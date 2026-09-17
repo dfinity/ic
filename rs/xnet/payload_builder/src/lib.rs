@@ -22,7 +22,7 @@ use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::{TokioExecutor, TokioTimer};
-use ic_config::message_routing::MAX_STREAM_MESSAGES;
+use ic_config::message_routing::{ADVERT_MAX_BODY_BYTES, MAX_STREAM_MESSAGES};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ErrorReproducibility;
 use ic_interfaces::messaging::{
@@ -1987,6 +1987,17 @@ pub trait XNetClient: Sync + Send {
         &self,
         endpoint: &EndpointLocator,
     ) -> Result<CertifiedStreamSlice, XNetClientError>;
+
+    /// Posts an advert — our own certified stream header — to the given
+    /// `XNetEndpoint`.
+    ///
+    /// On success, returns the peer's response: its certified header iff it already
+    /// reflects the contents of the advert, else `None`.
+    async fn post_advert(
+        &self,
+        endpoint: &EndpointLocator,
+        advert: CertifiedStreamSlice,
+    ) -> Result<Option<CertifiedStreamSlice>, XNetClientError>;
 }
 
 type XNetRequestBody = http_body_util::Full<hyper::body::Bytes>;
@@ -1995,7 +2006,7 @@ type XNetRequestBody = http_body_util::Full<hyper::body::Bytes>;
 /// configuration and connection pooling).
 struct XNetClientImpl {
     /// An HTTP client to be used for querying.
-    http_client: Client<TlsConnector, Request<XNetRequestBody>>,
+    http_client: Client<TlsConnector, XNetRequestBody>,
 
     /// Response body (encoded slice) size.
     response_body_size: HistogramVec,
@@ -2032,7 +2043,7 @@ impl XNetClientImpl {
         // query against it timing out. With keep-alive, such a connection is closed
         // within `interval + timeout` seconds and a fresh connection is established
         // on the next query.
-        let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
+        let http_client: Client<TlsConnector, XNetRequestBody> =
             Client::builder(TokioExecutor::new())
                 .http2_only(true)
                 // Timer required by HTTP/2 keep-alive.
@@ -2125,6 +2136,69 @@ impl XNetClientImpl {
             )),
         }
     }
+
+    async fn post_advert_impl(
+        &self,
+        endpoint: &EndpointLocator,
+        advert: CertifiedStreamSlice,
+    ) -> Result<Option<CertifiedStreamSlice>, XNetClientError> {
+        let body = pb::CertifiedStreamSlice::proxy_encode(advert);
+        // The receiver refuses anything larger, so there is no point in sending it.
+        if body.len() > ADVERT_MAX_BODY_BYTES {
+            return Err(XNetClientError::AdvertTooLarge(body.len()));
+        }
+        let request = Request::post(endpoint.url.clone())
+            .header(hyper::header::CONTENT_TYPE, "application/x-protobuf")
+            .body(XNetRequestBody::from(body))
+            .expect("failed to build advert request");
+
+        // TODO(MR-28) Make timeout configurable.
+        let result = tokio::time::timeout(Duration::from_secs(5), async {
+            let response = self
+                .http_client
+                .request(request)
+                .await
+                .map_err(XNetClientError::RequestFailed)?;
+
+            let status = response.status();
+
+            // A reply is a header-only slice, just like the advert.
+            let content = http_body_util::Limited::new(response.into_body(), ADVERT_MAX_BODY_BYTES)
+                .collect()
+                .await
+                .map(|collected| collected.to_bytes())
+                .map_err(XNetClientError::BodyReadError)?;
+
+            Ok((status, content))
+        })
+        .await;
+
+        let (status, bytes) = result.map_err(|_| XNetClientError::Timeout)??;
+
+        match status {
+            // Advert accepted.
+            StatusCode::NO_CONTENT => Ok(None),
+
+            // Everything in our advert was already inducted and certified: the reply is a
+            // certified header that proves it.
+            StatusCode::OK => pb::CertifiedStreamSlice::proxy_decode(bytes.as_ref())
+                .map(Some)
+                .map_err(XNetClientError::ProxyDecodeError),
+
+            _ => Err(XNetClientError::ErrorResponse(
+                status,
+                String::from_utf8_lossy(bytes.as_ref()).to_string(),
+            )),
+        }
+    }
+
+    /// Updates the node's health status, based on whether it served the request.
+    fn update_node_health<T>(&self, node_id: NodeId, result: &Result<T, XNetClientError>) {
+        match result {
+            Err(e) if e.is_node_failure() => self.unhealthy_nodes.observe_failure(node_id),
+            _ => self.unhealthy_nodes.observe_success(node_id),
+        }
+    }
 }
 
 #[async_trait]
@@ -2134,14 +2208,17 @@ impl XNetClient for XNetClientImpl {
         endpoint: &EndpointLocator,
     ) -> Result<CertifiedStreamSlice, XNetClientError> {
         let result = self.query_impl(endpoint).await;
+        self.update_node_health(endpoint.node_id, &result);
+        result
+    }
 
-        // Record whether the node served the request, so that node selection
-        // can skip the ones that don't.
-        match &result {
-            Err(e) if e.is_node_failure() => self.unhealthy_nodes.observe_failure(endpoint.node_id),
-            _ => self.unhealthy_nodes.observe_success(endpoint.node_id),
-        }
-
+    async fn post_advert(
+        &self,
+        endpoint: &EndpointLocator,
+        advert: CertifiedStreamSlice,
+    ) -> Result<Option<CertifiedStreamSlice>, XNetClientError> {
+        let result = self.post_advert_impl(endpoint, advert).await;
+        self.update_node_health(endpoint.node_id, &result);
         result
     }
 }
@@ -2160,6 +2237,8 @@ pub enum XNetClientError {
     BodyReadError(Box<dyn std::error::Error + Send + Sync>),
     #[error("Error decoding XNet proto into Rust struct: {0}")]
     ProxyDecodeError(ProxyDecodeError),
+    #[error("Advert of {0} bytes exceeds the {ADVERT_MAX_BODY_BYTES} byte limit")]
+    AdvertTooLarge(usize),
 }
 
 impl XNetClientError {
@@ -2186,6 +2265,9 @@ impl XNetClientError {
 
             // Definitely not an error, there's merely no new content.
             XNetClientError::NoContent => false,
+
+            // Our own doing, nothing to do with the node.
+            XNetClientError::AdvertTooLarge(..) => false,
         }
     }
 
@@ -2198,6 +2280,7 @@ impl XNetClientError {
             XNetClientError::ErrorResponse(status, _) => format!("HTTP_{}", status.as_u16()),
             XNetClientError::BodyReadError(..) => "BodyReadError".to_string(),
             XNetClientError::ProxyDecodeError(..) => STATUS_DECODE_ERROR.to_string(),
+            XNetClientError::AdvertTooLarge(..) => "AdvertTooLarge".to_string(),
         }
     }
 }

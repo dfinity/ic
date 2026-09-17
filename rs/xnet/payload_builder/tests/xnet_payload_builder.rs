@@ -1008,6 +1008,14 @@ impl XNetClient for FakeXNetClient {
                 FakeXNetClientError::NoContent => XNetClientError::NoContent,
             })
     }
+
+    async fn post_advert(
+        &self,
+        _endpoint: &EndpointLocator,
+        _advert: CertifiedStreamSlice,
+    ) -> Result<Option<CertifiedStreamSlice>, XNetClientError> {
+        unimplemented!("no advert sending in these tests")
+    }
 }
 
 /// A replacement for `XNetClientError` because `XNetClientError` is not `Clone`
