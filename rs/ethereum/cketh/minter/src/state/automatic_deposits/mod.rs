@@ -658,7 +658,7 @@ impl AutomaticDeposits {
         self.watchlist.len()
     }
 
-    /// How many `(account, asset)` pairs are armed and still being scanned as of `now`. Smaller
+    /// How many `(account, asset)` pairs are armed and still being scanned as of `now`. No greater
     /// than [`Self::watchlist_len`], which also counts entries whose window has closed but that
     /// nothing has evicted yet.
     pub fn armed_len(&self, now: Timestamp) -> usize {
