@@ -10068,6 +10068,7 @@ version = "0.9.0"
 dependencies = [
  "axum",
  "bytes",
+ "http-body-util",
  "hyper",
  "hyper-util",
  "ic-config",
@@ -10075,6 +10076,7 @@ dependencies = [
  "ic-crypto-tls-interfaces-mocks",
  "ic-crypto-utils-tls",
  "ic-http-endpoints-async-utils",
+ "ic-interfaces",
  "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
