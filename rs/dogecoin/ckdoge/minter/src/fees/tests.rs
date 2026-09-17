@@ -32,21 +32,21 @@ fn should_increase_minimum_withdrawal_amount_by_half() {
     );
 }
 
-#[test]
-fn fee_based_minimum_withdrawal_amount_should_cover_actual_minter_fee_for_typical_tx() {
-    // A small `retrieve_doge_min_amount` isolates the fee budget baked into
-    // `fee_based_minimum_withdrawal_amount` from the min amount itself,
-    // which otherwise dominates the sum and hides an undersized fee budget.
+#[proptest]
+fn fee_based_minimum_withdrawal_amount_should_cover_actual_minter_fee_for_typical_tx(
+    #[strategy(arbitrary::fee_rate(0_u64..10_000_000))] fee_rate: FeeRate,
+) {
     let retrieve_doge_min_amount = 2;
     let estimator = DogecoinFeeEstimator::new(Network::Mainnet, retrieve_doge_min_amount);
-    let zero_fee_rate = FeeRate::from_millis_per_byte(0);
 
-    let min_withdrawal_amount = estimator.fee_based_minimum_withdrawal_amount(zero_fee_rate);
+    let min_withdrawal_amount = estimator.fee_based_minimum_withdrawal_amount(fee_rate);
     let actual_minter_fee_for_typical_tx = estimator.evaluate_minter_fee(2, 2);
 
-    assert!(
+    prop_assert!(
         min_withdrawal_amount > actual_minter_fee_for_typical_tx,
-        "BUG: minimum withdrawal amount {min_withdrawal_amount} does not cover the actual minter fee {actual_minter_fee_for_typical_tx} for a typical (2 inputs, 2 outputs) transaction"
+        "BUG: minimum withdrawal amount {} does not cover the actual minter fee {} for a typical (2 inputs, 2 outputs) transaction",
+        min_withdrawal_amount,
+        actual_minter_fee_for_typical_tx
     );
 }
 
