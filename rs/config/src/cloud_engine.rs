@@ -8,17 +8,13 @@ pub const MAINNET_ENGINE_MANAGEMENT_CANISTER_ID: &str = "q6cfj-fyaaa-aaaar-qb77q
 /// Configuration that only cloud engine nodes use.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
 pub struct Config {
-    /// Principal of the engine management canister, which an all-in-one node
-    /// needs to discover the operator canister of its own engine. When unset,
-    /// the node cannot find its operator and therefore does not run `ic-gateway`.
+    /// An all-in-one node uses needs this canister to discover its engine's operator canister.
     #[serde(default, deserialize_with = "deserialize_canister_id")]
     pub engine_management_canister_id: Option<CanisterId>,
 }
 
 /// `CanisterId`'s own `Deserialize` casts rather than converts, so it accepts
-/// any principal. Going through `PrincipalId` rejects one that could not be a
-/// canister id while the configuration is read, instead of letting every lookup
-/// fail against a principal that cannot exist.
+/// any principal. We want to reject principals that are not canister IDs early.
 fn deserialize_canister_id<'de, D>(deserializer: D) -> Result<Option<CanisterId>, D::Error>
 where
     D: Deserializer<'de>,
@@ -55,7 +51,7 @@ mod tests {
     #[test]
     fn a_principal_that_is_no_canister_id_is_rejected() {
         // The anonymous principal: a well-formed principal, but never a
-        // canister id. `CanisterId`'s own `Deserialize` would let it through.
+        // canister id.
         let err = json5::from_str::<Config>(r#"{ engine_management_canister_id: "2vxsx-fae" }"#)
             .expect_err("a non-canister principal should be rejected");
 

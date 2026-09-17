@@ -1,10 +1,9 @@
 //! Keeps track of the `ic-gateway` configuration of a cloud engine node.
 //!
 //! Cloud engine subnets are self-contained: each one has an `engine-operator`
-//! canister on the subnet itself that holds the base domains the engine serves,
-//! a DNS provider API for the ACME dns-01 challenge, and the ACME account to
-//! renew certificates with. This module polls that canister and hands the result
-//! to whoever runs `ic-gateway`.
+//! canister on the subnet itself that holds all the relevant configuration.
+//! This module polls that canister and hands the result to whoever runs
+//! `ic-gateway`.
 
 mod agent;
 pub(crate) mod config;
@@ -33,10 +32,8 @@ const OUTCOME_NOT_READY: &str = "not_ready";
 const OUTCOME_ERROR: &str = "error";
 
 /// How many consecutive [`CloudEngineError::NotReady`] answers to tolerate
-/// before resolving the operator again. A fresh operator recovers with its next
-/// registry refetch, well within this budget; one that keeps not recognizing
-/// this node more likely is not (or no longer) ours. At one check every 10
-/// seconds this is about 5 minutes.
+/// before resolving the operator again. At one check every 10 seconds this is
+/// about 5 minutes.
 const MAX_CONSECUTIVE_NOT_READY: u32 = 30;
 
 pub(crate) struct CloudEngineManager {
@@ -50,7 +47,7 @@ pub(crate) struct CloudEngineManager {
     discovery: Discovery,
     /// The last configuration that passed validation, shared with the process
     /// manager that runs `ic-gateway`. Only ever replaced by another valid one,
-    /// never cleared: a failed fetch must not take a running `ic-gateway` down.
+    /// never cleared.
     current_config: Arc<RwLock<Option<EngineConfig>>>,
     consecutive_not_ready: u32,
     metrics: Arc<OrchestratorMetrics>,
@@ -58,8 +55,7 @@ pub(crate) struct CloudEngineManager {
 }
 
 impl CloudEngineManager {
-    /// `replica_url` addresses the replica running on this node, which serves
-    /// the calls to the operator canister on this node's own subnet.
+    /// `replica_url` addresses the replica running on this node.
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
@@ -103,8 +99,6 @@ impl CloudEngineManager {
             Ok(true) => self.fetch(subnet_id, version).await,
             // Only all-in-one nodes have an engine operator to ask.
             Ok(false) => return,
-            // Not the same as "not a cloud engine": treating it as such would
-            // hide the error on the very nodes where it matters.
             Err(err) => Err(CloudEngineError::failed(format!(
                 "could not determine the type of subnet {subnet_id}: {err}"
             ))),
@@ -205,7 +199,7 @@ impl CloudEngineManager {
     }
 }
 
-/// The `outcome` label to count this result under.
+/// Metrics: the `outcome` label to count this result under.
 fn outcome_label(outcome: &CloudEngineResult<EngineConfig>) -> &'static str {
     match outcome {
         Ok(_) => OUTCOME_OK,

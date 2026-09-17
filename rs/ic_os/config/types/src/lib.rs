@@ -218,9 +218,8 @@ pub struct GuestOSUpgradeConfig {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct GuestOSSettings {
     pub guestos_dev_settings: GuestOSDevSettings,
-    /// Only used for all-in-one nodes on Cloud Engines. If not set, the GuestOS
-    /// config tool (`generate_ic_config`) falls back to the default for
-    /// `deployment_environment` when rendering `ic.json5`.
+    /// Only used for Cloud Engines nodes. If not set, the GuestOS
+    /// config tool falls back to the default when rendering `ic.json5`.
     #[serde(default)]
     pub engine_management_canister_id: Option<String>,
 }

@@ -5,18 +5,13 @@ use std::fmt;
 
 pub(super) type CloudEngineResult<T> = Result<T, CloudEngineError>;
 
-/// The variants are the three ways [`super::CloudEngineManager`] reacts, not
+/// The variants are the three ways CloudEngineManager reacts, not
 /// the steps that can fail.
 #[derive(Debug)]
 pub(super) enum CloudEngineError {
-    /// A field the configuration needs is not set on the operator yet. Nothing
-    /// to apply, not a failure.
+    /// A field the configuration needs is not set on the operator yet.
     Incomplete(&'static str),
-    /// The operator did not (yet) recognise us as one of its engine's nodes.
-    /// Its access control answers from the subnet's node list, which it keeps
-    /// in a transient cache that stays empty until its first successful
-    /// registry refetch after an install or upgrade, so this is expected right
-    /// after either and never fatal.
+    /// The operator rejected the request because it does not recognize this node yet.
     NotReady,
     /// Everything else: a registry lookup, the transport, the decoding, or a
     /// configured value `ic-gateway` could not run with.

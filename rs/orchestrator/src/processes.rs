@@ -193,8 +193,8 @@ impl Process for IcGatewayProcess {
                 }
             };
 
-        // The shipped file only carries policy; the engine's own values, the two
-        // credentials among them, override it.
+        // The shipped file only carries the general config. the engine specific
+        // config is applied here as an override
         env.extend(engine_config.env_overlay(&config.acme_cache_dir)?);
 
         Ok(Self {

@@ -10,12 +10,10 @@ use serde::Serialize;
 use std::{collections::HashMap, ffi::OsString, fmt, path::Path};
 use url::Url;
 
-/// A complete, validated engine configuration.
+/// A complete, validated engine configuration for ic-gateway.
 ///
-/// `ic-gateway` terminates TLS for the engine, so it cannot run without all of
-/// these. An incomplete config is therefore not an error but simply nothing to
-/// apply, which [`validate_engine_config`] reports as
-/// [`Incomplete`](CloudEngineError::Incomplete).
+/// `ic-gateway` terminates TLS for the engine. It needs the config to
+/// obtain certificates and to know which domains to serve.
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct EngineConfig {
     pub base_domains: Vec<String>,
@@ -33,7 +31,7 @@ pub(crate) struct AcmeAccount {
     pub directory: String,
 }
 
-/// Turns what the operator canister handed out into an [`EngineConfig`],
+/// Turns what the operator canister handed out into an `EngineConfig`,
 /// rejecting values `ic-gateway` could not run with.
 pub(super) fn validate_engine_config(
     gateway: HttpGatewayConfig,
@@ -43,8 +41,6 @@ pub(super) fn validate_engine_config(
         .base_domains
         .filter(|domains| !domains.is_empty())
         .ok_or(CloudEngineError::Incomplete("base_domains"))?
-        // `ic-gateway` parses DOMAIN as a comma-separated list of FQDNs, so a
-        // value it would reject must not reach it: it would exit at startup.
         .iter()
         .map(|domain| match domain_to_ascii_strict(domain) {
             Ok(ascii) if !ascii.is_empty() => Ok(ascii),
@@ -58,8 +54,6 @@ pub(super) fn validate_engine_config(
         .dns_api_urls
         .filter(|urls| !urls.is_empty())
         .ok_or(CloudEngineError::Incomplete("dns_api_urls"))?
-        // The IC-DNS-LB client appends a path to each of these, so it rejects
-        // anything it cannot use as a base.
         .iter()
         .map(|url| match Url::parse(url) {
             Ok(parsed) if parsed.cannot_be_a_base() => Err(CloudEngineError::failed(format!(
@@ -99,11 +93,11 @@ pub(super) fn validate_engine_config(
 
 impl EngineConfig {
     /// The environment that overrides the shipped `ic-gateway.env`, which only
-    /// carries policy (which challenge, which DNS backend, which ports).
+    /// carries the general settings (DNS-01 ACME challenge, ports, etc.).
     ///
-    /// The two credentials go into the environment rather than the argument
-    /// list: arguments are logged by the process runner and are world-readable
-    /// through `/proc/<pid>/cmdline`, the environment is neither.
+    /// The two credentials (DNS API key and ACME account credentials) go into
+    /// the environment rather than the argument list, as they are logged by the
+    /// process runner and are world-readable.
     pub(crate) fn env_overlay(
         &self,
         acme_cache_dir: &Path,
@@ -170,6 +164,7 @@ impl fmt::Debug for EngineConfig {
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
+    use rstest::rstest;
 
     fn gateway() -> HttpGatewayConfig {
         HttpGatewayConfig {
@@ -216,59 +211,23 @@ mod tests {
         );
     }
 
-    #[test]
-    fn every_missing_field_is_incomplete() {
-        let cases: Vec<(&str, HttpGatewayConfig, AcmeCredentials)> = vec![
-            (
-                "base_domains",
-                HttpGatewayConfig {
-                    base_domains: None,
-                    ..gateway()
-                },
-                acme(),
-            ),
-            (
-                "dns_api_urls",
-                HttpGatewayConfig {
-                    dns_api_urls: None,
-                    ..gateway()
-                },
-                acme(),
-            ),
-            (
-                "dns_api_key",
-                HttpGatewayConfig {
-                    dns_api_key: None,
-                    ..gateway()
-                },
-                acme(),
-            ),
-            ("acme id", gateway(), AcmeCredentials { id: None, ..acme() }),
-            (
-                "acme key_pkcs8",
-                gateway(),
-                AcmeCredentials {
-                    key_pkcs8: None,
-                    ..acme()
-                },
-            ),
-            (
-                "acme directory",
-                gateway(),
-                AcmeCredentials {
-                    directory: None,
-                    ..acme()
-                },
-            ),
-        ];
-
-        for (field, gateway, acme) in cases {
-            assert_matches!(
-                parse(gateway, acme),
-                Err(CloudEngineError::Incomplete(missing)) if missing == field,
-                "expected {field} to be reported as missing"
-            );
-        }
+    #[rstest]
+    #[case("base_domains", HttpGatewayConfig { base_domains: None, ..gateway() }, acme())]
+    #[case("dns_api_urls", HttpGatewayConfig { dns_api_urls: None, ..gateway() }, acme())]
+    #[case("dns_api_key",  HttpGatewayConfig { dns_api_key: None,  ..gateway() }, acme())]
+    #[case("acme id",        gateway(), AcmeCredentials { id: None, ..acme() })]
+    #[case("acme key_pkcs8", gateway(), AcmeCredentials { key_pkcs8: None, ..acme() })]
+    #[case("acme directory", gateway(), AcmeCredentials { directory: None, ..acme() })]
+    fn every_missing_field_is_incomplete(
+        #[case] field: &str,
+        #[case] gateway: HttpGatewayConfig,
+        #[case] acme: AcmeCredentials,
+    ) {
+        assert_matches!(
+            parse(gateway, acme),
+            Err(CloudEngineError::Incomplete(missing)) if missing == field,
+            "expected {field} to be reported as missing"
+        );
     }
 
     #[test]

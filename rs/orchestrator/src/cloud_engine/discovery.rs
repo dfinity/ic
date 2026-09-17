@@ -1,8 +1,7 @@
 //! Finding the operator canister of this node's own engine.
 //!
-//! The engine management canister knows the mapping, but it lives on another
-//! subnet and is reached over the network, so its answer is treated as a hint
-//! and checked against the local, NNS-verified registry before it is used.
+//! The engine management canister knows for each engine the canister ID of
+//! the corresponding operator canister.
 
 use super::{
     agent,
@@ -11,7 +10,7 @@ use super::{
 use crate::registry_helper::RegistryHelper;
 use candid::{CandidType, Decode, Encode, Principal};
 use ic_agent::Agent;
-use ic_logger::{ReplicaLogger, info, warn};
+use ic_logger::{ReplicaLogger, info};
 use ic_types::{CanisterId, PrincipalId, RegistryVersion, SubnetId};
 use serde::Deserialize;
 use std::sync::Arc;
@@ -51,14 +50,13 @@ impl Discovery {
     /// engine management canister.
     ///
     /// The engine management canister is only contacted (and the agent to it
-    /// only built) when memory does not hold an id that the local registry
-    /// still vouches for.
+    /// only built) if the operator canister id is not in memory.
     pub(super) async fn resolve(
         &mut self,
         own_subnet: SubnetId,
         version: RegistryVersion,
     ) -> CloudEngineResult<CanisterId> {
-        if let Some(operator) = self.validated_from_memory(own_subnet, version) {
+        if let Some(operator) = self.resolved {
             return Ok(operator);
         }
 
@@ -67,34 +65,11 @@ impl Discovery {
             version,
             &self.logger,
         )?;
-        let candidate = self.lookup_operator_candidate(&agent, own_subnet).await?;
-        self.validate_operator_candidate(candidate, own_subnet, version)?;
-        info!(self.logger, "Resolved the engine operator: {}", candidate);
-        self.resolved = Some(candidate);
+        let operator = self.lookup_operator(&agent, own_subnet).await?;
+        info!(self.logger, "Resolved the engine operator: {}", operator);
+        self.resolved = Some(operator);
 
-        Ok(candidate)
-    }
-
-    /// The previously resolved id, but only if the local registry still
-    /// confirms it at `version`: the subnet's admins may change while the
-    /// orchestrator keeps running.
-    fn validated_from_memory(
-        &mut self,
-        own_subnet: SubnetId,
-        version: RegistryVersion,
-    ) -> Option<CanisterId> {
-        let operator = self.resolved?;
-        match self.validate_operator_candidate(operator, own_subnet, version) {
-            Ok(()) => Some(operator),
-            Err(err) => {
-                warn!(
-                    self.logger,
-                    "Discarding the previously resolved operator id: {}", err
-                );
-                self.resolved = None;
-                None
-            }
-        }
+        Ok(operator)
     }
 
     /// Forgets the resolved id, so the next [`Self::resolve`] asks the engine
@@ -104,9 +79,8 @@ impl Discovery {
     }
 
     /// The operator canister the engine management canister has on file for
-    /// `own_subnet`. Only a candidate: it comes from another subnet, so
-    /// [`Self::validate_operator_candidate`] has the last word.
-    async fn lookup_operator_candidate(
+    /// `own_subnet`.
+    async fn lookup_operator(
         &self,
         agent: &Agent,
         own_subnet: SubnetId,
@@ -145,40 +119,6 @@ impl Discovery {
             })
             .and_then(as_canister_id)
     }
-
-    /// Accepts `candidate` only if the local registry independently confirms it
-    /// is a canister on `own_subnet` and an admin of it. This is what keeps a
-    /// hostile node of the management subnet from pointing us at an arbitrary
-    /// canister.
-    fn validate_operator_candidate(
-        &self,
-        candidate: CanisterId,
-        own_subnet: SubnetId,
-        version: RegistryVersion,
-    ) -> CloudEngineResult<()> {
-        if !self
-            .registry
-            .get_subnet_canister_ranges(own_subnet, version)?
-            .iter()
-            .any(|range| range.contains(&candidate))
-        {
-            return Err(CloudEngineError::failed(format!(
-                "operator candidate {candidate} is not hosted by subnet {own_subnet}"
-            )));
-        }
-
-        if !self
-            .registry
-            .get_subnet_admins(own_subnet, version)?
-            .contains(&candidate.get())
-        {
-            return Err(CloudEngineError::failed(format!(
-                "operator candidate {candidate} is not an admin of subnet {own_subnet}"
-            )));
-        }
-
-        Ok(())
-    }
 }
 
 /// Lets the tests of the parent module observe whether a resolved operator id
@@ -207,103 +147,18 @@ mod tests {
     use super::*;
     use assert_matches::assert_matches;
     use ic_logger::no_op_logger;
-    use ic_protobuf::registry::{
-        routing_table::v1::RoutingTable as PbRoutingTable, subnet::v1::SubnetRecord,
-    };
     use ic_registry_client_fake::FakeRegistryClient;
-    use ic_registry_keys::{make_canister_ranges_key, make_subnet_record_key};
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-    use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2};
+    use ic_test_utilities_types::ids::NODE_1;
 
-    const VERSION: RegistryVersion = RegistryVersion::new(1);
-
-    /// The operator as a well-behaved engine would have it: a canister in the
-    /// subnet's own range that is also one of its admins.
-    fn operator() -> CanisterId {
-        CanisterId::from_u64(3)
-    }
-
-    /// Builds a registry where `SUBNET_1` owns canisters 0..=99 and has
-    /// `admins` as its subnet admins, and `SUBNET_2` owns 100..=199.
-    fn discovery_for_test(admins: &[PrincipalId]) -> Discovery {
-        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-
-        let mut routing_table = RoutingTable::new();
-        for (subnet_id, start, end) in [(SUBNET_1, 0, 99), (SUBNET_2, 100, 199)] {
-            routing_table
-                .insert(
-                    CanisterIdRange {
-                        start: CanisterId::from_u64(start),
-                        end: CanisterId::from_u64(end),
-                    },
-                    subnet_id,
-                )
-                .unwrap();
-        }
-        data_provider
-            .add(
-                &make_canister_ranges_key(CanisterId::from_u64(0)),
-                VERSION,
-                Some(PbRoutingTable::from(routing_table)),
-            )
-            .unwrap();
-        data_provider
-            .add(
-                &make_subnet_record_key(SUBNET_1),
-                VERSION,
-                Some(SubnetRecord {
-                    subnet_admins: admins.iter().copied().map(Into::into).collect(),
-                    ..Default::default()
-                }),
-            )
-            .unwrap();
-
-        let registry_client = Arc::new(FakeRegistryClient::new(data_provider));
+    fn discovery_for_test() -> Discovery {
+        let registry_client = Arc::new(FakeRegistryClient::new(Arc::new(
+            ProtoRegistryDataProvider::new(),
+        )));
         registry_client.update_to_latest_version();
-        let registry = Arc::new(RegistryHelper::new(
-            ic_test_utilities_types::ids::NODE_1,
-            registry_client,
-            no_op_logger(),
-        ));
+        let registry = Arc::new(RegistryHelper::new(NODE_1, registry_client, no_op_logger()));
 
         Discovery::new(registry, CanisterId::from_u64(1000), no_op_logger())
-    }
-
-    #[test]
-    fn own_subnet_admin_canister_is_accepted() {
-        let discovery = discovery_for_test(&[operator().get()]);
-
-        assert_matches!(
-            discovery.validate_operator_candidate(operator(), SUBNET_1, VERSION),
-            Ok(())
-        );
-    }
-
-    #[test]
-    fn canister_of_another_subnet_is_rejected() {
-        // In `subnet_admins`, but outside this subnet's canister ranges: the
-        // engine management canister itself would look like this.
-        let foreign = CanisterId::from_u64(150);
-        let discovery = discovery_for_test(&[foreign.get()]);
-
-        assert_matches!(
-            discovery.validate_operator_candidate(foreign, SUBNET_1, VERSION),
-            Err(CloudEngineError::Failed(msg)) if msg.contains("not hosted by")
-        );
-    }
-
-    #[test]
-    fn canister_that_is_not_a_subnet_admin_is_rejected() {
-        // On this subnet, but not an admin of it: any canister an engine's users
-        // happen to deploy.
-        let discovery = discovery_for_test(&[operator().get()]);
-        let bystander = CanisterId::from_u64(7);
-
-        assert_matches!(
-            discovery.validate_operator_candidate(bystander, SUBNET_1, VERSION),
-            Err(CloudEngineError::Failed(msg)) if msg.contains("not an admin")
-        );
     }
 
     #[test]
@@ -317,36 +172,12 @@ mod tests {
     }
 
     #[test]
-    fn resolved_id_is_served_without_asking_again() {
-        let mut discovery = discovery_for_test(&[operator().get()]);
-        discovery.resolved = Some(operator());
-
-        assert_eq!(
-            discovery.validated_from_memory(SUBNET_1, VERSION),
-            Some(operator())
-        );
-        assert_eq!(discovery.resolved, Some(operator()));
-    }
-
-    #[test]
-    fn resolved_id_is_revalidated_against_the_registry() {
-        // The remembered operator is no longer an admin of the subnet (the
-        // registry lists someone else): it has to be dropped, not served.
-        let mut discovery = discovery_for_test(&[CanisterId::from_u64(4).get()]);
-        discovery.resolved = Some(operator());
-
-        assert_eq!(discovery.validated_from_memory(SUBNET_1, VERSION), None);
-        assert_eq!(discovery.resolved, None);
-    }
-
-    #[test]
     fn invalidate_forgets_the_resolved_id() {
-        let mut discovery = discovery_for_test(&[operator().get()]);
-        discovery.resolved = Some(operator());
+        let mut discovery = discovery_for_test();
+        discovery.remember(CanisterId::from_u64(3));
 
         discovery.invalidate();
 
-        assert_eq!(discovery.resolved, None);
-        assert_eq!(discovery.validated_from_memory(SUBNET_1, VERSION), None);
+        assert_eq!(discovery.remembered(), None);
     }
 }

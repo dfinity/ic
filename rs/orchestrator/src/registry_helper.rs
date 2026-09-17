@@ -17,15 +17,13 @@ use ic_registry_client_helpers::{
     node::{NodeRecord, NodeRegistry},
     node_operator::NodeOperatorRegistry,
     replica_version::ReplicaVersionRegistry,
-    routing_table::RoutingTableRegistry,
     subnet::SubnetRegistry,
     unassigned_nodes::UnassignedNodeRegistry,
 };
 use ic_registry_keys::FirewallRulesScope;
-use ic_registry_routing_table::CanisterIdRange;
 use ic_types::{
     NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
-    hostos_version::HostosVersion, registry::RegistryClientError,
+    hostos_version::HostosVersion,
 };
 use std::{convert::TryFrom, net::IpAddr, sync::Arc};
 
@@ -416,45 +414,13 @@ impl RegistryHelper {
     }
 
     /// Whether the given subnet is a cloud engine, i.e. an all-in-one node that
-    /// runs `ic-gateway` next to the replica. A subnet's type is immutable, so
-    /// this cannot change for a subnet the node stays assigned to.
+    /// runs `ic-gateway` next to the replica.
     pub(crate) fn is_cloud_engine_subnet(
         &self,
         subnet_id: SubnetId,
         version: RegistryVersion,
     ) -> OrchestratorResult<bool> {
         Ok(self.get_subnet_type(subnet_id, version)? == Some(SubnetType::CloudEngine))
-    }
-
-    /// Return the principals that have admin privileges on the given subnet.
-    pub(crate) fn get_subnet_admins(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<PrincipalId>> {
-        self.get_subnet_record(subnet_id, version)?
-            .subnet_admins
-            .into_iter()
-            .map(|admin| {
-                PrincipalId::try_from(admin).map_err(|err| {
-                    OrchestratorError::RegistryClientError(RegistryClientError::DecodeError {
-                        error: format!("subnet {subnet_id} has a malformed subnet admin: {err}"),
-                    })
-                })
-            })
-            .collect()
-    }
-
-    /// Return the canister ID ranges assigned to the given subnet.
-    pub(crate) fn get_subnet_canister_ranges(
-        &self,
-        subnet_id: SubnetId,
-        version: RegistryVersion,
-    ) -> OrchestratorResult<Vec<CanisterIdRange>> {
-        Ok(self
-            .registry_client
-            .get_subnet_canister_ranges(version, subnet_id)?
-            .unwrap_or_default())
     }
 }
 

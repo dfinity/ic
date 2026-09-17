@@ -1,11 +1,5 @@
 //! Construction of the `ic-agent`s used to reach the engine management canister
 //! and the engine's own operator canister.
-//!
-//! Query signature verification is enabled on every agent, so all of them need
-//! the NNS root key. Unlike [`crate::registration`], a missing root key is an
-//! error here rather than a fallback to the key hard-coded in `ic-agent`:
-//! falling back would make every call fail outside mainnet, which is harder to
-//! diagnose than refusing to build the agent.
 
 use super::error::{CloudEngineError, CloudEngineResult};
 use crate::{
@@ -20,10 +14,9 @@ use rand::prelude::*;
 use std::sync::Arc;
 use url::Url;
 
-/// An anonymous agent aimed at a randomly chosen API boundary node. Used for
-/// the engine management canister, whose lookup endpoint is a public query and
-/// lives on a regular subnet: a cloud engine node has to go through the public
-/// API as regular nodes do not whitelist them.
+/// An anonymous agent aimed at a randomly chosen API boundary node. It is used
+/// to interact with the engine management canister. It lives on a regular subnet,
+/// so it is only reachable by a cloud engine node through an API BN.
 pub(super) fn anonymous_via_api_boundary_node(
     registry: &dyn RegistryClient,
     version: RegistryVersion,
@@ -34,9 +27,8 @@ pub(super) fn anonymous_via_api_boundary_node(
     build(registry, url, AnonymousIdentity, version)
 }
 
-/// An agent aimed at `replica_url` and signing as this node. The operator
-/// canister only serves the nodes of its own engine, so the calls to it have to
-/// be authenticated with the node signing key.
+/// An agent aimed at the local replica and signing as this node. It is used to
+/// interact with the engine's operator canister.
 pub(super) fn node_signed(
     registry: &dyn RegistryClient,
     crypto: Arc<dyn NodeRegistrationCrypto>,
@@ -85,8 +77,6 @@ fn build<I: Identity + 'static>(
     let agent = Agent::builder()
         .with_url(url)
         .with_identity(identity)
-        // On by default; set explicitly so the decision survives an upstream
-        // default change.
         .with_verify_query_signatures(true)
         .build()
         .map_err(|err| CloudEngineError::failed(format!("could not build an agent: {err}")))?;

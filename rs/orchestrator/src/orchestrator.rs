@@ -380,9 +380,8 @@ impl Orchestrator {
         // operator, so it has no engine configuration to fetch.
         let cloud_engine_manager = config.cloud_engine.engine_management_canister_id.and_then(
             |engine_management_canister_id| {
-                // The replica listens on a wildcard address, so only its port
-                // is of use here: the operator canister is on this node's own
-                // subnet and is therefore reached over the loopback interface.
+                // The operator canister is on this node's own subnet and is
+                // therefore reachable over the loopback interface.
                 let replica_url = Url::parse(&format!(
                     "http://127.0.0.1:{}",
                     config.http_handler.listen_addr.port()
