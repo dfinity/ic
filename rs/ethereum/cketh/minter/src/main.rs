@@ -1442,14 +1442,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Time since the last balance scan completed; +Inf if none has completed since \
                      the minter last started.",
                 )?;
-                w.encode_counter(
-                    "cketh_minter_untracked_delegations_total",
-                    s.sweep_observations.untracked_delegations() as f64,
-                    "Deposit addresses a delegation read found already delegated although the \
-                     minter tracks no nonce for them and has no sweep of their own in flight, so \
-                     the next authorization it signs for them will be skipped on chain. Resets on \
-                     upgrade.",
-                )?;
                 w.encode_gauge(
                     "cketh_minter_delegated_deposit_addresses",
                     s.automatic_deposits.delegation_nonces_len() as f64,

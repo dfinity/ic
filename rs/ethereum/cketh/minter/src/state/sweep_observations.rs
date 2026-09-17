@@ -1,7 +1,7 @@
-//! What the sweep pipeline's chain reads looked like, as opposed to what the minter decided from
-//! them. A failed `eth_call`, a batch that would not decode, or a deposit address someone else
-//! delegated leaves no trace in the event log — nothing was decided — yet each is exactly what an
-//! operator needs to see before the queue stops draining.
+//! What the balance scan's chain reads looked like, as opposed to what the minter decided from
+//! them. A failed `eth_call` or a batch that would not decode leaves no trace in the event log —
+//! nothing was decided — yet each is exactly what an operator needs to see before the queue stops
+//! draining.
 //!
 //! These counters are therefore kept beside the event-sourced state and start afresh after an
 //! upgrade, so alerts on them must be written against rates rather than absolute values.
@@ -15,7 +15,6 @@ pub struct SweepObservations {
     balance_scan_call_errors: u64,
     balance_scan_decode_errors: u64,
     last_completed_balance_scan: Option<Timestamp>,
-    untracked_delegations: u64,
 }
 
 impl SweepObservations {
@@ -35,25 +34,12 @@ impl SweepObservations {
         self.last_completed_balance_scan = Some(started_at);
     }
 
-    /// Records what one delegation read found delegated without the minter being able to account
-    /// for it, as counted by [`AutomaticDeposits::untracked_delegations`].
-    ///
-    /// [`AutomaticDeposits::untracked_delegations`]:
-    ///     crate::state::automatic_deposits::AutomaticDeposits::untracked_delegations
-    pub fn record_untracked_delegations(&mut self, count: u64) {
-        self.untracked_delegations = self.untracked_delegations.saturating_add(count);
-    }
-
     pub fn balance_scan_call_errors(&self) -> u64 {
         self.balance_scan_call_errors
     }
 
     pub fn balance_scan_decode_errors(&self) -> u64 {
         self.balance_scan_decode_errors
-    }
-
-    pub fn untracked_delegations(&self) -> u64 {
-        self.untracked_delegations
     }
 
     /// How long ago the last balance scan completed, or `None` when none has completed since the

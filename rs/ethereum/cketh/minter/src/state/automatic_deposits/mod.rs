@@ -402,36 +402,6 @@ impl AutomaticDeposits {
         DelegatedSweepBatch { delegate, targets }
     }
 
-    /// How many of the addresses this delegation read covered are delegated on chain although the
-    /// minter cannot account for having delegated them: it tracks no nonce for the address, and no
-    /// sweep of its own is in flight to install one.
-    ///
-    /// Each is an address whose nonce the minter's counter is behind on, so the next authorization
-    /// it signs spends a nonce the chain has already passed and is skipped — leaving the address on
-    /// whatever contract it holds. Counted off the read's own map, whose keys are the distinct
-    /// addresses the read asked about, so an address counts once per read however many assets it
-    /// has queued.
-    pub fn untracked_delegations(&self, delegations: &BTreeMap<DepositAddress, Delegation>) -> u64 {
-        delegations
-            .iter()
-            .filter(|(address, delegation)| match delegation {
-                Delegation::Delegated(_) => !self.accounts_for_delegating(address),
-                Delegation::NotDelegated | Delegation::Other => false,
-            })
-            .count() as u64
-    }
-
-    /// Whether the minter can account for `address` being delegated on chain: one of its own sweeps
-    /// delegated it and recorded the nonce that spent, or one is in flight doing exactly that and
-    /// will record it when it finalizes.
-    fn accounts_for_delegating(&self, address: &DepositAddress) -> bool {
-        self.delegation_nonces.contains_key(address)
-            || self
-                .sweep
-                .values()
-                .any(|entry| entry.address == *address && !entry.is_sweepable())
-    }
-
     /// The nonce the next authorization of `address` must be signed for, which is the nonce
     /// the address has reached on chain: zero until a sweep has delegated it, and one more per
     /// authorization of the minter's that applied to it since.

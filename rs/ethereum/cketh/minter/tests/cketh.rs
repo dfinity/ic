@@ -1387,8 +1387,7 @@ fn should_export_the_sweep_pipeline_metrics() {
         .assert_contains_metric_matching(
             r#"cketh_minter_balance_scan_errors_total\{kind="decode"\} 0 \d+"#,
         )
-        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds \+Inf \d+")
-        .assert_contains_metric_matching(r"cketh_minter_untracked_delegations_total 0 \d+");
+        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds \+Inf \d+");
 }
 
 #[test]
