@@ -10,9 +10,9 @@ use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, warn};
 use ic_protobuf::{
-    proxy::ProxyDecodeError, registry::subnet::v1::{
-CatchUpPackageContents, catch_up_package_contents::CupType,
-    }, types::v1 as pb,
+    proxy::ProxyDecodeError,
+    registry::subnet::v1::{CatchUpPackageContents, catch_up_package_contents::CupType},
+    types::v1 as pb,
 };
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
