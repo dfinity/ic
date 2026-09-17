@@ -9,7 +9,7 @@ use bytes::Bytes;
 use http_body_util::LengthLimitError;
 use hyper::{Method, Request, Response, StatusCode, body::Incoming};
 use hyper_util::{rt::TokioIo, server::graceful::GracefulShutdown};
-use ic_config::message_routing::Config;
+use ic_config::message_routing::{ADVERT_MAX_BODY_BYTES, Config};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_http_endpoints_async_utils::start_tcp_listener;
 use ic_interfaces::messaging::{XNetAdvertError, XNetAdvertHandler, XNetAdvertOutcome};
@@ -68,12 +68,6 @@ const RESOURCE_STREAMS: &str = "streams";
 const RESOURCE_UNKNOWN: &str = "unknown";
 
 const XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS: usize = 4;
-
-/// Maximum size of an advert request body. An advert is a header-only certified
-/// slice, so this only needs to accommodate a stream header (with up to
-/// `MAX_STREAM_MESSAGES` reject signals), a header-only witness and a
-/// certification.
-const ADVERT_MAX_BODY_BYTES: usize = 64 * 1024;
 
 /// Adverts accepted from any one node per second, sustained. A node advertises
 /// at most once per certified height of its subnet, i.e. at most 2.5 times a
