@@ -24,7 +24,7 @@ pub(super) fn anonymous_via_api_boundary_node(
 ) -> CloudEngineResult<Agent> {
     let url = random_api_boundary_node_url(registry, version, logger)?;
 
-    build(registry, url, AnonymousIdentity, version)
+    build(registry, url, AnonymousIdentity, version, logger)
 }
 
 /// An agent aimed at the local replica and signing as this node. It is used to
@@ -34,10 +34,11 @@ pub(super) fn node_signed(
     crypto: Arc<dyn NodeRegistrationCrypto>,
     replica_url: Url,
     version: RegistryVersion,
+    logger: &ReplicaLogger,
 ) -> CloudEngineResult<Agent> {
     let identity = NodeSender::for_this_node(crypto).map_err(CloudEngineError::failed)?;
 
-    build(registry, replica_url, identity, version)
+    build(registry, replica_url, identity, version, logger)
 }
 
 fn random_api_boundary_node_url(
@@ -73,6 +74,7 @@ fn build<I: Identity + 'static>(
     url: Url,
     identity: I,
     version: RegistryVersion,
+    logger: &ReplicaLogger,
 ) -> CloudEngineResult<Agent> {
     let agent = Agent::builder()
         .with_url(url)
@@ -80,9 +82,20 @@ fn build<I: Identity + 'static>(
         .with_verify_query_signatures(true)
         .build()
         .map_err(|err| CloudEngineError::failed(format!("could not build an agent: {err}")))?;
-    let root_key =
-        nns_root_key_der_from_registry(registry, version).map_err(CloudEngineError::failed)?;
-    agent.set_root_key(root_key);
+
+    match nns_root_key_der_from_registry(registry, version) {
+        Ok(root_key) => {
+            agent.set_root_key(root_key);
+        }
+        Err(err) => {
+            // If we cannot determine the NNS public key, we log a warning but still proceed. The
+            // agent will use the mainnet public key hardcoded in the agent library.
+            warn!(
+                logger,
+                "Failed to get NNS public key from registry: {}", err
+            );
+        }
+    }
 
     Ok(agent)
 }

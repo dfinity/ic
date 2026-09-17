@@ -192,6 +192,7 @@ impl CloudEngineManager {
             Arc::clone(&self.crypto),
             self.replica_url.clone(),
             version,
+            &self.logger,
         )?;
         self.operator_agent = Some(agent.clone());
 
