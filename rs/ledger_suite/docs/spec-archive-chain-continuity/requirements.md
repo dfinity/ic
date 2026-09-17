@@ -146,6 +146,22 @@ comes first.
   requires no further reservation and cannot be refused on these grounds at all. That
   is the drafted `memory_allocation` proposals, and it is why they are a dependency
   of this work rather than an adjacent nicety.
+- **Bounding a ledger's memory growth.** Switching archiving back on bounds only the
+  blocks a ledger retains — `trigger_threshold` of them, about 1.2 MiB at 2000 — which
+  is the smaller part of what a transaction costs it. A maximal `icrc2_approve` takes
+  ~1040 B of a ledger's stable memory, of which only the ~624 B block is archived; the
+  ~416 B of allowance and expiration entries stay for as long as the approval does. So
+  archiving slows spam-driven growth by roughly 2.5x rather than bounding it, and no
+  `memory_allocation` covers the remainder: stable memory never shrinks, so usage once
+  reached is a permanent floor on what the canister is billed, `max(allocation,
+  usage)`, even after those blocks are archived away — which is also why switching
+  archiving on earlier is worth more than sizing the allocation larger. The heap is
+  the bounded half and resets on upgrade: the dedup window is capped at
+  `MAX_TRANSACTIONS_IN_WINDOW` and self-throttles below it — admitting the first half
+  freely and rate-limiting after that, so 384 MiB is the ceiling and throttling
+  engages around half of it. Rate
+  limiting, the transfer fee and allowance pruning are the levers for the rest, and
+  each is separate work.
 - **Restoring a ledger from a canister snapshot as a recovery path.** A ledger
   restored alone resumes issuing block indices its archives already hold with
   different content, so its chain forks from the archived prefix and balances
