@@ -283,10 +283,50 @@ ledger, because the cache lives in the ledger and upgrading only the archive —
 scenario `Req 10` exists for — would not clear it. So an absent answer is re-probed,
 spaced by D1's backoff, and a positive answer is cached in `#[serde(skip)]` state.
 
+### D8b — The design uses the platform's two named patterns, not invented ones
+
+Worth recording, because a reviewer can then recognise the shapes rather than judging
+them from scratch. ICP's own security guidance names two answers to the problem this
+spec addresses, and the design uses one for each half.
+
+**For the append: ID deduplication.** The guidance's recommended way to make a call
+safely retryable is to have the callee deduplicate on an identifier derived from the
+call's parameters, and it cites the ICRC ledger as the example — identical parameters
+make a transfer idempotent. `Req 2`'s `Declared_Index` is exactly that identifier. It
+also avoids the drawback the guidance names for that pattern: deduplication windows
+expire, and after expiry a caller has to reconstruct what happened. Ours does not
+expire, because an archive's position only moves forward, so the answer is available
+for the life of the canister.
+
+**For the archive creation: journaling.** The guidance is explicit that avoiding
+traps after an await is the wrong strategy — "rather than attempting to avoid traps,
+which is difficult in practice, implement journaling", recording intent before the
+work and the result after. D1's `Creating { Idle, Started, Created(id) }` is a journal
+of exactly that shape, and `Req 11.6`'s "record the identity before doing anything
+else with it" is the intent half. This is also why *Not worth chasing: up-front
+allocation* is the right call rather than a concession: the platform's guidance says
+the same thing.
+
+**One piece of guidance we should follow and currently only half do.** The
+recommended fix for memory-exhaustion errors is to break operations that read or
+write large regions of stable memory into multiple messages. `Req 12` does that for
+the append side. Block removal is still one message per round, which is open item 1 —
+if the measurement there is unfavourable, splitting it is the platform's own
+prescription rather than an invention.
+
 ### D9 — `ARCHIVE_CALL_TIMEOUT` is the CDK default, 300 s
 
-Serves `Req 13.1`. `ic_cdk::call::Call::bounded_wait` defaults to 300 s, aligned with
-the replica's `MAX_CALL_TIMEOUT`. A shorter value buys a faster stall detection at the
+Serves `Req 13.1`, `Req 13.8`. `ic_cdk::call::Call::bounded_wait` defaults to 300 s,
+aligned with the replica's `MAX_CALL_TIMEOUT`.
+
+**The upgradeability argument is the strongest one for this decision, and it was
+missing.** An unbounded-wait call registers a callback, and while that callback is
+outstanding the caller cannot be stopped — and therefore cannot be cleanly upgraded.
+So a tail archive that stalls does not merely block archiving: it makes the ledger
+un-upgradeable. That matters here specifically because D2 makes an upgrade the
+operator's "resume now" lever for every halt in this document, and `Req 11.4`'s halt
+has no other remedy at all. Without `Req 13`, the one failure that most needs the
+lever is the one that disables it. A shorter value buys a faster stall detection at the
 cost of spurious unknown outcomes, each of which re-sends a batch; 300 s is
 conservative and can be lowered once the unknown-outcome counter shows how often it
 fires. The value is settled here rather than in `requirements.md` because `Req 13.1`
@@ -638,7 +678,7 @@ test is baseline-independent.
 | 16 | integration | stop the archive so `remaining_capacity` is rejected; count attempts over a window, then restart and assert archiving resumes with no intervention | `Req 9.1`–`9.6` |
 | 17 | integration | reuse the creation-trap harness; assert the counter is non-zero, archiving is halted, and that it does not self-clear | `Req 11.1`, `11.2`, `11.4` |
 | 18 | integration | install an old archive wasm as the tail; assert nothing is archived and the metric rises, then upgrade the archive and assert archiving resumes without a ledger upgrade. Repeat against a ledger whose archives do not implement the protocol and assert it archives normally | `Req 10.1`, `10.2`, `10.5` |
-| 19 | integration | make the tail archive not answer; assert the round ends within `ARCHIVE_CALL_TIMEOUT` and is retried, and that a subsequent round does not store any block twice | `Req 13.1`, `13.2`, `13.4` |
+| 19 | integration | make the tail archive not answer; assert the round ends within `ARCHIVE_CALL_TIMEOUT` and is retried, and that a subsequent round does not store any block twice. Then, with a call still in flight to that archive, assert the ledger can be stopped and upgraded — the property an unbounded call removes | `Req 13.1`, `13.2`, `13.4`, `13.8` |
 | 20 | integration | count `append_blocks` per round against a configuration that is multi-chunk today; assert one, and that the effective per-round metric matches | `Req 12.1`, `12.3`, `12.4` |
 | 21 | measurement | ledger memory across an archive-creation round, as `routine_archiving_does_not_grow_the_ledger` does for a routine one; assert growth below a bound | D2's allocation work |
 | 22 | archive | append `0..999`; then re-send `500..999` from a chain that diverges at 701, and assert `ChainMismatch` is returned, nothing is stored, and the covered-range counter rises while the tip-mismatch counter does not. Then re-send a range that does *not* diverge and assert success — so the check is not simply refusing every re-send | `Req 2.9`, `Req 6.6` |

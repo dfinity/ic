@@ -134,12 +134,14 @@ comes first.
   refusals that *do* return control, and this class is out of reach of any protocol
   change (Req 4.7).
 
-  The answer to it is to reserve the storage before writing rather than at the write:
-  a canister with a reserved memory allocation is charged when the allocation is
-  made, so growth inside it requires no further reservation and cannot be refused on
-  reservation grounds. That is a configuration change per archive, i.e. the drafted
-  `memory_allocation` proposals, and it is why they are not optional extras to this
-  work.
+  The answer to it is configuration, not protocol, and there are two levers. Raising
+  the archive's `reserved_cycles_limit` — 5 T by default — is what the platform's own
+  guidance suggests for this error, alongside moving to a subnet with lower memory
+  usage. Reserving the memory up front is the stronger form: a canister with a
+  reserved allocation is charged when the allocation is made, so growth inside it
+  requires no further reservation and cannot be refused on these grounds at all. That
+  is the drafted `memory_allocation` proposals, and it is why they are a dependency
+  of this work rather than an adjacent nicety.
 - **Restoring a ledger from a canister snapshot as a recovery path.** A ledger
   restored alone resumes issuing block indices its archives already hold with
   different content, so its chain forks from the archived prefix and balances
@@ -522,9 +524,8 @@ rather than several.
 ### Requirement 13: A Ledger Does Not Wait Indefinitely For An Archive
 
 **User Story:** As a canister operator, I want a ledger to give up on a call an
-archive is not answering, so that archiving cannot be stuck on one call
-indefinitely and the subnet need not hold response capacity for a call that may
-never be answered.
+archive is not answering, so that a stalled archive cannot leave the ledger both
+unable to archive and unable to be upgraded out of that state.
 
 #### Acceptance Criteria
 
@@ -549,3 +550,7 @@ never be answered.
 7. WHEN THE Ledger makes any other call whose unknown outcome it can resolve by
    asking again, THE Ledger SHALL likewise stop waiting after at most
    ARCHIVE_CALL_TIMEOUT, so that 13.5 is the exception rather than the rule.
+8. WHILE an archive is not answering an in-flight call, THE ICRC Ledger SHALL still
+   become stoppable within ARCHIVE_CALL_TIMEOUT, because an outstanding callback
+   otherwise prevents the ledger being stopped and therefore being upgraded — and an
+   upgrade is the operator's lever for every other halt in this document.
