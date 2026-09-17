@@ -331,7 +331,6 @@ impl StateReader for FakeStateManager {
         }
     }
 
-    // No certification support in FakeStateManager
     fn latest_certified_height(&self) -> Height {
         let real = self
             .states
@@ -351,9 +350,8 @@ impl StateReader for FakeStateManager {
             .expect("latest state is always available in FakeStateManager")
     }
 
-    // No certification support in FakeStateManager
     fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
-        None
+        self.get_state_at(self.latest_certified_height()).ok()
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {
