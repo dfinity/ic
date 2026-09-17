@@ -36,6 +36,7 @@ use ic_cketh_minter::state::automatic_deposits::{
     DepositRequest, DepositStatusInfo, RegisterDepositError,
 };
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
+use ic_cketh_minter::state::sweep_observations::SweepObservations;
 use ic_cketh_minter::state::transactions::{
     AuthorizedSweepItem, Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed,
     ReimbursementIndex, ReimbursementRequest, SweepRequest,
@@ -141,6 +142,10 @@ fn init(arg: MinterArg) {
                 storage::record_event(EventType::Init(init_arg.clone()), &IC_TIME_PROVIDER);
                 *cell.borrow_mut() =
                     Some(State::try_from(init_arg).expect("BUG: failed to initialize minter"))
+            });
+            mutate_state(|s| {
+                s.sweep_observations =
+                    SweepObservations::started_at(Timestamp::from_nanos(ic_cdk::api::time()))
             });
         }
         MinterArg::UpgradeArg(_) => {
@@ -1439,9 +1444,9 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     s.sweep_observations
                         .last_balance_scan_age(now)
                         .map(|age| age.as_secs() as f64)
-                        .unwrap_or(f64::INFINITY),
-                    "Time since the last balance scan completed; +Inf if none has completed since \
-                     the minter last started.",
+                        .unwrap_or(0.0),
+                    "Time since the last balance scan completed, or since the minter last started \
+                     if none has completed since.",
                 )?;
                 w.encode_gauge(
                     "cketh_minter_delegated_deposit_addresses",

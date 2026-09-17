@@ -14,10 +14,19 @@ use std::time::Duration;
 pub struct SweepObservations {
     balance_scan_call_errors: u64,
     balance_scan_decode_errors: u64,
-    last_completed_balance_scan: Option<Timestamp>,
+    balance_scan_fresh_since: Option<Timestamp>,
 }
 
 impl SweepObservations {
+    /// The observations of a minter starting at `now`: nothing seen yet, and the balance scan
+    /// counted as fresh from the start, so that its age grows from there until a pass completes.
+    pub fn started_at(now: Timestamp) -> Self {
+        Self {
+            balance_scan_fresh_since: Some(now),
+            ..Self::default()
+        }
+    }
+
     /// Records the chunks of one balance-scan pass that did not come back, whether or not any
     /// other chunk of that pass did.
     pub fn record_balance_scan_errors(&mut self, &ScanErrors { call, decode }: &ScanErrors) {
@@ -29,7 +38,7 @@ impl SweepObservations {
     /// started. Only such a pass moves the stamp: a pass with nothing due, or one whose every chunk
     /// failed, says nothing about how long ago the scan last worked.
     pub fn record_completed_balance_scan(&mut self, started_at: Timestamp) {
-        self.last_completed_balance_scan = Some(started_at);
+        self.balance_scan_fresh_since = Some(started_at);
     }
 
     pub fn balance_scan_call_errors(&self) -> u64 {
@@ -40,12 +49,12 @@ impl SweepObservations {
         self.balance_scan_decode_errors
     }
 
-    /// How long ago the last balance scan completed, or `None` when none has completed since the
-    /// minter last started. A scan stamped in the future (the clock moved back) reads as zero
-    /// rather than wrapping.
+    /// How long ago the last balance scan completed, counted from the minter's start while none
+    /// has completed since, or `None` for a minter that never started. A stamp in the future (the
+    /// clock moved back) reads as zero rather than wrapping.
     pub fn last_balance_scan_age(&self, now: Timestamp) -> Option<Duration> {
-        self.last_completed_balance_scan.map(|scanned_at| {
-            Duration::from_nanos(now.as_nanos().saturating_sub(scanned_at.as_nanos()))
+        self.balance_scan_fresh_since.map(|fresh_since| {
+            Duration::from_nanos(now.as_nanos().saturating_sub(fresh_since.as_nanos()))
         })
     }
 }

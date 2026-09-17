@@ -1368,7 +1368,10 @@ fn should_export_the_sweeper_funding_metrics() {
 
 #[test]
 fn should_export_the_sweep_pipeline_metrics() {
-    CkEthSetup::default()
+    let cketh = CkEthSetup::default();
+    cketh.advance_time(Duration::from_secs(90));
+    cketh.env.tick();
+    cketh
         .check_minter_metrics()
         .assert_contains_metric_matching(r"cketh_minter_armed_deposit_addresses 0 \d+")
         .assert_contains_metric_matching(r"cketh_minter_longest_armed_age_seconds 0 \d+")
@@ -1387,7 +1390,7 @@ fn should_export_the_sweep_pipeline_metrics() {
         .assert_contains_metric_matching(
             r#"cketh_minter_balance_scan_errors_total\{kind="decode"\} 0 \d+"#,
         )
-        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds \+Inf \d+");
+        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds 90 \d+");
 }
 
 #[test]
