@@ -139,7 +139,7 @@ impl Registry {
         };
 
         let (source_dkg_response, destination_dkg_response) = futures::join!(
-            create_subnet(source_nodes)
+            create_subnet(source_nodes),
             create_subnet(payload.destination_node_ids),
         );
         let destination_subnet_id = destination_dkg_response.fresh_subnet_id;
