@@ -100,13 +100,14 @@ impl FeeEstimator for DogecoinFeeEstimator {
                 // Size of a typical transaction made by the minter,
                 // which is a P2PKH transaction with 2 inputs and 2 outputs
                 const PER_REQUEST_SIZE_BOUND: u64 = 374;
-                //in Koinu
-                const PER_REQUEST_MINTER_FEE_BOUND: u64 = 326_000;
+                // Minter fee (in koinu) for a typical transaction made by the minter,
+                // which is a P2PKH transaction with 2 inputs and 2 outputs.
+                let per_request_minter_fee_bound = self.evaluate_minter_fee(2, 2);
 
                 let min_withdrawal_amount_increment = self.retrieve_doge_min_amount >> 1;
                 ((PER_REQUEST_RBF_BOUND
                     + median_fee_rate.fee_ceil(PER_REQUEST_SIZE_BOUND)
-                    + PER_REQUEST_MINTER_FEE_BOUND)
+                    + per_request_minter_fee_bound)
                     / min_withdrawal_amount_increment)
                     * min_withdrawal_amount_increment
                     + self.retrieve_doge_min_amount
