@@ -200,13 +200,6 @@ impl AsyncUdpSocket for CustomUdp {
         false
     }
 }
-/// How long `wait_for` waits, in *real* time, before giving up on its condition.
-///
-/// This exists so that an unsatisfiable condition fails promptly and says so,
-/// rather than grinding through the whole `simulation_duration` budget and
-/// surfacing as turmoil's opaque "Ran for duration: ... without completing".
-const WAIT_FOR_TIMEOUT: Duration = Duration::from_secs(60);
-
 /// Advances the simulation by one tick, pacing it against the real clock.
 ///
 /// `Sim::step` advances the *simulated* clock by `tick_duration` as fast as the
@@ -232,6 +225,15 @@ const WAIT_FOR_TIMEOUT: Duration = Duration::from_secs(60);
 /// the simulated ones expect. The tick duration is measured from the simulation
 /// itself rather than passed in, so this adapts to whatever the caller
 /// configured on the `Builder`.
+///
+/// The pacing only ever slows the simulation down: real time can run ahead of
+/// simulated time, but simulated time can no longer run ahead of real time.
+/// One consequence is that the `simulation_duration` configured on the
+/// `Builder`, which bounds the *simulated* clock, is now also a lower bound on
+/// the *real* time a simulation runs for before turmoil gives up on it. A
+/// budget that used to be "as good as infinite" because it was burnt through in
+/// a fraction of a second now has to be sized to the test's Bazel timeout; see
+/// `SIMULATION_DURATION` in `consensus_manager`'s tests.
 fn step_paced(sim: &mut Sim) -> turmoil::Result<bool> {
     let simulated_before = sim.elapsed();
     let real_before = Instant::now();
@@ -239,6 +241,15 @@ fn step_paced(sim: &mut Sim) -> turmoil::Result<bool> {
     let all_clients_finished = sim.step()?;
 
     let simulated = sim.elapsed().saturating_sub(simulated_before);
+    // `None` means real time is already ahead of simulated time: the step took
+    // longer than the tick it advanced. That happens on a contended machine,
+    // and structurally in `consensus_manager`'s `test_large_msgs`, whose 1 ms
+    // default tick is shorter than delivering its 50 MB messages takes. There
+    // is nothing to sleep off then, and deliberately no catching up later
+    // either: skipping subsequent sleeps to compensate would run those steps
+    // unpaced, which is exactly what this function exists to prevent. The
+    // simulation simply runs slower than real time for a while, which is the
+    // direction that was always safe.
     if let Some(ahead_of_real_time) = simulated.checked_sub(real_before.elapsed()) {
         std::thread::sleep(ahead_of_real_time);
     }
@@ -248,25 +259,32 @@ fn step_paced(sim: &mut Sim) -> turmoil::Result<bool> {
 
 /// Runs the tokio simulation until provided closure evaluates to true.
 /// If Ok(true) is returned all clients have completed.
+///
+/// Gives up when the simulation exhausts the `simulation_duration` configured
+/// on its `Builder`. Since the simulation is paced against real time, that
+/// takes at least that long in real time too (see `step_paced`), so the budget
+/// needs to be reachable inside the test's Bazel timeout for the failure to be
+/// reported as this error rather than as a bare timeout.
 pub fn wait_for<F>(sim: &mut Sim, mut f: F) -> turmoil::Result
 where
     F: FnMut() -> bool,
 {
     let simulated_start = sim.elapsed();
-    let deadline = Instant::now() + WAIT_FOR_TIMEOUT;
     while !f() {
-        if Instant::now() >= deadline {
-            return Err(format!(
-                "Condition not satisfied within {WAIT_FOR_TIMEOUT:?} of real time \
-                 and {:?} of simulated time (the simulation is {:?} old, of the \
-                 `simulation_duration` configured on the `Builder`)",
-                sim.elapsed().saturating_sub(simulated_start),
-                sim.elapsed(),
-            )
-            .into());
-        }
-        if step_paced(sim)? {
-            panic!("Simulation finished while checking condition");
+        match step_paced(sim) {
+            Ok(false) => {}
+            Ok(true) => panic!("Simulation finished while checking condition"),
+            Err(e) => {
+                // Turmoil reports the whole budget. Say how much of it went on
+                // this particular condition, since a test typically waits on
+                // several in sequence.
+                let spent_here = sim.elapsed().saturating_sub(simulated_start);
+                return Err(format!(
+                    "{e}; {spent_here:?} of that simulated time was spent waiting \
+                     for this condition"
+                )
+                .into());
+            }
         }
     }
     Ok(())
