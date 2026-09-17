@@ -671,10 +671,9 @@ impl AutomaticDeposits {
     pub fn longest_armed_age(&self, now: Timestamp) -> Option<Duration> {
         let window_nanos = u64::try_from(self.watchlist.ttl().as_nanos()).unwrap_or(u64::MAX);
         let expires_at = self
-            .watchlist
-            .iter_by_expiry()
+            .armed_iter(now)
             .map(|(_, entry)| entry.expires_at)
-            .find(|expires_at| *expires_at >= now)?;
+            .min()?;
         let armed_at = expires_at.as_nanos().saturating_sub(window_nanos);
         Some(Duration::from_nanos(
             now.as_nanos().saturating_sub(armed_at),

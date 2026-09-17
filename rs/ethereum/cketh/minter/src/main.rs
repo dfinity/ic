@@ -1231,13 +1231,6 @@ fn decode_ledger_memo(args: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
     memo::decode_ledger_memo(args)
 }
 
-/// Whole seconds elapsed at `now_nanos` since `since_nanos`, or zero when there is nothing to age.
-fn age_seconds(now_nanos: u64, since_nanos: Option<u64>) -> f64 {
-    since_nanos
-        .map(|since_nanos| (now_nanos.saturating_sub(since_nanos) / 1_000_000_000) as f64)
-        .unwrap_or(0.0)
-}
-
 #[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     use ic_metrics_encoder::MetricsEncoder;
@@ -1259,6 +1252,14 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "subaccount_minter_last_processed_block"
                 }
             }
+        }
+
+        /// Whole seconds elapsed at `now_nanos` since `since_nanos`, or zero when there is nothing
+        /// to age.
+        fn age_seconds(now_nanos: u64, since_nanos: Option<u64>) -> f64 {
+            since_nanos
+                .map(|since_nanos| (now_nanos.saturating_sub(since_nanos) / 1_000_000_000) as f64)
+                .unwrap_or(0.0)
         }
 
         fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
