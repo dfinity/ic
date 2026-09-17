@@ -1,13 +1,21 @@
 #!/bin/bash
 
+# Expects:
+# - name of account to install keys for as first argument
+# - replacement authorized_keys file on stdin
+
+case "$1" in
+    readonly | backup | recovery) ;;
+    *)
+        echo "$0: won't provision account '$1'" >&2
+        exit 1
+        ;;
+esac
+
 # Transparently switch uid to root in order to perform the privileged function.
 if [ $(id -u) != 0 ]; then
     exec sudo "$0" "$@"
 fi
-
-# Expects:
-# - name of account to install keys for as first argument
-# - replacement authorized_keys file on stdin
 
 ACCOUNT="$1"
 
