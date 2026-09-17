@@ -6,7 +6,7 @@ use std::{
     pin::Pin,
     sync::{Arc, RwLock},
     task::{Context, Poll},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -200,14 +200,67 @@ impl AsyncUdpSocket for CustomUdp {
         false
     }
 }
+/// How long `wait_for` waits, in *real* time, before giving up on its condition.
+///
+/// This exists so that an unsatisfiable condition fails promptly and says so,
+/// rather than grinding through the whole `simulation_duration` budget and
+/// surfacing as turmoil's opaque "Ran for duration: ... without completing".
+const WAIT_FOR_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Advances the simulation by one tick, pacing it against the real clock.
+///
+/// `Sim::step` advances the *simulated* clock by `tick_duration` as fast as the
+/// CPU can step it, so a bare `while !f() { sim.step()?; }` loop runs simulated
+/// time at hundreds of thousands of times real speed.
+///
+/// That matters because not everything under test runs on the simulated clock.
+/// The artifact processor (`ic_artifact_manager`'s `process_messages`) runs on
+/// its own OS thread with its own `enable_time()` runtime, and polls for work on
+/// *real* time every `ARTIFACT_MANAGER_TIMER_DURATION_MSEC` (200 ms). A
+/// free-running simulation exhausts its entire `simulation_duration` before that
+/// thread has managed even one poll, so any condition that depends on an
+/// artifact being processed can never become true and the test fails with
+/// turmoil's "Ran for duration: ... without completing". The faster and less
+/// contended the machine, the more reliably this happens -- it was deterministic
+/// on Namespace RBE workers while only flaking at ~0.2% on GitHub runners, and
+/// CPU oversubscription hides it entirely by slowing the simulation down.
+///
+/// Sleeping away the difference keeps simulated and real time advancing at
+/// roughly the same rate, so the real-time components make progress at the rate
+/// the simulated ones expect. The tick duration is measured from the simulation
+/// itself rather than passed in, so this adapts to whatever the caller
+/// configured on the `Builder`.
+fn step_paced(sim: &mut Sim) -> turmoil::Result<bool> {
+    let simulated_before = sim.elapsed();
+    let real_before = Instant::now();
+
+    let all_clients_finished = sim.step()?;
+
+    let simulated = sim.elapsed().saturating_sub(simulated_before);
+    if let Some(ahead_of_real_time) = simulated.checked_sub(real_before.elapsed()) {
+        std::thread::sleep(ahead_of_real_time);
+    }
+
+    Ok(all_clients_finished)
+}
+
 /// Runs the tokio simulation until provided closure evaluates to true.
 /// If Ok(true) is returned all clients have completed.
 pub fn wait_for<F>(sim: &mut Sim, mut f: F) -> turmoil::Result
 where
     F: FnMut() -> bool,
 {
+    let deadline = Instant::now() + WAIT_FOR_TIMEOUT;
     while !f() {
-        if sim.step()? {
+        if Instant::now() >= deadline {
+            return Err(format!(
+                "Condition not satisfied within {WAIT_FOR_TIMEOUT:?} of real time \
+                 ({:?} of simulated time)",
+                sim.elapsed()
+            )
+            .into());
+        }
+        if step_paced(sim)? {
             panic!("Simulation finished while checking condition");
         }
     }
@@ -222,7 +275,7 @@ pub fn run_simulation_for(sim: &mut Sim, timeout: Duration) -> turmoil::Result {
         if sim.elapsed() > timeout + now {
             break;
         }
-        if sim.step()? {
+        if step_paced(sim)? {
             panic!("Simulation finished while checking condition");
         }
     }
@@ -244,7 +297,7 @@ where
         if sim.elapsed() > timeout + now {
             break;
         }
-        if sim.step()? {
+        if step_paced(sim)? {
             panic!("Simulation finished while checking condition");
         }
     }
