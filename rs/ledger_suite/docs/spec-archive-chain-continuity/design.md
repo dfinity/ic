@@ -319,14 +319,28 @@ prescription rather than an invention.
 Serves `Req 13.1`, `Req 13.8`. `ic_cdk::call::Call::bounded_wait` defaults to 300 s,
 aligned with the replica's `MAX_CALL_TIMEOUT`.
 
-**The upgradeability argument is the strongest one for this decision, and it was
-missing.** An unbounded-wait call registers a callback, and while that callback is
-outstanding the caller cannot be stopped — and therefore cannot be cleanly upgraded.
-So a tail archive that stalls does not merely block archiving: it makes the ledger
-un-upgradeable. That matters here specifically because D2 makes an upgrade the
-operator's "resume now" lever for every halt in this document, and `Req 11.4`'s halt
-has no other remedy at all. Without `Req 13`, the one failure that most needs the
-lever is the one that disables it. A shorter value buys a faster stall detection at the
+**Our own archives do not stall, so that is not the justification.** Neither archive
+has an `async fn` or a single `.await`: every endpoint is synchronous, so a call
+either completes and replies or traps, and a trap arrives as a reject. The platform
+closes the remaining gap — it synthesises a reject when a callee becomes unreachable
+— so there is no state in which one of our archives silently never answers. A stopped,
+stopping, frozen, deleted or out-of-cycles archive all reject. What is genuinely
+unbounded is how *long* a guaranteed-response call may take on a loaded subnet, not
+whether it returns.
+
+**The justification is the reservation.** Sending a message reserves subnet memory
+for the message *and its response*, and a canister that cannot pay for that
+reservation without freezing is refused at call time. That is the same resource whose
+exhaustion stopped archiving on 2026-09-01, so a bounded call — which reserves no
+response capacity — is more likely to be accepted under exactly the conditions that
+matter. This argument does not depend on any archive misbehaving.
+
+**Upgradeability is a real secondary, but weaker here than in the guidance.** An
+outstanding callback prevents the caller being stopped and therefore cleanly
+upgraded, which matters because D2 makes an upgrade the operator's "resume now" lever
+and `Req 11.4`'s halt has no other remedy. The guidance raises it for *untrusted*
+callees that never respond; against our own synchronous archives the window is only
+as long as a response is slow. Worth having, not worth leading with. A shorter value buys a faster stall detection at the
 cost of spurious unknown outcomes, each of which re-sends a batch; 300 s is
 conservative and can be lowered once the unknown-outcome counter shows how often it
 fires. The value is settled here rather than in `requirements.md` because `Req 13.1`

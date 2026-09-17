@@ -547,9 +547,9 @@ rather than several.
 
 ### Requirement 13: A Ledger Does Not Wait Indefinitely For An Archive
 
-**User Story:** As a canister operator, I want a ledger to give up on a call an
-archive is not answering, so that a stalled archive cannot leave the ledger both
-unable to archive and unable to be upgraded out of that state.
+**User Story:** As a canister operator, I want a ledger's archiving calls not to
+reserve response capacity they may never use, so that archiving is still possible on
+a subnet under the memory pressure that stops it today.
 
 #### Acceptance Criteria
 
