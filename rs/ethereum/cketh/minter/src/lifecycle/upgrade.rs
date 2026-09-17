@@ -3,8 +3,10 @@ use crate::logs::INFO;
 use crate::state::STATE;
 use crate::state::audit::{EventType, process_event, replay_events};
 use crate::state::mutate_state;
+use crate::state::sweep_observations::SweepObservations;
 use crate::storage::total_event_count;
 use crate::time::TimeProvider;
+use crate::timed_sized_map::Timestamp;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_canister_log::log;
 use minicbor::{Decode, Encode};
@@ -44,6 +46,10 @@ pub fn post_upgrade<T: TimeProvider>(upgrade_args: Option<UpgradeArg>, time_prov
 
     STATE.with(|cell| {
         *cell.borrow_mut() = Some(replay_events());
+    });
+    mutate_state(|s| {
+        s.sweep_observations =
+            SweepObservations::started_at(Timestamp::from_nanos(time_provider.time()))
     });
     if let Some(args) = upgrade_args {
         mutate_state(|s| process_event(s, EventType::Upgrade(args), time_provider))

@@ -102,6 +102,14 @@ pub struct AutomaticDeposits {
     /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
     /// its own nonce sequence, independent of the main-address withdrawal pipeline.
     sweeper_transactions: SweeperTransactionPipeline,
+    /// How many deposits the balance scan found at or above their asset's minimum, i.e. how many
+    /// pairs have ever entered the sweep queue. Every event the log replays bumps it, so an upgrade
+    /// restores it rather than resetting it, as it does for the two sweep counters below.
+    balance_scan_candidates: u64,
+    /// How many sweeps finalized, by receipt. A failed sweep moved nothing and dropped every
+    /// deposit it named, so the two apart say whether a rising queue is being drained or discarded.
+    successful_sweeps: u64,
+    failed_sweeps: u64,
 }
 
 impl AutomaticDeposits {
@@ -250,6 +258,13 @@ impl AutomaticDeposits {
             );
         }
 
+        match receipt.status {
+            TransactionStatus::Success => {
+                self.successful_sweeps = self.successful_sweeps.saturating_add(1)
+            }
+            TransactionStatus::Failure => self.failed_sweeps = self.failed_sweeps.saturating_add(1),
+        }
+
         for account in accounts {
             let request = DepositRequest::new(account, asset);
             let entry = self
@@ -285,6 +300,9 @@ impl AutomaticDeposits {
             authorizations,
             delegation_nonces,
             sweeper_transactions,
+            balance_scan_candidates,
+            successful_sweeps,
+            failed_sweeps,
         } = self;
 
         ensure_eq!(watchlist, &other.watchlist);
@@ -292,6 +310,9 @@ impl AutomaticDeposits {
         ensure_eq!(attestations, &other.attestations);
         ensure_eq!(authorizations, &other.authorizations);
         ensure_eq!(delegation_nonces, &other.delegation_nonces);
+        ensure_eq!(balance_scan_candidates, &other.balance_scan_candidates);
+        ensure_eq!(successful_sweeps, &other.successful_sweeps);
+        ensure_eq!(failed_sweeps, &other.failed_sweeps);
         sweeper_transactions.is_equivalent_to(&other.sweeper_transactions)
     }
 
@@ -437,10 +458,19 @@ impl AutomaticDeposits {
 
     /// The number of assets `account` currently has armed (live as of `now`).
     fn armed_asset_count(&self, now: Timestamp, account: &Account) -> usize {
+        self.armed_iter(now)
+            .filter(|(request, _)| &request.account == account)
+            .count()
+    }
+
+    /// Every `(account, asset)` pair still armed as of `now`, i.e. whose scan window is open.
+    fn armed_iter(
+        &self,
+        now: Timestamp,
+    ) -> impl Iterator<Item = (&DepositRequest, &Entry<ScanProgress>)> {
         self.watchlist
             .iter()
-            .filter(|(request, entry)| &request.account == account && entry.expires_at >= now)
-            .count()
+            .filter(move |(_, entry)| entry.expires_at >= now)
     }
 
     /// Rebuild the watchlist exactly from a registry previously produced by
@@ -595,6 +625,7 @@ impl AutomaticDeposits {
             "BUG: sweep queue already has an entry for account {account:?} asset {}",
             deposit.asset
         );
+        self.balance_scan_candidates = self.balance_scan_candidates.saturating_add(1);
     }
 
     /// Snapshot of the watchlist, faithful enough to reconstruct it exactly via
@@ -627,8 +658,49 @@ impl AutomaticDeposits {
         self.watchlist.len()
     }
 
+    /// How many `(account, asset)` pairs are armed and still being scanned as of `now`. No greater
+    /// than [`Self::watchlist_len`], which also counts entries whose window has closed but that
+    /// nothing has evicted yet.
+    pub fn armed_len(&self, now: Timestamp) -> usize {
+        self.armed_iter(now).count()
+    }
+
+    /// How long the oldest still-armed pair has been waiting for a deposit to be detected, or
+    /// `None` when nothing is armed. Every pair is armed for the same window, so the oldest is the
+    /// one expiring first.
+    pub fn longest_armed_age(&self, now: Timestamp) -> Option<Duration> {
+        let window_nanos = u64::try_from(self.watchlist.ttl().as_nanos()).unwrap_or(u64::MAX);
+        let expires_at = self
+            .armed_iter(now)
+            .map(|(_, entry)| entry.expires_at)
+            .min()?;
+        let armed_at = expires_at.as_nanos().saturating_sub(window_nanos);
+        Some(Duration::from_nanos(
+            now.as_nanos().saturating_sub(armed_at),
+        ))
+    }
+
     pub fn sweep_len(&self) -> usize {
         self.sweep.len()
+    }
+
+    /// When the oldest sweep still awaiting finalization was decided, or `None` when every sweep
+    /// the pipeline holds has finalized.
+    pub fn oldest_unfinalized_sweep(&self) -> Option<u64> {
+        self.sweeper_transactions
+            .oldest_unfinalized_request_timestamp()
+    }
+
+    pub fn balance_scan_candidates(&self) -> u64 {
+        self.balance_scan_candidates
+    }
+
+    pub fn successful_sweeps(&self) -> u64 {
+        self.successful_sweeps
+    }
+
+    pub fn failed_sweeps(&self) -> u64 {
+        self.failed_sweeps
     }
 
     pub fn attestations_len(&self) -> usize {
@@ -726,6 +798,9 @@ impl Default for AutomaticDeposits {
             authorizations: BTreeMap::new(),
             delegation_nonces: BTreeMap::new(),
             sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
+            balance_scan_candidates: 0,
+            successful_sweeps: 0,
+            failed_sweeps: 0,
         }
     }
 }

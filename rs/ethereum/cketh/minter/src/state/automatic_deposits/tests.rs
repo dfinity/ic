@@ -87,6 +87,31 @@ fn should_watch_a_pair_for_the_scan_window() {
                 case.name
             );
         }
+
+        let expires_at = case
+            .expected
+            .as_ref()
+            .expect("BUG: every case of this table arms a pair")
+            .expires_at;
+        assert_eq!(
+            (
+                deposits.armed_len(expires_at),
+                deposits.longest_armed_age(expires_at)
+            ),
+            (case.expected_len, Some(DEPOSIT_ADDRESS_SCAN_WINDOW)),
+            "case: {}",
+            case.name
+        );
+        let past_the_window = ts(expires_at.as_nanos() + 1);
+        assert_eq!(
+            (
+                deposits.armed_len(past_the_window),
+                deposits.longest_armed_age(past_the_window)
+            ),
+            (0, None),
+            "case: {}",
+            case.name
+        );
     }
 }
 
@@ -422,6 +447,7 @@ mod scan_targets_iter {
                 .due_scan_targets(ts(101), BlockNumber::new(1_000_000))
                 .is_empty()
         );
+        assert_eq!(deposits.armed_len(ts(101)), 0);
     }
 
     #[test]
@@ -630,6 +656,7 @@ fn record_automatic_deposit_received_removes_the_pair_and_queues_it() {
             deposit_address(&account(0)),
         )
         .unwrap();
+    assert_eq!(deposits.balance_scan_candidates(), 0);
 
     deposits.record_automatic_deposit_received(&automatic_deposit(
         account(0),
@@ -645,6 +672,7 @@ fn record_automatic_deposit_received_removes_the_pair_and_queues_it() {
         None
     );
     assert_eq!(deposits.watchlist_len(), 0);
+    assert_eq!(deposits.balance_scan_candidates(), 1);
 
     // One sweep entry for the pair, carrying the deposit address, finding block, scan_count, and
     // the scanned balance.
@@ -1034,10 +1062,12 @@ async fn should_refuse_to_finalize_a_sweep_whose_deposit_left_the_queue() {
 async fn should_advance_the_delegation_nonce_when_a_finalized_sweep_applied_its_authorization() {
     for status in [TransactionStatus::Success, TransactionStatus::Failure] {
         let (mut deposits, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+        let decided_at = request.created_at;
         assert_eq!(
             deposits.delegation_nonce(&deposit_address(&account(0))),
             TransactionNonce::ZERO
         );
+        assert_eq!(deposits.oldest_unfinalized_sweep(), Some(decided_at));
 
         finalize_sweep(&mut deposits, request, status);
 
@@ -1048,6 +1078,14 @@ async fn should_advance_the_delegation_nonce_when_a_finalized_sweep_applied_its_
              nonce whichever way the call went"
         );
         assert_eq!(deposits.delegation_nonces_len(), 1);
+        assert_eq!(deposits.oldest_unfinalized_sweep(), None);
+        assert_eq!(
+            (deposits.successful_sweeps(), deposits.failed_sweeps()),
+            match status {
+                TransactionStatus::Success => (1, 0),
+                TransactionStatus::Failure => (0, 1),
+            }
+        );
     }
 }
 
