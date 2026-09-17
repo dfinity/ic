@@ -245,11 +245,9 @@ fn step_paced(sim: &mut Sim) -> turmoil::Result<bool> {
     // longer than the tick it advanced. That happens on a contended machine,
     // and structurally in `consensus_manager`'s `test_large_msgs`, whose 1 ms
     // default tick is shorter than delivering its 50 MB messages takes. There
-    // is nothing to sleep off then, and deliberately no catching up later
-    // either: skipping subsequent sleeps to compensate would run those steps
-    // unpaced, which is exactly what this function exists to prevent. The
-    // simulation simply runs slower than real time for a while, which is the
-    // direction that was always safe.
+    // is nothing to sleep off then, and no attempt is made to catch up later
+    // by skipping sleeps: the simulation simply runs slower than real time for
+    // a while, which is the direction that was always safe.
     if let Some(ahead_of_real_time) = simulated.checked_sub(real_before.elapsed()) {
         std::thread::sleep(ahead_of_real_time);
     }
