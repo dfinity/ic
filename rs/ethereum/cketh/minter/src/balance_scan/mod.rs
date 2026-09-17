@@ -78,8 +78,7 @@ fn apply_scan_pass<T: TimeProvider>(
         if pass.read_the_chain() {
             s.sweep_observations.record_completed_balance_scan(now);
         }
-        s.sweep_observations
-            .record_balance_scan_errors(&pass.errors);
+        s.sweep_observations.record_balance_scan_errors(pass.errors);
         for outcome in pass.outcomes {
             match outcome {
                 ScanOutcome::Detected(deposit) => process_event(
