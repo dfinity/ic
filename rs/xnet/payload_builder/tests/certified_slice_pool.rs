@@ -1927,7 +1927,7 @@ fn pool_classify_advert(
         let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
 
         // Nothing on record for a peer we have heard nothing from.
-        assert_matches!(
+        assert_eq!(
             classify_advert(&pool, SRC_SUBNET, &header),
             XNetAdvertOutcome::Actionable
         );
@@ -1936,14 +1936,14 @@ fn pool_classify_advert(
         pool.lock()
             .unwrap()
             .record_peer_header(SRC_SUBNET, &header, fixture.certified_height);
-        assert_matches!(
+        assert_eq!(
             classify_advert(&pool, SRC_SUBNET, &header),
             XNetAdvertOutcome::Duplicate
         );
 
         // Fetched, but not included into a block.
         put(&pool, SRC_SUBNET, slice, &store, &log).unwrap();
-        assert_matches!(
+        assert_eq!(
             classify_advert(&pool, SRC_SUBNET, &header),
             XNetAdvertOutcome::Pooled
         );
@@ -1959,7 +1959,7 @@ fn pool_classify_advert(
                 }
             },
         );
-        assert_matches!(
+        assert_eq!(
             classify_advert(&pool, SRC_SUBNET, &header),
             XNetAdvertOutcome::InPayload
         );
@@ -2007,11 +2007,12 @@ fn pool_classify_advert_collecting_reject_signal(
             .signals_end(stream.signals_end())
             .build();
 
-        // A reject signal at `messages_begin`, only collected by the advertised header.
-        let uncollected_signal = |from, to| from <= messages_begin && messages_begin < to;
-        // A reject signal before `messages_begin`, already collected by every reference
-        // header.
-        let collected_signal =
+        // A reject signal at `messages_begin`, i.e. one only the advertised header,
+        // which begins past it, collects.
+        let reject_signal_at_begin = |from, to| from <= messages_begin && messages_begin < to;
+        // A reject signal before `messages_begin`, i.e. one every reference header has
+        // already collected.
+        let reject_signal_before_begin =
             |from, to| from <= messages_begin.decrement() && messages_begin.decrement() < to;
 
         // A stream position accounting for all of the advertised messages and signals.
@@ -2027,23 +2028,23 @@ fn pool_classify_advert_collecting_reject_signal(
             &stream.header(),
             fixture.certified_height,
         );
-        assert_matches!(
-            classify_advert_with(&pool, SRC_SUBNET, &header, &uncollected_signal),
+        assert_eq!(
+            classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_at_begin),
             XNetAdvertOutcome::Actionable
         );
-        assert_matches!(
-            classify_advert_with(&pool, SRC_SUBNET, &header, &collected_signal),
+        assert_eq!(
+            classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_before_begin),
             XNetAdvertOutcome::Duplicate
         );
 
         // Fetched, but not included into a block.
         put(&pool, SRC_SUBNET, slice, &store, &log).unwrap();
-        assert_matches!(
-            classify_advert_with(&pool, SRC_SUBNET, &header, &uncollected_signal),
+        assert_eq!(
+            classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_at_begin),
             XNetAdvertOutcome::Actionable
         );
-        assert_matches!(
-            classify_advert_with(&pool, SRC_SUBNET, &header, &collected_signal),
+        assert_eq!(
+            classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_before_begin),
             XNetAdvertOutcome::Pooled
         );
 
@@ -2053,18 +2054,25 @@ fn pool_classify_advert_collecting_reject_signal(
             &pool,
             btreemap! { SRC_SUBNET => stream_position(messages_begin) },
         );
-        assert_matches!(
-            classify_advert_with(&pool, SRC_SUBNET, &header, &uncollected_signal),
+        assert_matches!(slice_stats(&pool, SRC_SUBNET), (Some(_), None, 0, 0));
+        assert_eq!(
+            classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_at_begin),
             XNetAdvertOutcome::Actionable
         );
+        // Skipping `classify_advert_with(_, _, _, &reject_signal_before_begin)`, as
+        // it's inconsistent with `max_no_gc_header_begin: messages_begin`.
 
         // Nothing left to collect.
         garbage_collect(
             &pool,
             btreemap! { SRC_SUBNET => stream_position(STREAM_INDEX_MAX) },
         );
-        assert_matches!(
-            classify_advert_with(&pool, SRC_SUBNET, &header, &collected_signal),
+        assert_eq!(
+            classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_at_begin),
+            XNetAdvertOutcome::InPayload
+        );
+        assert_eq!(
+            classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_before_begin),
             XNetAdvertOutcome::InPayload
         );
     });

@@ -108,7 +108,7 @@ pub trait XNetPayloadBuilder: Send + Sync {
 /// The variants are nested: an earlier variant implies all the later ones. The
 /// contexts they are compared against are, from strongest to weakest: certified
 /// state, cached stream position, pooled slice, recorded header.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum XNetAdvertOutcome {
     /// Advertised content is all in our certified state: reply with
     /// `certified_header()`, proving to the sender that they are behind.

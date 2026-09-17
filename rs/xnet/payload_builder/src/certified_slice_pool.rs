@@ -1585,7 +1585,7 @@ impl CertifiedSlicePool {
             Entry::Vacant(vacant) => {
                 vacant.insert(PeerHeader {
                     certification_height,
-                    header: header.clone().into(),
+                    header: Arc::new(header.clone()),
                 });
             }
 
@@ -1598,7 +1598,7 @@ impl CertifiedSlicePool {
 
                     recorded.insert(PeerHeader {
                         certification_height,
-                        header: header.clone().into(),
+                        header: Arc::new(header.clone()),
                     });
                 }
             }
