@@ -64,9 +64,13 @@ pub mod turmoil;
 /// `std::io::stderr()` writes to file descriptor 2 directly, bypassing the
 /// capture, and Bazel merges the test binary's stderr into the test log.
 ///
-/// The name of the panicking thread is included because libtest names each test
-/// thread after the test it runs, which identifies the offending test even
-/// though the panic aborts the whole binary.
+/// The name of the panicking thread is included too. For a panic on a libtest
+/// thread that name is the name of the test, which identifies the offending
+/// test even though the panic aborts the whole binary. A detached tokio task --
+/// the case this hook exists for -- instead panics on one of the runtime's
+/// threads, which all share tokio's configured thread name (`tokio-rt-worker`
+/// by default), so there it is the backtrace rather than the thread name that
+/// localises the panic.
 pub fn abort_process_on_panic() {
     std::panic::set_hook(Box::new(|info| {
         let current_thread = std::thread::current();
