@@ -411,7 +411,8 @@ Order of work, per D4 and D5:
    difference (`Req 2.9`). One comparison suffices rather than sampling: blocks are
    hash-chained, so a divergence at or below that index propagates forward to it and
    cannot heal — if the last covered block matches, every block below it does.
-6. Chain-check `blocks[k]` against the tip (`Req 1.1`, `1.3`, `1.4`, `1.5`), then
+6. Chain-check `blocks[k]` against the tip, or against the Expected_Parent when the
+   archive holds nothing and was given one (`Req 1.1`, `1.3`, `1.4`, `1.5`, `1.8`), then
    each subsequent stored block against its predecessor (`Req 1.7`). The second half
    is one hash per stored block, which is what makes `Req 2.8` a property the archive
    enforces rather than one it inherits from the sender — worth the cost precisely
@@ -450,6 +451,48 @@ all-or-nothing form would satisfy neither criterion.
 
 A block that fails to decode is counted distinctly (`Req 6.4`). Both
 `trap("no space left")` sites are replaced.
+
+### `ic-icrc1-archive` — `init`, and the Expected_Parent
+
+    service : (principal, nat64, opt nat64, opt nat64, opt blob) -> { ... }
+    //                                                  ^^^^^^^^ new: Expected_Parent
+
+A fifth optional `init` argument, the hash the archive should expect as the parent of
+the first block it stores (`Req 1.8`). It closes the last place where a stored block
+goes unchecked.
+
+**Why nothing else can close it.** The declared index verifies *position* and the
+chain check verifies *content*, and for a non-empty archive that covers both. An
+**empty** archive has no tip, so content is unverifiable — `Req 2.1` will accept a
+first append whose index is right whatever the blocks actually are. That is the hole
+`Req 1.4` documents, and it is the seat of the original corruption: a node created
+for one index, then handed blocks from a different chain state. Supplying the parent
+at creation gives the archive a tip before it has one, and makes the invariant
+plain — **the only block ever stored without a parent-hash check is genesis**.
+
+**What it does and does not catch.** It catches the case where creation and first
+append see *different* ledger states: the roll-over corruption, and a ledger restored
+from a snapshot between the two. It does not catch a ledger that had already forked
+before it created the node, since such a ledger would declare the forked parent and
+then send the matching forked block — consistently wrong. That is the residual the
+Rosetta precondition exists for.
+
+**It is not redundant with the index, but it does arrive with the same release.** A
+ledger that cannot send an index cannot supply the hash either, since both come from
+the same ledger version — so this buys nothing during the archive-only release, and
+`Req 1.4`'s window stays open for the ICP ledger and for third-party suites that
+upgrade only the archive. `Req 1.6` counts exactly those.
+
+**Plumbing.** The ledger has the value for free: it is `blocks[0].parent_hash()` of
+the batch it is about to send. But `node_and_capacity` currently receives only
+`blocks[0].size_bytes()`, so the parent hash has to be threaded alongside it to reach
+the `Encode!` at `archive.rs:463-468`.
+
+**Compatibility.** An old ledger encodes four arguments; the fifth being `opt` means
+candid decodes it as absent, so a new archive installed by an old ledger behaves
+exactly as it does today. That is what keeps the archive-only release safe, and it is
+the same tolerance `Req 5` rests on — verify it with `didc` and the CI check rather
+than by inspection.
 
 ### `ic-icrc1-archive` — `archive.did`
 
@@ -668,7 +711,8 @@ test is baseline-independent.
 | 7 | archive | size `max_memory_size_bytes` so a batch only partly fits; assert a short `next_index`, `at_capacity = true`, and that the blocks that fit are readable | `Req 4.1`, `4.2`, `4.3` |
 | 8 | archive | **partly written**: `test_empty_append_blocks_is_accepted_and_stores_nothing` already asserts an empty append stores nothing and consumes no capacity, on both the one-argument and null-index shapes. Extend it against the new implementation to assert a reported extent, and that an empty append at an index above the archive's position is neither refused nor counted | `Req 3.5`, `Req 6.5` |
 | 9 | archive | genesis into an empty archive with offset 0; then assert a block with no parent hash is refused by an archive whose offset is non-zero, and by one that already holds blocks | `Req 1.5` |
-| 9b | archive | index-less append into an empty archive; assert it is stored and the unverifiable-first-append counter rises, then assert an indexed append into an empty archive does not raise it | `Req 1.4`, `Req 1.6` |
+| 9b | archive | install with no Expected_Parent, append into it, and assert it is stored and the unverifiable-first-append counter rises | `Req 1.4`, `Req 1.6` |
+| 9c | archive | install with an Expected_Parent, then append a first batch whose first block carries a different parent; assert refusal and that nothing is stored. Then append one that matches and assert it is stored and the counter in 1.6 does *not* rise | `Req 1.8`, `Req 1.6` |
 | 10 | archive | **written**: `test_append_blocks_ignores_an_extra_optional_start_index` — the current one-argument archive stores the blocks, ignores the extra argument, and its empty reply reads as absent; a wrong-typed payload is rejected as a negative control | the rollout premise |
 | 11 | archive | against the new implementation: one argument only; assert blocks stored, empty reply, and that a chain mismatch traps rather than returning a refusal | `Req 5.1`, `5.2`, `5.3`, `5.4` |
 | 12 | archive | **written**: `should_ignore_an_extra_optional_start_index` (`icp/archive/tests/tests.rs`) — the ICP archive's hand-rolled decode tolerates the extra argument, capacity drops by the block size, and the empty reply reads as absent | D3's tolerance; a **release gate** |

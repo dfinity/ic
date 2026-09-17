@@ -96,6 +96,10 @@ comes first.
 - **`block_index_offset`**: the archive's published second `init` argument, the
   global index of the first block it will ever hold. It is fixed for the life of
   the canister.
+- **Expected_Parent**: the hash an archive is told at `init` to expect as the parent
+  of the first block it stores, i.e. the hash of the block at
+  `block_index_offset - 1`. Absent for an archive whose offset is zero, and absent
+  for one created by a ledger that does not supply it.
 - **`at_capacity`**: a reported flag distinguishing an archive that has reached its
   own configured storage limit from one that merely could not grow.
 
@@ -192,21 +196,25 @@ lost track of what it sent cannot corrupt the archive by sending them again.
    Index_Less_Append — rather than to the append's first block, which may be one the
    archive already holds and whose parent is therefore an earlier block of its own
    rather than its last.
-4. WHILE an archive holds no blocks, THE Archive SHALL NOT refuse an Index_Less_Append
-   on the grounds of 1.1, because it has no last block to compare against and an
-   Index_Less_Append carries nothing else that says where its blocks belong.
+4. WHILE an archive holds no blocks and was given no Expected_Parent, THE Archive
+   SHALL NOT refuse an Index_Less_Append on the grounds of 1.1, because it then has
+   nothing at all to compare against — neither a stored block nor a declared one.
 5. WHEN the earliest block an append would store carries no parent hash, THE Archive
    SHALL store it only if it holds no blocks and its `block_index_offset` is zero,
    because a block without a parent is the genesis block and belongs at index zero
    or nowhere.
-6. WHEN THE Archive stores one or more blocks from an Index_Less_Append while it
-   held none, THE Archive SHALL count that append distinctly, because it is the one append whose placement the
-   archive cannot verify by any means and the count reads zero once every ledger
-   sends an index (per Req 2.1).
+6. WHEN THE Archive stores blocks while holding none and having been given no
+   Expected_Parent, THE Archive SHALL count that append distinctly, because it is
+   the one append whose content the archive cannot verify by any means and the count
+   reads zero once every ledger supplies the hash (per 1.8).
 7. THE Archive SHALL check every block it stores against the block before it, not
    only the first, because otherwise 2.8 holds only as far as the sending ledger's
    own storage is intact and the archive would be trusting exactly what it cannot
    verify.
+8. WHEN an archive that holds no blocks was given an Expected_Parent, THE Archive
+   SHALL refuse an append whose first stored block does not carry that hash as its
+   parent, so that the only block it will ever store without checking a parent hash
+   is the genesis block.
 
 ### Requirement 2: An Append Is Placed By Its Declared Index
 
