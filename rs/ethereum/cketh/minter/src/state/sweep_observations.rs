@@ -6,9 +6,6 @@
 //! These counters are therefore kept beside the event-sourced state and start afresh after an
 //! upgrade, so alerts on them must be written against rates rather than absolute values.
 
-#[cfg(test)]
-mod tests;
-
 use crate::balance_scan::ScanErrors;
 use crate::timed_sized_map::Timestamp;
 use std::time::Duration;
@@ -31,11 +28,11 @@ impl SweepObservations {
             .saturating_add(errors.decode);
     }
 
-    /// Stamps a balance-scan pass that read balances off the chain, at the time it finished. Only
-    /// such a pass moves the stamp: a pass with nothing due, or one whose every chunk failed, says
-    /// nothing about how long ago the scan last worked.
-    pub fn record_completed_balance_scan(&mut self, completed_at: Timestamp) {
-        self.last_completed_balance_scan = Some(completed_at);
+    /// Stamps a balance-scan pass that read balances off the chain, at the time the scan tick
+    /// started. Only such a pass moves the stamp: a pass with nothing due, or one whose every chunk
+    /// failed, says nothing about how long ago the scan last worked.
+    pub fn record_completed_balance_scan(&mut self, started_at: Timestamp) {
+        self.last_completed_balance_scan = Some(started_at);
     }
 
     /// Records what one delegation read found delegated without the minter being able to account

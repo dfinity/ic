@@ -76,8 +76,7 @@ fn apply_scan_pass<T: TimeProvider>(
 ) {
     mutate_state(|s| {
         if pass.read_the_chain() {
-            s.sweep_observations
-                .record_completed_balance_scan(Timestamp::from_nanos(time_provider.time()));
+            s.sweep_observations.record_completed_balance_scan(now);
         }
         s.sweep_observations
             .record_balance_scan_errors(&pass.errors);

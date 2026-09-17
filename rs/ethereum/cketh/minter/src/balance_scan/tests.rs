@@ -155,7 +155,7 @@ async fn should_skip_without_scanning() {
         seed_state(case.latest_block, MIN_DEPOSITS[0].0, &case.holders, now);
 
         // No stub responses: the scan must short-circuit before any outcall.
-        scan(now, stub_rpc_client(vec![]), &reads_no_time()).await;
+        scan(now, stub_rpc_client(vec![]), &records_no_event()).await;
 
         // A skipped scan advances no watchlist entry.
         for (account, _) in &case.holders {
@@ -181,7 +181,7 @@ async fn should_advance_scanned_non_candidate_pairs() {
     scan(
         now,
         stub_rpc_client(vec![ok_balances(&[below_min, below_min])]),
-        &stamps_one_completed_pass(),
+        &records_no_event(),
     )
     .await;
 
@@ -191,6 +191,10 @@ async fn should_advance_scanned_non_candidate_pairs() {
         assert_eq!(entry.last_scanned_block, Some(latest));
     }
     assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 0);
+    assert_eq!(
+        read_state(|s| s.sweep_observations.last_balance_scan_age(now)),
+        Some(Duration::ZERO)
+    );
 }
 
 #[tokio::test]
@@ -220,7 +224,7 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
             ok_balances(&vec![below_min; MAX_CALLS_PER_BATCH]),
             ok_balances(&vec![below_min; extra]),
         ]),
-        &stamps_one_completed_pass(),
+        &records_no_event(),
     )
     .await;
 
@@ -243,17 +247,23 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
     struct Case {
         name: &'static str,
         response: Result<MultiRpcResult<Hex>, IcError>,
+        call_errors: u64,
+        decode_errors: u64,
     }
 
     let cases = vec![
         Case {
             name: "rpc call fails",
             response: Err(IcError::CallPerformFailed),
+            call_errors: 1,
+            decode_errors: 0,
         },
         Case {
             // A one-call chunk expects a single 32-byte word; five bytes cannot decode.
             name: "response fails to decode",
             response: Ok(MultiRpcResult::Consistent(Ok(Hex::from(vec![0_u8; 5])))),
+            call_errors: 0,
+            decode_errors: 1,
         },
     ];
 
@@ -263,7 +273,12 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
         let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
         seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
 
-        scan(now, stub_rpc_client(vec![case.response]), &reads_no_time()).await;
+        scan(
+            now,
+            stub_rpc_client(vec![case.response]),
+            &records_no_event(),
+        )
+        .await;
 
         let entry = live_entry(now, &holder.0, MIN_DEPOSITS[0].0);
         assert_eq!(
@@ -272,6 +287,24 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
             case.name
         );
         assert_eq!(entry.last_scanned_block, None, "case: {}", case.name);
+        assert_eq!(
+            read_state(|s| s.sweep_observations.last_balance_scan_age(now)),
+            None,
+            "case '{}': a pass that read nothing must not look fresh",
+            case.name
+        );
+        assert_eq!(
+            read_state(|s| s.sweep_observations.balance_scan_call_errors()),
+            case.call_errors,
+            "case: {}",
+            case.name
+        );
+        assert_eq!(
+            read_state(|s| s.sweep_observations.balance_scan_decode_errors()),
+            case.decode_errors,
+            "case: {}",
+            case.name
+        );
     }
 }
 
@@ -374,7 +407,7 @@ async fn should_timestamp_a_detected_deposit_with_the_current_time() {
     let mut time_provider = MockTimeProvider::new();
     time_provider
         .expect_time()
-        .times(2)
+        .times(1)
         .return_const(DETECTED_AT_NANOS);
 
     scan(
@@ -392,67 +425,10 @@ fn last_recorded_event() -> Option<crate::state::event::Event> {
     crate::storage::with_event_iter(|events| events.last())
 }
 
-#[tokio::test]
-async fn should_stamp_the_scan_only_once_a_chunk_came_back() {
-    let now = ts();
-    let latest = BlockNumber::new(1_000);
-    let (token, min) = MIN_DEPOSITS[0];
-    let below_min = min.checked_sub(Erc20Value::from(1_u8)).unwrap();
-    let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
-
-    seed_state(Some(latest), token, &[holder], now);
-    scan(
-        now,
-        stub_rpc_client(vec![Err(IcError::CallPerformFailed)]),
-        &reads_no_time(),
-    )
-    .await;
-
-    assert_eq!(
-        read_state(|s| s.sweep_observations.last_balance_scan_age(now)),
-        None,
-        "a pass whose every chunk failed has read nothing, so it must not look fresh"
-    );
-    assert_eq!(
-        read_state(|s| s.sweep_observations.balance_scan_call_errors()),
-        1,
-        "the failure itself is still counted"
-    );
-
-    seed_state(Some(latest), token, &[holder], now);
-    scan(
-        now,
-        stub_rpc_client(vec![ok_balances(&[below_min])]),
-        &stamps_one_completed_pass(),
-    )
-    .await;
-
-    assert_eq!(
-        read_state(|s| s
-            .sweep_observations
-            .last_balance_scan_age(Timestamp::from_nanos(SCAN_COMPLETED_AT + 5_000))),
-        Some(Duration::from_nanos(5_000)),
-        "the stamp is the time the pass finished, not the time the tick started"
-    );
-}
-
-const SCAN_COMPLETED_AT: u64 = 1_620_328_630_000_000_000;
-
-/// A [`TimeProvider`] for scans that must reach no clock at all: they record no event, and they
-/// read no balance to stamp.
-fn reads_no_time() -> MockTimeProvider {
+/// A [`TimeProvider`] for scans that must not record any event: it has no expectation, so
+/// reading the time at all fails the test.
+fn records_no_event() -> MockTimeProvider {
     MockTimeProvider::new()
-}
-
-/// A [`TimeProvider`] for a scan that reads balances but must record no event: the one time it
-/// answers is the completed pass' stamp, so a recorded deposit would ask for a second and fail.
-fn stamps_one_completed_pass() -> MockTimeProvider {
-    let mut time_provider = MockTimeProvider::new();
-    time_provider
-        .expect_time()
-        .times(1)
-        .return_const(SCAN_COMPLETED_AT);
-    time_provider
 }
 
 fn ts() -> Timestamp {

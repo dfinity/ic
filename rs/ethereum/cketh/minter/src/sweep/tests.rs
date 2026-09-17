@@ -373,6 +373,12 @@ async fn should_sweep_a_delegated_address_without_an_authorization() {
         GasAmount::new(185_000),
         "the sweep must not budget the gas of an authorization it does not carry"
     );
+    assert_eq!(
+        untracked_delegations(),
+        1,
+        "the minter tracks no nonce for an address it never delegated itself, whichever contract \
+         the delegation names"
+    );
 }
 
 #[tokio::test]
@@ -407,6 +413,7 @@ async fn should_sweep_an_address_delegated_elsewhere_with_a_nonce_zero_authoriza
         GasAmount::new(225_000),
         "the sweep must budget the gas of the authorization it carries"
     );
+    assert_eq!(untracked_delegations(), 1);
 }
 
 #[tokio::test]
@@ -439,6 +446,11 @@ async fn should_leave_out_an_address_holding_other_code() {
         "an address holding contract code cannot be delegated, so it must not be swept"
     );
     assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 2);
+    assert_eq!(
+        untracked_delegations(),
+        0,
+        "neither an address holding contract code nor an undelegated one holds a delegation"
+    );
 }
 
 #[tokio::test]
@@ -480,7 +492,7 @@ async fn should_read_delegations_once_for_every_asset_of_a_tick() {
     expect_delegation_read(
         &mut runtime,
         &[
-            (account(), Delegation::NotDelegated),
+            (account(), Delegation::Delegated(ANOTHER_SWEEPER_CONTRACT)),
             (another_account(), Delegation::NotDelegated),
         ],
     );
@@ -492,90 +504,11 @@ async fn should_read_delegations_once_for_every_asset_of_a_tick() {
         2,
         "the one stubbed answer must serve both assets: a second read has nothing to answer it"
     );
-}
-
-#[tokio::test]
-async fn should_count_an_untracked_delegation_once_per_delegation_read() {
-    init_state(state_ready_to_sign(&[
-        (account(), usdc()),
-        (account(), usdt()),
-    ]));
-    let mut runtime = mock();
-    runtime.expect_time().return_const(NOW);
-    expect_authorization_signing(
-        &mut runtime,
-        &authorization_request(SWEEPER_CONTRACT, TransactionNonce::ZERO),
-    );
-    expect_signing(&mut runtime);
-    expect_delegation_read(
-        &mut runtime,
-        &[(account(), Delegation::Delegated(ANOTHER_SWEEPER_CONTRACT))],
-    );
-
-    create_pending_sweeper_requests(&runtime).await;
-
     assert_eq!(
         untracked_delegations(),
         1,
-        "the tick reads an address once however many assets it has queued, so it counts once"
-    );
-}
-
-#[tokio::test]
-async fn should_count_an_untracked_delegation_to_the_configured_contract_too() {
-    init_state(state_ready_to_sign(&[(account(), usdc())]));
-    let mut runtime = mock();
-    runtime.expect_time().return_const(NOW);
-    expect_signing(&mut runtime);
-    expect_delegation_read(
-        &mut runtime,
-        &[(account(), Delegation::Delegated(SWEEPER_CONTRACT))],
-    );
-
-    create_pending_sweeper_requests(&runtime).await;
-
-    assert_eq!(
-        untracked_delegations(),
-        1,
-        "a delegation the minter never applied leaves its nonce behind whichever contract it names"
-    );
-}
-
-#[tokio::test]
-async fn should_count_no_untracked_delegation_for_an_address_that_is_not_delegated() {
-    for delegation in [Delegation::NotDelegated, Delegation::Other] {
-        init_state(state_ready_to_sign(&[(account(), usdc())]));
-        let mut runtime = mock();
-        runtime.expect_time().return_const(NOW);
-        expect_signing(&mut runtime);
-        expect_delegation_read(&mut runtime, &[(account(), delegation)]);
-
-        create_pending_sweeper_requests(&runtime).await;
-
-        assert_eq!(untracked_delegations(), 0);
-    }
-}
-
-#[tokio::test]
-async fn should_count_no_untracked_delegation_once_the_minter_tracks_the_nonce() {
-    let mut runtime = mock();
-    expect_authorization_signing(
-        &mut runtime,
-        &authorization_request(SWEEPER_CONTRACT, TransactionNonce::ONE),
-    );
-    finalize_a_first_sweep(&mut runtime).await;
-    queue_deposit(&account(), &usdc());
-
-    expect_delegation_read(
-        &mut runtime,
-        &[(account(), Delegation::Delegated(ANOTHER_SWEEPER_CONTRACT))],
-    );
-    create_pending_sweeper_requests(&runtime).await;
-
-    assert_eq!(
-        untracked_delegations(),
-        0,
-        "an address the minter delegated itself is accounted for by the nonce it tracks"
+        "the delegated address is read once for the whole tick, so it counts once and not once \
+         per asset"
     );
 }
 
@@ -672,6 +605,11 @@ async fn should_sign_a_rotation_authorization_at_the_tracked_nonce() {
         only_one(&sweep.items).authorization,
         signed_stored_authorization(&rotation),
         "the sweep must carry the rotation, which is what makes it a type-0x04 transaction"
+    );
+    assert_eq!(
+        untracked_delegations(),
+        0,
+        "the nonce the minter tracks accounts for the delegation the read found"
     );
 }
 
