@@ -14,6 +14,7 @@ pub use proximity::{GenRangeFn, ProximityMap, UnhealthyNodes};
 
 use crate::certified_slice_pool::{
     CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes,
+    decode_slice_header,
 };
 use crate::proximity::UNHEALTHY_NODE_TTL;
 use async_trait::async_trait;
@@ -25,11 +26,11 @@ use ic_config::message_routing::MAX_STREAM_MESSAGES;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ErrorReproducibility;
 use ic_interfaces::messaging::{
-    InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
-    XNetPayloadValidationFailure,
+    InvalidXNetPayload, XNetAdvertError, XNetAdvertHandler, XNetAdvertOutcome, XNetPayloadBuilder,
+    XNetPayloadValidationError, XNetPayloadValidationFailure,
 };
 use ic_interfaces::validation::ValidationError;
-use ic_interfaces_certified_stream_store::CertifiedStreamStore;
+use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
@@ -46,7 +47,7 @@ use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
 use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
-use ic_types::xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex};
+use ic_types::xnet::{CertifiedStreamSlice, RejectSignal, StreamHeader, StreamIndex};
 use ic_types::{Height, NodeId, NumBytes, RegistryVersion, SubnetId};
 use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
@@ -135,6 +136,28 @@ pub trait XNetSlicePool: Send + Sync {
     /// Garbage collects all messages and signals before the given stream
     /// position for the given slice.
     fn garbage_collect_slice(&self, subnet_id: SubnetId, stream_position: ExpectedIndices);
+
+    /// Classifies an advertised header by how much of its content the pool already
+    /// has, `have_reject_signal_between(from, to)` saying whether we hold a reject
+    /// signal in `[from, to)`.
+    ///
+    /// Never returns `NothingNew`, which would require comparison against the
+    /// certified state.
+    fn classify_advert(
+        &self,
+        subnet_id: SubnetId,
+        header: &StreamHeader,
+        have_reject_signal_between: &dyn Fn(StreamIndex, StreamIndex) -> bool,
+    ) -> XNetAdvertOutcome;
+
+    /// Records the header as the peer's high-water-mark header, unless one with
+    /// a greater certified height is already on record.
+    fn record_peer_header(
+        &self,
+        subnet_id: SubnetId,
+        header: &StreamHeader,
+        certification_height: Height,
+    );
 }
 
 pub struct XNetPayloadBuilderMetrics {
@@ -534,6 +557,40 @@ impl XNetPayloadBuilderImpl {
                 .next_reject_signal_index(max_header_begin)
                 .unwrap_or(STREAM_INDEX_MAX),
         }
+    }
+
+    /// Classifies an advertised header by the strongest statement we can make
+    /// about its content; see `XNetAdvertOutcome`.
+    fn classify_advert(&self, source_subnet: SubnetId, header: &StreamHeader) -> XNetAdvertOutcome {
+        // Only a certified header proves that there is nothing new, so the test for
+        // whether to reply must come from the certified state, same as the reply.
+        let state = self.state_manager.get_latest_certified_state();
+        let own_stream = state
+            .as_ref()
+            .and_then(|state| state.get_ref().streams().get(&source_subnet));
+
+        // Whether we hold a reject signal in `[from, to)`; none, without a certified
+        // state.
+        let have_reject_signal_between = |from, to| {
+            own_stream
+                .and_then(|stream| stream.next_reject_signal_index(from))
+                .is_some_and(|index| index < to)
+        };
+
+        if let Some(stream) = own_stream {
+            // `NothingNew` if our certified stream has signals for all advertised messages;
+            // no messages before the advertised `signals_end`; and no reject signals before
+            // the advertised `begin`.
+            if header.end() <= stream.signals_end()
+                && header.signals_end() <= stream.messages_begin()
+                && !have_reject_signal_between(StreamIndex::from(0), header.begin())
+            {
+                return XNetAdvertOutcome::NothingNew;
+            }
+        }
+
+        self.slice_pool
+            .classify_advert(source_subnet, header, &have_reject_signal_between)
     }
 
     /// Computes the expected message and signal indices for every known subnet
@@ -1365,6 +1422,77 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
     }
 }
 
+impl XNetAdvertHandler for XNetPayloadBuilderImpl {
+    fn handle_advert(
+        &self,
+        source_subnet: SubnetId,
+        advert: CertifiedStreamSlice,
+    ) -> Result<XNetAdvertOutcome, XNetAdvertError> {
+        // Decode without verifying: classifying the claimed header is cheap, and the
+        // outcomes that do not act (due to no new content) don't need verification.
+        let claimed = decode_slice_header(&advert.payload)
+            .map_err(|err| XNetAdvertError::Invalid(err.to_string()))?;
+        let outcome = self.classify_advert(source_subnet, &claimed);
+        match outcome {
+            // Valid or not, there is nothing for us to see here.
+            XNetAdvertOutcome::InPayload | XNetAdvertOutcome::Pooled => return Ok(outcome),
+
+            // A duplicate of a previously recorded header, re-enqueue _the recorded header_
+            // for a pull if we tried and failed before.
+            XNetAdvertOutcome::Duplicate => return Ok(outcome),
+
+            // Verify that the header is signed by `source_subnet` before recording the
+            // header or replying to it.
+            XNetAdvertOutcome::NothingNew | XNetAdvertOutcome::Actionable => {}
+        }
+
+        // Use the latest registry version for validation. There is a potential race
+        // condition here, but it's benign: our and the peer's views of the subnet
+        // record will converge eventually, and unblock validation.
+        let registry_version = self.registry.get_latest_version();
+        let slice = self
+            .certified_stream_store
+            .decode_certified_stream_slice(source_subnet, registry_version, &advert)
+            .map_err(|err| XNetAdvertError::Invalid(err.to_string()))?;
+        debug_assert_eq!(slice.header(), &claimed, "Inconsistent slice decoding");
+
+        // Record every verified peer header: it is our record of how far the peer has
+        // garbage collected its messages, which is what tells us whether we still owe
+        // it an advert.
+        self.slice_pool.record_peer_header(
+            source_subnet,
+            slice.header(),
+            advert.certification.height,
+        );
+
+        Ok(outcome)
+    }
+
+    fn certified_header(&self, subnet_id: SubnetId) -> Option<CertifiedStreamSlice> {
+        match self.certified_stream_store.encode_certified_stream_slice(
+            subnet_id,
+            None,
+            None,
+            Some(0),
+            None,
+        ) {
+            Ok(slice) => Some(slice),
+
+            Err(EncodeStreamError::NoStreamForSubnet(_)) => None,
+
+            Err(err @ EncodeStreamError::InvalidSliceBegin { .. })
+            | Err(err @ EncodeStreamError::InvalidSliceIndices { .. }) => {
+                error!(
+                    self.log,
+                    "Unreachable: failed to encode certified stream slice for subnet {subnet_id}: {err}"
+                );
+                debug_assert!(false);
+                None
+            }
+        }
+    }
+}
+
 /// Retrieves the given node's operator ID at the given registry version.
 ///
 /// Returns `None` if the node record does not exist or the registry read
@@ -1740,6 +1868,26 @@ impl XNetSlicePool for XNetSlicePoolImpl {
     fn garbage_collect_slice(&self, subnet_id: SubnetId, stream_position: ExpectedIndices) {
         let mut slice_pool = self.slice_pool.lock().unwrap();
         slice_pool.garbage_collect_slice(subnet_id, stream_position);
+    }
+
+    fn classify_advert(
+        &self,
+        subnet_id: SubnetId,
+        header: &StreamHeader,
+        have_reject_signal_between: &dyn Fn(StreamIndex, StreamIndex) -> bool,
+    ) -> XNetAdvertOutcome {
+        let slice_pool = self.slice_pool.lock().unwrap();
+        slice_pool.classify_advert(subnet_id, header, have_reject_signal_between)
+    }
+
+    fn record_peer_header(
+        &self,
+        subnet_id: SubnetId,
+        header: &StreamHeader,
+        certification_height: Height,
+    ) {
+        let mut slice_pool = self.slice_pool.lock().unwrap();
+        slice_pool.record_peer_header(subnet_id, header, certification_height);
     }
 }
 
