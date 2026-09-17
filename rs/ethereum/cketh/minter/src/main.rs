@@ -1383,7 +1383,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 
                 let now = Timestamp::from_nanos(now_nanos);
                 w.encode_gauge(
-                    "cketh_minter_armed_deposit_addresses",
+                    "cketh_minter_armed_deposits",
                     s.automatic_deposits.armed_len(now) as f64,
                     "Number of (account, asset) pairs currently armed and being scanned for a \
                      deposit.",

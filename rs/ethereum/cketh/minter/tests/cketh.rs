@@ -1373,7 +1373,7 @@ fn should_export_the_sweep_pipeline_metrics() {
     cketh.env.tick();
     cketh
         .check_minter_metrics()
-        .assert_contains_metric_matching(r"cketh_minter_armed_deposit_addresses 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_armed_deposits 0 \d+")
         .assert_contains_metric_matching(r"cketh_minter_longest_armed_age_seconds 0 \d+")
         .assert_contains_metric_matching(r"cketh_minter_queued_deposits 0 \d+")
         .assert_contains_metric_matching(
