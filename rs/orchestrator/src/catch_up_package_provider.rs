@@ -650,7 +650,10 @@ pub(crate) mod tests {
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
             dkg::{DkgSummary, PostSplitArgs, SubnetSplittingStatus},
         },
-        crypto::*,
+        crypto::{
+            threshold_sig::ni_dkg::{NiDkgReceivers, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
+            *,
+        },
         signature::ThresholdSignature,
         subnet_id_into_protobuf,
         time::UNIX_EPOCH,
@@ -883,8 +886,10 @@ pub(crate) mod tests {
         signer.dkg_tag = pb::NiDkgTag::LowThreshold as i32;
         cup_proto.signer = Some(signer);
 
-        let server_addr =
-            start_server(TestService::SendCup(Arc::new(cup_proto.encode_to_vec()))).await;
+        let server_addr = start_server(TestService::SendCup(Arc::new(Mutex::new(
+            cup_proto.clone(),
+        ))))
+        .await;
         let node_id = node_test_id(1);
         let node_record = NodeRecord {
             http: Some(ConnectionEndpoint {
@@ -1076,6 +1081,22 @@ pub(crate) mod tests {
         subnet_splitting_status: SubnetSplittingStatus,
         signer_subnet_id: SubnetId,
     ) -> CatchUpPackage {
+        let mut cup_signature = ThresholdSignature::fake();
+        // `SubnetAwareThresholdSigVerifier` reads the subnet ID off the signature.
+        cup_signature.signature =
+            CombinedThresholdSigOf::new(CombinedThresholdSig(signer_subnet_id.get().to_vec()));
+        cup_signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+        match subnet_splitting_status {
+            SubnetSplittingStatus::NotScheduled | SubnetSplittingStatus::Scheduled(_) => {
+                cup_signature.signer.dealer_subnet = signer_subnet_id;
+            }
+            SubnetSplittingStatus::PostSplit(_) => {
+                // Post-split CUPs use transcripts from the registry
+                cup_signature.signer.target_subnet =
+                    NiDkgTargetSubnet::Remote(NiDkgTargetId::new([0_u8; 32]));
+            }
+        }
+
         let fake_summary = DkgSummary::fake();
         let mut current_transcripts = fake_summary.current_transcripts().clone();
         let committee = NiDkgReceivers::new(committee.into_iter().collect()).unwrap();
@@ -1085,6 +1106,11 @@ pub(crate) mod tests {
             // `get_oldest_registry_version_in_use` agrees with the summary's registry version.
             transcript.registry_version = registry_version;
         }
+        // The high-threshold transcript must match the signer, otherwise validation fails
+        current_transcripts
+            .get_mut(&NiDkgTag::HighThreshold)
+            .unwrap()
+            .dkg_id = cup_signature.signer.clone();
 
         let dkg = DkgSummary::new(
             /*configs=*/ vec![],
@@ -1127,19 +1153,6 @@ pub(crate) mod tests {
             CryptoHashOf::from(CryptoHash(Vec::new())),
             None,
         );
-        let mut cup_signature = ThresholdSignature::fake();
-        cup_signature.signature =
-            CombinedThresholdSigOf::new(CombinedThresholdSig(signer_subnet_id.get().to_vec()));
-        match subnet_splitting_status {
-            SubnetSplittingStatus::NotScheduled | SubnetSplittingStatus::Scheduled(_) => {
-                cup_signature.signer.dealer_subnet = signer_subnet_id;
-            }
-            SubnetSplittingStatus::PostSplit(_) => {
-                // Post-split CUPs use transcripts from the registry
-                cup_signature.signer.target_subnet =
-                    NiDkgTargetSubnet::Remote(NiDkgTargetId::new([0_u8; 32]));
-            }
-        }
 
         Signed {
             content: cup_content,

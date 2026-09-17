@@ -3523,7 +3523,7 @@ mod tests {
             .has_exactly_n_messages_containing(
                 expected_rejections,
                 &Level::Warning,
-                "Failed to verify CUP signature",
+                "Failed to verify CUP from peer",
             )
             .has_exactly_n_messages_containing(
                 usize::from(moves_to_destination),
@@ -3688,7 +3688,7 @@ mod tests {
             .has_exactly_n_messages_containing(
                 0,
                 &Level::Warning,
-                "Failed to verify CUP signature",
+                "Failed to verify CUP from peer",
             );
     }
 
