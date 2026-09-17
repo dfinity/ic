@@ -156,13 +156,26 @@ candid's `done()` (`candid-0.10.35`, `de.rs`) absorbs an extra trailing value as
 `Reserved`, so it tolerates the new argument and its empty reply decodes as absent.
 Its `post_upgrade` already takes `Option<ArchiveUpgradeArgument>` (`:383`).
 
+**Every SNS ledger suite runs this archive, with archiving on.** `ic-icrc1-archive`
+is not ckBTC and ckDOGE's alone: `sns/init/src/lib.rs:604-616` installs it for every
+SNS with `trigger_threshold: 2000` and `num_blocks_to_archive: 1000`, so archiving is
+active there today. PR 1's cost — archiving halts until PR 3, retrying every
+transaction — therefore lands on all of them, each upgrading on its own schedule, so
+the window is as long as the slowest SNS takes.
+
 **Chunking today.** The chunk size is
 `min(archive.max_message_size_bytes, max_ledger_msg_size_bytes)`
-(`archive.rs:233-236`): 128 kB on ICP (`icp/src/lib.rs:628, :634`, and the ledger
-ceiling is written only in `init`), and 1 MiB on ICRC via a hard-coded
-`MAX_MESSAGE_SIZE`. So ICP rounds are two-chunk at `num_blocks_to_archive: 1000`
-(`icp/src/lib.rs:623-624`) and ICRC rounds are single-chunk. Node roll-over makes a
-round multi-message on *both*, independently of chunk size, roughly once per 3 GiB.
+(`archive.rs:233-236`), so the smaller governs:
+
+| | archive option | effective chunk | 1000 blocks |
+|---|---|---|---|
+| **ICP** | 128 kB (`icp/src/lib.rs:628`; the ledger ceiling `:634` is written only in `init`) | 128 kB | two chunks |
+| **ckBTC, ckDOGE** | `null`, so the 2 MiB default, clamped by a hard-coded 1 MiB `MAX_MESSAGE_SIZE` | 1 MiB | one chunk |
+| **every SNS** | 128 kB (`sns/init/src/lib.rs:610`) | 128 kB | **multi-chunk** |
+
+"ICRC is single-chunk" is therefore true only of the two ck suites. The chunking
+window is open on ICP *and* on every SNS. Node roll-over makes a round multi-message
+on all of them regardless, independently of chunk size, roughly once per 3 GiB.
 
 ## Design Decisions
 
@@ -300,10 +313,20 @@ the computed value.
 
 ### `ic-icrc1-archive` — `append_blocks`
 
-    type append_result = variant {
-      Ok            : record { block_index_offset : nat64; next_index : nat64; at_capacity : bool };
-      Gap           : record { expected : nat64; got : nat64 };
-      ChainMismatch : record { at_index : nat64 };
+    type append_outcome = variant {
+      Stored;                                      // Req 2.1, 2.3, 4.1, 4.8
+      AlreadyHeld;                                 // Req 2.4
+      BelowRange;                                  // Req 2.6
+      Gap;                                         // Req 2.2
+      ChainMismatch : record { at_index : nat64 };  // Req 1.1, 1.7, 2.9
+      Undecodable   : record { at_index : nat64 };  // Req 6.4
+    };
+
+    type append_result = record {
+      block_index_offset : nat64;
+      next_index         : nat64;
+      at_capacity        : bool;
+      outcome            : append_outcome;
     };
 
     append_blocks : (vec blob, opt nat64) -> (opt append_result);
@@ -313,12 +336,21 @@ releasable alone. The reply's first field is named `block_index_offset`, matchin
 the published `init` argument it reports, rather than `start_index` — the request's
 second argument is the index the *batch* starts at, and one word cannot mean both.
 
-`ChainMismatch` carries the index at which the divergence was found, and serves both
-`Req 1.1` (at the archive's tip) and `Req 2.9` (inside a range it already holds). One
-arm rather than two, because the ledger's response is the same for both — halt per
-`Req 9.7` — while `Req 6.1`'s separate counters give the operator the distinction
-that matters to them. That is the same division of labour as D5: type what the ledger
-acts on, count what an operator diagnoses.
+**A record, not a variant, because the range is unconditional.** `Req 3.1` requires
+the offset and position on *any* answer and `Req 3.3` requires one meaning in every
+outcome of `Req 2` — a variant whose refusing arms carried only their own fields
+satisfied neither, and left `Req 2.6` distinguishable from an ordinary success only by
+the ledger re-deriving it from what it sent. Hoisting the range out and demoting the
+outcome to a field makes `Req 3.3` literally true and `Req 3.6` free.
+
+`ChainMismatch` carries the index at which the divergence was found and serves
+`Req 1.1` at the tip, `Req 1.7` inside the batch, and `Req 2.9` inside a range already
+held. One arm for all three, because the ledger's response is the same — halt per
+`Req 9.7` — while `Req 6.1`'s separate counters give the operator the distinction that
+matters to them. That is D5's division of labour: type what the ledger acts on, count
+what an operator diagnoses. `Undecodable` exists because decoding on append is new —
+the current implementation stores opaque bytes and never parses them — so a block the
+archive cannot parse is a failure mode this design introduces and must answer for.
 
 Order of work, per D4 and D5:
 
@@ -339,8 +371,15 @@ Order of work, per D4 and D5:
    difference (`Req 2.9`). One comparison suffices rather than sampling: blocks are
    hash-chained, so a divergence at or below that index propagates forward to it and
    cannot heal — if the last covered block matches, every block below it does.
-6. Chain-check `blocks[k]` against the tip (`Req 1.1`, `1.3`, `1.4`, `1.5`).
-7. Append the suffix, stopping short where it must (`Req 4.1`, `4.2`, `4.8`). Two
+6. Chain-check `blocks[k]` against the tip (`Req 1.1`, `1.3`, `1.4`, `1.5`), then
+   each subsequent stored block against its predecessor (`Req 1.7`). The second half
+   is one hash per stored block, which is what makes `Req 2.8` a property the archive
+   enforces rather than one it inherits from the sender — worth the cost precisely
+   because the rest of this design exists to stop trusting what the ledger asserts.
+7. Append the suffix, stopping short where it must (`Req 4.1`, `4.2`, `4.8`), and
+   report `at_capacity` false whenever nothing stopped short (`Req 4.9`). Note the one
+   wasted round this leaves: an archive that stores its last block exactly fills, still
+   answers false, and is found full on the next round — which then spawns. Two
    different stops, and only one of them depends on the platform. `Req 4.1` is the
    archive comparing the next block's size against its own configured limit and its
    own usage, so it stops *before* asking for memory and cannot be refused — this is
@@ -398,6 +437,12 @@ since this is where the ranges are; per D6 they report upward rather than acting
 return type widens to carry the count `archive_blocks` should remove, which may
 include blocks an archive already held.
 
+A `BelowRange` outcome is **not** a halt. It is the ordinary signal that the ledger
+is behind — the coverage guard's input — so it routes to `Req 8.2` and its counter is
+diagnostic rather than alarming (`Req 9.8`). It is the one refusing outcome that does
+not stop archiving, which is why it is worth naming here rather than leaving to the
+halt table below.
+
 An absent reply routes by `Wasm::INDEXED_APPENDS` (D3): halt and count for an ICRC
 ledger (`Req 10.1`), incremental path and count for ICP (`Req 10.5`). The
 determination itself is the empty append of `Req 10.3`, issued here and exempt from
@@ -413,9 +458,26 @@ and its internal record are the same data, which is why `Req 8.6` has to be abou
 `#[serde(skip)]` fields per D2: last-attempt timestamp and consecutive-failure count
 (`Req 9`), in-flight creation counter (`Req 11`), cached capability answer (`Req 10.4`).
 
-The creation counter is `+1` before `create_canister` and `-1` when `nodes.push`
-succeeds. It is per-epoch, so it needs no baseline, and it does not self-clear
-(`Req 11.4`).
+Creation state is one persisted field rather than a counter:
+
+    enum Creating { Idle, Started, Created(CanisterId) }
+
+`Started` before `create_canister`, `Created(id)` as soon as it returns, `Idle` when
+`nodes.push` succeeds. Anything but `Idle` halts (`Req 11.1`) and is exposed
+(`Req 11.2`), with the id when there is one (`Req 11.7`).
+
+**Two of the three orphan windows stop being write-offs.** The Constraints table
+lists three, but after `create_canister` returns the id is in hand — it is lost only
+because nothing persists it before the next await. Recording it first (`Req 11.6`)
+makes the `install_code` and `update_settings` windows *recoverable*: the canister
+exists, the ledger knows which one, and an operator can finish or delete it. Only a
+trap in `create_canister`'s own reply is irreducible, and `Started` covers that — a
+halt with no id, which is precisely the "a canister may exist and I cannot name it"
+case.
+
+It is persisted rather than `#[serde(skip)]` like the rest of D2's state, because an
+orphan must outlive an upgrade or the upgrade becomes a way to forget it. It replaces
+the counter entirely: one field doing both the halt and the record.
 
 **The decrement is scoped to failures observed before the canister exists**, which
 is narrower than "any creation step" and the distinction matters.
@@ -468,6 +530,17 @@ pre-call afterwards.
 Creating a node sets `block_index_offset` from the reported extent of the previously
 created node (`Req 7.1`), and refuses to use a node whose reported range does not
 begin where the previous one ends (`Req 7.4`).
+
+For a suite that predates this work there is no previously *created* node to have
+reported anything — but there is a tail, and `Req 10.3`'s probe reports its range
+before the first roll-over, which is where `Req 7.1` gets its value. Worth a comment
+at the call site, since the probe doubling as the bootstrap is not obvious.
+
+That first probe is also a free divergence check: a tail whose reported range
+disagrees with what the ledger had inferred trips `Req 8.2` or `Req 8.4` immediately.
+It covers only the tail, so it does not replace Step 0's Rosetta sync — but it fires
+on every existing suite the moment PR 3 deploys, with no operator action, which the
+sync cannot claim.
 
 ### `ledger_canister_core::ledger` and `::blockchain` — round selection
 
@@ -569,7 +642,11 @@ test is baseline-independent.
 | 20 | integration | count `append_blocks` per round against a configuration that is multi-chunk today; assert one, and that the effective per-round metric matches | `Req 12.1`, `12.3`, `12.4` |
 | 21 | measurement | ledger memory across an archive-creation round, as `routine_archiving_does_not_grow_the_ledger` does for a routine one; assert growth below a bound | D2's allocation work |
 | 22 | archive | append `0..999`; then re-send `500..999` from a chain that diverges at 701, and assert `ChainMismatch` is returned, nothing is stored, and the covered-range counter rises while the tip-mismatch counter does not. Then re-send a range that does *not* diverge and assert success — so the check is not simply refusing every re-send | `Req 2.9`, `Req 6.6` |
-| 22b | integration | drive the ledger into a refusal per 1.1, 2.2 and 2.9 in turn; assert it stops attempting rather than backing off, and exposes the distinct metric | `Req 9.7` |
+| 22b | integration | drive the ledger into a refusal per 1.1, 2.2, 2.9 and 6.4 in turn; assert it stops attempting rather than backing off, and exposes the distinct metric. Then drive a `BelowRange` report and assert it does *not* halt but reconciles | `Req 9.7`, `Req 9.8` |
+| 22c | archive | append a batch whose first block continues the tip but whose fifth does not continue the fourth; assert `ChainMismatch` at that index and that nothing was stored — the case a first-block-only check accepts | `Req 1.7` |
+| 22d | archive | append a batch containing bytes that do not decode as a block; assert `Undecodable` is returned with its index, nothing is stored, and its counter rises separately from the mismatch counters | `Req 6.4` |
+| 22e | archive | assert every outcome of Req 2 carries the same `block_index_offset` and `next_index` fields, and that `at_capacity` is false on a full store and on a wholly-covered re-send | `Req 3.1`, `3.3`, `3.6`, `Req 4.9` |
+| 22f | integration | fail `install_code` after `create_canister` succeeded; assert archiving halts, the metric exposes the created canister's id, and that the id survives a ledger upgrade | `Req 11.1`, `11.6`, `11.7` |
 | 23 | unit, `ledger_canister_core` | create an archive after a round whose reported extent ends at `N`; assert its `block_index_offset` is `N+1` and that `archives()` tiles with no gap or overlap. Then present a node whose reported range starts elsewhere and assert no blocks are stored in it and the metric rises | `Req 7.1`, `7.2`, `7.3`, `7.4` |
 | 24 | integration | on a ledger whose archives report no extent, assert an archive is still created and blocks are still discarded — the exemptions, which a literal reading of Req 7 and Req 8 would forbid | `Req 7.5`, `Req 8.7` |
 | 25 | integration | fail `install_code` gracefully after `create_canister` succeeded; assert the creation counter stays non-zero and archiving halts, and that a failure of `create_canister` itself does not halt | `Req 11.1`, `11.3` |
@@ -602,7 +679,7 @@ reason.
 **Verification.**
 
     cargo check --all-targets --all-features -p ic-icrc1-archive -p ic-icp-archive \
-      -p ledger-canister-core -p ic-icrc1-ledger -p ledger-canister
+      -p ic-ledger-canister-core -p ic-icrc1-ledger -p ledger-canister
     ./ci/scripts/rust-lint.sh
     bazel test --test_output=errors \
       //rs/ledger_suite/icrc1/archive:archive_integration_tests \
@@ -627,6 +704,12 @@ the chain check on the first stored block, capacity reporting, the counters, and
 why `Req 5` is in this PR and not a later one.
 *Acceptance:* `Req 1`, `Req 2`, `Req 3`, `Req 4` (4.1-4.4, 4.7, 4.8), `Req 5`,
 `Req 6`.
+
+*Who this lands on.* Every ICRC suite, not only the two ck ones — see the SNS
+Constraint above. The cost below is therefore paid by each SNS ledger independently,
+on its own upgrade schedule, and the window between PR 1 and PR 3 is as long as the
+slowest of them takes. That is the strongest argument for keeping the two close
+together, and for not treating PR 1 as a change that can sit in `master` for a while.
 
 *What this release costs.* Two things, and the second is a limit rather than a price.
 
@@ -665,6 +748,12 @@ the comment.
 **Step 5 — lower `trigger_threshold`**, by NNS proposal. Not a PR. Last, because
 nothing forces re-enablement to a date: after PR 1 and PR 2 archiving is *safe*, and
 after PR 3 and PR 4 a stall heals itself rather than waiting for an operator.
+
+Expect the backlog to drain at **one message per transaction**, not at
+`num_blocks_to_archive` per transaction — `Req 12.1` makes a round one append, so that
+setting no longer governs the rate. The ck backlogs have been growing since the
+mitigation, so the drain is long even though each round is cheap; plan the proposal
+knowing that rather than expecting it to catch up quickly.
 
 The union of PRs 1, 3 and 4 covers `Req 1` through `Req 13`.
 

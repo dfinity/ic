@@ -201,6 +201,10 @@ lost track of what it sent cannot corrupt the archive by sending them again.
    held none, THE Archive SHALL count that append distinctly, because it is the one append whose placement the
    archive cannot verify by any means and the count reads zero once every ledger
    sends an index (per Req 2.1).
+7. THE Archive SHALL check every block it stores against the block before it, not
+   only the first, because otherwise 2.8 holds only as far as the sending ledger's
+   own storage is intact and the archive would be trusting exactly what it cannot
+   verify.
 
 ### Requirement 2: An Append Is Placed By Its Declared Index
 
@@ -248,8 +252,8 @@ wrong about it.
 
 #### Acceptance Criteria
 
-1. WHEN THE Archive completes an Indexed_Append, THE Archive SHALL report its
-   `block_index_offset` and its Archive_Position.
+1. WHEN THE Archive answers an Indexed_Append at all, THE Archive SHALL report its
+   `block_index_offset` and its Archive_Position, whatever the outcome was.
 2. THE Archive SHALL report the Archive_Position it holds *after* storing whatever
    the append stored, not the position before, because reporting the earlier
    position would leave a ledger permanently re-sending the same blocks.
@@ -261,6 +265,9 @@ wrong about it.
 5. WHEN THE Archive receives an Indexed_Append carrying no blocks, THE Archive
    SHALL report per 3.1 and SHALL store nothing and consume no capacity, because
    this is how a ledger asks an archive where it stands without risking a write.
+6. THE Archive SHALL state the outcome of an Indexed_Append explicitly alongside the
+   values in 3.1, so that a ledger never has to infer which case occurred by
+   comparing what it sent against what was reported.
 
 ### Requirement 4: A Capacity Stop Is Reported, Not A Failure
 
@@ -295,6 +302,9 @@ makes progress under storage pressure instead of repeating work it cannot finish
    configured limit asks for no memory and so cannot be refused.
 8. WHEN THE Archive is instead refused memory it asked for, and the refusal returns
    control to it, THE Archive SHALL behave as in 4.1.
+9. WHEN THE Archive stored every block it was offered, or stored none because they
+   were all already held, THE Archive SHALL report `at_capacity` as false, because a
+   ledger reading it as true would create an archive it does not need.
 
 ### Requirement 5: An Index-Less Append Behaves As It Does Today
 
@@ -427,10 +437,14 @@ per interval rather than work per transaction.
    instead ends the round's execution is the subject of the corresponding non-goal.
 6. WHEN an Archiving_Round fails, THE Ledger SHALL NOT prevent a later
    Archiving_Round from being attempted.
-7. WHEN an archive refuses an append per 1.1, 2.2 or 2.9, THE Ledger SHALL make no
-   further archiving attempt and SHALL expose a distinct non-zero metric, rather
-   than spacing further attempts per 9.1, because no retry can resolve a mismatch of
-   chain or position and backing off would probe an unrecoverable state forever.
+7. WHEN an archive refuses an append per 1.1, 1.7, 2.2, 2.9 or 6.4, THE Ledger SHALL
+   make no further archiving attempt and SHALL expose a distinct non-zero metric,
+   rather than spacing further attempts per 9.1, because no retry can resolve a
+   mismatch of chain or position or a block the archive cannot parse.
+8. WHEN an archive reports per 2.6 that the blocks offered fall below its own range,
+   THE Ledger SHALL NOT halt per 9.7 and SHALL instead reconcile per 8.2, because
+   this is the ordinary signal that the ledger is behind rather than a sign that
+   anything is wrong.
 
 ### Requirement 10: A Ledger Will Not Archive Against An Archive That Cannot Report Its Range
 
@@ -463,8 +477,8 @@ unaddressable canister does not become a series of them.
 
 #### Acceptance Criteria
 
-1. WHILE THE Ledger has begun creating an archive and has neither recorded its
-   identity nor observed the creation fail, THE Ledger SHALL make no further
+1. WHILE THE Ledger has begun creating an archive and has neither adopted it as one
+   of its archives nor observed the creation fail, THE Ledger SHALL make no further
    archiving attempt.
 2. WHILE the condition in 11.1 holds, THE Ledger SHALL expose a distinct non-zero
    metric.
@@ -477,6 +491,13 @@ unaddressable canister does not become a series of them.
 5. WHEN THE Ledger observes a failure *after* the canister exists but before its
    identity is recorded, THE Ledger SHALL enter the state in 11.1, because the
    canister is then unaddressable whether the failure was observed or not.
+6. WHEN THE Ledger learns the identity of a canister it created, THE Ledger SHALL
+   record that identity durably before doing anything else with it, so that a
+   later failure leaves a canister an operator can still address rather than one
+   nothing can reach.
+7. WHILE the condition in 11.1 holds and an identity was recorded per 11.6, THE
+   Ledger SHALL expose that identity, because an operator otherwise has to recover
+   it from canister logs that are unreadable by default.
 
 ### Requirement 12: An Archiving Round Makes One Append
 
