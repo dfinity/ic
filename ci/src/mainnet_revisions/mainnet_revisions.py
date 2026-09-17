@@ -56,12 +56,11 @@ MAINNET_BINARIES = [
 # //bazel:mainnet-icos-{images,binaries,versions}.bzl. They are read from the public
 # dashboard API -- which is not authenticated -- and from CDN-served SHA256SUMS files,
 # which are verified against the build's provenance attestation whenever the version's
-# commit is public (see VersionArtifactSums). The resulting PR is
-# auto-approved and auto-merged, so a value that is not exactly a commit id / sha256 /
-# plain name must never be written to mainnet-icos-revisions.json in the first place.
-# The repository rules reject such values as well (see bazel/mainnet-artifact-refs.bzl,
-# which these patterns mirror); failing here means a poisoned upstream value never
-# reaches a PR.
+# commit is public (see VersionArtifactSums). The resulting PR is auto-approved and
+# auto-merged, so a value that is not exactly a commit id / sha256 / plain name must
+# never be written to mainnet-icos-revisions.json in the first place. The Bazel rules
+# reject such values as well (see bazel/mainnet-artifact-refs.bzl, which these patterns
+# mirror); failing here means a poisoned upstream value never reaches a PR.
 COMMIT_ID_PATTERN = re.compile(r"\A[0-9a-f]{40}\Z")
 SHA256_PATTERN = re.compile(r"\A[0-9a-f]{64}\Z")
 ARTIFACT_NAME_PATTERN = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")

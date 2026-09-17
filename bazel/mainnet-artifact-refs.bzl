@@ -13,11 +13,15 @@ Every field validated here reaches at least one of:
     hard-coded GitHub repository through dot-segment normalization
     (`../../../org/repo/releases/download/x`), or simply select a different artifact
     on the pinned host,
-  * the `output` path of `repository_ctx.download`, which `..` can walk out of,
-  * the text of a generated `BUILD.bazel` file (the ICOS binary names), where
-    quotes/newlines would inject Starlark,
-  * the `sha256` of `repository_ctx.download`, where the empty string silently
-    *disables* verification.
+  * the `output` path of `repository_ctx.download` (canisters, binaries), which `..`
+    can walk out of,
+  * the text of a generated `BUILD.bazel` file: the ICOS binary names, where
+    quotes/newlines would inject Starlark, and the ICOS image URLs and hashes, which
+    end up verbatim in the shell command of a build-time download genrule
+    (//bazel:mainnet-icos-images.bzl), where `$`, quotes or whitespace would inject
+    shell or Make variables,
+  * the `sha256` of `repository_ctx.download` (canisters, binaries), where the empty
+    string silently *disables* verification.
 
 The `*_error` functions return a message describing the problem, or `None` when the
 value is acceptable. They deliberately do not call `fail()` themselves: `fail()`

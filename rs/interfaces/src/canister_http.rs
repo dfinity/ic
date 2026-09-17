@@ -206,11 +206,27 @@ pub enum CanisterHttpPayloadValidationFailure {
 pub type CanisterHttpPayloadValidationError =
     ValidationError<InvalidCanisterHttpPayloadReason, CanisterHttpPayloadValidationFailure>;
 
+/// Whether the response of a share is passed on to peers: gossiped along with the
+/// share, and served to a peer that pulls the artifact later.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResponseVisibility {
+    /// The peers of an outcall that is not fully replicated cannot produce the
+    /// response themselves, so they need ours.
+    Publish,
+    /// Either every replica of a fully replicated outcall produces the response
+    /// itself, or the outcall has already been answered and its response is of no
+    /// use to anyone.
+    Withhold,
+}
+
 #[derive(Debug)]
 pub enum CanisterHttpChangeAction {
-    AddToValidated(CanisterHttpResponseShare, CanisterHttpResponse),
-    AddToValidatedAndGossipResponse(CanisterHttpResponseShare, CanisterHttpResponse),
-    MoveToValidated(CanisterHttpResponseShare),
+    AddToValidated(
+        CanisterHttpResponseShare,
+        CanisterHttpResponse,
+        ResponseVisibility,
+    ),
+    MoveToValidated(CanisterHttpResponseShare, ResponseVisibility),
     RemoveValidated(CanisterHttpResponseId),
     RemoveUnvalidated(CanisterHttpResponseId),
     RemoveContent(CryptoHashOf<CanisterHttpResponse>),
