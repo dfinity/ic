@@ -1,8 +1,9 @@
-use std::{backtrace::Backtrace, collections::HashMap, ops::Range, sync::Arc, time::Duration};
+use std::{collections::HashMap, ops::Range, sync::Arc, time::Duration};
 
 use futures::StreamExt;
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_p2p_test_utils::{
+    abort_process_on_panic,
     consensus::{TestConsensus, U64Artifact},
     fully_connected_localhost_subnet, start_consensus_manager,
     turmoil::{
@@ -399,13 +400,7 @@ fn load_test(
 /// Small load test with four nodes and overlapping advert Id
 #[test]
 fn test_small_load_test() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
     let load_params = LoadParameters {
         num_peers: 4,
         num_events: 100,
@@ -419,13 +414,7 @@ fn test_small_load_test() {
 /// Large load test with 40 nodes without overlapping id.
 #[test]
 fn test_large_load_test_many_nodes() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
     let load_params = LoadParameters {
         num_peers: 8,
         num_events: 100,
@@ -439,13 +428,7 @@ fn test_large_load_test_many_nodes() {
 /// Load test with 20 nodes and large distribution of Id.
 #[test]
 fn test_load_test_many_ids() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
     let load_params = LoadParameters {
         num_peers: 5,
         num_events: 200,
@@ -459,13 +442,7 @@ fn test_load_test_many_ids() {
 /// Small load test with four nodes and no purging..
 #[test]
 fn test_small_load_test_without_purging() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
     let load_params = LoadParameters {
         num_peers: 4,
         num_events: 1000,
@@ -479,13 +456,7 @@ fn test_small_load_test_without_purging() {
 /// Small load test with four nodes and no purging..
 #[test]
 fn test_small_load_test_with_non_overlap() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
     let load_params = LoadParameters {
         num_peers: 4,
         num_events: 1000,
