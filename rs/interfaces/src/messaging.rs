@@ -102,6 +102,50 @@ pub trait XNetPayloadBuilder: Send + Sync {
     }
 }
 
+/// The outcome of handling a XNet advert: the strongest statement the receiver
+/// can make about the advertised content.
+///
+/// The variants are nested: an earlier variant implies all the later ones. The
+/// contexts they are compared against are, from strongest to weakest: certified
+/// state, cached stream position, pooled slice, recorded header.
+#[derive(Debug, Eq, PartialEq)]
+pub enum XNetAdvertOutcome {
+    /// Advertised content is all in our certified state: reply with
+    /// `certified_header()`, proving to the sender that they are behind.
+    NothingNew,
+
+    /// Advertised content is all accounted for by the cached stream position, i.e.
+    /// already included into blocks as far as this node knows. Nothing to fetch.
+    InPayload,
+
+    /// Advertised content is all covered by the pooled slice: not yet all included
+    /// into blocks, but nothing more to fetch. Sender is ahead of our block making
+    /// as far as this node knows.
+    Pooled,
+
+    /// Advertised content is all covered by the peer's _recorded header_: already
+    /// known to us, but not (fully) fetched. Re-enqueues a fetch if the earlier
+    /// attempt failed.
+    Duplicate,
+
+    /// Advertised content goes beyond the peer's _recorded header_: something this
+    /// node has not seen before. Enqueues a fetch.
+    Actionable,
+}
+
+impl XNetAdvertOutcome {
+    /// A short, stable name for the outcome, for use e.g. as a metric label.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            XNetAdvertOutcome::NothingNew => "nothing_new",
+            XNetAdvertOutcome::InPayload => "in_payload",
+            XNetAdvertOutcome::Pooled => "pooled",
+            XNetAdvertOutcome::Duplicate => "duplicate",
+            XNetAdvertOutcome::Actionable => "actionable",
+        }
+    }
+}
+
 pub const LABEL_VALUE_CANISTER_NOT_FOUND: &str = "CanisterNotFound";
 pub const LABEL_VALUE_CANISTER_STOPPED: &str = "CanisterStopped";
 pub const LABEL_VALUE_CANISTER_STOPPING: &str = "CanisterStopping";
