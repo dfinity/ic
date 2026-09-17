@@ -20,11 +20,9 @@ pub struct SweepObservations {
 impl SweepObservations {
     /// Records the chunks of one balance-scan pass that did not come back, whether or not any
     /// other chunk of that pass did.
-    pub fn record_balance_scan_errors(&mut self, errors: &ScanErrors) {
-        self.balance_scan_call_errors = self.balance_scan_call_errors.saturating_add(errors.call);
-        self.balance_scan_decode_errors = self
-            .balance_scan_decode_errors
-            .saturating_add(errors.decode);
+    pub fn record_balance_scan_errors(&mut self, &ScanErrors { call, decode }: &ScanErrors) {
+        self.balance_scan_call_errors = self.balance_scan_call_errors.saturating_add(call);
+        self.balance_scan_decode_errors = self.balance_scan_decode_errors.saturating_add(decode);
     }
 
     /// Stamps a balance-scan pass that read balances off the chain, at the time the scan tick
