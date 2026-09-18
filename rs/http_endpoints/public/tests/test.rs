@@ -1287,13 +1287,22 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
     mock_state_manager
         .expect_get_certified_state_snapshot()
         .return_once(move || {
-            struct FakeCertifiedStateSnapshot;
+            struct FakeCertifiedStateSnapshot(ReplicatedState);
+
+            impl Default for FakeCertifiedStateSnapshot {
+                fn default() -> Self {
+                    Self(ReplicatedState::new(
+                        subnet_test_id(1),
+                        SubnetType::Application,
+                    ))
+                }
+            }
 
             impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
                 type State = ReplicatedState;
 
                 fn get_state(&self) -> &ReplicatedState {
-                    unimplemented!();
+                    &self.0
                 }
 
                 fn get_height(&self) -> Height {
@@ -1361,7 +1370,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
                 }
             }
 
-            Some(Box::new(FakeCertifiedStateSnapshot))
+            Some(Box::new(FakeCertifiedStateSnapshot::default()))
         });
 
     let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
@@ -1717,13 +1726,22 @@ fn test_synchronous_call_endpoint_no_certification(
     });
 }
 
-struct FakeCertifiedStateSnapshot;
+struct FakeCertifiedStateSnapshot(ReplicatedState);
+
+impl Default for FakeCertifiedStateSnapshot {
+    fn default() -> Self {
+        Self(ReplicatedState::new(
+            subnet_test_id(1),
+            SubnetType::Application,
+        ))
+    }
+}
 
 impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
     type State = ReplicatedState;
 
     fn get_state(&self) -> &ReplicatedState {
-        unimplemented!()
+        &self.0
     }
 
     fn get_height(&self) -> Height {
@@ -1744,7 +1762,7 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
 /// but the state reader fails to read the certified state.
 #[rstest]
 #[case::certified_state_snapshot_unavailable(None)]
-#[case::reading_certified_state_fails(Some(Box::new(FakeCertifiedStateSnapshot) as _))]
+#[case::reading_certified_state_fails(Some(Box::new(FakeCertifiedStateSnapshot::default()) as _))]
 fn test_call_v3_response_when_state_reader_fails(
     #[values(
         UpdateEndpoint::Canister(Call::V3),

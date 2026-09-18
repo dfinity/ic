@@ -321,33 +321,27 @@ pub(crate) fn get_verified_delegation(
     metrics: &HttpHandlerMetrics,
     endpoint_type: &'static str,
 ) -> Result<Option<CertificateDelegation>, HttpError> {
-    let delegation_from_nns = match nns_delegation_reader.builder() {
-        None => None,
-        Some(builder) => {
-            let network_topology = &certified_state_reader.get_state().metadata.network_topology;
-            match builder.build_verified(
-                canister_ranges_check,
-                network_topology.routing_table_for_certification(),
-                |subnet_id| {
-                    network_topology
-                        .subnets_for_certification()
-                        .get(&subnet_id)
-                        .map(|subnet_topology| subnet_topology.public_key.as_slice())
-                },
+    let network_topology = &certified_state_reader.get_state().metadata.network_topology;
+    let delegation_from_nns = match nns_delegation_reader.get_verified_delegation(
+        canister_ranges_check,
+        network_topology.routing_table_for_certification(),
+        |subnet_id| {
+            network_topology
+                .subnets_for_certification()
+                .get(&subnet_id)
+                .map(|subnet_topology| subnet_topology.public_key.as_slice())
+        },
+    ) {
+        Ok(delegation) => delegation,
+        Err(err) => {
+            warn!(
+                every_n_seconds => LOG_EVERY_N_SECONDS,
                 log,
-            ) {
-                Ok(delegation) => Some(delegation),
-                Err(err) => {
-                    warn!(
-                        every_n_seconds => LOG_EVERY_N_SECONDS,
-                        log,
-                        "Failed to verify the NNS delegation (endpoint: {endpoint_type}): {err:?}"
-                    );
-                    metrics.observe_delegation_verification_failure(endpoint_type, &err);
+                "Failed to verify the NNS delegation (endpoint: {endpoint_type}): {err:?}"
+            );
+            metrics.observe_delegation_verification_failure(endpoint_type, &err);
 
-                    return Err(delegation_verification_failure_error(err));
-                }
-            }
+            return Err(delegation_verification_failure_error(err));
         }
     };
 

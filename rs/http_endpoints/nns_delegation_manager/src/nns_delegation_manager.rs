@@ -721,6 +721,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::RwLock;
 
+    use crate::CanisterRangesFilter;
     use assert_matches::assert_matches;
     use axum::response::IntoResponse;
     use axum_server::tls_rustls::RustlsConfig;
@@ -1215,7 +1216,16 @@ mod tests {
 
         reader.wait_until_initialized().await.unwrap();
 
-        assert!(reader.builder().is_none());
+        assert!(
+            reader
+                .get_verified_delegation(
+                    CanisterRangesCheck::NoCheck(CanisterRangesFilter::None),
+                    &RoutingTable::default(),
+                    |_subnet_id| None,
+                )
+                .expect("Verification is skipped when there is no delegation")
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -1250,13 +1260,9 @@ mod tests {
 
             reader.wait_until_initialized().await.unwrap();
 
-            let builder = reader
-                .builder()
-                .expect("Should return some delegation on non NNS subnet");
-
             let network_topology = &mutable_state.read().unwrap().metadata.network_topology;
-            let delegation = builder
-                .build_verified(
+            let delegation = reader
+                .get_verified_delegation(
                     CanisterRangesCheck::AllSubnetRanges,
                     network_topology.routing_table_for_certification(),
                     |subnet_id| {
@@ -1265,9 +1271,9 @@ mod tests {
                             .get(&subnet_id)
                             .map(|subnet_topology| subnet_topology.public_key.as_slice())
                     },
-                    &no_op_logger(),
                 )
-                .expect("Should return a valid delegation");
+                .expect("Should return a valid delegation")
+                .expect("Should return some delegation on non NNS subnet");
             let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
                 .expect("Should return a certificate which can be deserialized");
             let tree = LabeledTree::try_from(parsed_delegation.tree)
