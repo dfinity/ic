@@ -68,6 +68,7 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig, is_wasm64: bool) -> Sy
             config.feature_flags,
             config.stable_memory_dirty_page_limit,
             config.stable_memory_accessed_page_limit,
+            config.wasm_memory_accessed_page_limit,
             WasmMemoryType::Wasm64,
         );
     } else {
@@ -76,6 +77,7 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig, is_wasm64: bool) -> Sy
             config.feature_flags,
             config.stable_memory_dirty_page_limit,
             config.stable_memory_accessed_page_limit,
+            config.wasm_memory_accessed_page_limit,
             WasmMemoryType::Wasm32,
         );
     }

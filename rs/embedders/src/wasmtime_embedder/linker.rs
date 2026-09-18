@@ -8,7 +8,7 @@ use crate::{
     },
 };
 use ic_config::{
-    embedders::{FeatureFlags, StableMemoryPageLimit},
+    embedders::{FeatureFlags, MemoryPageLimit},
     flag_status::FlagStatus,
 };
 use ic_interfaces::execution_environment::{
@@ -234,8 +234,9 @@ pub fn syscalls<
 >(
     linker: &mut Linker<StoreData>,
     feature_flags: FeatureFlags,
-    stable_memory_dirty_page_limit: StableMemoryPageLimit,
-    stable_memory_access_page_limit: StableMemoryPageLimit,
+    stable_memory_dirty_page_limit: MemoryPageLimit,
+    stable_memory_access_page_limit: MemoryPageLimit,
+    wasm_memory_access_page_limit: MemoryPageLimit,
     main_memory_type: WasmMemoryType,
 ) where
     <I as TryInto<usize>>::Error: std::fmt::Display,
@@ -1581,6 +1582,17 @@ pub fn syscalls<
                             stable_memory_access_page_limit.message.get()
                                 * (PAGE_SIZE as u64 / 1024),
                             stable_memory_access_page_limit.query.get() * (PAGE_SIZE as u64 / 1024),
+                        ))
+                    }
+                    InternalErrorCode::HeapAccessLimitExceeded => {
+                        HypervisorError::MemoryAccessLimitExceeded(format!(
+                            "Exceeded the limit for the number of \
+                            accessed pages in the heap in a single \
+                            execution: limit {} KB for regular messages, {} KB \
+                            for upgrade messages and {} KB for queries.",
+                            wasm_memory_access_page_limit.message.get() * (PAGE_SIZE as u64 / 1024),
+                            wasm_memory_access_page_limit.upgrade.get() * (PAGE_SIZE as u64 / 1024),
+                            wasm_memory_access_page_limit.query.get() * (PAGE_SIZE as u64 / 1024),
                         ))
                     }
                     InternalErrorCode::StableGrowFailed => HypervisorError::CalledTrap {
