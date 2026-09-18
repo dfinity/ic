@@ -74,8 +74,15 @@ pub struct OrchestratorArgs {
 }
 
 impl OrchestratorArgs {
-    /// Create replica binary and CUP directories associated with this object if
-    /// they don't already exist
+    /// Where `ic-gateway` keeps its ACME account and the certificates it issues.
+    pub(crate) fn acme_cache_dir(&self) -> PathBuf {
+        self.orchestrator_data_directory
+            .join("ic-gateway")
+            .join("acme")
+    }
+
+    /// Create the replica binary, CUP and ACME cache directories associated with
+    /// this object if they don't already exist
     pub(crate) fn create_dirs(&self) {
         if !&self.replica_binary_dir.exists() {
             fs::create_dir(&self.replica_binary_dir).unwrap_or_else(|err| {
@@ -90,6 +97,13 @@ impl OrchestratorArgs {
         if !self.cup_dir.exists() {
             fs::create_dir(&self.cup_dir).unwrap_or_else(|err| {
                 panic!("Failed to create dir {}: {}", self.cup_dir.display(), err)
+            });
+        }
+
+        let acme_cache_dir = self.acme_cache_dir();
+        if !acme_cache_dir.exists() {
+            fs::create_dir_all(&acme_cache_dir).unwrap_or_else(|err| {
+                panic!("Failed to create dir {}: {}", acme_cache_dir.display(), err)
             });
         }
     }
@@ -115,5 +129,41 @@ impl OrchestratorArgs {
         self.metrics_listen_addr.unwrap_or_else(|| {
             SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), PROMETHEUS_HTTP_PORT).into()
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn args_for_test(data_directory: PathBuf) -> OrchestratorArgs {
+        OrchestratorArgs {
+            replica_binary_dir: data_directory.join("replica_binaries"),
+            cup_dir: data_directory.join("cups"),
+            replica_config_file: data_directory.join("ic.json5"),
+            ic_boundary_env_file: data_directory.join("ic-boundary.env"),
+            ic_gateway_env_file: data_directory.join("ic-gateway.env"),
+            ic_binary_directory: data_directory.clone(),
+            metrics_listen_addr: None,
+            enable_provisional_registration: false,
+            replica_version_file: data_directory.join("version.txt"),
+            guestos_version_file: data_directory.join("guestos_version.txt"),
+            node_id: false,
+            dc_id: false,
+            orchestrator_data_directory: data_directory,
+        }
+    }
+
+    #[test]
+    fn create_dirs_creates_the_acme_cache() {
+        let dir = tempdir().unwrap();
+        let args = args_for_test(dir.path().to_path_buf());
+
+        args.create_dirs();
+
+        // `ic-gateway` writes its ACME account and the private keys of the
+        // certificates it issues here.
+        assert!(args.acme_cache_dir().is_dir());
     }
 }
