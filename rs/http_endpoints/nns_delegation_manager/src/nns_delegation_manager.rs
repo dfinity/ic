@@ -1427,13 +1427,12 @@ mod tests {
             (APP_SUBNET_ID, SubnetType::Application),
             (VERIFIED_APP_SUBNET_ID, SubnetType::VerifiedApplication),
         ] {
-            let (registry_client, tls_config, _, mutable_state) =
-                set_up_nns_delegation_dependencies(
-                    rt_handle.clone(),
-                    Arc::new(RwLock::new(None)),
-                    /*delay=*/ None,
-                    subnet_id,
-                );
+            let (registry_client, tls_config, _, _) = set_up_nns_delegation_dependencies(
+                rt_handle.clone(),
+                Arc::new(RwLock::new(None)),
+                /*delay=*/ None,
+                subnet_id,
+            );
 
             let builder = load_root_delegation(
                 &Config::default(),
@@ -1449,23 +1448,12 @@ mod tests {
             .await;
 
             let builder = builder.expect("Should return Some delegation on non NNS subnet");
-
-            let network_topology = &mutable_state.read().unwrap().metadata.network_topology;
-            let delegation = builder
-                .build_verified(
-                    CanisterRangesCheck::AllSubnetRanges,
-                    network_topology.routing_table_for_certification(),
-                    |subnet_id| {
-                        network_topology
-                            .subnets_for_certification()
-                            .get(&subnet_id)
-                            .map(|subnet_topology| subnet_topology.public_key.as_slice())
-                    },
-                    &no_op_logger(),
-                )
-                .expect("Should return a valid delegation");
-            let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
-                .expect("Should return a certificate which can be deserialized");
+            let parsed_delegation: Certificate = serde_cbor::from_slice(
+                &builder
+                    .build_unverified(CanisterRangesFilter::Flat, &no_op_logger())
+                    .certificate,
+            )
+            .expect("Should return a certificate which can be deserialized");
             let tree = LabeledTree::try_from(parsed_delegation.tree)
                 .expect("The deserialized delegation should contain a correct tree");
             // Verify that the state tree has the a subtree corresponding to the requested subnet
