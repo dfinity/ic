@@ -95,7 +95,7 @@ impl NNSDelegationReader {
         })
     }
 
-    pub async fn wait_until_initialized(&mut self) -> Result<(), watch::error::RecvError> {
+    pub async fn changed(&mut self) -> Result<(), watch::error::RecvError> {
         self.receiver.changed().await
     }
 }
