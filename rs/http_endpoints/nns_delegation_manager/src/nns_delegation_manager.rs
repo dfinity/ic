@@ -721,6 +721,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::RwLock;
 
+    use crate::CanisterRangesFilter;
     use assert_matches::assert_matches;
     use axum::response::IntoResponse;
     use axum_server::tls_rustls::RustlsConfig;
@@ -1215,16 +1216,7 @@ mod tests {
 
         reader.wait_until_initialized().await.unwrap();
 
-        assert!(
-            reader
-                .get_delegation(
-                    CanisterRangesCheck::AllSubnetRanges,
-                    &RoutingTable::default(),
-                    |_subnet_id| None,
-                )
-                .expect("Verification is skipped when there is no delegation")
-                .is_none()
-        );
+        assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_none());
     }
 
     #[tokio::test]
@@ -1235,13 +1227,12 @@ mod tests {
             (APP_SUBNET_ID, SubnetType::Application),
             (VERIFIED_APP_SUBNET_ID, SubnetType::VerifiedApplication),
         ] {
-            let (registry_client, tls_config, state_reader, mutable_state) =
-                set_up_nns_delegation_dependencies(
-                    rt_handle.clone(),
-                    Arc::new(RwLock::new(None)),
-                    /*delay=*/ None,
-                    subnet_id,
-                );
+            let (registry_client, tls_config, state_reader, _) = set_up_nns_delegation_dependencies(
+                rt_handle.clone(),
+                Arc::new(RwLock::new(None)),
+                /*delay=*/ None,
+                subnet_id,
+            );
 
             let (_, mut reader) = start_nns_delegation_manager(
                 &MetricsRegistry::new(),
@@ -1259,19 +1250,8 @@ mod tests {
 
             reader.wait_until_initialized().await.unwrap();
 
-            let network_topology = &mutable_state.read().unwrap().metadata.network_topology;
             let delegation = reader
-                .get_delegation(
-                    CanisterRangesCheck::AllSubnetRanges,
-                    network_topology.routing_table_for_certification(),
-                    |subnet_id| {
-                        network_topology
-                            .subnets_for_certification()
-                            .get(&subnet_id)
-                            .map(|subnet_topology| subnet_topology.public_key.as_slice())
-                    },
-                )
-                .expect("Should return a valid delegation")
+                .get_delegation(CanisterRangesFilter::Flat)
                 .expect("Should return some delegation on non NNS subnet");
             let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
                 .expect("Should return a certificate which can be deserialized");

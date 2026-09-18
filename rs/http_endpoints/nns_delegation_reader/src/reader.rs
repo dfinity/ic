@@ -67,29 +67,17 @@ impl NNSDelegationReader {
         Self { receiver, logger }
     }
 
-    /// Verifies the most recent NNS delegation known to the replica against the given view
-    /// of the subnet information recorded in a replicated state and, only if it is
-    /// consistent, builds and returns it (see [`NNSDelegationBuilder::build_verified`]).
-    /// Consecutive calls might verify and return different delegations.
-    /// Note: on the NNS subnet this always returns `Ok(None)`.
-    pub fn get_delegation<'a>(
+    /// Returns the most recent NNS delegation known to the replica.
+    /// Consecutive calls might return different delegations.
+    /// Note: on the NNS subnet this always returns `None`.
+    pub fn get_delegation(
         &self,
-        ranges_check: CanisterRangesCheck,
-        routing_table: &RoutingTable,
-        public_key_for_subnet: impl FnOnce(SubnetId) -> Option<&'a [u8]>,
-    ) -> Result<Option<CertificateDelegation>, DelegationVerificationError> {
+        canister_ranges_filter: CanisterRangesFilter,
+    ) -> Option<CertificateDelegation> {
         self.receiver
             .borrow()
             .as_ref()
-            .map(|builder| {
-                builder.build_verified(
-                    ranges_check,
-                    routing_table,
-                    public_key_for_subnet,
-                    &self.logger,
-                )
-            })
-            .transpose()
+            .map(|builder| builder.build_unverified(canister_ranges_filter, &self.logger))
     }
 
     /// Returns the most recent NNS delegation known to the replica together with some metadata.

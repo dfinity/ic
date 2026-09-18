@@ -4,7 +4,6 @@ use crate::{
     HttpError, ReplicaHealthStatus,
     common::{Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error},
     metrics::HttpHandlerMetrics,
-    verified_delegation_source::VerifiedDelegationSource,
 };
 use axum::{
     Router,
@@ -23,7 +22,7 @@ use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::ReplicaLogger;
-use ic_nns_delegation_manager::{CanisterRangesCheck, CanisterRangesFilter, NNSDelegationReader};
+use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_replicated_state::{ReplicatedState, canister_state::execution_state::CustomSectionType};
 use ic_types::{
@@ -69,7 +68,7 @@ pub struct ReadStateService {
     log: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     metrics: HttpHandlerMetrics,
-    verified_delegation_source: VerifiedDelegationSource,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<ReadState, RegistryRootOfTrustProvider>>,
@@ -170,17 +169,12 @@ impl ReadStateServiceBuilder {
         let version = self.version;
         let target = self.target;
         let state = ReadStateService {
-            verified_delegation_source: VerifiedDelegationSource::new(
-                self.nns_delegation_reader,
-                self.log.clone(),
-                self.metrics.clone(),
-                "read_state",
-            ),
             log: self.log,
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             metrics: self.metrics,
+            nns_delegation_reader: self.nns_delegation_reader,
             state_reader: self.state_reader,
             time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
@@ -210,7 +204,7 @@ pub(crate) async fn read_state(
         log,
         health_status,
         metrics,
-        verified_delegation_source,
+        nns_delegation_reader,
         state_reader,
         time_source,
         validator,
@@ -287,26 +281,12 @@ pub(crate) async fn read_state(
             return (status, message).into_response();
         }
 
-        let canister_ranges_check = match (version, target) {
-            (Version::V2, Target::Canister) => {
-                CanisterRangesCheck::CanisterInFlat(effective_canister_id)
-            }
-            (Version::V2, Target::Subnet) => {
-                CanisterRangesCheck::NoCheck(CanisterRangesFilter::Flat)
-            }
-            (Version::V3, Target::Canister) => {
-                CanisterRangesCheck::CanisterInTree(effective_canister_id)
-            }
+        let delegation_from_nns = match (version, target) {
+            (Version::V2, _) => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
+            (Version::V3, Target::Canister) => nns_delegation_reader
+                .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
             (Version::V3, Target::Subnet) => {
-                CanisterRangesCheck::NoCheck(CanisterRangesFilter::None)
-            }
-        };
-        let delegation_from_nns = match verified_delegation_source
-            .get_delegation(certified_state_reader.as_ref(), canister_ranges_check)
-        {
-            Ok(delegation) => delegation,
-            Err(err) => {
-                return err.into_response();
+                nns_delegation_reader.get_delegation(CanisterRangesFilter::None)
             }
         };
 

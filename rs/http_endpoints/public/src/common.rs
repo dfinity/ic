@@ -44,8 +44,6 @@ pub const CONTENT_TYPE_TEXT: &str = "text/plain; charset=utf-8";
 /// [`408 Request Timeout`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408) will be returned to the user.
 const MAX_REQUEST_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);
 
-pub(crate) const LOG_EVERY_N_SECONDS: i32 = 10;
-
 pub(crate) fn get_root_threshold_public_key(
     log: &ReplicaLogger,
     registry_client: &dyn RegistryClient,
