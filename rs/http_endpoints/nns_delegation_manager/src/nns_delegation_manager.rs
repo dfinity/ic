@@ -67,6 +67,13 @@ const DELEGATION_PROACTIVE_UPDATE_INTERVAL: Duration = Duration::from_secs(5 * 6
 #[cfg(test)]
 const DELEGATION_PROACTIVE_UPDATE_INTERVAL: Duration = Duration::from_secs(5);
 
+/// As long as no delegation has been published yet, we proactively fetch much more frequently, so
+/// that the readers (i.e. the HTTP endpoints) are initialized as soon as possible.
+#[cfg(not(test))]
+const DELEGATION_INITIAL_PROACTIVE_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
+#[cfg(test)]
+const DELEGATION_INITIAL_PROACTIVE_UPDATE_INTERVAL: Duration = Duration::from_millis(500);
+
 #[cfg(not(test))]
 const DELEGATION_REACTIVE_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 #[cfg(test)]
@@ -207,12 +214,6 @@ impl DelegationManager {
     async fn proactive_fetch(&self) -> Option<Option<NNSDelegationBuilder>> {
         let new_delegation = self.fetch().await;
 
-        // If we do not have any delegation yet, we publish whatever we fetched right now to avoid
-        // delaying the initialization of the readers (i.e. the HTTP endpoints).
-        if matches!(self.last_delegation, PublishedDelegation::Uninitialized) {
-            return Some(new_delegation);
-        }
-
         if let Some(actual_new_delegation) = &new_delegation
             && self.is_delegation_valid_with_respect_to_state(actual_new_delegation) == Some(false)
         {
@@ -251,15 +252,21 @@ impl DelegationManager {
     }
 
     async fn run(mut self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
-        let mut proactive_interval = tokio::time::interval(DELEGATION_PROACTIVE_UPDATE_INTERVAL);
-        let mut reactive_interval = tokio::time::interval(DELEGATION_REACTIVE_UPDATE_INTERVAL);
-        // If we miss a tick because fetching the delegation took too long (f.ex. because the NNS
-        // is upgrading), we simply delay the next tick instead of building up a backlog of ticks
-        // while keeping a consistent duration between ticks.
-        proactive_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        reactive_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        // Until a delegation has been published, we proactively fetch at a higher frequency: a
+        // delegation which is inconsistent with the certified state is held back (also during the
+        // initialization), so it can take a couple of attempts until we have something to publish.
+        let mut proactive_interval = new_interval(
+            /*first_tick_delay=*/ Duration::ZERO,
+            DELEGATION_INITIAL_PROACTIVE_UPDATE_INTERVAL,
+        );
+        let mut reactive_interval = new_interval(
+            /*first_tick_delay=*/ Duration::ZERO,
+            DELEGATION_REACTIVE_UPDATE_INTERVAL,
+        );
 
         loop {
+            let uninitialized = matches!(self.last_delegation, PublishedDelegation::Uninitialized);
+
             // Fetch the delegation if enough time has passed.
             let Some(new_delegation) = select!(
                 _ = proactive_interval.tick() => self.proactive_fetch().await,
@@ -278,15 +285,36 @@ impl DelegationManager {
                     false
                 };
 
-                modified || matches!(self.last_delegation, PublishedDelegation::Uninitialized)
+                modified || uninitialized
             });
 
             self.last_delegation = match new_delegation {
                 None => PublishedDelegation::AbsentBecauseNNS,
                 Some(delegation) => PublishedDelegation::Present(delegation),
             };
+
+            if uninitialized {
+                // The readers have just been initialized, so we can slow down the proactive
+                // fetches again.
+                proactive_interval = new_interval(
+                    /*first_tick_delay=*/ DELEGATION_PROACTIVE_UPDATE_INTERVAL,
+                    DELEGATION_PROACTIVE_UPDATE_INTERVAL,
+                );
+            }
         }
     }
+}
+
+/// Creates an interval which ticks every `period`, with the first tick after `first_tick_delay`.
+fn new_interval(first_tick_delay: Duration, period: Duration) -> tokio::time::Interval {
+    let mut interval =
+        tokio::time::interval_at(tokio::time::Instant::now() + first_tick_delay, period);
+    // If we miss a tick because fetching the delegation took too long (f.ex. because the NNS
+    // is upgrading), we simply delay the next tick instead of building up a backlog of ticks
+    // while keeping a consistent duration between ticks.
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+    interval
 }
 
 /// Fetches a delegation from the NNS subnet to allow this subnet to issue
@@ -1881,13 +1909,13 @@ mod tests {
         .unwrap();
     }
 
-    /// Edge case: The *initial* delegation is inconsistent with the certified state, but the
-    /// manager should still publish it immediately. This can happen when restarting on a recovery
-    /// CUP, where the certified state does not reflect the changed public key yet. We still want to
-    /// get an initial delegation as fast as possible to serve requests, and accept the risk that it
-    /// could be inconsistent for a short while.
+    /// Edge case: The *initial* delegation is inconsistent with the certified state, e.g. because
+    /// we are catching up on a recovery CUP where the certified state does not reflect the changed
+    /// public key yet. The delegation is held back as any other inconsistent delegation, but the
+    /// proactive fetches happen at a higher frequency until the state has caught up, such that the
+    /// readers are initialized as soon as possible.
     #[tokio::test]
-    async fn manager_run_publishes_initial_delegation_even_if_inconsistent_with_state_test() {
+    async fn manager_run_publishes_initial_delegation_once_consistent_with_state_test() {
         let rt_handle = tokio::runtime::Handle::current();
         let (registry_client, tls_config, state_reader, mutable_state) =
             set_up_nns_delegation_dependencies(
@@ -1899,19 +1927,7 @@ mod tests {
 
         // Make the state disagree with the delegation which the NNS serves *before* the manager
         // starts.
-        {
-            let mut state = mutable_state.write().unwrap();
-            let subnet_id = state.metadata.own_subnet_id;
-            state.metadata.modify_network_topology(|topology| {
-                topology.set_subnets(BTreeMap::from_iter([(
-                    subnet_id,
-                    SubnetTopology {
-                        public_key: vec![0xDE, 0xAD, 0xBE, 0xEF],
-                        ..Default::default()
-                    },
-                )]));
-            });
-        }
+        let original_public_key = set_own_subnet_public_key(&mutable_state, vec![0xDE, 0xAD]);
 
         let (_, mut reader) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -1927,27 +1943,50 @@ mod tests {
             CancellationToken::new(),
         );
 
-        // The initial delegation should be published immediately, even though it is inconsistent
-        // with the state. The window is kept below any interval to ensure that the manager does not
-        // wait for any interval.
+        // As long as the state disagrees with what the NNS serves, the initial delegation should be
+        // held back.
         timeout(
-            DELEGATION_REACTIVE_UPDATE_INTERVAL / 2,
+            DELEGATION_INITIAL_PROACTIVE_UPDATE_INTERVAL * 3,
             reader.wait_until_initialized(),
         )
         .await
-        .expect("The initial delegation should be published without waiting for the state")
+        .expect_err("An initial delegation inconsistent with the state should be held back");
+        assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_none());
+
+        // Once the state has caught up, the initial delegation should be published without waiting
+        // for the (much longer) regular proactive interval.
+        set_own_subnet_public_key(&mutable_state, original_public_key);
+
+        timeout(
+            DELEGATION_INITIAL_PROACTIVE_UPDATE_INTERVAL * 3,
+            reader.wait_until_initialized(),
+        )
+        .await
+        .expect("The initial delegation should be published once the state has caught up")
         .unwrap();
         assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_some());
+    }
 
-        // Since the state disagrees with what the NNS keeps serving, the manager should keep
-        // reactively refreshing the delegation.
-        timeout(
-            DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.wait_until_initialized(),
-        )
-        .await
-        .expect("`reactive_fetch` should refresh a delegation which is inconsistent with the state")
-        .unwrap();
+    /// Sets the public key of the own subnet in the certified state, returning the previous one.
+    fn set_own_subnet_public_key(
+        mutable_state: &Arc<RwLock<ReplicatedState>>,
+        public_key: Vec<u8>,
+    ) -> Vec<u8> {
+        let mut state = mutable_state.write().unwrap();
+        let subnet_id = state.metadata.own_subnet_id;
+        let mut old_public_key = None;
+        state.metadata.modify_network_topology(|topology| {
+            let subnet_topology = topology
+                .subnets_mut()
+                .get_mut(&subnet_id)
+                .expect("The own subnet should be part of the network topology");
+            old_public_key = Some(std::mem::replace(
+                &mut subnet_topology.public_key,
+                public_key,
+            ));
+        });
+
+        old_public_key.unwrap()
     }
 
     #[rstest]
