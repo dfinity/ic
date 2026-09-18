@@ -8,6 +8,7 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
 source /opt/ic/bin/config.sh
 source /opt/ic/bin/functions.sh
+source /opt/ic/bin/guestos-vm-count.sh
 
 function install_hostos() {
     echo "* Installing HostOS disk-image..."
@@ -97,10 +98,10 @@ function resize_partition() {
         log_and_halt_installation_on_error "${?}" "Unable to include PV '/dev/${drive}' in VG."
     done
 
-    local node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
+    local vm_count=$(guestos_vm_count)
 
-    # Configure multiple GuestOS if type4.X
-    if [[ $node_reward_type =~ ^type4(\.[0-9]+)?$ ]]; then
+    # Split the volume when the node runs more than one GuestOS.
+    if ((vm_count > 1)); then
         # Cleanup the initial GuestOS
         lvremove -f hostlvm/guestos >/dev/null 2>&1
         log_and_halt_installation_on_error "${?}" "Unable to cleanup initial GuestOS volume"
@@ -108,23 +109,15 @@ function resize_partition() {
         # And set up new split volumes
         min_pv_free=$(pvs --noheadings -o pv_pe_count,pv_pe_alloc_count -S vg_name=hostlvm | awk '{print $1 - $2}' | sort -n | head -n1)
 
-        create_guestos_lvs() {
-            local total="$1"
-            local each=$(((min_pv_free / total) * count))
-            local i
+        local each=$(((min_pv_free / vm_count) * count))
+        local slot
 
-            for ((i = 1; i <= total; i++)); do
-                lvcreate -i "${count}" --type striped -l "${each}" -n "guestos${i}" hostlvm >/dev/null 2>&1
-                log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
-            done
-        }
-
-        case "${node_reward_type}" in
-            type4.1) create_guestos_lvs 60 ;;
-            type4.2) create_guestos_lvs 15 ;;
-            type4.3) create_guestos_lvs 4 ;;
-            type4.4) create_guestos_lvs 2 ;;
-        esac
+        # One volume per slot, named after the domain start-guestos.sh boots
+        for slot in $(guestos_vm_slots_for_count "${vm_count}"); do
+            lvcreate -i "${count}" --type striped -l "${each}" \
+                -n "guestos$(guestos_vm_slot_suffix "${slot}")" hostlvm >/dev/null 2>&1
+            log_and_halt_installation_on_error "${?}" "Unable to create new GuestOS"
+        done
     # "Normal" behavior
     else
         # Extend GuestOS LV to fill VG space

@@ -1587,6 +1587,7 @@ pub fn get_config() -> ConfigOptional {
         malicious_behavior: "null".to_string(),
         extra_api_boundary_node_trust_anchors_pem: "null".to_string(),
         peer_guest_vm_address: None,
+        hostos_address: std::net::Ipv6Addr::LOCALHOST,
     };
 
     let ic_json =
