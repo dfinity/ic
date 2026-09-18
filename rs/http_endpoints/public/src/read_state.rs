@@ -2,11 +2,9 @@
 
 use crate::{
     HttpError, ReplicaHealthStatus,
-    common::{
-        Cbor, WithTimeout, build_validator, get_verified_delegation, into_cbor,
-        validation_error_to_http_error,
-    },
+    common::{Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error},
     metrics::HttpHandlerMetrics,
+    verified_delegation_source::VerifiedDelegationSource,
 };
 use axum::{
     Router,
@@ -71,7 +69,7 @@ pub struct ReadStateService {
     log: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     metrics: HttpHandlerMetrics,
-    nns_delegation_reader: NNSDelegationReader,
+    verified_delegation_source: VerifiedDelegationSource,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<ReadState, RegistryRootOfTrustProvider>>,
@@ -172,12 +170,17 @@ impl ReadStateServiceBuilder {
         let version = self.version;
         let target = self.target;
         let state = ReadStateService {
+            verified_delegation_source: VerifiedDelegationSource::new(
+                self.nns_delegation_reader,
+                self.log.clone(),
+                self.metrics.clone(),
+                "read_state",
+            ),
             log: self.log,
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             metrics: self.metrics,
-            nns_delegation_reader: self.nns_delegation_reader,
             state_reader: self.state_reader,
             time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
@@ -207,7 +210,7 @@ pub(crate) async fn read_state(
         log,
         health_status,
         metrics,
-        nns_delegation_reader,
+        verified_delegation_source,
         state_reader,
         time_source,
         validator,
@@ -298,14 +301,9 @@ pub(crate) async fn read_state(
                 CanisterRangesCheck::NoCheck(CanisterRangesFilter::None)
             }
         };
-        let delegation_from_nns = match get_verified_delegation(
-            &nns_delegation_reader,
-            certified_state_reader.as_ref(),
-            canister_ranges_check,
-            &log,
-            &metrics,
-            "read_state",
-        ) {
+        let delegation_from_nns = match verified_delegation_source
+            .get_delegation(certified_state_reader.as_ref(), canister_ranges_check)
+        {
             Ok(delegation) => delegation,
             Err(err) => {
                 return err.into_response();

@@ -15,6 +15,7 @@ pub mod query;
 pub mod read_state;
 mod status;
 mod tracing_flamegraph;
+mod verified_delegation_source;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
