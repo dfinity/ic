@@ -12,7 +12,6 @@ use ic_types::{
     },
 };
 use serde::ser::Serialize;
-use std::sync::Arc;
 use tokio::sync::watch;
 
 use crate::validation::{
@@ -105,12 +104,11 @@ impl NNSDelegationReader {
 
 /// Builds NNS delegations, in the different canister ranges formats, out of the
 /// delegation certificate received from the NNS.
-/// Cloning is cheap: every field is behind an `Arc`.
 #[derive(Clone, Debug)]
 pub struct NNSDelegationBuilder {
-    builder: Arc<NNSDelegationBuilderInner>,
-    precomputed_delegation_with_flat_canister_ranges: Arc<CertificateDelegation>,
-    precomputed_delegation_without_canister_ranges: Arc<CertificateDelegation>,
+    builder: NNSDelegationBuilderInner,
+    precomputed_delegation_with_flat_canister_ranges: CertificateDelegation,
+    precomputed_delegation_without_canister_ranges: CertificateDelegation,
 }
 
 impl NNSDelegationBuilder {
@@ -153,13 +151,9 @@ impl NNSDelegationBuilder {
             builder.build_uncached_or_original(CanisterRangesFilter::Flat, logger);
 
         Self {
-            builder: Arc::new(builder),
-            precomputed_delegation_with_flat_canister_ranges: Arc::new(
-                precomputed_delegation_with_flat_canister_ranges,
-            ),
-            precomputed_delegation_without_canister_ranges: Arc::new(
-                precomputed_delegation_without_canister_ranges,
-            ),
+            builder: builder,
+            precomputed_delegation_with_flat_canister_ranges,
+            precomputed_delegation_without_canister_ranges,
         }
     }
 
@@ -239,11 +233,11 @@ impl NNSDelegationBuilder {
         logger: &ReplicaLogger,
     ) -> CertificateDelegation {
         match canister_ranges_filter {
-            CanisterRangesFilter::Flat => {
-                (*self.precomputed_delegation_with_flat_canister_ranges).clone()
-            }
+            CanisterRangesFilter::Flat => self
+                .precomputed_delegation_with_flat_canister_ranges
+                .clone(),
             CanisterRangesFilter::None => {
-                (*self.precomputed_delegation_without_canister_ranges).clone()
+                self.precomputed_delegation_without_canister_ranges.clone()
             }
             CanisterRangesFilter::Tree(_canister_id) => self
                 .builder
@@ -273,7 +267,7 @@ impl NNSDelegationBuilder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct NNSDelegationBuilderInner {
     full_certificate: Certificate,
     full_labeled_tree: LabeledTree<Vec<u8>>,
