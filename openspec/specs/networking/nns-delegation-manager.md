@@ -39,8 +39,8 @@ The delegation manager spawns a background task that periodically fetches the NN
 
 #### Scenario: Delegation is unchanged
 - **WHEN** the delegation manager fetches a new delegation identical to the current one
-- **THEN** the `watch::Sender` does not notify receivers of a change
-- **AND** the existing delegation remains available
+- **THEN** the fetched value is still published via `watch::Sender::send_replace` and the `nns_delegation_manager_updates_total` counter is still incremented, notifying receivers (`wait_until_updated`) even though the value didn't change
+- **AND** the published delegation is unchanged in content
 
 ### Requirement: Reactive Fetching on State Mismatch
 
@@ -64,9 +64,14 @@ In addition to the proactive interval, the manager reactively fetches a new dele
 - **AND** the currently held delegation is still consistent with the latest certified state
 - **THEN** no fetch is performed on that tick
 
-#### Scenario: No delegation yet, or on the NNS subnet
-- **WHEN** there is no currently held delegation (startup, or the replica is on the NNS subnet where delegations are always `None`)
-- **THEN** `is_delegation_valid_with_respect_to_state` returns `Some(true)`, so a proactive fetch is never held back in this case
+#### Scenario: Initial fetch is always published, even if ahead of state
+- **WHEN** no delegation has been published yet (`PublishedDelegation::Uninitialized`, e.g. at startup or right after a recovery CUP) and a proactive fetch completes
+- **THEN** the fetched delegation is published immediately without being checked against the certified state, so it is never held back on this first fetch
+- **AND** if the delegation is ahead of the (not-yet-caught-up) state, subsequent reactive fetches (every `DELEGATION_REACTIVE_UPDATE_INTERVAL`) will keep re-fetching until the state catches up, since `is_delegation_valid_with_respect_to_state` only runs once a delegation has actually been published
+
+#### Scenario: Nothing to compare against on the NNS subnet
+- **WHEN** the replica is on the NNS subnet (`PublishedDelegation::AbsentBecauseNNS`, delegations are always `None`)
+- **THEN** reactive fetches are a no-op, since there is nothing to fetch or compare
 
 #### Scenario: Certified state unavailable
 - **WHEN** the latest certified state cannot be obtained
@@ -239,13 +244,13 @@ The delegation manager exposes Prometheus metrics for observability.
 - **WHEN** the manager performs a reactive fetch or holds back a proactively fetched delegation
 - **THEN** `nns_delegation_manager_reactive_fetches_total` or `nns_delegation_manager_held_back_delegations_total` is incremented respectively, as described under Reactive Fetching on State Mismatch
 
-### Requirement: Initialization Awaiting
+### Requirement: Update Awaiting
 
-The `NNSDelegationReader` supports waiting until the first delegation fetch completes.
+The `NNSDelegationReader` supports waiting for the next delegation publish, including the first one.
 
-#### Scenario: Wait until initialized
-- **WHEN** `wait_until_initialized()` is called on a reader before the first fetch completes
-- **THEN** the call blocks asynchronously until the delegation manager publishes its first value (which may be `None` on NNS subnet or `Some` on non-NNS)
+#### Scenario: Wait until updated
+- **WHEN** `wait_until_updated()` is called on a reader
+- **THEN** the call blocks asynchronously (via `watch::Receiver::changed()`) until the delegation manager next publishes a value -- the first publish if called before it (which may be `None` on the NNS subnet or `Some` on non-NNS), or any subsequent publish otherwise, including republishes of an unchanged delegation
 - **AND** the method returns `Ok(())` on success
 
 ### Requirement: Cancellation Support
