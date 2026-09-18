@@ -9,6 +9,7 @@ use crate::{
         RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
         StopDissolve,
     },
+    signed_target::verify_signed_target,
 };
 use rosetta_core::objects::ObjectMap;
 
@@ -51,7 +52,13 @@ impl RosettaRequestHandler {
         let mut from_ai = vec![];
         let mut metadata = serde_json::Map::new();
 
-        for (request_type, HttpCanisterUpdate { arg, sender, .. }) in updates {
+        for (request_type, update) in updates {
+            // Every field of `request_type` reaching the caller below must be
+            // bound to the signed payload; otherwise the operations we return
+            // would not describe the bytes the caller signs and broadcasts.
+            verify_signed_target(&request_type, &update)?;
+
+            let HttpCanisterUpdate { arg, sender, .. } = update;
             let from = PrincipalId::try_from(sender.0)
                 .map_err(|e| ApiError::internal_error(e.to_string()))?
                 .into();
@@ -835,10 +842,11 @@ mod tests {
     /// Builds a `RosettaRequestHandler` together with a single ICP transfer
     /// (debit + credit + fee) and the signer's public and private keys, shared
     /// by the construction tests below.
-    fn setup_transfer_test() -> (
+    /// Builds an offline-capable `RosettaRequestHandler` together with a signer
+    /// keypair, shared by the construction tests below.
+    fn setup_handler() -> (
         RosettaRequestHandler,
         NetworkIdentifier,
-        Vec<Operation>,
         PublicKey,
         ic_ed25519::PrivateKey,
     ) {
@@ -866,16 +874,28 @@ mod tests {
         );
 
         let network_identifier = handler.network_id();
+        let pub_key = PublicKey {
+            hex_bytes: hex::encode(key.public_key().serialize_raw()),
+            curve_type: CurveType::Edwards25519,
+        };
+
+        (handler, network_identifier, pub_key, key)
+    }
+
+    fn setup_transfer_test() -> (
+        RosettaRequestHandler,
+        NetworkIdentifier,
+        Vec<Operation>,
+        PublicKey,
+        ic_ed25519::PrivateKey,
+    ) {
+        let (handler, network_identifier, pub_key, key) = setup_handler();
         let currency = Currency {
             symbol: "TKN".into(),
             decimals: 8,
             metadata: None,
         };
 
-        let pub_key = PublicKey {
-            hex_bytes: hex::encode(key.public_key().serialize_raw()),
-            curve_type: CurveType::Edwards25519,
-        };
         let account = handler
             .construction_derive(ConstructionDeriveRequest {
                 network_identifier: network_identifier.clone(),
@@ -1004,5 +1024,141 @@ mod tests {
             .expect("memo should always be present")
             .clone();
         assert_eq!(memo, serde_json::json!(0), "expected a memo of 0");
+    }
+    /// Regression test for the construction flow's authenticated-data
+    /// confusion: the outer `RequestType` is plain CBOR metadata that no
+    /// signature covers, so rewriting its `neuron_index` used to make
+    /// `/construction/parse` describe one neuron while the signed
+    /// `manage_neuron` update targeted another. For a full-stake `DISBURSE`
+    /// (`amount: None`) the index is the only field that says how much value
+    /// moves, so the operations shown to the signer must be bound to the signed
+    /// payload.
+    #[test]
+    fn test_parse_rejects_rewritten_neuron_index() {
+        use crate::{
+            models::{SignedTransaction, UnsignedTransaction},
+            request::Request,
+            request_types::{Disburse, RequestType},
+        };
+        use rosetta_core::convert::principal_id_from_public_key;
+
+        const DISPLAYED_INDEX: u64 = 0;
+        const SIGNED_INDEX: u64 = 7;
+
+        let (handler, network_identifier, pub_key, key) = setup_handler();
+        let signer = principal_id_from_public_key(&pub_key).unwrap();
+        let account = icp_ledger::AccountIdentifier::from(signer);
+
+        // A complete-stake disburse of the valuable neuron to a third party.
+        let operations = Request::requests_to_operations(
+            &[Request::Disburse(Disburse {
+                account,
+                amount: None,
+                recipient: Some(icp_ledger::AccountIdentifier::from(
+                    ic_types::PrincipalId::new_user_test_id(42),
+                )),
+                neuron_index: SIGNED_INDEX,
+            })],
+            "TKN",
+        )
+        .unwrap();
+
+        let payloads = handler
+            .construction_payloads(ConstructionPayloadsRequest {
+                network_identifier: network_identifier.clone(),
+                operations: operations.clone(),
+                metadata: None,
+                public_keys: Some(vec![pub_key.clone()]),
+            })
+            .unwrap();
+
+        // The untampered transaction parses, and reports the neuron actually
+        // targeted by the signed update.
+        let parsed = handler
+            .construction_parse(ConstructionParseRequest {
+                network_identifier: network_identifier.clone(),
+                signed: false,
+                transaction: payloads.unsigned_transaction.clone(),
+            })
+            .unwrap();
+        assert_eq!(operations, parsed.operations);
+
+        // Rewrite only the unsigned wrapper, leaving every signable byte of the
+        // update -- and therefore the message id and the signature -- untouched.
+        let mut unsigned = UnsignedTransaction::from_str(&payloads.unsigned_transaction).unwrap();
+        for (request_type, _) in unsigned.updates.iter_mut() {
+            assert_eq!(
+                *request_type,
+                RequestType::Disburse {
+                    neuron_index: SIGNED_INDEX
+                }
+            );
+            *request_type = RequestType::Disburse {
+                neuron_index: DISPLAYED_INDEX,
+            };
+        }
+
+        let err = handler
+            .construction_parse(ConstructionParseRequest {
+                network_identifier: network_identifier.clone(),
+                signed: false,
+                transaction: unsigned.to_string(),
+            })
+            .expect_err("parse must reject a wrapper that disagrees with the signed payload");
+        assert!(
+            format!("{err:?}").contains("neuron_index"),
+            "unexpected error: {err:?}"
+        );
+
+        // The same must hold once the (genuine) signatures are attached: the
+        // signed transaction carries the same unauthenticated wrapper.
+        let mut signatures = vec![];
+        for payload in payloads.payloads {
+            let bytes = hex::decode(payload.clone().hex_bytes).unwrap();
+            let signature = key.sign_message(&bytes);
+            signatures.push(Signature {
+                signing_payload: payload,
+                public_key: pub_key.clone(),
+                signature_type: SignatureType::Ed25519,
+                hex_bytes: hex::encode(signature),
+            });
+        }
+        let signed_transaction = handler
+            .construction_combine(ConstructionCombineRequest {
+                network_identifier: network_identifier.clone(),
+                unsigned_transaction: payloads.unsigned_transaction,
+                signatures,
+            })
+            .unwrap()
+            .signed_transaction;
+
+        let mut signed = SignedTransaction::from_str(&signed_transaction).unwrap();
+        for (request_type, _) in signed.requests.iter_mut() {
+            *request_type = RequestType::Disburse {
+                neuron_index: DISPLAYED_INDEX,
+            };
+        }
+        let tampered_signed = hex::encode(serde_cbor::to_vec(&signed).unwrap());
+
+        let err = handler
+            .construction_parse(ConstructionParseRequest {
+                network_identifier,
+                signed: true,
+                transaction: tampered_signed,
+            })
+            .expect_err("signed parse must reject a wrapper that disagrees with the payload");
+        assert!(
+            format!("{err:?}").contains("neuron_index"),
+            "unexpected error: {err:?}"
+        );
+
+        // And the submit path, which reconstructs the same operations for the
+        // `/construction/submit` response, must reject it too.
+        let err = Request::try_from(&signed.requests[0])
+            .expect_err("the submit path must reject the same mismatch");
+        assert!(
+            format!("{err:?}").contains("neuron_index"),
+            "unexpected error: {err:?}"
+        );
     }
 }

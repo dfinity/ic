@@ -1,6 +1,6 @@
 use crate::{
     convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
-    models::seconds::Seconds, request_types::*,
+    models::seconds::Seconds, request_types::*, signed_target::verify_signed_target,
 };
 use candid::Decode;
 use ic_nns_governance_api::{
@@ -237,6 +237,12 @@ impl TryFrom<&models::Request> for Request {
         let payload: &models::EnvelopePair = calls
             .first()
             .ok_or_else(|| ApiError::invalid_request("No request payload provided."))?;
+
+        // The submit path reconstructs the same `Request` values that
+        // `/construction/parse` returns, and reports them back in the
+        // `/construction/submit` response, so it needs the same guarantee that
+        // the wrapper metadata matches the signed payload.
+        verify_signed_target(request_type, payload.update_content())?;
 
         let pid =
             PrincipalId::try_from(payload.update_content().sender.clone().0).map_err(|e| {
