@@ -34,6 +34,7 @@ def image_deps(mode, _malicious = False):
             "//rs/ic_os/release:guest_vm_runner": "/opt/ic/bin/guest_vm_runner:0755",
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
             "//rs/ic_os/release:config_tool": "/opt/ic/bin/config_tool:0755",
+            "//rs/ic_os/upgrade_proxy:upgrade_proxy": "/opt/ic/bin/upgrade_proxy:0755",
             "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",
 
             # additional libraries to install

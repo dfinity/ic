@@ -547,6 +547,7 @@ members = [
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
+    "rs/ic_os/upgrade_proxy",
 ]
 
 resolver = "2"
@@ -960,6 +961,7 @@ threadpool = "1.8.1"
 tikv-jemalloc-ctl = { version = "0.7", features = ["stats"] }
 tikv-jemallocator = "0.7"
 time = { version = "0.3.36", features = ["formatting"] }
+tiny_http = "0.12.0"
 tokio = { version = "1.42.0", features = ["full"] }
 tokio-metrics = "0.4.0"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
@@ -997,6 +999,11 @@ tracing-subscriber = { version = "0.3.19", features = [
     "time",
 ] }
 turmoil = "0.6.4"
+ureq = { version = "3.4.1", default-features = false, features = [
+    "rustls-no-provider",
+    "rustls-webpki-roots",
+    "gzip",
+] }
 url = { version = "2.5.3", features = ["serde"] }
 # DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
 # This breaks `wasm32-unknown-unknown` compatibility.
