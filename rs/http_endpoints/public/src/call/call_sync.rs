@@ -31,7 +31,7 @@ use ic_crypto_tree_hash::{
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{ReplicaLogger, error, warn};
-use ic_nns_delegation_manager::{CanisterRangesCheck, NNSDelegationReader};
+use ic_nns_delegation_manager::{CanisterRangesCheck, CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     CanisterId, PrincipalId, SubnetId,
@@ -219,7 +219,7 @@ async fn call_sync(
         }
         Version::SubnetV4 => (
             EffectiveDestination::Subnet(SubnetId::from(id)),
-            CanisterRangesCheck::NoCheck,
+            CanisterRangesCheck::NoCheck(CanisterRangesFilter::None),
         ),
     };
     let log = call_handler.log.clone();

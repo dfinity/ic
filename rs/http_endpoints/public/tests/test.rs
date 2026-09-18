@@ -795,9 +795,10 @@ fn can_retrieve_subnet_metrics(
     let mock_certified_state = move |certificate: TestCertificate| {
         let hash_tree = certificate.clone().tree();
 
-        // The certified state must certify the same subnet public key and canister
-        // ranges as the delegation embedded in `certificate`; otherwise the
-        // delegation-vs-certified-state check rejects the request with 503.
+        // The certified state must certify the same subnet public key as the delegation
+        // embedded in `certificate`; otherwise the delegation-vs-certified-state check
+        // rejects the request with 503. The subnet endpoints don't verify the canister
+        // ranges, so those don't need to match.
         let delegation = certificate
             .delegation()
             .map(|d| CertificateDelegation {

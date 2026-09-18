@@ -25,7 +25,7 @@ use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::ReplicaLogger;
-use ic_nns_delegation_manager::{CanisterRangesCheck, NNSDelegationReader};
+use ic_nns_delegation_manager::{CanisterRangesCheck, CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_replicated_state::{ReplicatedState, canister_state::execution_state::CustomSectionType};
 use ic_types::{
@@ -288,11 +288,15 @@ pub(crate) async fn read_state(
             (Version::V2, Target::Canister) => {
                 CanisterRangesCheck::CanisterInFlat(effective_canister_id)
             }
-            (Version::V2, Target::Subnet) => CanisterRangesCheck::AllSubnetRanges,
+            (Version::V2, Target::Subnet) => {
+                CanisterRangesCheck::NoCheck(CanisterRangesFilter::Flat)
+            }
             (Version::V3, Target::Canister) => {
                 CanisterRangesCheck::CanisterInTree(effective_canister_id)
             }
-            (Version::V3, Target::Subnet) => CanisterRangesCheck::NoCheck,
+            (Version::V3, Target::Subnet) => {
+                CanisterRangesCheck::NoCheck(CanisterRangesFilter::None)
+            }
         };
         let delegation_from_nns = match get_verified_delegation(
             &nns_delegation_reader,

@@ -4,7 +4,7 @@ use std::hint::black_box;
 use criterion::{Criterion, criterion_group, criterion_main};
 use ic_crypto_tree_hash::{LabeledTree, lookup_path};
 use ic_logger::no_op_logger;
-use ic_nns_delegation_reader::{CanisterRangesCheck, NNSDelegationBuilder};
+use ic_nns_delegation_reader::{CanisterRangesCheck, CanisterRangesFilter, NNSDelegationBuilder};
 use ic_nns_delegation_reader_test_utils::create_fake_certificate_delegation;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::ids::SUBNET_0;
@@ -40,7 +40,7 @@ fn build_delegation_verify_canister_in_tree(criterion: &mut Criterion) {
 fn build_delegation_no_ranges_check(criterion: &mut Criterion) {
     build_delegation_bench(
         criterion,
-        CanisterRangesCheck::NoCheck,
+        CanisterRangesCheck::NoCheck(CanisterRangesFilter::None),
         "build_delegation_no_ranges_check",
     );
 }

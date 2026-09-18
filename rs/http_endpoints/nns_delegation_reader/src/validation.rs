@@ -19,6 +19,7 @@
 //! split, the delegation might already carry the new key while the certified state
 //! still carries the old key.
 
+use crate::reader::CanisterRangesFilter;
 use ic_crypto_tree_hash::{LabeledTree, LookupLowerBoundStatus, lookup_lower_bound, lookup_path};
 use ic_registry_routing_table::RoutingTable;
 use ic_types::{CanisterId, PrincipalId, SubnetId};
@@ -45,9 +46,10 @@ pub enum CanisterRangesCheck {
     /// other parts of the certified ranges are inconsistent with the state. The
     /// `/subnet/<subnet_id>/canister_ranges` leaf is ignored.
     CanisterInTree(CanisterId),
-    /// Don't check the canister ranges at all (e.g. for pruned delegations which don't
-    /// carry any).
-    NoCheck,
+    /// Don't check the canister ranges at all, i.e. only check the public key. Nothing about the
+    /// ranges is verified, but the variant specifies which canister ranges the delegation is still
+    /// served with. Useful for legacy endpoints.
+    NoCheck(CanisterRangesFilter),
 }
 
 /// An error encountered while checking a delegation against a replicated state.
@@ -151,7 +153,7 @@ pub(crate) fn is_tree_consistent_with(
                 .unwrap_or(false);
             Ok(do_tree_ranges_cover_canister(tree, subnet_id, canister_id)? == state_covers)
         }
-        CanisterRangesCheck::NoCheck => Ok(true),
+        CanisterRangesCheck::NoCheck(_canister_ranges_filter) => Ok(true),
     }
 }
 
@@ -303,6 +305,7 @@ fn decode_ranges(
 #[cfg(test)]
 mod tests {
     use super::{CanisterRangesCheck, DelegationValidationError, is_tree_consistent_with};
+    use crate::reader::CanisterRangesFilter;
     use assert_matches::assert_matches;
     use ic_canonical_state::encoding::encode_subnet_canister_ranges;
     use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, flatmap};
@@ -858,6 +861,12 @@ mod tests {
     fn no_check_ignores_ranges_but_still_checks_the_public_key(
         #[case] certified_public_key: Vec<u8>,
         #[case] expected_validity: bool,
+        #[values(
+            CanisterRangesFilter::Flat,
+            CanisterRangesFilter::Tree(CanisterId::from_u64(15)),
+            CanisterRangesFilter::None
+        )]
+        served_filter: CanisterRangesFilter,
     ) {
         let subnet_id = SUBNET_1;
         let expected_public_key = vec![1, 2, 3];
@@ -876,7 +885,7 @@ mod tests {
                 subnet_id,
                 &expected_public_key,
                 &[range(10, 20)],
-                CanisterRangesCheck::NoCheck,
+                CanisterRangesCheck::NoCheck(served_filter),
             ),
             Ok(is_valid) if is_valid == expected_validity,
             "NoCheck should ignore the (malformed) ranges and be decided solely by the \
