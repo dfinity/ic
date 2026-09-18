@@ -1955,7 +1955,7 @@ fn summarize_blob_field(blob: &[u8]) -> Vec<u8> {
              - Trailing 32 Bytes (in hex): {}",
             blob.len(),
             format_u8_slice(&Sha256::hash(blob)),
-            format_u8_slice(blob.chunks_exact(32).next().unwrap_or(&[])),
+            format_u8_slice(blob.get(..32).unwrap_or(&[])),
             format_u8_slice(blob.rchunks_exact(32).next().unwrap_or(&[])),
         )
         .as_bytes(),

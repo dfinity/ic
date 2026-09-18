@@ -69,7 +69,8 @@ pub const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 254;
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
 
-fn decoder_config() -> DecoderConfig {
+/// Candid decoder configuration used for all management-canister payload types.
+pub fn decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();
     config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
     config.set_full_error_message(false);
@@ -3819,17 +3820,19 @@ impl Payload<'_> for SubnetMetricsArgs {}
 ///     canister_state_bytes : nat;
 ///     consumed_cycles_total : nat;
 ///     update_transactions_total : nat;
+///     million_round_instructions_total : nat;
 /// }
 /// ```
 ///
 /// Freshness: only `block_height` is current as of the block in which the call is
-/// executed. The other four are read from `SystemMetadata::subnet_metrics`, which is
+/// executed. The other five are read from `SystemMetadata::subnet_metrics`, which is
 /// written at the *end* of a round, so they are as of the end of the previous round
 /// — except `canister_state_bytes`, which message routing recomputes only every 10
 /// rounds (summing it over every canister is expensive and it need not be exact),
 /// so it can be up to ten rounds stale and reads as `0` for the first rounds after
-/// the subnet is created. These are the same values, with the same staleness, that
-/// `read_state` serves at `/subnet/<subnet_id>/metrics`.
+/// the subnet is created. All but `million_round_instructions_total` are the same
+/// values, with the same staleness, that `read_state` serves at
+/// `/subnet/<subnet_id>/metrics`; that field has no `read_state` counterpart.
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
 pub struct SubnetMetricsResponse {
     pub block_height: candid::Nat,
@@ -3837,6 +3840,7 @@ pub struct SubnetMetricsResponse {
     pub canister_state_bytes: candid::Nat,
     pub consumed_cycles_total: candid::Nat,
     pub update_transactions_total: candid::Nat,
+    pub million_round_instructions_total: candid::Nat,
 }
 
 impl Payload<'_> for SubnetMetricsResponse {}

@@ -35,6 +35,10 @@ pub trait PipelineRequest {
     /// The identity of this request, used as the pipeline's alternate map key.
     fn id(&self) -> Self::Id;
 
+    /// When this request was recorded, in nanoseconds since the epoch, if known: requests recorded
+    /// before the minter stamped them carry no time.
+    fn created_at(&self) -> Option<u64>;
+
     /// The fee-bump strategy for this request's resubmitted transactions.
     fn resubmission_strategy(&self) -> ResubmissionStrategy;
 
@@ -62,6 +66,10 @@ impl PipelineRequest for WithdrawalRequest {
 
     fn id(&self) -> LedgerBurnIndex {
         self.cketh_ledger_burn_index()
+    }
+
+    fn created_at(&self) -> Option<u64> {
+        WithdrawalRequest::created_at(self)
     }
 
     fn resubmission_strategy(&self) -> ResubmissionStrategy {
@@ -199,6 +207,10 @@ impl PipelineRequest for SweepRequest {
 
     fn id(&self) -> SweepId {
         self.id
+    }
+
+    fn created_at(&self) -> Option<u64> {
+        Some(self.created_at)
     }
 
     fn resubmission_strategy(&self) -> ResubmissionStrategy {

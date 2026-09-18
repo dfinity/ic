@@ -342,6 +342,7 @@ members = [
     "rs/query_stats",
     "rs/recovery",
     "rs/recovery/subnet_splitting",
+    "rs/recovery/subnet_tools",
     "rs/registry/admin",
     "rs/registry/admin-derive",
     "rs/registry/canister",
@@ -550,8 +551,6 @@ members = [
 
 resolver = "2"
 
-exclude = ["universal_canister/impl"]
-
 [workspace.package]
 version = "0.9.0"
 authors = ["The Internet Computer Project Developers"]
@@ -717,7 +716,7 @@ ic-certified-map = "^0.3.1"
 ic-metrics-encoder = "^1.1.1"
 ic0 = "1.0.0"
 ic-agent = { version = "0.49.1", features = ["pem"] }
-ic-bn-lib = { version = "0.7.0", features = [
+ic-bn-lib = { version = "0.9", features = [
     "acme-alpn",
     "acme-dns",
     "pubsub",
@@ -734,7 +733,7 @@ ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3.0.3"
 ic-certification = "3"
 ic-doge-interface = "0.3.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", tag = "v0.6.5", features = [
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", tag = "v0.6.12", features = [
     "acme",
 ] }
 ic-http-certification = "3.0.3"
