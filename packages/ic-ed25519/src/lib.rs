@@ -609,7 +609,7 @@ impl PublicKey {
     /// Deserialize a public key in raw format
     ///
     /// This is just the 32 byte encoding of the public point,
-    /// cooresponding to Self::serialize_raw
+    /// corresponding to Self::serialize_raw
     ///
     /// # Warning
     ///
@@ -654,7 +654,7 @@ impl PublicKey {
 
     /// Deserialize the DER encoded public key
     ///
-    /// See RFC 8410 for details on the format. This cooresponds to
+    /// See RFC 8410 for details on the format. This corresponds to
     /// Self::serialize_rfc8410_der
     ///
     /// # Warning
@@ -670,7 +670,7 @@ impl PublicKey {
 
     /// Deserialize the PEM encoded public key
     ///
-    /// See RFC 8410 for details on the format. This cooresponds to
+    /// See RFC 8410 for details on the format. This corresponds to
     /// Self::serialize_rfc8410_pem
     ///
     /// # Warning
