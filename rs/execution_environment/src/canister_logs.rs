@@ -26,6 +26,7 @@ pub(crate) fn fetch_canister_logs(
         reply: Some(reply),
         heap_delta_increase: NumBytes::new(0),
         unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
+        instructions_to_charge_on_success: NumInstructions::new(0),
         deleted_call_context_responses: vec![],
         stop_call_id_to_remove: None,
         stop_contexts_to_reject: vec![],
