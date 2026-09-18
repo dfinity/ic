@@ -1614,12 +1614,22 @@ impl CanisterManager {
             state.get_own_subnet_cycles_config(),
             None,
         );
-        debug_assert!(
-            consumed_cycles.is_empty(),
-            "canister creation must not accumulate cycles for instructions: \
-             the accumulator is thrown away, so the error path below would roll \
-             back the charge and lose it"
-        );
+        if !consumed_cycles.is_empty() {
+            canister_creation_error.inc();
+            error!(
+                self.log,
+                "[EXC-BUG] Canister creation of canister {} accumulated {:?} cycles \
+                 for instructions.",
+                new_canister_id,
+                consumed_cycles,
+            );
+            debug_assert!(
+                false,
+                "canister creation must not accumulate cycles for instructions: \
+                 the accumulator is thrown away, so the error path below would roll \
+                 back the charge and lose it"
+            );
+        }
         if let Err(err) = settings_result {
             *round_limits = round_limits_snapshot;
             return Err(err);

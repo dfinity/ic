@@ -395,6 +395,16 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
     }
 }
 
+impl fmt::Debug for ConsumedCyclesForInstructions<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConsumedCyclesForInstructions")
+            .field("consumed_cycles", &self.consumed_cycles)
+            .field("instructions_used", &self.instructions_used)
+            .field("install_code_debit", &self.install_code_debit)
+            .finish()
+    }
+}
+
 /// Represent a paused execution that can be resumed or aborted.
 pub trait PausedExecution: std::fmt::Debug + Send {
     /// Resumes a paused execution.
