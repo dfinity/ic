@@ -218,7 +218,9 @@ impl DelegationManager {
             && self.is_delegation_valid_with_respect_to_state(actual_new_delegation) == Some(false)
         {
             // If the new delegation is incompatible with our state, hold it back. Once the state
-            // will have caught up, `reactive_fetch` will fetch a new delegation.
+            // will have caught up, a new delegation will be fetched: by `reactive_fetch` if we
+            // have already published a delegation, and by the next (shortened) proactive fetch
+            // otherwise, since `reactive_fetch` is a no-op until the initialization.
             // When not being able to determine this (e.g. the call above returned `None`), still
             // accept it.
             self.metrics.held_back_delegations.inc();
