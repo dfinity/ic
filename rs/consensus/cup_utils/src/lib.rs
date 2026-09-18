@@ -411,6 +411,7 @@ mod tests {
         CatchUpPackageContents, RecoveryArgs, RegistryStoreUri, SubnetRecord,
         catch_up_package_contents::CupType,
     };
+    use ic_registry_keys::CATCH_UP_PACKAGE_CONTENTS_KEY_PREFIX;
     use ic_types::{
         Height, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, Time,
         consensus::{ConsensusMessageHashable, HasVersion},
@@ -427,7 +428,7 @@ mod tests {
     fn setup_registry(registry_store_uri: Option<RegistryStoreUri>) -> impl RegistryClient {
         MockRegistryClient::new(LATEST_REGISTRY_VERSION, move |key, _| {
             use prost::Message;
-            if key.starts_with("catch_up_package_contents_") {
+            if key.starts_with(CATCH_UP_PACKAGE_CONTENTS_KEY_PREFIX) {
                 // Build a dummy cup
                 let committee = vec![NodeId::from(PrincipalId::new_node_test_id(0))];
                 let cup =
