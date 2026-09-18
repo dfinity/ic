@@ -9,7 +9,7 @@ use crate::{
         RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
         StopDissolve,
     },
-    signed_target::verify_signed_target,
+    signed_target::{verify_signed_envelopes, verify_signed_target},
 };
 use rosetta_core::objects::ObjectMap;
 
@@ -39,12 +39,17 @@ impl RosettaRequestHandler {
             ParsedTransaction::Signed(signed_transaction) => signed_transaction
                 .requests
                 .iter()
-                .map(
-                    |(request_type, updates)| match updates[0].update.content.clone() {
-                        HttpCallContent::Call { update } => (request_type.clone(), update),
-                    },
-                )
-                .collect(),
+                .map(|(request_type, envelopes)| {
+                    // Each envelope carries its own signature and the submit
+                    // path broadcasts whichever one is currently valid, not the
+                    // first, so all of them have to agree with the metadata
+                    // about to be displayed -- not just the one described.
+                    verify_signed_envelopes(request_type, envelopes)?;
+                    match envelopes[0].update.content.clone() {
+                        HttpCallContent::Call { update } => Ok((request_type.clone(), update)),
+                    }
+                })
+                .collect::<Result<Vec<_>, ApiError>>()?,
             ParsedTransaction::Unsigned(unsigned_transaction) => unsigned_transaction.updates,
         };
 
@@ -839,9 +844,6 @@ mod tests {
         });
     }
 
-    /// Builds a `RosettaRequestHandler` together with a single ICP transfer
-    /// (debit + credit + fee) and the signer's public and private keys, shared
-    /// by the construction tests below.
     /// Builds an offline-capable `RosettaRequestHandler` together with a signer
     /// keypair, shared by the construction tests below.
     fn setup_handler() -> (
@@ -882,6 +884,8 @@ mod tests {
         (handler, network_identifier, pub_key, key)
     }
 
+    /// Builds a handler together with a single ICP transfer (debit + credit +
+    /// fee) and the signer's public and private keys.
     fn setup_transfer_test() -> (
         RosettaRequestHandler,
         NetworkIdentifier,
@@ -1025,6 +1029,69 @@ mod tests {
             .clone();
         assert_eq!(memo, serde_json::json!(0), "expected a memo of 0");
     }
+    /// Builds and genuinely signs a complete-stake `DISBURSE` of `neuron_index`
+    /// to a third party, returning the operations it represents along with the
+    /// unsigned and signed transactions.
+    fn signed_disburse(
+        handler: &RosettaRequestHandler,
+        network_identifier: &NetworkIdentifier,
+        pub_key: &PublicKey,
+        key: &ic_ed25519::PrivateKey,
+        neuron_index: u64,
+    ) -> (Vec<Operation>, String, String) {
+        use crate::{request::Request, request_types::Disburse};
+        use rosetta_core::convert::principal_id_from_public_key;
+
+        let account =
+            icp_ledger::AccountIdentifier::from(principal_id_from_public_key(pub_key).unwrap());
+        let operations = Request::requests_to_operations(
+            &[Request::Disburse(Disburse {
+                account,
+                amount: None,
+                recipient: Some(icp_ledger::AccountIdentifier::from(
+                    ic_types::PrincipalId::new_user_test_id(42),
+                )),
+                neuron_index,
+            })],
+            "TKN",
+        )
+        .unwrap();
+
+        let payloads = handler
+            .construction_payloads(ConstructionPayloadsRequest {
+                network_identifier: network_identifier.clone(),
+                operations: operations.clone(),
+                metadata: None,
+                public_keys: Some(vec![pub_key.clone()]),
+            })
+            .unwrap();
+
+        let signatures = payloads
+            .payloads
+            .into_iter()
+            .map(|payload| {
+                let bytes = hex::decode(payload.clone().hex_bytes).unwrap();
+                Signature {
+                    signing_payload: payload,
+                    public_key: pub_key.clone(),
+                    signature_type: SignatureType::Ed25519,
+                    hex_bytes: hex::encode(key.sign_message(&bytes)),
+                }
+            })
+            .collect();
+
+        let signed = handler
+            .construction_combine(ConstructionCombineRequest {
+                network_identifier: network_identifier.clone(),
+                unsigned_transaction: payloads.unsigned_transaction.clone(),
+                signatures,
+            })
+            .unwrap()
+            .signed_transaction;
+
+        (operations, payloads.unsigned_transaction, signed)
+    }
+
     /// Regression test for the construction flow's authenticated-data
     /// confusion: the outer `RequestType` is plain CBOR metadata that no
     /// signature covers, so rewriting its `neuron_index` used to make
@@ -1158,6 +1225,94 @@ mod tests {
             .expect_err("the submit path must reject the same mismatch");
         assert!(
             format!("{err:?}").contains("neuron_index"),
+            "unexpected error: {err:?}"
+        );
+    }
+    /// Binding the neuron is not enough on its own: the submit path does not
+    /// re-derive the command for every request type, so rewriting only the
+    /// wrapper's variant used to make `/construction/submit` report one
+    /// operation while a different signed command executed. `/construction/parse`
+    /// happened to catch this because each of its per-operation handlers
+    /// re-decodes the command, but submit is reachable without parsing at all.
+    #[test]
+    fn test_submit_path_rejects_substituted_command() {
+        use crate::{models::SignedTransaction, request::Request, request_types::RequestType};
+
+        const NEURON_INDEX: u64 = 7;
+
+        let (handler, network_identifier, pub_key, key) = setup_handler();
+        let (_, _, signed_transaction) =
+            signed_disburse(&handler, &network_identifier, &pub_key, &key, NEURON_INDEX);
+
+        // Same neuron, same signed disburse command -- only the wrapper's
+        // operation name is swapped, for one whose submit branch never looks at
+        // the payload.
+        let mut signed = SignedTransaction::from_str(&signed_transaction).unwrap();
+        for (request_type, _) in signed.requests.iter_mut() {
+            *request_type = RequestType::StartDissolve {
+                neuron_index: NEURON_INDEX,
+            };
+        }
+
+        let err = Request::try_from(&signed.requests[0])
+            .expect_err("the submit path must reject a substituted operation");
+        assert!(
+            format!("{err:?}").contains("manage_neuron command"),
+            "unexpected error: {err:?}"
+        );
+
+        // Parse must reject it as well.
+        handler
+            .construction_parse(ConstructionParseRequest {
+                network_identifier,
+                signed: true,
+                transaction: hex::encode(serde_cbor::to_vec(&signed).unwrap()),
+            })
+            .expect_err("parse must reject a substituted operation");
+    }
+
+    /// A signed request carries one envelope per ingress expiry, and the submit
+    /// path broadcasts whichever is currently valid rather than the first.
+    /// Validating a single envelope therefore used to leave room for a request
+    /// that pairs an expired envelope matching the wrapper with a currently
+    /// valid envelope for a different neuron: parse would describe the first
+    /// while submit sent the second. Both envelopes here carry genuine
+    /// signatures.
+    #[test]
+    fn test_rejects_divergent_envelopes() {
+        use crate::{models::SignedTransaction, request::Request, request_types::RequestType};
+
+        let (handler, network_identifier, pub_key, key) = setup_handler();
+        let (_, _, displayed) = signed_disburse(&handler, &network_identifier, &pub_key, &key, 0);
+        let (_, _, hidden) = signed_disburse(&handler, &network_identifier, &pub_key, &key, 7);
+
+        let displayed = SignedTransaction::from_str(&displayed).unwrap();
+        let hidden = SignedTransaction::from_str(&hidden).unwrap();
+
+        // Wrapper and first envelope describe the worthless neuron; a later
+        // envelope targets the valuable one.
+        let mut envelopes = vec![displayed.requests[0].1[0].clone()];
+        envelopes.push(hidden.requests[0].1[0].clone());
+        let spliced = SignedTransaction {
+            requests: vec![(RequestType::Disburse { neuron_index: 0 }, envelopes)],
+        };
+
+        let err = Request::try_from(&spliced.requests[0])
+            .expect_err("the submit path must reject envelopes that disagree");
+        assert!(
+            format!("{err:?}").contains("ingress"),
+            "unexpected error: {err:?}"
+        );
+
+        let err = handler
+            .construction_parse(ConstructionParseRequest {
+                network_identifier,
+                signed: true,
+                transaction: hex::encode(serde_cbor::to_vec(&spliced).unwrap()),
+            })
+            .expect_err("parse must reject envelopes that disagree");
+        assert!(
+            format!("{err:?}").contains("ingress"),
             "unexpected error: {err:?}"
         );
     }

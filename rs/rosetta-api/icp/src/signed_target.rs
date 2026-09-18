@@ -24,10 +24,12 @@
 use crate::{
     convert,
     errors::ApiError,
+    models::EnvelopePair,
     request_types::{PublicKeyOrPrincipal, RequestType},
 };
 use ic_nns_governance_api::{
-    ClaimOrRefreshNeuronFromAccount, ManageNeuronRequest, manage_neuron::NeuronIdOrSubaccount,
+    ClaimOrRefreshNeuronFromAccount, ManageNeuronCommandRequest, ManageNeuronRequest,
+    manage_neuron, manage_neuron::NeuronIdOrSubaccount,
 };
 use ic_types::{PrincipalId, messages::HttpCanisterUpdate};
 
@@ -41,6 +43,54 @@ const GET_FULL_NEURON_BY_ID_OR_SUBACCOUNT: &str = "get_full_neuron_by_id_or_suba
 const LIST_NEURONS: &str = "list_neurons";
 /// Ledger method behind `RequestType::Send`.
 const SEND_PB: &str = "send_pb";
+
+/// Check a signed request's envelopes as a whole.
+///
+/// A signed request carries one envelope per ingress expiry, each with its own
+/// signature, and `/construction/submit` broadcasts whichever one is currently
+/// valid rather than the first. Validating only one envelope would therefore
+/// leave the displayed operations describing a message that is not the one sent:
+/// a request could pair an expired envelope matching the wrapper with a
+/// currently valid envelope for a different neuron, amount or recipient.
+///
+/// `/construction/combine` builds these envelopes by cloning a single update and
+/// varying only `ingress_expiry`, so requiring them to be identical in every
+/// other byte is both what honest requests satisfy and enough to make the
+/// envelope that gets broadcast interchangeable with the one described.
+pub fn verify_signed_envelopes(
+    request_type: &RequestType,
+    envelopes: &[EnvelopePair],
+) -> Result<(), ApiError> {
+    let representative = envelopes
+        .first()
+        .ok_or_else(|| ApiError::invalid_request("No request payload provided."))?
+        .update_content();
+
+    verify_signed_target(request_type, representative)?;
+
+    for envelope in &envelopes[1..] {
+        if !same_update_modulo_expiry(representative, envelope.update_content()) {
+            return Err(ApiError::invalid_request(
+                "The envelopes of a signed request must differ only in their ingress \
+                 expiry. Refusing a request whose envelopes carry different payloads, \
+                 since the one that gets submitted need not be the one described.",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Whether two updates are the same message sent in different ingress windows.
+fn same_update_modulo_expiry(a: &HttpCanisterUpdate, b: &HttpCanisterUpdate) -> bool {
+    // Compare whole updates rather than a field list, so a field added to
+    // `HttpCanisterUpdate` later is covered without touching this.
+    let normalize = |update: &HttpCanisterUpdate| {
+        let mut update = update.clone();
+        update.ingress_expiry = 0;
+        update
+    };
+    normalize(a) == normalize(b)
+}
 
 /// Check that every field of `request_type` that Rosetta will display is
 /// derivable from, and consistent with, the signed `update`.
@@ -79,7 +129,18 @@ pub fn verify_signed_target(
                     "the signed claim_or_refresh_neuron_from_account memo",
                 ));
             }
-            Ok(())
+            // The signed argument may name the controller explicitly, in which
+            // case the neuron claimed is `H(controller, memo)` rather than the
+            // signer's. Rosetta displays the request against the signer, so
+            // anything else would describe the wrong neuron's owner.
+            match args.controller {
+                None => Ok(()),
+                Some(controller) if controller == sender => Ok(()),
+                Some(controller) => Err(ApiError::invalid_request(format!(
+                    "The signed stake request names controller {controller}, but Rosetta \
+                     would display it against the signer {sender}."
+                ))),
+            }
         }
 
         RequestType::NeuronInfo {
@@ -130,7 +191,7 @@ pub fn verify_signed_target(
         | RequestType::Spawn { neuron_index }
         | RequestType::StakeMaturity { neuron_index }
         | RequestType::RegisterVote { neuron_index } => {
-            verify_manage_neuron(update, *neuron_index, None, sender)
+            verify_manage_neuron(request_type, update, *neuron_index, None, sender)
         }
 
         RequestType::Follow {
@@ -140,12 +201,19 @@ pub fn verify_signed_target(
         | RequestType::RefreshVotingPower {
             neuron_index,
             controller,
-        } => verify_manage_neuron(update, *neuron_index, controller.as_ref(), sender),
+        } => verify_manage_neuron(
+            request_type,
+            update,
+            *neuron_index,
+            controller.as_ref(),
+            sender,
+        ),
     }
 }
 
 /// Shared body for the `manage_neuron` request types.
 fn verify_manage_neuron(
+    request_type: &RequestType,
     update: &HttpCanisterUpdate,
     neuron_index: u64,
     controller: Option<&PublicKeyOrPrincipal>,
@@ -156,6 +224,8 @@ fn verify_manage_neuron(
     verify_nonce_neuron_index(update, neuron_index)?;
 
     let manage: ManageNeuronRequest = decode_arg(update, "manage_neuron")?;
+
+    verify_command_matches(request_type, manage.command.as_ref())?;
 
     // `/construction/payloads` always identifies the neuron by subaccount and
     // leaves the legacy `id` field unset. A request that sets `id` carries a
@@ -176,6 +246,63 @@ fn verify_manage_neuron(
     })?;
 
     verify_neuron_subaccount(&id_or_subaccount, controller, sender, neuron_index)
+}
+
+/// Check that the signed `manage_neuron` command is the operation the displayed
+/// request type names.
+///
+/// Binding the neuron alone is not enough: the submit path does not re-derive
+/// the command for every request type (`START_DISSOLVE` and `STOP_DISSOLVE`
+/// report the wrapper variant without decoding the payload at all), so
+/// rewriting only that variant would make Rosetta name one operation while a
+/// different one executes.
+fn verify_command_matches(
+    request_type: &RequestType,
+    command: Option<&ManageNeuronCommandRequest>,
+) -> Result<(), ApiError> {
+    use ManageNeuronCommandRequest as Cmd;
+    use manage_neuron::configure::Operation as Op;
+
+    let operation = match command {
+        Some(Cmd::Configure(manage_neuron::Configure { operation })) => operation.as_ref(),
+        _ => None,
+    };
+
+    let bound = match request_type {
+        RequestType::SetDissolveTimestamp { .. } => {
+            matches!(operation, Some(Op::SetDissolveTimestamp(_)))
+        }
+        RequestType::ChangeAutoStakeMaturity { .. } => {
+            matches!(operation, Some(Op::ChangeAutoStakeMaturity(_)))
+        }
+        RequestType::StartDissolve { .. } => matches!(operation, Some(Op::StartDissolving(_))),
+        RequestType::StopDissolve { .. } => matches!(operation, Some(Op::StopDissolving(_))),
+        RequestType::AddHotKey { .. } => matches!(operation, Some(Op::AddHotKey(_))),
+        RequestType::RemoveHotKey { .. } => matches!(operation, Some(Op::RemoveHotKey(_))),
+        RequestType::Disburse { .. } => matches!(command, Some(Cmd::Disburse(_))),
+        RequestType::DisburseMaturity { .. } => matches!(command, Some(Cmd::DisburseMaturity(_))),
+        RequestType::Spawn { .. } => matches!(command, Some(Cmd::Spawn(_))),
+        RequestType::StakeMaturity { .. } => matches!(command, Some(Cmd::StakeMaturity(_))),
+        RequestType::RegisterVote { .. } => matches!(command, Some(Cmd::RegisterVote(_))),
+        RequestType::Follow { .. } => matches!(command, Some(Cmd::Follow(_))),
+        RequestType::RefreshVotingPower { .. } => {
+            matches!(command, Some(Cmd::RefreshVotingPower(_)))
+        }
+        // Not submitted through `manage_neuron`; their own arms bind them.
+        RequestType::Send
+        | RequestType::Stake { .. }
+        | RequestType::NeuronInfo { .. }
+        | RequestType::ListNeurons { .. } => false,
+    };
+
+    if !bound {
+        return Err(ApiError::invalid_request(format!(
+            "The signed manage_neuron command is not the {} operation Rosetta would \
+             display. Refusing to name an operation other than the one being signed.",
+            request_type.clone().into_str()
+        )));
+    }
+    Ok(())
 }
 
 /// Check that the signed neuron subaccount is the one derived from the
@@ -547,5 +674,97 @@ mod tests {
             &update,
         )
         .unwrap_err();
+    }
+    #[test]
+    fn substituted_command_is_rejected() {
+        // The signed command is a disburse of this neuron; the wrapper names a
+        // different operation on the same neuron, so nonce, subaccount,
+        // canister and method all still agree.
+        let update = manage_neuron_update(controller(), NEURON_INDEX);
+        verify_signed_target(
+            &RequestType::StartDissolve {
+                neuron_index: NEURON_INDEX,
+            },
+            &update,
+        )
+        .unwrap_err();
+    }
+
+    #[test]
+    fn stake_with_foreign_controller_is_rejected() {
+        let sender = controller();
+        let signed_stake = |controller: Option<PrincipalId>| {
+            let args = ClaimOrRefreshNeuronFromAccount {
+                controller,
+                memo: NEURON_INDEX,
+            };
+            HttpCanisterUpdate {
+                canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+                method_name: CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT.to_string(),
+                arg: Blob(Encode!(&args).unwrap()),
+                nonce: Some(Blob(Encode!(&NEURON_INDEX).unwrap())),
+                sender: Blob(sender.into_vec()),
+                ingress_expiry: 0,
+                sender_info: None,
+            }
+        };
+        let stake = RequestType::Stake {
+            neuron_index: NEURON_INDEX,
+        };
+
+        // Absent, or naming the signer: the neuron displayed is the one claimed.
+        verify_signed_target(&stake, &signed_stake(None)).unwrap();
+        verify_signed_target(&stake, &signed_stake(Some(sender))).unwrap();
+        // Naming someone else claims `H(other, memo)`, not the signer's neuron.
+        verify_signed_target(
+            &stake,
+            &signed_stake(Some(PrincipalId::new_user_test_id(77))),
+        )
+        .unwrap_err();
+    }
+
+    #[test]
+    fn envelopes_must_differ_only_in_ingress_expiry() {
+        use crate::models::EnvelopePair;
+        use ic_types::messages::{
+            HttpCallContent, HttpReadState, HttpReadStateContent, HttpRequestEnvelope,
+        };
+
+        let pair = |update: HttpCanisterUpdate| EnvelopePair {
+            update: HttpRequestEnvelope::<HttpCallContent> {
+                content: HttpCallContent::Call { update },
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            },
+            read_state: HttpRequestEnvelope::<HttpReadStateContent> {
+                content: HttpReadStateContent::ReadState {
+                    read_state: HttpReadState {
+                        sender: Blob(controller().into_vec()),
+                        paths: vec![],
+                        nonce: None,
+                        ingress_expiry: 0,
+                    },
+                },
+                sender_pubkey: None,
+                sender_sig: None,
+                sender_delegation: None,
+            },
+        };
+
+        let base = manage_neuron_update(controller(), NEURON_INDEX);
+        let mut later = base.clone();
+        later.ingress_expiry = base.ingress_expiry + 1_000;
+
+        // The same message in two ingress windows is what combine produces.
+        verify_signed_envelopes(&disburse(NEURON_INDEX), &[pair(base.clone()), pair(later)])
+            .unwrap();
+
+        // An envelope for another neuron alongside it is not.
+        let other = manage_neuron_update(controller(), 9);
+        verify_signed_envelopes(&disburse(NEURON_INDEX), &[pair(base), pair(other)]).unwrap_err();
+
+        // And an empty request has nothing to describe.
+        verify_signed_envelopes(&disburse(NEURON_INDEX), &[]).unwrap_err();
     }
 }
