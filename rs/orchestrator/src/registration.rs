@@ -2,7 +2,7 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::{KeyRotationStatus, OrchestratorMetrics},
     signer::{Hsm, NodeProviderSigner, NodeSender, Signer},
-    utils::https_endpoint_to_url,
+    utils::{https_endpoint_to_url, nns_root_key_der_from_registry},
 };
 use anyhow::Context as _;
 use attestation::SevAttestationPackage;
@@ -517,40 +517,7 @@ impl NodeRegistration {
     async fn try_to_register_key(&self, idkg_pk: PublicKey) -> Result<(), String> {
         info!(self.log, "Trying to register rotated idkg key...");
 
-        let key_handler = self.key_handler.clone();
-        let node_pub_key_opt = tokio::task::spawn_blocking(move || {
-            key_handler
-                .current_node_public_keys()
-                .map(|cnpks| cnpks.node_signing_public_key)
-        })
-        .await
-        .unwrap();
-
-        let node_pub_key = match node_pub_key_opt {
-            Ok(Some(pk)) => pk,
-            Ok(None) => {
-                return Err("Missing node signing key.".into());
-            }
-            Err(e) => {
-                return Err(format!("Failed to retrieve current node public keys: {e}"));
-            }
-        };
-
-        let key_handler = self.key_handler.clone();
-        let sign_cmd = move |msg: &MessageId| {
-            // Implementation of 'sign_basic' uses Tokio's 'block_on' when issuing a RPC
-            // to the crypto service. 'block_on' panics when called from async context
-            // that's why we need to wrap 'sign_basic' in 'block_in_place'.
-            #[allow(clippy::disallowed_methods)]
-            tokio::task::block_in_place(|| {
-                key_handler
-                    .sign_basic(msg)
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
-                    .map(|value| value.get().0)
-            })
-        };
-
-        let signer = NodeSender::new(node_pub_key, Arc::new(sign_cmd))?;
+        let signer = NodeSender::for_this_node(self.key_handler.clone())?;
         let agent = self.get_https_agent_to_random_nns_url(signer)?;
         let update_node_payload = UpdateNodeDirectlyPayload {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
@@ -724,37 +691,12 @@ impl NodeRegistration {
     }
 
     fn get_nns_pub_key_der_from_registry(&self) -> Option<Vec<u8>> {
-        let version = self.registry_client.get_latest_version();
-        let root_subnet_id = match self.registry_client.get_root_subnet_id(version) {
-            Ok(Some(id)) => id,
-            err => {
-                warn!(self.log, "Failed to get root subnet id: {:?}", err);
-                return None;
-            }
-        };
-
-        let pub_key = match self
-            .registry_client
-            .get_threshold_signing_public_key_for_subnet(root_subnet_id, version)
-        {
-            Ok(Some(pub_key)) => pub_key,
-            Ok(None) => {
-                warn!(self.log, "NNS public key not set in the registry");
-                return None;
-            }
-            Err(e) => {
-                warn!(self.log, "Error when retrieving NNS public key: {:?}", e);
-                return None;
-            }
-        };
-
-        match threshold_sig_public_key_to_der(pub_key) {
-            Ok(der) => Some(der),
-            Err(e) => {
-                warn!(self.log, "Failed to convert NNS public key to DER: {:?}", e);
-                None
-            }
-        }
+        nns_root_key_der_from_registry(
+            self.registry_client.as_ref(),
+            self.registry_client.get_latest_version(),
+        )
+        .inspect_err(|err| warn!(self.log, "Failed to get the NNS public key: {}", err))
+        .ok()
     }
 
     async fn check_node_registered(&self) -> Result<(), CheckKeysWithRegistryError> {
