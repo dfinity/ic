@@ -7,7 +7,7 @@ tags: [cketh, ckerc20, cksol, minter, multichain]
 
 - [Motivation](#motivation)
 - [System Overview](#system-overview)
-- [Actors](#actors)
+- [Glossary](#glossary)
 - [Requirements](#requirements)
 - [Non-goals](#non-goals)
 - [Open questions](#open-questions)
@@ -50,3 +50,45 @@ flowchart LR
 - **Solana**: an origin chain holding USDC as an SPL token. The system controls custody
   token accounts on it through threshold Ed25519.
 
+## Glossary
+
+* An input chain is one of:
+    * Ethereum Mainnet
+    * Solana Mainnet
+* An output chain is one of:
+    * Ethereum Mainnet
+    * Solana Mainnet
+
+## Requirements
+
+### Requirement 1: Deposit Is Input-Chain Agnostic
+
+**User Story:** As a USDC holder, I want to deposit from whichever input chain my tokens are on, so that I can use them on ICP without caring whether they came from Ethereum or from Solana.
+
+#### Acceptance Criteria
+
+1. WHEN a user deposits k USDC on any input chain at an address given by the System, THE System SHALL mint the user k USDC on ICP.
+
+### Requirement 2: Withdrawal Is Output-Chain Agnostic
+
+**User Story:** As a USDC holder on ICP, I want to withdraw to any output chain of my choice, so that my withdrawal does not depend on which chain I originally deposited from.
+
+#### Acceptance Criteria
+
+1. WHEN a user withdraws k USDC on ICP to an address on a given output chain, THE System SHALL credit the beneficiary address on the given output chain with k USDC.
+
+### Requirement 3: Backing Is 1:1 at All Times
+
+**User Story:** As a USDC holder on ICP, I want every USDC on ICP to be backed by USDC held by the System on an input chain, so that I can always withdraw my holdings independently of what other holders do before me.
+
+#### Acceptance Criteria
+
+1. THE System SHALL, at all times including while deposits and withdrawals are in flight, hold on all input chains a total balance of USDC that is at least the total supply of USDC on ICP.
+
+   $$
+   \mathrm{supply}_{\mathrm{ICP}}(\mathrm{USDC}) \;\le\; \sum_{c \,\in\, \mathrm{Chains}} \mathrm{balance}_{c}(\mathrm{USDC})
+   $$
+
+   where $\mathrm{Chains} = \{\text{Ethereum Mainnet}, \text{Solana Mainnet}\}$ and
+   $\mathrm{balance}_{c}(\mathrm{USDC})$ is the amount of USDC held on chain $c$ at addresses
+   controlled by the System.
