@@ -1,7 +1,7 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::{ExpectedIndices, max_message_index};
+use crate::{ExpectedIndices, STREAM_INDEX_MAX, max_message_index};
 use header::Header;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{
@@ -1534,9 +1534,13 @@ impl CertifiedSlicePool {
         let mut messages_end = StreamIndex::from(0);
         let mut signals_end = StreamIndex::from(0);
         let mut header_begin = StreamIndex::from(0);
+        // The message we expect next, against which a pooled slice may have a gap;
+        // `STREAM_INDEX_MAX` while we expect nothing in particular.
+        let mut expected_message_index = STREAM_INDEX_MAX;
 
         if let Some(stream_position) = self.stream_positions.get(&subnet_id) {
             messages_end = stream_position.message_index;
+            expected_message_index = stream_position.message_index;
             signals_end = stream_position.signal_index;
             header_begin = stream_position.max_no_gc_header_begin;
             if covered_by(messages_end, signals_end, header_begin) {
@@ -1545,7 +1549,16 @@ impl CertifiedSlicePool {
         }
 
         if let Some(pooled) = self.slices.get(&subnet_id) {
-            messages_end = messages_end.max(pooled.payload.messages_end().unwrap_or_default());
+            // Unless it begins after the message we expect next, in which case the gap
+            // before it must be fetched before any of its messages can be inducted. Its
+            // header still counts: a header-only slice can be taken regardless.
+            if pooled
+                .payload
+                .messages_begin()
+                .is_some_and(|begin| begin <= expected_message_index)
+            {
+                messages_end = messages_end.max(pooled.payload.messages_end().unwrap_or_default());
+            }
             signals_end = signals_end.max(pooled.payload.header.signals_end());
             header_begin = header_begin.max(pooled.payload.header.begin());
             if covered_by(messages_end, signals_end, header_begin) {
