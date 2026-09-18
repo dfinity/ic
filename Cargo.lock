@@ -10296,6 +10296,7 @@ dependencies = [
  "ic-crypto-temp-crypto",
  "ic-error-types 0.2.0",
  "ic-https-outcalls-pricing",
+ "ic-https-outcalls-socks-proxy",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
  "ic-interfaces-mocks",
@@ -10306,7 +10307,6 @@ dependencies = [
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-client-helpers",
- "ic-registry-keys",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
@@ -10327,7 +10327,6 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rayon",
  "slog",
- "strum 0.26.3",
 ]
 
 [[package]]
@@ -10352,6 +10351,24 @@ dependencies = [
  "tonic",
  "tonic-prost",
  "tonic-prost-build",
+]
+
+[[package]]
+name = "ic-https-outcalls-socks-proxy"
+version = "0.9.0"
+dependencies = [
+ "ic-interfaces-registry",
+ "ic-logger",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-client-helpers",
+ "ic-registry-keys",
+ "ic-registry-proto-data-provider",
+ "ic-registry-subnet-type",
+ "ic-test-utilities-types",
+ "ic-types",
+ "slog",
+ "strum 0.26.3",
 ]
 
 [[package]]
