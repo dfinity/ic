@@ -328,12 +328,23 @@ stopping, frozen, deleted or out-of-cycles archive all reject. What is genuinely
 unbounded is how *long* a guaranteed-response call may take on a loaded subnet, not
 whether it returns.
 
-**The justification is the reservation.** Sending a message reserves subnet memory
-for the message *and its response*, and a canister that cannot pay for that
-reservation without freezing is refused at call time. That is the same resource whose
-exhaustion stopped archiving on 2026-09-01, so a bounded call — which reserves no
-response capacity — is more likely to be accepted under exactly the conditions that
-matter. This argument does not depend on any archive misbehaving.
+**The justification is the reservation, and the numbers make it.** A
+guaranteed-response call must be answerable whatever happens next, so the system sets
+aside subnet message memory for the reply when the *request* is sent and holds it
+until the call completes. The amount is flat: every outstanding call counts
+`MAX_RESPONSE_COUNT_BYTES` — `size_of::<RequestOrResponse>() + size_of::<Response>()`
+plus a 2 MiB payload ceiling (`types/types/src/messages.rs:86`, `:66`) — against
+`guaranteed_response_memory_usage`
+(`replicated_state/src/canister_state/queues.rs:1862`), regardless of how small the
+reply turns out to be. Best-effort responses are not in that accounting at all; the
+field's own comment distinguishes them.
+
+Our reply is two `nat64`s, a `bool` and a small variant — under 100 bytes. So each
+in-flight append reserves about 2 MiB to use about 50, and that reservation is taken
+from the same subnet memory whose exhaustion stopped archiving on 2026-09-01. A
+bounded call reserves none of it, so it is likelier to be accepted under exactly the
+conditions that matter. The argument needs no archive to misbehave, which is why it
+and not the stall is what carries `Req 13`.
 
 **Upgradeability is a real secondary, but weaker here than in the guidance.** An
 outstanding callback prevents the caller being stopped and therefore cleanly

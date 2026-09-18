@@ -547,9 +547,9 @@ rather than several.
 
 ### Requirement 13: A Ledger Does Not Wait Indefinitely For An Archive
 
-**User Story:** As a canister operator, I want a ledger's archiving calls not to
-reserve response capacity they may never use, so that archiving is still possible on
-a subnet under the memory pressure that stops it today.
+**User Story:** As a canister operator, I want archiving to still be possible on a
+subnet that is short of memory, so that the shortage which stopped archiving does not
+also block the calls needed to get it going again.
 
 #### Acceptance Criteria
 
