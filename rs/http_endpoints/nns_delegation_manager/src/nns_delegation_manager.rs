@@ -247,11 +247,8 @@ impl DelegationManager {
                 continue;
             };
 
-            if new_delegation != last_delegation {
-                self.metrics.updates.inc();
-            }
-
             sender.send_replace(new_delegation.clone());
+            self.metrics.updates.inc();
             last_delegation = new_delegation;
         }
     }

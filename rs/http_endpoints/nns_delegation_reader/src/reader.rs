@@ -115,16 +115,6 @@ pub struct NNSDelegationBuilder {
     precomputed_delegation_without_canister_ranges: Arc<CertificateDelegation>,
 }
 
-/// Shortcut equality check since everything is derived deterministically from the original
-/// delegation
-impl PartialEq for NNSDelegationBuilder {
-    fn eq(&self, other: &Self) -> bool {
-        self.builder.original_delegation == other.builder.original_delegation
-    }
-}
-
-impl Eq for NNSDelegationBuilder {}
-
 impl NNSDelegationBuilder {
     pub fn try_new(
         raw_certificate: Blob,
