@@ -100,7 +100,7 @@ impl NNSDelegationReader {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct NNSDelegationBuilder {
     builder: NNSDelegationBuilderInner,
     precomputed_delegation_with_flat_canister_ranges: CertificateDelegation,
@@ -263,7 +263,7 @@ impl NNSDelegationBuilder {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 struct NNSDelegationBuilderInner {
     full_certificate: Certificate,
     full_labeled_tree: LabeledTree<Vec<u8>>,

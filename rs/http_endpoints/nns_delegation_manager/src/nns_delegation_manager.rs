@@ -269,17 +269,8 @@ impl DelegationManager {
                 continue;
             };
 
-            sender.send_if_modified(|old_delegation: &mut Option<NNSDelegationBuilder>| {
-                let modified = if &new_delegation != old_delegation {
-                    old_delegation.clone_from(&new_delegation);
-                    self.metrics.updates.inc();
-                    true
-                } else {
-                    false
-                };
-
-                modified || matches!(self.last_delegation, PublishedDelegation::Uninitialized)
-            });
+            sender.send_replace(new_delegation.clone());
+            self.metrics.updates.inc();
 
             self.last_delegation = match new_delegation {
                 None => PublishedDelegation::AbsentBecauseNNS,
