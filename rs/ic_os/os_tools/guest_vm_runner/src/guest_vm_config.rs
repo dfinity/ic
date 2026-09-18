@@ -13,8 +13,9 @@ use tracing::info;
 const DEFAULT_GUEST_VM_DOMAIN_NAME: &str = "guestos";
 const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
 
-const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
-const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
+const SERIAL_LOG_DIR: &str = "/var/log/libvirt/qemu";
+const DEFAULT_SERIAL_LOG_NAME: &str = "guestos-serial";
+const UPGRADE_SERIAL_LOG_NAME: &str = "upgrade-guestos-serial";
 
 #[cfg(not(feature = "dev"))]
 const DEFAULT_VM_MEMORY_GIB: u32 = 480;
@@ -263,16 +264,14 @@ pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: VmSlot) -> String {
 }
 
 pub fn serial_log_path(guest_vm_type: GuestVMType, slot: VmSlot) -> PathBuf {
-    match guest_vm_type {
-        GuestVMType::Default => PathBuf::from(format!(
-            "{DEFAULT_SERIAL_LOG_PATH}{suffix}",
-            suffix = slot.to_suffix()
-        )),
-        GuestVMType::Upgrade => PathBuf::from(format!(
-            "{UPGRADE_SERIAL_LOG_PATH}{suffix}",
-            suffix = slot.to_suffix()
-        )),
-    }
+    let name = match guest_vm_type {
+        GuestVMType::Default => DEFAULT_SERIAL_LOG_NAME,
+        GuestVMType::Upgrade => UPGRADE_SERIAL_LOG_NAME,
+    };
+    PathBuf::from(format!(
+        "{SERIAL_LOG_DIR}/{name}{suffix}.log",
+        suffix = slot.to_suffix()
+    ))
 }
 
 #[cfg(all(test, not(feature = "skip_default_tests")))]
@@ -536,6 +535,36 @@ mod tests {
         assert!(
             media_path.metadata().unwrap().size() > 0,
             "Config media file is empty"
+        );
+    }
+
+    // The names export-guestos-serial-logs.sh forwards.
+    #[test]
+    fn test_serial_log_path() {
+        assert_eq!(
+            serial_log_path(GuestVMType::Default, VmSlot::Plain),
+            Path::new("/var/log/libvirt/qemu/guestos-serial.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Default, VmSlot::new(1)),
+            Path::new("/var/log/libvirt/qemu/guestos-serial1.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Default, VmSlot::new(60)),
+            Path::new("/var/log/libvirt/qemu/guestos-serial60.log")
+        );
+
+        assert_eq!(
+            serial_log_path(GuestVMType::Upgrade, VmSlot::Plain),
+            Path::new("/var/log/libvirt/qemu/upgrade-guestos-serial.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Upgrade, VmSlot::new(1)),
+            Path::new("/var/log/libvirt/qemu/upgrade-guestos-serial1.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Upgrade, VmSlot::new(60)),
+            Path::new("/var/log/libvirt/qemu/upgrade-guestos-serial60.log")
         );
     }
 
