@@ -64,6 +64,31 @@ and cannot be inferred by the ledger. Note the read path already enforces this
 boundary, rejecting a `start` below the offset (`:274-277`); only the write path
 lacks it.
 
+**What happened on 2026-09-01, so nothing here has to reconstruct it.** An
+unrelated canister's transient ~894 GiB allocation took subnet `pzp6e` from 68.7 GiB
+to 962.5 GiB between 05:28 and 07:28 UTC and released it around 10:00-10:28 — so for
+roughly four and a half hours the subnet sat 212.5 GiB above the 750 GiB
+storage-reservation threshold. Two ck canisters were refused a memory growth in that
+window:
+
+* **08:45 — the ckBTC index stopped syncing permanently**, its one-shot timer chain
+  never re-arming (DEFI-2983).
+* **09:13:17 — the ckBTC ledger's upgrade failed**: `Canister cannot grow memory by
+  59179008 bytes due to its reserved cycles limit. The current limit
+  (5_000_000_000_000) would be exceeded by 2_139_715_996_442.` That is `post_upgrade`
+  asking for 56.4 MB and being refused. The same upgrade succeeded at 11:00:37 once
+  the subnet had dropped back, with nothing on the ledger changed.
+
+**Archiving was not observed to fail, and whether it did cannot be determined.** The
+ledger's transaction path kept working throughout; the deployed ledger has no
+archiving-failure metric, callback traps are not logged by the replica, the canister
+log is controller-gated, and the ledger's own buffer was cleared by the 11:00:37
+upgrade. So the mitigation that disabled archiving was **precautionary** — applied
+after the subnet had already recovered, because the refusal class is reachable and
+its effect on archiving is undetectable. Every claim below about reservation refusals
+is about the *mechanism*, verified from the replica source, not about an observed
+archiving failure.
+
 **Two storage refusals never reach the archive's code.**
 `try_grow_stable_memory` maps most failures to `-1`, which
 `ic-stable-structures` surfaces as an `Err` the archive can handle — including the
@@ -74,10 +99,11 @@ an out-of-memory one (`embedders/src/wasmtime_embedder/system_api.rs:3605-3617`,
 which carries the comment saying so; the trap reaches the wasm boundary at
 `linker.rs:1089-1101`).
 
-This bounds `Req 4` sharply, and in the direction that matters: the cause of the
-2026-09-01 failure was `IC0534`, a reservation refusal, so it is on the trapping
-side. For that cause the archive keeps nothing and reports nothing, and blocks it
-appended earlier in the same call are discarded with the trap. `Req 4.8`'s partial progress is
+This bounds `Req 4` sharply, and in the direction that matters. The refusals
+actually seen on 2026-09-01 were `IC0534`, and they hit the ledger's `post_upgrade`
+and the index rather than an append — but the class is on the trapping side wherever
+it lands, so an append refused that way keeps nothing and reports nothing, and blocks
+it appended earlier in the same call are discarded with the trap. `Req 4.8`'s partial progress is
 therefore real for an out-of-memory subnet and unavailable for a reservation
 refusal — which is what `Req 4.7` says and why the non-goal points at
 `memory_allocation` rather than at anything in this design. `Req 4.1` is untouched
@@ -183,8 +209,10 @@ on all of them regardless, independently of chunk size, roughly once per 3 GiB.
 
 Serves `Req 9.1`, `Req 9.2`. `BACKOFF_INITIAL` = 30 s, doubling per consecutive
 failure, `BACKOFF_CAP` = 1 h. A transient cause recovers within a minute; a permanent
-one costs one probe per hour. Latching on any failure would have converted the
-2026-09-01 self-recovery into a manual intervention, which is why `Req 9.4` exists.
+one costs one probe per hour. What recovered on its own on 2026-09-01 was the
+*subnet*, not archiving — the pressure appeared and vanished inside four and a half
+hours, driven by a canister that was nothing to do with us. Latching on failure would
+have outlasted a cause that cleared itself, which is why `Req 9.4` exists.
 
 Transaction-triggered plus a timestamp check rather than a timer: no re-arm hazard,
 and it satisfies the every-await-is-a-call constraint above.
@@ -341,9 +369,9 @@ field's own comment distinguishes them.
 
 Our reply is two `nat64`s, a `bool` and a small variant — under 100 bytes. So each
 in-flight append reserves about 2 MiB to use about 50, and that reservation is taken
-from the same subnet memory whose exhaustion stopped archiving on 2026-09-01. A
-bounded call reserves none of it, so it is likelier to be accepted under exactly the
-conditions that matter. The argument needs no archive to misbehave, which is why it
+from the same subnet memory whose exhaustion on 2026-09-01 refused the ledger's
+upgrade and killed the index. A bounded call reserves none of it, so it is likelier to
+be accepted under exactly the conditions that matter. The argument needs no archive to misbehave, which is why it
 and not the stall is what carries `Req 13`.
 
 **Upgradeability is a real secondary, but weaker here than in the guidance.** An

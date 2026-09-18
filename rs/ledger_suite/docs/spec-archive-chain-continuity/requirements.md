@@ -58,9 +58,9 @@ histories. Neither can repair the archive.
 
 A second failure compounds the first, and in one direction: a ledger whose archiving
 keeps failing retries on every transaction with no spacing, so a single persistent
-cause becomes continuous wasted work — the failure that prompted this work, a
-refused memory growth, was persistent for about four and a half hours — while the
-blocks it could not archive accumulate, so there is more to send once archiving
+cause becomes continuous wasted work — and the storage pressure that prompted this
+work sat on the subnet for about four and a half hours — while the blocks it could
+not archive accumulate, so there is more to send once archiving
 resumes. Switching archiving back on re-exposes both, which is why the contract
 comes first.
 
@@ -134,9 +134,9 @@ comes first.
   refusals return control: two of them end the call outright, so the archive cannot
   keep a partial result or report a cause, and every block it stored earlier in that
   call is discarded with it. Those are the cycle-reservation refusals, and they are
-  the cause of the failure that prompted this work — so Req 4's reporting covers the
-  refusals that *do* return control, and this class is out of reach of any protocol
-  change (Req 4.7).
+  the class that refused the ledger's upgrade on 2026-09-01 — so Req 4's reporting
+  covers the refusals that *do* return control, and this class is out of reach of any
+  protocol change (Req 4.7).
 
   The answer to it is configuration, not protocol, and there are two levers. Raising
   the archive's `reserved_cycles_limit` — 5 T by default — is what the platform's own
@@ -453,9 +453,9 @@ per interval rather than work per transaction.
 3. WHEN an Archiving_Round succeeds after failures, THE Ledger SHALL return the
    spacing to no delay.
 4. WHEN a cause of failure ceases, THE Ledger SHALL resume archiving without
-   operator action, because the cause that prompted this work cleared on its own
-   in about four and a half hours and an operator-gated recovery would have turned
-   that into an incident.
+   operator action, because the storage pressure that prompted this work cleared on
+   its own in about four and a half hours and an operator-gated recovery would have
+   outlasted it.
 5. WHEN an Archiving_Round fails in a way THE Ledger observes, THE Ledger SHALL
    count the failure in the metric it already exposes for archiving failures, SHALL
    continue to serve the blocks it did not archive, and SHALL reply to the
