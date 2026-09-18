@@ -1592,15 +1592,19 @@ impl CanisterManager {
         // throw-away accumulator (never applied) and pass `None` for `metrics` to
         // skip observation.
         //
-        // On the error path below the canister is never created, so a charge
-        // accumulated before the failure is moot; on the success path the
-        // accumulator must be empty, which is asserted right after the call.
+        // Throwing the accumulator away is only sound because it stays empty,
+        // and it is the error path below that relies on that: it restores
+        // `round_limits` and drops `new_canister`, rolling back both halves of
+        // the inline charge, with no `apply` to re-charge them the way
+        // `execute_mgmt_operation_on_canister` does. The success path needs no
+        // accumulator: the inline charge stands there on the very canister that
+        // is created and on the round limits, neither of which is rolled back.
         let mut consumed_cycles = ConsumedCyclesForInstructions::new(
             &self.cycles_account_manager,
             state.get_own_cost_schedule(),
             &self.log,
         );
-        if let Err(err) = self.validate_and_update_canister_settings(
+        let settings_result = self.validate_and_update_canister_settings(
             &mut new_canister,
             round_limits,
             &mut consumed_cycles,
@@ -1609,15 +1613,17 @@ impl CanisterManager {
             subnet_memory_saturation.clone(),
             state.get_own_subnet_cycles_config(),
             None,
-        ) {
-            *round_limits = round_limits_snapshot;
-            return Err(err);
-        }
+        );
         debug_assert!(
             consumed_cycles.is_empty(),
             "canister creation must not accumulate cycles for instructions: \
-             the accumulator is thrown away and the charge would be lost"
+             the accumulator is thrown away, so the error path below would roll \
+             back the charge and lose it"
         );
+        if let Err(err) = settings_result {
+            *round_limits = round_limits_snapshot;
+            return Err(err);
+        }
 
         let controllers = new_canister
             .system_state
