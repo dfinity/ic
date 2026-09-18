@@ -721,7 +721,6 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::RwLock;
 
-    use crate::CanisterRangesFilter;
     use assert_matches::assert_matches;
     use axum::response::IntoResponse;
     use axum_server::tls_rustls::RustlsConfig;
@@ -1218,8 +1217,8 @@ mod tests {
 
         assert!(
             reader
-                .get_verified_delegation(
-                    CanisterRangesCheck::NoCheck(CanisterRangesFilter::None),
+                .get_delegation(
+                    CanisterRangesCheck::AllSubnetRanges,
                     &RoutingTable::default(),
                     |_subnet_id| None,
                 )
@@ -1262,7 +1261,7 @@ mod tests {
 
             let network_topology = &mutable_state.read().unwrap().metadata.network_topology;
             let delegation = reader
-                .get_verified_delegation(
+                .get_delegation(
                     CanisterRangesCheck::AllSubnetRanges,
                     network_topology.routing_table_for_certification(),
                     |subnet_id| {

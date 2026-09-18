@@ -322,7 +322,7 @@ pub(crate) fn get_verified_delegation(
     endpoint_type: &'static str,
 ) -> Result<Option<CertificateDelegation>, HttpError> {
     let network_topology = &certified_state_reader.get_state().metadata.network_topology;
-    let delegation_from_nns = match nns_delegation_reader.get_verified_delegation(
+    let delegation_from_nns = match nns_delegation_reader.get_delegation(
         canister_ranges_check,
         network_topology.routing_table_for_certification(),
         |subnet_id| {
