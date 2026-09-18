@@ -95,12 +95,12 @@ impl NNSDelegationReader {
         })
     }
 
-    pub async fn wait_until_initialized(&mut self) -> Result<(), watch::error::RecvError> {
+    pub async fn wait_until_updated(&mut self) -> Result<(), watch::error::RecvError> {
         self.receiver.changed().await
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct NNSDelegationBuilder {
     builder: NNSDelegationBuilderInner,
     precomputed_delegation_with_flat_canister_ranges: CertificateDelegation,
@@ -263,7 +263,7 @@ impl NNSDelegationBuilder {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 struct NNSDelegationBuilderInner {
     full_certificate: Certificate,
     full_labeled_tree: LabeledTree<Vec<u8>>,

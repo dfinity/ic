@@ -8328,6 +8328,7 @@ fn create_canister_memory_allocation_makes_subnet_oversubscribed() {
         .set_balance(Cycles::new(1_000_000_000_000_000_000));
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
         .build();
@@ -8352,6 +8353,7 @@ fn create_canister_memory_allocation_makes_subnet_oversubscribed() {
     // There should be not enough memory for CAPACITY/2 because universal
     // canister already consumed some
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
         .build();
@@ -8388,6 +8390,7 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
         .set_balance(Cycles::new(u128::MAX));
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_compute_allocation(50)
         .build();
@@ -8410,6 +8413,7 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
     Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_compute_allocation(25)
         .build();
@@ -8433,6 +8437,7 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
 
     // Create a canister with compute allocation.
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_compute_allocation(30)
         .build();
@@ -8608,6 +8613,7 @@ fn create_canister_insufficient_cycles_for_memory_allocation() {
         .unwrap();
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(0) // No freezing threshold.
         .with_memory_allocation(excessive_memory)
         .build();
@@ -8800,6 +8806,7 @@ fn create_canister_reverts_round_limits_on_failure() {
             canister_change_origin_from_principal(&sender),
             Some(100_000_000_000_000),
             CanisterSettingsBuilder::new()
+                .with_log_memory_limit(NumBytes::new(0))
                 .with_compute_allocation(ComputeAllocation::try_from(50_u64).unwrap())
                 .with_memory_allocation(MemoryAllocation::from(NumBytes::new(MIB)))
                 .with_reserved_cycles_limit(Cycles::zero())
@@ -8845,6 +8852,7 @@ fn create_canister_fails_with_reserved_cycles_limit_exceeded() {
 
     // Set the memory allocation to exceed the reserved cycles limit.
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_memory_allocation(1_000_000)
         .with_reserved_cycles_limit(1)
         .build();

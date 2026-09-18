@@ -317,7 +317,7 @@ pub(crate) struct ConsumedCyclesForInstructions<'a> {
 }
 
 impl<'a> ConsumedCyclesForInstructions<'a> {
-    fn new(
+    pub(crate) fn new(
         cycles_account_manager: &'a CyclesAccountManager,
         cost_schedule: CanisterCyclesCostSchedule,
         log: &'a ReplicaLogger,
@@ -338,6 +338,15 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
     ) {
         self.consumed_cycles += cycles;
         self.instructions_used += instructions;
+    }
+
+    /// Returns `true` if nothing has been accumulated, i.e. `apply` would be a
+    /// no-op. Used to assert that paths which deliberately throw the
+    /// accumulator away cannot lose a charge.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.consumed_cycles.is_zero()
+            && self.instructions_used.get() == 0
+            && self.install_code_debit.get() == 0
     }
 
     /// Accumulates instructions that count towards the `install_code` rate
@@ -383,6 +392,16 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
             );
         }
         round_limits.instructions -= as_round_instructions(self.instructions_used);
+    }
+}
+
+impl fmt::Debug for ConsumedCyclesForInstructions<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConsumedCyclesForInstructions")
+            .field("consumed_cycles", &self.consumed_cycles)
+            .field("instructions_used", &self.instructions_used)
+            .field("install_code_debit", &self.install_code_debit)
+            .finish()
     }
 }
 
@@ -2720,13 +2739,14 @@ impl ExecutionEnvironment {
         );
         self.execute_mgmt_operation_on_canister(
             canister_id,
-            |canister, _msg, round_limits, _consumed_cycles| {
+            |canister, _msg, round_limits, consumed_cycles| {
                 self.canister_manager.update_settings(
                     timestamp_nanos,
                     origin,
                     settings,
                     canister,
                     round_limits,
+                    consumed_cycles,
                     saturation,
                     subnet_cycles_config,
                     &self.metrics,
