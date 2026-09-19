@@ -634,27 +634,28 @@ class RunTest(unittest.TestCase):
 
         self.assertIn("doesn't match the CDN sha256 sum", str(raised.exception))
 
-    def test_a_mismatch_against_an_unvalidated_cached_image_is_still_a_confirmed_verdict(self):
-        """
-        A cached image reused because the CDN's HEAD failed was still bound to the fresh, attested
-        SHA256SUMS before the comparison, so a local build that differs from it differs from what
-        CI built: the verdict stays "confirmed".
-        """
+    def test_a_cached_image_is_downloaded_again_when_the_head_fails(self):
+        """A cached image the CDN cannot revalidate is a miss, not a reuse with a warning."""
         first = self.build_verifier(self.guestos_payload(MEASUREMENTS))
         first.run()
         mock.patch.stopall()
 
-        self.local_overrides = {"guestos/update/update-img.tar.zst": b"locally built guest-os image"}
+        fetched: list[str] = []
+        real_fetch = self.fake_fetch
+
+        def fetch(url, dest):
+            fetched.append(url)
+            return real_fetch(url, dest)
+
         second = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        mock.patch.object(repro_check, "fetch_url_to_file", fetch).start()
         mock.patch.object(repro_check, "fetch_url_validator", lambda url: None).start()
 
-        with self.assertLogs(repro_check.logger, level="WARNING") as logs, self.assertRaises(
-            repro_check.VerificationError
-        ) as raised:
+        with self.assertNoLogs(repro_check.logger, level="WARNING"):
             second.run()
 
-        self.assertIn("was confirmed, and the artifacts compared here match them", str(raised.exception))
-        self.assertTrue(any("Could not check whether" in line for line in logs.output), logs.output)
+        self.assertIn(GUEST_OS_IMG, fetched)
+        self.assertTrue(self.build_ran)
 
     def test_a_transport_fault_in_the_attestation_api_aborts_cleanly(self):
         """
@@ -1114,7 +1115,7 @@ class EnsureGhTest(unittest.TestCase):
 
 
 class CacheRevalidationTest(unittest.TestCase):
-    """The two fallbacks the README documents: nothing else covers them."""
+    """A cached image is reused only when the CDN confirms it still serves the same bytes."""
 
     def setUp(self):
         self.tmp_dir = Path(tempfile.mkdtemp())
@@ -1141,13 +1142,13 @@ class CacheRevalidationTest(unittest.TestCase):
 
     def test_a_matching_validator_reuses_the_cache(self):
         self.stub_validator({"ETag": '"a"'})
-        self.verifier.record_cache_validator("https://cdn/img", self.cache_file)
+        self.verifier.write_cache_validator(self.cache_file, {"ETag": '"a"'})
 
         self.assertTrue(self.verifier.cached_copy_is_current("https://cdn/img", self.cache_file))
 
     def test_a_changed_validator_forces_a_redownload(self):
         self.stub_validator({"ETag": '"a"'})
-        self.verifier.record_cache_validator("https://cdn/img", self.cache_file)
+        self.verifier.write_cache_validator(self.cache_file, {"ETag": '"a"'})
         self.stub_validator({"ETag": '"b"'})
 
         with self.assertLogs(repro_check.logger, level="WARNING") as logs:
@@ -1155,27 +1156,17 @@ class CacheRevalidationTest(unittest.TestCase):
 
         self.assertTrue(any("no longer serves" in line for line in logs.output), logs.output)
 
-    def test_a_cache_without_a_validator_is_reused_but_warned_about(self):
-        """Cached before this check existed: reuse rather than force a multi-GB re-download."""
+    def test_a_cache_without_a_record_is_a_miss(self):
+        """Cached by an older version of this script: downloaded again, once."""
         self.stub_validator({"ETag": '"a"'})
 
-        with self.assertLogs(repro_check.logger, level="WARNING") as logs:
-            self.assertTrue(self.verifier.cached_copy_is_current("https://cdn/img", self.cache_file))
-
-        self.assertTrue(any("--clean" in line for line in logs.output), logs.output)
-        # The current validator is adopted, so a LATER substitution is still caught.
-        self.stub_validator({"ETag": '"b"'})
         self.assertFalse(self.verifier.cached_copy_is_current("https://cdn/img", self.cache_file))
 
-    def test_an_unreachable_head_reuses_the_cache_and_warns(self):
-        self.stub_validator({"ETag": '"a"'})
-        self.verifier.record_cache_validator("https://cdn/img", self.cache_file)
+    def test_an_unreachable_head_is_a_miss(self):
+        self.verifier.write_cache_validator(self.cache_file, {"ETag": '"a"'})
         self.stub_validator(None)
 
-        with self.assertLogs(repro_check.logger, level="WARNING") as logs:
-            self.assertTrue(self.verifier.cached_copy_is_current("https://cdn/img", self.cache_file))
-
-        self.assertTrue(any("Could not check whether" in line for line in logs.output), logs.output)
+        self.assertFalse(self.verifier.cached_copy_is_current("https://cdn/img", self.cache_file))
 
     def cache_path(self, url: str, os_type: str) -> Path:
         """Where cached_download keeps the file for a URL."""
@@ -1221,7 +1212,7 @@ class CacheRevalidationTest(unittest.TestCase):
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         cache_file.write_bytes(b"previous image")
         self.stub_validator({"ETag": '"a"'})
-        self.verifier.record_cache_validator("https://cdn/img", cache_file)
+        self.verifier.write_cache_validator(cache_file, {"ETag": '"a"'})
         self.stub_validator({"ETag": '"b"'})
         mock.patch.object(
             repro_check, "fetch_url_to_file", mock.Mock(side_effect=RuntimeError("connection reset"))

@@ -181,17 +181,11 @@ establish. A hotfix built on `dfinity/ic-private` gains its attestation once
 its `hotfix-*` branch is published to `dfinity/ic` and rebuilt there.
 
 The checksum files and launch measurements are always fetched fresh rather
-than read from the download cache, and before a cached image is reused it is
-revalidated against the CDN with a `HEAD` request, so rerunning with a warm
-cache normally still reports on what the CDN serves now. Artifacts under
-`ic/{COMMIT_ID}/` are immutable by policy, so a revalidation mismatch is worth
-reporting.
-
-There are two deliberate exceptions, in which a cached image is reused without
-being compared against the CDN: when the `HEAD` request fails (the run warns
-and continues rather than being blocked by a network problem), and when the
-cached copy was created by a version of this script that did not record the
-information the comparison needs. Pass `--clean`, or use a fresh
+than read from the download cache, and a cached image is reused only after a
+`HEAD` request confirms that the CDN still serves the same bytes; otherwise it
+is downloaded again. So rerunning with a warm cache still reports on what the
+CDN serves now. Artifacts under `ic/{COMMIT_ID}/` are immutable by policy, so
+a revalidation mismatch is worth reporting. Pass `--clean`, or use a fresh
 `--cache-dir`, for a verification that reads nothing from the cache at all.
 
 `--skip-attestation-check` turns the check off. DFINITY's own CI passes it on

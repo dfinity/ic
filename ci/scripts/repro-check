@@ -1019,51 +1019,32 @@ class ReproducibilityVerifier:
         else:
             path.unlink(missing_ok=True)
 
-    def record_cache_validator(self, url: str, cache_file: Path) -> bool:
-        """Records what the CDN currently serves for a URL. False when it could not be obtained."""
-        validator = fetch_url_validator(url)
-        self.write_cache_validator(cache_file, validator)
-        return bool(validator)
-
     def cached_copy_is_current(self, url: str, cache_file: Path) -> bool:
         """
-        Whether the CDN still serves the bytes that were cached for this URL.
+        Whether the CDN confirms that it still serves the bytes that were cached for this URL.
+        Anything else counts as a cache miss, so a rerun always speaks about what the CDN serves
+        now.
 
         Artifacts under ic/<commit>/ are immutable by policy, so a change is an incident rather
         than routine. Without this check a rerun would re-verify the previous run's bytes and
         report success even if the CDN had since started serving a substituted image, and the
         freshly fetched SHA256SUMS could not reveal it: an attacker who cannot forge the
         attestation has every reason to leave SHA256SUMS alone and swap only the image.
-
-        A HEAD is cheap next to re-downloading multiple gigabytes. When it cannot be made, or the
-        cached copy predates this check, the cache is used rather than the run being blocked.
         """
         path = self.validator_path(cache_file)
         if not path.is_file():
-            # Cached before this check existed, or by a run whose HEAD failed. There is nothing to
-            # compare against, so the choice is between a multi-GB re-download of something that
-            # was never suspect and reusing the copy. Reuse it, adopt the current validator so a
-            # LATER substitution is caught, and say so: this run did not check these bytes against
-            # the CDN, and that is exactly the case the README tells people --clean is for.
-            logger.warning(
-                f"The cached copy of {url} carries no record of what the CDN served when it was "
-                "downloaded, so this run cannot tell whether the CDN still serves the same bytes; "
-                "using the cached copy. Pass --clean, or use a fresh --cache-dir, to verify "
-                "against what the CDN serves now."
-            )
-            self.record_cache_validator(url, cache_file)
-            return True
+            # Cached by a version of this script that recorded nothing, or by a run whose HEAD
+            # failed: there is nothing to compare against.
+            logger.debug(f"No record of what the CDN served for the cached {url}; downloading it again.")
+            return False
         try:
             recorded = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return False
         current = fetch_url_validator(url)
         if current is None:
-            logger.warning(
-                f"Could not check whether {url} still serves the bytes cached for this commit; "
-                "using the cached copy."
-            )
-            return True
+            logger.info(f"Could not check whether {url} still serves the cached bytes; downloading it again.")
+            return False
         if current == recorded:
             return True
         logger.warning(
