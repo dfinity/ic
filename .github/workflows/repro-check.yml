@@ -24,6 +24,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+permissions:
+  # This job builds the IC-OS images of the commit under verification, i.e. it executes that
+  # commit's own ci/container/build-ic.sh. Its token must therefore carry the least possible
+  # authority, and in particular not the `actions: write` that release-testing.yml grants itself:
+  # a reusable workflow inherits the caller's permissions unless it narrows them here.
+  contents: read
+
 jobs:
   repro-check:
     name: Run repro-check for ${{ inputs.github_sha || github.sha }}

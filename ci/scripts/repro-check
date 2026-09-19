@@ -859,6 +859,8 @@ class ReproducibilityVerifier:
         self.attested: dict[tuple[str, str], dict] = {}
         self.attestation_warnings: list[str] = []
         self.gh: Path | None = None
+        # Whether self.gh is the pinned release whose failure messages gh_verify can classify.
+        self.gh_is_pinned = False
 
         # Cache
         if base_cache_dir is not None:
@@ -1026,6 +1028,14 @@ class ReproducibilityVerifier:
     def start_download(self, url: str, target_file: Path, os_type: str, append_to_futures: bool = True) -> Download:
         return self.download_executor.submit(self.cached_download, url, target_file, os_type)
 
+    def uncached_download(self, url: str, target_file: Path) -> Path:
+        """Downloads straight to the target, bypassing the cache."""
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        return fetch_url_to_file(url, target_file)
+
+    def start_uncached_download(self, url: str, target_file: Path) -> Download:
+        return self.download_executor.submit(self.uncached_download, url, target_file)
+
     # --------------------------------------------------------------------------
     # Core logic restructured to start downloads early
     # --------------------------------------------------------------------------
@@ -1084,13 +1094,21 @@ class ReproducibilityVerifier:
         The attestation check runs before the local build is started and awaits only these small
         files. The executor has a fixed number of workers, so a SHA256SUMS queued behind the images
         of another OS type would make that check wait for a multi-GB download to finish first.
+
+        These are also the only downloads that deliberately bypass the cache. The cache keeps any
+        non-empty file it already has for a commit, so a second run would re-verify the bytes of
+        the first one and report success even if the CDN had since started serving something else.
+        Every SHA256SUMS is about a kilobyte, so fetching it fresh is cheap, and it makes the
+        provenance check -- and the image checks that hang off it -- speak about what the CDN
+        serves now. A cached image whose bytes no longer match then fails against the fresh sums,
+        which is the outcome we want.
         """
         for os_type in self.selected_os_types():
             path_component, _artifact, subdir_name = cdn_layout(os_type)
             for cdn_domain in self.cdn_domains:
                 cdn_path = f"ic/{self.git_hash}/{path_component}/{subdir_name}"
                 local_sums_path = storage.cdn_out / cdn_domain / os_type / "SHA256SUMS"
-                download = self.start_download(f"https://{cdn_domain}/{cdn_path}/SHA256SUMS", local_sums_path, os_type)
+                download = self.start_uncached_download(f"https://{cdn_domain}/{cdn_path}/SHA256SUMS", local_sums_path)
                 self.sums_downloads[(cdn_domain, os_type)] = (download, f"{cdn_path}/SHA256SUMS")
 
     def start_cdn_downloads_for_os(self, os_type: str, storage: Dirs) -> list[Download]:
@@ -1215,6 +1233,7 @@ class ReproducibilityVerifier:
                 )
             else:
                 logger.info(f"Using gh {format_version(version)} from PATH ({gh_on_path}).")
+                self.gh_is_pinned = version == parse_gh_version(f"gh version {GH_CLI_VERSION}")
                 return Path(gh_on_path)
         return self.download_gh(dirs)
 
@@ -1261,7 +1280,36 @@ class ReproducibilityVerifier:
                 "(--cache-dir decides where it lands)"
             )
         logger.info(f"Using the pinned gh {format_version(version)} downloaded to {gh_path}.")
+        self.gh_is_pinned = True
         return gh_path
+
+    def gh_verify(self, dirs: Dirs, sums_file: Path, bundle_file: Path, config_dir: Path) -> list[dict]:
+        """
+        Runs the verification, and keeps the hard-fail/warn split from depending on which gh is in
+        use.
+
+        GH_VERIFICATION_FAILED_MARKERS is calibrated against the pinned gh, but ensure_gh will
+        happily use any gh >= 2.68 from PATH, and a different release may word a verification
+        failure differently. An unrecognised message then degrades a genuine mismatch to a warning
+        (the local build would still catch it, but the fast, unambiguous signal is lost). So when
+        an unpinned gh fails in a way this script cannot classify, redo the verification with the
+        pinned binary and classify on that. The retry costs one 15 MB download, and only in the
+        failure case.
+        """
+        assert self.gh is not None, "ensure_gh must run before gh_verify"
+        try:
+            return run_gh_attestation_verify(self.gh, sums_file, bundle_file, self.git_hash, config_dir)
+        except AttestationUnavailable:
+            if self.gh_is_pinned:
+                raise
+            logger.warning(
+                f"gh {self.gh} failed in a way this script cannot classify. Retrying with the pinned "
+                f"gh {GH_CLI_VERSION}, whose failure messages it knows, so that a real mismatch is not "
+                "mistaken for an outage."
+            )
+            self.gh = self.download_gh(dirs)
+            self.gh_is_pinned = True
+            return run_gh_attestation_verify(self.gh, sums_file, bundle_file, self.git_hash, config_dir)
 
     def attestation_preflight(self, dirs: Dirs, dry_run: bool) -> None:
         """
@@ -1292,6 +1340,13 @@ class ReproducibilityVerifier:
                 f"Could not confirm the build provenance of the CDN checksum files: {e}.\n"
                 + ATTESTATION_UNAVAILABLE_ADVICE
             )
+        finally:
+            # The attestations API is the only thing in this run that wants a GitHub token, and it
+            # is done with it here. Drop it before build_locally() executes the commit's own
+            # ci/container/build-ic.sh, which inherits this environment: verifying a commit must
+            # not hand that commit's build scripts a credential. Harmless when none was set.
+            for name in ("GH_TOKEN", "GITHUB_TOKEN"):
+                os.environ.pop(name, None)
 
     def warn_about_attestations(self, message: str) -> None:
         """Warns now and again at the end, so a multi-hour run cannot bury the warning."""
@@ -1322,7 +1377,6 @@ class ReproducibilityVerifier:
         )
         config_dir = dirs.tmp_dir / "gh-config"
         bundle_dir = dirs.tmp_dir / "attestations"
-        assert self.gh is not None, "ensure_gh must run before verify_cdn_attestations"
 
         unavailable = 0
         for (cdn_domain, os_type), (download, expected_subject) in self.sums_downloads.items():
@@ -1336,7 +1390,12 @@ class ReproducibilityVerifier:
 
                 bundles = fetch_attestation_bundles(digest)
                 bundle_file = write_bundles_jsonl(bundles, bundle_dir / f"{digest}.jsonl")
-                entries = run_gh_attestation_verify(self.gh, sums_file, bundle_file, self.git_hash, config_dir)
+                entries = self.gh_verify(dirs, sums_file, bundle_file, config_dir)
+                # select_attested_entry belongs inside this try as well: it raises
+                # AttestationUnavailable for a gh JSON shape this script cannot read, and that
+                # must degrade this one directory rather than abandon the loop. Its
+                # VerificationError is not caught here and still stops the run.
+                cert = select_attested_entry(entries, expected_subject, digest, self.accepted_builds)
             except OSError as e:
                 raise AttestationUnavailable(
                     f"could not prepare the attestation check of {expected_subject}: {e}"
@@ -1348,7 +1407,6 @@ class ReproducibilityVerifier:
                 self.warn_about_attestations(f"Could not confirm the build provenance of {expected_subject}: {e}")
                 continue
 
-            cert = select_attested_entry(entries, expected_subject, digest, self.accepted_builds)
             self.attested[memo_key] = cert
 
             # The URI is <workflow path>@<ref>, and the ref contains slashes, so strip the ref

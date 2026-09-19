@@ -481,6 +481,70 @@ class RunTest(unittest.TestCase):
         self.assertIn("host-os/update-img/SHA256SUMS", str(raised.exception))
         self.assertFalse(self.build_ran)
 
+    def test_an_unreadable_gh_shape_degrades_only_that_directory(self):
+        """
+        select_attested_entry's AttestationUnavailable must be handled per directory too, or an
+        unrecognised gh shape on one directory would hide a substitution on the next.
+        """
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        guest_digest = self.sums_digest("guest-os", "update-img")
+        host_digest = self.sums_digest("host-os", "update-img")
+        self.entries_for = {
+            guest_digest: [{"someShapeThisScriptCannotRead": {}}],
+            host_digest: [gh_entry({f"ic/{GIT_HASH}/setup-os/disk-img/SHA256SUMS": host_digest})],
+        }
+
+        with self.assertRaises(repro_check.VerificationError) as raised:
+            verifier.run()
+
+        self.assertIn("host-os/update-img/SHA256SUMS", str(raised.exception))
+        self.assertFalse(self.build_ran)
+
+    def test_github_tokens_are_dropped_before_the_build_runs(self):
+        """
+        build_locally() executes the commit's own ci/container/build-ic.sh with this environment;
+        verifying a commit must not hand that commit's build scripts a GitHub credential.
+        """
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        seen = {}
+        real_build = self.fake_build
+
+        def build(storage):
+            seen["GH_TOKEN"] = os.environ.get("GH_TOKEN")
+            seen["GITHUB_TOKEN"] = os.environ.get("GITHUB_TOKEN")
+            return real_build(storage)
+
+        mock.patch.object(verifier, "build_locally", build).start()
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "secret", "GITHUB_TOKEN": "also-secret"}):
+            verifier.run()
+
+        self.assertIsNone(seen["GH_TOKEN"])
+        self.assertIsNone(seen["GITHUB_TOKEN"])
+
+    def test_tokens_are_dropped_even_when_the_preflight_warns(self):
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        verifier.ensure_gh = mock.Mock(side_effect=repro_check.AttestationUnavailable("no gh"))
+
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "secret"}):
+            verifier.run()
+            self.assertNotIn("GH_TOKEN", os.environ)
+
+    def test_sha256sums_are_fetched_fresh_rather_than_from_the_cache(self):
+        """
+        A cached SHA256SUMS would make a rerun re-verify the previous run's bytes and report
+        success even if the CDN had started serving something else since.
+        """
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        cached = []
+        mock.patch.object(
+            verifier, "cached_download", lambda url, target, os_type: cached.append(url) or self.fake_fetch(url, target)
+        ).start()
+
+        verifier.run()
+
+        self.assertTrue(cached, "the images should still come from the cache")
+        self.assertFalse([url for url in cached if url.endswith("/SHA256SUMS")], cached)
+
     # ---- the warn path: none of these may fail the run ----------------------
 
     def assert_warns_and_completes(self, verifier, needle: str):
@@ -879,6 +943,87 @@ class EnsureGhTest(unittest.TestCase):
             self.verifier.download_gh(self.dirs)
 
         self.assertIn("does not run", str(raised.exception))
+
+
+class GhVerifyRetryTest(unittest.TestCase):
+    """
+    The evidence markers are calibrated against the pinned gh, but a PATH gh may be any release
+    >= 2.68. An unclassifiable failure from an unpinned gh must be redone with the pinned one, or
+    a real mismatch would silently degrade to a warning.
+    """
+
+    def setUp(self):
+        self.tmp_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp_dir, True)
+        self.addCleanup(mock.patch.stopall)
+        self.verifier = repro_check.ReproducibilityVerifier(
+            verify_guestos=True,
+            verify_hostos=False,
+            verify_setupos=False,
+            verify_recovery=False,
+            proposal_id="",
+            git_commit=GIT_HASH,
+            download_source_mode="systems",
+            base_cache_dir=self.tmp_dir / "cache",
+            clean_base_cache_dir=False,
+            keep_temp=False,
+        )
+        self.addCleanup(self.verifier.download_executor.shutdown)
+        self.verifier.git_hash = GIT_HASH
+        self.dirs = repro_check.Dirs(self.tmp_dir, self.tmp_dir, self.tmp_dir, self.tmp_dir, self.tmp_dir)
+        self.calls = []
+
+    def stub_verify(self, *outcomes):
+        queue = list(outcomes)
+
+        def verify(gh, sums_file, bundle_file, commit, config_dir):
+            self.calls.append(str(gh))
+            outcome = queue.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        mock.patch.object(repro_check, "run_gh_attestation_verify", verify).start()
+
+    def call(self):
+        return self.verifier.gh_verify(self.dirs, self.tmp_dir / "s", self.tmp_dir / "b", self.tmp_dir / "cfg")
+
+    def test_an_unpinned_gh_that_cannot_be_classified_is_redone_with_the_pinned_one(self):
+        self.verifier.gh, self.verifier.gh_is_pinned = Path("/usr/bin/gh"), False
+        self.stub_verify(
+            repro_check.AttestationUnavailable("unrecognised failure"),
+            repro_check.VerificationError("expected SourceRepositoryDigest to be ..."),
+        )
+        mock.patch.object(self.verifier, "download_gh", mock.Mock(return_value=Path("/tmp/pinned/gh"))).start()
+
+        with self.assertRaises(repro_check.VerificationError):
+            self.call()
+
+        self.assertEqual(self.calls, ["/usr/bin/gh", "/tmp/pinned/gh"])
+        self.assertTrue(self.verifier.gh_is_pinned)
+
+    def test_the_pinned_gh_is_not_retried(self):
+        self.verifier.gh, self.verifier.gh_is_pinned = Path("/tmp/pinned/gh"), True
+        self.stub_verify(repro_check.AttestationUnavailable("sigstore is down"))
+        download = mock.patch.object(self.verifier, "download_gh", mock.Mock()).start()
+
+        with self.assertRaises(repro_check.AttestationUnavailable):
+            self.call()
+
+        self.assertEqual(len(self.calls), 1)
+        download.assert_not_called()
+
+    def test_a_verification_error_from_an_unpinned_gh_is_not_retried(self):
+        """It was classified as evidence; re-running would only cost a download."""
+        self.verifier.gh, self.verifier.gh_is_pinned = Path("/usr/bin/gh"), False
+        self.stub_verify(repro_check.VerificationError("verifying with issuer"))
+        download = mock.patch.object(self.verifier, "download_gh", mock.Mock()).start()
+
+        with self.assertRaises(repro_check.VerificationError):
+            self.call()
+
+        self.assertEqual(len(self.calls), 1)
+        download.assert_not_called()
 
 
 class GhArgvTest(unittest.TestCase):
