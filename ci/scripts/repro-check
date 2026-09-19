@@ -161,15 +161,15 @@ ATTESTATION_MAX_PAGES = 5
 RELEASE_BUILD = ("dfinity/ic/.github/workflows/release-testing.yml", r"refs/heads/(rc--|hotfix-)[^/]+")
 MASTER_BUILD = ("dfinity/ic/.github/workflows/ci-kickoff.yml", r"refs/heads/master")
 
-# Keep in sync with the gh pin in .github/actions/fetch-verified-artifacts/action.yaml. When
-# bumping, take the sha256 from that release's gh_<version>_checksums.txt.
+# Always this release, never a gh from PATH: one gh, the one the messages and the --format json
+# handling below were validated against. Keep in sync with the gh pin in
+# .github/actions/fetch-verified-artifacts/action.yaml; when bumping, take the sha256 from that
+# release's gh_<version>_checksums.txt, and stay at or above 2.68.0, the first release with
+# `gh attestation verify --source-digest`.
 GH_CLI_VERSION = "2.98.0"
 GH_CLI_SHA256 = "3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de"
 GH_CLI_URL = f"https://github.com/cli/cli/releases/download/v{GH_CLI_VERSION}/gh_{GH_CLI_VERSION}_linux_amd64.tar.gz"
 GH_CLI_TAR_MEMBER = f"gh_{GH_CLI_VERSION}_linux_amd64/bin/gh"
-# gh 2.68.0 is the first release with `gh attestation verify --source-digest`, which pins the
-# attestation to the commit under test. --bundle itself has existed since 2.61.
-GH_CLI_MIN_VERSION = (2, 68, 0)
 
 # Shown with the abort for a checksum file GitHub holds no attestation for. It deliberately does
 # not name --skip-attestation-check: a missing attestation is exactly the moment the bypass must
@@ -400,18 +400,9 @@ def fetch_url_to_file(url: str, dest_path: Path) -> Path:
 # end-to-end tests can stub them while the real policy code keeps running.
 # ------------------------------------------------------------------------------
 def parse_gh_version(text: str) -> tuple[int, int, int] | None:
-    """
-    Parses the version out of `gh --version` output, or None when it carries none.
-
-    Handles the Debian/Ubuntu `gh version 2.4.0+dfsg1 (...)` spelling; `gh version DEV`, as built
-    from source, yields None and is therefore treated as unusable rather than as new enough.
-    """
+    """Parses the version out of `gh --version` output, or None when it carries none."""
     match = re.search(r"gh version (\d+)\.(\d+)\.(\d+)", text)
     return (int(match.group(1)), int(match.group(2)), int(match.group(3))) if match else None
-
-
-def format_version(version: tuple[int, int, int]) -> str:
-    return ".".join(str(part) for part in version)
 
 
 def build_pipeline_name(build_config_uri: str | None) -> str:
@@ -730,9 +721,9 @@ def parse_args() -> argparse.Namespace:
             " - checks all OS images (GuestOS, HostOS, SetupOS)\n"
             " - compares hash sums against the artifacts from download.dfinity.systems and download.dfinity.network.\n"
             " - verifies that the CDN checksum files are covered by a GitHub build-provenance\n"
-            "   attestation of a dfinity/ic release build of the same commit. This uses gh >= 2.68\n"
-            "   from PATH, or a checksum-pinned gh downloaded into the run's temp directory; no\n"
-            "   GitHub account or login is needed. Any attestation that does not verify, or cannot\n"
+            "   attestation of a dfinity/ic release build of the same commit. This uses a\n"
+            "   checksum-pinned gh downloaded into the run's temp directory; no GitHub account or\n"
+            "   login is needed. Any attestation that does not verify, or cannot\n"
             "   be obtained, aborts the run before the build starts.\n\n"
         ),
         formatter_class=argparse.RawTextHelpFormatter,
@@ -1271,35 +1262,12 @@ class ReproducibilityVerifier:
 
     def ensure_gh(self, dirs: Dirs) -> Path:
         """
-        Returns a gh able to run `attestation verify --bundle --source-digest`: the one on PATH if
-        it is recent enough, otherwise a checksum-pinned download into this run's temp directory.
+        Downloads, pin-checks and unpacks the pinned gh release into the run's temp directory.
 
-        External verifiers are not expected to have gh installed, and neither path needs a GitHub
-        account or login.
+        Always the pinned release, never a gh from PATH: one gh, the one this script's messages and
+        JSON handling were validated against. External verifiers are not expected to have gh
+        installed, and the download needs no GitHub account or login.
         """
-        gh_on_path = shutil.which("gh")
-        if gh_on_path is None:
-            logger.info(f"No gh on PATH; downloading the pinned gh {GH_CLI_VERSION}.")
-        elif gh_on_path.startswith("/snap/"):
-            # A strictly confined snap cannot read files outside $HOME, and --cache-dir routinely
-            # points at another volume, which is exactly where the SHA256SUMS to verify live.
-            logger.info(f"Ignoring the snap-confined gh at {gh_on_path}; downloading the pinned gh {GH_CLI_VERSION}.")
-        else:
-            version = parse_gh_version(self.gh_version_output(gh_on_path))
-            if version is None:
-                logger.info(f"Could not read the version of {gh_on_path}; downloading the pinned gh {GH_CLI_VERSION}.")
-            elif version < GH_CLI_MIN_VERSION:
-                logger.info(
-                    f"gh {format_version(version)} at {gh_on_path} predates --source-digest "
-                    f"(gh {format_version(GH_CLI_MIN_VERSION)}); downloading the pinned gh {GH_CLI_VERSION}."
-                )
-            else:
-                logger.info(f"Using gh {format_version(version)} from PATH ({gh_on_path}).")
-                return Path(gh_on_path)
-        return self.download_gh(dirs)
-
-    def download_gh(self, dirs: Dirs) -> Path:
-        """Downloads, pin-checks and unpacks the pinned gh release into the run's temp directory."""
         try:
             tarball = self.cached_download(GH_CLI_URL, dirs.tmp_dir / "gh_cli.tar.gz", "tools")
         except (RuntimeError, OSError) as e:
@@ -1340,7 +1308,7 @@ class ReproducibilityVerifier:
                 f"the gh unpacked at {gh_path} does not run; is its filesystem mounted noexec? "
                 "(--cache-dir decides where it lands)"
             )
-        logger.info(f"Using the pinned gh {format_version(version)} downloaded to {gh_path}.")
+        logger.info(f"Using the pinned gh {GH_CLI_VERSION} downloaded to {gh_path}.")
         return gh_path
 
     def attestation_preflight(self, dirs: Dirs, dry_run: bool) -> None:

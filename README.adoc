@@ -113,15 +113,13 @@ The Internet Computer provides a robust system for verifying the build reproduci
   `release-assets.githubusercontent.com`, `api.github.com` and
   `tuf-repo-cdn.sigstore.dev` (all of them required: the run aborts when the
   attestation of a CDN checksum file cannot be fetched and verified)
-* The GitHub CLI `gh` (version 2.68 or higher) is used if it is installed;
-  otherwise a checksum-pinned `gh` is downloaded, kept in the download cache
-  and unpacked into the run's temporary directory. A snap-installed `gh` is
-  bypassed in favour of the download, because snap confinement prevents it
-  from reading a `--cache-dir` outside `$HOME`. *No GitHub account or login is
-  needed.* Setting `GH_TOKEN` to any GitHub token is optional: it makes the
-  run use your own API quota instead of the anonymous one (60 requests per
-  hour per IP address; a run normally needs at most eight), which matters
-  behind a shared address because an exhausted quota aborts the run.
+* A checksum-pinned GitHub CLI `gh` is downloaded, kept in the download cache
+  and unpacked into the run's temporary directory; a `gh` installed on the
+  machine is not used. *No GitHub account or login is needed.* Setting
+  `GH_TOKEN` to any GitHub token is optional: it makes the run use your own
+  API quota instead of the anonymous one (60 requests per hour per IP address;
+  a run normally needs at most eight), which matters behind a shared address
+  because an exhausted quota aborts the run.
 
 === Quick Start
 

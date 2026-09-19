@@ -1019,41 +1019,12 @@ class EnsureGhTest(unittest.TestCase):
         )
         self.dirs.tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    def test_min_version_is_the_first_release_with_source_digest(self):
-        self.assertEqual(repro_check.GH_CLI_MIN_VERSION, (2, 68, 0))
-
     def test_parse_gh_version(self):
         self.assertEqual(repro_check.parse_gh_version("gh version 2.98.0 (2026-08-20)"), (2, 98, 0))
         self.assertEqual(repro_check.parse_gh_version("gh version 2.4.0+dfsg1 (2022-03-23)"), (2, 4, 0))
         self.assertIsNone(repro_check.parse_gh_version("gh version DEV"))
         self.assertIsNone(repro_check.parse_gh_version("bash: gh: command not found"))
         self.assertIsNone(repro_check.parse_gh_version(""))
-
-    def use_path_gh(self, path: str | None, version_output: str = ""):
-        mock.patch.object(repro_check.shutil, "which", lambda name: path).start()
-        mock.patch.object(self.verifier, "gh_version_output", lambda gh: version_output).start()
-        return mock.patch.object(self.verifier, "download_gh", mock.Mock(return_value=Path("/downloaded/gh"))).start()
-
-    def test_uses_a_recent_path_gh(self):
-        for version in ("2.98.0", "2.98.0+dfsg1", "2.68.0"):
-            with self.subTest(version=version):
-                download = self.use_path_gh("/usr/bin/gh", f"gh version {version} (2026-01-01)")
-                self.assertEqual(self.verifier.ensure_gh(self.dirs), Path("/usr/bin/gh"))
-                download.assert_not_called()
-
-    def test_downloads_when_the_path_gh_is_unusable(self):
-        cases = [
-            (None, ""),
-            ("/usr/bin/gh", "gh version 2.67.0 (2026-01-01)"),
-            ("/usr/bin/gh", "gh version 2.4.0+dfsg1 (2022-03-23)"),
-            ("/usr/bin/gh", "gh version DEV"),
-            ("/snap/bin/gh", "gh version 2.98.0 (2026-08-20)"),
-        ]
-        for path, output in cases:
-            with self.subTest(path=path, output=output):
-                download = self.use_path_gh(path, output)
-                self.assertEqual(self.verifier.ensure_gh(self.dirs), Path("/downloaded/gh"))
-                download.assert_called_once()
 
     def make_tarball(self, gh_script: bytes) -> bytes:
         """A tar.gz shaped like the gh release: the binary we want, plus a decoy beside it."""
@@ -1084,7 +1055,7 @@ class EnsureGhTest(unittest.TestCase):
         self.stub_download(payload)
         mock.patch.object(repro_check, "GH_CLI_SHA256", sha256_hex(payload)).start()
 
-        gh_path = self.verifier.download_gh(self.dirs)
+        gh_path = self.verifier.ensure_gh(self.dirs)
 
         self.assertEqual(gh_path, self.dirs.tmp_dir / "gh")
         self.assertTrue(os.access(gh_path, os.X_OK))
@@ -1092,12 +1063,22 @@ class EnsureGhTest(unittest.TestCase):
         self.assertFalse((self.dirs.tmp_dir / f"gh_{repro_check.GH_CLI_VERSION}_linux_amd64").exists())
         self.assertEqual(repro_check.parse_gh_version(self.verifier.gh_version_output(str(gh_path))), (2, 98, 0))
 
+    def test_never_uses_a_gh_from_path(self):
+        """One gh, the one the messages and the JSON handling were validated against."""
+        payload = self.make_tarball(b'#!/bin/sh\necho "gh version 2.98.0 (2026-08-20)"\n')
+        self.stub_download(payload)
+        mock.patch.object(repro_check, "GH_CLI_SHA256", sha256_hex(payload)).start()
+        which = mock.patch.object(repro_check.shutil, "which", mock.Mock(return_value="/usr/bin/gh")).start()
+
+        self.assertEqual(self.verifier.ensure_gh(self.dirs), self.dirs.tmp_dir / "gh")
+        which.assert_not_called()
+
     def test_a_tarball_failing_the_pin_is_rejected_and_uncached(self):
         payload = self.make_tarball(b"#!/bin/sh\ntrue\n")
         self.stub_download(payload)  # GH_CLI_SHA256 deliberately NOT patched.
 
         with self.assertRaises(repro_check.VerificationError) as raised:
-            self.verifier.download_gh(self.dirs)
+            self.verifier.ensure_gh(self.dirs)
 
         self.assertIn("pinned sha256", str(raised.exception))
         self.assertFalse((self.dirs.tmp_dir / "gh").exists())
@@ -1109,7 +1090,7 @@ class EnsureGhTest(unittest.TestCase):
         mock.patch.object(repro_check, "GH_CLI_SHA256", sha256_hex(payload)).start()
 
         with self.assertRaises(repro_check.VerificationError) as raised:
-            self.verifier.download_gh(self.dirs)
+            self.verifier.ensure_gh(self.dirs)
 
         self.assertIn("does not run", str(raised.exception))
 
@@ -1443,7 +1424,7 @@ class NetworkTimeoutTest(unittest.TestCase):
         mock.patch.object(repro_check, "fetch_url_to_file", mock.Mock(side_effect=RuntimeError("timed out"))).start()
 
         with self.assertRaises(repro_check.VerificationError) as raised:
-            verifier.download_gh(dirs)
+            verifier.ensure_gh(dirs)
 
         self.assertIn("timed out", str(raised.exception))
 
