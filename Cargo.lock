@@ -14954,6 +14954,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-subnet-merging"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "futures",
+ "ic-base-types",
+ "ic-cup-explorer",
+ "ic-protobuf",
+ "ic-recovery",
+ "ic-registry-client-helpers",
+ "ic-registry-routing-table",
+ "ic-registry-subnet-type",
+ "ic-state-layout",
+ "ic-subnet-tools",
+ "ic-test-utilities-tmpdir",
+ "ic-types",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "slog",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ic-subnet-splitting"
 version = "0.9.0"
 dependencies = [
@@ -18214,20 +18242,29 @@ dependencies = [
  "candid",
  "canister-test",
  "dfn_candid",
+ "hex",
  "ic-agent",
  "ic-base-types",
  "ic-management-canister-types 0.8.0",
+ "ic-nns-governance-api",
+ "ic-recovery",
  "ic-registry-subnet-type",
+ "ic-state-layout",
+ "ic-subnet-merging",
  "ic-system-test-driver",
  "ic-types",
+ "ic-universal-canister",
  "ic-utils 0.49.1",
+ "ic_consensus_system_test_utils",
  "itertools 0.12.1",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
+ "registry-canister",
  "rejoin-test-lib",
  "slog",
  "tempfile",
  "tokio",
+ "url",
  "xnet-test",
 ]
 
