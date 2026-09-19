@@ -5,10 +5,12 @@ use ic_btc_replica_types::{
     GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network, SendTransactionRequest,
 };
 use ic_error_types::RejectCode;
+use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
     Payload as _,
 };
+use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -53,11 +55,16 @@ use ic_types_cycles::{
     NominalCyclesTesting,
 };
 use maplit::btreemap;
+use prometheus::IntCounter;
 use proptest::prelude::*;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem::size_of;
 use std::sync::Arc;
+
+fn mock_metrics() -> IntCounter {
+    MetricsRegistry::new().int_counter("error_counter", "Test error counter")
+}
 use strum::IntoEnumIterator;
 
 const SUBNET_ID: SubnetId = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
@@ -1370,9 +1377,11 @@ fn online_split() {
     let mut add_aborted_install_code_task = |canister_id| {
         let canister = fixture.state.canister_state_make_mut(&canister_id).unwrap();
         let balance_before_prepayment = canister.system_state.balance();
-        canister
-            .system_state
-            .consume_cycles(prepaid_install_code_cycles);
+        canister.system_state.consume_cycles(
+            prepaid_install_code_cycles,
+            &no_op_logger(),
+            &mock_metrics(),
+        );
         // The prepayment was consumed in full: out of the balance and into the
         // consumed cycles gauge.
         assert_eq!(
@@ -1803,12 +1812,14 @@ fn consumed_cycles_total_is_the_same_across_a_restart() {
         SchedulerState::default(),
         CanisterSnapshots::default(),
     );
-    canister
-        .system_state
-        .consume_cycles(CompoundCycles::<Instructions>::new(
+    canister.system_state.consume_cycles(
+        CompoundCycles::<Instructions>::new(
             Cycles::new(123_456),
             CanisterCyclesCostSchedule::Normal,
-        ));
+        ),
+        &no_op_logger(),
+        &mock_metrics(),
+    );
     let consumed_by_canister = canister.system_state.canister_metrics().consumed_cycles();
     assert!(consumed_by_canister > NominalCycles::zero());
 

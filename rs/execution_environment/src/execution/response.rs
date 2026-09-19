@@ -296,6 +296,8 @@ impl ResponseHelper {
                 original.subnet_cycles_config,
                 execution_mode,
                 reveal_top_up,
+                round.log,
+                round.counters.charging_from_balance_error,
             )?;
         Ok(())
     }
@@ -547,6 +549,7 @@ impl ResponseHelper {
             round.hypervisor.metrics(),
             round.log,
             round.counters.state_changes_error,
+            round.counters.charging_from_balance_error,
             call_tree_metrics,
             original.call_context_creation_time,
             // Composite queries are always executed in the non-replicated mode,
@@ -605,6 +608,7 @@ impl ResponseHelper {
             round.hypervisor.metrics(),
             round.log,
             round.counters.state_changes_error,
+            round.counters.charging_from_balance_error,
             call_tree_metrics,
             original.call_context_creation_time,
             // Composite queries are always executed in the non-replicated mode,

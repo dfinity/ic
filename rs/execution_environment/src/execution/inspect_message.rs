@@ -30,6 +30,7 @@ pub fn execute_inspect_message(
     network_topology: Arc<NetworkTopology>,
     logger: &ReplicaLogger,
     state_changes_error: &IntCounter,
+    charging_from_balance_error: &IntCounter,
     ingress_filter_metrics: &IngressFilterMetrics,
     subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> (NumInstructions, Result<(), UserError>) {
@@ -91,6 +92,7 @@ pub fn execute_inspect_message(
         network_topology,
         &mut round_limits,
         state_changes_error,
+        charging_from_balance_error,
         &CallTreeMetricsNoOp,
         time,
         subnet_cycles_config,

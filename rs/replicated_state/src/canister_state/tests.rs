@@ -883,14 +883,18 @@ fn canister_state_ingress_induction_cycles_debit_exceeding_balance() {
     // callback: the balance not covering the debit is expected there, rather than a
     // bug, so dropping the uncovered part must stay silent. Passing `strict` would
     // trip its `debug_assert` and report an `[EXC-BUG]` critical error instead.
+    let charging_from_balance_error = mock_metrics();
     system_state.apply_ingress_induction_cycles_debit(
         system_state.canister_id(),
         cost_schedule,
         false, // lenient
         &no_op_logger(),
-        &mock_metrics(),
+        &charging_from_balance_error,
     );
 
+    // Dropping the uncovered part of the debit is silent: it was capped before
+    // `consume_cycles()`, which would otherwise have reported it as a critical error.
+    assert_eq!(0, charging_from_balance_error.get());
     // The whole balance is charged and the rest of the debit is dropped.
     assert_eq!(
         Cycles::zero(),
@@ -922,7 +926,7 @@ fn update_balance_and_consumed_cycles_correctly() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let prepaid_cycles =
         CompoundCycles::<Instructions>::new(initial_consumed_cycles, cost_schedule);
-    system_state.consume_cycles(prepaid_cycles);
+    system_state.consume_cycles(prepaid_cycles, &no_op_logger(), &mock_metrics());
     assert_eq!(
         system_state.balance(),
         INITIAL_CYCLES - initial_consumed_cycles
@@ -950,7 +954,7 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
     let cycles_to_consume = Cycles::from(1000_u128);
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let prepaid_cycles = CompoundCycles::<Instructions>::new(cycles_to_consume, cost_schedule);
-    system_state.consume_cycles(prepaid_cycles);
+    system_state.consume_cycles(prepaid_cycles, &no_op_logger(), &mock_metrics());
 
     let refund = CompoundCycles::<Instructions>::new(Cycles::from(100_u128), cost_schedule);
     system_state.refund_cycles(prepaid_cycles, refund);
@@ -991,8 +995,8 @@ fn full_refund_resets_consumed_cycles() {
             "{ctx}"
         );
 
-        system_state.consume_cycles(outstanding_cycles);
-        system_state.consume_cycles(prepaid_cycles);
+        system_state.consume_cycles(outstanding_cycles, &no_op_logger(), &mock_metrics());
+        system_state.consume_cycles(prepaid_cycles, &no_op_logger(), &mock_metrics());
         assert_eq!(
             system_state.balance(),
             INITIAL_CYCLES - outstanding_cycles.real() - prepaid_cycles.real(),
@@ -1144,8 +1148,8 @@ fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
     let final_charge = CompoundCycles::<MemoryUseCase>::new(Cycles::new(500), cost_schedule);
     let prepaid = CompoundCycles::<Instructions>::new(Cycles::new(1000), cost_schedule);
     let refund = CompoundCycles::<Instructions>::new(Cycles::new(100), cost_schedule);
-    system_state.consume_cycles(final_charge);
-    system_state.consume_cycles(prepaid);
+    system_state.consume_cycles(final_charge, &no_op_logger(), &mock_metrics());
+    system_state.consume_cycles(prepaid, &no_op_logger(), &mock_metrics());
     system_state.refund_cycles(prepaid, refund);
     let settled = final_charge.nominal() + (prepaid - refund).nominal();
 
@@ -1153,14 +1157,16 @@ fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
     let outstanding = CompoundCycles::<Instructions>::new(Cycles::new(42), cost_schedule).nominal()
         + CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(168), cost_schedule)
             .nominal();
-    system_state.consume_cycles(CompoundCycles::<Instructions>::new(
-        Cycles::new(42),
-        cost_schedule,
-    ));
-    system_state.consume_cycles(CompoundCycles::<RequestAndResponseTransmission>::new(
-        Cycles::new(168),
-        cost_schedule,
-    ));
+    system_state.consume_cycles(
+        CompoundCycles::<Instructions>::new(Cycles::new(42), cost_schedule),
+        &no_op_logger(),
+        &mock_metrics(),
+    );
+    system_state.consume_cycles(
+        CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(168), cost_schedule),
+        &no_op_logger(),
+        &mock_metrics(),
+    );
     fixture.make_callback(NO_DEADLINE);
     let system_state = &mut fixture.canister_state.system_state;
 
@@ -1196,10 +1202,11 @@ fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
 fn migrate_consumed_cycles_to_monotonic_skips_paused_execution() {
     let mut fixture = CanisterStateFixture::new();
     let system_state = &mut fixture.canister_state.system_state;
-    system_state.consume_cycles(CompoundCycles::<MemoryUseCase>::new(
-        Cycles::new(500),
-        CanisterCyclesCostSchedule::Normal,
-    ));
+    system_state.consume_cycles(
+        CompoundCycles::<MemoryUseCase>::new(Cycles::new(500), CanisterCyclesCostSchedule::Normal),
+        &no_op_logger(),
+        &mock_metrics(),
+    );
     system_state
         .task_queue
         .enqueue(ExecutionTask::PausedExecution {
@@ -1220,22 +1227,29 @@ fn consume_cycles_exceeding_balance_reports_only_the_charged_amount() {
     fn test(cost_schedule: CanisterCyclesCostSchedule) {
         let mut system_state = CanisterStateFixture::new().canister_state.system_state;
         let ctx = format!("{cost_schedule:?} cost schedule");
+        let charging_from_balance_error = mock_metrics();
         // Request more cycles than the balance can cover.
         let requested_cycles =
             CompoundCycles::<Instructions>::new(INITIAL_CYCLES + Cycles::new(1000), cost_schedule);
-        system_state.consume_cycles(requested_cycles);
+        system_state.consume_cycles(
+            requested_cycles,
+            &no_op_logger(),
+            &charging_from_balance_error,
+        );
 
         // Under the normal cost schedule the balance is drained and only the drained
         // amount is reported as consumed, i.e. the part of the request that the balance
-        // could not cover is not. Under the free cost schedule this use case is not
-        // charged at all, so there is nothing to cap: the balance is untouched and the
+        // could not cover is not; that part is reported as a critical error instead.
+        // Under the free cost schedule this use case is not charged at all, so there is
+        // nothing to cap: the balance is untouched, nothing is left uncharged and the
         // full nominal amount is reported.
-        let (expected_balance, expected_consumed) = match cost_schedule {
+        let (expected_balance, expected_consumed, expected_errors) = match cost_schedule {
             CanisterCyclesCostSchedule::Normal => {
-                (Cycles::zero(), NominalCycles::new(INITIAL_CYCLES.get()))
+                (Cycles::zero(), NominalCycles::new(INITIAL_CYCLES.get()), 1)
             }
-            CanisterCyclesCostSchedule::Free => (INITIAL_CYCLES, requested_cycles.nominal()),
+            CanisterCyclesCostSchedule::Free => (INITIAL_CYCLES, requested_cycles.nominal(), 0),
         };
+        assert_eq!(expected_errors, charging_from_balance_error.get(), "{ctx}");
         assert_eq!(expected_balance, system_state.balance(), "{ctx}");
         assert_eq!(
             expected_consumed,
@@ -1266,30 +1280,40 @@ fn consume_cycles_exceeding_balance_and_reserved_balance_reports_only_the_charge
     fn test(cost_schedule: CanisterCyclesCostSchedule) {
         let mut system_state = CanisterStateFixture::new().canister_state.system_state;
         let ctx = format!("{cost_schedule:?} cost schedule");
+        let charging_from_balance_error = mock_metrics();
         let reserved_cycles = Cycles::new(1000);
         system_state.reserve_cycles(reserved_cycles).unwrap();
 
         // Request more cycles than the reserved balance and the balance together can cover.
         let requested_cycles =
             CompoundCycles::<MemoryUseCase>::new(INITIAL_CYCLES + Cycles::new(500), cost_schedule);
-        system_state.consume_cycles(requested_cycles);
+        system_state.consume_cycles(
+            requested_cycles,
+            &no_op_logger(),
+            &charging_from_balance_error,
+        );
 
-        // Under the normal cost schedule both balances are drained and only the drained
-        // amount is reported as consumed. Under the free cost schedule this use case is
-        // not charged at all, so neither balance is touched and the full nominal amount
-        // is reported.
-        let (expected_balance, expected_reserved_balance, expected_consumed) = match cost_schedule {
-            CanisterCyclesCostSchedule::Normal => (
-                Cycles::zero(),
-                Cycles::zero(),
-                NominalCycles::new(INITIAL_CYCLES.get()),
-            ),
-            CanisterCyclesCostSchedule::Free => (
-                INITIAL_CYCLES - reserved_cycles,
-                reserved_cycles,
-                requested_cycles.nominal(),
-            ),
-        };
+        // Under the normal cost schedule both balances are drained, only the drained
+        // amount is reported as consumed and the part that they could not cover is
+        // reported as a critical error. Under the free cost schedule this use case is
+        // not charged at all, so neither balance is touched, nothing is left uncharged
+        // and the full nominal amount is reported.
+        let (expected_balance, expected_reserved_balance, expected_consumed, expected_errors) =
+            match cost_schedule {
+                CanisterCyclesCostSchedule::Normal => (
+                    Cycles::zero(),
+                    Cycles::zero(),
+                    NominalCycles::new(INITIAL_CYCLES.get()),
+                    1,
+                ),
+                CanisterCyclesCostSchedule::Free => (
+                    INITIAL_CYCLES - reserved_cycles,
+                    reserved_cycles,
+                    requested_cycles.nominal(),
+                    0,
+                ),
+            };
+        assert_eq!(expected_errors, charging_from_balance_error.get(), "{ctx}");
         assert_eq!(expected_balance, system_state.balance(), "{ctx}");
         assert_eq!(
             expected_reserved_balance,
@@ -1655,7 +1679,7 @@ fn consumed_cycles_monotonic_accounts_for_refundable_use_cases_at_refund() {
         let prepaid = CompoundCycles::<T>::new(Cycles::new(1000), cost_schedule);
         let refund = CompoundCycles::<T>::new(Cycles::new(100), cost_schedule);
 
-        system_state.consume_cycles(prepaid);
+        system_state.consume_cycles(prepaid, &no_op_logger(), &mock_metrics());
         assert_eq!(
             system_state.canister_metrics().consumed_cycles(),
             prepaid.nominal(),
@@ -1698,7 +1722,7 @@ fn consumed_cycles_monotonic_accounts_for_direct_charges_right_away() {
     let charge =
         CompoundCycles::<MemoryUseCase>::new(Cycles::new(1000), CanisterCyclesCostSchedule::Normal);
 
-    system_state.consume_cycles(charge);
+    system_state.consume_cycles(charge, &no_op_logger(), &mock_metrics());
 
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
@@ -1719,8 +1743,8 @@ fn full_refund_does_not_lower_consumed_cycles_monotonic() {
     let direct_charge = CompoundCycles::<MemoryUseCase>::new(Cycles::new(500), cost_schedule);
     let prepaid = CompoundCycles::<Instructions>::new(Cycles::new(1000), cost_schedule);
 
-    system_state.consume_cycles(direct_charge);
-    system_state.consume_cycles(prepaid);
+    system_state.consume_cycles(direct_charge, &no_op_logger(), &mock_metrics());
+    system_state.consume_cycles(prepaid, &no_op_logger(), &mock_metrics());
     system_state.refund_cycles(prepaid, prepaid);
 
     assert_eq!(
@@ -1746,7 +1770,7 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
     let mut canister_state = CanisterStateFixture::new().canister_state;
 
     let system_state = &mut canister_state.system_state;
-    system_state.consume_cycles(prepaid);
+    system_state.consume_cycles(prepaid, &no_op_logger(), &mock_metrics());
     system_state
         .task_queue
         .enqueue(ExecutionTask::AbortedInstallCode {

@@ -250,6 +250,7 @@ rust_test(
         "//rs/types/types",
         "@crate_index//:maplit",
         "@crate_index//:more-asserts",
+        "@crate_index//:prometheus",
         "@crate_index//:strum",
     ],
 )

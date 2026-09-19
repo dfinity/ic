@@ -449,6 +449,7 @@ impl QueryContext {
                 &self.hypervisor,
                 &mut self.round_limits,
                 &self.metrics.query_critical_error,
+                &self.metrics.query_critical_error,
                 own_subnet_cycles_config,
             );
         self.add_system_api_call_counters(system_api_call_counters);
@@ -670,6 +671,7 @@ impl QueryContext {
             self.network_topology.clone(),
             &mut self.round_limits,
             &self.metrics.query_critical_error,
+            &self.metrics.query_critical_error,
             &CallTreeMetricsNoOp,
             call_context.time(),
             own_subnet_cycles_config,
@@ -771,6 +773,7 @@ impl QueryContext {
                 canister.execution_state.take().unwrap(),
                 self.network_topology.clone(),
                 &mut self.round_limits,
+                &self.metrics.query_critical_error,
                 &self.metrics.query_critical_error,
                 &CallTreeMetricsNoOp,
                 time,
