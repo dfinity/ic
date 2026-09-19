@@ -2,6 +2,7 @@
 
 import gzip
 import hashlib
+import http.client
 import importlib.machinery
 import importlib.util
 import io
@@ -626,6 +627,34 @@ class RunTest(unittest.TestCase):
 
         self.assertIn("doesn't match the CDN sha256 sum", str(raised.exception))
 
+    def test_a_transport_fault_in_the_attestation_api_only_warns(self):
+        """
+        http.client.HTTPException is neither OSError nor ValueError and urllib re-raises it
+        unwrapped, so a truncated response body or a captive portal used to abort the run with a
+        traceback before the authoritative local build had even started.
+        """
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        self.bundles_error = http.client.IncompleteRead(b"partial")
+
+        self.assert_warns_and_completes(verifier, "IncompleteRead")
+
+    def test_an_unexpected_exception_in_the_preflight_only_warns(self):
+        """attestation_preflight promises that only VerificationError leaves it."""
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        verifier.ensure_gh = mock.Mock(side_effect=http.client.BadStatusLine("garbage"))
+
+        self.assert_warns_and_completes(verifier, "BadStatusLine")
+
+    def test_a_download_failure_still_stops_the_run(self):
+        """The backstop must not swallow a CDN checksum file that cannot be fetched at all."""
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        del self.cdn[cdn_url("guest-os", "update-img", "SHA256SUMS")]
+
+        with self.assertRaises(Exception) as raised:
+            verifier.run()
+
+        self.assertNotIsInstance(raised.exception, repro_check.AttestationUnavailable)
+
     # ---- the warn path: none of these may fail the run ----------------------
 
     def assert_warns_and_completes(self, verifier, needle: str):
@@ -1026,6 +1055,92 @@ class EnsureGhTest(unittest.TestCase):
         self.assertIn("does not run", str(raised.exception))
 
 
+class CacheRevalidationTest(unittest.TestCase):
+    """The two fallbacks the README documents: nothing else covers them."""
+
+    def setUp(self):
+        self.tmp_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp_dir, True)
+        self.addCleanup(mock.patch.stopall)
+        self.verifier = repro_check.ReproducibilityVerifier(
+            verify_guestos=True,
+            verify_hostos=False,
+            verify_setupos=False,
+            verify_recovery=False,
+            proposal_id="",
+            git_commit=GIT_HASH,
+            download_source_mode="systems",
+            base_cache_dir=self.tmp_dir / "cache",
+            clean_base_cache_dir=False,
+            keep_temp=False,
+        )
+        self.addCleanup(self.verifier.download_executor.shutdown)
+        self.cache_file = self.tmp_dir / "img"
+        self.cache_file.write_bytes(b"cached image")
+
+    def stub_validator(self, value):
+        mock.patch.object(repro_check, "fetch_url_validator", mock.Mock(return_value=value)).start()
+
+    def test_a_matching_validator_reuses_the_cache(self):
+        self.stub_validator({"ETag": '"a"'})
+        self.verifier.record_cache_validator("https://cdn/img", self.cache_file)
+
+        self.assertTrue(self.verifier.cached_copy_is_current("https://cdn/img", self.cache_file))
+
+    def test_a_changed_validator_forces_a_redownload(self):
+        self.stub_validator({"ETag": '"a"'})
+        self.verifier.record_cache_validator("https://cdn/img", self.cache_file)
+        self.stub_validator({"ETag": '"b"'})
+
+        with self.assertLogs(repro_check.logger, level="WARNING") as logs:
+            self.assertFalse(self.verifier.cached_copy_is_current("https://cdn/img", self.cache_file))
+
+        self.assertTrue(any("no longer serves" in line for line in logs.output), logs.output)
+
+    def test_a_cache_without_a_validator_is_reused_but_warned_about(self):
+        """Cached before this check existed: reuse rather than force a multi-GB re-download."""
+        self.stub_validator({"ETag": '"a"'})
+
+        with self.assertLogs(repro_check.logger, level="WARNING") as logs:
+            self.assertTrue(self.verifier.cached_copy_is_current("https://cdn/img", self.cache_file))
+
+        self.assertTrue(any("--clean" in line for line in logs.output), logs.output)
+        # The current validator is adopted, so a LATER substitution is still caught.
+        self.stub_validator({"ETag": '"b"'})
+        self.assertFalse(self.verifier.cached_copy_is_current("https://cdn/img", self.cache_file))
+
+    def test_an_unreachable_head_reuses_the_cache_and_warns(self):
+        self.stub_validator({"ETag": '"a"'})
+        self.verifier.record_cache_validator("https://cdn/img", self.cache_file)
+        self.stub_validator(None)
+
+        with self.assertLogs(repro_check.logger, level="WARNING") as logs:
+            self.assertTrue(self.verifier.cached_copy_is_current("https://cdn/img", self.cache_file))
+
+        self.assertTrue(any("Could not check whether" in line for line in logs.output), logs.output)
+
+    def test_the_validator_is_recorded_before_the_download(self):
+        """
+        Sampled after the GET it could describe an object the CDN began serving during the
+        download, blessing bytes this run never had.
+        """
+        order = []
+        mock.patch.object(
+            repro_check, "fetch_url_validator", lambda url: order.append("head") or {"ETag": '"a"'}
+        ).start()
+        mock.patch.object(
+            repro_check,
+            "fetch_url_to_file",
+            lambda url, dest: order.append("get") or dest.write_bytes(b"x") or dest,
+        ).start()
+        self.verifier.git_hash = GIT_HASH
+        self.verifier.init_cache()
+
+        self.verifier.cached_download("https://cdn/img", self.tmp_dir / "out" / "img", "guest-os")
+
+        self.assertEqual(order, ["head", "get"])
+
+
 class GhVerifyRetryTest(unittest.TestCase):
     """
     The evidence markers are calibrated against the pinned gh, but a PATH gh may be any release
@@ -1175,12 +1290,24 @@ class RunGhAttestationVerifyTest(unittest.TestCase):
 
     def stub_run(self, returncode: int, stdout: str = "", stderr: str = ""):
         completed = mock.Mock(returncode=returncode, stdout=stdout, stderr=stderr)
-        mock.patch.object(repro_check.subprocess, "run", mock.Mock(return_value=completed)).start()
+        return mock.patch.object(repro_check.subprocess, "run", mock.Mock(return_value=completed)).start()
 
     def verify(self):
         return repro_check.run_gh_attestation_verify(
             Path("gh"), self.sums, self.tmp_dir / "b.jsonl", GIT_HASH, self.tmp_dir / "cfg"
         )
+
+    def test_gh_runs_with_the_sanitised_environment_and_a_timeout(self):
+        """Nothing else asserts that the env gh_env() builds actually reaches the subprocess."""
+        run = self.stub_run(0, stdout="[]")
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "t", "GH_HOST": "github.example.com"}):
+            self.verify()
+
+        env = run.call_args.kwargs["env"]
+        self.assertNotIn("GH_TOKEN", env)
+        self.assertNotIn("GH_HOST", env)
+        self.assertEqual(env["GH_CONFIG_DIR"], str(self.tmp_dir / "cfg"))
+        self.assertIsNotNone(run.call_args.kwargs["timeout"])
 
     def test_parses_stdout(self):
         self.stub_run(0, stdout=json.dumps([{"verificationResult": {}}]))
@@ -1317,9 +1444,17 @@ class InterruptedDownloadTest(unittest.TestCase):
 
     def test_raises_once_interrupted(self):
         class SlowResponse(FakeResponse):
+            """
+            Yields the body in chunks, tripping the interrupt on the first one.
+
+            Finite on purpose: a stub that returns forever would make a regression of the
+            interrupt check hang the suite instead of failing it by name.
+            """
+
             def read(self, *args):
                 repro_check.interrupted = True
-                return b"x" * 1024
+                chunk, self._content = self._content[:1024], self._content[1024:]
+                return chunk
 
         mock.patch.object(
             repro_check.urllib.request, "urlopen", lambda req, timeout=None: SlowResponse(b"x" * 4096)

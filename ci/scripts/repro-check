@@ -6,6 +6,7 @@ import concurrent.futures
 import contextlib
 import copy
 import hashlib
+import http.client
 import json
 import logging
 import os
@@ -536,7 +537,7 @@ def get_attestations_page(url: str, token: str | None, token_var: str | None) ->
             if e.code < 500:
                 raise AttestationUnavailable(f"HTTP {e.code} from {url}") from e
             last_error = f"HTTP {e.code} from {url}"
-        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError, http.client.HTTPException) as e:
             last_error = f"{type(e).__name__}: {e}"
         if attempt < attempts - 1:
             time.sleep(2 * (attempt + 1))
@@ -733,7 +734,7 @@ def fetch_url_validator(url: str) -> dict[str, str] | None:
             headers = response.headers
             names = ("ETag", "Last-Modified", "Content-Length")
             validator = {name: headers.get(name) for name in names if headers.get(name)}
-    except (urllib.error.URLError, OSError, ValueError) as e:
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:
         logger.debug(f"Could not HEAD {url}: {e}")
         return None
     return validator or None
@@ -1034,10 +1035,13 @@ class ReproducibilityVerifier:
     def validator_path(self, cache_file: Path) -> Path:
         return cache_file.with_name(cache_file.name + ".validator")
 
-    def record_cache_validator(self, url: str, cache_file: Path) -> None:
+    def record_cache_validator(self, url: str, cache_file: Path) -> bool:
+        """Records what the CDN currently serves for a URL. False when it could not be obtained."""
         validator = fetch_url_validator(url)
-        if validator:
-            self.validator_path(cache_file).write_text(json.dumps(validator), encoding="utf-8")
+        if not validator:
+            return False
+        self.validator_path(cache_file).write_text(json.dumps(validator), encoding="utf-8")
+        return True
 
     def cached_copy_is_current(self, url: str, cache_file: Path) -> bool:
         """
@@ -1054,9 +1058,17 @@ class ReproducibilityVerifier:
         """
         path = self.validator_path(cache_file)
         if not path.is_file():
-            # Cached by a version that did not record validators. Adopt the current one instead of
-            # forcing a multi-GB re-download for something we could not have detected anyway.
-            logger.debug(f"No recorded validator for {url}; adopting the current one.")
+            # Cached before this check existed, or by a run whose HEAD failed. There is nothing to
+            # compare against, so the choice is between a multi-GB re-download of something that
+            # was never suspect and reusing the copy. Reuse it, adopt the current validator so a
+            # LATER substitution is caught, and say so: this run did not check these bytes against
+            # the CDN, and that is exactly the case the README tells people --clean is for.
+            self.warn_about_attestations(
+                f"The cached copy of {url} carries no record of what the CDN served when it was "
+                "downloaded, so this run cannot tell whether the CDN still serves the same bytes; "
+                "using the cached copy. Pass --clean, or use a fresh --cache-dir, to verify "
+                "against what the CDN serves now."
+            )
             self.record_cache_validator(url, cache_file)
             return True
         try:
@@ -1065,7 +1077,10 @@ class ReproducibilityVerifier:
             return False
         current = fetch_url_validator(url)
         if current is None:
-            logger.warning(f"Could not check whether {url} still serves the cached bytes; using the cached copy.")
+            self.warn_about_attestations(
+                f"Could not check whether {url} still serves the bytes cached for this commit; "
+                "using the cached copy."
+            )
             return True
         if current == recorded:
             return True
@@ -1086,8 +1101,12 @@ class ReproducibilityVerifier:
             logger.debug(f"File already cached, skipping download: {url}")
         else:
             logger.debug(f"Cache miss, downloading: {url}")
-            fetch_url_to_file(url, cache_file)
+            # Before the GET, not after: a validator sampled afterwards can describe an object
+            # the CDN began serving *during* the download, blessing bytes this run never had.
+            # Sampled before, a change during the download leaves a validator that no longer
+            # matches, so the next run re-downloads and the sums comparison surfaces it.
             self.record_cache_validator(url, cache_file)
+            fetch_url_to_file(url, cache_file)
 
         target_file.parent.mkdir(parents=True, exist_ok=True)
         if target_file.exists():
@@ -1416,6 +1435,20 @@ class ReproducibilityVerifier:
                 f"Could not confirm the build provenance of the CDN checksum files: {e}.\n"
                 + ATTESTATION_UNAVAILABLE_ADVICE
             )
+        except (VerificationError, RuntimeError):
+            # Positive evidence of substitution, or a failure main() already maps to an exit code
+            # (a CDN checksum file that cannot be downloaded at all stops the run as it always did).
+            raise
+        except Exception as e:
+            # Backstop, so this method can keep its promise that only VerificationError leaves it.
+            # Transport faults in particular are easy to miss one at a time: http.client raises
+            # HTTPException, which is neither OSError nor ValueError, and urllib re-raises it
+            # unwrapped, so a truncated response body used to abort the run with a traceback
+            # before the authoritative local build had even started.
+            self.warn_about_attestations(
+                f"Could not confirm the build provenance of the CDN checksum files: "
+                f"unexpected {type(e).__name__}: {e}.\n" + ATTESTATION_UNAVAILABLE_ADVICE
+            )
         finally:
             # The attestations API is the only thing in this run that wants a GitHub token, and it
             # is done with it here. Drop it before build_locally() executes the commit's own
@@ -1472,11 +1505,7 @@ class ReproducibilityVerifier:
                 # must degrade this one directory rather than abandon the loop. Its
                 # VerificationError is not caught here and still stops the run.
                 cert = select_attested_entry(entries, expected_subject, digest, self.accepted_builds)
-            except OSError as e:
-                raise AttestationUnavailable(
-                    f"could not prepare the attestation check of {expected_subject}: {e}"
-                ) from e
-            except AttestationUnavailable as e:
+            except (OSError, AttestationUnavailable) as e:
                 # Per directory, so one unattested or unreachable file does not hide a substituted
                 # one in the next directory: a VerificationError there must still stop the run.
                 unavailable += 1
