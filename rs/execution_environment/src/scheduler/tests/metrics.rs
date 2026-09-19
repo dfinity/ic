@@ -20,6 +20,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::OutstandingPrepayments;
 use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
@@ -1105,32 +1106,82 @@ fn threshold_signature_agreements_metric_is_updated() {
     assert!(sign_with_threshold_contexts.is_empty());
 }
 
-/// Asserts the invariant that ties `CanisterMetrics::consumed_cycles` to its
-/// monotonic counterpart: the gauge exceeds the monotonic amount by exactly the
-/// prepayments whose refund is still outstanding. Returns the latter.
+/// Asserts the invariants that tie `CanisterMetrics::consumed_cycles` and
+/// `CanisterMetrics::consumed_cycles_by_use_cases` to their monotonic counterparts:
+/// a gauge exceeds its monotonic counterpart by exactly the prepayments that are
+/// still outstanding for it. Returns the outstanding prepayments.
 fn assert_consumed_cycles_invariant(
     test: &SchedulerTest,
     canister_id: CanisterId,
-) -> NominalCycles {
+) -> OutstandingPrepayments {
+    /// Asserts that `gauge` exceeds `monotonic` by exactly `outstanding`; `what`
+    /// names the amount.
+    fn assert_invariant(
+        what: &str,
+        gauge: NominalCycles,
+        monotonic: NominalCycles,
+        outstanding: NominalCycles,
+    ) {
+        assert!(
+            outstanding <= gauge,
+            "the {outstanding} outstanding prepayments must not exceed the {what} \
+             gauge {gauge}",
+        );
+        assert_eq!(
+            gauge - outstanding,
+            monotonic,
+            "{what} gauge {gauge} minus the {outstanding} outstanding prepayments \
+             must equal the monotonic {monotonic}",
+        );
+    }
+
     let system_state = &test.canister_state(canister_id).system_state;
     let outstanding = system_state
         .outstanding_prepayments()
         .expect("Canister has a paused execution");
     let metrics = system_state.canister_metrics();
+
+    assert_invariant(
+        "consumed cycles",
+        metrics.consumed_cycles(),
+        metrics.consumed_cycles_monotonic(),
+        outstanding.total(),
+    );
+    for (use_case, gauge) in metrics.consumed_cycles_by_use_cases() {
+        // An absent monotonic entry reads as zero, which is what it means: a canister
+        // decoded from a checkpoint predating the monotonic map has none of them at
+        // all until a checkpoint round backfills it.
+        let monotonic = metrics
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(use_case)
+            .copied()
+            .unwrap_or_else(NominalCycles::zero);
+        assert_invariant(
+            &format!("{} consumed cycles", use_case.as_str()),
+            *gauge,
+            monotonic,
+            outstanding.for_use_case(*use_case),
+        );
+    }
+
+    // The loop above covers the gauge map's use cases; `HTTPOutcalls` is the only
+    // monotonic entry allowed to have no gauge counterpart, as HTTPS outcalls are
+    // only tracked as a gauge at the subnet level.
+    let extra: Vec<_> = metrics
+        .consumed_cycles_by_use_cases_monotonic()
+        .keys()
+        .filter(|use_case| {
+            **use_case != CyclesUseCase::HTTPOutcalls
+                && !metrics
+                    .consumed_cycles_by_use_cases()
+                    .contains_key(use_case)
+        })
+        .collect();
     assert!(
-        outstanding <= metrics.consumed_cycles(),
-        "the {outstanding} outstanding prepayments must not exceed the consumed \
-         cycles gauge {}",
-        metrics.consumed_cycles(),
+        extra.is_empty(),
+        "Canister {canister_id}: monotonic consumed cycles with no gauge: {extra:?}",
     );
-    assert_eq!(
-        metrics.consumed_cycles() - outstanding,
-        metrics.consumed_cycles_monotonic(),
-        "consumed cycles gauge {} minus the {outstanding} outstanding prepayments \
-         must equal the monotonic {}",
-        metrics.consumed_cycles(),
-        metrics.consumed_cycles_monotonic(),
-    );
+
     outstanding
 }
 
@@ -1153,7 +1204,7 @@ fn consumed_cycles_monotonic_matches_the_gauge_net_of_outstanding_prepayments() 
     call_xnet_canister(&mut test, canister);
 
     let outstanding = assert_consumed_cycles_invariant(&test, canister);
-    assert_ne!(outstanding, NominalCycles::zero());
+    assert_ne!(outstanding, OutstandingPrepayments::default());
 }
 
 #[test]
@@ -1163,9 +1214,9 @@ fn checkpoint_round_backfills_consumed_cycles_monotonic() {
 
     call_xnet_canister(&mut test, canister);
     let outstanding = assert_consumed_cycles_invariant(&test, canister);
-    assert_ne!(outstanding, NominalCycles::zero());
+    assert_ne!(outstanding, OutstandingPrepayments::default());
 
-    // Pretend the canister was loaded from a checkpoint predating the field.
+    // Pretend the canister was loaded from a checkpoint predating the fields.
     test.canister_state_mut(canister)
         .system_state
         .reset_consumed_cycles_monotonic();
@@ -1176,8 +1227,15 @@ fn checkpoint_round_backfills_consumed_cycles_monotonic() {
             .consumed_cycles_monotonic(),
         NominalCycles::zero()
     );
+    assert!(
+        test.canister_state(canister)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .is_empty()
+    );
 
-    // An ordinary round does not backfill it, a checkpoint round does.
+    // An ordinary round does not backfill them, a checkpoint round does.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(
         test.canister_state(canister)
@@ -1186,15 +1244,70 @@ fn checkpoint_round_backfills_consumed_cycles_monotonic() {
             .consumed_cycles_monotonic(),
         NominalCycles::zero()
     );
-
-    test.execute_round(ExecutionRoundType::CheckpointRound);
-    assert_consumed_cycles_invariant(&test, canister);
-    assert_ne!(
+    assert!(
         test.canister_state(canister)
             .system_state
             .canister_metrics()
-            .consumed_cycles_monotonic(),
-        NominalCycles::zero()
+            .consumed_cycles_by_use_cases_monotonic()
+            .is_empty()
+    );
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+    assert_consumed_cycles_invariant(&test, canister);
+    let metrics = test
+        .canister_state(canister)
+        .system_state
+        .canister_metrics();
+    assert_ne!(metrics.consumed_cycles_monotonic(), NominalCycles::zero());
+    // The by-use-case amounts came back too. (Their exact values are what the
+    // invariant asserted above pins down.)
+    assert!(
+        metrics
+            .consumed_cycles_by_use_cases_monotonic()
+            .values()
+            .any(|amount| !amount.is_zero())
+    );
+}
+
+/// The `HTTPOutcalls` entry of the monotonic map is the one entry with no
+/// canister-level gauge, so the backfill must neither derive it nor report it as a
+/// monotonic amount above its (non-existent) gauge.
+#[test]
+fn checkpoint_round_leaves_http_outcalls_consumed_cycles_monotonic_alone() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    call_xnet_canister(&mut test, canister);
+
+    // Pretend the canister was loaded from a checkpoint predating the fields, then
+    // made an HTTPS outcall.
+    let outcalls = NominalCycles::new(1_000_000);
+    let system_state = &mut test.canister_state_mut(canister).system_state;
+    system_state.reset_consumed_cycles_monotonic();
+    system_state.observe_consumed_cycles_for_https_outcall(outcalls);
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+
+    // The other use cases were backfilled from their gauges...
+    assert_consumed_cycles_invariant(&test, canister);
+    let metrics = test
+        .canister_state(canister)
+        .system_state
+        .canister_metrics();
+    assert_ne!(metrics.consumed_cycles_monotonic(), NominalCycles::zero());
+    // ...while the `HTTPOutcalls` entry still holds just the outcall above, and is
+    // not part of the scalar total either.
+    assert_eq!(
+        metrics
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::HTTPOutcalls),
+        Some(&outcalls)
+    );
+    assert_eq!(
+        metrics
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::HTTPOutcalls),
+        None
     );
 }
 
@@ -1211,10 +1324,11 @@ fn checkpoint_round_reports_outstanding_prepayments_above_the_gauge() {
 
     call_xnet_canister(&mut test, canister);
     let outstanding = assert_consumed_cycles_invariant(&test, canister);
-    assert_ne!(outstanding, NominalCycles::zero());
+    assert_ne!(outstanding, OutstandingPrepayments::default());
 
-    // Break the invariant: drop the gauge below the outstanding prepayments, taking
-    // the monotonic value down with it, so that a derived zero would compare `Equal`.
+    // Break the invariant: drop the gauges below the outstanding prepayments, taking
+    // the monotonic amounts down with them, so that a derived zero would compare
+    // `Equal`.
     let system_state = &mut test.canister_state_mut(canister).system_state;
     system_state.reset_consumed_cycles();
     system_state.reset_consumed_cycles_monotonic();
@@ -1241,7 +1355,7 @@ fn checkpoint_round_reports_monotonic_above_the_gauge() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert_eq!(
         assert_consumed_cycles_invariant(&test, canister),
-        NominalCycles::zero()
+        OutstandingPrepayments::default()
     );
     assert_ne!(
         test.canister_state(canister)
@@ -1256,6 +1370,40 @@ fn checkpoint_round_reports_monotonic_above_the_gauge() {
     test.canister_state_mut(canister)
         .system_state
         .reset_consumed_cycles();
+
+    test.execute_round(ExecutionRoundType::CheckpointRound);
+}
+
+/// The by-use-case amounts are checked one use case at a time, so a monotonic amount
+/// above its gauge is reported even when the scalar total is perfectly consistent.
+#[test]
+#[should_panic(expected = "monotonic Instructions consumed cycles")]
+fn checkpoint_round_reports_monotonic_of_use_case_above_the_gauge() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister();
+
+    // An ingress execution that runs to completion refunds its prepayment, so the
+    // canister is left with consumed cycles and nothing outstanding.
+    test.send_ingress(canister, ingress(100));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        assert_consumed_cycles_invariant(&test, canister),
+        OutstandingPrepayments::default()
+    );
+
+    // Break the by-use-case invariant only: drop the `Instructions` gauge, which now
+    // sits below its monotonic counterpart, while leaving the scalar gauge (and thus
+    // the scalar invariant) untouched.
+    let system_state = &mut test.canister_state_mut(canister).system_state;
+    assert!(
+        !system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap()
+            .is_zero()
+    );
+    system_state.reset_consumed_cycles_of_use_case(CyclesUseCase::Instructions);
 
     test.execute_round(ExecutionRoundType::CheckpointRound);
 }
@@ -1297,8 +1445,8 @@ fn checkpoint_round_backfills_consumed_cycles_monotonic_of_paused_canister() {
     assert!(test.canister_state(canister).has_aborted_execution());
     let outstanding = assert_consumed_cycles_invariant(&test, canister);
     // The aborted execution's prepayment is outstanding, and is not part of the
-    // backfilled amount.
-    assert_ne!(outstanding, NominalCycles::zero());
+    // backfilled amounts.
+    assert_ne!(outstanding, OutstandingPrepayments::default());
 }
 
 /// A paused response execution is aborted before a checkpoint like any other, but
@@ -1385,8 +1533,10 @@ fn checkpoint_round_backfills_consumed_cycles_monotonic_of_aborted_response_exec
     let outstanding = assert_consumed_cycles_invariant(&test, caller);
     assert_eq!(
         outstanding,
-        callback.prepayment_for_response_execution.nominal()
-            + callback.prepayment_for_call_transmission.nominal()
+        OutstandingPrepayments {
+            instructions: callback.prepayment_for_response_execution.nominal(),
+            transmission: callback.prepayment_for_call_transmission.nominal(),
+        }
     );
     assert_ne!(
         system_state.canister_metrics().consumed_cycles_monotonic(),
