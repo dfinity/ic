@@ -177,6 +177,12 @@ Consequently:
   commit gains an attestation only once its `hotfix-*` branch is published to
   `dfinity/ic` and rebuilt there.
 
+The checksum files and launch measurements are always fetched fresh rather
+than read from the download cache, and a cached image is revalidated against
+the CDN (a `HEAD` request) before it is reused, so rerunning with a warm cache
+still reports on what the CDN serves now. Artifacts under `ic/{COMMIT_ID}/`
+are immutable by policy, so a revalidation mismatch is worth reporting.
+
 `--skip-attestation-check` turns the check off entirely. It is a developer
 escape hatch and should never be used when verifying an NNS proposal. It is
 also not the way around an outage, since an unreachable attestation already

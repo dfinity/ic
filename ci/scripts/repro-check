@@ -715,6 +715,24 @@ def select_attested_entry(
 # ------------------------------------------------------------------------------
 # ARGUMENT PARSING
 # ------------------------------------------------------------------------------
+def fetch_url_validator(url: str) -> dict[str, str] | None:
+    """
+    The CDN's cache validators for a URL, via a HEAD request, or None when they cannot be obtained.
+
+    download.dfinity.systems serves a stable ETag per object, alongside Last-Modified and
+    Content-Length, which is enough to notice that an object changed since it was cached.
+    """
+    request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "ReproducibilityVerifier/1.0"})
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            headers = response.headers
+            validator = {name: headers[name] for name in ("ETag", "Last-Modified", "Content-Length") if headers[name]}
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        logger.debug(f"Could not HEAD {url}: {e}")
+        return None
+    return validator or None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -1007,17 +1025,63 @@ class ReproducibilityVerifier:
         self.cache_for_this_hash.touch()
         logger.info("Using cache directory: %s", self.cache_for_this_hash)
 
+    def validator_path(self, cache_file: Path) -> Path:
+        return cache_file.with_name(cache_file.name + ".validator")
+
+    def record_cache_validator(self, url: str, cache_file: Path) -> None:
+        validator = fetch_url_validator(url)
+        if validator:
+            self.validator_path(cache_file).write_text(json.dumps(validator), encoding="utf-8")
+
+    def cached_copy_is_current(self, url: str, cache_file: Path) -> bool:
+        """
+        Whether the CDN still serves the bytes that were cached for this URL.
+
+        Artifacts under ic/<commit>/ are immutable by policy, so a change is an incident rather
+        than routine. Without this check a rerun would re-verify the previous run's bytes and
+        report success even if the CDN had since started serving a substituted image, and the
+        freshly fetched SHA256SUMS could not reveal it: an attacker who cannot forge the
+        attestation has every reason to leave SHA256SUMS alone and swap only the image.
+
+        A HEAD is cheap next to re-downloading multiple gigabytes. When it cannot be made, or the
+        cached copy predates this check, the cache is used rather than the run being blocked.
+        """
+        path = self.validator_path(cache_file)
+        if not path.is_file():
+            # Cached by a version that did not record validators. Adopt the current one instead of
+            # forcing a multi-GB re-download for something we could not have detected anyway.
+            logger.debug(f"No recorded validator for {url}; adopting the current one.")
+            self.record_cache_validator(url, cache_file)
+            return True
+        try:
+            recorded = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        current = fetch_url_validator(url)
+        if current is None:
+            logger.warning(f"Could not check whether {url} still serves the cached bytes; using the cached copy.")
+            return True
+        if current == recorded:
+            return True
+        logger.warning(
+            f"{url} no longer serves the bytes that were cached for this commit; re-downloading it.\n"
+            f"Cached: {recorded}\nNow:    {current}\n"
+            "Artifacts under ic/<commit>/ are supposed to be immutable, so this is worth reporting."
+        )
+        return False
+
     def cached_download(self, url: str, target_file: Path, os_type: str) -> Path:
         """Downloads a file if it’s not already in the cache."""
         dest_dir = self.cache_for_this_hash / urllib.parse.urlparse(url).netloc.split(":")[0] / os_type
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         cache_file = dest_dir / target_file.name
-        if not (cache_file.exists() and cache_file.stat().st_size > 0):
+        if cache_file.exists() and cache_file.stat().st_size > 0 and self.cached_copy_is_current(url, cache_file):
+            logger.debug(f"File already cached, skipping download: {url}")
+        else:
             logger.debug(f"Cache miss, downloading: {url}")
             fetch_url_to_file(url, cache_file)
-        else:
-            logger.debug(f"File already cached, skipping download: {url}")
+            self.record_cache_validator(url, cache_file)
 
         target_file.parent.mkdir(parents=True, exist_ok=True)
         if target_file.exists():
@@ -1138,7 +1202,10 @@ class ReproducibilityVerifier:
                 local_measurements_path = subdir / "launch-measurements.json"
                 downloads.extend(
                     [
-                        self.start_download(measurements_url, local_measurements_path, os_type),
+                        # Uncached for the same reason as SHA256SUMS: it is a few hundred bytes,
+                        # and checking a cached copy against freshly attested sums would miss a
+                        # substitution of the copy the CDN serves now.
+                        self.start_uncached_download(measurements_url, local_measurements_path),
                     ]
                 )
 
@@ -1322,12 +1389,15 @@ class ReproducibilityVerifier:
         substitution degrades to a warning, because the local build is the authoritative check.
         Only VerificationError leaves this method.
         """
-        if self.skip_attestation_check:
-            self.warn_about_attestations(
-                "--skip-attestation-check was given: the build provenance of the CDN checksum files was NOT verified."
-            )
-            return
         try:
+            if self.skip_attestation_check:
+                # Inside the try: the finally below must run on this path too, or the documented
+                # escape hatch would be the one way to hand a GitHub token to the build.
+                self.warn_about_attestations(
+                    "--skip-attestation-check was given: the build provenance of the CDN checksum files was NOT "
+                    "verified."
+                )
+                return
             self.gh = self.ensure_gh(dirs)
             if dry_run:
                 # A --dry-run on CI runs against the PR's merge commit, which was never uploaded

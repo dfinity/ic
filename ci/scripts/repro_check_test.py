@@ -215,6 +215,7 @@ class RunTest(unittest.TestCase):
         proposal = json.dumps({"payload": payload}).encode()
         mock.patch.object(repro_check.urllib.request, "urlopen", lambda req: FakeResponse(proposal)).start()
         mock.patch.object(repro_check, "fetch_url_to_file", self.fake_fetch).start()
+        mock.patch.object(repro_check, "fetch_url_validator", self.fake_validator).start()
         mock.patch.object(repro_check, "fetch_attestation_bundles", self.fake_fetch_bundles).start()
         mock.patch.object(repro_check, "run_gh_attestation_verify", self.fake_gh_verify).start()
         mock.patch.object(verifier, "ensure_gh", self.fake_ensure_gh).start()
@@ -255,6 +256,11 @@ class RunTest(unittest.TestCase):
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         dest_path.write_bytes(self.cdn[url])
         return dest_path
+
+    def fake_validator(self, url: str) -> dict[str, str] | None:
+        """An ETag that tracks the content, so mutating self.cdn models a CDN substitution."""
+        content = self.cdn.get(url)
+        return {"ETag": f'"{sha256_hex(content)}"'} if content is not None else None
 
     def fake_build(self, storage: "repro_check.Dirs") -> None:
         """Writes local artifacts that are byte-identical to the CDN ones, except for those in local_overrides."""
@@ -544,6 +550,77 @@ class RunTest(unittest.TestCase):
 
         self.assertTrue(cached, "the images should still come from the cache")
         self.assertFalse([url for url in cached if url.endswith("/SHA256SUMS")], cached)
+
+    def test_skip_flag_still_drops_the_github_tokens(self):
+        """The documented escape hatch must not be the one way to leak a token to the build."""
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS), skip=True)
+        seen = {}
+        real_build = self.fake_build
+        mock.patch.object(
+            verifier,
+            "build_locally",
+            lambda storage: seen.update(tok=os.environ.get("GH_TOKEN")) or real_build(storage),
+        ).start()
+
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "secret"}):
+            verifier.run()
+
+        self.assertIsNone(seen["tok"])
+
+    def test_launch_measurements_are_fetched_fresh_rather_than_from_the_cache(self):
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        cached = []
+        mock.patch.object(
+            verifier, "cached_download", lambda url, target, os_type: cached.append(url) or self.fake_fetch(url, target)
+        ).start()
+
+        verifier.run()
+
+        self.assertFalse([url for url in cached if url.endswith("/launch-measurements.json")], cached)
+
+    def test_a_substituted_image_is_detected_although_the_image_is_cached(self):
+        """
+        The attack the cache would otherwise hide: an attacker who cannot forge the attestation
+        leaves SHA256SUMS alone and swaps only the image. A rerun with a warm cache must notice
+        that the CDN no longer serves what was cached, rather than re-verifying the old bytes.
+        """
+        cache_dir = self.tmp_dir / "cache"
+        first = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        first.run()
+        self.assertTrue(self.build_ran)
+        mock.patch.stopall()
+
+        # The CDN now serves a different GuestOS image; SHA256SUMS is untouched, as it is attested.
+        self.cdn[GUEST_OS_IMG] = b"substituted guest-os image"
+        self.build_ran = False
+        second = repro_check.ReproducibilityVerifier(
+            verify_guestos=True,
+            verify_hostos=False,
+            verify_setupos=False,
+            verify_recovery=False,
+            proposal_id="143816",
+            git_commit="",
+            download_source_mode="systems",
+            base_cache_dir=cache_dir,
+            clean_base_cache_dir=False,
+            keep_temp=False,
+        )
+        self.addCleanup(second.download_executor.shutdown)
+        proposal = json.dumps({"payload": self.guestos_payload(MEASUREMENTS)}).encode()
+        mock.patch.object(repro_check.urllib.request, "urlopen", lambda req: FakeResponse(proposal)).start()
+        mock.patch.object(repro_check, "fetch_url_to_file", self.fake_fetch).start()
+        mock.patch.object(repro_check, "fetch_url_validator", self.fake_validator).start()
+        mock.patch.object(repro_check, "fetch_attestation_bundles", self.fake_fetch_bundles).start()
+        mock.patch.object(repro_check, "run_gh_attestation_verify", self.fake_gh_verify).start()
+        mock.patch.object(second, "ensure_gh", self.fake_ensure_gh).start()
+        mock.patch.object(second, "check_environment").start()
+        mock.patch.object(second, "build_locally", self.fake_build).start()
+
+        # The re-downloaded image no longer matches the (genuine, attested) SHA256SUMS.
+        with self.assertRaises(repro_check.VerificationError) as raised:
+            second.run()
+
+        self.assertIn("doesn't match the CDN sha256 sum", str(raised.exception))
 
     # ---- the warn path: none of these may fail the run ----------------------
 
