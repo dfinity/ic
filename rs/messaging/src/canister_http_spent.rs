@@ -548,10 +548,10 @@ mod tests {
         cost_schedule: CanisterCyclesCostSchedule,
     ) {
         let context = CanisterHttpRequestContext {
-            request: RequestBuilder::default().sender(sender).build(),
+            request: std::sync::Arc::new(RequestBuilder::default().sender(sender).build()),
             url: "https://example.com".to_string(),
             max_response_bytes: None,
-            headers: Vec::new(),
+            headers: std::sync::Arc::new(Vec::new()),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,

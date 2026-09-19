@@ -266,7 +266,7 @@ mod tests {
             MasterPublicKeyId::VetKd(_) => panic!("vetKD does not have pre-signatures"),
         };
         let context = SignWithThresholdContext {
-            request: RequestBuilder::new().build(),
+            request: Arc::new(RequestBuilder::new().build()),
             args,
             derivation_path: Arc::new(vec![]),
             batch_time: UNIX_EPOCH,

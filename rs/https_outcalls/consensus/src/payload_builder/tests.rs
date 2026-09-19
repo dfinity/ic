@@ -7821,10 +7821,10 @@ fn fully_replicated_contexts(
 
 pub(crate) fn request_context(replication: Replication) -> CanisterHttpRequestContext {
     CanisterHttpRequestContext {
-        request: RequestBuilder::default().build(),
+        request: std::sync::Arc::new(RequestBuilder::default().build()),
         url: "https://example.com".to_string(),
         max_response_bytes: None,
-        headers: vec![],
+        headers: std::sync::Arc::new(vec![]),
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: None,
@@ -7873,10 +7873,10 @@ fn flexible_request_context_with_allowance(
     per_replica_allowance: Cycles,
 ) -> CanisterHttpRequestContext {
     CanisterHttpRequestContext {
-        request: RequestBuilder::default().build(),
+        request: std::sync::Arc::new(RequestBuilder::default().build()),
         url: "https://example.com".to_string(),
         max_response_bytes: None,
-        headers: vec![],
+        headers: std::sync::Arc::new(vec![]),
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: None,
