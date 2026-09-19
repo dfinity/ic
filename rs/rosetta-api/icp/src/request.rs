@@ -1,6 +1,6 @@
 use crate::{
     convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
-    models::seconds::Seconds, request_types::*,
+    models::seconds::Seconds, request_types::*, signed_target::verify_signed_envelopes,
 };
 use candid::Decode;
 use ic_nns_governance_api::{
@@ -234,6 +234,15 @@ impl TryFrom<&models::Request> for Request {
 
     fn try_from(req: &models::Request) -> Result<Self, Self::Error> {
         let (request_type, calls) = req;
+
+        // The submit path reconstructs the same `Request` values that
+        // `/construction/parse` returns, and reports them back in the
+        // `/construction/submit` response, so it needs the same guarantee that
+        // the wrapper metadata matches the signed payload. It checks every
+        // envelope, because `do_request` broadcasts whichever one is currently
+        // valid rather than the first.
+        verify_signed_envelopes(request_type, calls)?;
+
         let payload: &models::EnvelopePair = calls
             .first()
             .ok_or_else(|| ApiError::invalid_request("No request payload provided."))?;
