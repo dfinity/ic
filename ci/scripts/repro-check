@@ -1429,8 +1429,9 @@ class ReproducibilityVerifier:
         """
         Obtains gh and checks the CDN checksum files' build provenance, BEFORE the local build is
         submitted: a substituted artifact that carries someone else's attestation must cost
-        seconds, not the hours the executor would then spend joining the build thread on the way
-        out. (One that carries none takes the warn path here and is left to the build; see
+        seconds, not the whole rebuild (about half an hour on CI hardware, longer on a laptop)
+        that the executor would otherwise sit through joining the build thread on the way out.
+        (One that carries none takes the warn path here and is left to the build; see
         provenance_verdict.)
 
         This is the single place where AttestationUnavailable is caught, which is why ensure_gh is
@@ -1482,7 +1483,7 @@ class ReproducibilityVerifier:
                 os.environ.pop(name, None)
 
     def warn_about_attestations(self, message: str) -> None:
-        """Warns now and again at the end, so a multi-hour run cannot bury the warning."""
+        """Warns now and again at the end, so the build output cannot bury the warning."""
         logger.warning(message)
         self.attestation_warnings.append(message)
 
@@ -1497,11 +1498,17 @@ class ReproducibilityVerifier:
         is needed. It is also all that is left of the check when the CDN served bytes nobody
         attested: the lookup is by digest and absence is not evidence, so up front those cannot be
         told from an unattested build and took the warn path before the build ran.
+
+        The confirmed verdict holds for a cached image reused without a current validator as well:
+        compare_cdn_hash bound every compared artifact to the fresh, attested SHA256SUMS before the
+        comparison, so what the local build was measured against is CI's whatever the CDN serves
+        now. Only the latter goes unobserved then, and its warning is repeated with the report.
         """
         if self.provenance_confirmed:
             return (
-                "The build provenance of the CDN checksum files was confirmed, so the CDN serves what CI built "
-                "for this commit: this is a reproducibility problem in the build, not a substituted artifact."
+                "The build provenance of the CDN checksum files was confirmed, and the artifacts compared here "
+                "match them, so they are what CI built for this commit: this is a reproducibility problem in the "
+                "build, not a substituted artifact."
             )
         return (
             "The build provenance of the CDN checksum files was NOT confirmed (see the warnings above), so this "
@@ -1836,10 +1843,10 @@ class ReproducibilityVerifier:
                 mismatches.append("Recovery-GuestOS update image")
 
         if mismatches:
-            if not self.provenance_confirmed:
-                # Repeated here because they decide how the mismatch is to be read, and the
-                # originals scrolled past before the build started.
-                self.log_attestation_warnings()
+            # Repeated here whatever the verdict: they decide how the mismatch is to be read, or
+            # say what this run did not observe (a cached image reused without a current
+            # validator), and the originals scrolled past before the build started.
+            self.log_attestation_warnings()
             raise VerificationError(
                 "The locally built artifacts do not match the remote CDN artifacts for: "
                 + ", ".join(mismatches)
@@ -1873,7 +1880,8 @@ class ReproducibilityVerifier:
 
             # Before the build is submitted, and after check_environment has installed git: on the
             # way out the executor joins whatever it is running, so a failure raised once the build
-            # is under way is reported in seconds but exits hours later.
+            # is under way is reported in seconds but exits only when the build is done (about half
+            # an hour on CI hardware, longer on a laptop).
             self.attestation_preflight(dirs, dry_run)
 
             build = self.download_executor.submit(self.build_locally, dirs)

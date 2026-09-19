@@ -347,8 +347,9 @@ class RunTest(unittest.TestCase):
             str(raised.exception),
             "The locally built artifacts do not match the remote CDN artifacts for: "
             "GuestOS update image, GuestOS launch measurements, SetupOS disk image.\n"
-            "The build provenance of the CDN checksum files was confirmed, so the CDN serves what CI built "
-            "for this commit: this is a reproducibility problem in the build, not a substituted artifact.",
+            "The build provenance of the CDN checksum files was confirmed, and the artifacts compared here "
+            "match them, so they are what CI built for this commit: this is a reproducibility problem in the "
+            "build, not a substituted artifact.",
         )
         # The artifacts after the first mismatch were still compared, and they matched.
         self.assertTrue(any("Verification successful for HostOS!" in line for line in logs.output), logs.output)
@@ -395,7 +396,7 @@ class RunTest(unittest.TestCase):
             verifier.run()
 
         self.assertIn("unexpected pipeline", str(raised.exception))
-        # The multi-hour build must not have been started for a substituted artifact.
+        # The build must not have been started for a substituted artifact.
         self.assertFalse(self.build_ran)
 
     def test_proposal_mode_accepts_the_release_entry_of_a_two_entry_list(self):
@@ -629,6 +630,32 @@ class RunTest(unittest.TestCase):
 
         self.assertIn("doesn't match the CDN sha256 sum", str(raised.exception))
 
+    def test_a_mismatch_against_an_unvalidated_cached_image_is_still_a_confirmed_verdict(self):
+        """
+        A cached image reused because the CDN's HEAD failed was still bound to the fresh, attested
+        SHA256SUMS before the comparison, so a local build that differs from it differs from what
+        CI built: the verdict stays "confirmed". What the run did not observe is what the CDN
+        serves now, and that warning is repeated with the report.
+        """
+        first = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        first.run()
+        mock.patch.stopall()
+
+        self.local_overrides = {"guestos/update/update-img.tar.zst": b"locally built guest-os image"}
+        second = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        mock.patch.object(repro_check, "fetch_url_validator", lambda url: None).start()
+
+        with self.assertLogs(repro_check.logger, level="WARNING") as logs, self.assertRaises(
+            repro_check.VerificationError
+        ) as raised:
+            second.run()
+
+        self.assertIn("was confirmed, and the artifacts compared here match them", str(raised.exception))
+        reused = [w for w in second.attestation_warnings if "Could not check whether" in w]
+        self.assertTrue(reused)
+        # Once when each image was reused, once more with the report.
+        self.assertEqual(sum("Could not check whether" in line for line in logs.output), 2 * len(reused))
+
     def test_a_transport_fault_in_the_attestation_api_only_warns(self):
         """
         http.client.HTTPException is neither OSError nor ValueError and urllib re-raises it
@@ -675,9 +702,9 @@ class RunTest(unittest.TestCase):
     def test_a_mismatch_without_confirmed_provenance_is_not_put_down_to_the_build(self):
         """
         Substituted bytes nobody attested take the warn path (the lookup is by digest, so up front
-        they look like an unattested build) and the local build catches them hours later. The
-        report must then say that the provenance was never confirmed, and repeat why, rather than
-        read like a reproducibility bug.
+        they look like an unattested build) and the local build catches them only once it has
+        finished. The report must then say that the provenance was never confirmed, and repeat
+        why, rather than read like a reproducibility bug.
         """
         self.local_overrides = {"guestos/update/update-img.tar.zst": b"what CI actually built"}
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
