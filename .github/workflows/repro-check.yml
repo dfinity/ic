@@ -68,9 +68,21 @@ jobs:
       - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
         if: ${{ github.event_name != 'pull_request' }}
+        env:
+          # The attestations REST endpoint the script reads is public; the token only lifts the
+          # anonymous rate limit of 60 requests/hour/IP, which runners behind a shared address can
+          # exhaust. No new permission is needed for it, and the run does not fail without it: an
+          # unreachable or rate-limited API only warns.
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
-          sudo -u ubuntu bash -c '
+          # sudo resets the environment, so GH_TOKEN has to be preserved explicitly.
+          #
+          # There is deliberately no way to switch the build-provenance check off from here. A
+          # commit whose attestations predate the signer change of #11569 is verified by
+          # dispatching this workflow on that commit's own ref: the script is fetched at
+          # github.sha, so the dispatched ref brings its own contemporaneous repro-check with it.
+          sudo --preserve-env=GH_TOKEN -u ubuntu bash -c '
             curl -fsSL https://raw.githubusercontent.com/dfinity/ic/${{ github.sha }}/ci/scripts/repro-check |
             python3 - -c ${{ inputs.github_sha }}
           '
