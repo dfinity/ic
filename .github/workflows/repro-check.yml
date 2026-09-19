@@ -78,18 +78,24 @@ jobs:
         env:
           # The attestations REST endpoint the script reads is public; the token only lifts the
           # anonymous rate limit of 60 requests/hour/IP, which runners behind a shared address can
-          # exhaust. No new permission is needed for it, and the run does not fail without it: an
-          # unreachable or rate-limited API only warns.
+          # exhaust. No new permission is needed for it, but it is load-bearing: an attestation
+          # that cannot be obtained, a rate limit included, fails the run.
           GH_TOKEN: ${{ github.token }}
+          # No attestations are minted outside dfinity/ic: the Attest steps of ci-main.yml are
+          # gated on github.repository == 'dfinity/ic', and a hotfix built on dfinity/ic-private is
+          # attested only once disclose-hotfix.yml publishes its branch here and Release Testing
+          # rebuilds it. github.repository is the repository this run belongs to, also inside a
+          # workflow_call, so on the mirror the check -- which could only ever fail there -- is
+          # switched off. On dfinity/ic it cannot be switched off from here.
+          ATTESTATION_ARGS: ${{ case(github.repository != 'dfinity/ic', '--skip-attestation-check', '') }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
-          # sudo resets the environment, so GH_TOKEN has to be preserved explicitly.
+          # sudo resets the environment, so the variables have to be preserved explicitly.
           #
-          # There is deliberately no way to switch the build-provenance check off from here. A
-          # commit whose attestations predate the signer change of #11569 is verified by
+          # A commit whose attestations predate the signer change of #11569 is verified by
           # dispatching this workflow on that commit's own ref: the script is fetched at
           # github.sha, so the dispatched ref brings its own contemporaneous repro-check with it.
-          sudo --preserve-env=GH_TOKEN -u ubuntu bash -c '
+          sudo --preserve-env=GH_TOKEN,ATTESTATION_ARGS -u ubuntu bash -c '
             curl -fsSL https://raw.githubusercontent.com/dfinity/ic/${{ github.sha }}/ci/scripts/repro-check |
-            python3 - -c ${{ inputs.github_sha }}
+            python3 - -c ${{ inputs.github_sha }} $ATTESTATION_ARGS
           '

@@ -181,8 +181,8 @@ class RunTest(unittest.TestCase):
         self.build_ran = False
         # Attestation stubs: what fetch_attestation_bundles / run_gh_attestation_verify do.
         self.bundles_error: Exception | None = None
-        # Digests for which GitHub holds no attestation, to test per-directory degradation.
-        self.unavailable_digests: set[str] = set()
+        # Digests for which GitHub holds no attestation.
+        self.unattested_digests: set[str] = set()
         self.gh_error: Exception | None = None
         self.entries_for: dict[str, list[dict]] = {}
         self.fetch_calls: list[str] = []
@@ -235,8 +235,8 @@ class RunTest(unittest.TestCase):
         self.fetch_calls.append(digest)
         if self.bundles_error is not None:
             raise self.bundles_error
-        if digest in self.unavailable_digests:
-            raise repro_check.AttestationUnavailable("GitHub holds no build-provenance attestation")
+        if digest in self.unattested_digests:
+            raise repro_check.VerificationError("GitHub holds no build-provenance attestation")
         return [{"stub": digest}]
 
     def fake_gh_verify(self, gh, sums_file, bundle_file, commit, config_dir) -> list[dict]:
@@ -256,6 +256,9 @@ class RunTest(unittest.TestCase):
         raise AssertionError(f"no SHA256SUMS in the fake CDN has digest {digest}")
 
     def fake_fetch(self, url: str, dest_path: Path) -> Path:
+        if url not in self.cdn:
+            # What fetch_url_to_file raises for a 404, so that the exit-2 path is exercised as is.
+            raise RuntimeError(f"Could not download {url} -> {dest_path}. Error: HTTP Error 404: Not Found")
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         dest_path.write_bytes(self.cdn[url])
         return dest_path
@@ -475,41 +478,40 @@ class RunTest(unittest.TestCase):
         self.assertEqual(len(self.gh_calls), 5)
         self.assertEqual(len(set(self.gh_calls)), 5)
 
-    def test_one_unattested_directory_does_not_hide_a_substitution_in_the_next(self):
+    def test_the_first_unverifiable_directory_stops_the_run(self):
         """
-        A 404 on one directory must not abort the loop: the remaining directories still have to be
-        checked, or an attacker could mask a substitution by making an earlier lookup fail.
+        Nothing after the first attestation that cannot be obtained is looked up, and the build
+        never starts: fail-first hides nothing, because nothing continues.
         """
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
         guest_digest = self.sums_digest("guest-os", "update-img")
         host_digest = self.sums_digest("host-os", "update-img")
-        self.unavailable_digests = {guest_digest}
-        # host-os is attested as some OTHER directory's SHA256SUMS: a cross-directory substitution.
+        self.unattested_digests = {guest_digest}
+        # host-os is attested as some OTHER directory's SHA256SUMS: a cross-directory substitution
+        # that a run continuing past guest-os would report; this one stops before it.
         self.entries_for = {host_digest: [gh_entry({f"ic/{GIT_HASH}/setup-os/disk-img/SHA256SUMS": host_digest})]}
 
         with self.assertRaises(repro_check.VerificationError) as raised:
             verifier.run()
 
-        self.assertIn("host-os/update-img/SHA256SUMS", str(raised.exception))
+        self.assertIn("guest-os/update-img/SHA256SUMS", str(raised.exception))
+        self.assertIn("no build-provenance attestation", str(raised.exception))
+        self.assertEqual(self.fetch_calls, [guest_digest])
+        self.assertEqual(self.gh_calls, [])
         self.assertFalse(self.build_ran)
 
-    def test_an_unreadable_gh_shape_degrades_only_that_directory(self):
-        """
-        select_attested_entry's AttestationUnavailable must be handled per directory too, or an
-        unrecognised gh shape on one directory would hide a substitution on the next.
-        """
+    def test_an_unreadable_gh_shape_aborts_the_run(self):
+        """A gh output this script cannot read stops the run, without claiming substitution."""
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
         guest_digest = self.sums_digest("guest-os", "update-img")
-        host_digest = self.sums_digest("host-os", "update-img")
-        self.entries_for = {
-            guest_digest: [{"someShapeThisScriptCannotRead": {}}],
-            host_digest: [gh_entry({f"ic/{GIT_HASH}/setup-os/disk-img/SHA256SUMS": host_digest})],
-        }
+        self.entries_for = {guest_digest: [{"someShapeThisScriptCannotRead": {}}]}
 
         with self.assertRaises(repro_check.VerificationError) as raised:
             verifier.run()
 
-        self.assertIn("host-os/update-img/SHA256SUMS", str(raised.exception))
+        self.assertIn("guest-os/update-img/SHA256SUMS", str(raised.exception))
+        self.assertIn("unrecognised", str(raised.exception))
+        self.assertNotIn("substitution", str(raised.exception))
         self.assertFalse(self.build_ran)
 
     def test_github_tokens_are_dropped_before_the_build_runs(self):
@@ -533,12 +535,14 @@ class RunTest(unittest.TestCase):
         self.assertIsNone(seen["GH_TOKEN"])
         self.assertIsNone(seen["GITHUB_TOKEN"])
 
-    def test_tokens_are_dropped_even_when_the_preflight_warns(self):
+    def test_tokens_are_dropped_even_when_the_preflight_aborts(self):
+        """The finally is the only thing between a credential and the build, on every path."""
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
-        verifier.ensure_gh = mock.Mock(side_effect=repro_check.AttestationUnavailable("no gh"))
+        verifier.ensure_gh = mock.Mock(side_effect=repro_check.VerificationError("no gh"))
 
         with mock.patch.dict(os.environ, {"GH_TOKEN": "secret"}):
-            verifier.run()
+            with self.assertRaises(repro_check.VerificationError):
+                verifier.run()
             self.assertNotIn("GH_TOKEN", os.environ)
 
     def test_sha256sums_are_fetched_fresh_rather_than_from_the_cache(self):
@@ -634,8 +638,7 @@ class RunTest(unittest.TestCase):
         """
         A cached image reused because the CDN's HEAD failed was still bound to the fresh, attested
         SHA256SUMS before the comparison, so a local build that differs from it differs from what
-        CI built: the verdict stays "confirmed". What the run did not observe is what the CDN
-        serves now, and that warning is repeated with the report.
+        CI built: the verdict stays "confirmed".
         """
         first = self.build_verifier(self.guestos_payload(MEASUREMENTS))
         first.run()
@@ -651,116 +654,117 @@ class RunTest(unittest.TestCase):
             second.run()
 
         self.assertIn("was confirmed, and the artifacts compared here match them", str(raised.exception))
-        reused = [w for w in second.attestation_warnings if "Could not check whether" in w]
-        self.assertTrue(reused)
-        # Once when each image was reused, once more with the report.
-        self.assertEqual(sum("Could not check whether" in line for line in logs.output), 2 * len(reused))
+        self.assertTrue(any("Could not check whether" in line for line in logs.output), logs.output)
 
-    def test_a_transport_fault_in_the_attestation_api_only_warns(self):
+    def test_a_transport_fault_in_the_attestation_api_aborts_cleanly(self):
         """
         http.client.HTTPException is neither OSError nor ValueError and urllib re-raises it
-        unwrapped, so a truncated response body or a captive portal used to abort the run with a
-        traceback before the authoritative local build had even started.
+        unwrapped: the abort must be a VerificationError with a message, not a traceback.
         """
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
         self.bundles_error = http.client.IncompleteRead(b"partial")
 
-        self.assert_warns_and_completes(verifier, "IncompleteRead")
+        self.assert_aborts_before_the_build(verifier, "IncompleteRead")
 
-    def test_an_unexpected_exception_in_the_preflight_only_warns(self):
-        """attestation_preflight promises that only VerificationError leaves it."""
+    def test_an_unexpected_exception_in_the_preflight_becomes_a_verification_error(self):
+        """attestation_preflight promises that only VerificationError and RuntimeError leave it."""
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
         verifier.ensure_gh = mock.Mock(side_effect=http.client.BadStatusLine("garbage"))
 
-        self.assert_warns_and_completes(verifier, "BadStatusLine")
+        self.assert_aborts_before_the_build(verifier, "BadStatusLine")
 
-    def test_a_download_failure_still_stops_the_run(self):
-        """The backstop must not swallow a CDN checksum file that cannot be fetched at all."""
+    def test_a_download_failure_still_stops_the_run_as_a_download_failure(self):
+        """The backstop must not rewrap a CDN checksum file that cannot be fetched: that is exit 2."""
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
         del self.cdn[cdn_url("guest-os", "update-img", "SHA256SUMS")]
 
-        with self.assertRaises(Exception) as raised:
+        with self.assertRaises(RuntimeError) as raised:
             verifier.run()
 
-        self.assertNotIsInstance(raised.exception, repro_check.AttestationUnavailable)
+        self.assertNotIsInstance(raised.exception, repro_check.VerificationError)
+        self.assertIn("Could not download", str(raised.exception))
+        self.assertFalse(self.build_ran)
 
-    # ---- the warn path: none of these may fail the run ----------------------
+    # ---- the abort path: none of these may start the build ------------------
 
-    def assert_warns_and_completes(self, verifier, needle: str):
-        with self.assertLogs(repro_check.logger, level="WARNING") as logs:
-            # Deliberately not assertRaises: an AttestationUnavailable escaping run() must fail.
-            verifier.run()
-        self.assertTrue(self.build_ran)
-        self.assertTrue(any(needle in line for line in logs.output), logs.output)
+    def assert_aborts_before_the_build(self, verifier, needle: str, *, dry_run: bool = False):
+        with self.assertRaises(repro_check.VerificationError) as raised:
+            verifier.run(dry_run=dry_run)
+        message = str(raised.exception)
+        self.assertIn(needle, message)
+        self.assertFalse(self.build_ran)
+        # The moment an attestation is missing is exactly when the bypass must not be suggested.
+        self.assertNotIn("--skip-attestation-check", message)
+        return raised.exception
 
-    def test_missing_attestation_only_warns(self):
+    def test_a_missing_attestation_aborts_before_the_build(self):
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
-        self.bundles_error = repro_check.AttestationUnavailable("GitHub holds no build-provenance attestation")
+        self.bundles_error = repro_check.VerificationError("GitHub holds no build-provenance attestation")
 
-        self.assert_warns_and_completes(verifier, "no build-provenance attestation")
+        self.assert_aborts_before_the_build(verifier, "no build-provenance attestation")
+        self.assertEqual(len(self.fetch_calls), 1)
+        self.assertEqual(self.gh_calls, [])
 
-    def test_a_mismatch_without_confirmed_provenance_is_not_put_down_to_the_build(self):
+    def test_the_abort_for_a_missing_attestation_does_not_name_the_bypass(self):
+        """The advice text, and the abort built from it, must both stay silent on the bypass."""
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        self.bundles_error = repro_check.VerificationError(
+            "GitHub holds no build-provenance attestation covering sha256:x.\n" + repro_check.NO_ATTESTATION_ADVICE
+        )
+
+        self.assert_aborts_before_the_build(verifier, "substituted checksum file")
+        self.assertNotIn("--skip-attestation-check", repro_check.NO_ATTESTATION_ADVICE)
+
+    def test_a_mismatch_with_the_check_skipped_is_not_put_down_to_the_build(self):
         """
-        Substituted bytes nobody attested take the warn path (the lookup is by digest, so up front
-        they look like an unattested build) and the local build catches them only once it has
-        finished. The report must then say that the provenance was never confirmed, and repeat
-        why, rather than read like a reproducibility bug.
+        With the check skipped the run cannot tell a reproducibility problem from a substituted
+        artifact, and its mismatch report must say so, naming the flag that caused it.
         """
         self.local_overrides = {"guestos/update/update-img.tar.zst": b"what CI actually built"}
-        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
-        self.bundles_error = repro_check.AttestationUnavailable("GitHub holds no build-provenance attestation")
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS), skip=True)
 
-        with self.assertLogs(repro_check.logger, level="WARNING") as logs, self.assertRaises(
-            repro_check.VerificationError
-        ) as raised:
+        with self.assertRaises(repro_check.VerificationError) as raised:
             verifier.run()
 
-        self.assertIn("was NOT confirmed", str(raised.exception))
+        self.assertIn("was NOT verified, because --skip-attestation-check was given", str(raised.exception))
         self.assertNotIn("reproducibility problem in the build, not", str(raised.exception))
-        # Once when it happened, once next to the mismatch it qualifies.
-        self.assertEqual(sum("Build provenance confirmed for 0 of" in line for line in logs.output), 2)
+        self.assertTrue(self.build_ran)
 
-    def test_rate_limited_api_only_warns(self):
+    def test_a_rate_limited_api_aborts_before_the_build(self):
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
-        self.bundles_error = repro_check.AttestationUnavailable("the GitHub API rate limit is exhausted")
+        self.bundles_error = repro_check.VerificationError("the GitHub API rate limit is exhausted")
 
-        self.assert_warns_and_completes(verifier, "rate limit is exhausted")
+        self.assert_aborts_before_the_build(verifier, "rate limit is exhausted")
 
-    def test_unreachable_api_only_warns(self):
+    def test_an_unreachable_api_aborts_before_the_build(self):
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
-        self.bundles_error = repro_check.AttestationUnavailable("could not reach the GitHub attestations API")
+        self.bundles_error = repro_check.VerificationError("could not reach the GitHub attestations API")
 
-        self.assert_warns_and_completes(verifier, "could not reach the GitHub attestations API")
+        self.assert_aborts_before_the_build(verifier, "could not reach the GitHub attestations API")
 
-    def test_failing_gh_bootstrap_only_warns(self):
-        """
-        Regression guard: ensure_gh runs outside verify_cdn_attestations, so its warn path must be
-        caught by the same handler rather than escaping as an uncaught exception.
-        """
+    def test_a_failing_gh_bootstrap_aborts_before_any_lookup(self):
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
-        verifier.ensure_gh = mock.Mock(side_effect=repro_check.AttestationUnavailable("could not download gh"))
+        verifier.ensure_gh = mock.Mock(side_effect=repro_check.VerificationError("could not download gh"))
 
-        self.assert_warns_and_completes(verifier, "could not download gh")
+        self.assert_aborts_before_the_build(verifier, "could not download gh")
         self.assertEqual(self.fetch_calls, [])
 
-    def test_failing_gh_bootstrap_only_warns_in_dry_run(self):
+    def test_a_failing_gh_bootstrap_fails_the_dry_run_too(self):
+        """The bootstrap is the one thing a PR's dry run rehearses; a broken pin must fail the PR."""
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
-        verifier.ensure_gh = mock.Mock(side_effect=repro_check.AttestationUnavailable("could not download gh"))
+        verifier.ensure_gh = mock.Mock(side_effect=repro_check.VerificationError("could not download gh"))
 
-        with self.assertLogs(repro_check.logger, level="WARNING") as logs:
-            verifier.run(dry_run=True)
+        self.assert_aborts_before_the_build(verifier, "could not download gh", dry_run=True)
+        self.assertEqual(self.fetch_calls, [])
 
-        self.assertTrue(self.build_ran)
-        self.assertTrue(any("could not download gh" in line for line in logs.output), logs.output)
-
-    def test_unusable_git_hash_only_warns(self):
+    def test_an_unusable_git_hash_aborts_before_the_build(self):
         verifier = self.build_verifier({}, proposal_id="", git_commit=GIT_HASH)
         verifier.git_hash = "abc"
         mock.patch.object(verifier, "decide_git_hash").start()
         # The CDN is keyed on the real hash; serve the same bytes for the truncated one.
         self.cdn.update({url.replace(GIT_HASH, "abc"): body for url, body in self.cdn.items()})
 
-        self.assert_warns_and_completes(verifier, "not a 40-character git commit id")
+        self.assert_aborts_before_the_build(verifier, "not a 40-character git commit id")
         self.assertEqual(self.fetch_calls, [])
 
 
@@ -838,13 +842,16 @@ class SelectAttestedEntryTest(unittest.TestCase):
         with self.assertRaises(repro_check.VerificationError):
             self.select([entry])
 
-    def test_an_unrecognised_json_shape_is_unavailable_not_evidence(self):
-        """A gh output this script cannot read is our problem, not evidence of substitution."""
-        with self.assertRaises(repro_check.AttestationUnavailable):
+    def test_an_unrecognised_json_shape_aborts_without_claiming_substitution(self):
+        """A gh output this script cannot read is our problem, and must not read as evidence."""
+        with self.assertRaises(repro_check.VerificationError) as raised:
             self.select([{"someNewShape": {}}])
 
+        self.assertIn("unrecognised", str(raised.exception))
+        self.assertNotIn("substitution", str(raised.exception))
+
     def test_malformed_entries_never_crash(self):
-        """Shape surprises must land in the AttestationUnavailable branch, not raise AttributeError."""
+        """Shape surprises must abort as a VerificationError, not raise AttributeError."""
         for entries in (
             [None],
             ["nope"],
@@ -852,7 +859,7 @@ class SelectAttestedEntryTest(unittest.TestCase):
             [{"verificationResult": {"signature": "oops"}}],
             [{"verificationResult": {"signature": {"certificate": "oops"}}}],
         ):
-            with self.subTest(entries=entries), self.assertRaises(repro_check.AttestationUnavailable):
+            with self.subTest(entries=entries), self.assertRaises(repro_check.VerificationError):
                 self.select(entries)
 
     def test_malformed_subjects_never_crash(self):
@@ -917,17 +924,23 @@ class FetchAttestationBundlesTest(unittest.TestCase):
 
         self.assertEqual(self.requests[0].get_header("Authorization"), "Bearer secret")
 
-    def test_404_is_unavailable_not_a_verification_error(self):
+    def test_404_means_no_attestation(self):
         self.serve(self.http_error(404))
 
-        with self.assertRaises(repro_check.AttestationUnavailable):
+        with self.assertRaises(repro_check.VerificationError) as raised:
             repro_check.fetch_attestation_bundles(self.DIGEST)
 
-    def test_empty_list_is_unavailable(self):
+        self.assertIn("holds no build-provenance attestation", str(raised.exception))
+        self.assertIn(repro_check.NO_ATTESTATION_ADVICE, str(raised.exception))
+        self.assertNotIn("--skip-attestation-check", str(raised.exception))
+
+    def test_an_empty_list_means_no_attestation(self):
         self.serve(self.page([]))
 
-        with self.assertRaises(repro_check.AttestationUnavailable):
+        with self.assertRaises(repro_check.VerificationError) as raised:
             repro_check.fetch_attestation_bundles(self.DIGEST)
+
+        self.assertIn("holds no build-provenance attestation", str(raised.exception))
 
     def test_retries_a_server_error(self):
         self.serve(self.http_error(503), self.page([{"a": 1}]))
@@ -938,7 +951,7 @@ class FetchAttestationBundlesTest(unittest.TestCase):
         err = urllib.error.URLError("no route to host")
         self.serve(err, err, err)
 
-        with self.assertRaises(repro_check.AttestationUnavailable) as raised:
+        with self.assertRaises(repro_check.VerificationError) as raised:
             repro_check.fetch_attestation_bundles(self.DIGEST)
 
         self.assertIn("could not reach", str(raised.exception))
@@ -946,7 +959,7 @@ class FetchAttestationBundlesTest(unittest.TestCase):
     def test_exhausted_rate_limit_names_gh_token_and_is_not_retried(self):
         self.serve(self.http_error(403, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1700000000"}))
 
-        with self.assertRaises(repro_check.AttestationUnavailable) as raised:
+        with self.assertRaises(repro_check.VerificationError) as raised:
             repro_check.fetch_attestation_bundles(self.DIGEST)
 
         self.assertIn("GH_TOKEN", str(raised.exception))
@@ -974,15 +987,10 @@ class FetchAttestationBundlesTest(unittest.TestCase):
         link = f'<{self.URL}&after=x>; rel="next"'
         self.serve(*[self.page([{"a": 1}], link=link) for _ in range(repro_check.ATTESTATION_MAX_PAGES)])
 
-        with self.assertRaises(repro_check.AttestationUnavailable) as raised:
+        with self.assertRaises(repro_check.VerificationError) as raised:
             repro_check.fetch_attestation_bundles(self.DIGEST)
 
         self.assertIn("refusing to page through them", str(raised.exception))
-
-    def test_unavailable_is_not_a_verification_error(self):
-        """The warn/fail split must not regress into 'everything fails' or 'everything warns'."""
-        self.assertFalse(issubclass(repro_check.AttestationUnavailable, repro_check.VerificationError))
-        self.assertFalse(issubclass(repro_check.AttestationUnavailable, RuntimeError))
 
 
 class EnsureGhTest(unittest.TestCase):
@@ -1025,17 +1033,12 @@ class EnsureGhTest(unittest.TestCase):
         mock.patch.object(self.verifier, "gh_version_output", lambda gh: version_output).start()
         return mock.patch.object(self.verifier, "download_gh", mock.Mock(return_value=Path("/downloaded/gh"))).start()
 
-    def test_uses_a_recent_path_gh_but_never_as_pinned(self):
-        """
-        Pinned means download_gh checked the archive hash. A PATH binary reporting the pinned
-        version, distro-patched (+dfsg1) or not, was never checked, so gh_verify keeps its retry.
-        """
+    def test_uses_a_recent_path_gh(self):
         for version in ("2.98.0", "2.98.0+dfsg1", "2.68.0"):
             with self.subTest(version=version):
                 download = self.use_path_gh("/usr/bin/gh", f"gh version {version} (2026-01-01)")
                 self.assertEqual(self.verifier.ensure_gh(self.dirs), Path("/usr/bin/gh"))
                 download.assert_not_called()
-                self.assertFalse(self.verifier.gh_is_pinned)
 
     def test_downloads_when_the_path_gh_is_unusable(self):
         cases = [
@@ -1083,7 +1086,6 @@ class EnsureGhTest(unittest.TestCase):
         gh_path = self.verifier.download_gh(self.dirs)
 
         self.assertEqual(gh_path, self.dirs.tmp_dir / "gh")
-        self.assertTrue(self.verifier.gh_is_pinned)
         self.assertTrue(os.access(gh_path, os.X_OK))
         # Only the member we asked for was written out.
         self.assertFalse((self.dirs.tmp_dir / f"gh_{repro_check.GH_CLI_VERSION}_linux_amd64").exists())
@@ -1093,19 +1095,19 @@ class EnsureGhTest(unittest.TestCase):
         payload = self.make_tarball(b"#!/bin/sh\ntrue\n")
         self.stub_download(payload)  # GH_CLI_SHA256 deliberately NOT patched.
 
-        with self.assertRaises(repro_check.AttestationUnavailable) as raised:
+        with self.assertRaises(repro_check.VerificationError) as raised:
             self.verifier.download_gh(self.dirs)
 
         self.assertIn("pinned sha256", str(raised.exception))
         self.assertFalse((self.dirs.tmp_dir / "gh").exists())
         self.assertFalse((self.verifier.cache_for_this_hash / "github.com" / "tools" / "gh_cli.tar.gz").exists())
 
-    def test_an_unrunnable_gh_is_unavailable_not_evidence(self):
+    def test_an_unrunnable_gh_aborts(self):
         payload = self.make_tarball(b"not an executable")
         self.stub_download(payload)
         mock.patch.object(repro_check, "GH_CLI_SHA256", sha256_hex(payload)).start()
 
-        with self.assertRaises(repro_check.AttestationUnavailable) as raised:
+        with self.assertRaises(repro_check.VerificationError) as raised:
             self.verifier.download_gh(self.dirs)
 
         self.assertIn("does not run", str(raised.exception))
@@ -1251,87 +1253,6 @@ class CacheRevalidationTest(unittest.TestCase):
         self.assertFalse(self.verifier.validator_path(cache_file).exists())
 
 
-class GhVerifyRetryTest(unittest.TestCase):
-    """
-    The evidence markers are calibrated against the pinned gh, but a PATH gh may be any release
-    >= 2.68. An unclassifiable failure from an unpinned gh must be redone with the pinned one, or
-    a real mismatch would silently degrade to a warning.
-    """
-
-    def setUp(self):
-        self.tmp_dir = Path(tempfile.mkdtemp())
-        self.addCleanup(shutil.rmtree, self.tmp_dir, True)
-        self.addCleanup(mock.patch.stopall)
-        self.verifier = repro_check.ReproducibilityVerifier(
-            verify_guestos=True,
-            verify_hostos=False,
-            verify_setupos=False,
-            verify_recovery=False,
-            proposal_id="",
-            git_commit=GIT_HASH,
-            download_source_mode="systems",
-            base_cache_dir=self.tmp_dir / "cache",
-            clean_base_cache_dir=False,
-            keep_temp=False,
-        )
-        self.addCleanup(self.verifier.download_executor.shutdown)
-        self.verifier.git_hash = GIT_HASH
-        self.dirs = repro_check.Dirs(self.tmp_dir, self.tmp_dir, self.tmp_dir, self.tmp_dir, self.tmp_dir)
-        self.calls = []
-
-    def stub_verify(self, *outcomes):
-        queue = list(outcomes)
-
-        def verify(gh, sums_file, bundle_file, commit, config_dir):
-            self.calls.append(str(gh))
-            outcome = queue.pop(0)
-            if isinstance(outcome, Exception):
-                raise outcome
-            return outcome
-
-        mock.patch.object(repro_check, "run_gh_attestation_verify", verify).start()
-
-    def call(self):
-        return self.verifier.gh_verify(self.dirs, self.tmp_dir / "s", self.tmp_dir / "b", self.tmp_dir / "cfg")
-
-    def test_an_unpinned_gh_that_cannot_be_classified_is_redone_with_the_pinned_one(self):
-        self.verifier.gh, self.verifier.gh_is_pinned = Path("/usr/bin/gh"), False
-        self.stub_verify(
-            repro_check.AttestationUnavailable("unrecognised failure"),
-            repro_check.VerificationError("expected SourceRepositoryDigest to be ..."),
-        )
-        mock.patch.object(self.verifier, "download_gh", mock.Mock(return_value=Path("/tmp/pinned/gh"))).start()
-
-        with self.assertRaises(repro_check.VerificationError):
-            self.call()
-
-        self.assertEqual(self.calls, ["/usr/bin/gh", "/tmp/pinned/gh"])
-        self.assertTrue(self.verifier.gh_is_pinned)
-
-    def test_the_pinned_gh_is_not_retried(self):
-        self.verifier.gh, self.verifier.gh_is_pinned = Path("/tmp/pinned/gh"), True
-        self.stub_verify(repro_check.AttestationUnavailable("sigstore is down"))
-        download = mock.patch.object(self.verifier, "download_gh", mock.Mock()).start()
-
-        with self.assertRaises(repro_check.AttestationUnavailable):
-            self.call()
-
-        self.assertEqual(len(self.calls), 1)
-        download.assert_not_called()
-
-    def test_a_verification_error_from_an_unpinned_gh_is_not_retried(self):
-        """It was classified as evidence; re-running would only cost a download."""
-        self.verifier.gh, self.verifier.gh_is_pinned = Path("/usr/bin/gh"), False
-        self.stub_verify(repro_check.VerificationError("verifying with issuer"))
-        download = mock.patch.object(self.verifier, "download_gh", mock.Mock()).start()
-
-        with self.assertRaises(repro_check.VerificationError):
-            self.call()
-
-        self.assertEqual(len(self.calls), 1)
-        download.assert_not_called()
-
-
 class GhArgvTest(unittest.TestCase):
     """The gh invocation is positional and load-bearing; pin it so a reorder cannot slip through."""
 
@@ -1424,69 +1345,62 @@ class RunGhAttestationVerifyTest(unittest.TestCase):
         self.assertEqual(self.verify(), [{"verificationResult": {}}])
 
     # The stderr strings below are verbatim output of the pinned gh 2.98.0, captured by running it
-    # against the real rc bundles of 2967c1cc9b. Do not paraphrase them: an earlier version of this
-    # test invented plausible-looking text, which kept the suite green while every real Sigstore
-    # outage hard-failed. Re-capture them when bumping GH_CLI_VERSION.
+    # against the real rc bundles of 2967c1cc9b, and kept as documentation of what a verifier will
+    # see: a wrong --source-digest, a tampered file or a non-matching signer, a Sigstore setup
+    # failure, an empty bundle. Every one of them aborts, and the message quotes gh and gives both
+    # readings, since gh has no exit code separating "failed to verify" from "could not be set up".
 
-    def test_a_wrong_source_digest_is_evidence(self):
-        """The message gh prints when the bytes are attested, but for a different commit."""
-        self.stub_run(
-            1,
-            stderr=(
+    def test_a_non_zero_exit_aborts_with_ghs_own_words(self):
+        cases = [
+            (
                 "\x1b[31mError: expected SourceRepositoryDigest to be "
                 "0000000000000000000000000000000000000000, got 2967c1cc9ba88fd85f196a09d05ea941bbabe830\x1b[0m"
             ),
-        )
+            'Error: verifying with issuer "sigstore.dev"',
+            "error creating Sigstore verifier: no valid Sigstore verifiers could be initialized",
+            "Error: bundle content could not be parsed: provided bundle file is empty",
+        ]
+        for stderr in cases:
+            with self.subTest(stderr=stderr):
+                self.stub_run(1, stderr=stderr)
+
+                with self.assertRaises(repro_check.VerificationError) as raised:
+                    self.verify()
+
+                message = str(raised.exception)
+                self.assertIn(repro_check.sanitize_output(stderr), message)
+                self.assertNotIn("\x1b", message)
+                # Both readings, for the reader to match against gh's words.
+                self.assertIn("Sigstore verifiers could be initialized", message)
+                self.assertIn("SourceRepositoryDigest", message)
+                self.assertNotIn("--skip-attestation-check", message)
+
+    def test_a_gh_that_cannot_be_executed_aborts(self):
+        mock.patch.object(repro_check.subprocess, "run", mock.Mock(side_effect=OSError("noexec"))).start()
 
         with self.assertRaises(repro_check.VerificationError) as raised:
             self.verify()
 
-        self.assertIn("expected SourceRepositoryDigest to be", str(raised.exception))
-        self.assertNotIn("\x1b", str(raised.exception))
+        self.assertIn("could not run", str(raised.exception))
 
-    def test_a_failed_signature_check_is_evidence(self):
-        """The message gh prints when the file was tampered with, or no bundle carries the signer."""
-        self.stub_run(1, stderr='Error: verifying with issuer "sigstore.dev"')
+    def test_unparseable_output_aborts(self):
+        self.stub_run(0, stdout="not json")
 
         with self.assertRaises(repro_check.VerificationError):
             self.verify()
 
-    def test_a_sigstore_init_failure_is_unavailable_not_evidence(self):
-        """No bundle was ever examined: tuf-repo-cdn.sigstore.dev is unreachable, or its cache is."""
-        self.stub_run(1, stderr="error creating Sigstore verifier: no valid Sigstore verifiers could be initialized")
-
-        with self.assertRaises(repro_check.AttestationUnavailable):
-            self.verify()
-
-    def test_an_unrecognised_gh_failure_defaults_to_unavailable(self):
-        """
-        The default has to be "not evidence": the local build still catches a substitution, so a gh
-        message this script does not know must not block the run.
-        """
-        self.stub_run(1, stderr="Error: bundle content could not be parsed: provided bundle file is empty")
-
-        with self.assertRaises(repro_check.AttestationUnavailable):
-            self.verify()
-
-    def test_unparseable_output_is_unavailable(self):
-        self.stub_run(0, stdout="not json")
-
-        with self.assertRaises(repro_check.AttestationUnavailable):
-            self.verify()
-
-    def test_a_non_list_or_non_object_shape_is_unavailable(self):
+    def test_a_non_list_or_non_object_shape_aborts(self):
         for stdout in ('{"verificationResult": {}}', "[null]", '["nope"]', "[1]"):
             with self.subTest(stdout=stdout):
                 self.stub_run(0, stdout=stdout)
-                with self.assertRaises(repro_check.AttestationUnavailable):
+                with self.assertRaises(repro_check.VerificationError):
                     self.verify()
 
 
 class NetworkTimeoutTest(unittest.TestCase):
     """
     Every urlopen must be bounded. Without a timeout a connection that is accepted and then
-    stalls hangs the run forever, and in particular the gh bootstrap never reaches the handler
-    that degrades it to a warning, so the authoritative local build never starts.
+    stalls hangs the run forever instead of failing it.
     """
 
     def setUp(self):
@@ -1513,12 +1427,12 @@ class NetworkTimeoutTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             try:
                 repro_check.fetch_attestation_bundles("e" * 64)
-            except repro_check.AttestationUnavailable:
+            except repro_check.VerificationError:
                 pass
         self.assertEqual(self.timeouts, [repro_check.NETWORK_TIMEOUT_SECONDS])
 
-    def test_a_stalled_download_of_gh_degrades_to_a_warning(self):
-        """A timeout during the gh bootstrap must warn, not hang and not abort."""
+    def test_a_stalled_download_of_gh_aborts_rather_than_hangs(self):
+        """A timeout during the gh bootstrap must fail the run, not hang it."""
         verifier = repro_check.ReproducibilityVerifier(
             verify_guestos=True,
             verify_hostos=False,
@@ -1537,10 +1451,35 @@ class NetworkTimeoutTest(unittest.TestCase):
         dirs = repro_check.Dirs(self.tmp_dir, self.tmp_dir, self.tmp_dir, self.tmp_dir, self.tmp_dir)
         mock.patch.object(repro_check, "fetch_url_to_file", mock.Mock(side_effect=RuntimeError("timed out"))).start()
 
-        with self.assertRaises(repro_check.AttestationUnavailable) as raised:
+        with self.assertRaises(repro_check.VerificationError) as raised:
             verifier.download_gh(dirs)
 
         self.assertIn("timed out", str(raised.exception))
+
+
+class MainExitCodeTest(unittest.TestCase):
+    """An attestation that cannot be obtained exits like a mismatch; a download failure as before."""
+
+    def setUp(self):
+        self.addCleanup(mock.patch.stopall)
+        self.tmp_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp_dir, True)
+        argv = ["repro-check", "-c", GIT_HASH, "--cache-dir", str(self.tmp_dir)]
+        mock.patch.object(repro_check.sys, "argv", argv).start()
+        # conventional_logging replaces the root handlers, which would silence the test runner.
+        mock.patch.object(repro_check, "conventional_logging").start()
+
+    def exit_code_for(self, error: Exception) -> int:
+        mock.patch.object(repro_check.ReproducibilityVerifier, "run", mock.Mock(side_effect=error)).start()
+        with self.assertRaises(SystemExit) as raised:
+            repro_check.main()
+        return raised.exception.code
+
+    def test_an_unobtainable_attestation_exits_1_like_a_mismatch(self):
+        self.assertEqual(self.exit_code_for(repro_check.VerificationError("GitHub holds no attestation")), 1)
+
+    def test_a_download_failure_exits_2(self):
+        self.assertEqual(self.exit_code_for(RuntimeError("Could not download")), 2)
 
 
 class InterruptedDownloadTest(unittest.TestCase):

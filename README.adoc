@@ -111,15 +111,17 @@ The Internet Computer provides a robust system for verifying the build reproduci
   with `--download-source network` or `both`), `ic-api.internetcomputer.org`
   (for `-p`), `github.com`, `raw.githubusercontent.com`,
   `release-assets.githubusercontent.com`, `api.github.com` and
-  `tuf-repo-cdn.sigstore.dev`
+  `tuf-repo-cdn.sigstore.dev` (all of them required: the run aborts when the
+  attestation of a CDN checksum file cannot be fetched and verified)
 * The GitHub CLI `gh` (version 2.68 or higher) is used if it is installed;
   otherwise a checksum-pinned `gh` is downloaded, kept in the download cache
   and unpacked into the run's temporary directory. A snap-installed `gh` is
   bypassed in favour of the download, because snap confinement prevents it
   from reading a `--cache-dir` outside `$HOME`. *No GitHub account or login is
-  needed.* Setting `GH_TOKEN` to any GitHub token is optional and only makes
-  the run use your own API quota instead of the anonymous one (60 requests per
-  hour per IP address).
+  needed.* Setting `GH_TOKEN` to any GitHub token is optional: it makes the
+  run use your own API quota instead of the anonymous one (60 requests per
+  hour per IP address; a run normally needs at most eight), which matters
+  behind a shared address because an exhausted quota aborts the run.
 
 === Quick Start
 
@@ -163,27 +165,20 @@ trusting GitHub's runners at all. The attestation is there to tell two very
 different failures apart: if the rebuild does not match the CDN but the
 attestation does verify, the build is not reproducible (a bug); if the
 attestation does not verify, the CDN is not serving what CI built (an
-incident). The report of a mismatching rebuild therefore ends by saying
-whether the provenance of the CDN files was confirmed.
+incident). The mismatch report of a rebuild therefore always says that the
+provenance of the CDN files was confirmed, unless the check was skipped.
 
-Consequently:
-
-* An attestation that *does not match* aborts the run, within seconds and
-  before the build starts. This is what a substituted file that carries
-  someone else's attestation — another commit's or another directory's
-  checksum file — runs into.
-* An attestation that *cannot be obtained* only prints a warning, and the
-  verification continues to the local build. This covers GitHub or Sigstore
-  being unreachable, the API rate limit being exhausted, a commit built before
-  attestations were introduced, and a security hotfix built on the private
-  `dfinity/ic-private` repository: those builds are not attested, and the
-  commit gains an attestation only once its `hotfix-*` branch is published to
-  `dfinity/ic` and rebuilt there. It also covers a substituted file that
-  nobody attested at all: attestations are looked up by the file's digest, so
-  up front such a file cannot be told from an unattested build. The local
-  build catches it at the end, and the mismatch report then states that the
-  provenance was never confirmed, so that the mismatch is not taken for a
-  reproducibility bug.
+Consequently, any attestation that does not verify aborts the run within
+seconds, before the build starts — whether it *mismatches* (a substituted file
+carrying someone else's attestation: another commit's or another directory's
+checksum file) or *cannot be obtained* at all (bytes nobody attested, a commit
+built before attestations were introduced on 2026-08-31, a security hotfix
+still private on `dfinity/ic-private`, GitHub or Sigstore unreachable, the API
+rate limit exhausted). Attestations are looked up by the file's digest, so from
+here a substituted file nobody attested looks exactly like an unattested build;
+the run stops rather than rebuild against bytes whose provenance it cannot
+establish. A hotfix built on `dfinity/ic-private` gains its attestation once
+its `hotfix-*` branch is published to `dfinity/ic` and rebuilt there.
 
 The checksum files and launch measurements are always fetched fresh rather
 than read from the download cache, and before a cached image is reused it is
@@ -199,11 +194,11 @@ cached copy was created by a version of this script that did not record the
 information the comparison needs. Pass `--clean`, or use a fresh
 `--cache-dir`, for a verification that reads nothing from the cache at all.
 
-`--skip-attestation-check` turns the check off entirely. It is a developer
-escape hatch and should never be used when verifying an NNS proposal. It is
-also not the way around an outage, since an unreachable attestation already
-only warns; and verifying an older release is done by running that release's
-own version of the script, as described above, not by disabling the check.
+`--skip-attestation-check` turns the check off. DFINITY's own CI passes it on
+the private `dfinity/ic-private` repository, where no attestations are minted.
+Never use it when verifying an NNS proposal: a release predating the check is
+verified with that release's own version of this script, as described above,
+which has no check to skip.
 
 === Component-Specific Verification
 
