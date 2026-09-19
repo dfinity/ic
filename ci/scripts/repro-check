@@ -334,6 +334,11 @@ def compute_sha256(file_path: Path) -> str:
     return sha.hexdigest()
 
 
+# Applies per socket operation, not to the whole transfer, so a slow but progressing multi-GB
+# download is unaffected while a connection that accepts and then stalls cannot hang the run
+# forever. Without it the gh bootstrap could never reach its "degrade to a warning" handler.
+NETWORK_TIMEOUT_SECONDS = 60
+
 progress_hidden: collections.deque[None] = collections.deque()
 interrupted = False
 
@@ -389,7 +394,7 @@ def fetch_url_to_file(url: str, dest_path: Path) -> Path:
 
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "ReproducibilityVerifier/1.0"})
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=NETWORK_TIMEOUT_SECONDS) as response:
             try:
                 length: int | None = int(response.headers["Content-Length"])
             except (IndexError, KeyError, ValueError):
@@ -510,7 +515,7 @@ def get_attestations_page(url: str, token: str | None, token_var: str | None) ->
     last_error = "unknown error"
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(attestations_request(url, token), timeout=60) as response:
+            with urllib.request.urlopen(attestations_request(url, token), timeout=NETWORK_TIMEOUT_SECONDS) as response:
                 payload = json.loads(response.read().decode("utf-8"))
                 if not isinstance(payload, dict):
                     # Caught below with the other ValueErrors, i.e. retried and then warned about.
@@ -724,9 +729,10 @@ def fetch_url_validator(url: str) -> dict[str, str] | None:
     """
     request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "ReproducibilityVerifier/1.0"})
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=NETWORK_TIMEOUT_SECONDS) as response:
             headers = response.headers
-            validator = {name: headers[name] for name in ("ETag", "Last-Modified", "Content-Length") if headers[name]}
+            names = ("ETag", "Last-Modified", "Content-Length")
+            validator = {name: headers.get(name) for name in names if headers.get(name)}
     except (urllib.error.URLError, OSError, ValueError) as e:
         logger.debug(f"Could not HEAD {url}: {e}")
         return None
@@ -1111,7 +1117,7 @@ class ReproducibilityVerifier:
         logger.debug(f"Fetching proposal {proposal_url}")
         try:
             req = urllib.request.Request(proposal_url, headers={"User-Agent": "ReproducibilityVerifier/1.0"})
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, timeout=NETWORK_TIMEOUT_SECONDS) as resp:
                 if not (200 <= resp.status < 300):
                     raise RuntimeError(f"Could not fetch proposal {self.proposal_id}, HTTP code {resp.status}")
                 data = resp.read()

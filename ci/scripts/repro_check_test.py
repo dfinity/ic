@@ -213,7 +213,9 @@ class RunTest(unittest.TestCase):
         self.addCleanup(verifier.download_executor.shutdown)
 
         proposal = json.dumps({"payload": payload}).encode()
-        mock.patch.object(repro_check.urllib.request, "urlopen", lambda req: FakeResponse(proposal)).start()
+        mock.patch.object(
+            repro_check.urllib.request, "urlopen", lambda req, timeout=None: FakeResponse(proposal)
+        ).start()
         mock.patch.object(repro_check, "fetch_url_to_file", self.fake_fetch).start()
         mock.patch.object(repro_check, "fetch_url_validator", self.fake_validator).start()
         mock.patch.object(repro_check, "fetch_attestation_bundles", self.fake_fetch_bundles).start()
@@ -607,7 +609,9 @@ class RunTest(unittest.TestCase):
         )
         self.addCleanup(second.download_executor.shutdown)
         proposal = json.dumps({"payload": self.guestos_payload(MEASUREMENTS)}).encode()
-        mock.patch.object(repro_check.urllib.request, "urlopen", lambda req: FakeResponse(proposal)).start()
+        mock.patch.object(
+            repro_check.urllib.request, "urlopen", lambda req, timeout=None: FakeResponse(proposal)
+        ).start()
         mock.patch.object(repro_check, "fetch_url_to_file", self.fake_fetch).start()
         mock.patch.object(repro_check, "fetch_url_validator", self.fake_validator).start()
         mock.patch.object(repro_check, "fetch_attestation_bundles", self.fake_fetch_bundles).start()
@@ -1241,6 +1245,67 @@ class RunGhAttestationVerifyTest(unittest.TestCase):
                     self.verify()
 
 
+class NetworkTimeoutTest(unittest.TestCase):
+    """
+    Every urlopen must be bounded. Without a timeout a connection that is accepted and then
+    stalls hangs the run forever, and in particular the gh bootstrap never reaches the handler
+    that degrades it to a warning, so the authoritative local build never starts.
+    """
+
+    def setUp(self):
+        self.addCleanup(mock.patch.stopall)
+        self.tmp_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp_dir, True)
+        self.timeouts = []
+
+        def fake_urlopen(req, timeout=None):
+            self.timeouts.append(timeout)
+            return FakeResponse(b'{"payload": {}}')
+
+        mock.patch.object(repro_check.urllib.request, "urlopen", fake_urlopen).start()
+
+    def test_downloads_are_bounded(self):
+        repro_check.fetch_url_to_file("https://example.com/x", self.tmp_dir / "x")
+        self.assertEqual(self.timeouts, [repro_check.NETWORK_TIMEOUT_SECONDS])
+
+    def test_the_validator_head_is_bounded(self):
+        repro_check.fetch_url_validator("https://example.com/x")
+        self.assertEqual(self.timeouts, [repro_check.NETWORK_TIMEOUT_SECONDS])
+
+    def test_the_attestations_api_is_bounded(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            try:
+                repro_check.fetch_attestation_bundles("e" * 64)
+            except repro_check.AttestationUnavailable:
+                pass
+        self.assertEqual(self.timeouts, [repro_check.NETWORK_TIMEOUT_SECONDS])
+
+    def test_a_stalled_download_of_gh_degrades_to_a_warning(self):
+        """A timeout during the gh bootstrap must warn, not hang and not abort."""
+        verifier = repro_check.ReproducibilityVerifier(
+            verify_guestos=True,
+            verify_hostos=False,
+            verify_setupos=False,
+            verify_recovery=False,
+            proposal_id="",
+            git_commit=GIT_HASH,
+            download_source_mode="systems",
+            base_cache_dir=self.tmp_dir / "cache",
+            clean_base_cache_dir=False,
+            keep_temp=False,
+        )
+        self.addCleanup(verifier.download_executor.shutdown)
+        verifier.git_hash = GIT_HASH
+        verifier.init_cache()
+        dirs = repro_check.Dirs(self.tmp_dir, self.tmp_dir, self.tmp_dir, self.tmp_dir, self.tmp_dir)
+        mock.patch.object(repro_check, "fetch_url_to_file", mock.Mock(side_effect=RuntimeError("timed out"))).start()
+
+        with self.assertRaises(repro_check.AttestationUnavailable) as raised:
+            verifier.download_gh(dirs)
+
+        self.assertIn("timed out", str(raised.exception))
+
+
 class InterruptedDownloadTest(unittest.TestCase):
     """An interrupted multi-GB download must abort rather than return a bogus path."""
 
@@ -1256,7 +1321,9 @@ class InterruptedDownloadTest(unittest.TestCase):
                 repro_check.interrupted = True
                 return b"x" * 1024
 
-        mock.patch.object(repro_check.urllib.request, "urlopen", lambda req: SlowResponse(b"x" * 4096)).start()
+        mock.patch.object(
+            repro_check.urllib.request, "urlopen", lambda req, timeout=None: SlowResponse(b"x" * 4096)
+        ).start()
 
         with self.assertRaises(RuntimeError) as raised:
             repro_check.fetch_url_to_file("https://example.com/img", self.tmp_dir / "img")
