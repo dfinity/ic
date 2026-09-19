@@ -163,19 +163,27 @@ trusting GitHub's runners at all. The attestation is there to tell two very
 different failures apart: if the rebuild does not match the CDN but the
 attestation does verify, the build is not reproducible (a bug); if the
 attestation does not verify, the CDN is not serving what CI built (an
-incident). It also catches the second case within seconds instead of after a
-multi-hour build.
+incident). The report of a mismatching rebuild therefore ends by saying
+whether the provenance of the CDN files was confirmed.
 
 Consequently:
 
-* An attestation that *does not match* aborts the run.
+* An attestation that *does not match* aborts the run, within seconds and
+  before the build starts. This is what a substituted file that carries
+  someone else's attestation — another commit's or another directory's
+  checksum file — runs into.
 * An attestation that *cannot be obtained* only prints a warning, and the
   verification continues to the local build. This covers GitHub or Sigstore
   being unreachable, the API rate limit being exhausted, a commit built before
   attestations were introduced, and a security hotfix built on the private
   `dfinity/ic-private` repository: those builds are not attested, and the
   commit gains an attestation only once its `hotfix-*` branch is published to
-  `dfinity/ic` and rebuilt there.
+  `dfinity/ic` and rebuilt there. It also covers a substituted file that
+  nobody attested at all: attestations are looked up by the file's digest, so
+  up front such a file cannot be told from an unattested build. The local
+  build catches it at the end, and the mismatch report then states that the
+  provenance was never confirmed, so that the mismatch is not taken for a
+  reproducibility bug.
 
 The checksum files and launch measurements are always fetched fresh rather
 than read from the download cache, and before a cached image is reused it is

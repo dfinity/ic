@@ -346,7 +346,9 @@ class RunTest(unittest.TestCase):
         self.assertEqual(
             str(raised.exception),
             "The locally built artifacts do not match the remote CDN artifacts for: "
-            "GuestOS update image, GuestOS launch measurements, SetupOS disk image",
+            "GuestOS update image, GuestOS launch measurements, SetupOS disk image.\n"
+            "The build provenance of the CDN checksum files was confirmed, so the CDN serves what CI built "
+            "for this commit: this is a reproducibility problem in the build, not a substituted artifact.",
         )
         # The artifacts after the first mismatch were still compared, and they matched.
         self.assertTrue(any("Verification successful for HostOS!" in line for line in logs.output), logs.output)
@@ -670,6 +672,27 @@ class RunTest(unittest.TestCase):
 
         self.assert_warns_and_completes(verifier, "no build-provenance attestation")
 
+    def test_a_mismatch_without_confirmed_provenance_is_not_put_down_to_the_build(self):
+        """
+        Substituted bytes nobody attested take the warn path (the lookup is by digest, so up front
+        they look like an unattested build) and the local build catches them hours later. The
+        report must then say that the provenance was never confirmed, and repeat why, rather than
+        read like a reproducibility bug.
+        """
+        self.local_overrides = {"guestos/update/update-img.tar.zst": b"what CI actually built"}
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        self.bundles_error = repro_check.AttestationUnavailable("GitHub holds no build-provenance attestation")
+
+        with self.assertLogs(repro_check.logger, level="WARNING") as logs, self.assertRaises(
+            repro_check.VerificationError
+        ) as raised:
+            verifier.run()
+
+        self.assertIn("was NOT confirmed", str(raised.exception))
+        self.assertNotIn("reproducibility problem in the build, not", str(raised.exception))
+        # Once when it happened, once next to the mismatch it qualifies.
+        self.assertEqual(sum("Build provenance confirmed for 0 of" in line for line in logs.output), 2)
+
     def test_rate_limited_api_only_warns(self):
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
         self.bundles_error = repro_check.AttestationUnavailable("the GitHub API rate limit is exhausted")
@@ -975,12 +998,17 @@ class EnsureGhTest(unittest.TestCase):
         mock.patch.object(self.verifier, "gh_version_output", lambda gh: version_output).start()
         return mock.patch.object(self.verifier, "download_gh", mock.Mock(return_value=Path("/downloaded/gh"))).start()
 
-    def test_uses_a_recent_path_gh(self):
-        for version in ("2.98.0", "2.68.0"):
+    def test_uses_a_recent_path_gh_but_never_as_pinned(self):
+        """
+        Pinned means download_gh checked the archive hash. A PATH binary reporting the pinned
+        version, distro-patched (+dfsg1) or not, was never checked, so gh_verify keeps its retry.
+        """
+        for version in ("2.98.0", "2.98.0+dfsg1", "2.68.0"):
             with self.subTest(version=version):
                 download = self.use_path_gh("/usr/bin/gh", f"gh version {version} (2026-01-01)")
                 self.assertEqual(self.verifier.ensure_gh(self.dirs), Path("/usr/bin/gh"))
                 download.assert_not_called()
+                self.assertFalse(self.verifier.gh_is_pinned)
 
     def test_downloads_when_the_path_gh_is_unusable(self):
         cases = [
@@ -1028,6 +1056,7 @@ class EnsureGhTest(unittest.TestCase):
         gh_path = self.verifier.download_gh(self.dirs)
 
         self.assertEqual(gh_path, self.dirs.tmp_dir / "gh")
+        self.assertTrue(self.verifier.gh_is_pinned)
         self.assertTrue(os.access(gh_path, os.X_OK))
         # Only the member we asked for was written out.
         self.assertFalse((self.dirs.tmp_dir / f"gh_{repro_check.GH_CLI_VERSION}_linux_amd64").exists())
@@ -1119,26 +1148,80 @@ class CacheRevalidationTest(unittest.TestCase):
 
         self.assertTrue(any("Could not check whether" in line for line in logs.output), logs.output)
 
-    def test_the_validator_is_recorded_before_the_download(self):
+    def cache_path(self, url: str, os_type: str) -> Path:
+        """Where cached_download keeps the file for a URL."""
+        self.verifier.git_hash = GIT_HASH
+        self.verifier.init_cache()
+        netloc = url.split("://", 1)[1].split("/", 1)[0]
+        return self.verifier.cache_for_this_hash / netloc / os_type / url.rsplit("/", 1)[1]
+
+    def download(self, url: str = "https://cdn/img", os_type: str = "guest-os") -> Path:
+        return self.verifier.cached_download(url, self.tmp_dir / "out" / url.rsplit("/", 1)[1], os_type)
+
+    def test_the_validator_is_sampled_before_the_download_and_recorded_after_it(self):
         """
         Sampled after the GET it could describe an object the CDN began serving during the
-        download, blessing bytes this run never had.
+        download, blessing bytes this run never had. Recorded before the GET it would outlive a
+        failed one (next test).
         """
+        record = self.verifier.validator_path(self.cache_path("https://cdn/img", "guest-os"))
         order = []
         mock.patch.object(
             repro_check, "fetch_url_validator", lambda url: order.append("head") or {"ETag": '"a"'}
         ).start()
-        mock.patch.object(
-            repro_check,
-            "fetch_url_to_file",
-            lambda url, dest: order.append("get") or dest.write_bytes(b"x") or dest,
-        ).start()
-        self.verifier.git_hash = GIT_HASH
-        self.verifier.init_cache()
 
-        self.verifier.cached_download("https://cdn/img", self.tmp_dir / "out" / "img", "guest-os")
+        def get(url, dest):
+            order.append("get" if not record.exists() else "get, with the record already written")
+            dest.write_bytes(b"x")
+            return dest
+
+        mock.patch.object(repro_check, "fetch_url_to_file", get).start()
+
+        self.download()
 
         self.assertEqual(order, ["head", "get"])
+        self.assertEqual(json.loads(record.read_text()), {"ETag": '"a"'})
+
+    def test_a_failed_redownload_leaves_neither_the_stale_bytes_nor_a_record_behind(self):
+        """
+        The CDN changed and the replacement download failed. The previous bytes must not stay in
+        the cache under the CDN's new validator (the next run would take them for current), nor
+        without one (cached_copy_is_current would adopt them).
+        """
+        cache_file = self.cache_path("https://cdn/img", "guest-os")
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_bytes(b"previous image")
+        self.stub_validator({"ETag": '"a"'})
+        self.verifier.record_cache_validator("https://cdn/img", cache_file)
+        self.stub_validator({"ETag": '"b"'})
+        mock.patch.object(
+            repro_check, "fetch_url_to_file", mock.Mock(side_effect=RuntimeError("connection reset"))
+        ).start()
+
+        with self.assertRaises(RuntimeError):
+            self.download()
+
+        self.assertFalse(cache_file.exists())
+        self.assertFalse(self.verifier.validator_path(cache_file).exists())
+
+    def test_a_download_without_a_validator_drops_the_previous_record(self):
+        """An old record next to new bytes would turn the next run's HEAD comparison into noise."""
+        cache_file = self.cache_path("https://cdn/img", "guest-os")
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_bytes(b"")  # An empty cached file counts as a miss.
+        self.verifier.write_cache_validator(cache_file, {"ETag": '"a"'})
+        self.stub_validator(None)
+
+        def get(url, dest):
+            dest.write_bytes(b"x")
+            return dest
+
+        mock.patch.object(repro_check, "fetch_url_to_file", get).start()
+
+        self.download()
+
+        self.assertEqual(cache_file.read_bytes(), b"x")
+        self.assertFalse(self.verifier.validator_path(cache_file).exists())
 
 
 class GhVerifyRetryTest(unittest.TestCase):

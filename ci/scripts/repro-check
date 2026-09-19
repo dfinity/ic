@@ -204,11 +204,13 @@ GH_CLI_MIN_VERSION = (2, 68, 0)
 # Why a missing attestation is not an accusation. Shown with every warning, because the reader of
 # a proposal verification should not have to guess whether they are looking at an incident.
 ATTESTATION_UNAVAILABLE_ADVICE = (
-    "This is not evidence that the artifacts were tampered with. A commit built before PR #11323 "
-    "(2026-08-31) has no attestation; neither has a security hotfix built on the private "
-    "dfinity/ic-private repository, until its hotfix-* branch is published to dfinity/ic and "
-    "rebuilt there; and GitHub or Sigstore may simply be unreachable.\n"
-    "The local build below remains the authoritative check."
+    "By itself this is not evidence of tampering: a commit built before PR #11323 (2026-08-31) has "
+    "no attestation; neither has a security hotfix built on the private dfinity/ic-private "
+    "repository, until its hotfix-* branch is published to dfinity/ic and rebuilt there; and GitHub "
+    "or Sigstore may simply be unreachable.\n"
+    "A substituted file looks the same from here, though, since nobody attested its bytes either. "
+    "The local build below remains the authoritative check, and a mismatch there must then not be "
+    "put down to the build."
 )
 
 GH_VERIFICATION_FAILED_MARKERS = (
@@ -883,6 +885,9 @@ class ReproducibilityVerifier:
         # API call, while a sums file attested for directory A can never pass at directory B.
         self.attested: dict[tuple[str, str], dict] = {}
         self.attestation_warnings: list[str] = []
+        # True once every CDN checksum file of this run has verified; decides how a mismatch of
+        # the local build is to be read (provenance_verdict).
+        self.provenance_confirmed = False
         self.gh: Path | None = None
         # Whether self.gh is the pinned release whose failure messages gh_verify can classify.
         self.gh_is_pinned = False
@@ -1035,13 +1040,19 @@ class ReproducibilityVerifier:
     def validator_path(self, cache_file: Path) -> Path:
         return cache_file.with_name(cache_file.name + ".validator")
 
+    def write_cache_validator(self, cache_file: Path, validator: dict[str, str] | None) -> None:
+        """Stores what the CDN served for a cached file, or drops the record when nothing is known."""
+        path = self.validator_path(cache_file)
+        if validator:
+            path.write_text(json.dumps(validator), encoding="utf-8")
+        else:
+            path.unlink(missing_ok=True)
+
     def record_cache_validator(self, url: str, cache_file: Path) -> bool:
         """Records what the CDN currently serves for a URL. False when it could not be obtained."""
         validator = fetch_url_validator(url)
-        if not validator:
-            return False
-        self.validator_path(cache_file).write_text(json.dumps(validator), encoding="utf-8")
-        return True
+        self.write_cache_validator(cache_file, validator)
+        return bool(validator)
 
     def cached_copy_is_current(self, url: str, cache_file: Path) -> bool:
         """
@@ -1101,12 +1112,19 @@ class ReproducibilityVerifier:
             logger.debug(f"File already cached, skipping download: {url}")
         else:
             logger.debug(f"Cache miss, downloading: {url}")
-            # Before the GET, not after: a validator sampled afterwards can describe an object
-            # the CDN began serving *during* the download, blessing bytes this run never had.
-            # Sampled before, a change during the download leaves a validator that no longer
+            # Sampled before the GET, not after: sampled afterwards, a validator can describe an
+            # object the CDN began serving *during* the download, blessing bytes this run never
+            # had. Sampled before, a change during the download leaves a validator that no longer
             # matches, so the next run re-downloads and the sums comparison surfaces it.
-            self.record_cache_validator(url, cache_file)
+            validator = fetch_url_validator(url)
+            # But recorded only once the download has succeeded, with the previous copy and its
+            # record gone first. Recorded earlier, a failed GET would leave the previous bytes in
+            # the cache under the CDN's new validator, and the next run would take them for
+            # current; left behind without a record, cached_copy_is_current would adopt them.
+            self.write_cache_validator(cache_file, None)
+            cache_file.unlink(missing_ok=True)
             fetch_url_to_file(url, cache_file)
+            self.write_cache_validator(cache_file, validator)
 
         target_file.parent.mkdir(parents=True, exist_ok=True)
         if target_file.exists():
@@ -1324,8 +1342,12 @@ class ReproducibilityVerifier:
                     f"(gh {format_version(GH_CLI_MIN_VERSION)}); downloading the pinned gh {GH_CLI_VERSION}."
                 )
             else:
+                # Not pinned even when it reports GH_CLI_VERSION: pinned means download_gh checked
+                # the archive against GH_CLI_SHA256. A distro build (2.98.0+dfsg1) or any other
+                # binary of that version may carry patches that reword the failure messages
+                # GH_VERIFICATION_FAILED_MARKERS was calibrated against, and gh_verify redoes an
+                # unclassifiable failure with the pinned download for exactly that reason.
                 logger.info(f"Using gh {format_version(version)} from PATH ({gh_on_path}).")
-                self.gh_is_pinned = version == parse_gh_version(f"gh version {GH_CLI_VERSION}")
                 return Path(gh_on_path)
         return self.download_gh(dirs)
 
@@ -1406,8 +1428,10 @@ class ReproducibilityVerifier:
     def attestation_preflight(self, dirs: Dirs, dry_run: bool) -> None:
         """
         Obtains gh and checks the CDN checksum files' build provenance, BEFORE the local build is
-        submitted: a substituted artifact must cost seconds, not the hours the executor would then
-        spend joining the build thread on the way out.
+        submitted: a substituted artifact that carries someone else's attestation must cost
+        seconds, not the hours the executor would then spend joining the build thread on the way
+        out. (One that carries none takes the warn path here and is left to the build; see
+        provenance_verdict.)
 
         This is the single place where AttestationUnavailable is caught, which is why ensure_gh is
         called from here rather than from run(): everything that is not positive evidence of
@@ -1465,6 +1489,25 @@ class ReproducibilityVerifier:
     def log_attestation_warnings(self) -> None:
         for message in self.attestation_warnings:
             logger.warning(message)
+
+    def provenance_verdict(self) -> str:
+        """
+        How a mismatch between the local build and the CDN is to be read, for the report that
+        raises it. This is the disambiguation the attestation check exists for, delivered where it
+        is needed. It is also all that is left of the check when the CDN served bytes nobody
+        attested: the lookup is by digest and absence is not evidence, so up front those cannot be
+        told from an unattested build and took the warn path before the build ran.
+        """
+        if self.provenance_confirmed:
+            return (
+                "The build provenance of the CDN checksum files was confirmed, so the CDN serves what CI built "
+                "for this commit: this is a reproducibility problem in the build, not a substituted artifact."
+            )
+        return (
+            "The build provenance of the CDN checksum files was NOT confirmed (see the warnings above), so this "
+            "run cannot tell a reproducibility problem in the build from a substituted artifact. Do not put the "
+            "mismatch down to the build until the provenance has been confirmed."
+        )
 
     def verify_cdn_attestations(self, dirs: Dirs) -> None:
         """
@@ -1530,6 +1573,7 @@ class ReproducibilityVerifier:
                 f"{unavailable} could not be confirmed either way.\n" + ATTESTATION_UNAVAILABLE_ADVICE
             )
         else:
+            self.provenance_confirmed = True
             logger.info(
                 f"Build provenance confirmed: {confirmed} CDN checksum file(s) were produced by a dfinity/ic CI "
                 f"build of commit {self.git_hash} matching this run's accepted pipelines."
@@ -1792,8 +1836,15 @@ class ReproducibilityVerifier:
                 mismatches.append("Recovery-GuestOS update image")
 
         if mismatches:
+            if not self.provenance_confirmed:
+                # Repeated here because they decide how the mismatch is to be read, and the
+                # originals scrolled past before the build started.
+                self.log_attestation_warnings()
             raise VerificationError(
-                "The locally built artifacts do not match the remote CDN artifacts for: " + ", ".join(mismatches)
+                "The locally built artifacts do not match the remote CDN artifacts for: "
+                + ", ".join(mismatches)
+                + ".\n"
+                + self.provenance_verdict()
             )
 
     # --------------------------------------------------------------------------
