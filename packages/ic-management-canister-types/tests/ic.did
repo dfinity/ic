@@ -500,7 +500,7 @@ type subnet_metrics_args = record {
 // This API is EXPERIMENTAL and may evolve in a non-backward-compatible way.
 //
 // Only `block_height` is current as of the block in which the call is executed.
-// The other four fields are read from the subnet's aggregated metrics, which the
+// The other five fields are read from the subnet's aggregated metrics, which the
 // replica updates at the *end* of a round, so they describe the state as of an
 // earlier block; see the individual fields.
 type subnet_metrics_result = record {
@@ -523,6 +523,15 @@ type subnet_metrics_result = record {
     // number of messages executed in replicated mode, as of the end of the
     // previous round.
     update_transactions_total : nat;
+    // Total instructions the subnet accounted for across the execution phases of
+    // all rounds, as of the end of the previous round, counted in units of one
+    // million and rounded up: a value of 42 means 42 million instructions.
+    // Covers both executed Wasm and the fixed per-execution and per-canister
+    // scheduler overheads plus non-Wasm charges (compilation, chunk assembly,
+    // snapshots), so it is not a Wasm instruction meter. Unlike the fields
+    // above, it has no counterpart under /subnet/<subnet_id>/metrics in the
+    // certified state.
+    million_round_instructions_total : nat;
 };
 
 type subnet_info_args = record {
