@@ -205,8 +205,8 @@ pub trait SubnetRegistry {
         version: RegistryVersion,
     ) -> RegistryClientResult<Vec<(SubnetId, SubnetRecord)>>;
 
-    /// Get the necessary material to construct a genesis/recovery CUP for the
-    /// given subnet
+    /// Get the necessary material to construct a genesis/recovery/post-split CUP
+    /// for the given subnet
     fn get_cup_contents(
         &self,
         subnet_id: SubnetId,

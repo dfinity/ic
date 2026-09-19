@@ -158,7 +158,7 @@ impl RegistryHelper {
             ))
     }
 
-    /// Return the genesis cup at the given registry version for this node
+    /// Return the genesis/recovery CUP at the given registry version for this node
     pub(crate) fn get_registry_cup(
         &self,
         version: RegistryVersion,
