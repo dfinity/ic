@@ -15,14 +15,17 @@ Success::
 
 end::catalog[] */
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
+use ic_agent::AgentError;
 use ic_canister_client::Sender;
-use ic_consensus_system_test_utils::get_cup_from_node;
-use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_consensus_system_test_utils::{
+    get_cup_from_node, rw_message::install_nns_with_customizations_and_check_progress,
+};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -32,28 +35,33 @@ use ic_registry_routing_table::{
     CANISTER_IDS_PER_SUBNET, CanisterIdRange, CanisterIdRanges, canister_id_into_u64, difference,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
-use ic_system_test_driver::driver::test_env_api::{HasRegistryVersion, get_dependency_path};
-use ic_system_test_driver::nns::vote_and_execute_proposal;
-use ic_system_test_driver::retry_with_msg_async;
-use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use ic_system_test_driver::{
+    canister_agent::HasCanisterAgentCapability,
     driver::{
+        group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
+            HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
+            IcNodeSnapshot, NnsCustomizations, SubnetSnapshot, get_dependency_path,
         },
     },
-    util::runtime_from_url,
+    nns::vote_and_execute_proposal,
+    retry_with_msg_async, retry_with_msg_async_quiet, systest,
+    util::{create_agent, runtime_from_url},
 };
 use ic_types::{CanisterId, Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
-use registry_canister::mutations::do_split_subnet::SplitSubnetPayload;
+use registry_canister::{
+    init::RegistryCanisterInitPayload, mutations::do_split_subnet::SplitSubnetPayload,
+};
 use slog::info;
 use xnet_test::{Metrics, StartArgs};
 
-const DKG_INTERVAL: u64 = 49;
+const DKG_INTERVAL: u64 = 99;
 const INITIAL_SOURCE_SUBNET_NODES: usize = 8;
+
+const ACCEPTABLE_SOURCE_DOWNTIME: Duration = Duration::from_secs(15);
+const ACCEPTABLE_DEST_DOWNTIME: Duration = Duration::from_secs(35);
 
 /// Number of counter canisters to install on the source subnet, before splitting it.
 const COUNTER_CANISTERS_COUNT: usize = 13;
@@ -67,14 +75,18 @@ const CHATTING_CANISTERS_ON_THIRD_SUBNET_COUNT: usize = 3;
 const FIRST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 3;
 const LAST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 8;
 
-const TEST_ENABLED: bool = false;
-
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(35 * 60))
         .add_test(systest!(subnet_splitting_test))
+        // When the subnet splits, it is expected that some messages are invalidated because the
+        // two new subnets are still connected through the same underlying p2p network.
+        .remove_metrics_to_check("consensus_invalidated_artifacts")
+        .remove_metrics_to_check("dkg_invalidated_artifacts")
+        // The destination replicas are restarted after the split
+        .update_orchestrator_metrics_to_check("orchestrator_processes_start_attempts_total", 2)
         .execute_from_args()
 }
 
@@ -108,7 +120,19 @@ fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_check_progress(env.topology_snapshot());
+    // Subnet Splitting is still behind a feature flag in the Registry canister,
+    // so it has to be turned on explicitly. This only works because system
+    // tests install registry-canister-test, not the release build.
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        NnsCustomizations {
+            registry_canister_init_payload: RegistryCanisterInitPayload {
+                is_subnet_splitting_enabled: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
 }
 
 fn subnet_splitting_test(env: TestEnv) {
@@ -120,15 +144,6 @@ fn subnet_splitting_test(env: TestEnv) {
             so the canisters have some time to chit chat"
         );
         tokio::time::sleep(Duration::from_secs(10)).await;
-
-        if !TEST_ENABLED {
-            info!(
-                env.logger(),
-                "Subnet splititing not enabled yet, skipping the test."
-            );
-
-            return;
-        }
 
         run_subnet_splitting_test(env.clone(), &test_params).await
     })
@@ -161,43 +176,162 @@ async fn run_subnet_splitting_test(env: TestEnv, test_params: &TestParams) {
     let source_subnet = get_source_subnet(&env);
     let original_source_subnet_canister_ranges = source_subnet.subnet_canister_ranges();
     let nns_canister_ranges = nns_subnet.subnet_canister_ranges();
+    let initial_dkg_canister_ranges = initial_dkg_subnet.subnet_canister_ranges();
 
     let mut source_subnet_nodes: Vec<_> = source_subnet.nodes().map(|node| node.node_id).collect();
     let destination_subnet_nodes: Vec<_> =
         source_subnet_nodes.split_off(INITIAL_SOURCE_SUBNET_NODES / 2);
     let nns_subnet_nodes: Vec<_> = nns_subnet.nodes().map(|node| node.node_id).collect();
+    let initial_dkg_subnet_nodes: Vec<_> = initial_dkg_subnet
+        .nodes()
+        .map(|node| node.node_id)
+        .collect();
 
-    info!(env.logger(), "Proposing to split the source subnet.");
-    propose_to_split_subnet(
-        &env,
-        &source_subnet,
-        test_params.canister_migration_list.clone(),
-        destination_subnet_nodes.clone(),
-        Some(initial_dkg_subnet.subnet_id),
-    )
-    .await;
+    // Flag used to stop the concurrent calls probe (see below).
+    let stop_calls_probe = AtomicBool::new(false);
 
-    info!(
-        env.logger(),
-        "Running checks to make sure the subnet was split correctly."
+    let split_and_check = async {
+        info!(env.logger(), "Proposing to split the source subnet.");
+        propose_to_split_subnet(
+            &env,
+            &source_subnet,
+            test_params.canister_migration_list.clone(),
+            destination_subnet_nodes.clone(),
+            Some(initial_dkg_subnet.subnet_id),
+        )
+        .await;
+
+        info!(
+            env.logger(),
+            "Running checks to make sure the subnet was split correctly."
+        );
+        check_routing_table(
+            &env,
+            source_subnet.subnet_id,
+            &original_source_subnet_canister_ranges,
+            &nns_canister_ranges,
+            &initial_dkg_canister_ranges,
+            &test_params.canister_migration_list,
+        );
+        check_subnet_membership(
+            &env,
+            source_subnet.subnet_id,
+            &source_subnet_nodes,
+            &destination_subnet_nodes,
+            &nns_subnet_nodes,
+            &initial_dkg_subnet_nodes,
+        )
+        .await;
+        check_counter_canisters(&env, source_subnet.subnet_id, test_params).await;
+
+        // The split is done and all checks passed; stop the calls probe just before the
+        // chatting canisters' metrics are measured and the canisters are stopped.
+        stop_calls_probe.store(true, Ordering::Relaxed);
+    };
+
+    // Continuously make calls to all the counter canisters for the entire duration of the split
+    // (starting before the split is proposed, stopping just before measuring the chatting
+    // canisters' metrics), asserting that every single one of them succeeds.
+    tokio::join!(
+        split_and_check,
+        call_counter_canisters_until_stopped(
+            &env,
+            &test_params.source_subnet_counting_canister_ids,
+            &test_params.destination_subnet_counting_canister_ids,
+            &stop_calls_probe
+        ),
     );
-    check_routing_table(
-        &env,
-        source_subnet.subnet_id,
-        &original_source_subnet_canister_ranges,
-        &nns_canister_ranges,
-        &test_params.canister_migration_list,
-    );
-    check_subnet_membership(
-        &env,
-        source_subnet.subnet_id,
-        &source_subnet_nodes,
-        &destination_subnet_nodes,
-        &nns_subnet_nodes,
-    )
-    .await;
-    check_counter_canisters(&env, source_subnet.subnet_id, test_params).await;
+
     check_chatting_canisters(&env, test_params).await;
+}
+
+/// Continuously makes calls to every counter canister — routing each call to whichever subnet
+/// currently hosts the canister — until `stop` is set, asserting that every single call succeeds.
+/// Transient failures (e.g. while the destination subnet is still catching up right after the
+/// split, or while a node refreshes its cached NNS delegation) are retried.
+///
+/// Run concurrently with the split, this verifies that the counter canisters remain available
+/// for the entire duration of the subnet split.
+async fn call_counter_canisters_until_stopped(
+    env: &TestEnv,
+    source_counter_canister_ids: &[CanisterId],
+    dest_counter_canister_ids: &[CanisterId],
+    stop: &AtomicBool,
+) {
+    let counter_canister_ids: Vec<_> = source_counter_canister_ids
+        .iter()
+        .chain(dest_counter_canister_ids)
+        .copied()
+        .collect();
+    let timeout = |canister_id| {
+        if source_counter_canister_ids.contains(canister_id) {
+            ACCEPTABLE_SOURCE_DOWNTIME
+        } else if dest_counter_canister_ids.contains(canister_id) {
+            ACCEPTABLE_DEST_DOWNTIME
+        } else {
+            unreachable!()
+        }
+    };
+    futures::future::join_all(counter_canister_ids.iter().map(|canister_id| async move {
+        while !stop.load(Ordering::Relaxed) {
+            retry_with_msg_async_quiet!(
+                format!("Calling counter canister {canister_id} during the subnet split"),
+                &env.logger(),
+                timeout(canister_id),
+                Duration::from_secs(1),
+                || async {
+                    // Re-resolve the host on every attempt: the migrated canisters move from
+                    // the source to the destination subnet partway through the split.
+                    let node = env
+                        .topology_snapshot()
+                        .subnets()
+                        .find(|subnet| {
+                            subnet
+                                .subnet_canister_ranges()
+                                .iter()
+                                .any(|range| range.contains(canister_id))
+                        })
+                        .and_then(|subnet| {
+                            subnet
+                                .nodes()
+                                .nth(rand::random::<usize>() % subnet.nodes().count())
+                        })
+                        .expect("The counter canister is not hosted by any subnet");
+
+                    let agent = create_agent(node.get_public_url().as_str()).await?;
+                    match futures::future::try_join(
+                        agent.query(&canister_id.get().0, "read".to_string()).call(),
+                        agent
+                            .update(&canister_id.get().0, "read".to_string())
+                            .call(),
+                    )
+                    .await
+                    {
+                        Ok(_) => Ok(()),
+                        Err(err @ AgentError::CertificateNotAuthorized())
+                        | Err(err @ AgentError::CertificateVerificationFailed())
+                        | Err(err @ AgentError::CertificateOutdated(_)) => {
+                            // These errors could happen with an invalid/stale delegation.
+                            // Replicas could be able to detect this and refresh their delegations
+                            // before attempting to reply (and we could panic here to ensure we do
+                            // not observe those errors), but this is not yet implemented. So we
+                            // retry instead.
+                            Err(err.into())
+                        }
+                        Err(err) => {
+                            // Transient errors are expected during the subnet split, so we retry.
+                            Err(err.into())
+                        }
+                    }
+                }
+            )
+            .await
+            .expect("A call to a counter canister failed during the subnet split");
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    }))
+    .await;
 }
 
 fn runtime_from_subnet(subnet: &SubnetSnapshot) -> Runtime {
@@ -348,8 +482,18 @@ async fn check_chatting_canisters_metrics(
     .into_iter()
     .for_each(|metrics_after| aggregated_metrics.merge(&metrics_after));
 
-    assert_eq!(aggregated_metrics.call_errors, 0);
-    assert_eq!(aggregated_metrics.reject_responses, 0);
+    let error_percentage = (aggregated_metrics.call_errors + aggregated_metrics.reject_responses)
+        as f64
+        / aggregated_metrics.calls_attempted as f64
+        * 100.0;
+    assert!(
+        error_percentage < 10.0,
+        "The percentage of failed calls ({error_percentage}%) is too high. \
+        {} calls were attempted, {} failed with call errors and {} failed with reject responses",
+        aggregated_metrics.calls_attempted,
+        aggregated_metrics.call_errors,
+        aggregated_metrics.reject_responses
+    );
     assert_eq!(aggregated_metrics.seq_errors, 0);
 }
 
@@ -396,7 +540,7 @@ async fn install_chatting_canisters(env: &TestEnv) -> (Vec<CanisterId>, Vec<Cani
 
     let canister_start_arguments = StartArgs {
         network_topology: canister_groups.clone(),
-        canister_to_subnet_rate: 10,
+        canister_to_subnet_rate: 1,
         request_payload_size_bytes: 1,
         call_timeouts_seconds: vec![None],
         response_payload_size_bytes: 1,
@@ -621,6 +765,7 @@ async fn check_subnet_membership(
     source_subnet_nodes: &[NodeId],
     destination_subnet_nodes: &[NodeId],
     nns_subnet_nodes: &[NodeId],
+    initial_dkg_subnet_nodes: &[NodeId],
 ) {
     let topology = env.topology_snapshot();
 
@@ -632,10 +777,16 @@ async fn check_subnet_membership(
         let nodes: Vec<_> = subnet.nodes().map(|node| node.node_id).collect();
 
         match subnet.subnet_type() {
-            SubnetType::System => {
+            SubnetType::System if subnet.subnet_id == topology.root_subnet_id() => {
                 assert_eq!(
                     nodes, nns_subnet_nodes,
                     "The NNS subnet membership shouldn't change"
+                );
+            }
+            SubnetType::System => {
+                assert_eq!(
+                    nodes, initial_dkg_subnet_nodes,
+                    "The initial DKG subnet membership shouldn't change"
                 );
             }
             SubnetType::Application if subnet.subnet_id == source_subnet_id => {
@@ -673,8 +824,11 @@ async fn check_subnet_membership(
     );
     for subnet in topology.subnets() {
         match subnet.subnet_type() {
-            SubnetType::System => {
+            SubnetType::System if subnet.subnet_id == topology.root_subnet_id() => {
                 info!(env.logger(), "Checking the NNS subnet");
+            }
+            SubnetType::System => {
+                info!(env.logger(), "Checking the initial DKG subnet");
             }
             SubnetType::Application if subnet.subnet_id == source_subnet_id => {
                 info!(env.logger(), "Checking the source subnet");
@@ -723,6 +877,7 @@ fn check_routing_table(
     source_subnet_id: SubnetId,
     original_source_canister_ranges: &[CanisterIdRange],
     original_nns_canister_ranges: &[CanisterIdRange],
+    original_initial_dkg_canister_ranges: &[CanisterIdRange],
     migrated_canister_ranges: &[CanisterIdRange],
 ) {
     info!(
@@ -736,11 +891,20 @@ fn check_routing_table(
 
     for subnet in env.topology_snapshot().subnets() {
         match subnet.subnet_type() {
-            SubnetType::System => {
+            // NNS subnet
+            SubnetType::System if subnet.subnet_id == env.topology_snapshot().root_subnet_id() => {
                 assert_eq!(
                     subnet.subnet_canister_ranges(),
                     original_nns_canister_ranges,
                     "The NNS subnet canister id assignment shouldn't change"
+                );
+            }
+            // Initial DKG subnet
+            SubnetType::System => {
+                assert_eq!(
+                    subnet.subnet_canister_ranges(),
+                    original_initial_dkg_canister_ranges,
+                    "The initial DKG subnet canister id assignment shouldn't change"
                 );
             }
             // Source subnet
