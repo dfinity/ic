@@ -705,12 +705,25 @@ def select_attested_entry(
 # ------------------------------------------------------------------------------
 # ARGUMENT PARSING
 # ------------------------------------------------------------------------------
+def strong_etag(validator: object) -> str | None:
+    """
+    The strong ETag among a set of cache validators, or None. Only a strong ETag confirms that an
+    object is unchanged: a weak one (W/"...") promises semantic equivalence, and Content-Length
+    with Last-Modified cannot tell a same-sized replacement within the same second apart.
+    """
+    etag = validator.get("ETag") if isinstance(validator, dict) else None
+    if isinstance(etag, str) and etag and etag[:2].upper() != "W/":
+        return etag
+    return None
+
+
 def fetch_url_validator(url: str) -> dict[str, str] | None:
     """
-    The CDN's cache validators for a URL, via a HEAD request, or None when they cannot be obtained.
+    The CDN's cache validators for a URL, via a HEAD request, or None when they cannot be obtained
+    or carry no strong ETag, in which case a cached copy is never reused.
 
-    download.dfinity.systems serves a stable ETag per object, alongside Last-Modified and
-    Content-Length, which is enough to notice that an object changed since it was cached.
+    download.dfinity.systems (S3 behind CloudFront) serves a strong ETag per object, alongside
+    Last-Modified and Content-Length; all three are recorded and must be unchanged.
     """
     request = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "ReproducibilityVerifier/1.0"})
     try:
@@ -721,7 +734,10 @@ def fetch_url_validator(url: str) -> dict[str, str] | None:
     except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:
         logger.debug(f"Could not HEAD {url}: {e}")
         return None
-    return validator or None
+    if strong_etag(validator) is None:
+        logger.debug(f"{url} is served without a strong ETag, so a cached copy of it cannot be confirmed.")
+        return None
+    return validator
 
 
 def parse_args() -> argparse.Namespace:
@@ -1025,9 +1041,10 @@ class ReproducibilityVerifier:
 
     def cached_copy_is_current(self, url: str, cache_file: Path) -> bool:
         """
-        Whether the CDN confirms that it still serves the bytes that were cached for this URL.
-        Anything else counts as a cache miss, so a rerun always speaks about what the CDN serves
-        now.
+        Whether the CDN confirms that it still serves the bytes that were cached for this URL: a
+        HEAD must return the strong ETag, Last-Modified and Content-Length recorded when the copy
+        was downloaded. Anything else counts as a cache miss, so a rerun always speaks about what
+        the CDN serves now.
 
         Artifacts under ic/<commit>/ are immutable by policy, so a change is an incident rather
         than routine. Without this check a rerun would re-verify the previous run's bytes and
@@ -1044,6 +1061,12 @@ class ReproducibilityVerifier:
         try:
             recorded = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
+            return False
+        if strong_etag(recorded) is None:
+            # Recorded by a version of this script that also accepted weaker validators.
+            logger.debug(
+                f"The record of what the CDN served for the cached {url} has no strong ETag; downloading it again."
+            )
             return False
         current = fetch_url_validator(url)
         if current is None:

@@ -1115,6 +1115,36 @@ class EnsureGhTest(unittest.TestCase):
         self.assertIn("does not run", str(raised.exception))
 
 
+class FetchUrlValidatorTest(unittest.TestCase):
+    """
+    Only a strong ETag confirms a cached copy. Content-Length and Last-Modified cannot tell a
+    same-sized replacement within the same second apart, and a weak ETag promises only semantic
+    equivalence, so without a strong ETag there is no validator and the copy is downloaded again.
+    """
+
+    ETAG = '"98545880a7fb2e166110260376c9a202-78"'
+    MODIFIED = "Fri, 18 Sep 2026 15:50:01 GMT"
+
+    def setUp(self):
+        self.addCleanup(mock.patch.stopall)
+
+    def head(self, headers: dict[str, str]) -> dict[str, str] | None:
+        mock.patch.object(
+            repro_check.urllib.request, "urlopen", lambda req, timeout=None: FakeResponse(b"", headers)
+        ).start()
+        return repro_check.fetch_url_validator("https://cdn/img")
+
+    def test_a_strong_etag_is_recorded_with_the_size_and_the_modification_time(self):
+        validator = self.head({"ETag": self.ETAG, "Last-Modified": self.MODIFIED})
+        self.assertEqual(validator, {"ETag": self.ETAG, "Last-Modified": self.MODIFIED, "Content-Length": "0"})
+
+    def test_a_weak_etag_is_no_validator(self):
+        self.assertIsNone(self.head({"ETag": 'W/"abc"', "Last-Modified": self.MODIFIED}))
+
+    def test_size_and_modification_time_alone_are_no_validator(self):
+        self.assertIsNone(self.head({"Last-Modified": self.MODIFIED}))
+
+
 class CacheRevalidationTest(unittest.TestCase):
     """A cached image is reused only when the CDN confirms it still serves the same bytes."""
 
@@ -1178,6 +1208,15 @@ class CacheRevalidationTest(unittest.TestCase):
 
     def download(self, url: str = "https://cdn/img", os_type: str = "guest-os") -> Path:
         return self.verifier.cached_download(url, self.tmp_dir / "out" / url.rsplit("/", 1)[1], os_type)
+
+    def test_a_record_without_a_strong_etag_is_a_miss(self):
+        """Recorded by a version of this script that also accepted weaker validators."""
+        weak = {"Last-Modified": "Fri, 18 Sep 2026 15:50:01 GMT", "Content-Length": "12"}
+        self.verifier.write_cache_validator(self.cache_file, weak)
+        self.stub_validator(weak)
+
+        with self.assertNoLogs(repro_check.logger, level="WARNING"):
+            self.assertFalse(self.verifier.cached_copy_is_current("https://cdn/img", self.cache_file))
 
     def test_the_validator_is_sampled_before_the_download_and_recorded_after_it(self):
         """
