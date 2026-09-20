@@ -707,6 +707,27 @@ class RunTest(unittest.TestCase):
         self.assertEqual(len(self.fetch_calls), 1)
         self.assertEqual(self.gh_calls, [])
 
+    def test_no_image_is_downloaded_when_the_preflight_aborts(self):
+        """
+        storage() joins the executor on the way out, so an image in flight when the check fails
+        would hold the exit for as long as the download takes: the images are queued only once the
+        check has passed, and only the checksum files are fetched before it.
+        """
+        fetched: list[str] = []
+        real_fetch = self.fake_fetch
+
+        def fetch(url, dest):
+            fetched.append(url)
+            return real_fetch(url, dest)
+
+        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
+        mock.patch.object(repro_check, "fetch_url_to_file", fetch).start()
+        self.bundles_error = repro_check.VerificationError("GitHub holds no build-provenance attestation")
+
+        self.assert_aborts_before_the_build(verifier, "no build-provenance attestation")
+        self.assertTrue(any(url.endswith("/SHA256SUMS") for url in fetched), fetched)
+        self.assertEqual([url for url in fetched if not url.endswith("/SHA256SUMS")], [])
+
     def test_the_abort_for_a_missing_attestation_does_not_name_the_bypass(self):
         """The advice text, and the abort built from it, must both stay silent on the bypass."""
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))

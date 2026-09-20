@@ -171,16 +171,17 @@ The mismatch report of a rebuild therefore always says that the provenance of
 the CDN files was confirmed, unless the check was skipped.
 
 Consequently, any attestation that does not verify aborts the run within
-seconds, before the build starts — whether it *mismatches* (a substituted file
-carrying someone else's attestation: another commit's or another directory's
-checksum file) or *cannot be obtained* at all (bytes nobody attested, a commit
-built before attestations were introduced on 2026-08-31, a security hotfix
-still private on `dfinity/ic-private`, GitHub or Sigstore unreachable, the API
-rate limit exhausted). Attestations are looked up by the file's digest, so from
-here a substituted file nobody attested looks exactly like an unattested build;
-the run stops rather than rebuild against bytes whose provenance it cannot
-establish. A hotfix built on `dfinity/ic-private` gains its attestation once
-its `hotfix-*` branch is published to `dfinity/ic` and rebuilt there.
+seconds, before any image is downloaded or the build starts — whether it
+*mismatches* (a substituted file carrying someone else's attestation: another
+commit's or another directory's checksum file) or *cannot be obtained* at all
+(bytes nobody attested, a commit built before attestations were introduced on
+2026-08-31, a security hotfix still private on `dfinity/ic-private`, GitHub or
+Sigstore unreachable, the API rate limit exhausted). Attestations are looked up
+by the file's digest, so from here a substituted file nobody attested looks
+exactly like an unattested build; the run stops rather than rebuild against
+bytes whose provenance it cannot establish. A hotfix built on
+`dfinity/ic-private` gains its attestation once its `hotfix-*` branch is
+published to `dfinity/ic` and rebuilt there.
 
 The checksum files and launch measurements are always fetched fresh rather
 than read from the download cache, and a cached image is reused only after a

@@ -1175,11 +1175,8 @@ class ReproducibilityVerifier:
 
     def start_sums_downloads(self, storage: Dirs) -> None:
         """
-        Queues EVERY directory's SHA256SUMS before any multi-GB image is queued.
-
-        The attestation check runs before the local build is started and awaits only these small
-        files. The executor has a fixed number of workers, so a SHA256SUMS queued behind the images
-        of another OS type would make that check wait for a multi-GB download to finish first.
+        Queues every directory's SHA256SUMS. These are the only downloads started before the
+        attestation check, which awaits them; run() queues the images once the check has passed.
 
         These downloads, like the launch measurements queued later, deliberately bypass the cache.
         Every SHA256SUMS is about a kilobyte, so fetching it fresh is cheap, and it makes the
@@ -1748,14 +1745,13 @@ class ReproducibilityVerifier:
             self.decide_git_hash()
             self.init_cache()
 
-            # Before every image, including the proposal's own mirrors: the attestation check
-            # below awaits these and the executor has a fixed number of workers.
+            # The checksum files are the only downloads started before the attestation check,
+            # which awaits them. The images and the proposal's package are queued once it has
+            # passed: on the way out the executor joins whatever is in flight, so a failed check
+            # must not have a multi-GB download to wait for, and nothing large is fetched for bytes
+            # whose provenance is not established. The check takes seconds, so the images lose
+            # almost nothing of their head start on the build.
             self.start_sums_downloads(dirs)
-            downloads_for_proposal = self.start_proposal_download_if_needed(dirs)
-            guest_os_downloads = self.start_cdn_downloads_for_os("guest-os", dirs) if self.verify_guestos else []
-            host_os_downloads = self.start_cdn_downloads_for_os("host-os", dirs) if self.verify_hostos else []
-            setup_os_downloads = self.start_cdn_downloads_for_os("setup-os", dirs) if self.verify_setupos else []
-            recovery_downloads = self.start_cdn_downloads_for_os("recovery-guestos", dirs) if self.verify_recovery else []
 
             # Environment checks can happen while downloads progress
             self.check_environment()
@@ -1766,6 +1762,12 @@ class ReproducibilityVerifier:
             # minutes on CI hardware, longer on a laptop). That is now every attestation failure,
             # not only a mismatch.
             self.attestation_preflight(dirs, dry_run)
+
+            downloads_for_proposal = self.start_proposal_download_if_needed(dirs)
+            guest_os_downloads = self.start_cdn_downloads_for_os("guest-os", dirs) if self.verify_guestos else []
+            host_os_downloads = self.start_cdn_downloads_for_os("host-os", dirs) if self.verify_hostos else []
+            setup_os_downloads = self.start_cdn_downloads_for_os("setup-os", dirs) if self.verify_setupos else []
+            recovery_downloads = self.start_cdn_downloads_for_os("recovery-guestos", dirs) if self.verify_recovery else []
 
             build = self.download_executor.submit(self.build_locally, dirs)
 
