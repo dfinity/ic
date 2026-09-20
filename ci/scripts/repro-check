@@ -1151,14 +1151,21 @@ class ReproducibilityVerifier:
         return (guest_os_hash, guest_os_measurements, host_os_hash)
 
     def decide_git_hash(self) -> None:
-        """Determines which git hash to build and verify."""
-        if self.proposal_id:
-            return
-        if self.git_commit:
-            self.git_hash = self.git_commit
-        else:
-            self.check_git_repo()
-            self.git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+        """Determines which git hash to build and verify, and refuses anything but a full commit id."""
+        if not self.proposal_id:  # otherwise process_proposal has set it from the proposal
+            if self.git_commit:
+                self.git_hash = self.git_commit
+            else:
+                self.check_git_repo()
+                self.git_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+        # Checked here, in every mode, before init_cache() names a directory after the value and
+        # before anything is downloaded or built for it: the attestation check is not the only
+        # consumer, and --skip-attestation-check and --dry-run never reach it.
+        if not re.fullmatch(r"[0-9a-f]{40}", self.git_hash):
+            source = "the proposal" if self.proposal_id else "-c"
+            raise VerificationError(
+                f"{self.git_hash!r} (from {source}) is not a 40-character git commit id; the full commit id is needed."
+            )
 
     def selected_os_types(self) -> list[str]:
         """The OS types this run verifies, in the order their downloads are queued."""
@@ -1422,12 +1429,6 @@ class ReproducibilityVerifier:
         Only the checksum files need this: the images and launch-measurements.json are bound to
         them by sha256 afterwards.
         """
-        if not re.fullmatch(r"[0-9a-f]{40}", self.git_hash):
-            raise VerificationError(
-                f"{self.git_hash!r} is not a 40-character git commit id, so no attestation can be looked up for "
-                "it; pass the full commit id to -c"
-            )
-
         _token, token_var = attestation_token()
         logger.info(
             "Verifying the build provenance of the CDN checksum files "

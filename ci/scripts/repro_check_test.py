@@ -780,15 +780,31 @@ class RunTest(unittest.TestCase):
         self.assert_aborts_before_the_build(verifier, "could not download gh", dry_run=True)
         self.assertEqual(self.fetch_calls, [])
 
-    def test_an_unusable_git_hash_aborts_before_the_build(self):
-        verifier = self.build_verifier({}, proposal_id="", git_commit=GIT_HASH)
-        verifier.git_hash = "abc"
-        mock.patch.object(verifier, "decide_git_hash").start()
-        # The CDN is keyed on the real hash; serve the same bytes for the truncated one.
-        self.cdn.update({url.replace(GIT_HASH, "abc"): body for url, body in self.cdn.items()})
+    def test_an_unusable_git_hash_aborts_before_the_build_in_every_mode(self):
+        """
+        The 40-hex check is not the attestation check's alone: --skip-attestation-check and --dry-run
+        never reach that check, yet init_cache() names a directory after the value and the build
+        would fetch it. It is applied as soon as the hash is decided, whatever its source.
+        """
+        cases = [
+            ("-c", False, False, {}, "abc"),
+            ("-c under --skip-attestation-check", True, False, {}, "abc"),
+            ("-c under --dry-run", False, True, {}, "abc"),
+            ("the proposal", False, False, {**self.guestos_payload(MEASUREMENTS), "replica_version_to_elect": "abc"}, ""),
+        ]
+        for source, skip, dry_run, payload, git_commit in cases:
+            with self.subTest(source=source):
+                self.build_ran = False
+                proposal_id = "143816" if payload else ""
+                verifier = self.build_verifier(payload, proposal_id=proposal_id, git_commit=git_commit, skip=skip)
 
-        self.assert_aborts_before_the_build(verifier, "not a 40-character git commit id")
-        self.assertEqual(self.fetch_calls, [])
+                message = str(
+                    self.assert_aborts_before_the_build(verifier, "not a 40-character git commit id", dry_run=dry_run)
+                )
+
+                self.assertIn(f"(from {source.split(' under ')[0]})", message)
+                self.assertEqual(self.fetch_calls, [])
+                self.assertFalse((self.tmp_dir / "cache" / "abc").exists(), "the cache was named after the value")
 
 
 class BuildPipelineNameTest(unittest.TestCase):
