@@ -173,7 +173,7 @@ GH_CLI_TAR_MEMBER = f"gh_{GH_CLI_VERSION}_linux_amd64/bin/gh"
 
 # Shown with the abort for a checksum file GitHub holds no attestation for. It deliberately does
 # not name --skip-attestation-check: a missing attestation is exactly the moment the bypass must
-# not be suggested. --help and the README document the flag, for CI on dfinity/ic-private.
+# not be suggested. --help and the README document the flag.
 NO_ATTESTATION_ADVICE = (
     "That is what a substituted checksum file looks like, and also what an unattested build looks "
     "like: a commit built before PR #11323 (2026-08-31), or a security hotfix built on the private "
@@ -792,10 +792,10 @@ def parse_args() -> argparse.Namespace:
         "--skip-attestation-check",
         action="store_true",
         help=(
-            "Skip the build-provenance check. DFINITY's CI passes this on dfinity/ic-private, where\n"
-            "no attestations are minted. Never use it when verifying an NNS proposal: an older\n"
-            "commit is verified with its own version of this script (see the README), which\n"
-            "predates the check."
+            "Skip the build-provenance check. An escape hatch that CI does not use: a mismatch report\n"
+            "then cannot tell a reproducibility problem from a substituted artifact. Never use it when\n"
+            "verifying an NNS proposal: an older commit is verified with its own version of this\n"
+            "script (see the README), which predates the check."
         ),
     )
 
@@ -1347,9 +1347,10 @@ class ReproducibilityVerifier:
     def attestation_preflight(self, dirs: Dirs, dry_run: bool) -> None:
         """
         Obtains gh and checks the CDN checksum files' build provenance, BEFORE the local build is
-        submitted: anything that cannot be verified must cost seconds, not the whole rebuild (23-28
-        minutes on CI hardware, longer on a laptop) that the executor would otherwise sit through
-        joining the build thread on the way out.
+        submitted: anything that cannot be verified must cost seconds, or the few minutes of a
+        GitHub or Sigstore timeout, not the whole rebuild (23-28 minutes on CI hardware, longer on
+        a laptop) that the executor would otherwise sit through joining the build thread on the way
+        out.
 
         Every outcome other than a verified attestation stops the run: a mismatch is positive
         evidence of substitution, and an attestation that cannot be obtained looks exactly like a

@@ -773,7 +773,7 @@ class RunTest(unittest.TestCase):
         self.assertEqual(self.fetch_calls, [])
 
     def test_a_failing_gh_bootstrap_fails_the_dry_run_too(self):
-        """The bootstrap is the one thing a PR's dry run rehearses; a broken pin must fail the PR."""
+        """The bootstrap is all of the attestation check a PR's dry run rehearses; a broken pin must fail the PR."""
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
         verifier.ensure_gh = mock.Mock(side_effect=repro_check.VerificationError("could not download gh"))
 

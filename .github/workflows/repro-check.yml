@@ -25,16 +25,15 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  # The permission GitHub documents for reading attestations with the job token.
-  attestations: read
   contents: read
 
 jobs:
   repro-check:
     name: Run repro-check for ${{ inputs.github_sha || github.sha }}
-    # run on all events except on PRs from forks
+    # Only on dfinity/ic, whose source a verifier can fetch and whose builds are attested; not on PRs from forks.
     if: |
-      github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+      github.repository == 'dfinity/ic' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on:
       labels: dind-large
     container:
@@ -56,17 +55,9 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: ${{ github.event_name == 'pull_request' }}
         with:
           sparse-checkout: "ci/scripts/repro-check"
-          persist-credentials: false
-
-      # With CI set, repro-check builds from a clone of its working directory; the sparse checkout above has no blobs for that.
-      - name: Checkout ${{ inputs.github_sha }} to build
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        if: ${{ github.event_name != 'pull_request' }}
-        with:
-          ref: ${{ inputs.github_sha }}
-          path: ic
           persist-credentials: false
 
       - name: Repro check for PR
@@ -74,25 +65,24 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
         env:
           CI_PROJECT_DIR: ${{ github.workspace }}
+          COMMIT: ${{ github.sha }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
           set -euo pipefail
-          sudo -u ubuntu -- "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit ${{ github.sha }} --dry-run
+          sudo -u ubuntu -- "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit "$COMMIT" --dry-run
 
       - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
         if: ${{ github.event_name != 'pull_request' }}
-        working-directory: ic
         env:
-          CI_PROJECT_DIR: ${{ github.workspace }}
           COMMIT: ${{ inputs.github_sha }}
           # Lifts the anonymous rate limit of the attestations API; a rate-limited lookup fails the run.
           GH_TOKEN: ${{ github.token }}
-          # Only dfinity/ic mints attestations (ci-main.yml gates actions/attest on it).
-          ATTESTATION_ARGS: ${{ case(github.repository != 'dfinity/ic', '--skip-attestation-check', '') }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
-          # sudo resets the environment, so CI and GH_TOKEN have to be preserved explicitly.
-          set -euo pipefail
-          sudo --preserve-env=CI,GH_TOKEN -u ubuntu -- \
-            "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit "$COMMIT" $ATTESTATION_ARGS
+          # The command the README gives verifiers, with the commit's own script; pipefail so that a failed fetch fails the job.
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "github_sha must be a full commit id, got '$COMMIT'" >&2; exit 1; }
+          sudo --preserve-env=COMMIT,GH_TOKEN -u ubuntu -- bash -o pipefail -c '
+            curl -fsSL "https://raw.githubusercontent.com/dfinity/ic/$COMMIT/ci/scripts/repro-check" |
+            python3 - -c "$COMMIT"
+          '

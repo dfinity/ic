@@ -110,10 +110,11 @@ The Internet Computer provides a robust system for verifying the build reproduci
 * Network access to `download.dfinity.systems` (and `download.dfinity.network`
   with `--download-source network` or `both`), `ic-api.internetcomputer.org`
   (for `-p`), `github.com`, `raw.githubusercontent.com`,
-  `release-assets.githubusercontent.com`, `api.github.com` and
-  `tuf-repo-cdn.sigstore.dev` (the GitHub hosts and Sigstore are not optional:
-  the run aborts when the attestation of a CDN checksum file cannot be fetched
-  and verified)
+  `release-assets.githubusercontent.com`, `api.github.com`,
+  `tuf-repo-cdn.sigstore.dev` and `ghcr.io` (the build container image), plus
+  an Ubuntu package archive if `git` or `podman` has to be installed. The
+  GitHub hosts and Sigstore are not optional: the run aborts when the
+  attestation of a CDN checksum file cannot be fetched and verified.
 * A checksum-pinned GitHub CLI `gh` is downloaded, kept in the download cache
   and unpacked into the run's temporary directory; a `gh` installed on the
   machine is not used. *No GitHub account or login is needed.* Setting
@@ -170,8 +171,9 @@ unavailable, not which of the two it faces, and it stops rather than guess.
 The mismatch report of a rebuild therefore always says that the provenance of
 the CDN files was confirmed, unless the check was skipped.
 
-Consequently, any attestation that does not verify aborts the run within
-seconds, before any image is downloaded or the build starts — whether it
+Consequently, any attestation that does not verify aborts the run before any
+image is downloaded or the build starts: within seconds, or within a few
+minutes when GitHub or Sigstore has to time out first — whether it
 *mismatches* (a substituted file carrying someone else's attestation: another
 commit's or another directory's checksum file) or *cannot be obtained* at all
 (bytes nobody attested, a commit built before attestations were introduced on
@@ -192,11 +194,12 @@ with a warm cache still reports on what the CDN serves now. Artifacts under
 reporting. Pass `--clean`, or use a fresh `--cache-dir`, for a verification
 that reads nothing from the cache at all.
 
-`--skip-attestation-check` turns the check off. DFINITY's own CI passes it on
-the private `dfinity/ic-private` repository, where no attestations are minted.
-Never use it when verifying an NNS proposal: a release predating the check is
-verified with that release's own version of this script, as described above,
-which has no check to skip.
+`--skip-attestation-check` turns the check off. It is an escape hatch that
+DFINITY's CI does not use and a verifier never needs: a mismatch report then
+cannot tell a reproducibility problem from a substituted artifact. Never use it
+when verifying an NNS proposal: a release predating the check is verified with
+that release's own version of this script, as described above, which has no
+check to skip.
 
 === Component-Specific Verification
 
