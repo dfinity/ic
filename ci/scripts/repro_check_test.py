@@ -1020,6 +1020,22 @@ class FetchAttestationBundlesTest(unittest.TestCase):
         self.assertTrue(any("GITHUB_TOKEN" in line for line in logs.output), logs.output)
         self.assertIsNone(self.requests[1].get_header("Authorization"))
 
+    def test_a_token_rejected_on_the_last_attempt_is_still_retried_anonymously(self):
+        """The anonymous retry gets attempts of its own; a rejection on the last one used to end the loop."""
+        os.environ["GITHUB_TOKEN"] = "wrong-repo"
+        self.serve(
+            urllib.error.URLError("connection reset"),
+            urllib.error.URLError("connection reset"),
+            self.http_error(403),
+            self.page([{"a": 1}]),
+        )
+
+        with self.assertLogs(repro_check.logger, level="WARNING"):
+            self.assertEqual(repro_check.fetch_attestation_bundles(self.DIGEST), [{"a": 1}])
+
+        self.assertEqual(len(self.requests), 4)
+        self.assertIsNone(self.requests[3].get_header("Authorization"))
+
     def test_a_404_after_the_first_page_is_reported_rather_than_truncating(self):
         """A cursor GitHub no longer honours must not pass as a complete but shorter list."""
         nxt = f'<{self.URL}&after=cursor>; rel="next"'

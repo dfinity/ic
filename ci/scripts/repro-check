@@ -498,10 +498,11 @@ def get_attestations_page(
                 raise VerificationError(rate_limit_message(e)) from e
             if e.code in (401, 403) and token is not None:
                 # Whether a token minted for another repository is accepted here is unverified;
-                # the endpoint is public, so drop the credential and try again without it.
+                # the endpoint is public, so drop the credential and try again without it, with a
+                # fresh set of attempts: a rejection on the last one must not end this loop before
+                # the anonymous request has been made.
                 logger.warning(f"The GitHub API rejected ${token_var} with HTTP {e.code}; retrying anonymously.")
-                token = None
-                continue
+                return get_attestations_page(url, None, None, first_page)
             if e.code < 500:
                 raise VerificationError(f"HTTP {e.code} from {url}") from e
             last_error = f"HTTP {e.code} from {url}"
