@@ -790,7 +790,13 @@ class RunTest(unittest.TestCase):
             ("-c", False, False, {}, "abc"),
             ("-c under --skip-attestation-check", True, False, {}, "abc"),
             ("-c under --dry-run", False, True, {}, "abc"),
-            ("the proposal", False, False, {**self.guestos_payload(MEASUREMENTS), "replica_version_to_elect": "abc"}, ""),
+            (
+                "the proposal",
+                False,
+                False,
+                {**self.guestos_payload(MEASUREMENTS), "replica_version_to_elect": "abc"},
+                "",
+            ),
         ]
         for source, skip, dry_run, payload, git_commit in cases:
             with self.subTest(source=source):
