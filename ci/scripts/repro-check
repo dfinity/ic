@@ -470,8 +470,16 @@ def rate_limit_message(err: urllib.error.HTTPError) -> str:
     )
 
 
-def get_attestations_page(url: str, token: str | None, token_var: str | None) -> tuple[dict, str | None]:
-    """Fetches one page of the attestations endpoint, returning it with the rel="next" cursor."""
+def get_attestations_page(
+    url: str, token: str | None, token_var: str | None, first_page: bool
+) -> tuple[dict, str | None]:
+    """
+    Fetches one page of the attestations endpoint, returning it with the rel="next" cursor.
+
+    A 404 on the first page means GitHub holds nothing for these bytes and yields an empty page for
+    fetch_attestation_bundles to report. On a later page it means a cursor GitHub no longer honours,
+    and must not pass as a complete but shorter list.
+    """
     attempts = 3
     last_error = "unknown error"
     for attempt in range(attempts):
@@ -483,8 +491,7 @@ def get_attestations_page(url: str, token: str | None, token_var: str | None) ->
                     raise ValueError(f"expected a JSON object from {url}, got {type(payload).__name__}")
                 return payload, next_page_url(response.headers)
         except urllib.error.HTTPError as e:
-            if e.code == 404:
-                # GitHub holds nothing for these bytes; fetch_attestation_bundles reports that once.
+            if e.code == 404 and first_page:
                 return {}, None
             if e.code in (403, 429) and e.headers.get("x-ratelimit-remaining") == "0":
                 # Retrying a rate limit only burns the caller's remaining quota.
@@ -524,9 +531,15 @@ def fetch_attestation_bundles(digest: str) -> list[dict]:
                 f"more than {ATTESTATION_MAX_PAGES * ATTESTATION_PAGE_SIZE} attestations cover "
                 f"sha256:{digest}; refusing to page through them"
             )
-        payload, url = get_attestations_page(url, token, token_var)
+        payload, url = get_attestations_page(url, token, token_var, first_page=pages == 0)
         pages += 1
-        for attestation in payload.get("attestations") or []:
+        attestations = payload.get("attestations") or []
+        if not isinstance(attestations, list):
+            raise VerificationError(
+                f"unexpected shape from the attestations API: 'attestations' is {type(attestations).__name__}, "
+                "not a list"
+            )
+        for attestation in attestations:
             bundle = attestation.get("bundle") if isinstance(attestation, dict) else None
             if bundle is not None:
                 bundles.append(bundle)
@@ -1063,7 +1076,7 @@ class ReproducibilityVerifier:
             # But recorded only once the download has succeeded, with the previous copy and its
             # record gone first. Recorded earlier, a failed GET would leave the previous bytes in
             # the cache under the CDN's new validator, and the next run would take them for
-            # current; left behind without a record, cached_copy_is_current would adopt them.
+            # current; a stale copy left behind must not be what a later run compares against.
             self.write_cache_validator(cache_file, None)
             cache_file.unlink(missing_ok=True)
             fetch_url_to_file(url, cache_file)
@@ -1252,9 +1265,11 @@ class ReproducibilityVerifier:
     # --------------------------------------------------------------------------
     # Build-provenance attestations
     # --------------------------------------------------------------------------
-    def gh_version_output(self, gh: str) -> str:
+    def gh_version_output(self, gh: str, config_dir: Path) -> str:
         try:
-            result = subprocess.run([gh, "--version"], capture_output=True, text=True, timeout=60)
+            result = subprocess.run(
+                [gh, "--version"], capture_output=True, text=True, env=gh_env(config_dir), timeout=60
+            )
         except (OSError, subprocess.SubprocessError) as e:
             logger.debug(f"Could not run {gh} --version: {e}")
             return ""
@@ -1302,7 +1317,7 @@ class ReproducibilityVerifier:
             gh_path.unlink(missing_ok=True)
             raise VerificationError(f"could not extract {GH_CLI_TAR_MEMBER} from {tarball}: {e}") from e
 
-        version = parse_gh_version(self.gh_version_output(str(gh_path)))
+        version = parse_gh_version(self.gh_version_output(str(gh_path), dirs.tmp_dir / "gh-config"))
         if version is None:
             raise VerificationError(
                 f"the gh unpacked at {gh_path} does not run; is its filesystem mounted noexec? "
@@ -1726,8 +1741,8 @@ class ReproducibilityVerifier:
 
             # Before the build is submitted, and after check_environment has installed git: on the
             # way out the executor joins whatever it is running, so a failure raised once the build
-            # is under way is reported in seconds but exits only when the build is done (about half
-            # an hour on CI hardware, longer on a laptop). That is now every attestation failure,
+            # is under way is reported in seconds but exits only when the build is done (23-28
+            # minutes on CI hardware, longer on a laptop). That is now every attestation failure,
             # not only a mismatch.
             self.attestation_preflight(dirs, dry_run)
 

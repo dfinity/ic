@@ -639,6 +639,7 @@ class RunTest(unittest.TestCase):
         first = self.build_verifier(self.guestos_payload(MEASUREMENTS))
         first.run()
         mock.patch.stopall()
+        self.build_ran = False
 
         fetched: list[str] = []
         real_fetch = self.fake_fetch
@@ -976,6 +977,24 @@ class FetchAttestationBundlesTest(unittest.TestCase):
         self.assertTrue(any("GITHUB_TOKEN" in line for line in logs.output), logs.output)
         self.assertIsNone(self.requests[1].get_header("Authorization"))
 
+    def test_a_404_after_the_first_page_is_reported_rather_than_truncating(self):
+        """A cursor GitHub no longer honours must not pass as a complete but shorter list."""
+        nxt = f'<{self.URL}&after=cursor>; rel="next"'
+        self.serve(self.page([{"a": 1}], link=nxt), self.http_error(404))
+
+        with self.assertRaises(repro_check.VerificationError) as raised:
+            repro_check.fetch_attestation_bundles(self.DIGEST)
+
+        self.assertIn("HTTP 404", str(raised.exception))
+
+    def test_a_non_list_attestations_field_aborts(self):
+        self.serve(FakeResponse(json.dumps({"attestations": 5}).encode()))
+
+        with self.assertRaises(repro_check.VerificationError) as raised:
+            repro_check.fetch_attestation_bundles(self.DIGEST)
+
+        self.assertIn("attestations API", str(raised.exception))
+
     def test_follows_the_next_cursor(self):
         nxt = f'<{self.URL}&after=cursor>; rel="next", <{self.URL}>; rel="last"'
         self.serve(self.page([{"a": 1}], link=nxt), self.page([{"b": 2}]))
@@ -1061,7 +1080,8 @@ class EnsureGhTest(unittest.TestCase):
         self.assertTrue(os.access(gh_path, os.X_OK))
         # Only the member we asked for was written out.
         self.assertFalse((self.dirs.tmp_dir / f"gh_{repro_check.GH_CLI_VERSION}_linux_amd64").exists())
-        self.assertEqual(repro_check.parse_gh_version(self.verifier.gh_version_output(str(gh_path))), (2, 98, 0))
+        version = repro_check.parse_gh_version(self.verifier.gh_version_output(str(gh_path), self.dirs.tmp_dir / "cfg"))
+        self.assertEqual(version, (2, 98, 0))
 
     def test_never_uses_a_gh_from_path(self):
         """One gh, the one the messages and the JSON handling were validated against."""
@@ -1187,7 +1207,7 @@ class CacheRevalidationTest(unittest.TestCase):
         """
         The CDN changed and the replacement download failed. The previous bytes must not stay in
         the cache under the CDN's new validator (the next run would take them for current), nor
-        without one (cached_copy_is_current would adopt them).
+        without one (a stale copy must not be what a later run compares against).
         """
         cache_file = self.cache_path("https://cdn/img", "guest-os")
         cache_file.parent.mkdir(parents=True, exist_ok=True)

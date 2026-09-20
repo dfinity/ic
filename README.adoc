@@ -111,8 +111,9 @@ The Internet Computer provides a robust system for verifying the build reproduci
   with `--download-source network` or `both`), `ic-api.internetcomputer.org`
   (for `-p`), `github.com`, `raw.githubusercontent.com`,
   `release-assets.githubusercontent.com`, `api.github.com` and
-  `tuf-repo-cdn.sigstore.dev` (all of them required: the run aborts when the
-  attestation of a CDN checksum file cannot be fetched and verified)
+  `tuf-repo-cdn.sigstore.dev` (the GitHub hosts and Sigstore are not optional:
+  the run aborts when the attestation of a CDN checksum file cannot be fetched
+  and verified)
 * A checksum-pinned GitHub CLI `gh` is downloaded, kept in the download cache
   and unpacked into the run's temporary directory; a `gh` installed on the
   machine is not used. *No GitHub account or login is needed.* Setting
