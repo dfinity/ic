@@ -56,6 +56,16 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           sparse-checkout: "ci/scripts/repro-check"
+          persist-credentials: false
+
+      # With CI set, repro-check builds from a clone of its working directory; the sparse checkout above has no blobs for that.
+      - name: Checkout ${{ inputs.github_sha }} to build
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: ${{ github.event_name != 'pull_request' }}
+        with:
+          ref: ${{ inputs.github_sha }}
+          path: ic
+          persist-credentials: false
 
       - name: Repro check for PR
         shell: bash
@@ -70,15 +80,17 @@ jobs:
       - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
         if: ${{ github.event_name != 'pull_request' }}
+        working-directory: ic
         env:
           CI_PROJECT_DIR: ${{ github.workspace }}
+          COMMIT: ${{ inputs.github_sha }}
           # Lifts the anonymous rate limit of the attestations API; a rate-limited lookup fails the run.
           GH_TOKEN: ${{ github.token }}
           # Only dfinity/ic mints attestations (ci-main.yml gates actions/attest on it).
           ATTESTATION_ARGS: ${{ case(github.repository != 'dfinity/ic', '--skip-attestation-check', '') }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
-          # sudo resets the environment, so GH_TOKEN has to be preserved explicitly.
+          # sudo resets the environment, so CI and GH_TOKEN have to be preserved explicitly.
           set -euo pipefail
-          sudo --preserve-env=GH_TOKEN -u ubuntu -- \
-            "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit ${{ inputs.github_sha }} $ATTESTATION_ARGS
+          sudo --preserve-env=CI,GH_TOKEN -u ubuntu -- \
+            "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit "$COMMIT" $ATTESTATION_ARGS
