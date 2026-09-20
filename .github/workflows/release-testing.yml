@@ -127,5 +127,9 @@ jobs:
     name: Repro check for ${{ github.sha }}
     uses: ./.github/workflows/repro-check.yml
     needs: [ci-main]
+    # A called workflow cannot exceed its caller's permissions; this block replaces the workflow-level one.
+    permissions:
+      attestations: read
+      contents: read
     with:
       github_sha: ${{ github.sha }}
