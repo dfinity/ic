@@ -161,11 +161,14 @@ of `master`, since a commit need not have been through a release branch. Use
 *The local build remains the authoritative check.* Rebuilding the images from
 source proves strictly more than an attestation does — it does not require
 trusting GitHub's runners at all. The attestation is there to tell two very
-different failures apart: if the rebuild does not match the CDN but the
-attestation does verify, the build is not reproducible (a bug); if the
-attestation does not verify, the CDN is not serving what CI built (an
-incident). The mismatch report of a rebuild therefore always says that the
-provenance of the CDN files was confirmed, unless the check was skipped.
+different failures apart: if the attestation verifies but the rebuild does not
+match the CDN, the build is not reproducible (a bug); if the CDN file carries
+an attestation of another commit, directory or signer, the CDN is not serving
+what CI built (an incident). Anything else — no attestation on GitHub, or
+GitHub or Sigstore unreachable — tells the run only that the provenance is
+unavailable, not which of the two it faces, and it stops rather than guess.
+The mismatch report of a rebuild therefore always says that the provenance of
+the CDN files was confirmed, unless the check was skipped.
 
 Consequently, any attestation that does not verify aborts the run within
 seconds, before the build starts — whether it *mismatches* (a substituted file

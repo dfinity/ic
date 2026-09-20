@@ -1181,13 +1181,11 @@ class ReproducibilityVerifier:
         files. The executor has a fixed number of workers, so a SHA256SUMS queued behind the images
         of another OS type would make that check wait for a multi-GB download to finish first.
 
-        These are also the only downloads that deliberately bypass the cache. The cache keeps any
-        non-empty file it already has for a commit, so a second run would re-verify the bytes of
-        the first one and report success even if the CDN had since started serving something else.
+        These downloads, like the launch measurements queued later, deliberately bypass the cache.
         Every SHA256SUMS is about a kilobyte, so fetching it fresh is cheap, and it makes the
         provenance check -- and the image checks that hang off it -- speak about what the CDN
-        serves now. A cached image whose bytes no longer match then fails against the fresh sums,
-        which is the outcome we want.
+        serves now rather than about the bytes of an earlier run. A cached image whose bytes no
+        longer match then fails against the fresh sums, which is the outcome we want.
         """
         for os_type in self.selected_os_types():
             path_component, _artifact, subdir_name = cdn_layout(os_type)
