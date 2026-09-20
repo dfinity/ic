@@ -76,13 +76,11 @@ jobs:
         if: ${{ github.event_name != 'pull_request' }}
         env:
           COMMIT: ${{ inputs.github_sha }}
-          # Lifts the anonymous rate limit of the attestations API; a rate-limited lookup fails the run.
-          GH_TOKEN: ${{ github.token }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
           # The command the README gives verifiers, with the commit's own script; pipefail so that a failed fetch fails the job.
           [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "github_sha must be a full commit id, got '$COMMIT'" >&2; exit 1; }
-          sudo --preserve-env=COMMIT,GH_TOKEN -u ubuntu -- bash -o pipefail -c '
+          sudo --preserve-env=COMMIT -u ubuntu -- bash -o pipefail -c '
             curl -fsSL "https://raw.githubusercontent.com/dfinity/ic/$COMMIT/ci/scripts/repro-check" |
             python3 - -c "$COMMIT"
           '
