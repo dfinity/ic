@@ -54,7 +54,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        if: ${{ github.event_name == 'pull_request' }}
         with:
           sparse-checkout: "ci/scripts/repro-check"
 
@@ -72,14 +71,14 @@ jobs:
         shell: bash
         if: ${{ github.event_name != 'pull_request' }}
         env:
+          CI_PROJECT_DIR: ${{ github.workspace }}
           # Lifts the anonymous rate limit of the attestations API; a rate-limited lookup fails the run.
           GH_TOKEN: ${{ github.token }}
           # Only dfinity/ic mints attestations (ci-main.yml gates actions/attest on it).
           ATTESTATION_ARGS: ${{ case(github.repository != 'dfinity/ic', '--skip-attestation-check', '') }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
-          # sudo resets the environment, so the variables have to be preserved explicitly.
-          sudo --preserve-env=GH_TOKEN,ATTESTATION_ARGS -u ubuntu bash -c '
-            curl -fsSL https://raw.githubusercontent.com/dfinity/ic/${{ github.sha }}/ci/scripts/repro-check |
-            python3 - -c ${{ inputs.github_sha }} $ATTESTATION_ARGS
-          '
+          # sudo resets the environment, so GH_TOKEN has to be preserved explicitly.
+          set -euo pipefail
+          sudo --preserve-env=GH_TOKEN -u ubuntu -- \
+            "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit ${{ inputs.github_sha }} $ATTESTATION_ARGS
