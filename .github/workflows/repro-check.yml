@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  # The attestations API accepts the job token only with this; without it the script falls back to the anonymous quota.
+  # The permission GitHub documents for reading attestations with the job token.
   attestations: read
   contents: read
 
