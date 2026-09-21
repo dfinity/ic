@@ -338,6 +338,10 @@ impl CanisterManager {
     /// are updated in-place and changes must be reverted by the caller
     /// of this function in case of `Err`.
     ///
+    /// `subnet_memory_saturation` is updated in-place to account for the bytes
+    /// allocated by applying the new settings, so that the caller can keep
+    /// reserving storage cycles at the post-update saturation.
+    ///
     /// If `metrics` is `Some`, a `log_memory_limit` resize that does real
     /// work (see `LogMemoryStore::would_resize`) is timed and recorded into
     /// `canister_log_resize_duration`. Pass `None` to skip observation on
@@ -351,7 +355,7 @@ impl CanisterManager {
         consumed_cycles: &mut ConsumedCyclesForInstructions,
         settings: &CanisterSettings,
         sender: PrincipalId,
-        mut subnet_memory_saturation: ResourceSaturation,
+        subnet_memory_saturation: &mut ResourceSaturation,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         metrics: Option<&ExecutionEnvironmentMetrics>,
     ) -> Result<NumBytes, CanisterManagerError> {
@@ -423,7 +427,7 @@ impl CanisterManager {
                 round_limits,
                 new_canister_memory_usage,
                 old_canister_memory_usage,
-                &subnet_memory_saturation,
+                subnet_memory_saturation,
             )?;
             round_limits.instructions -= as_round_instructions(log_resize_instructions);
             let log_resize_cost = self
@@ -437,7 +441,7 @@ impl CanisterManager {
             let log_allocated_bytes = memory_allocation
                 .allocated_bytes(new_canister_memory_usage)
                 .saturating_sub(&memory_allocation.allocated_bytes(old_canister_memory_usage));
-            subnet_memory_saturation = subnet_memory_saturation.add(log_allocated_bytes.get());
+            *subnet_memory_saturation = subnet_memory_saturation.add(log_allocated_bytes.get());
             let limit = requested_limit.get() as usize;
             let log_memory_store = &mut canister.system_state.log_memory_store;
             {
@@ -633,7 +637,7 @@ impl CanisterManager {
                 .cycles_account_manager
                 .storage_reservation_cycles(
                     allocated_bytes,
-                    &subnet_memory_saturation,
+                    subnet_memory_saturation,
                     subnet_cycles_config,
                 )
                 .real();
@@ -657,6 +661,12 @@ impl CanisterManager {
                         }
                     }
                 })?;
+            // Account the newly allocated bytes on the subnet memory saturation so
+            // that any subsequent reservation by the caller (e.g. for a canister
+            // history entry) reserves at the post-update saturation. Deallocated
+            // bytes are deliberately not subtracted: keeping the saturation at its
+            // high-water mark only ever over-reserves.
+            *subnet_memory_saturation = subnet_memory_saturation.add(allocated_bytes.get());
         }
         // Controllers: validate count and apply (only at the end
         // so that cycles balance errors use the original controllers
@@ -694,7 +704,7 @@ impl CanisterManager {
         canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
         consumed_cycles: &mut ConsumedCyclesForInstructions,
-        subnet_memory_saturation: ResourceSaturation,
+        mut subnet_memory_saturation: ResourceSaturation,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         metrics: &ExecutionEnvironmentMetrics,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
@@ -708,7 +718,7 @@ impl CanisterManager {
             consumed_cycles,
             &settings,
             sender,
-            subnet_memory_saturation.clone(),
+            &mut subnet_memory_saturation,
             subnet_cycles_config,
             Some(metrics),
         )?;
@@ -766,7 +776,9 @@ impl CanisterManager {
             // memory usage change resulting from the update. Recording the
             // `controllers_change` canister history entry is therefore the only memory
             // change past that point, so the new memory usage (read after recording it)
-            // differs from the old one exactly by that entry.
+            // differs from the old one exactly by that entry. `subnet_memory_saturation`
+            // was updated in-place by the settings update, so the reservation for that
+            // entry uses the post-update saturation.
             let old_memory_usage = canister.memory_usage();
             canister.add_canister_change(
                 timestamp_nanos,
@@ -1531,7 +1543,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         specified_id: Option<PrincipalId>,
-        subnet_memory_saturation: ResourceSaturation,
+        mut subnet_memory_saturation: ResourceSaturation,
         canister_creation_error: &IntCounter,
     ) -> Result<CanisterId, CanisterManagerError> {
         let sender = origin.origin();
@@ -1610,7 +1622,7 @@ impl CanisterManager {
             &mut consumed_cycles,
             &settings,
             sender,
-            subnet_memory_saturation.clone(),
+            &mut subnet_memory_saturation,
             state.get_own_subnet_cycles_config(),
             None,
         );
@@ -1649,7 +1661,8 @@ impl CanisterManager {
         // change resulting from the update. Recording the `canister_creation` canister
         // history entry is therefore the only memory change past that point, so the new
         // memory usage (read after recording it) differs from the old one exactly by
-        // that entry.
+        // that entry. `subnet_memory_saturation` was updated in-place by the settings
+        // update, so the reservation for that entry uses the post-update saturation.
         let old_memory_usage = new_canister.memory_usage();
         new_canister.add_canister_change(
             state.time(),
@@ -1990,6 +2003,14 @@ impl CanisterManager {
     // read `new_memory_usage` after recording it, so that the subnet available
     // execution memory, freezing threshold, and storage reservation below all account
     // for it over the true total memory usage.
+    //
+    // `resource_saturation` must be the subnet memory saturation *at the point of this
+    // call*, i.e. it must account for all bytes allocated since it was derived from
+    // `round_limits.subnet_available_memory`. Otherwise the storage reservation below
+    // would be computed at a stale (too low) saturation and under-reserve. Callers
+    // that allocate bytes before calling this function (in particular those calling it
+    // more than once) therefore have to account those bytes on the saturation, the way
+    // `validate_and_update_canister_settings` does.
     fn cycles_and_memory_usage_checks_and_updates(
         &self,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
