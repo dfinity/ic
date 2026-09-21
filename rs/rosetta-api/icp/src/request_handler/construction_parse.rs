@@ -683,7 +683,7 @@ mod tests {
             ConstructionPayloadsRequestMetadata, CurveType, PublicKey, Signature, SignatureType,
         },
         request_handler::tests::construction::{
-            setup_handler, setup_transfer_test, signed_disburse,
+            setup_handler, setup_transfer_test, sign_and_combine, signed_disburse,
         },
     };
     use rosetta_core::objects::ObjectMap;
@@ -904,6 +904,98 @@ mod tests {
             .clone();
         assert_eq!(memo, serde_json::json!(0), "expected a memo of 0");
     }
+    /// Everything below rejects a tampered transaction, so the negative
+    /// control belongs with them: what `/construction/combine` genuinely
+    /// produces must still parse, and must describe the same operations it was
+    /// built from -- including over an ingress window wide enough to need
+    /// several independently signed envelopes, which is the shape
+    /// `verify_signed_envelopes` is strictest about.
+    #[test]
+    fn test_parse_accepts_a_genuine_signed_transaction() {
+        use crate::{models::SignedTransaction, request::Request, request_types::Disburse};
+        use rosetta_core::convert::principal_id_from_public_key;
+
+        const NEURON_INDEX: u64 = 7;
+        const NANOS: u64 = 1_000_000_000;
+
+        let (handler, network_identifier, pub_key, key) = setup_handler();
+
+        // A single envelope, as the default ingress window produces.
+        let (operations, _unsigned, signed) =
+            signed_disburse(&handler, &network_identifier, &pub_key, &key, NEURON_INDEX);
+        let parsed = handler
+            .construction_parse(ConstructionParseRequest {
+                network_identifier: network_identifier.clone(),
+                signed: true,
+                transaction: signed.clone(),
+            })
+            .expect("a genuine signed transaction must parse");
+        assert_eq!(operations, parsed.operations);
+        Request::from_signed_request(
+            &SignedTransaction::from_str(&signed).unwrap().requests[0],
+            handler.ledger.ledger_canister_id(),
+        )
+        .expect("the submit path must accept a genuine signed transaction");
+
+        // And several envelopes, as a wider ingress window produces.
+        let account =
+            icp_ledger::AccountIdentifier::from(principal_id_from_public_key(&pub_key).unwrap());
+        let operations = Request::requests_to_operations(
+            &[Request::Disburse(Disburse {
+                account,
+                amount: None,
+                recipient: None,
+                neuron_index: NEURON_INDEX,
+            })],
+            "TKN",
+        )
+        .unwrap();
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        let payloads = handler
+            .construction_payloads(ConstructionPayloadsRequest {
+                network_identifier: network_identifier.clone(),
+                operations: operations.clone(),
+                metadata: Some(
+                    ConstructionPayloadsRequestMetadata {
+                        memo: None,
+                        created_at_time: Some(now),
+                        ingress_start: Some(now),
+                        ingress_end: Some(now + 600 * NANOS),
+                    }
+                    .try_into()
+                    .unwrap(),
+                ),
+                public_keys: Some(vec![pub_key.clone()]),
+            })
+            .unwrap();
+        let signed = sign_and_combine(&handler, &network_identifier, &pub_key, &key, payloads);
+
+        let envelopes = SignedTransaction::from_str(&signed).unwrap().requests[0]
+            .1
+            .len();
+        assert!(
+            envelopes > 1,
+            "expected a multi-envelope transaction, got {envelopes}"
+        );
+
+        let parsed = handler
+            .construction_parse(ConstructionParseRequest {
+                network_identifier,
+                signed: true,
+                transaction: signed.clone(),
+            })
+            .expect("a genuine multi-envelope transaction must parse");
+        assert_eq!(operations, parsed.operations);
+        Request::from_signed_request(
+            &SignedTransaction::from_str(&signed).unwrap().requests[0],
+            handler.ledger.ledger_canister_id(),
+        )
+        .expect("the submit path must accept a genuine multi-envelope transaction");
+    }
+
     /// Regression test for the construction flow's authenticated-data
     /// confusion: the outer `RequestType` is plain CBOR metadata that no
     /// signature covers, so rewriting its `neuron_index` used to make
