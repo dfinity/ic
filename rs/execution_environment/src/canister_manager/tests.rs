@@ -9581,16 +9581,17 @@ fn failed_take_canister_snapshot_does_not_charge_for_instructions() {
 }
 
 #[test]
-fn clear_chunk_store_of_frozen_canister_with_empty_chunk_store_succeeds() {
+fn update_settings_of_frozen_canister_succeeds() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test
         .universal_canister_with_cycles(Cycles::new(1_000_000_000_000))
         .unwrap();
-    assert_eq!(
-        test.canister_state(canister_id)
-            .wasm_chunk_store_memory_usage(),
-        NumBytes::new(0)
-    );
+    // The canister's log memory store is allocated with the default limit,
+    // so disabling the canister log below shrinks the canister's memory usage.
+    let log_memory_store_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage();
+    assert_ne!(log_memory_store_memory_usage, NumBytes::new(0));
 
     // Set the freezing threshold high to freeze the canister.
     let payload = UpdateSettingsArgs {
@@ -9604,21 +9605,46 @@ fn clear_chunk_store_of_frozen_canister_with_empty_chunk_store_succeeds() {
     test.subnet_message(Method::UpdateSettings, payload)
         .unwrap();
 
-    // Clearing an already empty chunk store does not change the canister's memory
-    // usage and charges for no instructions, so the cycles and memory usage checks
-    // are skipped and the operation succeeds even though the canister is frozen.
+    let memory_usage_before = test.canister_state(canister_id).memory_usage();
     let balance_before = test.canister_state(canister_id).system_state.balance();
-    let clear_args = ClearChunkStoreArgs {
-        canister_id: canister_id.into(),
-    };
-    test.subnet_message(Method::ClearChunkStore, clear_args.encode())
-        .unwrap();
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+    let subnet_available_memory_before = test.subnet_available_memory().get_execution_memory();
 
-    assert_eq!(balance_before, balance_after);
+    // Disabling the canister log frees the memory of the log memory store and,
+    // since the log memory store is empty, charges for no instructions. The
+    // canister's memory usage, memory allocation, and compute allocation thus do
+    // not increase, so the freezing threshold check is skipped and the operation
+    // succeeds even though the canister is frozen. Note that making the freezing
+    // threshold check unconditional would break this: `update_settings` must
+    // tolerate a frozen canister, e.g., so that the freezing threshold can be
+    // raised to freeze the canister in the first place.
+    let payload = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(0)
+            .build(),
+        sender_canister_version: None,
+    }
+    .encode();
+    test.subnet_message(Method::UpdateSettings, payload)
+        .unwrap();
+
+    // The log memory store is deallocated and its memory returned to the subnet
+    // available execution memory; the frozen canister is not charged anything.
     assert_eq!(
         test.canister_state(canister_id)
-            .wasm_chunk_store_memory_usage(),
+            .log_memory_store_memory_usage(),
         NumBytes::new(0)
+    );
+    assert_eq!(
+        test.canister_state(canister_id).memory_usage(),
+        memory_usage_before - log_memory_store_memory_usage
+    );
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        subnet_available_memory_before + log_memory_store_memory_usage.get() as i64
+    );
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        balance_before
     );
 }

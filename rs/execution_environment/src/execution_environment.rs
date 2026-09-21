@@ -695,13 +695,13 @@ impl ExecutionEnvironment {
                 let result = op_result.and_then(|response| {
                     self.canister_manager
                         .cycles_and_memory_usage_checks_and_updates_after_operation(
-                            subnet_cycles_config,
-                            &saved_canister,
                             canister,
-                            sender,
-                            response.instructions_to_charge_on_success,
                             round_limits,
+                            response.instructions_to_charge_on_success,
+                            sender,
+                            &saved_canister,
                             &resource_saturation,
+                            subnet_cycles_config,
                         )
                         .map(|()| response)
                 });

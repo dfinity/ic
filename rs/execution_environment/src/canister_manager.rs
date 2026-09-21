@@ -1503,13 +1503,13 @@ impl CanisterManager {
         // state before the settings were applied (canister history is accounted
         // for like any other canister memory).
         if let Err(err) = self.cycles_and_memory_usage_checks_and_updates(
-            state.get_own_subnet_cycles_config(),
-            &canister_snapshot,
             &mut new_canister,
-            sender,
-            NumInstructions::new(0),
             round_limits,
+            NumInstructions::new(0),
+            sender,
+            &canister_snapshot,
             &subnet_memory_saturation,
+            state.get_own_subnet_cycles_config(),
         ) {
             *round_limits = round_limits_snapshot;
             return Err(err);
@@ -1816,13 +1816,13 @@ impl CanisterManager {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn cycles_and_memory_usage_checks_and_updates_after_operation(
         &self,
-        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-        old_canister: &CanisterState,
         canister: &mut CanisterState,
-        sender: PrincipalId,
-        instructions: NumInstructions,
         round_limits: &mut RoundLimits,
+        instructions: NumInstructions,
+        sender: PrincipalId,
+        old_canister: &CanisterState,
         resource_saturation: &ResourceSaturation,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> Result<(), CanisterManagerError> {
         if canister.memory_usage() == old_canister.memory_usage()
             && canister.memory_allocation() == old_canister.memory_allocation()
@@ -1832,13 +1832,13 @@ impl CanisterManager {
             return Ok(());
         }
         self.cycles_and_memory_usage_checks_and_updates(
-            subnet_cycles_config,
-            old_canister,
             canister,
-            sender,
-            instructions,
             round_limits,
+            instructions,
+            sender,
+            old_canister,
             resource_saturation,
+            subnet_cycles_config,
         )
     }
 
@@ -1870,13 +1870,13 @@ impl CanisterManager {
     // instructions) and the caller must revert them in case of `Err`.
     fn cycles_and_memory_usage_checks_and_updates(
         &self,
-        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-        old_canister: &CanisterState,
         canister: &mut CanisterState,
-        sender: PrincipalId,
-        instructions: NumInstructions,
         round_limits: &mut RoundLimits,
+        instructions: NumInstructions,
+        sender: PrincipalId,
+        old_canister: &CanisterState,
         resource_saturation: &ResourceSaturation,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> Result<(), CanisterManagerError> {
         let old_memory_usage = old_canister.memory_usage();
         let new_memory_usage = canister.memory_usage();
@@ -3082,13 +3082,13 @@ impl CanisterManager {
             ),
         );
         if let Err(err) = self.cycles_and_memory_usage_checks_and_updates(
-            state.get_own_subnet_cycles_config(),
-            &canister_snapshot,
             canister,
-            sender,
-            NumInstructions::new(0),
             round_limits,
+            NumInstructions::new(0),
+            sender,
+            &canister_snapshot,
             resource_saturation,
+            state.get_own_subnet_cycles_config(),
         ) {
             *canister = canister_snapshot;
             *round_limits = round_limits_snapshot;
