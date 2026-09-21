@@ -334,6 +334,12 @@ impl CanisterManager {
     /// The heap delta increase must be accounted for by the caller, e.g.,
     /// by returning it as part of `CanisterManagerResponse`.
     ///
+    /// The cycles for the instructions used by a `log_memory_limit` resize are
+    /// charged here (and recorded in `consumed_cycles`), but the memory usage
+    /// and allocation changes resulting from the new settings are not accounted
+    /// for: the caller must run `cycles_and_memory_usage_checks_and_updates`
+    /// (comparing the canister against its state before the update) for them.
+    ///
     /// `canister: &mut CanisterState` and `round_limits: &mut RoundLimits`
     /// are updated in-place and changes must be reverted by the caller
     /// of this function in case of `Err`.
@@ -351,7 +357,6 @@ impl CanisterManager {
         consumed_cycles: &mut ConsumedCyclesForInstructions,
         settings: &CanisterSettings,
         sender: PrincipalId,
-        mut subnet_memory_saturation: ResourceSaturation,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         metrics: Option<&ExecutionEnvironmentMetrics>,
     ) -> Result<NumBytes, CanisterManagerError> {
@@ -407,37 +412,24 @@ impl CanisterManager {
             } else {
                 NumInstructions::new(0)
             };
-            let new_log_store_memory_usage = canister
-                .system_state
-                .log_memory_store
-                .memory_usage_for_limit(requested_limit);
-            let old_canister_memory_usage = canister.memory_usage();
-            let new_canister_memory_usage = old_canister_memory_usage
-                - canister.log_memory_store_memory_usage()
-                + new_log_store_memory_usage;
-            self.cycles_and_memory_usage_checks_and_updates(
-                subnet_cycles_config,
-                canister,
-                sender,
-                log_resize_instructions,
-                round_limits,
-                new_canister_memory_usage,
-                old_canister_memory_usage,
-                &subnet_memory_saturation,
-            )?;
-            round_limits.instructions -= as_round_instructions(log_resize_instructions);
+            // Charge for the resize instructions w.r.t. the canister's memory
+            // usage before the resize, i.e., the memory usage for which the
+            // instructions are executed. The memory usage change of the resize
+            // itself is accounted for by the caller.
             let log_resize_cost = self
                 .cycles_account_manager
                 .management_canister_cost(log_resize_instructions, subnet_cycles_config);
+            self.cycles_account_manager
+                .consume_cycles_for_management_canister_instructions(
+                    &sender,
+                    canister,
+                    log_resize_instructions,
+                    subnet_cycles_config,
+                )
+                .map_err(CanisterManagerError::NotEnoughCycles)?;
+            // Record the charge so it survives the canister state rollback on failure.
             consumed_cycles.add(log_resize_cost, log_resize_instructions);
-            // Account the log's newly allocated bytes on the subnet memory
-            // saturation so that the subsequent memory-allocation reservation
-            // reserves at the post-resize saturation.
-            let memory_allocation = canister.memory_allocation();
-            let log_allocated_bytes = memory_allocation
-                .allocated_bytes(new_canister_memory_usage)
-                .saturating_sub(&memory_allocation.allocated_bytes(old_canister_memory_usage));
-            subnet_memory_saturation = subnet_memory_saturation.add(log_allocated_bytes.get());
+            round_limits.instructions -= as_round_instructions(log_resize_instructions);
             let limit = requested_limit.get() as usize;
             let log_memory_store = &mut canister.system_state.log_memory_store;
             {
@@ -496,20 +488,19 @@ impl CanisterManager {
             canister.system_state.environment_variables = environment_variables.clone();
         }
 
-        // Compute and memory allocation: apply first so that `CyclesAccountManager`
-        // computes the freezing threshold in cycles based on the updated settings
-        // during subsequent validation.
+        // Memory allocation: apply. The caller accounts for the resulting change
+        // of the canister's memory allocation (subnet available memory and
+        // storage reservation cycles).
+        if let Some(memory_allocation) = settings.memory_allocation() {
+            canister.system_state.memory_allocation = memory_allocation;
+        }
+
+        // Compute allocation: apply. The caller accounts for the resulting change
+        // of the canister's compute allocation (freezing threshold).
         let old_compute_allocation = canister.compute_allocation();
         if let Some(compute_allocation) = settings.compute_allocation() {
             canister.system_state.compute_allocation = compute_allocation;
         }
-        let new_compute_allocation = canister.system_state.compute_allocation;
-
-        let old_memory_allocation = canister.memory_allocation();
-        if let Some(memory_allocation) = settings.memory_allocation() {
-            canister.system_state.memory_allocation = memory_allocation;
-        }
-        let new_memory_allocation = canister.system_state.memory_allocation;
 
         // Reserved cycles limit: validate and apply before reserving cycles
         // since the error produced here refers to the current reserved cycles balance
@@ -525,8 +516,7 @@ impl CanisterManager {
             canister.system_state.set_reserved_balance_limit(limit);
         }
 
-        // Compute allocation: validate subnet capacity before the freezing
-        // threshold check so that SubnetOversubscribed takes priority.
+        // Compute allocation: validate subnet capacity.
         if let Some(new_compute_allocation) = settings.compute_allocation {
             // The saturating `u64` subtractions ensure that the available compute
             // capacity of the subnet never goes below zero. This means that even if
@@ -561,108 +551,12 @@ impl CanisterManager {
             }
         }
 
-        // Check that the canister is not frozen after changing its settings.
-        // Note that the error is produced only if compute/memory allocation increases.
-        // This is to allow increasing of the freezing threshold to make the
-        // canister frozen.
-        let reveal_top_up = canister.controllers().contains(&sender);
-        if let Err(err) = self
-            .cycles_account_manager
-            .can_withdraw_cycles_with_threshold(
-                &canister.system_state,
-                Cycles::zero(),
-                canister.memory_usage(),
-                canister.message_memory_usage(),
-                canister.system_state.reserved_balance(),
-                subnet_cycles_config,
-                reveal_top_up,
-            )
-        {
-            if new_compute_allocation > old_compute_allocation {
-                return Err(
-                    CanisterManagerError::InsufficientCyclesInComputeAllocation {
-                        compute_allocation: new_compute_allocation,
-                        available: err.available,
-                        threshold: err.threshold,
-                    },
-                );
-            } else if new_memory_allocation > old_memory_allocation {
-                return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
-                    memory_allocation: new_memory_allocation,
-                    available: err.available,
-                    threshold: err.threshold,
-                });
-            }
-        }
-
-        if settings.memory_allocation.is_some() {
-            // Memory allocation: validate subnet capacity and reserve cycles.
-            let canister_memory_usage = canister.memory_usage();
-            let old_memory_allocation_bytes =
-                old_memory_allocation.allocated_bytes(canister_memory_usage);
-            let new_memory_allocation_bytes =
-                new_memory_allocation.allocated_bytes(canister_memory_usage);
-            let allocated_bytes =
-                new_memory_allocation_bytes.saturating_sub(&old_memory_allocation_bytes);
-            let deallocated_bytes =
-                old_memory_allocation_bytes.saturating_sub(&new_memory_allocation_bytes);
-            if new_memory_allocation_bytes >= old_memory_allocation_bytes {
-                let available_execution_memory = round_limits
-                    .subnet_available_memory
-                    .get_execution_memory()
-                    .max(0) as u64;
-                let available_execution_memory_to_canister =
-                    available_execution_memory.saturating_add(old_memory_allocation_bytes.get());
-                round_limits
-                    .subnet_available_memory
-                    .try_decrement(allocated_bytes, NumBytes::from(0), NumBytes::from(0))
-                    .map_err(
-                        |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                            requested: new_memory_allocation_bytes,
-                            available: NumBytes::from(available_execution_memory_to_canister),
-                        },
-                    )?;
-            } else {
-                round_limits.subnet_available_memory.increment(
-                    deallocated_bytes,
-                    NumBytes::from(0),
-                    NumBytes::from(0),
-                );
-            }
-            let reservation_cycles = self
-                .cycles_account_manager
-                .storage_reservation_cycles(
-                    allocated_bytes,
-                    &subnet_memory_saturation,
-                    subnet_cycles_config,
-                )
-                .real();
-            canister
-                .system_state
-                .reserve_cycles(reservation_cycles)
-                .map_err(|err| match err {
-                    ReservationError::InsufficientCycles {
-                        requested,
-                        available,
-                    } => CanisterManagerError::InsufficientCyclesInMemoryAllocation {
-                        memory_allocation: new_memory_allocation,
-                        available,
-                        threshold: requested,
-                    },
-                    ReservationError::ReservedLimitExceed { requested, limit } => {
-                        CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
-                            memory_allocation: new_memory_allocation,
-                            requested,
-                            limit,
-                        }
-                    }
-                })?;
-        }
-        // Controllers: validate count and apply (only at the end
-        // so that cycles balance errors use the original controllers
-        // to determine their verbosity: the sender should still see verbose
-        // errors if the sender is no longer a controller after applying
-        // the settings).
+        // Controllers: validate count and apply (only at the end so that cycles
+        // balance errors use the original controllers to determine their verbosity:
+        // the sender should still see verbose errors if the sender is no longer a
+        // controller after applying the settings; the caller's
+        // `cycles_and_memory_usage_checks_and_updates` likewise derives the
+        // verbosity from the canister state before the update).
         if let Some(controllers) = settings.controllers()
             && controllers.len() > self.config.max_controllers
         {
@@ -694,7 +588,6 @@ impl CanisterManager {
         canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
         consumed_cycles: &mut ConsumedCyclesForInstructions,
-        subnet_memory_saturation: ResourceSaturation,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         metrics: &ExecutionEnvironmentMetrics,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
@@ -708,7 +601,6 @@ impl CanisterManager {
             consumed_cycles,
             &settings,
             sender,
-            subnet_memory_saturation.clone(),
             subnet_cycles_config,
             Some(metrics),
         )?;
@@ -730,13 +622,6 @@ impl CanisterManager {
                     .map(|environment_variables| environment_variables.hash());
 
                 if new_environment_variables_hash.is_some() || new_controllers.is_some() {
-                    // `validate_and_update_canister_settings` above already applied the
-                    // settings and ran `cycles_and_memory_usage_checks_and_updates` for
-                    // any memory usage change resulting from the update. Recording the
-                    // `settings_change` canister history entry is therefore the only
-                    // memory change past that point, so the new memory usage (read after
-                    // recording it) differs from the old one exactly by that entry.
-                    let old_memory_usage = canister.memory_usage();
                     canister.add_canister_change(
                         timestamp_nanos,
                         origin,
@@ -745,45 +630,19 @@ impl CanisterManager {
                             new_environment_variables_hash,
                         ),
                     );
-                    let new_memory_usage = canister.memory_usage();
-                    self.cycles_and_memory_usage_checks_and_updates(
-                        subnet_cycles_config,
-                        canister,
-                        sender,
-                        NumInstructions::new(0),
-                        round_limits,
-                        new_memory_usage,
-                        old_memory_usage,
-                        &subnet_memory_saturation,
-                    )?;
                 }
             }
             FlagStatus::Disabled => {
         */
         if let Some(new_controllers) = new_controllers {
-            // `validate_and_update_canister_settings` above already applied the
-            // settings and ran `cycles_and_memory_usage_checks_and_updates` for any
-            // memory usage change resulting from the update. Recording the
-            // `controllers_change` canister history entry is therefore the only memory
-            // change past that point, so the new memory usage (read after recording it)
-            // differs from the old one exactly by that entry.
-            let old_memory_usage = canister.memory_usage();
+            // The caller accounts for the memory usage of the recorded canister
+            // history entry (canister history is accounted for like any other
+            // canister memory).
             canister.add_canister_change(
                 timestamp_nanos,
                 origin,
                 CanisterChangeDetails::controllers_change(new_controllers),
             );
-            let new_memory_usage = canister.memory_usage();
-            self.cycles_and_memory_usage_checks_and_updates(
-                subnet_cycles_config,
-                canister,
-                sender,
-                NumInstructions::new(0),
-                round_limits,
-                new_memory_usage,
-                old_memory_usage,
-                &subnet_memory_saturation,
-            )?;
         }
         /*
             }
@@ -1572,6 +1431,11 @@ impl CanisterManager {
         // If validation fails, the canister is not inserted into state, but
         // `round_limits` may have been partially updated, so restore on error.
         let round_limits_snapshot = round_limits.clone();
+        // The canister state before applying the settings: the cycles and memory
+        // usage checks and updates below account for everything that applying the
+        // settings and recording the `canister_creation` canister history entry
+        // change w.r.t. it.
+        let old_canister = new_canister.clone();
         // Canister creation's first-time log memory buffer allocation is a
         // different event class from user-triggered resize: it starts from an
         // empty log store, so the resize records zero instructions. Use a
@@ -1596,7 +1460,6 @@ impl CanisterManager {
             &mut consumed_cycles,
             &settings,
             sender,
-            subnet_memory_saturation.clone(),
             state.get_own_subnet_cycles_config(),
             None,
         );
@@ -1630,27 +1493,22 @@ impl CanisterManager {
         let environment_variables_hash = settings
             .environment_variables()
             .map(|env_vars| env_vars.hash());
-        // `validate_and_update_canister_settings` above already applied the settings
-        // and ran `cycles_and_memory_usage_checks_and_updates` for any memory usage
-        // change resulting from the update. Recording the `canister_creation` canister
-        // history entry is therefore the only memory change past that point, so the new
-        // memory usage (read after recording it) differs from the old one exactly by
-        // that entry.
-        let old_memory_usage = new_canister.memory_usage();
         new_canister.add_canister_change(
             state.time(),
             origin,
             CanisterChangeDetails::canister_creation(controllers, environment_variables_hash),
         );
-        let new_memory_usage = new_canister.memory_usage();
+        // Account for everything that applying the settings and recording the
+        // `canister_creation` canister history entry changed w.r.t. the canister
+        // state before the settings were applied (canister history is accounted
+        // for like any other canister memory).
         if let Err(err) = self.cycles_and_memory_usage_checks_and_updates(
             state.get_own_subnet_cycles_config(),
+            &old_canister,
             &mut new_canister,
             sender,
             NumInstructions::new(0),
             round_limits,
-            new_memory_usage,
-            old_memory_usage,
             &subnet_memory_saturation,
         ) {
             *round_limits = round_limits_snapshot;
@@ -1939,17 +1797,17 @@ impl CanisterManager {
         Ok(StoredChunksReply(keys))
     }
 
-    /// Runs `cycles_and_memory_usage_checks_and_updates` for the memory usage
-    /// change of a management operation that has already been applied to the
-    /// canister: `old_memory_usage` is the canister's memory usage before the
-    /// operation and the new memory usage is read off the updated canister, so
-    /// that it includes any canister history the operation recorded (canister
-    /// history is accounted for like any other canister memory).
+    /// Runs `cycles_and_memory_usage_checks_and_updates` for the changes that a
+    /// management operation already applied to the canister: `old_canister` is
+    /// the canister state before the operation and the new canister state is the
+    /// updated `canister`, so that the changes include any canister history the
+    /// operation recorded (canister history is accounted for like any other
+    /// canister memory).
     ///
-    /// The checks and updates are skipped if the operation neither changed the
-    /// canister's memory usage nor used any instructions to be charged for here, so
-    /// that operations that do neither remain unaffected by them (in particular,
-    /// they do not start failing for an already frozen canister).
+    /// The checks and updates are skipped if the operation changed neither the
+    /// canister's memory usage, memory allocation, nor compute allocation, and used
+    /// no instructions to be charged for here, so that operations that do none of
+    /// this remain unaffected by them.
     ///
     /// `instructions` are the operation's
     /// `CanisterManagerResponse::instructions_to_charge_on_success`, i.e. the ones
@@ -1958,59 +1816,75 @@ impl CanisterManager {
     pub(crate) fn cycles_and_memory_usage_checks_and_updates_after_operation(
         &self,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+        old_canister: &CanisterState,
         canister: &mut CanisterState,
         sender: PrincipalId,
         instructions: NumInstructions,
         round_limits: &mut RoundLimits,
-        old_memory_usage: NumBytes,
         resource_saturation: &ResourceSaturation,
     ) -> Result<(), CanisterManagerError> {
-        let new_memory_usage = canister.memory_usage();
-        if new_memory_usage == old_memory_usage && instructions == NumInstructions::new(0) {
+        if canister.memory_usage() == old_canister.memory_usage()
+            && canister.memory_allocation() == old_canister.memory_allocation()
+            && canister.compute_allocation() == old_canister.compute_allocation()
+            && instructions == NumInstructions::new(0)
+        {
             return Ok(());
         }
         self.cycles_and_memory_usage_checks_and_updates(
             subnet_cycles_config,
+            old_canister,
             canister,
             sender,
             instructions,
             round_limits,
-            new_memory_usage,
-            old_memory_usage,
             resource_saturation,
         )
     }
 
     // Runs the following checks on cycles and memory usage and performs the corresponding updates:
-    // 1. There is enough subnet available memory for the new memory usage.
+    // 1. There is enough subnet available memory for the new memory usage and allocation.
     // 2. Cycles for instructions can be withdrawn w.r.t. the old memory usage
     //    (in particular, the canister is not frozen afterwards).
-    // 3. The canister is not frozen due to its new memory usage.
+    // 3. The canister is not frozen due to its new memory usage, memory allocation,
+    //    and compute allocation. This check is only performed if the canister's memory
+    //    usage, memory allocation, or compute allocation increased: otherwise the
+    //    canister is allowed to be frozen afterwards (in particular, an operation can
+    //    raise the freezing threshold so that the canister becomes frozen).
     // 4. Storage reservation cycles can be reserved.
     //
-    // `new_memory_usage` must be the canister's memory usage *including* any canister
-    // history recorded by the operation (canister history is accounted for like any
-    // other canister memory). Callers that record a canister history entry therefore
-    // read `new_memory_usage` after recording it, so that the subnet available
-    // execution memory, freezing threshold, and storage reservation below all account
-    // for it over the true total memory usage.
+    // The old and new memory usage, memory allocation, and compute allocation are
+    // derived from `old_canister` (the canister state before the operation) and
+    // `canister` (the canister state after the operation). In particular, the new
+    // memory usage *includes* any canister history recorded by the operation
+    // (canister history is accounted for like any other canister memory), so that
+    // the subnet available execution memory, freezing threshold, and storage
+    // reservation below all account for it over the true total memory usage.
+    //
+    // Whether the cycles balance is revealed in errors is determined by the
+    // controllers *before* the operation: the sender should still see verbose errors
+    // if the operation removed the sender from the canister's controllers.
     fn cycles_and_memory_usage_checks_and_updates(
         &self,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+        old_canister: &CanisterState,
         canister: &mut CanisterState,
         sender: PrincipalId,
         instructions: NumInstructions,
         round_limits: &mut RoundLimits,
-        new_memory_usage: NumBytes,
-        old_memory_usage: NumBytes,
         resource_saturation: &ResourceSaturation,
     ) -> Result<(), CanisterManagerError> {
+        let old_memory_usage = old_canister.memory_usage();
+        let new_memory_usage = canister.memory_usage();
+        let old_memory_allocation = old_canister.memory_allocation();
+        let new_memory_allocation = canister.memory_allocation();
+        let old_compute_allocation = old_canister.compute_allocation();
+        let new_compute_allocation = canister.compute_allocation();
+
         // Update subnet available memory:
         // - return deallocated bytes back to subnet available memory;
         // - deduct allocated bytes from subnet available memory.
-        let memory_allocation = canister.memory_allocation();
-        let old_memory_allocated_bytes = memory_allocation.allocated_bytes(old_memory_usage);
-        let new_memory_allocated_bytes = memory_allocation.allocated_bytes(new_memory_usage);
+        let old_memory_allocated_bytes = old_memory_allocation.allocated_bytes(old_memory_usage);
+        let new_memory_allocated_bytes = new_memory_allocation.allocated_bytes(new_memory_usage);
         let allocated_bytes =
             new_memory_allocated_bytes.saturating_sub(&old_memory_allocated_bytes);
         let deallocated_bytes =
@@ -2037,7 +1911,7 @@ impl CanisterManager {
 
         // Consume cycles for instructions w.r.t. the old memory usage,
         // i.e., the memory usage for which the instructions were executed.
-        let reveal_top_up = canister.controllers().contains(&sender);
+        let reveal_top_up = old_canister.controllers().contains(&sender);
         let cycles_for_instructions = self
             .cycles_account_manager
             .management_canister_cost(instructions, subnet_cycles_config);
@@ -2053,20 +1927,41 @@ impl CanisterManager {
             )
             .map_err(CanisterManagerError::NotEnoughCycles)?;
 
-        // Check that the canister is not frozen due to its new memory usage
-        // (no cycles are withdrawn by this check).
-        if let Err(err) = self
-            .cycles_account_manager
-            .can_withdraw_cycles_with_threshold(
-                &canister.system_state,
-                Cycles::zero(),
-                new_memory_usage,
-                message_memory_usage,
-                canister.system_state.reserved_balance(),
-                subnet_cycles_config,
-                reveal_top_up,
-            )
+        // Check that the canister is not frozen due to its new memory usage, memory
+        // allocation, and compute allocation (no cycles are withdrawn by this check).
+        // The check is skipped unless one of them increased so that, e.g., raising the
+        // freezing threshold may freeze the canister.
+        if (new_memory_usage > old_memory_usage
+            || new_memory_allocation > old_memory_allocation
+            || new_compute_allocation > old_compute_allocation)
+            && let Err(err) = self
+                .cycles_account_manager
+                .can_withdraw_cycles_with_threshold(
+                    &canister.system_state,
+                    Cycles::zero(),
+                    new_memory_usage,
+                    message_memory_usage,
+                    canister.system_state.reserved_balance(),
+                    subnet_cycles_config,
+                    reveal_top_up,
+                )
         {
+            if new_compute_allocation > old_compute_allocation {
+                return Err(
+                    CanisterManagerError::InsufficientCyclesInComputeAllocation {
+                        compute_allocation: new_compute_allocation,
+                        available: err.available,
+                        threshold: err.threshold,
+                    },
+                );
+            }
+            if new_memory_allocation > old_memory_allocation {
+                return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
+                    memory_allocation: new_memory_allocation,
+                    available: err.available,
+                    threshold: err.threshold,
+                });
+            }
             return Err(CanisterManagerError::InsufficientCyclesInMemoryGrow {
                 bytes: allocated_bytes,
                 available: err.available,
@@ -2085,16 +1980,34 @@ impl CanisterManager {
                 ReservationError::InsufficientCycles {
                     requested,
                     available,
-                } => CanisterManagerError::InsufficientCyclesInMemoryGrow {
-                    bytes: allocated_bytes,
-                    available,
-                    required: requested,
-                },
+                } => {
+                    if new_memory_allocation > old_memory_allocation {
+                        CanisterManagerError::InsufficientCyclesInMemoryAllocation {
+                            memory_allocation: new_memory_allocation,
+                            available,
+                            threshold: requested,
+                        }
+                    } else {
+                        CanisterManagerError::InsufficientCyclesInMemoryGrow {
+                            bytes: allocated_bytes,
+                            available,
+                            required: requested,
+                        }
+                    }
+                }
                 ReservationError::ReservedLimitExceed { requested, limit } => {
-                    CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
-                        bytes: allocated_bytes,
-                        requested,
-                        limit,
+                    if new_memory_allocation > old_memory_allocation {
+                        CanisterManagerError::ReservedCyclesLimitExceededInMemoryAllocation {
+                            memory_allocation: new_memory_allocation,
+                            requested,
+                            limit,
+                        }
+                    } else {
+                        CanisterManagerError::ReservedCyclesLimitExceededInMemoryGrow {
+                            bytes: allocated_bytes,
+                            requested,
+                            limit,
+                        }
                     }
                 }
             })?;
@@ -3146,12 +3059,9 @@ impl CanisterManager {
             .system_state
             .rename_canister(new_id, to_version, to_total_num_changes);
         // Recording the `rename_canister` canister history entry is the only memory
-        // change here, so the new memory usage (read after recording it) differs from
-        // the old one exactly by that entry. Account for it against the subnet
-        // available execution memory (and the canister's cycles), just like any other
-        // canister memory, failing if the subnet cannot account for the canister
-        // history.
-        let old_memory_usage = canister.memory_usage();
+        // change here. Account for it against the subnet available execution memory
+        // (and the canister's cycles), just like any other canister memory, failing
+        // if the subnet cannot account for the canister history.
         canister.add_canister_change(
             state.time(),
             origin,
@@ -3164,15 +3074,13 @@ impl CanisterManager {
                 requested_by,
             ),
         );
-        let new_memory_usage = canister.memory_usage();
         if let Err(err) = self.cycles_and_memory_usage_checks_and_updates(
             state.get_own_subnet_cycles_config(),
+            &canister_snapshot,
             canister,
             sender,
             NumInstructions::new(0),
             round_limits,
-            new_memory_usage,
-            old_memory_usage,
             resource_saturation,
         ) {
             *canister = canister_snapshot;
