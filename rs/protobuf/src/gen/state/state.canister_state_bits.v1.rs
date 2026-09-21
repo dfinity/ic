@@ -706,8 +706,7 @@ pub struct CanisterStateBits {
     pub interrupted_during_execution: u64,
     /// Total cycles consumed by the canister, as a gauge: increased on prepayment
     /// and decreased again on refund. Predates `consumed_cycles_monotonic` below,
-    /// which is backfilled from here, so this is the field that is guaranteed to
-    /// hold the canister's full history.
+    /// so this is the field that holds the canister's full history.
     #[prost(message, optional, tag = "22")]
     pub consumed_cycles: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
     /// Total cycles consumed by the canister, monotonic: unlike `consumed_cycles`,
@@ -715,9 +714,7 @@ pub struct CanisterStateBits {
     /// increased, by the actually consumed amount once the refund is known.
     ///
     /// Absent from checkpoints written before September 2026, where it decodes as
-    /// zero; but backfilled from the `consumed_cycles` gauge above on the first
-    /// checkpoint round after an upgrade, so from then on it covers the canister's
-    /// full history too.
+    /// zero.
     #[prost(message, optional, tag = "71")]
     pub consumed_cycles_monotonic:
         ::core::option::Option<super::super::super::types::v1::NominalCycles>,
@@ -758,8 +755,8 @@ pub struct CanisterStateBits {
     /// the respective amount is added to the consumed amount while when a refund
     /// happens the refund amount is subtracted from consumed amount.
     ///
-    /// These predate `consumed_cycles_by_use_cases_monotonic` below, which is
-    /// backfilled from here, so these are the amounts that reach furthest back.
+    /// These predate `consumed_cycles_by_use_cases_monotonic` below, so these are
+    /// the amounts that reach furthest back.
     /// They only reach back to April 2023, so unlike the scalar `consumed_cycles`
     /// above they are not the canister's full history: the by-use-case breakdown
     /// was introduced in March 2023 (EXC-1345), but the fix that followed
@@ -773,15 +770,11 @@ pub struct CanisterStateBits {
     /// monotonic amounts facilitate programming retrieval of metrics and performing
     /// various aggregations on them more easily than their gauge counterparts.
     ///
-    /// Absent from checkpoints written before May 2026; but backfilled from the
-    /// gauges above on the first checkpoint round after an upgrade, so from then on
-    /// they cover as much as those gauges do, i.e. everything consumed since April
-    /// 2023. The backfill cannot reach further back: no per-use-case record from
-    /// before then exists.
+    /// Absent from checkpoints written before May 2026.
     ///
-    /// The one exception is the HTTPOutcalls entry, which is not backfilled and
-    /// thus only ever covers the outcalls made since May 2026: it is the one entry
-    /// with no gauge above to derive it from.
+    /// Unlike the gauges above, these have an HTTPOutcalls entry: HTTPS outcalls
+    /// are only tracked as a gauge at the subnet level, but as a monotonic amount
+    /// here too.
     #[prost(message, repeated, tag = "65")]
     pub consumed_cycles_by_use_cases_monotonic: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]

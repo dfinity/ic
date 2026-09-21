@@ -1271,12 +1271,7 @@ impl CanisterManager {
     /// Reports the cycles the canister has consumed, by use case.
     ///
     /// Reads the monotonic amounts rather than the gauges, as the endpoint's
-    /// contract is a total that only ever grows. Every checkpoint round backfills them
-    /// from the gauges, which predate them, so from the first such round after an
-    /// upgrade onwards they cover everything the canister consumed since April 2023 --
-    /// as far back as any per-use-case record goes. The sole exception is
-    /// `HTTPOutcalls`, which has no canister-level gauge to be backfilled from and
-    /// hence only ever covers the outcalls made since May 2026 (see
+    /// contract is a total that only ever grows (see
     /// `CanisterMetrics::consumed_cycles_by_use_cases_monotonic`).
     pub(crate) fn get_canister_metrics(
         &self,
@@ -1394,11 +1389,6 @@ impl CanisterManager {
         // `consumed_cycles_by_use_cases` gauges, not their monotonic counterparts,
         // that are moved into the subnet metrics below. That is deliberate: the gauges
         // are the ones that reach furthest back.
-        //
-        // Once the monotonic amounts have been backfilled the two agree anyway: a
-        // canister can only be deleted while `Stopped` and with empty queues, so it
-        // has no callback and no execution left holding an outstanding prepayment (see
-        // `SystemState::outstanding_prepayments`).
         let leftover_cycles = self
             .cycles_account_manager
             .leftover_cycles_for_canister_to_deleted(

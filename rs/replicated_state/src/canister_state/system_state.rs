@@ -334,10 +334,9 @@ impl CanisterMetrics {
     /// The total cycles consumed by the canister, as a gauge: raised by every
     /// prepayment and lowered again by its refund.
     ///
-    /// This gauge predates its monotonic counterpart, so it is the one that holds the
-    /// canister's full history; the monotonic amount only catches up on the first
-    /// checkpoint round that backfills it from here (see
-    /// `SystemState::migrate_consumed_cycles_to_monotonic`).
+    /// This gauge predates its monotonic counterpart
+    /// [`Self::consumed_cycles_monotonic`], so it is the one that holds the canister's
+    /// full history.
     pub fn consumed_cycles(&self) -> NominalCycles {
         self.consumed_cycles
     }
@@ -348,17 +347,15 @@ impl CanisterMetrics {
     /// (e.g. for memory usage). The gauge above, in contrast, is raised by the
     /// prepayment and lowered again by the refund.
     ///
-    /// The scalar equivalent of [`Self::consumed_cycles_by_use_cases_monotonic`],
-    /// summed over the use cases that [`Self::consumed_cycles`] covers, i.e.
-    /// everything except HTTPS outcalls, which are only tracked at the subnet level
-    /// (and, for the canister, in the by-use-case map). The two agree on everything
-    /// consumed from April 2023 onwards, but this amount reaches further back (see
-    /// [`Self::consumed_cycles_by_use_cases`]), so for a canister that consumed
-    /// cycles before then it exceeds what the by-use-case amounts add up to.
+    /// The scalar counterpart of [`Self::consumed_cycles_by_use_cases_monotonic`],
+    /// covering the use cases that [`Self::consumed_cycles`] covers, i.e. everything
+    /// except HTTPS outcalls, which are only tracked at the subnet level (and, for the
+    /// canister, in the by-use-case map). The two need not add up: this amount and
+    /// the by-use-case ones were introduced at different times, and their gauges
+    /// reach back to different points (see [`Self::consumed_cycles_by_use_cases`]).
     ///
     /// Tracked since September 2026 (#11465) and zero in checkpoints written before
-    /// that; but backfilled from the gauge above on the first checkpoint round after
-    /// an upgrade, so from then on it covers the canister's full history too.
+    /// that.
     ///
     /// See `SystemState::outstanding_prepayments` for the invariant that ties the
     /// two together.
@@ -369,10 +366,9 @@ impl CanisterMetrics {
     /// The cycles consumed by the canister per use case, as gauges: each is raised by
     /// every prepayment for that use case and lowered again by its refund.
     ///
-    /// These gauges predate their monotonic counterparts, so they are the ones that
-    /// hold the longer history; the monotonic amounts only catch up on the first
-    /// checkpoint round that backfills them from here (see
-    /// `SystemState::migrate_consumed_cycles_to_monotonic`).
+    /// These gauges predate their monotonic counterparts
+    /// [`Self::consumed_cycles_by_use_cases_monotonic`], so they are the ones that
+    /// hold the longer history.
     ///
     /// They only reach back to April 2023, so unlike the scalar
     /// [`Self::consumed_cycles`] -- which has been tracked since the beginning -- they
@@ -393,16 +389,12 @@ impl CanisterMetrics {
     /// once the refund is known; or right away, for a direct charge made without a
     /// prepayment (e.g. for memory usage).
     ///
-    /// Tracked since May 2026 (#9922) and absent from checkpoints written before that;
-    /// but backfilled from the gauges above on the first checkpoint round after an
-    /// upgrade, so from then on they cover as much as those gauges do, i.e. everything
-    /// consumed since April 2023. The backfill cannot reach further back than that:
-    /// no per-use-case record of what a canister consumed before April 2023 exists.
+    /// Tracked since May 2026 (#9922) and absent from checkpoints written before that.
     ///
-    /// The one exception is the `HTTPOutcalls` entry, which is not backfilled and thus
-    /// only ever covers the outcalls made since May 2026: it is the one entry with no
-    /// canister-level gauge to derive it from, as HTTPS outcalls are only tracked as a
-    /// gauge at the subnet level.
+    /// Unlike the gauges, these have an `HTTPOutcalls` entry (see
+    /// `SystemState::observe_consumed_cycles_for_https_outcall`): HTTPS outcalls are
+    /// only tracked as a gauge at the subnet level, but as a monotonic amount here
+    /// too.
     ///
     /// See `SystemState::outstanding_prepayments` for the invariant that ties these
     /// to the gauges.
