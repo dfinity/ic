@@ -1542,7 +1542,7 @@ mod eth_balance {
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{
-        BlockNumber, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
+        BlockNumber, GasAmount, LedgerBurnIndex, TransactionCount, TransactionNonce, Wei, WeiPerGas,
     };
     use crate::state::audit::{EventType, apply_state_transition};
     use crate::state::tests::checked_sub;
@@ -1827,6 +1827,94 @@ mod eth_balance {
         );
     }
 
+    /// Finalizing the receipts a round did get, rather than discarding them all when one lookup
+    /// fails, makes a gap in `sent_tx` reachable: the withdrawal whose lookup failed stays there
+    /// while a later nonce finalizes. The assert this replaced ruled that out, so pin what the
+    /// pipeline does with it.
+    #[test]
+    fn should_finalize_a_later_nonce_while_an_earlier_one_stays_pending() {
+        let spiked_fee = GasFeeEstimate {
+            base_fee_per_gas: WeiPerGas::from(1_000_000_u32),
+            max_priority_fee_per_gas: WeiPerGas::from(1_000_000_u32),
+        };
+        let straggler = withdrawal_flow(LedgerBurnIndex::new(0), TransactionNonce::ZERO);
+        let ahead = withdrawal_flow(LedgerBurnIndex::new(1), TransactionNonce::ONE);
+
+        let mut out_of_order = deposited_state();
+        let straggler_tx = straggler.send(&mut out_of_order);
+        let ahead_tx = ahead.send(&mut out_of_order);
+        ahead.finalize(&mut out_of_order, &ahead_tx);
+
+        assert_eq!(
+            out_of_order
+                .withdrawal_transactions
+                .finalized_transactions_iter()
+                .map(|(nonce, id, _tx)| (*nonce, *id))
+                .collect::<Vec<_>>(),
+            vec![(TransactionNonce::ONE, LedgerBurnIndex::new(1))],
+            "the later nonce must finalize on its own"
+        );
+        assert_eq!(
+            out_of_order
+                .withdrawal_transactions
+                .create_resubmit_transactions(TransactionCount::TWO, spiked_fee.clone()),
+            vec![],
+            "the chain has moved past the straggler's nonce, so it must not be resubmitted"
+        );
+        assert!(
+            !out_of_order
+                .withdrawal_transactions
+                .create_resubmit_transactions(TransactionCount::ZERO, spiked_fee)
+                .is_empty(),
+            "a straggler the chain has not passed is still considered for resubmission, so the \
+             emptiness above is the nonce filter and not the fee"
+        );
+
+        straggler.finalize(&mut out_of_order, &straggler_tx);
+
+        let mut in_order = deposited_state();
+        let straggler_tx = straggler.send(&mut in_order);
+        let ahead_tx = ahead.send(&mut in_order);
+        straggler.finalize(&mut in_order, &straggler_tx);
+        ahead.finalize(&mut in_order, &ahead_tx);
+        assert_eq!(
+            out_of_order.withdrawal_transactions, in_order.withdrawal_transactions,
+            "both withdrawals must end up finalized, whichever order their receipts arrived in"
+        );
+        assert_eq!(out_of_order.eth_balance, in_order.eth_balance);
+    }
+
+    fn deposited_state() -> State {
+        let mut state = initial_state();
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedDeposit(received_eth_event()),
+        );
+        state
+    }
+
+    /// A withdrawal small enough that two of them fit the deposit [`deposited_state`] credits.
+    fn withdrawal_flow(
+        ledger_burn_index: LedgerBurnIndex,
+        nonce: TransactionNonce,
+    ) -> WithdrawalFlow {
+        WithdrawalFlow {
+            nonce,
+            ..WithdrawalFlow::for_request(EthWithdrawalRequest {
+                withdrawal_amount: Wei::new(4_000_000_000_000_000),
+                destination: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
+                    .parse()
+                    .unwrap(),
+                ledger_burn_index,
+                from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+                    .parse()
+                    .unwrap(),
+                from_subaccount: None,
+                created_at: Some(1699527697000000000),
+            })
+        }
+    }
+
     #[test]
     fn should_update_after_successful_and_failed_sweeper_funding() {
         let mut state_before_funding = initial_state();
@@ -2023,6 +2111,12 @@ mod eth_balance {
         }
 
         fn apply(self, state: &mut State) -> TransactionReceipt {
+            let signed_tx = self.send(state);
+            self.finalize(state, &signed_tx)
+        }
+
+        /// Drives the request up to a sent transaction, which then awaits its receipt.
+        fn send(&self, state: &mut State) -> SignedEip1559TransactionRequest {
             let accepted_withdrawal_request_event =
                 accepted_withdrawal_request_event(self.withdrawal_request.clone());
             apply_state_transition(state, &accepted_withdrawal_request_event);
@@ -2031,7 +2125,7 @@ mod eth_balance {
                 .withdrawal_request
                 .create_transaction(
                     self.nonce,
-                    self.tx_fee,
+                    self.tx_fee.clone(),
                     self.gas_limit,
                     EthereumNetwork::Sepolia,
                 )
@@ -2049,8 +2143,7 @@ mod eth_balance {
                 r: Default::default(),
                 s: Default::default(),
             };
-            let signed_tx =
-                SignedEip1559TransactionRequest::from((transaction.clone(), dummy_signature));
+            let signed_tx = SignedEip1559TransactionRequest::from((transaction, dummy_signature));
             apply_state_transition(
                 state,
                 &EventType::SignedTransaction {
@@ -2058,7 +2151,15 @@ mod eth_balance {
                     transaction: signed_tx.clone(),
                 },
             );
+            signed_tx
+        }
 
+        /// Records the receipt of the transaction the request sent, finalizing it.
+        fn finalize(
+            &self,
+            state: &mut State,
+            signed_tx: &SignedEip1559TransactionRequest,
+        ) -> TransactionReceipt {
             let tx_receipt = TransactionReceipt {
                 block_hash: "0xce67a85c9fb8bc50213815c32814c159fd75160acf7cb8631e8e7b7cf7f1d472"
                     .parse()
