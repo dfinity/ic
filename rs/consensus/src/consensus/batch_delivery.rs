@@ -634,14 +634,12 @@ mod tests {
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{
-        subnet_test_id, test_platform_version, test_replica_version,
-    };
+    use ic_test_utilities_types::ids::{subnet_test_id, test_platform_version};
     use ic_types::{
-        PrincipalId, SubnetId,
+        PrincipalId, RegistryVersion, SubnetId,
         batch::BatchPayload,
         consensus::{
-            DataPayload, HashedBlock,
+            DataPayload, HashedBlock, Payload as ConsensusPayload,
             dkg::{DkgDataPayload, RemoteTranscriptResult, SplittingArgs, SubnetSplittingStatus},
         },
         crypto::threshold_sig::ni_dkg::{
