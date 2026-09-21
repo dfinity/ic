@@ -390,25 +390,22 @@ fn get_messages_responses_and_http_spent(
         })
         .unwrap_or_default();
 
-    let mut responses = Vec::new();
-    responses.append(&mut generate_responses_to_remote_dkgs(
-        &data_payload.dkg.transcripts_for_remote_subnets,
-        log,
-    ));
+    let remote_dkgs =
+        generate_responses_to_remote_dkgs(&data_payload.dkg.transcripts_for_remote_subnets, log);
 
-    if let Some(payload) = &data_payload.idkg {
-        responses.append(&mut generate_responses_to_initial_dealings_calls(payload));
-    }
+    let mut idkg_reshares = generate_responses_to_initial_dealings_calls(&data_payload.idkg);
 
     let (mut http_responses, canister_http_spent, http_stats) =
         CanisterHttpPayloadBuilderImpl::into_messages(&data_payload.batch.canister_http);
-    responses.append(&mut http_responses);
     stats.canister_http = http_stats;
 
     let mut chain_key_responses =
         ChainKeyPayloadBuilderImpl::into_messages(&data_payload.batch.chain_key);
-    responses.append(&mut chain_key_responses);
 
+    let mut responses = remote_dkgs;
+    responses.append(&mut idkg_reshares);
+    responses.append(&mut http_responses);
+    responses.append(&mut chain_key_responses);
     (messages, responses, canister_http_spent)
 }
 
@@ -611,8 +608,12 @@ fn generate_dkg_response_payload(
 /// Creates responses to `ReshareChainKeyArgs` system calls with the initial
 /// dealings.
 fn generate_responses_to_initial_dealings_calls(
-    idkg_payload: &idkg::IDkgPayload,
+    idkg_payload: &idkg::Payload,
 ) -> Vec<ConsensusResponse> {
+    let Some(idkg_payload) = idkg_payload else {
+        return Vec::new();
+    };
+
     let mut consensus_responses = Vec::new();
     for agreement in idkg_payload.xnet_reshare_agreements.values() {
         if let idkg::CompletedReshareRequest::Unreported(response) = agreement {
