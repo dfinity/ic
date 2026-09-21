@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added the `million_round_instructions_total` field to `SubnetMetricsResult`, reporting the instructions the subnet accounted for across the execution phases of all rounds, in millions rounded up.
+
 ## [0.10.0] - 2026-09-10
 
 ### Added
