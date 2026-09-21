@@ -23,6 +23,10 @@
 //! draws on a subaccount would be described as coming from somewhere it does
 //! not.
 //!
+//! Alongside each signed update travels the signed read-state call that reads
+//! its result. The two are signed separately, so they can be paired up wrongly,
+//! and the submit path then reports a call as having failed while it executes.
+//!
 //! [`verify_signed_target`] closes that gap. It is shared by
 //! `/construction/parse`, `/construction/hash` and the submit path's `Request`
 //! reconstruction, so the operations shown before signing, the operations shown
@@ -39,7 +43,10 @@ use ic_nns_governance_api::{
     ClaimOrRefreshNeuronFromAccount, ManageNeuronCommandRequest, ManageNeuronRequest,
     manage_neuron, manage_neuron::NeuronIdOrSubaccount,
 };
-use ic_types::{CanisterId, PrincipalId, messages::HttpCanisterUpdate};
+use ic_types::{
+    CanisterId, PrincipalId,
+    messages::{HttpCanisterUpdate, HttpReadStateContent},
+};
 
 /// Governance method that every neuron management command is submitted through.
 const MANAGE_NEURON: &str = "manage_neuron";
@@ -80,11 +87,13 @@ pub fn verify_signed_envelopes(
 }
 
 /// Return the update that stands for every envelope of a signed request, or an
-/// error if they do not all carry the same message.
+/// error if the envelopes are not interchangeable.
 ///
-/// See [`verify_signed_envelopes`] for why they have to. Callers that go on to
-/// check the returned update against the displayed metadata themselves use this
-/// directly, rather than having it checked twice.
+/// They are interchangeable when they all carry the same message -- see
+/// [`verify_signed_envelopes`] for why they have to -- and each is paired with
+/// the read-state call that reads that message's own result. Callers that go on
+/// to check the returned update against the displayed metadata themselves use
+/// this directly, rather than having it checked twice.
 pub fn representative_envelope(
     envelopes: &[EnvelopePair],
 ) -> Result<&HttpCanisterUpdate, ApiError> {
@@ -94,7 +103,7 @@ pub fn representative_envelope(
         .update_content();
 
     let expected = without_expiry(representative);
-    for envelope in &envelopes[1..] {
+    for envelope in envelopes {
         if without_expiry(envelope.update_content()) != expected {
             return Err(ApiError::invalid_request(
                 "The envelopes of a signed request must differ only in their ingress \
@@ -102,6 +111,7 @@ pub fn representative_envelope(
                  since the one that gets submitted need not be the one described.",
             ));
         }
+        verify_read_state(envelope)?;
     }
     Ok(representative)
 }
@@ -115,6 +125,30 @@ fn without_expiry(update: &HttpCanisterUpdate) -> HttpCanisterUpdate {
     let mut update = update.clone();
     update.ingress_expiry = 0;
     update
+}
+
+/// Check that an envelope's read-state call is the one that reads the result of
+/// that envelope's own update.
+///
+/// The two halves are signed independently, so a request can pair an update
+/// with a read-state call belonging to some other message. The submit path
+/// broadcasts the update and then polls with whatever read-state it was handed,
+/// which never certifies the update's request id: the call is reported as
+/// having failed while it is in fact executing, and a caller who believes that
+/// report retries a transaction that has already gone through.
+///
+/// `/construction/combine` derives each read-state call from its own update, so
+/// requiring exactly that is what honest requests already satisfy.
+fn verify_read_state(envelope: &EnvelopePair) -> Result<(), ApiError> {
+    let HttpReadStateContent::ReadState { read_state } = &envelope.read_state.content;
+    if *read_state != convert::make_read_state_from_update(envelope.update_content()) {
+        return Err(ApiError::invalid_request(
+            "The read-state call of a signed request must read the result of that \
+             request's own update. Refusing a request that would be reported as \
+             having failed while it executes.",
+        ));
+    }
+    Ok(())
 }
 
 /// Check that every field of `request_type` that Rosetta will display is
@@ -477,9 +511,10 @@ fn mismatch(field: &str, displayed: u64, signed: u64, source: &str) -> ApiError 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::EnvelopePair;
     use candid::Encode;
     use ic_nns_governance_api::{ManageNeuronCommandRequest, manage_neuron};
-    use ic_types::messages::Blob;
+    use ic_types::messages::{Blob, HttpCallContent, HttpRequestEnvelope};
 
     const NEURON_INDEX: u64 = 7;
 
@@ -871,14 +906,12 @@ mod tests {
         .unwrap_err();
     }
 
-    #[test]
-    fn envelopes_must_differ_only_in_ingress_expiry() {
-        use crate::models::EnvelopePair;
-        use ic_types::messages::{
-            HttpCallContent, HttpReadState, HttpReadStateContent, HttpRequestEnvelope,
-        };
-
-        let pair = |update: HttpCanisterUpdate| EnvelopePair {
+    /// Builds the envelope pair `/construction/combine` would build for
+    /// `update`: the update itself, and the read-state call that reads its
+    /// result.
+    fn pair(update: HttpCanisterUpdate) -> EnvelopePair {
+        let read_state = convert::make_read_state_from_update(&update);
+        EnvelopePair {
             update: HttpRequestEnvelope::<HttpCallContent> {
                 content: HttpCallContent::Call { update },
                 sender_pubkey: None,
@@ -886,20 +919,16 @@ mod tests {
                 sender_delegation: None,
             },
             read_state: HttpRequestEnvelope::<HttpReadStateContent> {
-                content: HttpReadStateContent::ReadState {
-                    read_state: HttpReadState {
-                        sender: Blob(controller().into_vec()),
-                        paths: vec![],
-                        nonce: None,
-                        ingress_expiry: 0,
-                    },
-                },
+                content: HttpReadStateContent::ReadState { read_state },
                 sender_pubkey: None,
                 sender_sig: None,
                 sender_delegation: None,
             },
-        };
+        }
+    }
 
+    #[test]
+    fn envelopes_must_differ_only_in_ingress_expiry() {
         let base = manage_neuron_update(controller(), NEURON_INDEX);
         let mut later = base.clone();
         later.ingress_expiry = base.ingress_expiry + 1_000;
@@ -913,5 +942,27 @@ mod tests {
 
         // And an empty request has nothing to describe.
         verify_envelopes(&disburse(NEURON_INDEX), &[]).unwrap_err();
+    }
+
+    /// The update and read-state halves are signed separately, so an envelope
+    /// can pair an update with the read-state call of another message. Submit
+    /// would broadcast the update and then poll for a request id the IC never
+    /// certifies, reporting a failure for a call that is executing.
+    #[test]
+    fn a_read_state_for_another_message_is_rejected() {
+        let base = manage_neuron_update(controller(), NEURON_INDEX);
+        let mut later = base.clone();
+        later.ingress_expiry = base.ingress_expiry + 1_000;
+
+        // Both halves of a genuine pair, swapped between two envelopes of the
+        // same transaction -- no extra signature needed to build this.
+        let mut spliced = pair(base.clone());
+        spliced.read_state = pair(later).read_state;
+        verify_envelopes(&disburse(NEURON_INDEX), &[spliced]).unwrap_err();
+
+        // And the read-state call of an entirely different neuron's request.
+        let mut spliced = pair(base);
+        spliced.read_state = pair(manage_neuron_update(controller(), 9)).read_state;
+        verify_envelopes(&disburse(NEURON_INDEX), &[spliced]).unwrap_err();
     }
 }

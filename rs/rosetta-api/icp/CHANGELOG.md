@@ -6,6 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixed
 - `construction/payloads` now addresses neuron management to the governance canister this instance was configured with (`--governance-canister-id`), as `construction/derive` already did, instead of always to the mainnet one ([#11616](https://github.com/dfinity/ic/pull/11616)).
+- Require each envelope of a signed transaction to pair an update with the read-state call that reads that update's own result. A mismatched pair made `construction/submit` report a call as failed while it was executing, inviting a retry of a transaction that had already gone through ([#11616](https://github.com/dfinity/ic/pull/11616)).
 - Require the request metadata that `construction/parse`, `construction/hash` and `construction/submit` report to be derivable from, and consistent with, the signed payload. A transaction whose metadata cannot be confirmed against what is being signed is now rejected rather than described unverified ([#11616](https://github.com/dfinity/ic/pull/11616)).
 
 ## [2.1.10] - 2026-07-01
