@@ -1726,6 +1726,22 @@ fn pricing_label(pay_as_you_go: bool) -> &'static str {
 /// answers the outcall from the mocked response.
 const OUTCALL_URL: &str = "example.com";
 
+/// An upper bound on the number of rounds a message needs.
+const MAX_TICKS: usize = 20;
+
+/// Executes rounds until the given update call completes and returns its reply,
+/// panicking if it does not complete within [`MAX_TICKS`] rounds or if it is
+/// rejected.
+fn tick_until_completed(pic: &PocketIc, message_id: RawMessageId) -> Vec<u8> {
+    for _ in 0..MAX_TICKS {
+        pic.tick();
+        if let Some(status) = pic.ingress_status(message_id.clone()) {
+            return status.unwrap();
+        }
+    }
+    panic!("update call did not complete within {MAX_TICKS} rounds");
+}
+
 /// A PocketIC instance with a single application subnet on which flexible HTTP
 /// outcalls and the pay-as-you-go pricing model are enabled.
 fn flexible_outcalls_pic() -> PocketIc {
@@ -1781,11 +1797,20 @@ fn submit_outcall(
         )
         .unwrap();
 
-    // We need a pair of ticks for the test canister method to make the http outcall
-    // and for the management canister to start processing the http outcall.
-    pic.tick();
-    pic.tick();
-    let mut canister_http_requests = pic.get_canister_http();
+    // The test canister method has to make the http outcall and the management
+    // canister has to start processing it, which takes a pair of ticks.
+    // Installing also charges the canister for compiling its module, which can
+    // exceed the round's remaining instruction budget and delay the work below
+    // by a round, so tick until the outcall shows up rather than assuming a
+    // fixed number of rounds.
+    let mut canister_http_requests = Vec::new();
+    for _ in 0..MAX_TICKS {
+        pic.tick();
+        canister_http_requests = pic.get_canister_http();
+        if !canister_http_requests.is_empty() {
+            break;
+        }
+    }
     assert_eq!(
         canister_http_requests.len(),
         1,
@@ -3725,9 +3750,9 @@ fn ingress_status() {
         status => panic!("Unexpected ingress status: {status:?}"),
     }
 
-    pic.tick();
-
-    let reply = pic.ingress_status(msg_id.clone()).unwrap().unwrap();
+    // Installing charges the canister for compiling its module, which can exceed
+    // the round's remaining instruction budget, so tick until it completes.
+    let reply = tick_until_completed(&pic, msg_id.clone());
     let principal = Decode!(&reply, String).unwrap();
     assert_eq!(principal, canister_id.to_string());
 
@@ -3809,15 +3834,14 @@ fn call_ingress_expiry() {
     );
     assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
 
-    // execute a round on the PocketIC instance to process that update call
-    pic.tick();
-
     // check the update call status
     let raw_message_id = RawMessageId {
         effective_principal: RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
         message_id: msg_id.to_vec(),
     };
-    let reply = pic.ingress_status(raw_message_id).unwrap().unwrap();
+    // Installing charges the canister for compiling its module, which can exceed
+    // the round's remaining instruction budget and delay this call by a round.
+    let reply = tick_until_completed(&pic, raw_message_id);
     let principal = Decode!(&reply, String).unwrap();
     assert_eq!(principal, canister_id.to_string());
 

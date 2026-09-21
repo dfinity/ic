@@ -31,6 +31,13 @@ fn execute_many_instructions(
     // Install the test canister wasm on the canister.
     pic.install_canister(can_id, test_canister_wasm(), vec![], None);
 
+    // Installing charges the canister for compiling its module, which for this
+    // canister exceeds what is left of the round's instruction budget. That
+    // deficit costs one further round, which would otherwise be counted against
+    // the message below. Spend it here so that the round counts measure only how
+    // the message under test is sliced.
+    pic.tick();
+
     let t0 = pic.get_time();
     let res = pic.update_call(
         can_id,
