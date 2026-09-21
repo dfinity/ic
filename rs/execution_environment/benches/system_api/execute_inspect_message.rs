@@ -132,6 +132,7 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 network_topology,
                 &no_op_logger(),
                 exec_env.state_changes_error(),
+                exec_env.charging_from_balance_error(),
                 &IngressFilterMetrics::new(&MetricsRegistry::new()),
                 CyclesAccountManagerSubnetConfig::new(
                     SMALL_APP_SUBNET_MAX_SIZE,

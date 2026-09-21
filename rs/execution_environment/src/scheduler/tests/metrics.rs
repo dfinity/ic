@@ -44,6 +44,7 @@ use ic_types_cycles::{
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
+use prometheus::IntCounter;
 use std::time::Duration;
 
 /// Observes the state metrics at `height`, having first refreshed the derived
@@ -1707,7 +1708,11 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
             CompoundCycles::<Instructions>::new(Cycles::from(1000_u128), cost_schedule);
         test.canister_state_mut(canister_id)
             .system_state
-            .consume_cycles(removed_cycles);
+            .consume_cycles(
+                removed_cycles,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
+            );
 
         observe_state_metrics(&mut test, 0);
 
@@ -1812,7 +1817,11 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
             CompoundCycles::<Instructions>::new(Cycles::from(1000_u128), cost_schedule);
         test.canister_state_mut(canister_id)
             .system_state
-            .consume_cycles(removed_cycles);
+            .consume_cycles(
+                removed_cycles,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
+            );
 
         test.inject_call_to_ic00(
             Method::DeleteCanister,

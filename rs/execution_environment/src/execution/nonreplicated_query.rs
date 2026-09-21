@@ -35,6 +35,7 @@ pub fn execute_non_replicated_query(
     hypervisor: &Hypervisor,
     round_limits: &mut RoundLimits,
     state_changes_error: &IntCounter,
+    charging_from_balance_error: &IntCounter,
     subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> (
     CanisterState,
@@ -135,6 +136,7 @@ pub fn execute_non_replicated_query(
         network_topology,
         round_limits,
         state_changes_error,
+        charging_from_balance_error,
         &CallTreeMetricsNoOp,
         time,
         subnet_cycles_config,

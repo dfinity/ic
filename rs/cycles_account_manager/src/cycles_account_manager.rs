@@ -316,6 +316,8 @@ impl CyclesAccountManager {
         cycles: Cycles,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         reveal_top_up: bool,
+        log: &ReplicaLogger,
+        charging_error: &IntCounter,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
             canister.system_state.freeze_threshold,
@@ -346,6 +348,8 @@ impl CyclesAccountManager {
                 CompoundCycles::new(cycles, subnet_cycles_config.cost_schedule),
                 threshold,
                 reveal_top_up,
+                log,
+                charging_error,
             )
         }
     }
@@ -372,6 +376,8 @@ impl CyclesAccountManager {
         cycles: CompoundCycles<T>,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         reveal_top_up: bool,
+        log: &ReplicaLogger,
+        charging_error: &IntCounter,
     ) -> Result<(), CanisterOutOfCyclesError> {
         self.consume_cycles_impl(
             system_state,
@@ -380,6 +386,8 @@ impl CyclesAccountManager {
             cycles,
             subnet_cycles_config,
             reveal_top_up,
+            log,
+            charging_error,
         )
     }
 
@@ -394,6 +402,8 @@ impl CyclesAccountManager {
         cycles: CompoundCycles<T>,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         reveal_top_up: bool,
+        log: &ReplicaLogger,
+        charging_error: &IntCounter,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
             system_state.freeze_threshold,
@@ -404,7 +414,14 @@ impl CyclesAccountManager {
             subnet_cycles_config,
             system_state.reserved_balance(),
         );
-        self.consume_with_threshold_impl(system_state, cycles, threshold, reveal_top_up)
+        self.consume_with_threshold_impl(
+            system_state,
+            cycles,
+            threshold,
+            reveal_top_up,
+            log,
+            charging_error,
+        )
     }
 
     /// Consumes a direct, final `Instructions` charge (e.g. the cost of
@@ -423,6 +440,8 @@ impl CyclesAccountManager {
         cycles: CompoundCycles<Instructions>,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         reveal_top_up: bool,
+        log: &ReplicaLogger,
+        charging_error: &IntCounter,
     ) -> Result<(), CanisterOutOfCyclesError> {
         self.consume_cycles_impl(
             system_state,
@@ -431,6 +450,8 @@ impl CyclesAccountManager {
             cycles,
             subnet_cycles_config,
             reveal_top_up,
+            log,
+            charging_error,
         )?;
         let zero_refund =
             CompoundCycles::<Instructions>::new(Cycles::zero(), subnet_cycles_config.cost_schedule);
@@ -446,6 +467,8 @@ impl CyclesAccountManager {
         canister: &mut CanisterState,
         amount: NumInstructions,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+        log: &ReplicaLogger,
+        charging_error: &IntCounter,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let memory_usage = canister.memory_usage();
         let message_memory = canister.message_memory_usage();
@@ -458,6 +481,8 @@ impl CyclesAccountManager {
             cycles,
             subnet_cycles_config,
             reveal_top_up,
+            log,
+            charging_error,
         )
     }
 
@@ -481,6 +506,8 @@ impl CyclesAccountManager {
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         reveal_top_up: bool,
         execution_mode: WasmExecutionMode,
+        log: &ReplicaLogger,
+        charging_error: &IntCounter,
     ) -> Result<CompoundCycles<Instructions>, CanisterOutOfCyclesError> {
         let cost = self.execution_cost(num_instructions, subnet_cycles_config, execution_mode);
         self.consume_with_threshold_impl(
@@ -496,6 +523,8 @@ impl CyclesAccountManager {
                 system_state.reserved_balance(),
             ),
             reveal_top_up,
+            log,
+            charging_error,
         )
         .map(|_| cost)
     }
@@ -881,6 +910,8 @@ impl CyclesAccountManager {
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         execution_mode: WasmExecutionMode,
         reveal_top_up: bool,
+        log: &ReplicaLogger,
+        charging_error: &IntCounter,
     ) -> Result<CompoundCycles<Instructions>, CanisterOutOfCyclesError> {
         let required = self.prepayment_for_response_execution(subnet_cycles_config, execution_mode);
         let prepaid = prepayment_for_response_execution;
@@ -891,6 +922,8 @@ impl CyclesAccountManager {
                 required - prepaid,
                 Cycles::zero(),
                 reveal_top_up,
+                log,
+                charging_error,
             )?;
             return Ok(required);
         }
@@ -1067,8 +1100,17 @@ impl CyclesAccountManager {
         cycles: CompoundCycles<T>,
         threshold: Cycles,
         reveal_top_up: bool,
+        log: &ReplicaLogger,
+        charging_error: &IntCounter,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        self.consume_with_threshold_impl(system_state, cycles, threshold, reveal_top_up)
+        self.consume_with_threshold_impl(
+            system_state,
+            cycles,
+            threshold,
+            reveal_top_up,
+            log,
+            charging_error,
+        )
     }
 
     /// Same as `consume_with_threshold` but without the restriction to
@@ -1080,6 +1122,8 @@ impl CyclesAccountManager {
         cycles: CompoundCycles<T>,
         threshold: Cycles,
         reveal_top_up: bool,
+        log: &ReplicaLogger,
+        charging_error: &IntCounter,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let use_case = T::cycles_use_case();
 
@@ -1110,7 +1154,8 @@ impl CyclesAccountManager {
             reveal_top_up,
         )?;
 
-        system_state.consume_cycles(cycles);
+        // The balance was verified against the threshold above.
+        system_state.consume_cycles(cycles, log, charging_error);
         Ok(())
     }
 
@@ -1310,6 +1355,7 @@ impl CyclesAccountManager {
         &self,
         rate: CompoundCycles<T>,
         log: &ReplicaLogger,
+        charging_error: &IntCounter,
         canister: &mut CanisterState,
         duration_since_last_charge: Duration,
     ) -> Result<(), CanisterOutOfCyclesError> {
@@ -1321,6 +1367,8 @@ impl CyclesAccountManager {
             cycles,
             Cycles::zero(),
             false, // caller is system => no need to reveal top up balance
+            log,
+            charging_error,
         ) {
             info!(
                 log,
@@ -1340,6 +1388,7 @@ impl CyclesAccountManager {
     pub fn charge_canister_for_resource_allocation_and_usage(
         &self,
         log: &ReplicaLogger,
+        charging_error: &IntCounter,
         canister: &mut CanisterState,
         duration_since_last_charge: Duration,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
@@ -1359,18 +1408,21 @@ impl CyclesAccountManager {
         self.charge_canister_for_single_resource(
             memory,
             log,
+            charging_error,
             canister,
             duration_since_last_charge,
         )?;
         self.charge_canister_for_single_resource(
             message_memory,
             log,
+            charging_error,
             canister,
             duration_since_last_charge,
         )?;
         self.charge_canister_for_single_resource(
             compute_allocation,
             log,
+            charging_error,
             canister,
             duration_since_last_charge,
         )?;

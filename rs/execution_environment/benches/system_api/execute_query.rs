@@ -133,6 +133,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 exec_env.hypervisor_for_testing(),
                 &mut round_limits,
                 exec_env.state_changes_error(),
+                exec_env.charging_from_balance_error(),
                 CyclesAccountManagerSubnetConfig::new(
                     SMALL_APP_SUBNET_MAX_SIZE,
                     CanisterCyclesCostSchedule::Normal,

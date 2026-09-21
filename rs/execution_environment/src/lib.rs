@@ -26,6 +26,7 @@ pub use execution_environment::{
     ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits, as_num_instructions,
     as_round_instructions, execute_canister,
 };
+use execution_environment_metrics::ExecutionEnvironmentMetrics;
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{
     CanisterMemoryHandling, Hypervisor, HypervisorMetrics, MemoryHandling, MemorySource,
@@ -382,9 +383,13 @@ fn setup_execution_helper(
         config.max_environment_variable_name_length,
         config.max_environment_variable_value_length,
     );
+    let execution_environment_metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
     let canister_manager = Arc::new(CanisterManager::new(
         Arc::clone(&hypervisor),
         logger.clone(),
+        execution_environment_metrics
+            .charging_from_balance_error
+            .clone(),
         canister_manager_config,
         Arc::clone(&cycles_account_manager),
         Arc::clone(&fd_factory),
@@ -395,6 +400,7 @@ fn setup_execution_helper(
         Arc::clone(&hypervisor),
         Arc::clone(&canister_manager),
         Arc::clone(&ingress_history_writer) as Arc<_>,
+        execution_environment_metrics,
         metrics_registry,
         own_subnet_id,
         own_subnet_type,

@@ -83,6 +83,10 @@ const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
 pub(crate) struct CanisterManager {
     hypervisor: Arc<Hypervisor>,
     log: ReplicaLogger,
+    /// Critical error for charges exceeding the canister's cycles balance:
+    /// the same counter as `ExecutionEnvironmentMetrics::charging_from_balance_error`,
+    /// held directly for the paths that have no `RoundCounters` at hand.
+    charging_from_balance_error: IntCounter,
     config: CanisterMgrConfig,
     cycles_account_manager: Arc<CyclesAccountManager>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
@@ -92,6 +96,7 @@ impl CanisterManager {
     pub(crate) fn new(
         hypervisor: Arc<Hypervisor>,
         log: ReplicaLogger,
+        charging_from_balance_error: IntCounter,
         config: CanisterMgrConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
@@ -99,6 +104,7 @@ impl CanisterManager {
         CanisterManager {
             hypervisor,
             log,
+            charging_from_balance_error,
             config,
             cycles_account_manager,
             fd_factory,
@@ -959,6 +965,8 @@ impl CanisterManager {
                     subnet_cycles_config,
                     reveal_top_up,
                     wasm_execution_mode,
+                    &self.log,
+                    round_counters.charging_from_balance_error,
                 ) {
                     Ok(cycles) => cycles,
                     Err(err) => {
@@ -1575,7 +1583,7 @@ impl CanisterManager {
             Arc::clone(&self.fd_factory),
         );
 
-        system_state.consume_cycles(creation_fee);
+        system_state.consume_cycles(creation_fee, &self.log, &self.charging_from_balance_error);
         let mut new_canister = CanisterState::new(
             system_state,
             None,
@@ -1838,6 +1846,8 @@ impl CanisterManager {
                 canister,
                 instructions,
                 subnet_cycles_config,
+                &self.log,
+                &self.charging_from_balance_error,
             )
             .map_err(|err| CanisterManagerError::WasmChunkStoreError {
                 message: format!("Error charging for 'upload_chunk': {err}"),
@@ -2046,6 +2056,8 @@ impl CanisterManager {
                 cycles_for_instructions,
                 subnet_cycles_config,
                 reveal_top_up,
+                &self.log,
+                &self.charging_from_balance_error,
             )
             .map_err(CanisterManagerError::NotEnoughCycles)?;
 
@@ -2404,6 +2416,8 @@ impl CanisterManager {
             subnet_cycles_config,
             reveal_top_up,
             wasm_execution_mode,
+            &self.log,
+            &self.charging_from_balance_error,
         ) {
             Ok(cycles) => cycles,
             Err(err) => {
@@ -2782,6 +2796,8 @@ impl CanisterManager {
                 canister,
                 num_instructions,
                 subnet_cycles_config,
+                &self.log,
+                &self.charging_from_balance_error,
             )
             .map_err(CanisterManagerError::NotEnoughCycles)?;
         let cost = self
@@ -3007,6 +3023,8 @@ impl CanisterManager {
                 canister,
                 instructions,
                 subnet_cycles_config,
+                &self.log,
+                &self.charging_from_balance_error,
             )
             .map_err(CanisterManagerError::NotEnoughCycles)?;
         let cost = self

@@ -112,6 +112,7 @@ fn test_can_charge_application_subnets() {
                     cycles_account_manager
                         .charge_canister_for_resource_allocation_and_usage(
                             &log,
+                            &IntCounter::new("no_op", "no_op").unwrap(),
                             &mut canister,
                             duration,
                             subnet_cycles_config,
@@ -322,6 +323,8 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
             subnet_cycles_config,
             false,
             WASM_EXECUTION_MODE,
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     assert_eq!(system_state.balance(), initial_balance);
@@ -365,6 +368,8 @@ fn verify_no_cycles_charged_for_message_execution_on_free_schedule() {
             subnet_cycles_config,
             false,
             WASM_EXECUTION_MODE,
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     assert_eq!(system_state.balance(), initial_balance);
@@ -451,6 +456,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
+                &IntCounter::new("no_op", "no_op").unwrap(),
                 &mut canister,
                 Duration::from_secs(1),
                 subnet_cycles_config,
@@ -468,6 +474,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
+                &IntCounter::new("no_op", "no_op").unwrap(),
                 &mut canister,
                 Duration::from_secs(1),
                 subnet_cycles_config,
@@ -485,6 +492,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
+                &IntCounter::new("no_op", "no_op").unwrap(),
                 &mut canister,
                 Duration::from_secs(1),
                 subnet_cycles_config,
@@ -538,6 +546,7 @@ fn charge_canister_for_memory_usage() {
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
+                &IntCounter::new("no_op", "no_op").unwrap(),
                 &mut canister,
                 HOUR,
                 subnet_cycles_config,
@@ -603,6 +612,7 @@ fn do_not_charge_canister_for_memory_usage_free_schedule() {
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
+                &IntCounter::new("no_op", "no_op").unwrap(),
                 &mut canister,
                 HOUR,
                 subnet_cycles_config,
@@ -661,6 +671,7 @@ fn do_not_charge_canister_for_compute_allocation_free_schedule() {
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
                 &log,
+                &IntCounter::new("no_op", "no_op").unwrap(),
                 &mut canister,
                 HOUR,
                 subnet_cycles_config,
@@ -785,6 +796,8 @@ fn test_consume_with_threshold() {
                 CompoundCycles::<Memory>::new(Cycles::zero(), cost_schedule),
                 threshold,
                 false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
             )
             .is_ok()
     );
@@ -796,7 +809,14 @@ fn test_consume_with_threshold() {
     let amount = CompoundCycles::<Memory>::new(Cycles::from(i128::MAX as u128), cost_schedule);
     assert!(
         cycles_account_manager
-            .consume_with_threshold(&mut system_state, amount, threshold, false)
+            .consume_with_threshold(
+                &mut system_state,
+                amount,
+                threshold,
+                false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap()
+            )
             .is_ok()
     );
     cycles_balance_expected -= amount.real();
@@ -807,7 +827,14 @@ fn test_consume_with_threshold() {
 
     assert!(
         cycles_account_manager
-            .consume_with_threshold(&mut system_state, amount, threshold, false)
+            .consume_with_threshold(
+                &mut system_state,
+                amount,
+                threshold,
+                false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap()
+            )
             .is_ok()
     );
     cycles_balance_expected -= amount.real();
@@ -816,7 +843,14 @@ fn test_consume_with_threshold() {
     let amount = CompoundCycles::<Memory>::new(Cycles::new(1), cost_schedule);
     assert!(
         cycles_account_manager
-            .consume_with_threshold(&mut system_state, amount, threshold, false)
+            .consume_with_threshold(
+                &mut system_state,
+                amount,
+                threshold,
+                false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap()
+            )
             .is_ok()
     );
     cycles_balance_expected -= amount.real();
@@ -824,7 +858,14 @@ fn test_consume_with_threshold() {
 
     assert!(
         cycles_account_manager
-            .consume_with_threshold(&mut system_state, amount, threshold, false)
+            .consume_with_threshold(
+                &mut system_state,
+                amount,
+                threshold,
+                false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap()
+            )
             .is_err()
     );
     cycles_balance_expected -= amount.real();
@@ -879,6 +920,8 @@ fn cycles_withdraw_for_execution() {
                 amount,
                 subnet_cycles_config,
                 false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
             )
             .is_ok()
     );
@@ -892,6 +935,8 @@ fn cycles_withdraw_for_execution() {
                 amount,
                 subnet_cycles_config,
                 false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
             )
             .is_err()
     );
@@ -922,6 +967,8 @@ fn cycles_withdraw_for_execution() {
                 compound_exec_cycles_max,
                 subnet_cycles_config,
                 false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
             )
             .is_ok()
     );
@@ -955,6 +1002,8 @@ fn cycles_withdraw_for_execution() {
                 compound_exec_cycles_max,
                 subnet_cycles_config,
                 false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
             )
             .is_err()
     );
@@ -967,6 +1016,8 @@ fn cycles_withdraw_for_execution() {
                 CompoundCycles::<Instructions>::new(Cycles::new(10), cost_schedule),
                 subnet_cycles_config,
                 false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
             )
             .is_err()
     );
@@ -979,6 +1030,8 @@ fn cycles_withdraw_for_execution() {
                 CompoundCycles::<Instructions>::new(Cycles::new(1), cost_schedule),
                 subnet_cycles_config,
                 false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
             )
             .is_err()
     );
@@ -991,6 +1044,8 @@ fn cycles_withdraw_for_execution() {
                 CompoundCycles::<Instructions>::new(Cycles::zero(), cost_schedule),
                 subnet_cycles_config,
                 false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
             )
             .is_ok()
     );
@@ -1045,6 +1100,8 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
                 amount,
                 subnet_cycles_config,
                 false,
+                &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
             )
             .is_ok()
     );
@@ -1090,6 +1147,8 @@ fn withdraw_execution_cycles_consumes_cycles() {
             ),
             false,
             WASM_EXECUTION_MODE,
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     let consumed_cycles_after = system_state.canister_metrics().consumed_cycles();
@@ -1151,6 +1210,8 @@ fn consume_cycles_updates_consumed_cycles() {
                 DEFAULT_REFERENCE_SUBNET_SIZE,
             ),
             false,
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     let consumed_cycles_after = system_state.canister_metrics().consumed_cycles();
@@ -1177,6 +1238,8 @@ fn consume_cycles_for_memory_drains_reserved_balance() {
         CompoundCycles::<Memory>::new(Cycles::new(2_000_000), cost_schedule),
         Cycles::new(0),
         false,
+        &no_op_logger(),
+        &IntCounter::new("no_op", "no_op").unwrap(),
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(0));
@@ -1202,6 +1265,8 @@ fn consume_cycles_for_compute_drains_reserved_balance() {
         ),
         Cycles::new(0),
         false,
+        &no_op_logger(),
+        &IntCounter::new("no_op", "no_op").unwrap(),
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(0));
@@ -1224,6 +1289,8 @@ fn consume_cycles_for_uninstall_drains_reserved_balance() {
         CompoundCycles::<Uninstall>::new(Cycles::new(2_000_000), cost_schedule),
         Cycles::new(0),
         false,
+        &no_op_logger(),
+        &IntCounter::new("no_op", "no_op").unwrap(),
     )
     .unwrap();
     assert_eq!(system_state.reserved_balance(), Cycles::new(0));
@@ -1263,6 +1330,8 @@ fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
             subnet_cycles_config,
             false,
             WASM_EXECUTION_MODE,
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     assert_ne!(prepaid.real(), Cycles::zero());
@@ -1637,6 +1706,8 @@ fn variable_execution_cost_matches_refund() {
             subnet_cycles_config,
             false,
             WASM_EXECUTION_MODE,
+            &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
 

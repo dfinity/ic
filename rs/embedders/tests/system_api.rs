@@ -33,6 +33,7 @@ use ic_types::{
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use maplit::btreemap;
 use more_asserts::assert_le;
+use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::From,
@@ -1303,6 +1304,7 @@ fn certified_data_set() {
             false,
             &NoOpMetrics {},
             &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     assert_eq!(system_state.certified_data, vec![10; 32])
@@ -1499,6 +1501,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             false,
             &NoOpMetrics {},
             &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     assert_eq!(system_state.balance(), initial_cycles);
@@ -1558,6 +1561,7 @@ fn cycles_burn128_clamps_to_available_cycles() {
             false,
             &NoOpMetrics {},
             &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     assert_eq!(system_state.balance(), freeze_limit);
@@ -1720,6 +1724,7 @@ fn push_output_request_respects_memory_limits() {
             false,
             &NoOpMetrics {},
             &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     assert_eq!(1, system_state.queues().output_queues_len());
@@ -1821,6 +1826,7 @@ fn push_output_request_oversized_request_memory_limits() {
             false,
             &NoOpMetrics {},
             &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     assert_eq!(1, system_state.queues().output_queues_len());
@@ -1859,6 +1865,7 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
             false,
             &NoOpMetrics {},
             &no_op_logger(),
+            &IntCounter::new("no_op", "no_op").unwrap(),
         )
         .unwrap();
     assert_eq!(
@@ -2122,6 +2129,7 @@ fn ic0_call_with_best_effort_response() {
                 false,
                 &NoOpMetrics {},
                 &no_op_logger(),
+                &IntCounter::new("no_op", "no_op").unwrap(),
             )
             .unwrap();
 
