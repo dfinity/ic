@@ -2529,9 +2529,12 @@ impl SystemState {
 
         // Driven by the gauge map, which leaves the monotonic map's `HTTPOutcalls`
         // entry alone: it has no gauge counterpart at the canister level. The skip
-        // below makes that explicit, rather than relying on the gauge map never
-        // holding such an entry (which `observe_consumed_cycles_with_use_case` only
-        // asserts in debug builds).
+        // below guards that entry explicitly, because it is the one monotonic entry
+        // that carries data of its own -- `observe_consumed_cycles_for_https_outcall`
+        // writes it directly, with no gauge behind it. A stray `HTTPOutcalls` gauge
+        // entry (which `observe_consumed_cycles_with_use_case` only rules out in debug
+        // builds) would otherwise be taken as the amount to backfill from, and the
+        // `max` could raise a live-tracked amount above what was really consumed.
         for (use_case, gauge) in consumed_cycles_by_use_cases.iter() {
             if *use_case == CyclesUseCase::HTTPOutcalls {
                 continue;

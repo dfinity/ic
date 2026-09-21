@@ -2245,9 +2245,13 @@ fn migrate_consumed_cycles_to_monotonic(
         // time. The monotonic map's `HTTPOutcalls` entry is left out, as it must be:
         // it has no canister-level gauge to be checked or derived from (see
         // `CanisterMetrics::consumed_cycles_by_use_cases_monotonic`). The skip below
-        // makes that explicit, rather than relying on the gauge map never holding
-        // such an entry (which `observe_consumed_cycles_with_use_case` only asserts
-        // in debug builds).
+        // guards that entry explicitly, because it is the one monotonic entry that
+        // carries data of its own, written directly by
+        // `observe_consumed_cycles_for_https_outcall` with no gauge behind it. A stray
+        // `HTTPOutcalls` gauge entry (which `observe_consumed_cycles_with_use_case`
+        // only rules out in debug builds) would otherwise make this check report that
+        // live-tracked amount as above its gauge, and the backfill below derive from
+        // it.
         check_monotonic_consumed_cycles(
             canister_metrics.consumed_cycles(),
             canister_metrics.consumed_cycles_monotonic(),
