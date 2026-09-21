@@ -107,21 +107,7 @@ The Internet Computer provides a robust system for verifying the build reproduci
 * curl (`sudo apt install curl`)
 * About 100 GB of free disk space in `$HOME` (or another volume, specifed via
   option `--cache-dir`)
-* Network access to `download.dfinity.systems` (and `download.dfinity.network`
-  with `--download-source network` or `both`), `ic-api.internetcomputer.org`
-  (for `-p`), `github.com`, `raw.githubusercontent.com`,
-  `release-assets.githubusercontent.com`, `api.github.com`,
-  `tuf-repo-cdn.sigstore.dev` and `ghcr.io` (the build container image), plus
-  an Ubuntu package archive if `git` or `podman` has to be installed. The
-  GitHub hosts and Sigstore are not optional: the run aborts when the
-  attestation of a CDN checksum file cannot be fetched and verified.
-* A checksum-pinned GitHub CLI `gh` is downloaded, kept in the download cache
-  and unpacked into the run's temporary directory; a `gh` installed on the
-  machine is not used. *No GitHub account or login is needed.* Setting
-  `GH_TOKEN` to any GitHub token is optional: it makes the run use your own
-  API quota instead of the anonymous one (60 requests per hour per IP address;
-  a run normally needs at most eight), which matters behind a shared address
-  because an exhausted quota aborts the run.
+* Internet access.
 
 === Quick Start
 
@@ -170,20 +156,6 @@ GitHub or Sigstore unreachable — tells the run only that the provenance is
 unavailable, not which of the two it faces, and it stops rather than guess.
 The mismatch report of a rebuild therefore always says that the provenance of
 the CDN files was confirmed, unless the check was skipped.
-
-Consequently, any attestation that does not verify aborts the run before any
-image is downloaded or the build starts: within seconds, or within a few
-minutes when GitHub or Sigstore has to time out first — whether it
-*mismatches* (a substituted file carrying someone else's attestation: another
-commit's or another directory's checksum file) or *cannot be obtained* at all
-(bytes nobody attested, a commit built before attestations were introduced on
-2026-08-31, a security hotfix still private on `dfinity/ic-private`, GitHub or
-Sigstore unreachable, the API rate limit exhausted). Attestations are looked up
-by the file's digest, so from here a substituted file nobody attested looks
-exactly like an unattested build; the run stops rather than rebuild against
-bytes whose provenance it cannot establish. A hotfix built on
-`dfinity/ic-private` gains its attestation once its `hotfix-*` branch is
-published to `dfinity/ic` and rebuilt there.
 
 The checksum files and launch measurements are always fetched fresh rather
 than read from the download cache, and a cached image is reused only after a

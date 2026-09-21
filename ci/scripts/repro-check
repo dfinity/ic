@@ -143,7 +143,7 @@ class VerificationError(RuntimeError):
 # entry. The rationale behind each pin is documented there at length; it is not repeated here.
 #
 # What differs is the transport. That script calls `gh attestation verify` in its online mode,
-# which requires a GitHub login. repro-check is run by external verifiers who have no GitHub
+# which requires a GitHub login. repro-check is run by external verifiers who might not have a GitHub
 # account, so it fetches the Sigstore bundles from the public attestations REST endpoint and hands
 # them to gh with --bundle, which verifies them with no token at all.
 ATTESTATION_REPO = "dfinity/ic"
@@ -170,24 +170,6 @@ GH_CLI_VERSION = "2.98.0"
 GH_CLI_SHA256 = "3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de"
 GH_CLI_URL = f"https://github.com/cli/cli/releases/download/v{GH_CLI_VERSION}/gh_{GH_CLI_VERSION}_linux_amd64.tar.gz"
 GH_CLI_TAR_MEMBER = f"gh_{GH_CLI_VERSION}_linux_amd64/bin/gh"
-
-# Shown with the abort for a checksum file GitHub holds no attestation for. It deliberately does
-# not name --skip-attestation-check: a missing attestation is exactly the moment the bypass must
-# not be suggested. --help and the README document the flag.
-NO_ATTESTATION_ADVICE = (
-    "That is what a substituted checksum file looks like, and also what an unattested build looks "
-    "like: a commit built before PR #11323 (2026-08-31), or a security hotfix built on the private "
-    "dfinity/ic-private repository and not yet published to dfinity/ic and rebuilt there. This run "
-    "stops here rather than rebuild against bytes whose provenance it cannot establish. A commit "
-    "that predates attestations is verified with its own version of this script (see the README); "
-    "if GitHub was unreachable, run again later."
-)
-
-# Said when the check is skipped and again at the end of the run, so the build output cannot bury
-# it: a run that skipped the check must not end in a green that reads as provenance-verified.
-SKIP_NOTICE = (
-    "--skip-attestation-check was given: the build provenance of the CDN checksum files was NOT verified."
-)
 
 
 def verify_sha256_against_sums(binary_path: Path, sums_file: Path, git_rev: str) -> str:
@@ -421,29 +403,12 @@ def sanitize_output(text: str, limit: int = 2000) -> str:
     return cleaned if len(cleaned) <= limit else cleaned[:limit] + " [...]"
 
 
-def attestation_token() -> tuple[str | None, str | None]:
-    """
-    Returns the GitHub token to use for the attestations API and the variable it came from.
-
-    A token is never required: the endpoint is public. It only lifts the anonymous rate limit of
-    60 requests/hour/IP, which a shared or NATed address can exhaust. Exhausting it aborts the run,
-    so behind a shared address set one.
-    """
-    for name in ("GH_TOKEN", "GITHUB_TOKEN"):
-        value = os.environ.get(name)
-        if value:
-            return value, name
-    return None, None
-
-
-def attestations_request(url: str, token: str | None) -> urllib.request.Request:
+def attestations_request(url: str) -> urllib.request.Request:
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "ReproducibilityVerifier/1.0",
     }
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
     return urllib.request.Request(url, headers=headers)
 
 
@@ -464,15 +429,10 @@ def rate_limit_message(err: urllib.error.HTTPError) -> str:
     when = ""
     if reset and reset.isdigit():
         when = " until " + datetime.fromtimestamp(int(reset)).strftime("%Y-%m-%d %H:%M:%S")
-    return (
-        f"the GitHub API rate limit is exhausted{when} (60 requests/hour/IP without a token); "
-        "export GH_TOKEN=<any GitHub token> to use your own quota"
-    )
+    return f"the GitHub API rate limit of 60 requests per hour per address is exhausted{when}; run again later"
 
 
-def get_attestations_page(
-    url: str, token: str | None, token_var: str | None, first_page: bool
-) -> tuple[dict, str | None]:
+def get_attestations_page(url: str, first_page: bool) -> tuple[dict, str | None]:
     """
     Fetches one page of the attestations endpoint, returning it with the rel="next" cursor.
 
@@ -484,7 +444,7 @@ def get_attestations_page(
     last_error = "unknown error"
     for attempt in range(attempts):
         try:
-            with urllib.request.urlopen(attestations_request(url, token), timeout=NETWORK_TIMEOUT_SECONDS) as response:
+            with urllib.request.urlopen(attestations_request(url), timeout=NETWORK_TIMEOUT_SECONDS) as response:
                 payload = json.loads(response.read().decode("utf-8"))
                 if not isinstance(payload, dict):
                     # Caught below with the other ValueErrors, i.e. retried and then reported.
@@ -496,13 +456,6 @@ def get_attestations_page(
             if e.code in (403, 429) and e.headers.get("x-ratelimit-remaining") == "0":
                 # Retrying a rate limit only burns the caller's remaining quota.
                 raise VerificationError(rate_limit_message(e)) from e
-            if e.code in (401, 403) and token is not None:
-                # Whether a token minted for another repository is accepted here is unverified;
-                # the endpoint is public, so drop the credential and try again without it, with a
-                # fresh set of attempts: a rejection on the last one must not end this loop before
-                # the anonymous request has been made.
-                logger.warning(f"The GitHub API rejected ${token_var} with HTTP {e.code}; retrying anonymously.")
-                return get_attestations_page(url, None, None, first_page)
             if e.code < 500:
                 raise VerificationError(f"HTTP {e.code} from {url}") from e
             last_error = f"HTTP {e.code} from {url}"
@@ -520,7 +473,6 @@ def fetch_attestation_bundles(digest: str) -> list[dict]:
     The bundles need no integrity of their own in transit: gh verifies their Sigstore signatures,
     so whoever tampers with them can only cause a failure, never an acceptance.
     """
-    token, token_var = attestation_token()
     url: str | None = (
         ATTESTATION_API_URL.format(repo=ATTESTATION_REPO, digest=digest) + f"?per_page={ATTESTATION_PAGE_SIZE}"
     )
@@ -532,7 +484,7 @@ def fetch_attestation_bundles(digest: str) -> list[dict]:
                 f"more than {ATTESTATION_MAX_PAGES * ATTESTATION_PAGE_SIZE} attestations cover "
                 f"sha256:{digest}; refusing to page through them"
             )
-        payload, url = get_attestations_page(url, token, token_var, first_page=pages == 0)
+        payload, url = get_attestations_page(url, first_page=pages == 0)
         pages += 1
         attestations = payload.get("attestations") or []
         if not isinstance(attestations, list):
@@ -545,8 +497,16 @@ def fetch_attestation_bundles(digest: str) -> list[dict]:
             if bundle is not None:
                 bundles.append(bundle)
     if not bundles:
+        # Deliberately silent on --skip-attestation-check: a missing attestation is exactly the
+        # moment the bypass must not be suggested. --help and the README document the flag.
         raise VerificationError(
-            f"GitHub holds no build-provenance attestation covering sha256:{digest}.\n" + NO_ATTESTATION_ADVICE
+            f"GitHub holds no build-provenance attestation covering sha256:{digest}.\n"
+            "That is what a substituted checksum file looks like, and also what an unattested build looks like: "
+            "a commit built before builds were attested, or a security hotfix built on the private "
+            "dfinity/ic-private repository and not yet published to dfinity/ic and rebuilt there. This run stops "
+            "here rather than rebuild against bytes whose provenance it cannot establish. A commit that predates "
+            "attestations is verified with its own version of this script (see the README); if GitHub was "
+            "unreachable, run again later."
         )
     return bundles
 
@@ -632,9 +592,7 @@ def run_gh_attestation_verify(
             "unreachable (or ~/.cache/gh is not writable): run again later. If it reports an unexpected "
             "SourceRepositoryDigest, or fails verifying with issuer sigstore.dev, no attestation signed by "
             "ci-main.yml covers these bytes for this commit: the CDN is serving a file attested for a DIFFERENT "
-            "commit or by a different signer (attestations minted between #11323 and #11569, 2026-08-31.."
-            "2026-09-14, were signed by the calling workflow and are rejected by design), or a file that was "
-            "altered after it was attested.\n"
+            "commit or a file that was altered after it was attested.\n"
             f"gh said: {stderr}"
         )
 
@@ -1355,15 +1313,11 @@ class ReproducibilityVerifier:
     def attestation_preflight(self, dirs: Dirs, dry_run: bool) -> None:
         """
         Obtains gh and checks the CDN checksum files' build provenance, BEFORE the local build is
-        submitted: anything that cannot be verified must cost seconds, or the few minutes of a
-        GitHub or Sigstore timeout, not the whole rebuild (23-28 minutes on CI hardware, longer on
-        a laptop) that the executor would otherwise sit through joining the build thread on the way
-        out.
+        submitted.
 
         Every outcome other than a verified attestation stops the run: a mismatch is positive
         evidence of substitution, and an attestation that cannot be obtained looks exactly like a
-        substituted file nobody attested. --skip-attestation-check is the only path through, and it
-        is kept inside the try so that the finally below still drops the tokens on that path. Only
+        substituted file nobody attested. --skip-attestation-check is the only path through. Only
         VerificationError and RuntimeError leave this method.
         """
         try:
@@ -1378,9 +1332,7 @@ class ReproducibilityVerifier:
                 return
             self.verify_cdn_attestations(dirs)
         except RuntimeError:
-            # Already an abort main() maps to an exit code: a VerificationError (a mismatch, or an
-            # attestation that could not be obtained) to 1, a CDN checksum file that could not be
-            # downloaded at all to 2, as it always did.
+            # Already mapped to an exit code by main().
             raise
         except Exception as e:
             # A transport fault must stop the run with a message, not a traceback: http.client
@@ -1390,36 +1342,14 @@ class ReproducibilityVerifier:
                 "Could not verify the build provenance of the CDN checksum files: "
                 f"unexpected {type(e).__name__}: {e}"
             ) from e
-        finally:
-            # The attestations API is the only thing in this run that wants a GitHub token, and it
-            # is done with it here. Drop it before build_locally() executes the commit's own
-            # ci/container/build-ic.sh, which inherits this environment: verifying a commit must
-            # not hand that commit's build scripts a credential. Harmless when none was set.
-            for name in ("GH_TOKEN", "GITHUB_TOKEN"):
-                os.environ.pop(name, None)
 
     def warn_if_check_skipped(self) -> None:
+        # Said when the check is skipped and again at the end of the run, so the build output cannot
+        # bury it: a run that skipped the check must not end in a green that reads as verified.
         if self.skip_attestation_check:
-            logger.warning(SKIP_NOTICE)
-
-    def provenance_verdict(self) -> str:
-        """
-        How a mismatch between the local build and the CDN is to be read, for the report that
-        raises it: the disambiguation the attestation check exists for, delivered where it is
-        needed. The build is reached only after every checksum file verified, or with the check
-        skipped, so those are the two readings.
-        """
-        if self.skip_attestation_check:
-            return (
-                "The build provenance of the CDN checksum files was NOT verified, because --skip-attestation-check "
-                "was given, so this run cannot tell a reproducibility problem in the build from a substituted "
-                "artifact. Run again without the flag before putting the mismatch down to the build."
+            logger.warning(
+                "--skip-attestation-check was given: the build provenance of the CDN checksum files was NOT verified."
             )
-        return (
-            "The build provenance of the CDN checksum files was confirmed, and the artifacts compared here "
-            "match them, so they are what CI built for this commit: this is a reproducibility problem in the "
-            "build, not a substituted artifact."
-        )
 
     def verify_cdn_attestations(self, dirs: Dirs) -> None:
         """
@@ -1430,11 +1360,7 @@ class ReproducibilityVerifier:
         Only the checksum files need this: the images and launch-measurements.json are bound to
         them by sha256 afterwards.
         """
-        _token, token_var = attestation_token()
-        logger.info(
-            "Verifying the build provenance of the CDN checksum files "
-            + (f"(using ${token_var} for the GitHub API quota)." if token_var else "(no GitHub token in use).")
-        )
+        logger.info("Verifying the build provenance of the CDN checksum files.")
         config_dir = dirs.tmp_dir / "gh-config"
         bundle_dir = dirs.tmp_dir / "attestations"
         assert self.gh is not None, "ensure_gh must run before the attestations are verified"
@@ -1729,11 +1655,25 @@ class ReproducibilityVerifier:
                 mismatches.append("Recovery-GuestOS update image")
 
         if mismatches:
+            # The disambiguation the attestation check exists for, delivered where it is needed: the
+            # build is reached only after every checksum file verified, or with the check skipped.
+            if self.skip_attestation_check:
+                verdict = (
+                    "The build provenance of the CDN checksum files was NOT verified, because --skip-attestation-check "
+                    "was given, so this run cannot tell a reproducibility problem in the build from a substituted "
+                    "artifact. Run again without the flag before putting the mismatch down to the build."
+                )
+            else:
+                verdict = (
+                    "The build provenance of the CDN checksum files was confirmed, and the artifacts compared here "
+                    "match them, so they are what CI built for this commit: this is a reproducibility problem in the "
+                    "build, not a substituted artifact."
+                )
             raise VerificationError(
                 "The locally built artifacts do not match the remote CDN artifacts for: "
                 + ", ".join(mismatches)
                 + ".\n"
-                + self.provenance_verdict()
+                + verdict
             )
 
     # --------------------------------------------------------------------------
@@ -1761,9 +1701,7 @@ class ReproducibilityVerifier:
 
             # Before the build is submitted, and after check_environment has installed git: on the
             # way out the executor joins whatever it is running, so a failure raised once the build
-            # is under way is reported in seconds but exits only when the build is done (23-28
-            # minutes on CI hardware, longer on a laptop). That is now every attestation failure,
-            # not only a mismatch.
+            # is under way exits only when the build is done.
             self.attestation_preflight(dirs, dry_run)
 
             downloads_for_proposal = self.start_proposal_download_if_needed(dirs)

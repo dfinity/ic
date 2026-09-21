@@ -514,37 +514,6 @@ class RunTest(unittest.TestCase):
         self.assertNotIn("substitution", str(raised.exception))
         self.assertFalse(self.build_ran)
 
-    def test_github_tokens_are_dropped_before_the_build_runs(self):
-        """
-        build_locally() executes the commit's own ci/container/build-ic.sh with this environment;
-        verifying a commit must not hand that commit's build scripts a GitHub credential.
-        """
-        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
-        seen = {}
-        real_build = self.fake_build
-
-        def build(storage):
-            seen["GH_TOKEN"] = os.environ.get("GH_TOKEN")
-            seen["GITHUB_TOKEN"] = os.environ.get("GITHUB_TOKEN")
-            return real_build(storage)
-
-        mock.patch.object(verifier, "build_locally", build).start()
-        with mock.patch.dict(os.environ, {"GH_TOKEN": "secret", "GITHUB_TOKEN": "also-secret"}):
-            verifier.run()
-
-        self.assertIsNone(seen["GH_TOKEN"])
-        self.assertIsNone(seen["GITHUB_TOKEN"])
-
-    def test_tokens_are_dropped_even_when_the_preflight_aborts(self):
-        """The finally is the only thing between a credential and the build, on every path."""
-        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
-        verifier.ensure_gh = mock.Mock(side_effect=repro_check.VerificationError("no gh"))
-
-        with mock.patch.dict(os.environ, {"GH_TOKEN": "secret"}):
-            with self.assertRaises(repro_check.VerificationError):
-                verifier.run()
-            self.assertNotIn("GH_TOKEN", os.environ)
-
     def test_sha256sums_are_fetched_fresh_rather_than_from_the_cache(self):
         """
         A cached SHA256SUMS would make a rerun re-verify the previous run's bytes and report
@@ -560,22 +529,6 @@ class RunTest(unittest.TestCase):
 
         self.assertTrue(cached, "the images should still come from the cache")
         self.assertFalse([url for url in cached if url.endswith("/SHA256SUMS")], cached)
-
-    def test_skip_flag_still_drops_the_github_tokens(self):
-        """The documented escape hatch must not be the one way to leak a token to the build."""
-        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS), skip=True)
-        seen = {}
-        real_build = self.fake_build
-        mock.patch.object(
-            verifier,
-            "build_locally",
-            lambda storage: seen.update(tok=os.environ.get("GH_TOKEN")) or real_build(storage),
-        ).start()
-
-        with mock.patch.dict(os.environ, {"GH_TOKEN": "secret"}):
-            verifier.run()
-
-        self.assertIsNone(seen["tok"])
 
     def test_launch_measurements_are_fetched_fresh_rather_than_from_the_cache(self):
         verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
@@ -727,16 +680,6 @@ class RunTest(unittest.TestCase):
         self.assert_aborts_before_the_build(verifier, "no build-provenance attestation")
         self.assertTrue(any(url.endswith("/SHA256SUMS") for url in fetched), fetched)
         self.assertEqual([url for url in fetched if not url.endswith("/SHA256SUMS")], [])
-
-    def test_the_abort_for_a_missing_attestation_does_not_name_the_bypass(self):
-        """The advice text, and the abort built from it, must both stay silent on the bypass."""
-        verifier = self.build_verifier(self.guestos_payload(MEASUREMENTS))
-        self.bundles_error = repro_check.VerificationError(
-            "GitHub holds no build-provenance attestation covering sha256:x.\n" + repro_check.NO_ATTESTATION_ADVICE
-        )
-
-        self.assert_aborts_before_the_build(verifier, "substituted checksum file")
-        self.assertNotIn("--skip-attestation-check", repro_check.NO_ATTESTATION_ADVICE)
 
     def test_a_mismatch_with_the_check_skipped_is_not_put_down_to_the_build(self):
         """
@@ -927,7 +870,6 @@ class FetchAttestationBundlesTest(unittest.TestCase):
     def setUp(self):
         self.addCleanup(mock.patch.stopall)
         mock.patch.object(repro_check.time, "sleep").start()
-        mock.patch.dict(os.environ, {}, clear=True).start()
         self.requests: list[urllib.request.Request] = []
 
     def serve(self, *responses):
@@ -961,14 +903,6 @@ class FetchAttestationBundlesTest(unittest.TestCase):
         self.assertEqual(request.get_header("X-github-api-version"), "2022-11-28")
         self.assertIsNone(request.get_header("Authorization"))
 
-    def test_uses_a_token_when_one_is_set(self):
-        os.environ["GH_TOKEN"] = "secret"
-        self.serve(self.page([{"a": 1}]))
-
-        repro_check.fetch_attestation_bundles(self.DIGEST)
-
-        self.assertEqual(self.requests[0].get_header("Authorization"), "Bearer secret")
-
     def test_404_means_no_attestation(self):
         self.serve(self.http_error(404))
 
@@ -976,7 +910,8 @@ class FetchAttestationBundlesTest(unittest.TestCase):
             repro_check.fetch_attestation_bundles(self.DIGEST)
 
         self.assertIn("holds no build-provenance attestation", str(raised.exception))
-        self.assertIn(repro_check.NO_ATTESTATION_ADVICE, str(raised.exception))
+        self.assertIn("substituted checksum file", str(raised.exception))
+        # A missing attestation is exactly the moment the bypass must not be suggested.
         self.assertNotIn("--skip-attestation-check", str(raised.exception))
 
     def test_an_empty_list_means_no_attestation(self):
@@ -1001,40 +936,14 @@ class FetchAttestationBundlesTest(unittest.TestCase):
 
         self.assertIn("could not reach", str(raised.exception))
 
-    def test_exhausted_rate_limit_names_gh_token_and_is_not_retried(self):
+    def test_an_exhausted_rate_limit_is_not_retried(self):
         self.serve(self.http_error(403, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1700000000"}))
 
         with self.assertRaises(repro_check.VerificationError) as raised:
             repro_check.fetch_attestation_bundles(self.DIGEST)
 
-        self.assertIn("GH_TOKEN", str(raised.exception))
+        self.assertIn("rate limit", str(raised.exception))
         self.assertEqual(len(self.requests), 1)
-
-    def test_a_rejected_token_is_retried_anonymously(self):
-        os.environ["GITHUB_TOKEN"] = "wrong-repo"
-        self.serve(self.http_error(401), self.page([{"a": 1}]))
-
-        with self.assertLogs(repro_check.logger, level="WARNING") as logs:
-            self.assertEqual(repro_check.fetch_attestation_bundles(self.DIGEST), [{"a": 1}])
-
-        self.assertTrue(any("GITHUB_TOKEN" in line for line in logs.output), logs.output)
-        self.assertIsNone(self.requests[1].get_header("Authorization"))
-
-    def test_a_token_rejected_on_the_last_attempt_is_still_retried_anonymously(self):
-        """The anonymous retry gets attempts of its own; a rejection on the last one used to end the loop."""
-        os.environ["GITHUB_TOKEN"] = "wrong-repo"
-        self.serve(
-            urllib.error.URLError("connection reset"),
-            urllib.error.URLError("connection reset"),
-            self.http_error(403),
-            self.page([{"a": 1}]),
-        )
-
-        with self.assertLogs(repro_check.logger, level="WARNING"):
-            self.assertEqual(repro_check.fetch_attestation_bundles(self.DIGEST), [{"a": 1}])
-
-        self.assertEqual(len(self.requests), 4)
-        self.assertIsNone(self.requests[3].get_header("Authorization"))
 
     def test_a_404_after_the_first_page_is_reported_rather_than_truncating(self):
         """A cursor GitHub no longer honours must not pass as a complete but shorter list."""
@@ -1514,11 +1423,10 @@ class NetworkTimeoutTest(unittest.TestCase):
         self.assertEqual(self.timeouts, [repro_check.NETWORK_TIMEOUT_SECONDS])
 
     def test_the_attestations_api_is_bounded(self):
-        with mock.patch.dict(os.environ, {}, clear=True):
-            try:
-                repro_check.fetch_attestation_bundles("e" * 64)
-            except repro_check.VerificationError:
-                pass
+        try:
+            repro_check.fetch_attestation_bundles("e" * 64)
+        except repro_check.VerificationError:
+            pass
         self.assertEqual(self.timeouts, [repro_check.NETWORK_TIMEOUT_SECONDS])
 
     def test_a_stalled_download_of_gh_aborts_rather_than_hangs(self):
