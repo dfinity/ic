@@ -1800,28 +1800,50 @@ fn can_compile(
     })
 }
 
-fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<NumBytes, WasmValidationError> {
+fn check_code_section_size(
+    wasm: &BinaryEncodedWasm,
+    max_custom_sections: usize,
+) -> Result<NumBytes, WasmValidationError> {
     let parser = wasmparser::Parser::new(0);
-    let payloads = parser.parse_all(wasm.as_slice());
-    for payload in payloads {
-        if let wasmparser::Payload::CodeSectionStart {
-            count: _,
-            range: _,
-            size,
-        } = payload.map_err(|e| {
-            WasmValidationError::DecodingError(format!("Error finding code section: {e}"))
-        })? {
-            if size > MAX_CODE_SECTION_SIZE_IN_BYTES {
-                return Err(WasmValidationError::CodeSectionTooLarge {
-                    size,
-                    allowed: MAX_CODE_SECTION_SIZE_IN_BYTES,
-                });
-            } else {
-                return Ok(NumBytes::from(size as u64));
+    let mut code_section_size = NumBytes::from(0);
+    let mut seen_code_section = false;
+    let mut custom_sections = 0;
+    for payload in parser.parse_all(wasm.as_slice()) {
+        let payload = match payload {
+            Ok(payload) => payload,
+            // Malformed bytes after a valid code-section header are rejected by
+            // Wasmtime; don't convert them into a decoding error here.
+            Err(_) if seen_code_section => break,
+            Err(e) => {
+                return Err(WasmValidationError::DecodingError(format!(
+                    "Error finding code section: {e}"
+                )));
             }
+        };
+        match payload {
+            wasmparser::Payload::CodeSectionStart { size, .. } => {
+                if size > MAX_CODE_SECTION_SIZE_IN_BYTES {
+                    return Err(WasmValidationError::CodeSectionTooLarge {
+                        size,
+                        allowed: MAX_CODE_SECTION_SIZE_IN_BYTES,
+                    });
+                }
+                code_section_size = NumBytes::from(size as u64);
+                seen_code_section = true;
+            }
+            wasmparser::Payload::CustomSection(_) => {
+                custom_sections += 1;
+                if custom_sections > max_custom_sections {
+                    return Err(WasmValidationError::TooManyCustomSections {
+                        defined: custom_sections,
+                        allowed: max_custom_sections,
+                    });
+                }
+            }
+            _ => {}
         }
     }
-    Ok(NumBytes::from(0))
+    Ok(code_section_size)
 }
 
 /// Validates a Wasm binary against the requirements of the interface spec
@@ -1843,7 +1865,7 @@ pub(super) fn validate_wasm_binary<'a>(
     wasm: &'a BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
-    let code_section_size = check_code_section_size(wasm)?;
+    let code_section_size = check_code_section_size(wasm, config.max_custom_sections)?;
     can_compile(wasm, config)?;
     let module = Module::parse(wasm.as_slice(), false, false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{err}")))?;

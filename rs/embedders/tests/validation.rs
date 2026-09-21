@@ -939,6 +939,24 @@ fn can_reject_module_with_too_many_custom_sections() {
 }
 
 #[test]
+fn rejects_too_many_empty_name_custom_sections() {
+    let config = EmbeddersConfig::default();
+    let n = config.max_custom_sections + 1;
+    let mut bytes = b"\0asm\x01\x00\x00\x00".to_vec();
+    for _ in 0..n {
+        bytes.extend_from_slice(&[0x00, 0x01, 0x00]);
+    }
+    let wasm = BinaryEncodedWasm::new(bytes);
+    assert_eq!(
+        validate_wasm_binary(&wasm, &config),
+        Err(WasmValidationError::TooManyCustomSections {
+            defined: n,
+            allowed: config.max_custom_sections,
+        })
+    );
+}
+
+#[test]
 fn can_reject_module_with_custom_sections_too_big() {
     let content = vec![0, 1, 6, 5, 6, 7, 4, 6];
     let size = 2 * content.len() + "name".len() + "custom_section".len();
