@@ -6407,6 +6407,39 @@ fn subnet_metrics_ingress_query_fails() {
         );
 }
 
+/// The endpoint reports the raw counter in millions, rounded up, so that it
+/// cannot be read as a fine-grained per-block activity signal.
+#[test]
+fn subnet_metrics_reports_round_instructions_in_millions_rounded_up() {
+    for (raw, expected) in [
+        (0_u64, 0_u64),
+        (1, 1),
+        (999_999, 1),
+        (1_000_000, 1),
+        (1_000_001, 2),
+        (2_000_000, 2),
+        (u64::MAX, u64::MAX.div_ceil(1_000_000)),
+    ] {
+        let own_subnet_id = subnet_test_id(1);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet_id)
+            .with_caller(subnet_test_id(2), canister_test_id(1))
+            .build();
+        test.state_mut()
+            .metadata
+            .subnet_metrics
+            .round_instructions_total = raw;
+
+        let response = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
+
+        assert_eq!(
+            response.million_round_instructions_total,
+            candid::Nat::from(expected),
+            "raw count {raw}"
+        );
+    }
+}
+
 #[test]
 fn subnet_metrics_foreign_subnet_id_is_rejected() {
     let own_subnet_id = subnet_test_id(1);
@@ -8284,6 +8317,7 @@ fn create_canister_memory_allocation_makes_subnet_oversubscribed() {
         .set_balance(Cycles::new(1_000_000_000_000_000_000));
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
         .build();
@@ -8308,6 +8342,7 @@ fn create_canister_memory_allocation_makes_subnet_oversubscribed() {
     // There should be not enough memory for CAPACITY/2 because universal
     // canister already consumed some
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
         .build();
@@ -8344,6 +8379,7 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
         .set_balance(Cycles::new(u128::MAX));
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_compute_allocation(50)
         .build();
@@ -8366,6 +8402,7 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
     Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_compute_allocation(25)
         .build();
@@ -8389,6 +8426,7 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
 
     // Create a canister with compute allocation.
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_compute_allocation(30)
         .build();
@@ -8564,6 +8602,7 @@ fn create_canister_insufficient_cycles_for_memory_allocation() {
         .unwrap();
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(0) // No freezing threshold.
         .with_memory_allocation(excessive_memory)
         .build();
@@ -8756,6 +8795,7 @@ fn create_canister_reverts_round_limits_on_failure() {
             canister_change_origin_from_principal(&sender),
             Some(100_000_000_000_000),
             CanisterSettingsBuilder::new()
+                .with_log_memory_limit(NumBytes::new(0))
                 .with_compute_allocation(ComputeAllocation::try_from(50_u64).unwrap())
                 .with_memory_allocation(MemoryAllocation::from(NumBytes::new(MIB)))
                 .with_reserved_cycles_limit(Cycles::zero())
@@ -8801,6 +8841,7 @@ fn create_canister_fails_with_reserved_cycles_limit_exceeded() {
 
     // Set the memory allocation to exceed the reserved cycles limit.
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_memory_allocation(1_000_000)
         .with_reserved_cycles_limit(1)
         .build();

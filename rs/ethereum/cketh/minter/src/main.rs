@@ -36,6 +36,7 @@ use ic_cketh_minter::state::automatic_deposits::{
     DepositRequest, DepositStatusInfo, RegisterDepositError,
 };
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
+use ic_cketh_minter::state::sweep_observations::SweepObservations;
 use ic_cketh_minter::state::transactions::{
     AuthorizedSweepItem, Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed,
     ReimbursementIndex, ReimbursementRequest, SweepRequest,
@@ -141,6 +142,10 @@ fn init(arg: MinterArg) {
                 storage::record_event(EventType::Init(init_arg.clone()), &IC_TIME_PROVIDER);
                 *cell.borrow_mut() =
                     Some(State::try_from(init_arg).expect("BUG: failed to initialize minter"))
+            });
+            mutate_state(|s| {
+                s.sweep_observations =
+                    SweepObservations::started_at(Timestamp::from_nanos(ic_cdk::api::time()))
             });
         }
         MinterArg::UpgradeArg(_) => {
@@ -1254,6 +1259,14 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             }
         }
 
+        /// Whole seconds elapsed at `now_nanos` since `since_nanos`, or zero when there is nothing
+        /// to age.
+        fn age_seconds(now_nanos: u64, since_nanos: Option<u64>) -> f64 {
+            since_nanos
+                .map(|since_nanos| (now_nanos.saturating_sub(since_nanos) / 1_000_000_000) as f64)
+                .unwrap_or(0.0)
+        }
+
         fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
             const WASM_PAGE_SIZE_IN_BYTES: f64 = 65536.0;
 
@@ -1346,14 +1359,13 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
 
                 let now_nanos = ic_cdk::api::time();
-                let age_nanos = now_nanos.saturating_sub(
-                    s.withdrawal_transactions
-                        .oldest_incomplete_request_timestamp()
-                        .unwrap_or(now_nanos),
-                );
                 w.encode_gauge(
                     "cketh_oldest_incomplete_eth_withdrawal_request_age_seconds",
-                    (age_nanos / 1_000_000_000) as f64,
+                    age_seconds(
+                        now_nanos,
+                        s.withdrawal_transactions
+                            .oldest_incomplete_request_timestamp(),
+                    ),
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
@@ -1367,6 +1379,84 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_stored_authorizations",
                     s.automatic_deposits.authorizations_len() as f64,
                     "Number of delegation authorizations the minter has signed and stored.",
+                )?;
+
+                let now = Timestamp::from_nanos(now_nanos);
+                w.encode_gauge(
+                    "cketh_minter_armed_deposits",
+                    s.automatic_deposits.armed_len(now) as f64,
+                    "Number of (account, asset) pairs currently armed and being scanned for a \
+                     deposit.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_longest_armed_age_seconds",
+                    s.automatic_deposits
+                        .longest_armed_age(now)
+                        .map(|age| age.as_secs() as f64)
+                        .unwrap_or(0.0),
+                    "Age of the oldest armed pair still waiting for a deposit to be detected; 0 if \
+                     none is armed. For dashboards, not alerts: a pair armed and never funded \
+                     keeps it near the scan window, which is ordinary user behaviour.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_queued_deposits",
+                    s.automatic_deposits.sweep_len() as f64,
+                    "Detected deposits waiting for a sweep to move them.",
+                )?;
+                w.counter_vec(
+                    "cketh_minter_sweeps_finalized_total",
+                    "Sweeps that finalized, by outcome. A failed sweep moved nothing and dropped \
+                     every deposit it named, each of which has to be armed afresh.",
+                )?
+                .value(
+                    &[("status", "success")],
+                    s.automatic_deposits.successful_sweeps() as f64,
+                )?
+                .value(
+                    &[("status", "failure")],
+                    s.automatic_deposits.failed_sweeps() as f64,
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_unfinalized_sweep_age_seconds",
+                    age_seconds(now_nanos, s.automatic_deposits.oldest_unfinalized_sweep()),
+                    "Age of the oldest sweep awaiting finalization; 0 if none is outstanding.",
+                )?;
+                w.encode_counter(
+                    "cketh_minter_balance_scan_candidates_total",
+                    s.automatic_deposits.balance_scan_candidates() as f64,
+                    "Deposits the balance scan found at or above their asset's minimum, i.e. that \
+                     entered the sweep queue.",
+                )?;
+                w.counter_vec(
+                    "cketh_minter_balance_scan_chunks_total",
+                    "Balance-scan batches attempted, by outcome: `ok` returned balances, the \
+                     others yielded none. Resets on upgrade.",
+                )?
+                .value(
+                    &[("outcome", "ok")],
+                    s.sweep_observations.balance_scan_chunks_read() as f64,
+                )?
+                .value(
+                    &[("outcome", "eth_call_error")],
+                    s.sweep_observations.balance_scan_call_errors() as f64,
+                )?
+                .value(
+                    &[("outcome", "decode_error")],
+                    s.sweep_observations.balance_scan_decode_errors() as f64,
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_last_balance_scan_age_seconds",
+                    s.sweep_observations
+                        .last_balance_scan_age(now)
+                        .map(|age| age.as_secs() as f64)
+                        .unwrap_or(0.0),
+                    "Time since the last balance scan completed, or since the minter last started \
+                     if none has completed since.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_delegated_deposit_addresses",
+                    s.automatic_deposits.delegation_nonces_len() as f64,
+                    "Number of deposit addresses whose EIP-7702 delegation the minter has applied at least once.",
                 )?;
 
                 w.encode_counter(
@@ -1417,13 +1507,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
                 w.encode_gauge(
                     "cketh_minter_sweeper_funding_in_flight_age_seconds",
-                    s.withdrawal_transactions
-                        .outstanding_sweeper_funding()
-                        .map(|funding| {
-                            (now_nanos.saturating_sub(funding.created_at.unwrap_or(now_nanos))
-                                / 1_000_000_000) as f64
-                        })
-                        .unwrap_or(0.0),
+                    age_seconds(
+                        now_nanos,
+                        s.withdrawal_transactions
+                            .outstanding_sweeper_funding()
+                            .and_then(|funding| funding.created_at),
+                    ),
                     "Age of the sweeper funding awaiting finalization; 0 if none is outstanding.",
                 )?;
 

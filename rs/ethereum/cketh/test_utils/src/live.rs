@@ -51,6 +51,10 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::asset::Asset;
+use ic_cketh_minter::balance_scan::batcher::{
+    Delegation, decode_delegation_batch, encode_delegation_batch,
+};
+use ic_cketh_minter::deposit_address::DepositAddress;
 use ic_cketh_minter::endpoints::events::{
     Asset as EventAsset, Event, EventPayload, TransactionStatus,
 };
@@ -136,6 +140,14 @@ const SWEEP_TICKS: u32 = 8;
 const CREDIT_TICKS: u32 = 6;
 
 const FUNDING_TICKS: u32 = 6;
+
+/// The EIP-2718 type of a sweep that still installs a delegation, and so carries an EIP-7702
+/// authorization list.
+pub const DELEGATING_SWEEP_TRANSACTION_TYPE: u64 = 4;
+
+/// The EIP-2718 type of a sweep of addresses all delegated already, which carries no authorization
+/// and so is a plain EIP-1559 transaction.
+pub const PLAIN_SWEEP_TRANSACTION_TYPE: u64 = 2;
 
 pub struct DepositPlan {
     pub owner: Principal,
@@ -789,19 +801,38 @@ impl LiveSetup<CkErc20Setup> {
         self.assert_delegations_installed_at(deposits.iter().map(|d| d.address), delegate)
     }
 
+    /// Checks the delegations the sweep installed twice over: as the code each address holds, and
+    /// as the delegation batcher reads them back in one call, since the batcher is the minter's
+    /// only consumer that must read a designator through `EXTCODECOPY` rather than run it.
     fn assert_delegations_installed_at(
         self,
         addresses: impl IntoIterator<Item = Address>,
         delegate: &Address,
     ) -> Self {
+        let addresses: Vec<Address> = addresses.into_iter().collect();
         let designator = delegation_designator(delegate);
-        for address in addresses {
+        for address in &addresses {
             assert_eq!(
-                self.anvil.code(&address),
+                self.anvil.code(address),
                 designator,
                 "the sweep should have installed the delegation"
             );
         }
+        let deposit_addresses: Vec<DepositAddress> =
+            addresses.iter().copied().map(DepositAddress::new).collect();
+        let read = self
+            .anvil
+            .eth_call_create(
+                &address_from_hex(DEV_ACCOUNT),
+                &encode_delegation_batch(&deposit_addresses),
+            )
+            .expect("the delegation batcher must read delegated addresses without reverting");
+        assert_eq!(
+            decode_delegation_batch(&read, deposit_addresses.len())
+                .expect("the delegation batcher must return one word per address"),
+            vec![Delegation::Delegated(*delegate); deposit_addresses.len()],
+            "the delegation batcher must classify every swept address as delegated"
+        );
         self
     }
 
@@ -1079,6 +1110,16 @@ impl<S: AsRef<CkEthSetup>> LiveSetup<S> {
         self.env()
             .start_canister(minter_id, None)
             .expect("starting the minter must succeed");
+    }
+
+    /// Points the minter at `delegate`, as an operator replacing the sweeper contract does. The
+    /// addresses already delegated to the old one are re-delegated lazily, by the sweeps that
+    /// happen anyway.
+    pub fn rotate_delegate_to(&self, delegate: &Address) {
+        self.upgrade_minter_with(UpgradeArg {
+            ethereum_sweeper_contract_address: Some(delegate.to_string()),
+            ..Default::default()
+        });
     }
 
     /// Gives the minter [`TICK_SETTLE`] of *real* time to carry out whatever the last tick started,
@@ -1548,12 +1589,30 @@ pub struct SweepsSent {
 }
 
 impl SweepsSent {
+    /// Asserts every sweep succeeded riding a type-4 transaction, as a sweep still installing a
+    /// delegation must.
     pub fn expect_all_delegating_sweeps(self) -> (LiveSetup<CkErc20Setup>, Vec<SentTransaction>) {
-        for sweep in &self.sweeps {
+        let delegating = vec![DELEGATING_SWEEP_TRANSACTION_TYPE; self.sweeps.len()];
+        self.expect_sweeps_of_types(&delegating)
+    }
+
+    /// Asserts every sweep succeeded riding the transaction type its position in `expected` names:
+    /// type 4 while it still delegates an address it sweeps, type 2 once they are all delegated.
+    pub fn expect_sweeps_of_types(
+        self,
+        expected: &[u64],
+    ) -> (LiveSetup<CkErc20Setup>, Vec<SentTransaction>) {
+        assert_eq!(
+            self.sweeps.len(),
+            expected.len(),
+            "expected {} sweeps, got {:?}",
+            expected.len(),
+            self.sweeps
+        );
+        for (sweep, expected_type) in self.sweeps.iter().zip(expected) {
             assert_eq!(
-                sweep.transaction_type, 4,
-                "a sweep here always carries its EIP-7702 authorizations, installed or re-sent, \
-                 so it must be a type-4 transaction: {sweep:?}"
+                sweep.transaction_type, *expected_type,
+                "the sweep did not ride the expected transaction type: {sweep:?}"
             );
             assert!(sweep.succeeded, "the sweep reverted: {sweep:?}");
         }
