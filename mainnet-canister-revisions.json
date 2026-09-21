@@ -88,8 +88,8 @@
     "tag": "release-2026-09-18"
   },
   "internet_identity_frontend": {
-    "sha256": "1d4a8e7f0dd449349c9d17ce7fa7a1a2d2b7970c2a033771b7e85563456bf959",
-    "tag": "release-2026-09-11"
+    "sha256": "e0c6b903e9c867f6496a1b5efcf59886b4c70bf88f62668b5910b9c1b04090f4",
+    "tag": "release-2026-09-18"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
