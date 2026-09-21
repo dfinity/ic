@@ -55,7 +55,7 @@ pub const ROUNDS_PER_ATTEMPT_WHILE_SKIPPING: u32 = 4;
 /// and one that answered "not mined": the latter is the normal answer for a resubmission variant
 /// that was superseded, and letting it shrink the window would collapse it to the floor on a
 /// perfectly healthy minter.
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct RoundOutcome {
     receipts: u32,
     not_mined: u32,
