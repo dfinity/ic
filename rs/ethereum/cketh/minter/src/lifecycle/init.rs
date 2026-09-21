@@ -131,6 +131,8 @@ impl TryFrom<InitArg> for State {
             sweeper_contract_address,
             sweeper_funding: Default::default(),
             sweep_observations: Default::default(),
+            withdrawal_receipt_fetch: Default::default(),
+            sweeper_receipt_fetch: Default::default(),
         };
         state.validate_config()?;
         Ok(state)
