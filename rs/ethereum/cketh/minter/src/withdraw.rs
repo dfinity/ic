@@ -528,7 +528,7 @@ type ReceiptResult =
 /// Each id stands on its own: a failed lookup, or an id none of whose transactions was mined,
 /// leaves that id pending for a later round instead of discarding the receipts the round did get.
 /// The one exception is two different receipts for the same id, which no chain can produce and
-/// which therefore abandons the whole round.
+/// which therefore abandons the whole round - the receipts, not the count of what came back.
 async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
     txs_to_finalize: BTreeMap<Hash, Id>,
 ) -> (BTreeMap<Id, EvmTransactionReceipt>, RoundOutcome) {
@@ -569,7 +569,6 @@ fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
                             "ERROR: received different receipts for transaction {hash} with id {id:?}: {existing_receipt:?} and {receipt:?}. Will retry later"
                         );
                         outcome.abandon();
-                        return (BTreeMap::new(), outcome);
                     }
                     None => {
                         receipts.insert(id, receipt);
@@ -591,6 +590,12 @@ fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
                 );
             }
         }
+    }
+    // The round's lookups have all come back by the time they are walked, so an abandoned round
+    // still counts what each of them returned; what it does not do is report its ids as stalled,
+    // since they were resolved and then thrown away rather than left unanswered.
+    if outcome.is_abandoned() {
+        return (BTreeMap::new(), outcome);
     }
     // Replaces an assert on the ids that did finalize: an id whose transactions all answered "not
     // mined" - a nonce filled by another transaction, or a reorg - is a withdrawal that stalls,

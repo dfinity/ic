@@ -86,6 +86,9 @@ impl RoundOutcome {
     /// Marks a round whose receipts cannot be used at all, because two different receipts named the
     /// same id. The window then shrinks to its floor: the round is a total loss, and repeating it at
     /// the same size would cost the same fan-out again.
+    ///
+    /// A flag rather than a count, so a round in which several ids conflict is still the one
+    /// abandoned round the window counts.
     pub fn abandon(&mut self) {
         self.abandoned = true;
     }

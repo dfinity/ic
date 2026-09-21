@@ -88,14 +88,27 @@ mod collect {
 
     #[test]
     fn should_abandon_the_round_on_two_different_receipts_for_the_same_id() {
+        // The lookups after the conflicting one have all come back too, so the round still counts
+        // what they returned: what the conflict throws away is the receipts, not the tally.
         let (receipts, outcome) = collect(vec![
             (hash(1), id(1), Ok(Some(receipt(hash(1))))),
             (hash(2), id(1), Ok(Some(receipt(hash(2))))),
             (hash(3), id(2), Ok(Some(receipt(hash(3))))),
+            (hash(4), id(3), Ok(None)),
+            (hash(5), id(4), Err(failed_lookup())),
         ]);
 
         assert_eq!(receipts, BTreeMap::new());
         assert!(outcome.is_abandoned());
+        assert_eq!(outcome.receipts(), 3);
+        assert_eq!(outcome.not_mined(), 1);
+        assert_eq!(outcome.failures(), 1);
+        assert_eq!(outcome.lookups(), 5);
+        assert_eq!(
+            outcome.stalled_ids(),
+            0,
+            "the ids of an abandoned round were answered and thrown away, not left unanswered"
+        );
     }
 }
 

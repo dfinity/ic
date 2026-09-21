@@ -62,9 +62,10 @@ mod adaptation {
     }
 
     #[test]
-    fn should_count_an_abandoned_round() {
+    fn should_count_a_round_with_several_conflicts_as_one_abandoned_round() {
         let mut window = window_of(INITIAL_RECEIPT_FETCH_WINDOW);
-        let mut outcome = round(2, 0, 0);
+        let mut outcome = round(4, 0, 0);
+        outcome.abandon();
         outcome.abandon();
 
         window.record_round(outcome);
