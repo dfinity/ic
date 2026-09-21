@@ -2397,9 +2397,12 @@ fn test_canister_log_resize_rejected_insufficient_cycles() {
                 .build(),
         )
         .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+    // The cycles for the resize instructions are charged before the freezing
+    // threshold is checked against the new memory usage, so the frozen canister
+    // already fails to pay for the instructions.
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
     assert!(
-        err.description().contains("insufficient cycles"),
+        err.description().contains("out of cycles"),
         "Unexpected error message: {}",
         err.description(),
     );
