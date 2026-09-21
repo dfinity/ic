@@ -29,7 +29,7 @@ use ic_types::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
         ChainKeyData, ConsensusResponse,
     },
-    consensus::{BlockPayload, HasVersion, dkg::RemoteTranscriptResult, idkg},
+    consensus::{BlockPayload, DataPayload, HasVersion, dkg::RemoteTranscriptResult, idkg},
     crypto::{
         randomness_from_crypto_hashable,
         threshold_sig::{
@@ -224,7 +224,9 @@ fn deliver_batches(
             nidkg_ids,
         };
 
-        let (batch_content, batch_stats) = match block.payload.as_ref() {
+        let mut batch_stats = BatchStats::new(height);
+
+        let batch_content = match block.payload.as_ref() {
             BlockPayload::Summary(summary_payload) => {
                 info!(
                     log,
@@ -243,70 +245,62 @@ fn deliver_batches(
                     );
                 }
 
-                let batch_stats = BatchStats {
-                    batch_height: height.get(),
-                    ..Default::default()
-                };
-
-                let batch_content =
-                    if let Some(scheduled) = subnet_splitting::is_split_scheduled(&block) {
-                        let node_id =
-                            maybe_node_id.expect("Subnet splitting not yet supported in ic-replay");
-                        let subnet_splitting::PostSplitAssignment {
-                            new_subnet_id,
-                            other_subnet_id,
-                        } = match subnet_splitting::get_post_split_subnet_assignment(
-                            node_id,
-                            &block,
-                            registry_client,
-                            scheduled,
-                        ) {
-                            Ok(assignment) => assignment,
-                            Err(err) => {
-                                warn!(
-                                    every_n_seconds => 30,
-                                    log,
-                                    "Error getting new subnet assignment: {}",
-                                    err
-                                );
-                                break;
-                            }
-                        };
-
-                        info!(
-                            log,
-                            "Delivering splitting block. New subnet assignment: {}", new_subnet_id
-                        );
-
-                        BatchContent::Splitting {
-                            new_subnet_id,
-                            other_subnet_id,
-                        }
-                    } else {
-                        BatchContent::Data {
-                            batch_messages: BatchMessages::default(),
-                            chain_key_data,
-                            consensus_responses: vec![],
-                            canister_http_spent: Default::default(),
-                            requires_full_state_hash: true,
+                if let Some(scheduled) = subnet_splitting::is_split_scheduled(&block) {
+                    let node_id =
+                        maybe_node_id.expect("Subnet splitting not yet supported in ic-replay");
+                    let subnet_splitting::PostSplitAssignment {
+                        new_subnet_id,
+                        other_subnet_id,
+                    } = match subnet_splitting::get_post_split_subnet_assignment(
+                        node_id,
+                        &block,
+                        registry_client,
+                        scheduled,
+                    ) {
+                        Ok(assignment) => assignment,
+                        Err(err) => {
+                            warn!(
+                                every_n_seconds => 30,
+                                log,
+                                "Error getting new subnet assignment: {}",
+                                err
+                            );
+                            break;
                         }
                     };
 
-                (batch_content, batch_stats)
+                    info!(
+                        log,
+                        "Delivering splitting block. New subnet assignment: {}", new_subnet_id
+                    );
+
+                    BatchContent::Splitting {
+                        new_subnet_id,
+                        other_subnet_id,
+                    }
+                } else {
+                    BatchContent::Data {
+                        batch_messages: BatchMessages::default(),
+                        chain_key_data,
+                        consensus_responses: vec![],
+                        canister_http_spent: Default::default(),
+                        requires_full_state_hash: true,
+                    }
+                }
             }
             BlockPayload::Data(data_payload) => {
-                let (batch_messages, consensus_responses, batch_stats, canister_http_spent) =
-                    get_messages_responses_stats_and_http_spent(height, data_payload, log);
+                batch_stats.add_from_payload(&data_payload.batch);
 
-                let batch_content = BatchContent::Data {
+                let (batch_messages, consensus_responses, canister_http_spent) =
+                    get_messages_responses_and_http_spent(data_payload, &mut batch_stats, log);
+
+                BatchContent::Data {
                     batch_messages,
                     chain_key_data,
                     consensus_responses,
                     canister_http_spent,
                     requires_full_state_hash: false,
-                };
-
-                (batch_content, batch_stats)
+                }
             }
         };
 
@@ -379,21 +373,12 @@ fn deliver_batches(
 ///   - Initial NiDKG transcript creation.
 ///   - Canister threshold signature creation.
 ///   - CanisterHttpResponse handling, i.e. responses to canister http requests.
-///
-///   All of them are answered from the data payload; summary payloads carry no responses.
-/// - The [`BatchStats`] of the payload, including the canister http stats.
-/// - The cycles spent on the canister http requests answered by this payload and/or by previous
-///   payloads.
-fn get_messages_responses_stats_and_http_spent(
-    height: Height,
+/// - The amount of cycles spent on HTTP outcalls as part of the batch.
+fn get_messages_responses_and_http_spent(
     data_payload: &DataPayload,
+    stats: &mut BatchStats,
     log: &ReplicaLogger,
-) -> (
-    BatchMessages,
-    Vec<ConsensusResponse>,
-    BatchStats,
-    CanisterHttpSpent,
-) {
+) -> (BatchMessages, Vec<ConsensusResponse>, CanisterHttpSpent) {
     let messages = data_payload
         .batch
         .clone()
@@ -417,17 +402,13 @@ fn get_messages_responses_stats_and_http_spent(
     let (mut http_responses, canister_http_spent, http_stats) =
         CanisterHttpPayloadBuilderImpl::into_messages(&data_payload.batch.canister_http);
     responses.append(&mut http_responses);
+    stats.canister_http = http_stats;
 
     let mut chain_key_responses =
         ChainKeyPayloadBuilderImpl::into_messages(&data_payload.batch.chain_key);
     responses.append(&mut chain_key_responses);
 
-    let stats = BatchStats {
-        canister_http: http_stats,
-        ..BatchStats::from_payload(height, &data_payload.batch)
-    };
-
-    (messages, responses, stats, canister_http_spent)
+    (messages, responses, canister_http_spent)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -854,11 +835,9 @@ mod tests {
             dkg: dkg_data,
             idkg: None,
         };
-        let (_, responses, _, _) = get_messages_responses_stats_and_http_spent(
-            Height::from(1),
-            &data_payload,
-            &no_op_logger(),
-        );
+        let mut batch_stats = BatchStats::new(Height::from(1));
+        let (_, responses, _) =
+            get_messages_responses_and_http_spent(&data_payload, &mut batch_stats, &no_op_logger());
 
         assert_eq!(
             responses.len(),

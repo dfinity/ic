@@ -1317,6 +1317,7 @@ impl
         CanisterHttpBatchStats,
     ) {
         let mut stats = CanisterHttpBatchStats::default();
+        stats.payload_bytes = payload.len();
 
         let messages = bytes_to_payload(payload)
             .expect("Failed to parse a payload that was already validated");
