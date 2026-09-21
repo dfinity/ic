@@ -57,7 +57,7 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
     routing::get,
 };
-use crossbeam::atomic::AtomicCell;
+use crossbeam_utils::atomic::AtomicCell;
 use hyper::{Request, StatusCode, body::Incoming};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use ic_config::http_handler::Config;
