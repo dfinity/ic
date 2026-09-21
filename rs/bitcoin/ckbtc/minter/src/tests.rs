@@ -1,21 +1,27 @@
 use crate::state::utxos::UtxoSet;
 use crate::tx::FeeRate;
 use crate::{
-    BuildTxError, CacheWithExpiration, Network,
+    BuildTxError, CacheWithExpiration, CanisterRuntime, ConsolidateUtxosError, Network,
+    SignTxRequest,
     address::BitcoinAddress,
-    build_unsigned_transaction, build_unsigned_transaction_from_inputs, estimate_retrieve_btc_fee,
-    fake_sign,
+    build_unsigned_transaction, build_unsigned_transaction_from_inputs, consolidate_utxos,
+    estimate_retrieve_btc_fee, fake_sign,
     fees::{BitcoinFeeEstimator, FeeEstimator},
     greedy,
     lifecycle::init::InitArgs,
-    select_utxos_to_consolidate,
+    management::CallError,
+    queries::WithdrawalFee,
+    select_utxos_to_consolidate, sign_and_submit_request,
+    state::eventlog::CkBtcEventLogger,
     state::invariants::CheckInvariantsImpl,
     state::{
-        ChangeOutput, CkBtcMinterState, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, RetrieveBtcRequest,
-        RetrieveBtcStatus, SubmittedBtcTransaction,
+        ChangeOutput, CkBtcMinterState, ConsolidateUtxosRequest,
+        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, RetrieveBtcRequest, RetrieveBtcStatus,
+        SubmittedBtcTransaction, SubmittedWithdrawalRequests, audit, mutate_state, read_state,
     },
     test_fixtures::{
-        arbitrary, bitcoin_fee_estimator, build_bitcoin_unsigned_transaction, init_args,
+        DAY, NOW, arbitrary, bitcoin_fee_estimator, build_bitcoin_unsigned_transaction,
+        ecdsa_public_key, init_args, init_state, minter, minter_address, mock::MockCanisterRuntime,
     },
     tx,
 };
@@ -24,6 +30,7 @@ use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use candid::Principal;
 use ic_btc_interface::{OutPoint, Utxo};
+use ic_cdk::call::CallRejected;
 use icrc_ledger_types::icrc1::account::Account;
 use proptest::{
     array::uniform20, collection::vec as pvec, prelude::any, prop_assert, prop_assert_eq,
@@ -1234,6 +1241,93 @@ fn test_build_consolidation_transaction() {
         total_amount,
         outputs.iter().map(|x| x.value).sum::<u64>() + fee.bitcoin_fee
     );
+}
+
+const CONSOLIDATION_THRESHOLD: usize = 5;
+const CONSOLIDATION_FEE_BURN_BLOCK_INDEX: u64 = 42;
+
+#[tokio::test]
+async fn should_not_block_next_consolidation_when_signing_fails() {
+    init_state(init_args());
+    mutate_state(|s| {
+        s.ecdsa_public_key = Some(ecdsa_public_key());
+        s.utxo_consolidation_threshold = CONSOLIDATION_THRESHOLD;
+    });
+    let mut runtime = MockCanisterRuntime::new();
+    runtime.expect_event_logger().return_const(CkBtcEventLogger);
+    runtime
+        .expect_time()
+        .return_const(NOW.as_nanos_since_unix_epoch());
+    let minter_main_account = Account {
+        owner: minter(),
+        subaccount: None,
+    };
+    let deposits: Vec<Utxo> = (1..=10)
+        .map(|value_multiplier| dummy_utxo_from_value(value_multiplier * 100_000))
+        .collect();
+    mutate_state(|s| audit::add_utxos(s, None, minter_main_account, deposits, &runtime));
+
+    let (sign_request, total_fee) = consolidation_sign_request(&runtime);
+    runtime
+        .expect_sign_transaction()
+        .times(1)
+        .return_const(Err(rejected_call("sign_with_ecdsa")));
+    let signing = sign_and_submit_request(sign_request, total_fee, &runtime).await;
+    assert_matches!(signing, Err(_));
+
+    runtime.checkpoint();
+    runtime.expect_event_logger().return_const(CkBtcEventLogger);
+    runtime
+        .expect_time()
+        .return_const(NOW.saturating_add(DAY).as_nanos_since_unix_epoch());
+    runtime
+        .expect_get_current_fee_percentiles()
+        .return_const(Err(rejected_call("bitcoin_get_current_fee_percentiles")));
+
+    let next_attempt = consolidate_utxos(&runtime).await;
+
+    assert!(
+        !matches!(next_attempt, Err(ConsolidateUtxosError::StillProcessing)),
+        "a failed signing must not block the next consolidation, got {next_attempt:?}"
+    );
+}
+
+fn consolidation_sign_request<R: CanisterRuntime>(runtime: &R) -> (SignTxRequest, WithdrawalFee) {
+    let input_utxos = mutate_state(|s| {
+        select_utxos_to_consolidate(&mut s.available_utxos, s.max_num_inputs_in_transaction)
+    });
+    let total_amount: u64 = input_utxos.iter().map(|utxo| utxo.value).sum();
+    let (unsigned_tx, change_output, total_fee) = build_unsigned_transaction_from_inputs(
+        &input_utxos,
+        vec![(minter_address(), total_amount / 2)],
+        &minter_address(),
+        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
+        FeeRate::from_millis_per_byte(10),
+        &bitcoin_fee_estimator(),
+    )
+    .expect("failed to build consolidation transaction");
+    let request = ConsolidateUtxosRequest {
+        block_index: CONSOLIDATION_FEE_BURN_BLOCK_INDEX,
+        address: minter_address(),
+        amount: total_amount,
+        received_at: NOW.as_nanos_since_unix_epoch(),
+    };
+    mutate_state(|s| audit::create_consolidate_utxos_request(s, request.clone(), runtime));
+    let sign_request = read_state(|s| SignTxRequest {
+        key_name: s.ecdsa_key_name.clone(),
+        network: s.btc_network,
+        ecdsa_public_key: ecdsa_public_key(),
+        accounts: s.find_all_accounts(&unsigned_tx),
+        unsigned_tx,
+        change_output,
+        requests: SubmittedWithdrawalRequests::ToConsolidate { request },
+        utxos: input_utxos,
+    });
+    (sign_request, total_fee)
+}
+
+fn rejected_call(method: &str) -> CallError {
+    CallError::from_cdk_call_error(method, CallRejected::with_rejection(1, "BOOM!".to_string()))
 }
 
 proptest! {
