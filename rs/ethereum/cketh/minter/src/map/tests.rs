@@ -114,6 +114,7 @@ fn should_count_the_entries_it_holds() {
 
     map.remove_entry(&PrimaryKey::new(5)).unwrap();
     assert_eq!(map.len(), 9);
+    assert_eq!(map.alt_keys().count(), map.len());
 }
 
 #[test]
