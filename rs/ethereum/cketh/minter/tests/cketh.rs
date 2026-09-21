@@ -1393,7 +1393,19 @@ fn should_export_the_sweep_pipeline_metrics() {
         .assert_contains_metric_matching(
             r#"cketh_minter_balance_scan_chunks_total\{outcome="decode_error"\} 0 \d+"#,
         )
-        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds 90 \d+");
+        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds 90 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="queued"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="unsent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="sent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="sweeper"\} 0 \d+"#,
+        );
 }
 
 #[test]
@@ -1411,19 +1423,7 @@ fn should_export_the_unfinalized_backlog_metrics() {
             r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="sent"\} 0 \d+"#,
         )
         .assert_contains_metric_matching(
-            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="queued"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="unsent"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="sent"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
             r#"cketh_minter_unfinalized_transactions\{pipeline="withdrawal"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_unfinalized_transactions\{pipeline="sweeper"\} 0 \d+"#,
         );
 
     let caller: Principal = cketh.caller.into();
@@ -1459,9 +1459,6 @@ fn should_export_the_unfinalized_backlog_metrics() {
         )
         .assert_contains_metric_matching(
             r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="unsent"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="sent"\} 0 \d+"#,
         );
 }
 
