@@ -9,6 +9,7 @@ use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
 use crate::state::audit::{EventType, apply_state_transition, process_event};
 use crate::state::eth_logs_scraping::LogScrapings;
 use crate::state::event::AutomaticDeposit;
+use crate::state::receipt_fetch::ROUNDS_WITHOUT_READS_BEFORE_SKIPPING;
 use crate::state::transactions::{PipelineRequest, SweepId, SweepRequest};
 use crate::state::{State, mutate_state, read_state};
 use crate::storage::with_event_iter;
@@ -23,6 +24,7 @@ use crate::tx::{
     AuthorizationRequest, GasFeeEstimate, SignableTransaction, Signed, SignedAuthorization,
     TransactionSignature,
 };
+use crate::withdraw::fetch_receipts_for_round;
 use ethnum::u256;
 use evm_rpc_types::{Hex, MultiRpcResult};
 use ic_canister_runtime::IcError;
@@ -649,6 +651,41 @@ fn finalize_sweep_through_the_event_log(request: &SweepRequest, runtime: &MockCa
             process_event(s, event, runtime);
         }
     });
+}
+
+/// The sweeper's receipt fetch runs on its own window, on the pipeline's own ids.
+#[tokio::test]
+async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
+    init_state(initial_state());
+    mutate_state(|s| {
+        for _ in 0..=ROUNDS_WITHOUT_READS_BEFORE_SKIPPING {
+            s.sweeper_receipt_fetch.record_round_without_reads();
+        }
+    });
+
+    // A round that is not skipped reads the chain, which no unit test can answer, so reaching one
+    // here fails the test by panicking.
+    let receipts: BTreeMap<SweepId, _> = fetch_receipts_for_round(
+        Address::new([0_u8; 20]),
+        "test",
+        |s, finalized_tx_count| {
+            s.automatic_deposits
+                .sent_sweep_transactions_to_finalize(finalized_tx_count)
+        },
+        |s| &mut s.sweeper_receipt_fetch,
+    )
+    .await;
+
+    assert_eq!(receipts, BTreeMap::new());
+    assert_eq!(
+        read_state(|s| s.sweeper_receipt_fetch.rounds_without_reads()),
+        ROUNDS_WITHOUT_READS_BEFORE_SKIPPING + 2
+    );
+    assert_eq!(
+        read_state(|s| s.withdrawal_receipt_fetch),
+        Default::default(),
+        "a sweeper problem must not throttle user withdrawals"
+    );
 }
 
 fn one_pending_sweep() -> SweepRequest {

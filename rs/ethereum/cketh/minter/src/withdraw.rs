@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::eth_rpc::Hash;
 use crate::{
     MAIN_DERIVATION_PATH,
@@ -14,6 +17,7 @@ use crate::{
         State, TaskType,
         audit::{EventType, process_event},
         minter_address, mutate_state, read_state,
+        receipt_fetch::{ReceiptFetchWindow, RoundOutcome},
         transactions::{
             CreateTransactionError, PipelineRequest, Reimbursed, ReimbursementIndex,
             ReimbursementRequest, WithdrawalRequest,
@@ -433,42 +437,97 @@ async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_prov
         return;
     }
 
-    match finalized_transaction_count(sender).await {
-        Ok(finalized_tx_count) => {
-            let txs_to_finalize = read_state(|s| {
-                s.withdrawal_transactions
-                    .sent_transactions_to_finalize(&finalized_tx_count)
-            });
-            if let Some(receipts) = fetch_finalized_receipts(txs_to_finalize).await {
-                for (withdrawal_id, transaction_receipt) in receipts {
-                    mutate_state(|s| {
-                        process_event(
-                            s,
-                            EventType::FinalizedTransaction {
-                                withdrawal_id,
-                                transaction_receipt: transaction_receipt.into(),
-                            },
-                            time_provider,
-                        );
-                    });
-                }
-            }
-        }
+    let receipts = fetch_receipts_for_round(
+        sender,
+        "finalize_transactions_batch",
+        |s, finalized_tx_count| {
+            s.withdrawal_transactions
+                .sent_transactions_to_finalize(finalized_tx_count)
+        },
+        |s| &mut s.withdrawal_receipt_fetch,
+    )
+    .await;
 
-        Err(e) => {
-            log!(INFO, "Failed to get finalized transaction count: {e:?}");
-        }
+    for (withdrawal_id, transaction_receipt) in receipts {
+        mutate_state(|s| {
+            process_event(
+                s,
+                EventType::FinalizedTransaction {
+                    withdrawal_id,
+                    transaction_receipt: transaction_receipt.into(),
+                },
+                time_provider,
+            );
+        });
     }
 }
 
-/// Fetch the finalized receipts for the given (transaction hash → pipeline id) map. Returns `None` when
-/// the batch should be retried later (a receipt fetch failed, or the same hash came back with two
-/// different receipts). On success the map is keyed by pipeline id, and its keys are asserted to be
-/// exactly the ids expected to finalize. Sender/id-agnostic, so both pipelines reuse it.
-pub(crate) async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
+/// One pipeline's receipt fetch for one round: reads how far the sender's transactions are
+/// finalized, takes as many pending ids as that pipeline's [`ReceiptFetchWindow`] allows, fetches
+/// their receipts, and reports back how the round fared so the window follows the providers.
+///
+/// Returns the receipts that can be recorded now. Whatever is left pending is picked up by a later
+/// round, which resumes past the ids this one took. Sender/id-agnostic, so both pipelines reuse it.
+pub(crate) async fn fetch_receipts_for_round<Id: Copy + Ord + std::fmt::Debug>(
+    sender: Address,
+    context: &str,
+    pending: fn(&State, &TransactionCount) -> BTreeMap<Hash, Id>,
+    window: fn(&mut State) -> &mut ReceiptFetchWindow<Id>,
+) -> BTreeMap<Id, EvmTransactionReceipt> {
+    let skipped = mutate_state(|s| {
+        let window = window(s);
+        window.skip_round().then(|| window.rounds_without_reads())
+    });
+    if let Some(rounds_without_reads) = skipped {
+        log!(
+            INFO,
+            "[{context}]: SKIPPING: the last {rounds_without_reads} rounds could not read the \
+             chain to fetch a single receipt"
+        );
+        return BTreeMap::new();
+    }
+
+    let finalized_tx_count = match finalized_transaction_count(sender).await {
+        Ok(finalized_tx_count) => finalized_tx_count,
+        Err(e) => {
+            log!(
+                INFO,
+                "[{context}]: failed to get the finalized transaction count of {sender}: {e:?}"
+            );
+            mutate_state(|s| window(s).record_round_without_reads());
+            return BTreeMap::new();
+        }
+    };
+
+    let txs_to_finalize = mutate_state(|s| {
+        let pending = pending(s, &finalized_tx_count);
+        window(s).select_next_round(&pending)
+    });
+    if txs_to_finalize.is_empty() {
+        mutate_state(|s| window(s).record_round(RoundOutcome::default()));
+        return BTreeMap::new();
+    }
+
+    let (receipts, outcome) = fetch_finalized_receipts(txs_to_finalize).await;
+    mutate_state(|s| window(s).record_round(outcome));
+    receipts
+}
+
+/// What one receipt lookup reduced to: the receipt of a mined transaction, `None` for a
+/// transaction that was not mined, or the provider-level failure that kept it from answering.
+type ReceiptResult =
+    Result<Option<EvmTransactionReceipt>, MultiCallError<Option<EvmTransactionReceipt>>>;
+
+/// Fetch the finalized receipts for the given (transaction hash -> pipeline id) map, returning the
+/// receipts that can be recorded and how the round's lookups fared.
+///
+/// Each id stands on its own: a failed lookup, or an id none of whose transactions was mined,
+/// leaves that id pending for a later round instead of discarding the receipts the round did get.
+/// The one exception is two different receipts for the same id, which no chain can produce and
+/// which therefore abandons the whole round.
+async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
     txs_to_finalize: BTreeMap<Hash, Id>,
-) -> Option<BTreeMap<Id, EvmTransactionReceipt>> {
-    let expected_finalized_ids: BTreeSet<Id> = txs_to_finalize.values().copied().collect();
+) -> (BTreeMap<Id, EvmTransactionReceipt>, RoundOutcome) {
     let rpc_client = read_state(rpc_client);
     let results = join_all(txs_to_finalize.keys().map(async |hash| {
         rpc_client
@@ -479,6 +538,16 @@ pub(crate) async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
             .reduce_with_strategy(NoReduction)
     }))
     .await;
+    collect_finalized_receipts(txs_to_finalize, results)
+}
+
+/// The receipts one round's lookups produced, and how that round fared.
+fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
+    txs_to_finalize: BTreeMap<Hash, Id>,
+    results: Vec<ReceiptResult>,
+) -> (BTreeMap<Id, EvmTransactionReceipt>, RoundOutcome) {
+    let expected_finalized_ids: BTreeSet<Id> = txs_to_finalize.values().copied().collect();
+    let mut outcome = RoundOutcome::default();
     let mut receipts: BTreeMap<Id, EvmTransactionReceipt> = BTreeMap::new();
     for ((hash, id), result) in zip(txs_to_finalize, results) {
         match result {
@@ -487,6 +556,7 @@ pub(crate) async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
                     DEBUG,
                     "Received transaction receipt {receipt:?} for transaction {hash} and id {id:?}"
                 );
+                outcome.record_receipt();
                 match receipts.get(&id) {
                     // by construction we never query twice the same transaction hash, which is a field in TransactionReceipt.
                     Some(existing_receipt) => {
@@ -494,7 +564,8 @@ pub(crate) async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
                             INFO,
                             "ERROR: received different receipts for transaction {hash} with id {id:?}: {existing_receipt:?} and {receipt:?}. Will retry later"
                         );
-                        return None;
+                        outcome.abandon();
+                        return (BTreeMap::new(), outcome);
                     }
                     None => {
                         receipts.insert(id, receipt);
@@ -502,26 +573,35 @@ pub(crate) async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
                 }
             }
             Ok(None) => {
+                outcome.record_not_mined();
                 log!(
                     DEBUG,
                     "Transaction {hash} for id {id:?} was not mined, it's probably a resubmitted transaction",
                 )
             }
             Err(e) => {
+                outcome.record_failure();
                 log!(
                     INFO,
                     "Failed to get transaction receipt for {hash} and id {id:?}: {e:?}. Will retry later",
                 );
-                return None;
             }
         }
     }
-    let actual_finalized_ids: BTreeSet<Id> = receipts.keys().copied().collect();
-    assert_eq!(
-        expected_finalized_ids, actual_finalized_ids,
-        "ERROR: unexpected transaction receipts for some ids"
-    );
-    Some(receipts)
+    // Replaces an assert on the ids that did finalize: an id whose transactions all answered "not
+    // mined" - a nonce filled by another transaction, or a reorg - is a withdrawal that stalls,
+    // not a bug, and trapping here would take the whole minter down with it.
+    for id in expected_finalized_ids
+        .iter()
+        .filter(|id| !receipts.contains_key(id))
+    {
+        outcome.record_stalled_id();
+        log!(
+            INFO,
+            "No transaction receipt for any of the transactions of id {id:?}: leaving it pending",
+        );
+    }
+    (receipts, outcome)
 }
 
 pub(crate) async fn finalized_transaction_count(
