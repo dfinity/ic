@@ -1459,6 +1459,12 @@ fn should_export_the_unfinalized_backlog_metrics() {
         )
         .assert_contains_metric_matching(
             r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="unsent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="sent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="sweeper"\} 0 \d+"#,
         );
 }
 
