@@ -30,6 +30,7 @@ const ERROR_CODE_REQUEST_PROCESSING_ERROR: u32 = 10;
 const ERROR_CODE_PROCESSING_CONSTRUCTION_FAILED: u32 = 11;
 const ERROR_CODE_INVALID_METADATA: u32 = 12;
 const ERROR_CODE_ACCOUNT_BALANCE_NOT_FOUND: u32 = 13;
+const ERROR_CODE_BLOCK_NOT_YET_PROCESSED: u32 = 14;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
@@ -156,6 +157,20 @@ impl Error {
             message: "Unable to find account balance.".to_owned(),
             description: Some(format!("{description:?}")),
             retriable: false,
+            details: None,
+        })
+    }
+
+    /// The requested block exists in the block store, but the account balances for it have not
+    /// been computed yet. This is a transient condition that resolves once the balance
+    /// synchronization has caught up with the requested block, hence the error is retriable.
+    pub fn block_not_yet_processed<T: std::fmt::Debug>(description: &T) -> Self {
+        Self(rosetta_core::miscellaneous::Error {
+            code: ERROR_CODE_BLOCK_NOT_YET_PROCESSED,
+            message: "Account balances have not been computed for the requested block yet."
+                .to_owned(),
+            description: Some(format!("{description:?}")),
+            retriable: true,
             details: None,
         })
     }
