@@ -1369,6 +1369,10 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
+                // `stage="sent"` counts everything sent and not yet finalized rather than what
+                // `sent_transactions_to_finalize` would yield: that needs the finalized
+                // transaction count, which comes from an outcall and so is out of reach of a
+                // query endpoint. The superset is deliberate.
                 // `stage="unsent"` and `stage="sent"` together are the unique pending nonces that
                 // `TransactionPipeline::requests_batch` caps at 1000: once the withdrawal pipeline
                 // reaches that cap it stops turning withdrawal requests into transactions at all,
@@ -1378,10 +1382,13 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Requests the minter still owes a finalized transaction, by pipeline and by \
                      the stage they have reached. Each request is counted once, at one stage only, \
                      however many transactions have carried it: a withdrawal resubmitted at a \
-                     higher fee stays a single `sent` entry. `sent` is the backlog waiting for a \
-                     receipt and is the first thing to grow when finalization stalls. The \
-                     withdrawal pipeline also carries the minter's own sweeper-funding transfers, \
-                     of which at most one is outstanding at a time.",
+                     higher fee stays a single `sent` entry. `sent` is everything sent and not \
+                     yet finalized, which includes the transactions still waiting for Ethereum \
+                     finality: it is never 0 while withdrawals flow, so alert on it growing and \
+                     staying grown rather than on it being non-zero. It is the first thing to \
+                     grow when finalization stalls. The withdrawal pipeline also carries the \
+                     minter's own sweeper-funding transfers, of which at most one is outstanding \
+                     at a time.",
                 )?
                 .value(
                     &[("pipeline", "withdrawal"), ("stage", "queued")],

@@ -933,6 +933,11 @@ where
     ///
     /// Counted once per request, so a request resubmitted at a higher fee is a single entry
     /// however many transactions carry it.
+    ///
+    /// A superset of what [`Self::sent_transactions_to_finalize`] would report, deliberately:
+    /// narrowing it to the transactions a round would ask about needs the finalized transaction
+    /// count, which the minter only learns from an outcall, so a query cannot have it. Requests
+    /// still waiting for Ethereum finality are therefore counted too.
     pub fn sent_requests_len(&self) -> usize {
         self.sent_tx.len()
     }
