@@ -152,14 +152,9 @@ pub trait XNetSlicePool: Send + Sync {
         have_reject_signal_between: &dyn Fn(StreamIndex, StreamIndex) -> bool,
     ) -> XNetAdvertOutcome;
 
-    /// Records a verified header as the peer's high-water-mark header, unless one
-    /// with a greater certified height is already on record.
-    fn record_peer_header(
-        &self,
-        subnet_id: SubnetId,
-        header: &StreamHeader,
-        certification_height: Height,
-    );
+    /// Records a verified header as the peer's high-water-mark header, unless the
+    /// one on record is already at or past it in all indices.
+    fn record_peer_header(&self, subnet_id: SubnetId, header: &StreamHeader, log: &ReplicaLogger);
 }
 
 pub struct XNetPayloadBuilderMetrics {
@@ -1464,11 +1459,8 @@ impl XNetAdvertHandler for XNetPayloadBuilderImpl {
         // Record every verified peer header: it is our record of how far the peer has
         // garbage collected its messages, which is what tells us whether we still owe
         // it an advert.
-        self.slice_pool.record_peer_header(
-            source_subnet,
-            slice.header(),
-            advert.certification.height,
-        );
+        self.slice_pool
+            .record_peer_header(source_subnet, slice.header(), &self.log);
 
         Ok(outcome)
     }
@@ -1885,14 +1877,9 @@ impl XNetSlicePool for XNetSlicePoolImpl {
         slice_pool.classify_advert(subnet_id, header, have_reject_signal_between)
     }
 
-    fn record_peer_header(
-        &self,
-        subnet_id: SubnetId,
-        header: &StreamHeader,
-        certification_height: Height,
-    ) {
+    fn record_peer_header(&self, subnet_id: SubnetId, header: &StreamHeader, log: &ReplicaLogger) {
         let mut slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.record_peer_header(subnet_id, header, certification_height);
+        slice_pool.record_peer_header(subnet_id, header, log);
     }
 }
 

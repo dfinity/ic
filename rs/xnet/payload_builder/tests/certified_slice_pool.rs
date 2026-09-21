@@ -11,16 +11,18 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::{messaging::xnet::v1, proxy::ProtoProxy};
 use ic_replicated_state::Stream;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{HistogramStats, metric_vec};
+use ic_test_utilities_metrics::{
+    HistogramStats, fetch_int_counter_vec, metric_vec, nonzero_values,
+};
 use ic_test_utilities_state::arb_stream_slice;
 use ic_test_utilities_types::xnet::{StreamHeaderBuilder, StreamSliceBuilder};
 use ic_types::messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT;
 use ic_types::xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex, StreamSlice};
 use ic_types::{CountBytes, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{
-    CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, InvalidAppend, InvalidSlice,
-    LABEL_STATUS, STATUS_LESS_USEFUL, STATUS_NONE, STATUS_SUCCESS, UnpackedStreamSlice,
-    certified_slice_count_bytes, testing,
+    CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError, CertifiedSlicePool,
+    CertifiedSliceResult, InvalidAppend, InvalidSlice, LABEL_STATUS, STATUS_LESS_USEFUL,
+    STATUS_NONE, STATUS_SUCCESS, UnpackedStreamSlice, certified_slice_count_bytes, testing,
 };
 use ic_xnet_payload_builder::{ExpectedIndices, MAX_SIGNALS, STREAM_INDEX_MAX, max_message_index};
 use maplit::btreemap;
@@ -673,7 +675,7 @@ fn peer_header(pool: &Mutex<CertifiedSlicePool>, subnet_id: SubnetId) -> Option<
     pool.lock()
         .unwrap()
         .peer_header(subnet_id)
-        .map(|(peer_header, _height)| (**peer_header).clone())
+        .map(|peer_header| (**peer_header).clone())
 }
 
 fn peers(pool: &Mutex<CertifiedSlicePool>) -> Vec<SubnetId> {
@@ -1779,6 +1781,9 @@ fn pool_peer_header(
         10, // max_signal_count
         CURRENT_CERTIFICATION_VERSION,
     ))]
+    // Filter out streams beginning at index zero, to leave room for a header behind
+    // the recorded one's `begin`.
+    #[filter(#test_slice.0.messages_begin().get() > 0)]
     test_slice: (Stream, StreamIndex, usize),
 ) {
     let (mut stream, from, msg_count) = test_slice;
@@ -1813,9 +1818,52 @@ fn pool_peer_header(
         assert_matches!(slice_stats(&pool, SRC_SUBNET), (_, _, count, _) if count == msg_count);
         assert_eq!(Some(newer_header.clone()), peer_header(&pool, SRC_SUBNET));
 
-        // And an earlier certified header does not replace it.
+        // And a header behind it in signals does not replace it.
         put(&pool, SRC_SUBNET, slice, &store, &log).unwrap();
         assert_eq!(Some(newer_header.clone()), peer_header(&pool, SRC_SUBNET));
+
+        // Neither does an identical one.
+        {
+            let mut pool = pool.lock().unwrap();
+            let recorded = pool.peer_header(SRC_SUBNET).unwrap().clone();
+            pool.record_peer_header(SRC_SUBNET, &newer_header, &log);
+            assert!(Arc::ptr_eq(
+                &recorded,
+                pool.peer_header(SRC_SUBNET).unwrap()
+            ));
+        }
+
+        // Nor does one ahead of it in some indices and behind in others, in any
+        // combination. No honest peer produces such a header and we cannot tell it
+        // apart from a regression, so we hold on to a header the peer did certify.
+        let shift = |ahead: bool, index: StreamIndex| match ahead {
+            true => index.increment(),
+            false => index.decrement(),
+        };
+        for [begin_ahead, end_ahead, signals_ahead] in [
+            [false, true, true],
+            [true, false, true],
+            [true, true, false],
+            [true, false, false],
+            [false, true, false],
+            [false, false, true],
+        ] {
+            let incomparable = StreamHeaderBuilder::new()
+                .begin(shift(begin_ahead, newer_header.begin()))
+                .end(shift(end_ahead, newer_header.end()))
+                .signals_end(shift(signals_ahead, newer_header.signals_end()))
+                .build();
+            pool.lock()
+                .unwrap()
+                .record_peer_header(SRC_SUBNET, &incomparable, &log);
+            assert_eq!(Some(newer_header.clone()), peer_header(&pool, SRC_SUBNET));
+        }
+        // All 6 incomparable headers were reported as critical errors; the header
+        // behind the record in every index was not.
+        assert_eq!(
+            metric_vec(&[(&[("error", CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER)], 6)]),
+            nonzero_values(fetch_int_counter_vec(&fixture.metrics, "critical_errors"))
+        );
 
         // And taking the slice leaves the header in place.
         take_slice(&pool, SRC_SUBNET, None, None, None);
@@ -1959,7 +2007,7 @@ fn pool_classify_advert(
         // Seen, but not fetched.
         pool.lock()
             .unwrap()
-            .record_peer_header(SRC_SUBNET, &header, fixture.certified_height);
+            .record_peer_header(SRC_SUBNET, &header, &log);
         assert_eq!(
             classify_advert(&pool, SRC_SUBNET, &header),
             XNetAdvertOutcome::Duplicate
@@ -2213,11 +2261,9 @@ fn pool_classify_advert_collecting_reject_signal(
         };
 
         // Seen, but not fetched.
-        pool.lock().unwrap().record_peer_header(
-            SRC_SUBNET,
-            &stream.header(),
-            fixture.certified_height,
-        );
+        pool.lock()
+            .unwrap()
+            .record_peer_header(SRC_SUBNET, &stream.header(), &log);
         assert_eq!(
             classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_at_begin),
             XNetAdvertOutcome::Actionable
@@ -2273,6 +2319,98 @@ fn pool_classify_advert_collecting_reject_signal(
         assert_eq!(
             classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_before_begin),
             XNetAdvertOutcome::InPayload
+        );
+    });
+}
+
+/// Tests that `classify_advert()` combines the pooled slice with a peer header
+/// that the slice's header neither dominates nor is dominated by, i.e. one left
+/// on record because the peer is misbehaving. This is the only way the record
+/// can lag the pooled slice in any index.
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
+fn pool_classify_advert_incomparable_peer_header(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
+    ))]
+    // Filter out streams beginning at index zero or without signals, to leave room
+    // for a recorded header behind the stream's `begin` resp. `signals_end`.
+    #[filter(#test_slice.0.messages_begin().get() > 0 && #test_slice.0.signals_end().get() > 0)]
+    test_slice: (Stream, StreamIndex, usize),
+) {
+    let (stream, _, _) = test_slice;
+
+    with_test_replica_logger(|log| {
+        let messages_begin = stream.messages_begin();
+        let msg_count = (stream.messages_end() - messages_begin).get() as usize;
+        let fixture =
+            StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
+
+        let mut store = MockCertifiedStreamStore::new();
+        // Actual return value does not matter as long as it's `Ok(_)`.
+        store
+            .expect_decode_certified_stream_slice()
+            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
+
+        // A pool with the whole stream pooled and `recorded` (which the pooled
+        // slice's header does not dominate, so it is left on record) recorded.
+        let pool_with_recorded_header = |recorded: StreamHeader| {
+            // A registry of its own, as each pool registers the same metrics.
+            let pool = Mutex::new(CertifiedSlicePool::new(&MetricsRegistry::new()));
+            pool.lock()
+                .unwrap()
+                .record_peer_header(SRC_SUBNET, &recorded, &log);
+            let slice = fixture.get_slice(DST_SUBNET, messages_begin, msg_count);
+            put(&pool, SRC_SUBNET, slice, &store, &log).unwrap();
+            assert_eq!(Some(recorded), peer_header(&pool, SRC_SUBNET));
+            pool
+        };
+
+        // A reject signal of ours collected by the pooled slice's `begin`, but by
+        // neither record below, both of which begin before it.
+        let reject_signal_below_begin =
+            |from, to| from <= messages_begin.decrement() && messages_begin.decrement() < to;
+
+        // Against a record behind the pooled slice in messages and `begin`, ahead in
+        // signals, an advert whose messages and `begin` only the pooled slice covers
+        // and whose signals only the record covers.
+        let pool = pool_with_recorded_header(
+            StreamHeaderBuilder::new()
+                .begin(messages_begin.decrement())
+                .end(stream.messages_end().decrement())
+                .signals_end(stream.signals_end().increment())
+                .build(),
+        );
+        let advert = StreamHeaderBuilder::new()
+            .begin(messages_begin)
+            .end(stream.messages_end())
+            .signals_end(stream.signals_end().increment())
+            .build();
+        assert_eq!(
+            classify_advert_with(&pool, SRC_SUBNET, &advert, &reject_signal_below_begin),
+            XNetAdvertOutcome::Duplicate
+        );
+
+        // And conversely, against a record ahead in messages, an advert whose messages
+        // only the record covers, its signals and `begin` only the pooled slice.
+        let pool = pool_with_recorded_header(
+            StreamHeaderBuilder::new()
+                .begin(messages_begin.decrement())
+                .end(stream.messages_end().increment())
+                .signals_end(stream.signals_end().decrement())
+                .build(),
+        );
+        let advert = StreamHeaderBuilder::new()
+            .begin(messages_begin)
+            .end(stream.messages_end().increment())
+            .signals_end(stream.signals_end())
+            .build();
+        assert_eq!(
+            classify_advert_with(&pool, SRC_SUBNET, &advert, &reject_signal_below_begin),
+            XNetAdvertOutcome::Duplicate
         );
     });
 }

@@ -10,7 +10,7 @@ use ic_crypto_tree_hash::{
 };
 use ic_interfaces::messaging::XNetAdvertOutcome;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
-use ic_logger::{ReplicaLogger, info};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::{
     MetricsRegistry,
     buckets::{decimal_buckets, decimal_buckets_with_zero},
@@ -18,12 +18,12 @@ use ic_metrics::{
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_types::{
-    CountBytes, Height, RegistryVersion, SubnetId,
+    CountBytes, RegistryVersion, SubnetId,
     consensus::certification::Certification,
     xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex},
 };
 use messages::Messages;
-use prometheus::{Histogram, IntCounterVec, IntGauge};
+use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
 use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
@@ -49,6 +49,7 @@ struct CertifiedSlicePoolMetrics {
     take_messages: Histogram,
     take_gced_messages: Histogram,
     take_size_bytes: Histogram,
+    critical_error_incomparable_peer_header: IntCounter,
 }
 
 pub const METRIC_POOL_SIZE_BYTES: &str = "xnet_pool_size_bytes";
@@ -57,6 +58,8 @@ pub const METRIC_TAKE_COUNT: &str = "xnet_pool_take_count";
 pub const METRIC_TAKE_MESSAGES: &str = "xnet_pool_take_messages";
 pub const METRIC_TAKE_SIZE_BYTES: &str = "xnet_pool_take_size_bytes";
 pub const METRIC_TAKE_GCED_MESSAGES: &str = "xnet_pool_take_gced_messages";
+
+pub const CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER: &str = "xnet_pool_incomparable_peer_header";
 
 pub const LABEL_STATUS: &str = "status";
 
@@ -99,6 +102,8 @@ impl CertifiedSlicePoolMetrics {
                 // 100 B - 5 MB
                 decimal_buckets(2, 6)
             ),
+            critical_error_incomparable_peer_header: metrics_registry
+                .error_counter(CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER),
         }
     }
 
@@ -1128,16 +1133,9 @@ pub struct CertifiedSlicePool {
     /// a pooled slice, which is dropped once consumed, this is retained: it is
     /// the only record of how far the peer has seen our signals (its `begin`)
     /// and of what it has on offer (its `end` and `signals_end`).
-    peer_headers: BTreeMap<SubnetId, PeerHeader>,
+    peer_headers: BTreeMap<SubnetId, Arc<StreamHeader>>,
 
     metrics: CertifiedSlicePoolMetrics,
-}
-
-/// A peer subnet's high-water-mark header, along with the height of the
-/// certification it was taken from, which orders the headers received.
-struct PeerHeader {
-    certification_height: Height,
-    header: Arc<StreamHeader>,
 }
 
 impl CertifiedSlicePool {
@@ -1383,11 +1381,11 @@ impl CertifiedSlicePool {
             subnet_id,
             certified_stream_store,
             registry_version,
-            log,
+            &log,
         )?;
         let unpacked = slice.try_into()?;
 
-        let result = pool.lock().unwrap().pool_slice(subnet_id, unpacked);
+        let result = pool.lock().unwrap().pool_slice(subnet_id, unpacked, &log);
         // `pool_slice` returned any displaced slice. Drop it outside the pool lock.
         result.map(|_| ())
     }
@@ -1446,10 +1444,10 @@ impl CertifiedSlicePool {
             subnet_id,
             certified_stream_store,
             registry_version,
-            log,
+            &log,
         )?;
 
-        let result = pool.lock().unwrap().pool_slice(subnet_id, slice);
+        let result = pool.lock().unwrap().pool_slice(subnet_id, slice, &log);
         // `pool_slice` returned any displaced slice. Drop it outside the pool lock.
         result.map(|_| ())
     }
@@ -1464,13 +1462,10 @@ impl CertifiedSlicePool {
         &mut self,
         subnet_id: SubnetId,
         mut unpacked: UnpackedStreamSlice,
+        log: &ReplicaLogger,
     ) -> CertifiedSliceResult<Option<UnpackedStreamSlice>> {
         // Record every pulled header, whether or not we end up pooling it.
-        self.record_peer_header(
-            subnet_id,
-            unpacked.payload.header.decoded(),
-            unpacked.certification.height,
-        );
+        self.record_peer_header(subnet_id, unpacked.payload.header.decoded(), log);
 
         // Trim off everything before the cached stream position.
         let stream_position = self.stream_positions.get(&subnet_id);
@@ -1528,9 +1523,9 @@ impl CertifiedSlicePool {
                 && !have_reject_signal_between(header_begin, header.begin())
             };
 
-        // The peer's messages, signals and `header.begin()` accounted for so far. Each
-        // reference point below is at or past the previous one, so testing them in
-        // order yields the strongest statement that holds.
+        // The peer's messages, signals and `header.begin()` accounted for so far. The
+        // reference points below are tested in increasing order of strength, but none
+        // of them is guaranteed to subsume the previous ones, hence the accumulation.
         let mut messages_end = StreamIndex::from(0);
         let mut signals_end = StreamIndex::from(0);
         let mut header_begin = StreamIndex::from(0);
@@ -1561,9 +1556,9 @@ impl CertifiedSlicePool {
         }
 
         if let Some(recorded) = self.peer_headers.get(&subnet_id) {
-            messages_end = messages_end.max(recorded.header.end());
-            signals_end = signals_end.max(recorded.header.signals_end());
-            header_begin = header_begin.max(recorded.header.begin());
+            messages_end = messages_end.max(recorded.end());
+            signals_end = signals_end.max(recorded.signals_end());
+            header_begin = header_begin.max(recorded.begin());
             if covered_by(messages_end, signals_end, header_begin) {
                 return XNetAdvertOutcome::Duplicate;
             }
@@ -1572,41 +1567,51 @@ impl CertifiedSlicePool {
         XNetAdvertOutcome::Actionable
     }
 
-    /// Returns the given peer subnet's high-water-mark header and the height it was
-    /// certified at, if any.
-    pub fn peer_header(&self, subnet_id: SubnetId) -> Option<(&Arc<StreamHeader>, Height)> {
-        self.peer_headers
-            .get(&subnet_id)
-            .map(|peer_header| (&peer_header.header, peer_header.certification_height))
+    /// Returns the given peer subnet's high-water-mark header, if any.
+    pub fn peer_header(&self, subnet_id: SubnetId) -> Option<&Arc<StreamHeader>> {
+        self.peer_headers.get(&subnet_id)
     }
 
-    /// Records the slice header as the peer's high-water-mark header, unless one
-    /// with a greater certified height is already on record.
+    /// Records the header as the peer's high-water-mark header, unless the one on
+    /// record is already at or past it in all of `begin`, `end` and `signals_end`.
+    ///
+    /// A stream's `begin`, `end` and `signals_end` always advance monotonically, so
+    /// a header that is ahead in one and behind in another comes from a peer that
+    /// is misbehaving. It is ignored rather than merged, so that the record stays a
+    /// header that the peer actually certified.
     pub fn record_peer_header(
         &mut self,
         subnet_id: SubnetId,
         header: &StreamHeader,
-        certification_height: Height,
+        log: &ReplicaLogger,
     ) {
         match self.peer_headers.entry(subnet_id) {
             Entry::Vacant(vacant) => {
-                vacant.insert(PeerHeader {
-                    certification_height,
-                    header: Arc::new(header.clone()),
-                });
+                vacant.insert(Arc::new(header.clone()));
             }
 
-            Entry::Occupied(mut recorded) => {
-                if recorded.get().certification_height < certification_height {
-                    // Higher certified height implies >= header indices.
-                    debug_assert!(recorded.get().header.begin() <= header.begin());
-                    debug_assert!(recorded.get().header.end() <= header.end());
-                    debug_assert!(recorded.get().header.signals_end() <= header.signals_end());
+            Entry::Occupied(mut occupied) => {
+                let recorded = occupied.get();
+                // Nothing to do unless the header advances some index.
+                if recorded.begin() >= header.begin()
+                    && recorded.end() >= header.end()
+                    && recorded.signals_end() >= header.signals_end()
+                {
+                    return;
+                }
 
-                    recorded.insert(PeerHeader {
-                        certification_height,
-                        header: Arc::new(header.clone()),
-                    });
+                if recorded.begin() <= header.begin()
+                    && recorded.end() <= header.end()
+                    && recorded.signals_end() <= header.signals_end()
+                {
+                    occupied.insert(Arc::new(header.clone()));
+                } else {
+                    error!(
+                        log,
+                        "{}: Header from subnet {subnet_id} ({header:?}) is inconsistent with the header on record ({recorded:?})",
+                        CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER,
+                    );
+                    self.metrics.critical_error_incomparable_peer_header.inc();
                 }
             }
         }
@@ -1790,7 +1795,7 @@ fn validate_slice(
     subnet_id: SubnetId,
     certified_stream_store: &dyn CertifiedStreamStore,
     registry_version: RegistryVersion,
-    log: ReplicaLogger,
+    log: &ReplicaLogger,
 ) -> CertifiedSliceResult<()> {
     match certified_stream_store.decode_certified_stream_slice(subnet_id, registry_version, slice) {
         Ok(_) => Ok(()),

@@ -1,6 +1,6 @@
 use super::test_fixtures::*;
 use super::*;
-use crate::certified_slice_pool::CertifiedSliceError;
+use crate::certified_slice_pool::{CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError};
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces::messaging::{InvalidXNetPayload, XNetPayloadValidationFailure};
@@ -418,6 +418,7 @@ async fn validate_broken_count_bytes_fn() {
 
         assert_eq!(
             metric_vec(&[
+                (&[("error", &CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER)], 0),
                 (&[("error", &CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES)], 0),
                 (&[("error", &CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED)], 1),
             ]),
@@ -567,7 +568,7 @@ impl XNetSlicePool for TestSlicePool {
         XNetAdvertOutcome::Actionable
     }
 
-    fn record_peer_header(&self, _: SubnetId, _: &StreamHeader, _: Height) {}
+    fn record_peer_header(&self, _: SubnetId, _: &StreamHeader, _: &ReplicaLogger) {}
 }
 
 /// `get_xnet_payload` must not include a slice from a deleted subnet even if
@@ -955,11 +956,8 @@ fn advert_store(advertised: &Stream, verifications: usize) -> MockCertifiedStrea
 }
 
 /// The peer header on record for `REMOTE_SUBNET`, if any.
-fn recorded_peer_header(pool: &Mutex<CertifiedSlicePool>) -> Option<(Arc<StreamHeader>, Height)> {
-    pool.lock()
-        .unwrap()
-        .peer_header(REMOTE_SUBNET)
-        .map(|(header, height)| (header.clone(), height))
+fn recorded_peer_header(pool: &Mutex<CertifiedSlicePool>) -> Option<Arc<StreamHeader>> {
+    pool.lock().unwrap().peer_header(REMOTE_SUBNET).cloned()
 }
 
 /// An advert offering messages we have not inducted is actionable, and its
@@ -979,10 +977,7 @@ async fn handle_advert_actionable() {
             payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
             Ok(XNetAdvertOutcome::Actionable)
         );
-        assert_eq!(
-            Some((Arc::new(header), CERTIFIED_HEIGHT)),
-            recorded_peer_header(&pool)
-        );
+        assert_eq!(Some(Arc::new(header)), recorded_peer_header(&pool));
 
         // Redundant copies of the same advert are classified as duplicates
         // and not verified again.
@@ -1038,7 +1033,8 @@ async fn handle_advert_new_signals() {
             signal_end: OWN_MESSAGES_BEGIN + 2,
         });
         let header = advertised.header();
-        let (payload_builder, pool) = advert_handler_and_pool(advert_store(&advertised, 1), log);
+        let (payload_builder, pool) =
+            advert_handler_and_pool(advert_store(&advertised, 1), log.clone());
 
         // A header on record covering everything except the new signals.
         let recorded = generate_stream(&StreamConfig {
@@ -1046,25 +1042,20 @@ async fn handle_advert_new_signals() {
             message_end: OWN_SIGNALS_END,
             signal_end: OWN_MESSAGES_BEGIN,
         });
-        pool.lock().unwrap().record_peer_header(
-            REMOTE_SUBNET,
-            &recorded.header(),
-            CERTIFIED_HEIGHT.decrement(),
-        );
+        pool.lock()
+            .unwrap()
+            .record_peer_header(REMOTE_SUBNET, &recorded.header(), &log);
 
         assert_matches!(
             payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
             Ok(XNetAdvertOutcome::Actionable)
         );
-        assert_eq!(
-            Some((Arc::new(header), CERTIFIED_HEIGHT)),
-            recorded_peer_header(&pool)
-        );
+        assert_eq!(Some(Arc::new(header)), recorded_peer_header(&pool));
     });
 }
 
-/// An advert whose content we have already recorded, but at a lower certified
-/// height, is classified as a duplicate without being verified.
+/// An advert whose content we have already recorded is classified as a
+/// duplicate without being verified.
 #[tokio::test]
 async fn handle_advert_duplicate_content() {
     with_test_replica_logger(|log| {
@@ -1074,13 +1065,12 @@ async fn handle_advert_duplicate_content() {
             signal_end: OWN_MESSAGES_BEGIN,
         });
         let header = advertised.header();
-        let (payload_builder, pool) = advert_handler_and_pool(advert_store(&advertised, 0), log);
+        let (payload_builder, pool) =
+            advert_handler_and_pool(advert_store(&advertised, 0), log.clone());
 
-        pool.lock().unwrap().record_peer_header(
-            REMOTE_SUBNET,
-            &header,
-            CERTIFIED_HEIGHT.decrement(),
-        );
+        pool.lock()
+            .unwrap()
+            .record_peer_header(REMOTE_SUBNET, &header, &log);
 
         assert_matches!(
             payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
@@ -1130,7 +1120,7 @@ async fn handle_advert_nothing_new() {
             );
             // Advertised header was recorded regardless.
             assert_eq!(
-                Some((Arc::new(advertised.header()), CERTIFIED_HEIGHT)),
+                Some(Arc::new(advertised.header())),
                 recorded_peer_header(&pool)
             );
             assert_eq!(
