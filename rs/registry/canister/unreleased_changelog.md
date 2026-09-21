@@ -28,6 +28,11 @@ on the process that this file is part of, see
 
 ## Changed
 
+* The engine controller canister may now set `cooling_down` on the `CloudEngine`
+  subnets it manages, in addition to `subnet_admins` and `is_halted`. This lets
+  an engine frozen for non-payment be cooled down rather than halted, so it
+  stops executing while consensus keeps running.
+
 * `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
   fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward
   (`deployment_progress == 1.0`).
