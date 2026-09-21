@@ -21,12 +21,25 @@ use turmoil::Builder;
 
 const TIMEOUT_DURATION_TRIGGER: Duration = Duration::from_secs(5);
 
+/// How much *simulated* time a simulation may run for before turmoil gives up on
+/// it with "Ran for duration: ... without completing".
+///
+/// `ic_p2p_test_utils::turmoil` paces the simulated clock against the real one,
+/// so this is also a lower bound on how long a test whose `wait_for` condition
+/// never becomes true takes in real time before it fails. It therefore has to
+/// fit inside this target's Bazel timeout (300 s, the `medium` default) with
+/// room to spare, or such a failure surfaces as a bare Bazel timeout instead.
+/// Two minutes is still generous for the passing tests: the longest of them
+/// consumes about 16 s of simulated time, and no single `wait_for` more than
+/// about 5.5 s, dominated by the transport's 5 s connect retry backoff.
+const SIMULATION_DURATION: Duration = Duration::from_secs(120);
+
 #[test]
 fn test_artifact_sent_to_other_peer() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60 * 60))
+            .simulation_duration(SIMULATION_DURATION)
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -83,7 +96,7 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60 * 60))
+            .simulation_duration(SIMULATION_DURATION)
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -166,7 +179,7 @@ fn test_flapping_connection_does_not_cause_duplicate_artifact_assemble() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60 * 60))
+            .simulation_duration(SIMULATION_DURATION)
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -479,7 +492,7 @@ fn test_adverts_are_retransmitted_on_reconnection() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60 * 60))
+            .simulation_duration(SIMULATION_DURATION)
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -575,7 +588,7 @@ fn test_new_adverts_are_transmitted_on_reconnection() {
     with_test_replica_logger(|log| {
         let mut sim = Builder::new()
             .tick_duration(Duration::from_millis(100))
-            .simulation_duration(Duration::from_secs(60 * 60))
+            .simulation_duration(SIMULATION_DURATION)
             .build();
 
         let exit_notify = Arc::new(Notify::new());
@@ -668,7 +681,7 @@ fn test_large_msgs() {
         let mut sim = Builder::new()
             .max_message_latency(Duration::from_millis(0))
             .udp_capacity(1024 * 1024)
-            .simulation_duration(Duration::from_secs(20 * 60))
+            .simulation_duration(SIMULATION_DURATION)
             .build();
 
         let exit_notify = Arc::new(Notify::new());
