@@ -446,6 +446,16 @@ mod tests {
         NNSDelegationBuilder::try_new(delegation.certificate, SUBNET_0, &no_op_logger()).unwrap()
     }
 
+    fn create_reader(delegation: Option<CertificateDelegation>) -> NNSDelegationReader {
+        let builder = delegation.map(create_builder);
+        let (_sender, receiver) = watch::channel(builder);
+
+        NNSDelegationReader {
+            receiver,
+            logger: no_op_logger(),
+        }
+    }
+
     #[test]
     fn no_ranges_test() {
         let (full_delegation, root_public_key) = create_fake_certificate_delegation(
@@ -455,9 +465,11 @@ mod tests {
             ],
             SUBNET_0,
         );
-        let builder = create_builder(full_delegation);
+        let reader = create_reader(Some(full_delegation));
 
-        let delegation = builder.build_unverified(CanisterRangesFilter::None, &no_op_logger());
+        let delegation = reader
+            .get_delegation(CanisterRangesFilter::None)
+            .expect("Should succeed");
 
         assert!(
             !path_exists(&delegation, &[b"canister_ranges"]),
@@ -489,9 +501,11 @@ mod tests {
             ],
             SUBNET_0,
         );
-        let builder = create_builder(full_delegation);
+        let reader = create_reader(Some(full_delegation));
 
-        let delegation = builder.build_unverified(CanisterRangesFilter::Flat, &no_op_logger());
+        let delegation = reader
+            .get_delegation(CanisterRangesFilter::Flat)
+            .expect("Should succeed");
 
         assert!(
             !path_exists(&delegation, &[b"canister_ranges"]),
@@ -527,12 +541,11 @@ mod tests {
             ],
             SUBNET_0,
         );
-        let builder = create_builder(full_delegation);
+        let reader = create_reader(Some(full_delegation));
 
-        let delegation = builder.build_unverified(
-            CanisterRangesFilter::Tree(CanisterId::from(150)),
-            &no_op_logger(),
-        );
+        let delegation = reader
+            .get_delegation(CanisterRangesFilter::Tree(CanisterId::from(150)))
+            .expect("Should succeed");
 
         assert!(
             path_exists(&delegation, &[b"canister_ranges"]),
@@ -579,12 +592,11 @@ mod tests {
             ],
             SUBNET_0,
         );
-        let builder = create_builder(full_delegation);
+        let reader = create_reader(Some(full_delegation));
 
-        let delegation = builder.build_unverified(
-            CanisterRangesFilter::Tree(CanisterId::from(0)),
-            &no_op_logger(),
-        );
+        let delegation = reader
+            .get_delegation(CanisterRangesFilter::Tree(CanisterId::from(0)))
+            .expect("Should succeed");
 
         assert!(
             !path_exists(&delegation, &[b"canister_ranges"]),

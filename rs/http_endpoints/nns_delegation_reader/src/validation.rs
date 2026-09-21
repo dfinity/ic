@@ -157,23 +157,6 @@ pub(crate) fn is_tree_consistent_with(
     }
 }
 
-/// Returns whether the canister ranges certified in `tree` at
-/// `/subnet/<subnet_id>/canister_ranges` exactly match the ranges which `routing_table`
-/// assigns to the subnet.
-fn do_all_subnet_ranges_match(
-    tree: &LabeledTree<Vec<u8>>,
-    subnet_id: SubnetId,
-    routing_table: &RoutingTable,
-) -> Result<bool, DelegationValidationError> {
-    let subnet_ranges: Vec<(PrincipalId, PrincipalId)> = routing_table
-        .ranges(subnet_id)
-        .iter()
-        .map(|range| (range.start.get(), range.end.get()))
-        .collect();
-
-    do_flat_ranges_match(tree, subnet_id, &subnet_ranges)
-}
-
 /// Returns whether the public key certified in `tree` matches `expected_public_key`.
 fn does_public_key_match(
     tree: &LabeledTree<Vec<u8>>,
@@ -192,6 +175,23 @@ fn does_public_key_match(
             "missing /subnet/{subnet_id}/public_key leaf"
         ))),
     }
+}
+
+/// Returns whether the canister ranges certified in `tree` at
+/// `/subnet/<subnet_id>/canister_ranges` exactly match the ranges which `routing_table`
+/// assigns to the subnet.
+fn do_all_subnet_ranges_match(
+    tree: &LabeledTree<Vec<u8>>,
+    subnet_id: SubnetId,
+    routing_table: &RoutingTable,
+) -> Result<bool, DelegationValidationError> {
+    let subnet_ranges: Vec<(PrincipalId, PrincipalId)> = routing_table
+        .ranges(subnet_id)
+        .iter()
+        .map(|range| (range.start.get(), range.end.get()))
+        .collect();
+
+    do_flat_ranges_match(tree, subnet_id, &subnet_ranges)
 }
 
 /// Returns whether the ranges certified in the `/subnet/<subnet_id>/canister_ranges`
