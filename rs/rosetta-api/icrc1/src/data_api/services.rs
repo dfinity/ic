@@ -205,22 +205,34 @@ async fn get_balance_block(
     storage_client: &StorageClient,
     partial_block_identifier: &Option<PartialBlockIdentifier>,
 ) -> Result<RosettaBlock, Error> {
-    let highest_processed_block_idx = storage_client
-        .get_highest_processed_block_idx()
-        .await
-        .map_err(|e| Error::unable_to_find_block(&e))?
-        .ok_or_else(|| {
-            Error::block_not_yet_processed(
-                &"No account balances have been computed yet.".to_owned(),
-            )
-        })?;
+    async fn highest_processed_block_idx(storage_client: &StorageClient) -> Result<u64, Error> {
+        storage_client
+            .get_highest_processed_block_idx()
+            .await
+            .map_err(|e| Error::unable_to_find_block(&e))?
+            .ok_or_else(|| {
+                Error::block_not_yet_processed(
+                    &"No account balances have been computed yet.".to_owned(),
+                )
+            })
+    }
 
-    match partial_block_identifier {
+    // A block identifier that specifies neither an index nor a hash is a request for the current
+    // block, just like providing no block identifier at all.
+    let explicitly_requested_block = partial_block_identifier
+        .as_ref()
+        .filter(|block_id| block_id.index.is_some() || block_id.hash.is_some());
+
+    match explicitly_requested_block {
+        // Resolve the requested block before looking at the processed height, so that an
+        // identifier that does not name a block is reported as such rather than as a block whose
+        // balances are still being computed.
         Some(block_id) => {
             let rosetta_block =
                 get_rosetta_block_from_partial_block_identifier(block_id, storage_client)
                     .await
                     .map_err(|err| Error::invalid_block_identifier(&err))?;
+            let highest_processed_block_idx = highest_processed_block_idx(storage_client).await?;
             if rosetta_block.index > highest_processed_block_idx {
                 return Err(Error::block_not_yet_processed(&format!(
                     "Block {} was requested but account balances have only been computed up to block {}.",
@@ -229,11 +241,14 @@ async fn get_balance_block(
             }
             Ok(rosetta_block)
         }
-        None => storage_client
-            .get_block_at_idx(highest_processed_block_idx)
-            .await
-            .map_err(|e| Error::unable_to_find_block(&e))?
-            .ok_or_else(|| Error::unable_to_find_block(&"Current block not found".to_owned())),
+        None => {
+            let highest_processed_block_idx = highest_processed_block_idx(storage_client).await?;
+            storage_client
+                .get_block_at_idx(highest_processed_block_idx)
+                .await
+                .map_err(|e| Error::unable_to_find_block(&e))?
+                .ok_or_else(|| Error::unable_to_find_block(&"Current block not found".to_owned()))
+        }
     }
 }
 
@@ -2193,7 +2208,13 @@ mod test {
         );
 
         // The implicit form is labelled with the highest processed block, not with the tip, and
-        // the value is the one that is actually true at that block.
+        // the value is the one that is actually true at that block. A block identifier that
+        // specifies neither an index nor a hash is a request for the current block, so it is
+        // treated the same way.
+        let current_block = Some(PartialBlockIdentifier {
+            index: None,
+            hash: None,
+        });
         for response in [
             account_balance(
                 &storage_client,
@@ -2208,6 +2229,25 @@ mod test {
                 &storage_client,
                 &b.into(),
                 &None,
+                &None,
+                metadata.decimals,
+                metadata.symbol.clone(),
+            )
+            .await
+            .unwrap(),
+            account_balance(
+                &storage_client,
+                &b.into(),
+                &current_block,
+                metadata.decimals,
+                metadata.symbol.clone(),
+            )
+            .await
+            .unwrap(),
+            account_balance_with_metadata(
+                &storage_client,
+                &b.into(),
+                &current_block,
                 &None,
                 metadata.decimals,
                 metadata.symbol.clone(),
@@ -2298,8 +2338,28 @@ mod test {
             .await
             .unwrap();
 
+        // A block identifier that does not name a block is reported as an invalid block
+        // identifier, and not as a block whose balances are still being computed.
+        let error = account_balance(
+            &storage_client,
+            &a.into(),
+            &Some(PartialBlockIdentifier {
+                index: Some(17),
+                hash: None,
+            }),
+            metadata.decimals,
+            metadata.symbol.clone(),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.0.code, 3, "{error:?}");
+
         for partial_block_identifier in [
             None,
+            Some(PartialBlockIdentifier {
+                index: None,
+                hash: None,
+            }),
             Some(PartialBlockIdentifier {
                 index: Some(2),
                 hash: None,
