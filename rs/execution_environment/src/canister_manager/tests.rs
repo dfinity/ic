@@ -45,7 +45,8 @@ use ic_management_canister_types_private::{
     OnLowWasmMemoryHookStatus, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     RenameCanisterArgs, RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
     SubnetInfoResponse, SubnetMetricsArgs, SubnetMetricsResponse, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply, WasmMemoryPersistence,
+    UpdateSettingsArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, UploadChunkReply,
+    WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -9578,6 +9579,59 @@ fn failed_take_canister_snapshot_does_not_charge_for_instructions() {
     assert_eq!(test.canister_state(canister_id).canister_snapshots.len(), 0);
     assert_eq!(test.subnet_available_memory().get_execution_memory(), 0);
     assert_eq!(balance_before, balance_after);
+}
+
+// Unlike `take_canister_snapshot`, which only charges for its instructions once
+// the operation succeeded, `upload_canister_snapshot_metadata` charges for them
+// upfront. Regression test that the charge is recorded in
+// `ConsumedCyclesForInstructions` and thus survives the canister state rollback
+// on failure, i.e. that it is re-applied to the restored canister.
+#[test]
+fn failed_create_snapshot_from_metadata_charges_for_instructions() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
+        .unwrap();
+    // Exhaust the subnet available execution memory so that the memory of the
+    // snapshot cannot be accounted for against it.
+    test.set_available_execution_memory(0);
+
+    let args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,
+        1234,
+        vec![],
+        1 << 16,
+        1 << 16,
+        vec![],
+        None,
+        None,
+    );
+    let instructions = NumInstructions::new(
+        SchedulerConfig::application_subnet()
+            .canister_snapshot_baseline_instructions
+            .get()
+            + args.snapshot_size_bytes().get(),
+    );
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(instructions, test.get_own_subnet_cycles_config())
+        .real();
+    assert_ne!(expected_charge, Cycles::zero());
+
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let err = test
+        .subnet_message(Method::UploadCanisterSnapshotMetadata, args.encode())
+        .unwrap_err();
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    // The operation is rolled back, so no snapshot is created and the subnet
+    // available execution memory is unchanged, but the instructions charged for
+    // upfront are charged for nonetheless.
+    assert_eq!(test.canister_state(canister_id).canister_snapshots.len(), 0);
+    assert_eq!(test.subnet_available_memory().get_execution_memory(), 0);
+    assert_eq!(balance_before - balance_after, expected_charge);
 }
 
 #[test]
