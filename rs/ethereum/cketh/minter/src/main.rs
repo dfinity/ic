@@ -1516,6 +1516,70 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Age of the sweeper funding awaiting finalization; 0 if none is outstanding.",
                 )?;
 
+                let receipt_fetch = [
+                    ("withdrawal", s.withdrawal_receipt_fetch.counters()),
+                    ("sweeper", s.sweeper_receipt_fetch.counters()),
+                ];
+                w.gauge_vec(
+                    "cketh_minter_receipt_fetch_window",
+                    "How many pipeline ids the next finalization round fetches transaction \
+                     receipts for, per pipeline. Doubles while no lookup fails and shrinks when \
+                     they do, so a sustained low value means the providers are failing.",
+                )?
+                .value(
+                    &[("pipeline", "withdrawal")],
+                    s.withdrawal_receipt_fetch.window() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper")],
+                    s.sweeper_receipt_fetch.window() as f64,
+                )?;
+                w.gauge_vec(
+                    "cketh_minter_receipt_fetch_rounds_without_reads",
+                    "Consecutive finalization rounds that could not make a single receipt lookup, \
+                     because the transaction count they start from did not come back. Past a few \
+                     of them the pipeline starts skipping rounds.",
+                )?
+                .value(
+                    &[("pipeline", "withdrawal")],
+                    s.withdrawal_receipt_fetch.rounds_without_reads() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper")],
+                    s.sweeper_receipt_fetch.rounds_without_reads() as f64,
+                )?;
+                let mut receipt_lookups = w.counter_vec(
+                    "cketh_minter_receipt_lookups_total",
+                    "Transaction receipt lookups, by pipeline and outcome. `not_mined` is the \
+                     ordinary answer for a superseded resubmission, `error` is a provider-level \
+                     failure. Resets on upgrade.",
+                )?;
+                for (pipeline, counters) in receipt_fetch {
+                    receipt_lookups = receipt_lookups
+                        .value(
+                            &[("pipeline", pipeline), ("outcome", "receipt")],
+                            counters.receipts as f64,
+                        )?
+                        .value(
+                            &[("pipeline", pipeline), ("outcome", "not_mined")],
+                            counters.not_mined as f64,
+                        )?
+                        .value(
+                            &[("pipeline", pipeline), ("outcome", "error")],
+                            counters.failures as f64,
+                        )?;
+                }
+                let mut stalled_ids = w.counter_vec(
+                    "cketh_minter_receipt_fetch_stalled_ids_total",
+                    "Ids a round left pending because none of their transactions came back with a \
+                     receipt, counted once per round. A withdrawal whose receipt can never be \
+                     retrieved keeps adding to this. Resets on upgrade.",
+                )?;
+                for (pipeline, counters) in receipt_fetch {
+                    stalled_ids = stalled_ids
+                        .value(&[("pipeline", pipeline)], counters.stalled_ids as f64)?;
+                }
+
                 w.encode_gauge(
                     "cketh_minter_last_max_fee_per_gas",
                     s.last_transaction_price_estimate
