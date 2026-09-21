@@ -133,10 +133,12 @@ pub mod requests {
     }
 
     /// Returns the age in nanos of the request that has been in flight the longest,
-    /// or `None` if there is no request in flight.
-    pub fn oldest_request_age_nanos() -> Option<u64> {
+    /// or 0 if there is no request in flight.
+    pub fn oldest_request_age_nanos() -> u64 {
         let now = now();
-        ACCEPTED_TIME.with_borrow(|a| a.values().map(|time| now.saturating_sub(time)).max())
+        ACCEPTED_TIME
+            .with_borrow(|a| a.values().map(|time| now.saturating_sub(time)).max())
+            .unwrap_or_default()
     }
 
     pub fn remove_request(request: &RequestState) {

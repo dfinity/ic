@@ -706,6 +706,12 @@ pub struct CanisterStateBits {
     pub interrupted_during_execution: u64,
     #[prost(message, optional, tag = "22")]
     pub consumed_cycles: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+    /// Total cycles consumed by the canister, monotonic: unlike `consumed_cycles`,
+    /// which is increased on prepayment and decreased on refund, this is only ever
+    /// increased, by the actually consumed amount once the refund is known.
+    #[prost(message, optional, tag = "71")]
+    pub consumed_cycles_monotonic:
+        ::core::option::Option<super::super::super::types::v1::NominalCycles>,
     #[prost(uint64, tag = "23")]
     pub freeze_threshold: u64,
     #[prost(message, repeated, tag = "25")]
@@ -744,12 +750,12 @@ pub struct CanisterStateBits {
     /// happens the refund amount is subtracted from consumed amount.
     #[prost(message, repeated, tag = "36")]
     pub consumed_cycles_by_use_cases: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
-    /// Consumed cycles by use case presented as counters. The consumed amount is
-    /// only updated once the refund is known to perform a single accounting step.
-    /// These counters facilitate programming retrieval of metrics and performing
+    /// Consumed cycles by use case, monotonic. The consumed amount is only updated
+    /// once the refund is known, to perform a single accounting step. These
+    /// monotonic amounts facilitate programming retrieval of metrics and performing
     /// various aggregations on them more easily than their gauge counterparts.
     #[prost(message, repeated, tag = "65")]
-    pub consumed_cycles_by_use_cases_as_counters: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
+    pub consumed_cycles_by_use_cases_monotonic: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]
     pub canister_history: ::core::option::Option<CanisterHistory>,
     /// Resource reservation cycles.
@@ -774,16 +780,6 @@ pub struct CanisterStateBits {
     /// The capacity of the canister log in bytes.
     #[prost(uint64, tag = "56")]
     pub log_memory_limit: u64,
-    /// Log records of the canister.
-    #[prost(message, repeated, tag = "43")]
-    pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,
-    /// The index of the next log record to be created.
-    #[prost(uint64, tag = "44")]
-    pub next_canister_log_record_idx: u64,
-    /// Whether the one-time migration from CanisterLog to LogMemoryStore has
-    /// already been performed for this canister.
-    #[prost(bool, tag = "66")]
-    pub log_memory_store_migrated: bool,
     /// The persistent high-water mark for log record indexing in LogMemoryStore.
     #[prost(uint64, tag = "67")]
     pub log_memory_store_persistent_next_idx: u64,

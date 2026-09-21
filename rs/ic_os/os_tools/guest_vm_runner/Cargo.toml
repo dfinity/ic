@@ -39,7 +39,7 @@ tokio-util = { workspace = true }
 uuid = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-systemd = { workspace = true }
+libsystemd = { workspace = true }
 virt = { workspace = true }
 
 [features]

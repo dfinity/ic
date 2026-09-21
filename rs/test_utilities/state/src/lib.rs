@@ -160,6 +160,7 @@ impl ReplicatedStateBuilder {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 },
             );
         });
@@ -890,8 +891,9 @@ pub fn reject_reasons_encodable_at(
 prop_compose! {
     /// Produces a strategy that generates arbitrary stream signals.
     ///
-    /// Signals start at `signals_begin` from which there are `signal_count` signals.
-    /// Of these signals, `ceil(sqrt(signal_count))` are randomly distributed reject signals.
+    /// Signals start at the generated `signals_begin`, from which there are
+    /// `signal_count` signals. Of these signals, `ceil(sqrt(signal_count))` are
+    /// randomly distributed reject signals.
     ///
     /// `signals_end` comes after the signal range, i.e. `signals_begin + signal_count + 1`.
     pub fn arb_stream_signals(
@@ -912,13 +914,13 @@ prop_compose! {
                     ),
                 )
             })
-    ) -> (StreamIndex, StreamIndex, VecDeque<RejectSignal>) {
+    ) -> (StreamIndex, VecDeque<RejectSignal>) {
         let reject_signals = reject_signals_map
             .into_iter()
             .map(|(index, reason)| RejectSignal::new(reason, (index as u64 + signals_begin).into()))
             .collect::<VecDeque<RejectSignal>>();
         let signals_end = (signals_begin + signal_count as u64 + 1).into();
-        (signals_begin.into(), signals_end, reject_signals)
+        (signals_end, reject_signals)
     }
 }
 
@@ -939,7 +941,7 @@ prop_compose! {
             arbitrary::stream_message_with_config(true),
             size_range,
         ),
-        (signals_begin, signals_end, reject_signals) in arb_stream_signals(
+        (signals_end, reject_signals) in arb_stream_signals(
             signal_start_range,
             signal_count_range,
             with_reject_reasons,
@@ -951,7 +953,7 @@ prop_compose! {
             messages.push(m)
         }
 
-        let mut stream = Stream::with_signals(messages, signals_begin, signals_end, reject_signals);
+        let mut stream = Stream::with_signals(messages, signals_end, reject_signals);
         stream.set_reverse_stream_flags(StreamFlags {
             deprecated_responses_only: responses_only_flag,
         });
@@ -1015,7 +1017,7 @@ prop_compose! {
     )(
         msg_start in 0..10000_u64,
         msg_len in 0..10000_u64,
-        (_signals_begin, signals_end, reject_signals) in arb_stream_signals(
+        (signals_end, reject_signals) in arb_stream_signals(
             0..=10000,
             min_signal_count..=max_signal_count,
             with_reject_reasons,
@@ -1139,6 +1141,7 @@ prop_compose! {
         num_canisters in any::<u64>(),
         canister_state_bytes in arb_num_bytes(),
         update_transactions_total in any::<u64>(),
+        round_instructions_total in any::<u64>(),
         consumed_cycles_by_use_case in proptest::collection::btree_map(arb_cycles_use_case(), arb_nominal_cycles(), 0..10),
         threshold_signature_agreements in proptest::collection::btree_map(arb_master_public_key_id(), any::<u64>(), 0..10),
     ) -> SubnetMetrics {
@@ -1150,6 +1153,7 @@ prop_compose! {
         metrics.num_canisters = num_canisters;
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;
+        metrics.round_instructions_total = round_instructions_total;
         metrics.threshold_signature_agreements = threshold_signature_agreements;
 
         for (use_case, cycles) in consumed_cycles_by_use_case {

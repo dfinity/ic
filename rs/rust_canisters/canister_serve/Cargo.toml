@@ -15,6 +15,7 @@ edition.workspace = true
 by_address = { workspace = true }
 ic-canister-log = { path = "../canister_log", version = "0.2.0" }
 ic-cdk = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic-metrics-encoder = { workspace = true }
 maplit = { workspace = true }
 priority-queue = { workspace = true }

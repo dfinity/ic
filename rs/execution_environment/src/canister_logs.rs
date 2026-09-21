@@ -6,6 +6,7 @@ use ic_management_canister_types_private::{
     FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2,
 };
 use ic_replicated_state::CanisterState;
+use ic_replicated_state::metadata_state::UnflushedCheckpointOps;
 use ic_types::{NumBytes, NumInstructions, PrincipalId};
 
 pub(crate) fn fetch_canister_logs(
@@ -24,7 +25,7 @@ pub(crate) fn fetch_canister_logs(
         canister_id,
         reply: Some(reply),
         heap_delta_increase: NumBytes::new(0),
-        unflushed_checkpoint_op: None,
+        unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
         deleted_call_context_responses: vec![],
         stop_call_id_to_remove: None,
         stop_contexts_to_reject: vec![],

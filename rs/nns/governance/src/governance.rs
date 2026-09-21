@@ -5018,13 +5018,22 @@ impl Governance {
             }
         };
 
-        if decoded_payload.node_provider_principal_id.is_none() {
+        let Some(node_provider_id_of_node_operator) = decoded_payload.node_provider_principal_id
+        else {
             return Err("The payload's node_provider_principal_id field was None".to_string());
-        }
+        };
 
-        let is_registered = node_providers
-            .iter()
-            .any(|np| np.id.unwrap() == decoded_payload.node_provider_principal_id.unwrap());
+        let is_registered = node_providers.iter().any(|np| {
+            let Some(np_id) = np.id else {
+                println!(
+                    "{}Skipping node provider with no id while checking registration.",
+                    LOG_PREFIX,
+                );
+                return false;
+            };
+
+            np_id == node_provider_id_of_node_operator
+        });
         if !is_registered {
             return Err("The node provider specified in the payload is not registered".to_string());
         }

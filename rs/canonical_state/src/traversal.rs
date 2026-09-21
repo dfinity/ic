@@ -939,6 +939,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 },
                 subnet_test_id(1) => SubnetTopology {
                     public_key: vec![5, 6, 7, 8],
@@ -948,6 +949,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 },
                 subnet_test_id(2) => SubnetTopology {
                     public_key: vec![9, 10, 11, 12],
@@ -957,6 +959,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 },
                 subnet_test_id(3) => SubnetTopology {
                     public_key: vec![13, 14, 15, 16],
@@ -966,6 +969,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 }
             });
             network_topology.set_routing_table(
@@ -1195,7 +1199,9 @@ mod tests {
     #[test]
     fn test_traverse_subnet_metrics_includes_canister_consumed_cycles_at_v29() {
         use crate::encoding::encode_subnet_metrics;
-        use ic_types_cycles::{CompoundCycles, Instructions, NominalCycles};
+        use ic_types_cycles::{
+            CompoundCycles, CyclesUseCase, Instructions, NominalCycles, NominalCyclesTesting,
+        };
 
         let own_subnet_id = subnet_test_id(1);
         let mut state = ReplicatedState::new(own_subnet_id, SubnetType::Application);
@@ -1212,6 +1218,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 },
             });
             network_topology.set_routing_table(
@@ -1221,6 +1228,13 @@ mod tests {
                 .unwrap(),
             );
         });
+
+        // Non-zero subnet-level consumption, so that the reported total covers both
+        // parts: the subnet-level aggregate and the canisters' part below.
+        let subnet_metrics = &mut state.metadata.subnet_metrics;
+        subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::new(1_000));
+        subnet_metrics
+            .observe_consumed_cycles_with_use_case(CyclesUseCase::VetKd, NominalCycles::new(4));
 
         // Add a non-deleted canister that has consumed some cycles.
         let mut canister_state = new_canister_state(
@@ -1242,6 +1256,26 @@ mod tests {
         assert!(consumed_by_canisters > NominalCycles::zero());
         state.put_canister_state(canister_state);
 
+        // The tree reads the stored aggregate, which is zero until refreshed.
+        assert_eq!(
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters(),
+            NominalCycles::zero()
+        );
+
+        let subnet_level = state.metadata.subnet_metrics.consumed_cycles_total();
+        assert!(subnet_level > NominalCycles::zero());
+        state.refresh_consumed_cycles();
+        assert_eq!(
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters(),
+            subnet_level + consumed_by_canisters
+        );
+
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
 
@@ -1258,25 +1292,18 @@ mod tests {
                 })
                 .expect("no metrics leaf in traversal");
 
-            // The tree must pass the sum of the non-deleted canisters' consumed
-            // cycles to `encode_subnet_metrics`; it is only reflected in the
-            // encoding starting with V29.
-            let expected_blob = encode_subnet_metrics(
-                &state.metadata.subnet_metrics,
-                consumed_by_canisters,
-                certification_version,
-            );
+            let expected_blob =
+                encode_subnet_metrics(&state.metadata.subnet_metrics, certification_version);
             assert_eq!(
                 metrics_blob, expected_blob,
                 "unexpected metrics leaf for certification_version: {certification_version:?}"
             );
 
             // The canister's consumed cycles are included only starting with V29.
-            let without_canisters = encode_subnet_metrics(
-                &state.metadata.subnet_metrics,
-                NominalCycles::zero(),
-                certification_version,
-            );
+            let mut metrics_without_canisters = state.metadata.subnet_metrics.clone();
+            metrics_without_canisters.refresh_consumed_cycles(NominalCycles::zero());
+            let without_canisters =
+                encode_subnet_metrics(&metrics_without_canisters, certification_version);
             if certification_version >= CertificationVersion::V29 {
                 assert_ne!(metrics_blob, without_canisters);
             } else {
@@ -1299,6 +1326,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 },
                 subnet_test_id(1) => SubnetTopology {
                     public_key: vec![5, 6, 7, 8],
@@ -1308,6 +1336,7 @@ mod tests {
                     chain_keys_held: BTreeSet::new(),
                     cost_schedule: CanisterCyclesCostSchedule::Normal,
                     subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
                 }
             });
             network_topology.set_routing_table(

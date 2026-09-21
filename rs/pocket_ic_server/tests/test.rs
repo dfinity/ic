@@ -1,8 +1,7 @@
-#![allow(deprecated)]
 use crate::common::{send_signal_to_pic, start_server, start_server_helper};
 use candid::{Encode, Principal};
 use ic_agent::agent::CallResponse;
-use ic_cdk::management_canister::{
+use ic_cdk_management_canister::{
     CanisterIdRecord,
     ProvisionalCreateCanisterWithCyclesArgs as IcCdkProvisionalCreateCanisterWithCyclesArgs,
 };

@@ -22,5 +22,8 @@ rust_library(
 rust_test(
     name = "pricing_test",
     crate = ":pricing",
-    deps = [],
+    deps = [
+        # Keep sorted.
+        "//rs/types/types_test_utils",
+    ],
 )

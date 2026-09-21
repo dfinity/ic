@@ -217,7 +217,7 @@ pub(crate) mod test {
     use ic_btc_replica_types::{
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_tree_hash::{Digest, Witness};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_interfaces::consensus::PayloadWithSizeEstimate;
@@ -338,7 +338,7 @@ pub(crate) mod test {
         provided_canister_http_responses: Vec<CanisterHttpResponseWithConsensus>,
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { registry, .. } = dependencies(pool_config, 1);
+            let Dependencies { registry, .. } = DependenciesBuilder::new(pool_config, 1).build();
             let payload_builder = make_test_payload_impl(
                 registry,
                 vec![provided_ingress_messages.clone()],
@@ -428,7 +428,7 @@ pub(crate) mod test {
     // 5. query_stats
     fn test_get_payload_respect_limits() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { registry, .. } = dependencies(pool_config, 1);
+            let Dependencies { registry, .. } = DependenciesBuilder::new(pool_config, 1).build();
 
             const MAX_BLOCK_SIZE: NumBytes = NumBytes::new(ic_limits::MAX_BLOCK_PAYLOAD_SIZE);
             const XNET_PAYLOAD_SIZE: NumBytes = NumBytes::new(64 * KB);
@@ -508,7 +508,7 @@ pub(crate) mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             const ZERO_BYTES: NumBytes = NumBytes::new(0);
 
-            let Dependencies { registry, .. } = dependencies(pool_config, 1);
+            let Dependencies { registry, .. } = DependenciesBuilder::new(pool_config, 1).build();
 
             let settings = MocksSettings {
                 ingress_payload_size_to_return: NumBytes::from(ingress_payload_size),

@@ -81,8 +81,8 @@ fn assert_error(
         .execute_ingress_as(CONTROLLER, canister_id, method, Encode!(&()).unwrap())
         .unwrap_err();
     result.assert_matches(code, &format!("{message}.*{backtrace}.*"));
-    let logs = env.canister_log(canister_id);
-    let last_error = std::str::from_utf8(&logs.records().back().as_ref().unwrap().content).unwrap();
+    let logs = env.canister_log_records(canister_id);
+    let last_error = std::str::from_utf8(&logs.last().as_ref().unwrap().content).unwrap();
     let backtrace_regex = RegexBuilder::new(&format!(".*{backtrace}.*"))
         .dot_matches_new_line(true)
         .build()
@@ -129,8 +129,8 @@ fn no_backtrace_without_name_section() {
         "Result message: {} cointains unexpected 'Backtrace'",
         result.description(),
     );
-    let logs = env.canister_log(canister_id);
-    for log in logs.records() {
+    let logs = env.canister_log_records(canister_id);
+    for log in &logs {
         let log = std::str::from_utf8(&log.content).unwrap();
         assert!(
             !log.contains("Backtrace"),
@@ -236,9 +236,8 @@ mod visibility {
             );
         }
         // The backtrace should still be in the logs.
-        let logs = env.canister_log(canister_id);
-        let last_error =
-            std::str::from_utf8(&logs.records().back().as_ref().unwrap().content).unwrap();
+        let logs = env.canister_log_records(canister_id);
+        let last_error = std::str::from_utf8(&logs.last().as_ref().unwrap().content).unwrap();
         assert!(
             backtrace_regex.is_match(last_error),
             "Last log:\n----------\n{last_error}\n----------\ndoesn't contain backtrace: {backtrace}"

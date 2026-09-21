@@ -37,7 +37,6 @@ BASE_DEPENDENCIES = [
     "//rs/universal_canister/lib",
     "@crate_index//:candid",
     "@crate_index//:maplit",
-    "@crate_index//:pretty-bytes",
     "@crate_index//:proptest",
     "@crate_index//:prost",
     "@crate_index//:rand",
@@ -123,7 +122,6 @@ rust_canister(
         "//rs/sns/governance",
         "//rs/types/base_types",
         "@crate_index//:ic-stable-structures",
-        "@crate_index//:pretty-bytes",
         "@crate_index//:prost",
         "@crate_index//:rand",
     ],
@@ -202,7 +200,7 @@ rust_ic_test_suite_with_extra_srcs(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
-    exec_properties = {"cpu": "8"},
+    exec_properties = {"test.cpu": "8"},
     extra_srcs = [],
     proc_macro_deps = [
         # Keep sorted.
@@ -223,7 +221,7 @@ rust_ic_test(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
-    exec_properties = {"cpu": "8"},
+    exec_properties = {"test.cpu": "8"},
     #proc_macro_deps = [
     #    # Keep sorted.
     #    "@crate_index//:async-trait",
@@ -246,7 +244,7 @@ rust_ic_test(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
-    exec_properties = {"cpu": "8"},
+    exec_properties = {"test.cpu": "8"},
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:async-trait",
@@ -298,7 +296,7 @@ rust_ic_test_suite_with_extra_srcs(
         ("MAINNET_SNS_SWAP_CANISTER_WASM_PATH", "$(rootpath @mainnet_canisters//:swap.wasm.gz)"),
     ]),
     exec_properties = {
-        "cpu": "8",
+        "test.cpu": "8",
         # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
         # so we need this Namespace.so-specific execution property to open up the network on RBE:
         "namespace_requires_network": "true",

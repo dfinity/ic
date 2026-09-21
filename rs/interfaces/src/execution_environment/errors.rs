@@ -193,6 +193,13 @@ pub enum HypervisorError {
         bytes: NumBytes,
         limit: NumBytes,
     },
+    /// The Wasm memory of the canister is incompatible with its Wasm module,
+    /// e.g. because it exceeds the maximum Wasm memory size for the module's
+    /// Wasm execution mode or because it does not match the Wasm memory
+    /// declared by the module.
+    InvalidWasmMemory {
+        message: String,
+    },
     EnvironmentVariableIndexOutOfBounds {
         index: usize,
         length: usize,
@@ -394,6 +401,12 @@ impl std::fmt::Display for HypervisorError {
                     bytes.get()
                 )
             }
+            Self::InvalidWasmMemory { message } => {
+                write!(
+                    f,
+                    "Canister Wasm memory is incompatible with its Wasm module: {message}"
+                )
+            }
             Self::EnvironmentVariableIndexOutOfBounds { index, length } => {
                 write!(
                     f,
@@ -514,6 +527,10 @@ impl AsErrorHelp for HypervisorError {
             },
             Self::InvalidWasm(inner) => inner.error_help(),
             Self::InstrumentationFailed(inner) => inner.error_help(),
+            Self::InvalidWasmMemory { .. } => ErrorHelp::UserError {
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
+            },
             Self::EnvironmentVariableIndexOutOfBounds { .. } => ErrorHelp::UserError {
                 suggestion: "".to_string(),
                 doc_link: "".to_string(),
@@ -571,6 +588,7 @@ impl HypervisorError {
                 E::InsufficientCyclesInMessageMemoryGrow
             }
             Self::WasmMemoryLimitExceeded { .. } => E::CanisterWasmMemoryLimitExceeded,
+            Self::InvalidWasmMemory { .. } => E::CanisterContractViolation,
             Self::EnvironmentVariableIndexOutOfBounds { .. } => E::CanisterContractViolation,
             Self::EnvironmentVariableNotFound { .. } => E::CanisterContractViolation,
         };
@@ -611,6 +629,7 @@ impl HypervisorError {
                 "InsufficientCyclesInMessageMemoryGrow"
             }
             HypervisorError::WasmMemoryLimitExceeded { .. } => "WasmMemoryLimitExceeded",
+            HypervisorError::InvalidWasmMemory { .. } => "InvalidWasmMemory",
             HypervisorError::EnvironmentVariableIndexOutOfBounds { .. } => {
                 "EnvironmentVariableIndexOutOfBounds"
             }

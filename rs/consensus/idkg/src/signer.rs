@@ -573,10 +573,7 @@ impl ThresholdSignerImpl {
         let reconstruction_threshold = match inputs {
             ThresholdSigInputs::Ecdsa(inputs) => inputs.reconstruction_threshold().get() as usize,
             ThresholdSigInputs::Schnorr(inputs) => inputs.reconstruction_threshold().get() as usize,
-            // VetKd's API does not expose the number of shares needed for reconstruction directly.
-            // As this code path is an optimization, we conservatively assume that we do not have
-            // enough shares if the inputs are for VetKd.
-            // The worst thing that can happen is to validate a few extra shares.
+            // Validate all VetKD shares, to allow for failures during share combination.
             ThresholdSigInputs::VetKd(_inputs) => return false,
         };
 

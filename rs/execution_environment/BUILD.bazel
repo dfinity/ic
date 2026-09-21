@@ -157,6 +157,7 @@ rust_ic_test_suite(
         "//rs/config",
         "//rs/crypto/sha2",
         "//rs/crypto/test_utils/vetkd",
+        "//rs/crypto/tree_hash",
         "//rs/cycles_account_manager",
         "//rs/embedders",
         "//rs/interfaces",
@@ -214,7 +215,7 @@ rust_ic_test(
         "UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister_no_heartbeat.wasm.gz)",
         "RUST_TEST_THREADS": "4",
     },
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     tags = [
         "test_all_platforms_slow",
     ],
@@ -252,7 +253,7 @@ rust_ic_test(
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         "RUST_TEST_THREADS": "4",
     },
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     tags = [
         "test_all_platforms_slow",
     ],
@@ -287,7 +288,7 @@ rust_ic_test(
         "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     tags = [
         "test_all_platforms_slow",
     ],
@@ -369,6 +370,7 @@ rust_ic_bench(
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/limits",
         "//rs/types/cycles",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:criterion",

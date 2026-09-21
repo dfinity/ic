@@ -26,7 +26,7 @@ use ic_agent::{
     identity::BasicIdentity,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
-use ic_cdk::management_canister::{
+use ic_cdk_management_canister::{
     SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
 use ic_config::{ConfigOptional, ConfigSource};
@@ -736,6 +736,14 @@ impl<'a> MessageCanister<'a> {
     /// Forwards a message to the `receiver` that calls
     /// `receiver.method(payload)` along with the specified amount of cycles
     /// and returns the result.
+    ///
+    /// If the receiver rejects the call, the message canister re-rejects it via
+    /// `msg_reject(err.to_string())`. The caller therefore always observes the
+    /// reject code `CanisterReject` and a reject message of the form
+    /// `"call rejected: <code> - <message>"` (ic-cdk's `CallRejected` `Display`),
+    /// where `<code>` and `<message>` are the receiver's original reject code and
+    /// message. Don't rely on the observed reject code or on a prefix of the
+    /// message when classifying such errors.
     pub async fn forward_with_cycles_to(
         &self,
         receiver: &Principal,
@@ -760,6 +768,9 @@ impl<'a> MessageCanister<'a> {
 
     /// Forwards a message to the `receiver` that calls
     /// `receiver.method(payload)` and returns the result.
+    ///
+    /// See [`Self::forward_with_cycles_to`] for how rejects of the receiver are
+    /// reported.
     pub async fn forward_to(
         &self,
         receiver: &Principal,
@@ -1574,6 +1585,8 @@ pub fn get_config() -> ConfigOptional {
         domain_name: "".to_string(),
         node_reward_type: "".to_string(),
         malicious_behavior: "null".to_string(),
+        extra_api_boundary_node_trust_anchors_pem: "null".to_string(),
+        peer_guest_vm_address: None,
     };
 
     let ic_json =

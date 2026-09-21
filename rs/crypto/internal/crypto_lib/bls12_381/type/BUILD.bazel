@@ -17,7 +17,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
-        "@crate_index//:cached",
+        "//rs/utils/mem-lru",
         "@crate_index//:hex",
         "@crate_index//:ic_bls12_381",
         "@crate_index//:itertools",
@@ -44,7 +44,7 @@ rust_bench(
         # Keep sorted.
         ":type",
         "//rs/crypto/test_utils/reproducible_rng",
-        "@crate_index//:cached",
+        "//rs/utils/mem-lru",
         "@crate_index//:criterion",
         "@crate_index//:hex",
         "@crate_index//:ic_bls12_381",
@@ -69,7 +69,7 @@ rust_test(
     deps = [
         # Keep sorted.
         "//rs/crypto/test_utils/reproducible_rng",
-        "@crate_index//:cached",
+        "//rs/utils/mem-lru",
         "@crate_index//:hex",
         "@crate_index//:ic_bls12_381",
         "@crate_index//:itertools",
@@ -94,7 +94,7 @@ rust_test_suite(
         # Keep sorted.
         ":type",
         "//rs/crypto/test_utils/reproducible_rng",
-        "@crate_index//:cached",
+        "//rs/utils/mem-lru",
         "@crate_index//:hex",
         "@crate_index//:ic_bls12_381",
         "@crate_index//:itertools",

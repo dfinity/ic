@@ -632,7 +632,7 @@ impl BackupArtifact {
 mod tests {
     use super::*;
     use ic_test_utilities_consensus::fake::*;
-    use ic_test_utilities_types::ids::node_test_id;
+    use ic_test_utilities_types::ids::{node_test_id, test_replica_version};
     use ic_types::{
         RegistryVersion,
         batch::*,
@@ -643,7 +643,10 @@ mod tests {
 
     #[test]
     fn test_random_tape_conversion() {
-        let artifact = RandomTape::fake(RandomTapeContent::new(Height::from(22)));
+        let artifact = RandomTape::fake(RandomTapeContent::new(
+            Height::from(22),
+            test_replica_version(),
+        ));
         let mut buf = Vec::new();
         pb::RandomTape::from(artifact.clone())
             .encode(&mut buf)
@@ -659,6 +662,7 @@ mod tests {
         let artifact = Finalization::fake(FinalizationContent::new(
             Height::from(22),
             CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            test_replica_version(),
         ));
         let mut buf = Vec::new();
         pb::Finalization::from(artifact.clone())
@@ -675,6 +679,7 @@ mod tests {
         let artifact = Notarization::fake(NotarizationContent::new(
             Height::from(22),
             CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            test_replica_version(),
         ));
         let mut buf = Vec::new();
         pb::Notarization::from(artifact.clone())
@@ -702,6 +707,7 @@ mod tests {
                     certified_height: Height::from(42),
                     time: UNIX_EPOCH,
                 },
+                test_replica_version(),
             ),
             node_test_id(333),
         );

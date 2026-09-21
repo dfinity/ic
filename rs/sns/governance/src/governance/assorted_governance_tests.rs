@@ -2,17 +2,15 @@
 //! here, so that Bazel does not recompile the whole production crate each time the tests are run.
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
+use super::*;
 use crate::{
     extensions::{ExtensionSpec, ExtensionType, ExtensionVersion},
-    governance::{
-        test_helpers::{
-            A_MOTION_PROPOSAL, A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, DoNothingLedger,
-            TEST_ARCHIVES_CANISTER_IDS, TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID,
-            TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
-            TEST_SWAP_CANISTER_ID, basic_governance_proto, canister_status_for_test,
-            canister_status_from_management_canister_for_test,
-        },
-        *,
+    governance::test_helpers::{
+        A_MOTION_PROPOSAL, A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, DoNothingLedger,
+        TEST_ARCHIVES_CANISTER_IDS, TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID,
+        TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
+        TEST_SWAP_CANISTER_ID, basic_governance_proto, canister_status_for_test,
+        canister_status_from_management_canister_for_test,
     },
     pb::v1::{
         Account as AccountProto, Motion, NervousSystemFunction, NeuronPermissionType, ProposalData,
@@ -53,6 +51,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_token_valuation::{Token, ValuationFactors};
 use ic_sns_test_utils::itest_helpers::UserInfo;
@@ -3049,6 +3048,7 @@ fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
+            canister_upgrade_options: None,
         });
 
         // Upgrade Proposal
@@ -3160,6 +3160,95 @@ fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
     assert_proposal_failed(
         execute_proposal(&mut governance, 7),
         "Unknown canister upgrade",
+    );
+}
+
+#[test]
+fn test_canister_upgrade_options_rejected_when_mode_is_not_upgrade() {
+    // Step 1: Prepare the world.
+    let install = CanisterInstallMode::Install;
+    let canister_upgrade_options = Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Keep as i32),
+        skip_pre_upgrade: None,
+    });
+
+    // Step 2: Run the code under test.
+    let result = valid_canister_upgrade_options(install, canister_upgrade_options);
+
+    // Step 3: Inspect result(s).
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("canister_upgrade_options") && err.contains("mode is upgrade"),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn test_canister_upgrade_options_rejected_when_wasm_memory_persistence_unspecified() {
+    // Step 1: Prepare the world.
+    let upgrade = CanisterInstallMode::Upgrade;
+    let canister_upgrade_options = Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        // 0/Unspecified is not allowed here.
+        wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Unspecified as i32),
+        skip_pre_upgrade: None,
+    });
+
+    // Step 2: Run the code under test.
+    let result = valid_canister_upgrade_options(upgrade, canister_upgrade_options);
+
+    // Step 3: Inspect result(s).
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("Unrecognized") && err.contains("wasm_memory_persistence"),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn test_canister_upgrade_options_accepted_when_mode_is_upgrade() {
+    // Step 1: Prepare the world.
+    let upgrade = CanisterInstallMode::Upgrade;
+    let canister_upgrade_options = Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Keep as i32),
+        skip_pre_upgrade: Some(true),
+    });
+
+    // Step 2: Run the code under test.
+    let canister_upgrade_options =
+        valid_canister_upgrade_options(upgrade, canister_upgrade_options).unwrap();
+    let root_mode = assemble_mode(upgrade, canister_upgrade_options);
+
+    // Step 3: Inspect result(s).
+    assert_eq!(
+        root_mode,
+        CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        })),
+    );
+}
+
+#[test]
+fn test_canister_upgrade_options_accepted_when_wasm_memory_persistence_is_replace() {
+    // Step 1: Prepare the world.
+    let upgrade = CanisterInstallMode::Upgrade;
+    let canister_upgrade_options = Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Replace as i32),
+        skip_pre_upgrade: Some(false),
+    });
+
+    // Step 2: Run the code under test.
+    let canister_upgrade_options =
+        valid_canister_upgrade_options(upgrade, canister_upgrade_options).unwrap();
+    let root_mode = assemble_mode(upgrade, canister_upgrade_options);
+
+    // Step 3: Inspect result(s).
+    assert_eq!(
+        root_mode,
+        CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            skip_pre_upgrade: Some(false),
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
+        })),
     );
 }
 

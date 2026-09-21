@@ -1,5 +1,5 @@
 use crate::consensus::payload_builder::test::make_test_payload_impl;
-use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
 use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::{batch_payload::ProposalContext, consensus::PayloadBuilder};
 use ic_interfaces_registry::RegistryClient;
@@ -41,11 +41,12 @@ fn proptest_payload_size_validation() {
             .with_max_ingress_bytes_per_message(MAX_BLOCK_SIZE as u64)
             .build();
 
-        let Dependencies { registry, .. } = dependencies_with_subnet_params(
+        let Dependencies { registry, .. } = DependenciesBuilder::single_subnet(
             pool_config,
             subnet_test_id(0),
             vec![(1, subnet_record.clone())],
-        );
+        )
+        .build();
 
         proptest!(
             ProptestConfig {
@@ -172,11 +173,12 @@ fn regression1() {
             .with_max_ingress_bytes_per_message(MAX_BLOCK_SIZE as u64)
             .build();
 
-        let Dependencies { registry, .. } = dependencies_with_subnet_params(
+        let Dependencies { registry, .. } = DependenciesBuilder::single_subnet(
             pool_config,
             subnet_test_id(0),
             vec![(1, subnet_record.clone())],
-        );
+        )
+        .build();
         let ingress = vec![make_ingress(965988), make_ingress(1019914)];
         let mut xnet = BTreeMap::new();
         xnet.insert(subnet_test_id(0), make_xnet_slice(1389926));

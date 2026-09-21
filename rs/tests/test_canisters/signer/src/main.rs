@@ -3,12 +3,11 @@ use std::marker::PhantomData;
 use candid::Encode;
 use ic_cdk::{
     api::{msg_reject, msg_reply},
-    management_canister::{
-        SignWithEcdsaArgs, SignWithEcdsaResult, SignWithSchnorrArgs, SignWithSchnorrResult,
-        VetKDDeriveKeyArgs, VetKDDeriveKeyResult, sign_with_ecdsa, sign_with_schnorr,
-        vetkd_derive_key,
-    },
     update,
+};
+use ic_cdk_management_canister::{
+    SignWithEcdsaArgs, SignWithEcdsaResult, SignWithSchnorrArgs, SignWithSchnorrResult,
+    VetKDDeriveKeyArgs, VetKDDeriveKeyResult, sign_with_ecdsa, sign_with_schnorr, vetkd_derive_key,
 };
 use ic_signer::{GenEcdsaParams, GenSchnorrParams, GenVetkdParams};
 

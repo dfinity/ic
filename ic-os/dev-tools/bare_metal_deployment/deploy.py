@@ -382,7 +382,7 @@ def check_guestos_hsm_capability(ip_address: IPv6Address, ssh_key_file: Optional
 
     # Execute the HSM command
     log.info(f"Executing HSM command on {ip_address}")
-    hsm_command = "/opt/ic/bin/vsock_guest --attach-hsm && sleep 5 && pkcs11-tool --list-slots | grep 'Nitrokey HSM'"
+    hsm_command = "/opt/ic/bin/vsock_guest attach-hsm && sleep 5 && pkcs11-tool --list-slots | grep 'Nitrokey HSM'"
     result = invoke.run(
         f'ssh {ssh_opts} {ssh_key_arg} admin@{ip_address} "{hsm_command}"',
         warn=True,
@@ -797,7 +797,7 @@ def main():
     print(sys.argv)
     args: Args = parse(Args, add_config_path_arg=True)  # Parse from config file too
 
-    DISABLE_PROGRESS_BAR = args.ci_mode  # noqa - ruff format wants to erroneously delete this
+    DISABLE_PROGRESS_BAR = args.ci_mode  # noqa - ruff fix wants to erroneously delete this
 
     network_image_url: str = f"http://{args.file_share_url}/{args.file_share_image_filename}"
     log.info(f"Using network_image_url: {network_image_url}")

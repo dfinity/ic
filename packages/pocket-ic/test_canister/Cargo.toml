@@ -13,6 +13,7 @@ path = "src/canister.rs"
 [dependencies]
 candid = { workspace = true }
 ic-cdk = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 icrc-ledger-types = { path = "../../icrc-ledger-types" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

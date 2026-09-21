@@ -14,4 +14,4 @@ ExecStart=/opt/ic/bin/guest_vm_runner run --slot %i
 ExecStartPost=/opt/ic/bin/manageboot.sh hostos confirm
 Restart=always
 RestartSec=60
-TimeoutStopSec=130s
+TimeoutStopSec=660s

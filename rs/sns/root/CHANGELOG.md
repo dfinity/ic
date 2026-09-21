@@ -11,6 +11,23 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-08-28: Proposal 143739
+
+http://dashboard.internetcomputer.org/proposal/143739
+
+Besides features and fixes, this freshens the code again, since it has been a
+while since we updated this.
+
+###  Added
+
+- Support for `snapshot_visibility` in `ManageDappCanisterSettingsRequest`.
+
+- Support for upgrade options. The one of greatest interest is
+  wasm_memory_persistence, which is needed for modern Motoko canisters that use
+  Enhanced Orthogonal Persistence.
+
+
+
 # 2025-11-28: Proposal 139577
 
 http://dashboard.internetcomputer.org/proposal/139577

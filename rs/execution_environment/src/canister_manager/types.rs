@@ -13,7 +13,7 @@ use ic_replicated_state::{
     CanisterState,
     canister_state::canister_snapshots::CanisterSnapshotError,
     canister_state::system_state::wasm_chunk_store::{WasmChunkStore, chunk_size},
-    metadata_state::UnflushedCheckpointOp,
+    metadata_state::UnflushedCheckpointOps,
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_types::{
@@ -75,6 +75,7 @@ pub(crate) struct CanisterMgrConfig {
     pub(crate) wasm_chunk_store_max_size: NumBytes,
     pub(crate) canister_snapshot_baseline_instructions: NumInstructions,
     pub(crate) canister_snapshot_data_baseline_instructions: NumInstructions,
+    pub(crate) canister_log_resize_instructions_per_byte: NumInstructions,
     pub(crate) default_wasm_memory_limit: NumBytes,
     pub(crate) max_number_of_snapshots_per_canister: usize,
     pub(crate) max_environment_variables: usize,
@@ -99,6 +100,7 @@ impl CanisterMgrConfig {
         wasm_chunk_store_max_size: NumBytes,
         canister_snapshot_baseline_instructions: NumInstructions,
         canister_snapshot_data_baseline_instructions: NumInstructions,
+        canister_log_resize_instructions_per_byte: NumInstructions,
         default_wasm_memory_limit: NumBytes,
         max_number_of_snapshots_per_canister: usize,
         max_environment_variables: usize,
@@ -120,6 +122,7 @@ impl CanisterMgrConfig {
             wasm_chunk_store_max_size,
             canister_snapshot_baseline_instructions,
             canister_snapshot_data_baseline_instructions,
+            canister_log_resize_instructions_per_byte,
             default_wasm_memory_limit,
             max_number_of_snapshots_per_canister,
             max_environment_variables,
@@ -316,9 +319,9 @@ pub(crate) struct CanisterManagerResponse {
     /// The heap delta increase produced by processing
     /// the current request.
     pub heap_delta_increase: NumBytes,
-    /// An unflushed checkpoint operation that must be handled
+    /// Unflushed checkpoint operations that must be handled
     /// before the next checkpoint.
-    pub unflushed_checkpoint_op: Option<UnflushedCheckpointOp>,
+    pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
     /// (Reject) responses from call contexts that were marked as "deleted" while processing the current request.
     /// Note. A call context is marked as "deleted" when a canister is uninstalled.
     pub deleted_call_context_responses: Vec<Response>,
@@ -495,6 +498,10 @@ pub(crate) enum CanisterManagerError {
         section_name: String,
     },
     CanisterLogMemoryLimitIsTooHigh {
+        bytes: NumBytes,
+        limit: NumBytes,
+    },
+    CanisterLogMemoryLimitIsTooLow {
         bytes: NumBytes,
         limit: NumBytes,
     },
@@ -774,6 +781,12 @@ impl AsErrorHelp for CanisterManagerError {
             },
             CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
                 suggestion: "Set a lower canister log memory limit.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterLogMemoryLimitIsTooLow { .. } => ErrorHelp::UserError {
+                suggestion: "Set a higher canister log memory limit, \
+                or zero to disable canister logging."
+                    .to_string(),
                 doc_link: "".to_string(),
             },
         }
@@ -1215,6 +1228,13 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "The canister log memory limit {bytes} is too high. It must be at most {limit}."
+                ),
+            ),
+            CanisterLogMemoryLimitIsTooLow { bytes, limit } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister log memory limit {bytes} is too low. \
+                    It must be either zero or at least {limit}."
                 ),
             ),
             FetchCanisterLogsAccessDenied { caller } => Self::new(

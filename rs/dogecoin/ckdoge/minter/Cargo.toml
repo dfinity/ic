@@ -19,6 +19,8 @@ candid_parser = { workspace = true }
 ciborium = { workspace = true }
 hex = { workspace = true }
 ic-cdk = { workspace = true }
+ic-cdk-bitcoin-canister = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic-ckbtc-minter = { path = "../../../bitcoin/ckbtc/minter" }
 ic-management-canister-types = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }

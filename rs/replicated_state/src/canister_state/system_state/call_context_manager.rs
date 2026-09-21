@@ -935,6 +935,7 @@ impl AsInt for (CoarseTime, CallbackId) {
 
 pub mod testing {
     use super::*;
+    use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles};
 
     /// Exposes `CallContextManager` internals for use in other modules' or crates'
     /// tests.
@@ -948,6 +949,11 @@ pub mod testing {
 
         /// Testing only: Publicly exposes `unregister_callback()`.
         fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>>;
+
+        /// Testing only: Zeroes the `prepayment_for_call_transmission` of the given
+        /// callback, e.g. to simulate a callback created before April 2026. Panics if
+        /// there is no such callback.
+        fn reset_prepayment_for_call_transmission(&mut self, callback_id: CallbackId);
     }
 
     impl CallContextManagerTesting for CallContextManager {
@@ -971,6 +977,18 @@ pub mod testing {
 
         fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
             self.unregister_callback(callback_id)
+        }
+
+        fn reset_prepayment_for_call_transmission(&mut self, callback_id: CallbackId) {
+            let mut callback = self.callbacks.get(&callback_id).unwrap().as_ref().clone();
+            // A zero amount is zero under either cost schedule. And as only the
+            // prepayment changes, every index and statistic derived from the callback
+            // stays valid.
+            callback.prepayment_for_call_transmission =
+                CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal);
+            self.callbacks.insert(callback_id, Arc::new(callback));
+
+            debug_assert!(self.stats_ok());
         }
     }
 }

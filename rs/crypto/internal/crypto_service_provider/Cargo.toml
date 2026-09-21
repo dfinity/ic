@@ -52,9 +52,7 @@ slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 stubborn-io = "0.3.2"
-# Pinned to a fork because the published `tarpc` releases lag well behind on
-# `opentelemetry`. Switch back to crates.io once this is released:
-# https://github.com/google/tarpc/pull/565
+# Pinned to a fork because the published `tarpc` uses syn 3, while the rest of this repo (still) uses syn 2.
 tarpc = { git = "https://github.com/dfinity/tarpc", rev = "cddf1c64011d00f36016146e8447bef99531030c", features = [
     "full",
 ] }

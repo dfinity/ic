@@ -7,12 +7,13 @@
 
 use crate::CanisterManager;
 use crate::canister_logs::fetch_canister_logs_response;
-use crate::execution::common::list_canisters;
+use crate::execution::common::{canister_info, list_canisters};
 use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterMetricsArgs, FetchCanisterLogsRequest, Payload, QueryMethod,
+    CanisterIdRecord, CanisterInfoRequest, CanisterMetricsArgs, FetchCanisterLogsRequest, Payload,
+    QueryMethod,
 };
 use ic_replicated_state::{CanisterState, ReplicatedState};
 use ic_types::{CanisterId, NumInstructions};
@@ -58,6 +59,12 @@ pub(super) fn execute_subnet_query(
                 ready_for_migration,
                 state.get_own_subnet_admins(),
             )?;
+            Ok((Encode!(&response).unwrap(), NumInstructions::new(0)))
+        }
+        QueryMethod::CanisterInfo => {
+            let args = CanisterInfoRequest::decode(payload)?;
+            let canister = get_canister(state, args.canister_id())?;
+            let response = canister_info(canister, args.num_requested_changes());
             Ok((Encode!(&response).unwrap(), NumInstructions::new(0)))
         }
         QueryMethod::ListCanisters => list_canisters(state, &caller, payload),

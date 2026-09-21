@@ -9,6 +9,7 @@ rust_canister(
         "//packages/icrc-ledger-types",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
     ],

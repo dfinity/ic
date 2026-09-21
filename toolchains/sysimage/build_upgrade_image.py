@@ -20,6 +20,12 @@ def main():
     parser.add_argument("-r", "--root", help="The (tzst) root filesystem image", type=str)
     parser.add_argument("-v", "--versionfile", help="The version file in the upgrade image", type=str)
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
+    parser.add_argument(
+        "--overlay",
+        help="Optional (tzst) overlay image for the fast upgrade",
+        type=str,
+        default=None,
+    )
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -27,6 +33,7 @@ def main():
     root_image = args.root
     boot_image = args.boot
     version_file = args.versionfile
+    overlay_image = args.overlay
 
     tmpdir = tempfile.mkdtemp()
 
@@ -39,23 +46,24 @@ def main():
     version_path = os.path.join(tmpdir, "VERSION.TXT")
     shutil.copy(version_file, version_path, follow_symlinks=True)
 
+    dflate_inputs = [boot_path, root_path, version_path]
+
+    if overlay_image:
+        overlay_path = os.path.join(tmpdir, "overlay.img")
+        subprocess.run(
+            ["tar", "xf", overlay_image, "--transform=s/partition.img/overlay.img/", "-C", tmpdir],
+            check=True,
+        )
+        dflate_inputs.append(overlay_path)
+
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
     # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
-    subprocess.run(
-        [
-            args.dflate,
-            "--input",
-            boot_path,
-            "--input",
-            root_path,
-            "--input",
-            version_path,
-            "--output",
-            out_file,
-        ],
-        check=True,
-    )
+    dflate_args = [args.dflate]
+    for inp in dflate_inputs:
+        dflate_args.extend(["--input", inp])
+    dflate_args.extend(["--output", out_file])
+    subprocess.run(dflate_args, check=True)
 
     # tempfile cleanup is handled by proc_wrapper.sh
 

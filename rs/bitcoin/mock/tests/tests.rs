@@ -8,7 +8,7 @@ use ic_btc_interface::{
     GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte,
     Network, NetworkInRequest, OutPoint, Txid, Utxo,
 };
-use ic_cdk::bitcoin_canister::{Network as BitcoinNetwork, SendTransactionRequest};
+use ic_cdk_bitcoin_canister::SendTransactionRequest;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types_cycles::Cycles;
@@ -103,7 +103,7 @@ fn test_install_bitcoin_mock_canister() {
         "bitcoin_send_transaction",
         Encode!(&SendTransactionRequest {
             transaction: Vec::from_hex(tx).unwrap(),
-            network: BitcoinNetwork::Regtest,
+            network: NetworkInRequest::Regtest,
         })
         .unwrap(),
     )

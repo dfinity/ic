@@ -20,7 +20,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tonic = { workspace = true, features = ["default"] }
-vsock_lib = { path = "../../vsock/vsock_lib" }
+vsock_lib = { path = "../../vsock" }
 x509-parser = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }

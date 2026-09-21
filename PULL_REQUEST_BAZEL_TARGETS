@@ -15,6 +15,9 @@
 # targets to explicitly test based on which files were modified
 # disregarding whether they're long_tests.
 #
+# Note that on PRs labelled CI_SKIP_SYSTEM_TESTS no targets tagged 'system_test'
+# are tested, even when they're listed in this file.
+#
 # How?
 # The syntax is similar but not the same as gitignore
 # (https://git-scm.com/docs/gitignore#_pattern_format):

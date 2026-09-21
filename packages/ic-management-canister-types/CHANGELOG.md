@@ -7,9 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-10
+
+### Added
+
+- Types for `subnet_metrics`:
+  - Added the types `SubnetMetricsArgs` and `SubnetMetricsResult`.
+- Added the `pricing_version` field to `HttpRequestArgs`, selecting the pricing mechanism for a canister HTTPS outcall: `1` ("legacy", the default, deprecated) or `2` ("pay-as-you-go").
+- Types for `flexible_http_request`, a variant of `http_request` in which a committee of nodes return their individual HTTP responses instead of the subnet reaching consensus on one:
+  - Added the types `FlexibleHttpRequestArgs`, `ReplicationCounts`, `FlexibleHttpRequestResult`, `FlexibleHttpRequestErr`, `FlexibleHttpGlobalError`, `FlexibleHttpNodeDetail`, `HttpRequestResourceReport`, `ResourceUsage` and `FlexibleHttpNodeError`.
+
+## [0.9.0] - 2026-08-13
+
 ### Added
 
 - Added the `PATCH` variant to the `HttpMethod` enum used by canister HTTPS outcalls (`http_request`). The variant is plumbed through the type but not yet enabled on replicated subnets.
+- Added `minimum_incoming_canister_call_cycles` field to `CanisterSettings` and `DefiniteCanisterSettings`.
+- Added `status_visibility` field to `CanisterSettings` and `DefiniteCanisterSettings`.
+  - Added the type `StatusVisibility`.
+
+### Changed
+
+- Doc: `CanisterSettings::wasm_memory_threshold` is capped at 2<sup>48</sup> (i.e., 256TB), not 2<sup>64</sup>-1.
+- Doc: the `CanisterLogFilter` variants filter on the half-open range `[start, end)`; `end` is exclusive, not inclusive.
 
 ## [0.8.0] - 2026-05-13
 

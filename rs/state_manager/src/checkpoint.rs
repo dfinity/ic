@@ -818,8 +818,9 @@ pub fn load_canister_state(
         canister_state_bits.executed,
         canister_state_bits.interrupted_during_execution,
         canister_state_bits.consumed_cycles,
+        canister_state_bits.consumed_cycles_monotonic,
         canister_state_bits.consumed_cycles_by_use_cases,
-        canister_state_bits.consumed_cycles_by_use_cases_as_counters,
+        canister_state_bits.consumed_cycles_by_use_cases_monotonic,
         canister_state_bits.instructions_executed,
         LoadMetrics::new(
             canister_state_bits.ingress_messages_executed,
@@ -880,7 +881,6 @@ pub fn load_canister_state(
         canister_state_bits.log_visibility,
         canister_state_bits.snapshot_visibility,
         canister_state_bits.status_visibility,
-        canister_state_bits.canister_log,
         log_memory_store_data,
         canister_state_bits.log_memory_store_persistent_next_idx,
         canister_state_bits.wasm_memory_limit,

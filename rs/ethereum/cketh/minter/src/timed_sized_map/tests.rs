@@ -216,6 +216,47 @@ fn should_reject_insert_entry_when_full_of_live_entries() {
 }
 
 #[test]
+fn should_remove_entry_and_clean_both_indices() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(100), cap(5));
+    // "a" and "b" share an expiry bucket; removing "a" must keep "b" in it.
+    map.insert(ts(0), "a", 1).unwrap();
+    map.insert(ts(0), "b", 2).unwrap();
+    map.insert(ts(10), "c", 3).unwrap();
+
+    let removed = map.remove(&"a");
+
+    assert_eq!(
+        removed,
+        Some(Entry {
+            value: 1,
+            expires_at: ts(100),
+        })
+    );
+    assert_eq!(map.len(), 2);
+    // No liveness filtering: "a" is gone from every view.
+    assert_eq!(map.get(ts(0), &"a"), None);
+    assert!(map.iter().all(|(key, _)| *key != "a"));
+    assert!(map.iter_by_expiry().all(|(key, _)| *key != "a"));
+    assert_consistent(&map);
+
+    // Removing the last key in a bucket drops the bucket entirely.
+    map.remove(&"b");
+    assert!(!map.by_time.contains_key(&ts(100)));
+    assert_consistent(&map);
+}
+
+#[test]
+fn should_return_none_when_removing_an_absent_key() {
+    let mut map = TimedSizedMap::new(Duration::from_nanos(100), cap(5));
+    map.insert(ts(0), "a", 1).unwrap();
+    let before = map.clone();
+
+    assert_eq!(map.remove(&"absent"), None);
+    assert_eq!(map, before);
+    assert_consistent(&map);
+}
+
+#[test]
 fn should_keep_indices_consistent_through_churn() {
     let mut map = TimedSizedMap::new(Duration::from_nanos(100), cap(4));
     for (i, key) in ["a", "b", "c", "d"].into_iter().enumerate() {

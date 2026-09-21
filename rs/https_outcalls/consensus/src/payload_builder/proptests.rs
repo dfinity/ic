@@ -4,14 +4,14 @@ use crate::payload_builder::tests::{
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
-use ic_test_utilities_types::ids::{canister_test_id, node_test_id};
+use ic_test_utilities_types::ids::{node_test_id, test_replica_version};
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, ReplicaVersion, Time,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, Time,
     batch::ValidationContext,
     canister_http::{
         CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpReject, CanisterHttpRequestContext,
         CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
-        CanisterHttpResponseShare, Replication,
+        CanisterHttpResponseShare, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Replication,
     },
     crypto::{CryptoHash, CryptoHashOf, crypto_hash},
     messages::CallbackId,
@@ -276,7 +276,6 @@ fn build_fully_replicated(
 ) -> Scenario {
     let response = CanisterHttpResponse {
         id: callback_id,
-        canister_id: canister_test_id(0),
         content,
     };
     let metadata = make_metadata(&response);
@@ -316,7 +315,6 @@ fn build_non_replicated(
         .map(|content| {
             let response = CanisterHttpResponse {
                 id: callback_id,
-                canister_id: canister_test_id(0),
                 content,
             };
             let share = metadata_to_share(designated_node, &make_metadata(&response));
@@ -345,7 +343,6 @@ fn build_flexible(
             let content = maybe_content?;
             let response = CanisterHttpResponse {
                 id: callback_id,
-                canister_id: canister_test_id(0),
                 content,
             };
             let share = metadata_to_share(idx as u64, &make_metadata(&response));
@@ -370,7 +367,7 @@ fn make_metadata(response: &CanisterHttpResponse) -> CanisterHttpResponseMetadat
         content_hash: crypto_hash(response),
         content_size: response.content.count_bytes() as u32,
         is_reject: response.content.is_reject(),
-        replica_version: ReplicaVersion::default(),
+        replica_version: test_replica_version(),
     }
 }
 
@@ -488,16 +485,16 @@ fn prop_flexible_kind(max_size: usize, subnet_size: usize) -> impl Strategy<Valu
 
 /// Generates random content that is either a success message of length up to
 /// `max_size` bytes or a reject message whose description has length up to
-/// `max_size` bytes.
+/// `min(max_size, MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES=1KiB)` bytes.
 fn prop_content(max_size: usize) -> impl Strategy<Value = CanisterHttpResponseContent> {
     prop_oneof![
         (0..=max_size).prop_map(|size| CanisterHttpResponseContent::Success(vec![0; size])),
-        (0..=max_size).prop_map(
-            |size| CanisterHttpResponseContent::Reject(CanisterHttpReject {
+        (0..=max_size.min(MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES)).prop_map(|size| {
+            CanisterHttpResponseContent::Reject(CanisterHttpReject {
                 reject_code: RejectCode::SysFatal,
                 message: "a".repeat(size),
             })
-        ),
+        }),
     ]
 }
 
@@ -516,7 +513,7 @@ fn prop_random_metadata() -> impl Strategy<Value = CanisterHttpResponseMetadata>
             content_hash: CryptoHashOf::new(CryptoHash(hash.to_vec())),
             content_size,
             is_reject,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         }
     })
 }

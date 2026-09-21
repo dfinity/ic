@@ -515,6 +515,26 @@ impl std::error::Error for CryptoError {
     }
 }
 
+/// The maximum number of bytes of a byte string that is hex-encoded into an
+/// error message by [`ellipsized_hex`].
+const MAX_ELLIPSIZED_HEX_BYTES: usize = 64;
+
+/// Hex-encodes `bytes` for use in an error message.
+///
+/// Byte strings longer than [`MAX_ELLIPSIZED_HEX_BYTES`] are truncated and
+/// their length is appended instead, so that error messages stay short.
+pub(crate) fn ellipsized_hex(bytes: &[u8]) -> String {
+    if bytes.len() <= MAX_ELLIPSIZED_HEX_BYTES {
+        hex::encode(bytes)
+    } else {
+        format!(
+            "{}... ({} bytes)",
+            hex::encode(&bytes[..MAX_ELLIPSIZED_HEX_BYTES]),
+            bytes.len()
+        )
+    }
+}
+
 impl fmt::Debug for CryptoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -546,7 +566,7 @@ impl fmt::Debug for CryptoError {
             CryptoError::TlsSecretKeyNotFound { certificate_der } => write!(
                 f,
                 "Cannot find TLS secret key for certificate (DER encoding) 0x{}",
-                hex::encode(certificate_der)
+                ellipsized_hex(certificate_der)
             ),
 
             CryptoError::MalformedSecretKey { algorithm, .. } => {
@@ -561,7 +581,7 @@ impl fmt::Debug for CryptoError {
                 f,
                 "Malformed {:?} public key: {}, error: {}",
                 algorithm,
-                hex::encode(key_bytes),
+                ellipsized_hex(key_bytes),
                 internal_error,
             ),
             CryptoError::MalformedPublicKey {
@@ -578,7 +598,7 @@ impl fmt::Debug for CryptoError {
                 f,
                 "Malformed {:?} signature: [{}] error: '{}'",
                 algorithm,
-                hex::encode(sig_bytes),
+                ellipsized_hex(sig_bytes),
                 internal_error
             ),
             CryptoError::MalformedPop {
@@ -589,7 +609,7 @@ impl fmt::Debug for CryptoError {
                 f,
                 "Malformed {:?} PoP: [{}] error: '{}'",
                 algorithm,
-                hex::encode(pop_bytes),
+                ellipsized_hex(pop_bytes),
                 internal_error
             ),
 
@@ -602,8 +622,8 @@ impl fmt::Debug for CryptoError {
                 f,
                 "{:?} signature could not be verified: public key {}, signature {}, error: {}",
                 algorithm,
-                hex::encode(public_key_bytes),
-                hex::encode(sig_bytes),
+                ellipsized_hex(public_key_bytes),
+                ellipsized_hex(sig_bytes),
                 internal_error,
             ),
             CryptoError::PopVerification {
@@ -615,8 +635,8 @@ impl fmt::Debug for CryptoError {
                 f,
                 "{:?} PoP could not be verified: public key {}, pop {}, error: {}",
                 algorithm,
-                hex::encode(public_key_bytes),
-                hex::encode(pop_bytes),
+                ellipsized_hex(public_key_bytes),
+                ellipsized_hex(pop_bytes),
                 internal_error,
             ),
 

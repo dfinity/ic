@@ -1,5 +1,5 @@
 # Aliases into the host-import repos (see BUILD.cryptsetup.bazel,
-# BUILD.devmapper.bazel, BUILD.libvirt.bazel and BUILD.libsystemd.bazel), so
+# BUILD.devmapper.bazel and BUILD.libvirt.bazel), so
 # that the `link_deps` of the crate annotations in bazel/rust.MODULE.bazel can
 # reference them with stable root-repo labels (apparent repo names like
 # @devmapper don't resolve from inside the generated crate repositories).
@@ -18,11 +18,5 @@ alias(
 alias(
     name = "libvirt",
     actual = "@libvirt//:libvirt",
-    visibility = ["//visibility:public"],
-)
-
-alias(
-    name = "systemd",
-    actual = "@libsystemd//:libsystemd",
     visibility = ["//visibility:public"],
 )

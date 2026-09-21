@@ -23,6 +23,9 @@ const LABEL_MESSAGE_KIND: &str = "kind";
 const MESSAGE_KIND_INGRESS: &str = "ingress";
 const MESSAGE_KIND_CANISTER: &str = "canister";
 
+const LABEL_INGRESS_STATE: &str = "state";
+const LABEL_TYPE: &str = "type";
+
 /// Alert for call contexts older than this cutoff (one day).
 const OLD_CALL_CONTEXT_CUTOFF_ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
 const OLD_CALL_CONTEXT_LABEL_ONE_DAY: &str = "1d";
@@ -48,13 +51,16 @@ pub struct ReplicatedStateMetrics {
     canister_history_memory_usage_bytes: IntGauge,
     canister_history_total_num_changes: Histogram,
     ingress_history_length: IntGauge,
+    ingress_history_length_by_state: IntGaugeVec,
     registered_canisters: IntGaugeVec,
     available_canister_ids: IntGauge,
     consumed_cycles: Gauge,
     consumed_cycles_by_use_case: GaugeVec,
-    consumed_cycles_by_use_case_as_counters: CounterVec,
+    consumed_cycles_by_use_case_monotonic: CounterVec,
     input_queue_messages: IntGaugeVec,
     input_queues_size_bytes: IntGaugeVec,
+    subnet_input_queue_messages: IntGaugeVec,
+    subnet_output_queue_messages: IntGauge,
     queues_response_bytes: IntGauge,
     queues_memory_reservations: IntGauge,
     queues_oversized_requests_extra_bytes: IntGauge,
@@ -63,6 +69,9 @@ pub struct ReplicatedStateMetrics {
     canisters_not_in_routing_table: IntGauge,
     old_open_call_contexts: IntGaugeVec,
     canisters_with_old_open_call_contexts: IntGaugeVec,
+    subnet_call_contexts: IntGaugeVec,
+    pending_refunds: IntGauge,
+    pending_refunds_cycles: Gauge,
     total_canister_balance: Gauge,
     total_canister_reserved_balance: Gauge,
     canister_paused_execution: Histogram,
@@ -139,6 +148,11 @@ impl ReplicatedStateMetrics {
                 "replicated_state_ingress_history_length",
                 "Total number of entries kept in the ingress history.",
             ),
+            ingress_history_length_by_state: metrics_registry.int_gauge_vec(
+                "replicated_state_ingress_history_length_by_state",
+                "Number of entries kept in the ingress history, by ingress state.",
+                &[LABEL_INGRESS_STATE],
+            ),
             registered_canisters: metrics_registry.int_gauge_vec(
                 "replicated_state_registered_canisters",
                 "Total number of canisters keyed by their current status.",
@@ -157,7 +171,7 @@ impl ReplicatedStateMetrics {
                 "Number of cycles consumed by use cases.",
                 &["use_case"],
             ),
-            consumed_cycles_by_use_case_as_counters: metrics_registry.counter_vec(
+            consumed_cycles_by_use_case_monotonic: metrics_registry.counter_vec(
                 "replicated_state_consumed_cycles_from_replica_start_as_counters",
                 "Number of cycles consumed by use cases.",
                 &["use_case"],
@@ -171,6 +185,15 @@ impl ReplicatedStateMetrics {
                 "execution_input_queue_size_bytes",
                 "Byte size of input queues, by message kind.",
                 &[LABEL_MESSAGE_KIND],
+            ),
+            subnet_input_queue_messages: metrics_registry.int_gauge_vec(
+                "execution_subnet_input_queue_messages",
+                "Count of messages currently enqueued in the subnet (i.e. management canister) input queues, by message kind.",
+                &[LABEL_MESSAGE_KIND],
+            ),
+            subnet_output_queue_messages: metrics_registry.int_gauge(
+                "execution_subnet_output_queue_messages",
+                "Count of messages currently enqueued in the subnet (i.e. management canister) output queues.",
             ),
             queues_response_bytes: metrics_registry.int_gauge(
                 "execution_queues_response_size_bytes",
@@ -205,6 +228,19 @@ impl ReplicatedStateMetrics {
                 "scheduler_canisters_with_old_open_call_contexts",
                 "Number of canisters with call contexts that have been open for more than the given age.",
                 &["age"]
+            ),
+            subnet_call_contexts: metrics_registry.int_gauge_vec(
+                "replicated_state_subnet_call_contexts",
+                "Number of in-progress subnet calls (i.e. call contexts in the subnet call context manager), by call type.",
+                &[LABEL_TYPE],
+            ),
+            pending_refunds: metrics_registry.int_gauge(
+                "replicated_state_pending_refunds",
+                "Number of pending anonymous refunds, i.e. refunds accumulated at the subnet level, not yet routed into streams.",
+            ),
+            pending_refunds_cycles: metrics_registry.gauge(
+                "replicated_state_pending_refunds_cycles",
+                "Total value in Cycles of pending anonymous refunds, i.e. refunds accumulated at the subnet level, not yet routed into streams.",
             ),
             total_canister_balance: metrics_registry.gauge(
                 "scheduler_canister_balance_cycles_total",
@@ -283,7 +319,7 @@ impl ReplicatedStateMetrics {
             "replicated_state_consumed_cycles_by_use_case",
         );
         metrics_registry.register_alias(
-            &metrics.consumed_cycles_by_use_case_as_counters,
+            &metrics.consumed_cycles_by_use_case_monotonic,
             "replicated_state_consumed_cycles_by_use_case_as_counters",
         );
 
@@ -301,15 +337,15 @@ impl ReplicatedStateMetrics {
         }
     }
 
-    fn observe_consumed_cycles_by_use_case_as_counters(
+    fn observe_consumed_cycles_by_use_case_monotonic(
         &self,
-        consumed_cycles_by_use_case_as_counters: &BTreeMap<CyclesUseCase, NominalCycles>,
+        consumed_cycles_by_use_case_monotonic: &BTreeMap<CyclesUseCase, NominalCycles>,
     ) {
-        for (use_case, cycles) in consumed_cycles_by_use_case_as_counters.iter() {
-            self.consumed_cycles_by_use_case_as_counters
+        for (use_case, cycles) in consumed_cycles_by_use_case_monotonic.iter() {
+            self.consumed_cycles_by_use_case_monotonic
                 .with_label_values(&[use_case.as_str()])
                 .reset();
-            self.consumed_cycles_by_use_case_as_counters
+            self.consumed_cycles_by_use_case_monotonic
                 .with_label_values(&[use_case.as_str()])
                 .inc_by(cycles.get() as f64);
         }
@@ -378,9 +414,8 @@ impl ReplicatedStateMetrics {
         let mut num_paused_install = 0;
         let mut num_aborted_install = 0;
 
-        let mut consumed_cycles_total = NominalCycles::zero();
         let mut consumed_cycles_total_by_use_case = BTreeMap::new();
-        let mut consumed_cycles_total_by_use_case_as_counters = BTreeMap::new();
+        let mut consumed_cycles_total_by_use_case_monotonic = BTreeMap::new();
 
         let mut ingress_queue_message_count = 0;
         let mut ingress_queue_size_bytes = 0;
@@ -438,7 +473,6 @@ impl ReplicatedStateMetrics {
                 | Some(ExecutionTask::OnLowWasmMemory)
                 | None => {}
             }
-            consumed_cycles_total += canister.system_state.canister_metrics().consumed_cycles();
             join_consumed_cycles_by_use_case(
                 &mut consumed_cycles_total_by_use_case,
                 canister
@@ -453,11 +487,11 @@ impl ReplicatedStateMetrics {
             let mut counter_metrics_map = canister
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases_as_counters()
+                .consumed_cycles_by_use_cases_monotonic()
                 .clone();
             counter_metrics_map.remove(&CyclesUseCase::HTTPOutcalls);
             join_consumed_cycles_by_use_case(
-                &mut consumed_cycles_total_by_use_case_as_counters,
+                &mut consumed_cycles_total_by_use_case_monotonic,
                 &counter_metrics_map,
             );
             let queues = canister.system_state.queues();
@@ -521,12 +555,6 @@ impl ReplicatedStateMetrics {
         self.current_heap_delta
             .set(state.metadata.heap_delta_estimate.get() as i64);
 
-        // Add the consumed cycles by canisters that were deleted.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_by_deleted_canisters();
-
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
             state
@@ -535,45 +563,27 @@ impl ReplicatedStateMetrics {
                 .get_consumed_cycles_by_use_case(),
         );
         join_consumed_cycles_by_use_case(
-            &mut consumed_cycles_total_by_use_case_as_counters,
+            &mut consumed_cycles_total_by_use_case_monotonic,
             state
                 .metadata
                 .subnet_metrics
                 .get_consumed_cycles_by_use_case(),
         );
 
-        // Add the consumed cycles in ecdsa outcalls.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_ecdsa_outcalls();
-
-        // Add the consumed cycles in http outcalls.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_http_outcalls();
-
-        // Add the remaining subnet-level use cases. Unlike ECDSA/HTTP outcalls
-        // and deleted canisters, these have no dedicated scalar field, but their
-        // getters read the by-use-case map. The canister-level use cases in that
-        // map originate from deleted canisters and are already covered by
-        // `get_consumed_cycles_by_deleted_canisters()`.
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_schnorr_outcalls();
-        consumed_cycles_total += state.metadata.subnet_metrics.get_consumed_cycles_vetkd();
-        consumed_cycles_total += state
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_dropped_messages();
-
-        self.consumed_cycles.set(consumed_cycles_total.get() as f64);
+        // Read from the shared definition rather than re-folding, so the gauge cannot
+        // drift from the certified state tree. The per-use-case breakdowns below do
+        // still fold over the canisters, as no aggregate holds them.
+        self.consumed_cycles.set(
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters()
+                .get() as f64,
+        );
 
         self.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
-        self.observe_consumed_cycles_by_use_case_as_counters(
-            &consumed_cycles_total_by_use_case_as_counters,
+        self.observe_consumed_cycles_by_use_case_monotonic(
+            &consumed_cycles_total_by_use_case_monotonic,
         );
 
         for (key_id, count) in &state.metadata.subnet_metrics.threshold_signature_agreements {
@@ -625,6 +635,16 @@ impl ReplicatedStateMetrics {
         self.observe_input_messages(MESSAGE_KIND_CANISTER, input_queues_message_count);
         self.observe_input_queues_size_bytes(MESSAGE_KIND_CANISTER, input_queues_size_bytes);
 
+        let subnet_queues = state.subnet_queues();
+        self.subnet_input_queue_messages
+            .with_label_values(&[MESSAGE_KIND_INGRESS])
+            .set(subnet_queues.ingress_queue_message_count() as i64);
+        self.subnet_input_queue_messages
+            .with_label_values(&[MESSAGE_KIND_CANISTER])
+            .set(subnet_queues.input_queues_message_count() as i64);
+        self.subnet_output_queue_messages
+            .set(subnet_queues.output_queues_message_count() as i64);
+
         self.queues_response_bytes.set(queues_response_bytes as i64);
         self.queues_memory_reservations
             .set(queues_memory_reservations as i64);
@@ -635,6 +655,22 @@ impl ReplicatedStateMetrics {
 
         self.ingress_history_length
             .set(state.metadata.ingress_history.len() as i64);
+        for (ingress_state, count) in state.metadata.ingress_history.state_counts() {
+            self.ingress_history_length_by_state
+                .with_label_values(&[ingress_state])
+                .set(count as i64);
+        }
+
+        for (call_type, count) in state.metadata.subnet_call_context_manager.context_counts() {
+            self.subnet_call_contexts
+                .with_label_values(&[call_type])
+                .set(count as i64);
+        }
+
+        self.pending_refunds.set(state.refunds().len() as i64);
+        self.pending_refunds_cycles
+            .set(state.refunds().total().get() as f64);
+
         self.canisters_not_in_routing_table
             .set(canisters_not_in_routing_table);
         self.stop_canister_calls_without_call_id
