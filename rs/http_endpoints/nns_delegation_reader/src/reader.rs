@@ -751,11 +751,25 @@ mod tests {
     }
 
     #[rstest]
-    #[case::flat(CanisterRangesFilter::Flat, false, true)]
-    #[case::tree(CanisterRangesFilter::Tree(CanisterId::from(150)), true, false)]
-    #[case::none(CanisterRangesFilter::None, false, false)]
-    fn build_verified_with_no_check_serves_the_requested_ranges(
-        #[case] canister_ranges_filter: CanisterRangesFilter,
+    #[case::canister_in_flat(
+        CanisterRangesCheck::CanisterInFlat(CanisterId::from(150)),
+        false,
+        true
+    )]
+    #[case::canister_in_tree(
+        CanisterRangesCheck::CanisterInTree(CanisterId::from(150)),
+        true,
+        false
+    )]
+    #[case::no_check_flat(CanisterRangesCheck::NoCheck(CanisterRangesFilter::Flat), false, true)]
+    #[case::no_check_tree(
+        CanisterRangesCheck::NoCheck(CanisterRangesFilter::Tree(CanisterId::from(150))),
+        true,
+        false
+    )]
+    #[case::no_check_none(CanisterRangesCheck::NoCheck(CanisterRangesFilter::None), false, false)]
+    fn build_verified_serves_the_requested_ranges(
+        #[case] canister_ranges_check: CanisterRangesCheck,
         #[case] expects_tree_ranges: bool,
         #[case] expects_flat_ranges: bool,
     ) {
@@ -763,14 +777,12 @@ mod tests {
 
         let delegation = builder
             .build_verified(
-                CanisterRangesCheck::NoCheck(canister_ranges_filter),
-                // The state assigns an extra range to the subnet which is not certified
-                // in the delegation, which `NoCheck` should not care about.
-                &routing_table_with(&[(0, 10), (100, 200), (300, 400)]),
+                canister_ranges_check,
+                &routing_table_with(RANGES),
                 |_subnet_id| Some(&public_key),
                 &no_op_logger(),
             )
-            .expect("only the public key should be checked");
+            .expect("the delegation should be consistent with the state view");
 
         assert_eq!(
             path_exists(
