@@ -304,7 +304,10 @@ fn decode_ranges(
 
 #[cfg(test)]
 mod tests {
-    use super::{CanisterRangesCheck, DelegationValidationError, is_tree_consistent_with};
+    use super::{
+        CanisterRangesCheck, DelegationValidationError, do_ranges_cover_canister,
+        is_tree_consistent_with,
+    };
     use crate::reader::CanisterRangesFilter;
     use assert_matches::assert_matches;
     use ic_canonical_state::encoding::encode_subnet_canister_ranges;
@@ -752,6 +755,36 @@ mod tests {
             Ok(is_valid) if is_valid == expected_validity,
             "with the delegation certifying {certified_ranges:?}, the {location:?} \
              per-canister check for canister {canister_id} should return {expected_validity}"
+        );
+    }
+
+    /// The ranges are inclusive at both ends: a canister id falling exactly on a range's
+    /// start or end is covered.
+    #[rstest]
+    #[case::before_first_range(9, false)]
+    #[case::first_range_start(10, true)]
+    #[case::inside_first_range(15, true)]
+    #[case::first_range_end(20, true)]
+    #[case::after_first_range(21, false)]
+    #[case::between_ranges(50, false)]
+    #[case::last_range_start(100, true)]
+    #[case::inside_last_range(150, true)]
+    #[case::last_range_end(200, true)]
+    #[case::after_last_range(201, false)]
+    fn ranges_cover_the_canister_ids_between_their_inclusive_endpoints(
+        #[case] canister_id: u64,
+        #[case] expected_coverage: bool,
+    ) {
+        let ranges: Vec<(PrincipalId, PrincipalId)> = [range(10, 20), range(100, 200)]
+            .iter()
+            .map(|r| (r.start.get(), r.end.get()))
+            .collect();
+
+        assert_eq!(
+            do_ranges_cover_canister(&ranges, CanisterId::from_u64(canister_id)),
+            expected_coverage,
+            "the ranges [10, 20] and [100, 200] should return {expected_coverage} for \
+             canister {canister_id}"
         );
     }
 
