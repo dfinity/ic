@@ -1384,11 +1384,6 @@ impl CanisterManager {
         );
 
         // Leftover cycles in the canister are considered `consumed`.
-        //
-        // Note that it is the canister's `consumed_cycles` gauge and
-        // `consumed_cycles_by_use_cases` gauges, not their monotonic counterparts,
-        // that are moved into the subnet metrics below. That is deliberate: the gauges
-        // are the ones that reach furthest back.
         let leftover_cycles = self
             .cycles_account_manager
             .leftover_cycles_for_canister_to_deleted(
