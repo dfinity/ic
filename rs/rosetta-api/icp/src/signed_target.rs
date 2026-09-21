@@ -16,10 +16,15 @@
 //! `DISBURSE_MATURITY` the neuron index is the only field indicating how much
 //! value moves.
 //!
+//! A transfer has the same problem in a smaller way: it is reported in the
+//! token of the ledger this Rosetta instance serves, so a `send_pb` update
+//! addressed to some other ledger would be described in the wrong currency.
+//!
 //! [`verify_signed_target`] closes that gap. It is shared by
-//! `/construction/parse` and by the submit path's `Request` reconstruction, so
-//! the operations shown before signing, the operations shown after signing, and
-//! the operations reported back after submission cannot diverge.
+//! `/construction/parse`, `/construction/hash` and the submit path's `Request`
+//! reconstruction, so the operations shown before signing, the operations shown
+//! after signing, the hash the caller is told to expect, and the operations
+//! reported back after submission cannot diverge.
 
 use crate::{
     convert,
@@ -31,7 +36,7 @@ use ic_nns_governance_api::{
     ClaimOrRefreshNeuronFromAccount, ManageNeuronCommandRequest, ManageNeuronRequest,
     manage_neuron, manage_neuron::NeuronIdOrSubaccount,
 };
-use ic_types::{PrincipalId, messages::HttpCanisterUpdate};
+use ic_types::{CanisterId, PrincipalId, messages::HttpCanisterUpdate};
 
 /// Governance method that every neuron management command is submitted through.
 const MANAGE_NEURON: &str = "manage_neuron";
@@ -60,13 +65,14 @@ const SEND_PB: &str = "send_pb";
 pub fn verify_signed_envelopes(
     request_type: &RequestType,
     envelopes: &[EnvelopePair],
+    ledger_canister_id: &CanisterId,
 ) -> Result<(), ApiError> {
     let representative = envelopes
         .first()
         .ok_or_else(|| ApiError::invalid_request("No request payload provided."))?
         .update_content();
 
-    verify_signed_target(request_type, representative)?;
+    verify_signed_target(request_type, representative, ledger_canister_id)?;
 
     for envelope in &envelopes[1..] {
         if !same_update_modulo_expiry(representative, envelope.update_content()) {
@@ -98,20 +104,23 @@ fn same_update_modulo_expiry(a: &HttpCanisterUpdate, b: &HttpCanisterUpdate) -> 
 /// Fails closed: a request whose displayed metadata cannot be confirmed against
 /// the signed payload is rejected rather than displayed with a warning.
 ///
-/// The one field this does not cover is the `canister_id` of a
-/// `RequestType::Send`, which requires knowing the ledger canister this Rosetta
-/// instance is configured for. Every governance-bound request type does have its
-/// `canister_id` checked here.
+/// `ledger_canister_id` is the ledger this Rosetta instance is configured for.
+/// A transfer is denominated in that ledger's token, so one addressed anywhere
+/// else would be reported in the wrong currency.
 pub fn verify_signed_target(
     request_type: &RequestType,
     update: &HttpCanisterUpdate,
+    ledger_canister_id: &CanisterId,
 ) -> Result<(), ApiError> {
     let sender = PrincipalId::try_from(update.sender.0.as_slice()).map_err(|e| {
         ApiError::invalid_request(format!("Could not parse the signed update's sender: {e}"))
     })?;
 
     match request_type {
-        RequestType::Send => verify_method_name(update, SEND_PB),
+        RequestType::Send => {
+            verify_canister(update, ledger_canister_id, "A transfer")?;
+            verify_method_name(update, SEND_PB)
+        }
 
         RequestType::Stake { neuron_index } => {
             verify_governance_canister(update)?;
@@ -376,11 +385,22 @@ fn verify_nonce_neuron_index(
 }
 
 fn verify_governance_canister(update: &HttpCanisterUpdate) -> Result<(), ApiError> {
-    let expected = ic_nns_constants::GOVERNANCE_CANISTER_ID.get();
-    if update.canister_id.0.as_slice() != expected.as_slice() {
+    verify_canister(
+        update,
+        &ic_nns_constants::GOVERNANCE_CANISTER_ID,
+        "A neuron request",
+    )
+}
+
+fn verify_canister(
+    update: &HttpCanisterUpdate,
+    expected: &CanisterId,
+    what: &str,
+) -> Result<(), ApiError> {
+    if update.canister_id.0.as_slice() != expected.get().as_slice() {
         return Err(ApiError::invalid_request(format!(
-            "A neuron request must be addressed to the governance canister {expected}, \
-             but the signed update is addressed elsewhere."
+            "{what} must be addressed to canister {expected}, but the signed update \
+             is addressed elsewhere."
         )));
     }
     Ok(())
@@ -424,6 +444,22 @@ mod tests {
         PrincipalId::new_user_test_id(1)
     }
 
+    /// The ledger this Rosetta instance is configured for.
+    fn ledger() -> CanisterId {
+        CanisterId::from_u64(1)
+    }
+
+    fn verify(request_type: &RequestType, update: &HttpCanisterUpdate) -> Result<(), ApiError> {
+        verify_signed_target(request_type, update, &ledger())
+    }
+
+    fn verify_envelopes(
+        request_type: &RequestType,
+        envelopes: &[EnvelopePair],
+    ) -> Result<(), ApiError> {
+        verify_signed_envelopes(request_type, envelopes, &ledger())
+    }
+
     /// Builds the update that `add_neuron_management_payload` would build for a
     /// complete-stake disburse of `neuron_index`, controlled by `sender`.
     fn manage_neuron_update(sender: PrincipalId, neuron_index: u64) -> HttpCanisterUpdate {
@@ -457,7 +493,7 @@ mod tests {
     #[test]
     fn faithful_update_is_accepted() {
         let update = manage_neuron_update(controller(), NEURON_INDEX);
-        verify_signed_target(&disburse(NEURON_INDEX), &update).unwrap();
+        verify(&disburse(NEURON_INDEX), &update).unwrap();
     }
 
     #[test]
@@ -465,7 +501,7 @@ mod tests {
         let update = manage_neuron_update(controller(), NEURON_INDEX);
         // The wrapper claims a different, less valuable neuron than the one the
         // signed subaccount and nonce identify.
-        verify_signed_target(&disburse(0), &update).unwrap_err();
+        verify(&disburse(0), &update).unwrap_err();
     }
 
     #[test]
@@ -474,7 +510,7 @@ mod tests {
         update.nonce = None;
         // Fail closed: an absent nonce leaves the displayed index unverifiable
         // rather than verified.
-        verify_signed_target(&disburse(NEURON_INDEX), &update).unwrap_err();
+        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
     }
 
     #[test]
@@ -499,7 +535,7 @@ mod tests {
             )),
         };
         update.arg = Blob(Encode!(&manage).unwrap());
-        verify_signed_target(&disburse(NEURON_INDEX), &update).unwrap_err();
+        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
     }
 
     #[test]
@@ -519,7 +555,7 @@ mod tests {
             )),
         };
         update.arg = Blob(Encode!(&manage).unwrap());
-        verify_signed_target(&disburse(NEURON_INDEX), &update).unwrap_err();
+        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
     }
 
     #[test]
@@ -538,21 +574,21 @@ mod tests {
             )),
         };
         update.arg = Blob(Encode!(&manage).unwrap());
-        verify_signed_target(&disburse(NEURON_INDEX), &update).unwrap_err();
+        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
     }
 
     #[test]
     fn foreign_canister_is_rejected() {
         let mut update = manage_neuron_update(controller(), NEURON_INDEX);
         update.canister_id = Blob(PrincipalId::new_user_test_id(3).to_vec());
-        verify_signed_target(&disburse(NEURON_INDEX), &update).unwrap_err();
+        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
     }
 
     #[test]
     fn unexpected_method_name_is_rejected() {
         let mut update = manage_neuron_update(controller(), NEURON_INDEX);
         update.method_name = "some_other_method".to_string();
-        verify_signed_target(&disburse(NEURON_INDEX), &update).unwrap_err();
+        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
     }
 
     #[test]
@@ -579,7 +615,7 @@ mod tests {
             neuron_index: NEURON_INDEX,
             controller: Some(PublicKeyOrPrincipal::Principal(controller())),
         };
-        verify_signed_target(&honest, &update).unwrap();
+        verify(&honest, &update).unwrap();
 
         let substituted = RequestType::Follow {
             neuron_index: NEURON_INDEX,
@@ -587,7 +623,7 @@ mod tests {
                 PrincipalId::new_user_test_id(4),
             )),
         };
-        verify_signed_target(&substituted, &update).unwrap_err();
+        verify(&substituted, &update).unwrap_err();
     }
 
     #[test]
@@ -607,14 +643,14 @@ mod tests {
             sender_info: None,
         };
 
-        verify_signed_target(
+        verify(
             &RequestType::Stake {
                 neuron_index: NEURON_INDEX,
             },
             &update,
         )
         .unwrap();
-        verify_signed_target(&RequestType::Stake { neuron_index: 0 }, &update).unwrap_err();
+        verify(&RequestType::Stake { neuron_index: 0 }, &update).unwrap_err();
     }
 
     #[test]
@@ -638,8 +674,8 @@ mod tests {
             sender_info: None,
         };
 
-        verify_signed_target(&RequestType::ListNeurons { page_number: 3 }, &update).unwrap();
-        verify_signed_target(&RequestType::ListNeurons { page_number: 0 }, &update).unwrap_err();
+        verify(&RequestType::ListNeurons { page_number: 3 }, &update).unwrap();
+        verify(&RequestType::ListNeurons { page_number: 0 }, &update).unwrap_err();
     }
 
     #[test]
@@ -658,7 +694,7 @@ mod tests {
             sender_info: None,
         };
 
-        verify_signed_target(
+        verify(
             &RequestType::NeuronInfo {
                 neuron_index: NEURON_INDEX,
                 controller: None,
@@ -666,7 +702,7 @@ mod tests {
             &update,
         )
         .unwrap();
-        verify_signed_target(
+        verify(
             &RequestType::NeuronInfo {
                 neuron_index: 0,
                 controller: None,
@@ -681,13 +717,39 @@ mod tests {
         // different operation on the same neuron, so nonce, subaccount,
         // canister and method all still agree.
         let update = manage_neuron_update(controller(), NEURON_INDEX);
-        verify_signed_target(
+        verify(
             &RequestType::StartDissolve {
                 neuron_index: NEURON_INDEX,
             },
             &update,
         )
         .unwrap_err();
+    }
+
+    #[test]
+    fn a_transfer_to_another_ledger_is_rejected() {
+        let args = icp_ledger::SendArgs {
+            memo: icp_ledger::Memo(0),
+            amount: icp_ledger::Tokens::from_e8s(100_000_000),
+            fee: icp_ledger::Tokens::from_e8s(10_000),
+            from_subaccount: None,
+            to: icp_ledger::AccountIdentifier::from(controller()),
+            created_at_time: None,
+        };
+        let send = |canister_id: CanisterId| HttpCanisterUpdate {
+            canister_id: Blob(canister_id.get().to_vec()),
+            method_name: SEND_PB.to_string(),
+            arg: Blob(convert::to_arg(args.clone())),
+            nonce: None,
+            sender: Blob(controller().into_vec()),
+            ingress_expiry: 0,
+            sender_info: None,
+        };
+
+        verify(&RequestType::Send, &send(ledger())).unwrap();
+        // The amount and the recipient are signed, but the token they are
+        // denominated in follows from the ledger being called.
+        verify(&RequestType::Send, &send(CanisterId::from_u64(99))).unwrap_err();
     }
 
     #[test]
@@ -713,10 +775,10 @@ mod tests {
         };
 
         // Absent, or naming the signer: the neuron displayed is the one claimed.
-        verify_signed_target(&stake, &signed_stake(None)).unwrap();
-        verify_signed_target(&stake, &signed_stake(Some(sender))).unwrap();
+        verify(&stake, &signed_stake(None)).unwrap();
+        verify(&stake, &signed_stake(Some(sender))).unwrap();
         // Naming someone else claims `H(other, memo)`, not the signer's neuron.
-        verify_signed_target(
+        verify(
             &stake,
             &signed_stake(Some(PrincipalId::new_user_test_id(77))),
         )
@@ -757,14 +819,13 @@ mod tests {
         later.ingress_expiry = base.ingress_expiry + 1_000;
 
         // The same message in two ingress windows is what combine produces.
-        verify_signed_envelopes(&disburse(NEURON_INDEX), &[pair(base.clone()), pair(later)])
-            .unwrap();
+        verify_envelopes(&disburse(NEURON_INDEX), &[pair(base.clone()), pair(later)]).unwrap();
 
         // An envelope for another neuron alongside it is not.
         let other = manage_neuron_update(controller(), 9);
-        verify_signed_envelopes(&disburse(NEURON_INDEX), &[pair(base), pair(other)]).unwrap_err();
+        verify_envelopes(&disburse(NEURON_INDEX), &[pair(base), pair(other)]).unwrap_err();
 
         // And an empty request has nothing to describe.
-        verify_signed_envelopes(&disburse(NEURON_INDEX), &[]).unwrap_err();
+        verify_envelopes(&disburse(NEURON_INDEX), &[]).unwrap_err();
     }
 }

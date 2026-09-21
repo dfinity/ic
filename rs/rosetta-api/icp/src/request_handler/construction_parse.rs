@@ -44,7 +44,11 @@ impl RosettaRequestHandler {
                     // path broadcasts whichever one is currently valid, not the
                     // first, so all of them have to agree with the metadata
                     // about to be displayed -- not just the one described.
-                    verify_signed_envelopes(request_type, envelopes)?;
+                    verify_signed_envelopes(
+                        request_type,
+                        envelopes,
+                        self.ledger.ledger_canister_id(),
+                    )?;
                     match envelopes[0].update.content.clone() {
                         HttpCallContent::Call { update } => Ok((request_type.clone(), update)),
                     }
@@ -61,7 +65,7 @@ impl RosettaRequestHandler {
             // Every field of `request_type` reaching the caller below must be
             // bound to the signed payload; otherwise the operations we return
             // would not describe the bytes the caller signs and broadcasts.
-            verify_signed_target(&request_type, &update)?;
+            verify_signed_target(&request_type, &update, self.ledger.ledger_canister_id())?;
 
             let HttpCanisterUpdate { arg, sender, .. } = update;
             let from = PrincipalId::try_from(sender.0)
@@ -1029,8 +1033,9 @@ mod tests {
 
         // And the submit path, which reconstructs the same operations for the
         // `/construction/submit` response, must reject it too.
-        let err = Request::try_from(&signed.requests[0])
-            .expect_err("the submit path must reject the same mismatch");
+        let err =
+            Request::from_signed_request(&signed.requests[0], handler.ledger.ledger_canister_id())
+                .expect_err("the submit path must reject the same mismatch");
         assert!(
             format!("{err:?}").contains("neuron_index"),
             "unexpected error: {err:?}"
@@ -1062,8 +1067,9 @@ mod tests {
             };
         }
 
-        let err = Request::try_from(&signed.requests[0])
-            .expect_err("the submit path must reject a substituted operation");
+        let err =
+            Request::from_signed_request(&signed.requests[0], handler.ledger.ledger_canister_id())
+                .expect_err("the submit path must reject a substituted operation");
         assert!(
             format!("{err:?}").contains("manage_neuron command"),
             "unexpected error: {err:?}"
@@ -1105,8 +1111,9 @@ mod tests {
             requests: vec![(RequestType::Disburse { neuron_index: 0 }, envelopes)],
         };
 
-        let err = Request::try_from(&spliced.requests[0])
-            .expect_err("the submit path must reject envelopes that disagree");
+        let err =
+            Request::from_signed_request(&spliced.requests[0], handler.ledger.ledger_canister_id())
+                .expect_err("the submit path must reject envelopes that disagree");
         assert!(
             format!("{err:?}").contains("ingress"),
             "unexpected error: {err:?}"

@@ -303,7 +303,7 @@ impl LedgerAccess for LedgerClient {
             .requests
             .iter()
             .map(|e| {
-                Request::try_from(e).map(|_type| RequestResult {
+                Request::from_signed_request(e, &self.canister_id).map(|_type| RequestResult {
                     _type,
                     block_index: None,
                     neuron_id: None,
