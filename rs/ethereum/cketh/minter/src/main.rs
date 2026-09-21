@@ -1383,8 +1383,8 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                      the stage they have reached. Each request is counted once, at one stage only, \
                      however many transactions have carried it: a withdrawal resubmitted at a \
                      higher fee stays a single `sent` entry. `sent` is everything sent and not \
-                     yet finalized, which includes the transactions still waiting for Ethereum \
-                     finality: it is never 0 while withdrawals flow, so alert on it growing and \
+                     yet finalized, which includes those still waiting for Ethereum finality: it \
+                     is never 0 while withdrawals flow, so alert on it growing and \
                      staying grown rather than on it being non-zero. It is the first thing to \
                      grow when finalization stalls. The withdrawal pipeline also carries the \
                      minter's own sweeper-funding transfers, of which at most one is outstanding \
