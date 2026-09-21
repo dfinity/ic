@@ -201,6 +201,9 @@ fn test_recover_subnet_with_replacement_nodes() {
                 get_value_or_panic(&registry, &cup_contents_key).await;
 
             // Assert that the CatchUpPackageContents was updated as expected
+            assert_eq!(payload.height, updated_cup_contents.height);
+            assert_eq!(payload.time_ns, updated_cup_contents.time);
+            assert_eq!(payload.state_hash, updated_cup_contents.state_hash);
             assert_eq!(
                 updated_cup_contents.cup_type,
                 Some(CupType::Recovery(RecoveryArgs {
