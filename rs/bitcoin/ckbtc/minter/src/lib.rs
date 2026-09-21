@@ -23,7 +23,7 @@ use crate::state::utxos::UtxoSet;
 use crate::state::{CkBtcMinterState, mutate_state, read_state};
 use crate::tx::{BitcoinTransactionSigner, FeeRate, SignedRawTransaction, UnsignedTransaction};
 use crate::updates::get_btc_address;
-use crate::updates::retrieve_btc::BtcAddressCheckStatus;
+use crate::updates::retrieve_btc::{BtcAddressCheckStatus, BurnCkbtcError, BurnSource};
 pub use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_checker::{CheckAddressArgs, CheckAddressResponse};
 pub use ic_btc_interface::{Address, OutPoint, Page, Satoshi, Txid, Utxo};
@@ -1434,7 +1434,7 @@ pub enum ConsolidateUtxosError {
     EstimateFeeNotAvailable,
     StillProcessing,
     BuildTx(BuildTxError),
-    BurnCkbtc(updates::retrieve_btc::RetrieveBtcError, u64),
+    BurnCkbtc(BurnCkbtcError, u64),
     SubmitRequest(CallError),
 }
 
@@ -1532,20 +1532,21 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         value: total_amount,
         inputs: input_utxos_len as u64,
     };
-    let block_index = updates::retrieve_btc::burn_ckbtcs_from_subaccount(
-        FEE_COLLECTOR_SUBACCOUNT,
-        total_fee.bitcoin_fee,
-        crate::memo::encode(&burn_memo).into(),
-    )
-    .await
-    .map_err(|err| {
-        log!(
-            Priority::Info,
-            "[consolidate_utxos]: failed to burn ckbtc from fee account {:?}",
-            err
-        );
-        ConsolidateUtxosError::BurnCkbtc(err, total_fee.bitcoin_fee)
-    })?;
+    let block_index = runtime
+        .burn_ckbtc(
+            BurnSource::MinterSubaccount(FEE_COLLECTOR_SUBACCOUNT),
+            total_fee.bitcoin_fee,
+            crate::memo::encode(&burn_memo).into(),
+        )
+        .await
+        .map_err(|err| {
+            log!(
+                Priority::Info,
+                "[consolidate_utxos]: failed to burn ckbtc from fee account {:?}",
+                err
+            );
+            ConsolidateUtxosError::BurnCkbtc(err, total_fee.bitcoin_fee)
+        })?;
 
     let request = state::ConsolidateUtxosRequest {
         block_index,
@@ -1666,6 +1667,13 @@ pub trait CanisterRuntime {
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError>;
 
+    async fn burn_ckbtc(
+        &self,
+        source: BurnSource,
+        amount: u64,
+        memo: Memo,
+    ) -> Result<u64, BurnCkbtcError>;
+
     async fn sign_transaction(
         &self,
         key_name: String,
@@ -1745,6 +1753,15 @@ impl CanisterRuntime for IcCanisterRuntime {
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError> {
         updates::update_balance::mint(amount, to, memo).await
+    }
+
+    async fn burn_ckbtc(
+        &self,
+        source: BurnSource,
+        amount: u64,
+        memo: Memo,
+    ) -> Result<u64, BurnCkbtcError> {
+        updates::retrieve_btc::burn_ckbtc(source, amount, memo).await
     }
 
     async fn sign_transaction(

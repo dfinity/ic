@@ -28,7 +28,7 @@ use ic_ckbtc_minter::{
     management::CallError,
     state::CkBtcMinterState,
     tx,
-    updates::retrieve_btc::BtcAddressCheckStatus,
+    updates::retrieve_btc::{BtcAddressCheckStatus, BurnCkbtcError, BurnSource},
 };
 pub use ic_ckbtc_minter::{
     MIN_RESUBMISSION_DELAY, OutPoint, Page, Txid, UTXOS_COUNT_THRESHOLD, Utxo,
@@ -109,6 +109,15 @@ impl CanisterRuntime for DogeCanisterRuntime {
         memo: Memo,
     ) -> Result<u64, UpdateBalanceError> {
         ic_ckbtc_minter::updates::update_balance::mint(amount, to, memo).await
+    }
+
+    async fn burn_ckbtc(
+        &self,
+        source: BurnSource,
+        amount: u64,
+        memo: Memo,
+    ) -> Result<u64, BurnCkbtcError> {
+        ic_ckbtc_minter::updates::retrieve_btc::burn_ckbtc(source, amount, memo).await
     }
 
     async fn sign_transaction(
