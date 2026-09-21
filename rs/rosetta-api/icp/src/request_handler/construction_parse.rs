@@ -668,26 +668,19 @@ fn refresh_voting_power(
 }
 #[cfg(test)]
 mod tests {
-    use ic_base_types::CanisterId;
     use proptest::{
         prop_assert, prop_assert_eq, proptest, strategy::Strategy, test_runner::TestCaseError,
     };
-    use rand_chacha::rand_core::OsRng;
-    use rosetta_core::metrics::RosettaMetrics;
-    use std::sync::Arc;
-    use std::sync::atomic::AtomicBool;
     use std::{str::FromStr, time::SystemTime};
-    use url::Url;
 
     use crate::{
-        ledger_client::LedgerClient,
         models::{
-            Amount, ConstructionCombineRequest, ConstructionDeriveRequest,
-            ConstructionParseRequest, ConstructionPayloadsRequest,
-            ConstructionPayloadsRequestMetadata, Currency, CurveType, NetworkIdentifier, Operation,
-            OperationIdentifier, PublicKey, Signature, SignatureType, operation::OperationType,
+            ConstructionCombineRequest, ConstructionParseRequest, ConstructionPayloadsRequest,
+            ConstructionPayloadsRequestMetadata, CurveType, PublicKey, Signature, SignatureType,
         },
-        request_handler::RosettaRequestHandler,
+        request_handler::tests::construction::{
+            setup_handler, setup_transfer_test, signed_disburse,
+        },
     };
     use rosetta_core::objects::ObjectMap;
 
@@ -844,128 +837,6 @@ mod tests {
         });
     }
 
-    /// Builds an offline-capable `RosettaRequestHandler` together with a signer
-    /// keypair, shared by the construction tests below.
-    fn setup_handler() -> (
-        RosettaRequestHandler,
-        NetworkIdentifier,
-        PublicKey,
-        ic_ed25519::PrivateKey,
-    ) {
-        let key = ic_ed25519::PrivateKey::generate_using_rng(&mut OsRng);
-        let ledger_client = futures::executor::block_on(LedgerClient::new(
-            Url::from_str("http://localhost:1234").unwrap(),
-            CanisterId::from_u64(1),
-            "TKN".into(),
-            CanisterId::from_u64(2),
-            None,
-            None,
-            true,
-            None,
-            false,
-            false, // optimize_search_indexes: disabled for tests
-        ))
-        .unwrap();
-        let mock_canister_id_hex = "00000000000000000101";
-        let initial_sync_complete = AtomicBool::new(true);
-        let handler = RosettaRequestHandler::new(
-            "Internet Computer".into(),
-            ledger_client.into(),
-            RosettaMetrics::new("TKN".into(), mock_canister_id_hex.into()),
-            Arc::new(initial_sync_complete),
-        );
-
-        let network_identifier = handler.network_id();
-        let pub_key = PublicKey {
-            hex_bytes: hex::encode(key.public_key().serialize_raw()),
-            curve_type: CurveType::Edwards25519,
-        };
-
-        (handler, network_identifier, pub_key, key)
-    }
-
-    /// Builds a handler together with a single ICP transfer (debit + credit +
-    /// fee) and the signer's public and private keys.
-    fn setup_transfer_test() -> (
-        RosettaRequestHandler,
-        NetworkIdentifier,
-        Vec<Operation>,
-        PublicKey,
-        ic_ed25519::PrivateKey,
-    ) {
-        let (handler, network_identifier, pub_key, key) = setup_handler();
-        let currency = Currency {
-            symbol: "TKN".into(),
-            decimals: 8,
-            metadata: None,
-        };
-
-        let account = handler
-            .construction_derive(ConstructionDeriveRequest {
-                network_identifier: network_identifier.clone(),
-                public_key: pub_key.clone(),
-                metadata: None,
-            })
-            .unwrap()
-            .account_identifier;
-
-        let operations = vec![
-            Operation {
-                operation_identifier: OperationIdentifier {
-                    index: 0,
-                    network_index: None,
-                },
-                related_operations: None,
-                type_: OperationType::Transaction.to_string(),
-                status: None,
-                account: account.clone(),
-                amount: Some(Amount {
-                    value: "-100000000".into(),
-                    currency: currency.clone(),
-                    metadata: None,
-                }),
-                coin_change: None,
-                metadata: None,
-            },
-            Operation {
-                operation_identifier: OperationIdentifier {
-                    index: 1,
-                    network_index: None,
-                },
-                related_operations: None,
-                type_: OperationType::Transaction.to_string(),
-                status: None,
-                account: account.clone(),
-                amount: Some(Amount {
-                    value: "100000000".into(),
-                    currency: currency.clone(),
-                    metadata: None,
-                }),
-                coin_change: None,
-                metadata: None,
-            },
-            Operation {
-                operation_identifier: OperationIdentifier {
-                    index: 2,
-                    network_index: None,
-                },
-                related_operations: None,
-                type_: OperationType::Fee.to_string(),
-                status: None,
-                account,
-                amount: Some(Amount {
-                    value: "-1000000".into(),
-                    currency,
-                    metadata: None,
-                }),
-                coin_change: None,
-                metadata: None,
-            },
-        ];
-
-        (handler, network_identifier, operations, pub_key, key)
-    }
-
     // When the caller does not specify a memo, `construction_payloads` uses a
     // deterministic memo of 0 instead of a random one. With the time-based
     // inputs pinned, reconstructing
@@ -1029,69 +900,6 @@ mod tests {
             .clone();
         assert_eq!(memo, serde_json::json!(0), "expected a memo of 0");
     }
-    /// Builds and genuinely signs a complete-stake `DISBURSE` of `neuron_index`
-    /// to a third party, returning the operations it represents along with the
-    /// unsigned and signed transactions.
-    fn signed_disburse(
-        handler: &RosettaRequestHandler,
-        network_identifier: &NetworkIdentifier,
-        pub_key: &PublicKey,
-        key: &ic_ed25519::PrivateKey,
-        neuron_index: u64,
-    ) -> (Vec<Operation>, String, String) {
-        use crate::{request::Request, request_types::Disburse};
-        use rosetta_core::convert::principal_id_from_public_key;
-
-        let account =
-            icp_ledger::AccountIdentifier::from(principal_id_from_public_key(pub_key).unwrap());
-        let operations = Request::requests_to_operations(
-            &[Request::Disburse(Disburse {
-                account,
-                amount: None,
-                recipient: Some(icp_ledger::AccountIdentifier::from(
-                    ic_types::PrincipalId::new_user_test_id(42),
-                )),
-                neuron_index,
-            })],
-            "TKN",
-        )
-        .unwrap();
-
-        let payloads = handler
-            .construction_payloads(ConstructionPayloadsRequest {
-                network_identifier: network_identifier.clone(),
-                operations: operations.clone(),
-                metadata: None,
-                public_keys: Some(vec![pub_key.clone()]),
-            })
-            .unwrap();
-
-        let signatures = payloads
-            .payloads
-            .into_iter()
-            .map(|payload| {
-                let bytes = hex::decode(payload.clone().hex_bytes).unwrap();
-                Signature {
-                    signing_payload: payload,
-                    public_key: pub_key.clone(),
-                    signature_type: SignatureType::Ed25519,
-                    hex_bytes: hex::encode(key.sign_message(&bytes)),
-                }
-            })
-            .collect();
-
-        let signed = handler
-            .construction_combine(ConstructionCombineRequest {
-                network_identifier: network_identifier.clone(),
-                unsigned_transaction: payloads.unsigned_transaction.clone(),
-                signatures,
-            })
-            .unwrap()
-            .signed_transaction;
-
-        (operations, payloads.unsigned_transaction, signed)
-    }
-
     /// Regression test for the construction flow's authenticated-data
     /// confusion: the outer `RequestType` is plain CBOR metadata that no
     /// signature covers, so rewriting its `neuron_index` used to make
