@@ -1425,6 +1425,24 @@ fn checkpoint_round_backfills_consumed_cycles_monotonic_of_paused_canister() {
         .build();
     let canister = test.create_canister();
 
+    // An ingress execution that runs to completion first, so that the canister has
+    // settled consumption for the backfill to recover: otherwise everything consumed
+    // would be outstanding, and a backfilled zero would be indistinguishable from the
+    // reset zero below.
+    test.send_ingress(canister, ingress(50));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        assert_consumed_cycles_invariant(&test, canister),
+        OutstandingPrepayments::default()
+    );
+    let settled = test
+        .canister_state(canister)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_monotonic();
+    assert_ne!(settled, NominalCycles::zero());
+
+    // Then one that runs past the slice limit and is paused.
     test.send_ingress(canister, ingress(1000));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     assert!(test.canister_state(canister).has_paused_execution());
@@ -1442,11 +1460,32 @@ fn checkpoint_round_backfills_consumed_cycles_monotonic_of_paused_canister() {
 
     test.execute_round(ExecutionRoundType::CheckpointRound);
 
-    assert!(test.canister_state(canister).has_aborted_execution());
+    let system_state = &test.canister_state(canister).system_state;
+    let Some(ExecutionTask::AbortedExecution {
+        input: CanisterMessageOrTask::Message(CanisterMessage::Ingress(_)),
+        prepaid_execution_cycles,
+    }) = system_state.task_queue.paused_or_aborted_task()
+    else {
+        panic!(
+            "Expected an aborted ingress execution, got {:?}",
+            system_state.task_queue.paused_or_aborted_task()
+        );
+    };
+    // The aborted execution's prepayment is outstanding, for `Instructions` only...
+    assert_ne!(prepaid_execution_cycles.nominal(), NominalCycles::zero());
     let outstanding = assert_consumed_cycles_invariant(&test, canister);
-    // The aborted execution's prepayment is outstanding, and is not part of the
-    // backfilled amounts.
-    assert_ne!(outstanding, OutstandingPrepayments::default());
+    assert_eq!(
+        outstanding,
+        OutstandingPrepayments {
+            instructions: prepaid_execution_cycles.nominal(),
+            transmission: NominalCycles::zero(),
+        }
+    );
+    // ...and is not part of the backfilled amount, which is exactly what was settled.
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles_monotonic(),
+        settled
+    );
 }
 
 /// A paused response execution is aborted before a checkpoint like any other, but
