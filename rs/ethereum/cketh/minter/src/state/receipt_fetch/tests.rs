@@ -222,6 +222,23 @@ mod cursor {
     }
 
     #[test]
+    fn should_take_the_whole_set_once_when_the_window_spans_it_from_a_cursor() {
+        let pending = pending(&[(1, 1), (2, 1), (3, 1)]);
+        let mut window = window_of(3);
+        window.cursor = Some(id(2));
+
+        let selected = window.select_next_round(&pending);
+
+        assert_eq!(ids_of(&selected), vec![id(1), id(2), id(3)]);
+        assert_eq!(
+            selected.len(),
+            pending.len(),
+            "a wrap across the whole set must take every transaction exactly once"
+        );
+        assert_eq!(window.cursor(), Some(id(2)));
+    }
+
+    #[test]
     fn should_leave_the_cursor_alone_on_a_round_that_selected_nothing() {
         let mut window = window_of(2);
         window.select_next_round(&pending(&[(1, 1), (2, 1)]));
