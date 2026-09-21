@@ -1369,6 +1369,61 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
+                // `stage="unsent"` and `stage="sent"` together are the unique pending nonces that
+                // `TransactionPipeline::requests_batch` caps at 1000: once the withdrawal pipeline
+                // reaches that cap it stops turning withdrawal requests into transactions at all,
+                // which is the boundary a prolonged finalization stall runs into.
+                w.gauge_vec(
+                    "cketh_minter_unfinalized_requests",
+                    "Requests the minter still owes a finalized transaction, by pipeline and by \
+                     the stage they have reached. Each request is counted once, at one stage only, \
+                     however many transactions have carried it: a withdrawal resubmitted at a \
+                     higher fee stays a single `sent` entry. `sent` is the backlog waiting for a \
+                     receipt and is the first thing to grow when finalization stalls. The \
+                     withdrawal pipeline also carries the minter's own sweeper-funding transfers, \
+                     of which at most one is outstanding at a time.",
+                )?
+                .value(
+                    &[("pipeline", "withdrawal"), ("stage", "queued")],
+                    s.withdrawal_transactions.requests_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "withdrawal"), ("stage", "unsent")],
+                    s.withdrawal_transactions.unsent_transactions_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "withdrawal"), ("stage", "sent")],
+                    s.withdrawal_transactions.sent_requests_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper"), ("stage", "queued")],
+                    s.automatic_deposits.queued_sweep_requests_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper"), ("stage", "unsent")],
+                    s.automatic_deposits.unsent_sweep_transactions_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper"), ("stage", "sent")],
+                    s.automatic_deposits.sent_sweep_requests_len() as f64,
+                )?;
+                w.gauge_vec(
+                    "cketh_minter_unfinalized_transactions",
+                    "Transactions behind the `sent` stage of `cketh_minter_unfinalized_requests`, \
+                     one per attempt: a request resubmitted at a higher fee contributes one \
+                     transaction, with its own hash, per fee bump. This, not the request count, is \
+                     how many receipts a finalization round fetches, so it is what drives the \
+                     HTTPS-outcall volume.",
+                )?
+                .value(
+                    &[("pipeline", "withdrawal")],
+                    s.withdrawal_transactions.sent_transactions_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper")],
+                    s.automatic_deposits.sent_sweep_transactions_len() as f64,
+                )?;
+
                 w.encode_gauge(
                     "cketh_minter_stored_attestations",
                     s.automatic_deposits.attestations_len() as f64,
