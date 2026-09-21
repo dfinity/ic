@@ -1569,6 +1569,17 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                             counters.failures as f64,
                         )?;
                 }
+                let mut abandoned_rounds = w.counter_vec(
+                    "cketh_minter_receipt_fetch_abandoned_rounds_total",
+                    "Rounds that threw away their receipts because two different receipts named \
+                     the same id. One id maps to one nonce, so no chain can mine two of its \
+                     transactions: anything above zero is an invariant breach, not an unhealthy \
+                     provider. Resets on upgrade.",
+                )?;
+                for (pipeline, counters) in receipt_fetch {
+                    abandoned_rounds = abandoned_rounds
+                        .value(&[("pipeline", pipeline)], counters.abandoned_rounds as f64)?;
+                }
                 let mut stalled_ids = w.counter_vec(
                     "cketh_minter_receipt_fetch_stalled_ids_total",
                     "Ids a round left pending because none of their transactions came back with a \

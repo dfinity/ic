@@ -62,6 +62,17 @@ mod adaptation {
     }
 
     #[test]
+    fn should_count_an_abandoned_round() {
+        let mut window = window_of(INITIAL_RECEIPT_FETCH_WINDOW);
+        let mut outcome = round(2, 0, 0);
+        outcome.abandon();
+
+        window.record_round(outcome);
+
+        assert_eq!(window.counters().abandoned_rounds, 1);
+    }
+
+    #[test]
     fn should_not_shrink_on_transactions_that_were_not_mined() {
         let mut window = window_of(INITIAL_RECEIPT_FETCH_WINDOW);
 
@@ -97,6 +108,7 @@ mod adaptation {
                 not_mined: 4,
                 failures: 6,
                 stalled_ids: 2,
+                abandoned_rounds: 0,
             }
         );
     }

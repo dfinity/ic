@@ -139,6 +139,7 @@ pub struct ReceiptFetchWindow<Id> {
     not_mined_total: u64,
     failures_total: u64,
     stalled_ids_total: u64,
+    abandoned_rounds_total: u64,
 }
 
 impl<Id> Default for ReceiptFetchWindow<Id> {
@@ -151,6 +152,7 @@ impl<Id> Default for ReceiptFetchWindow<Id> {
             not_mined_total: 0,
             failures_total: 0,
             stalled_ids_total: 0,
+            abandoned_rounds_total: 0,
         }
     }
 }
@@ -232,6 +234,9 @@ impl<Id: Copy + Ord> ReceiptFetchWindow<Id> {
         self.stalled_ids_total = self
             .stalled_ids_total
             .saturating_add(outcome.stalled_ids() as u64);
+        if outcome.is_abandoned() {
+            self.abandoned_rounds_total = self.abandoned_rounds_total.saturating_add(1);
+        }
         self.window = outcome.next_window(self.window);
     }
 
@@ -255,6 +260,7 @@ impl<Id: Copy + Ord> ReceiptFetchWindow<Id> {
             not_mined: self.not_mined_total,
             failures: self.failures_total,
             stalled_ids: self.stalled_ids_total,
+            abandoned_rounds: self.abandoned_rounds_total,
         }
     }
 }
@@ -272,6 +278,9 @@ pub struct ReceiptFetchCounters {
     /// Ids that a round left pending because none of their transactions came back with a receipt.
     /// Counted once per round, so an id that cannot be finalized keeps adding to it.
     pub stalled_ids: u64,
+    /// Rounds abandoned because two different receipts named the same id. No chain can produce
+    /// that, so anything above zero is an invariant breach rather than an unhealthy provider.
+    pub abandoned_rounds: u64,
 }
 
 /// The transactions of `pending` grouped by the id that sent them, so a round takes whole ids.
