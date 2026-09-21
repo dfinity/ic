@@ -339,8 +339,8 @@ impl CanisterManager {
     /// of this function in case of `Err`.
     ///
     /// `subnet_memory_saturation` is updated in-place to account for the bytes
-    /// allocated by applying the new settings, so that the caller can keep
-    /// reserving storage cycles at the post-update saturation.
+    /// allocated and deallocated by applying the new settings, so that the caller
+    /// can keep reserving storage cycles at the post-update saturation.
     ///
     /// If `metrics` is `Some`, a `log_memory_limit` resize that does real
     /// work (see `LogMemoryStore::would_resize`) is timed and recorded into
@@ -434,14 +434,17 @@ impl CanisterManager {
                 .cycles_account_manager
                 .management_canister_cost(log_resize_instructions, subnet_cycles_config);
             consumed_cycles.add(log_resize_cost, log_resize_instructions);
-            // Account the log's newly allocated bytes on the subnet memory
-            // saturation so that the subsequent memory-allocation reservation
-            // reserves at the post-resize saturation.
+            // Account the bytes the log resize allocated or deallocated on the
+            // subnet memory saturation so that the subsequent memory-allocation
+            // reservation reserves at the post-resize saturation.
             let memory_allocation = canister.memory_allocation();
-            let log_allocated_bytes = memory_allocation
-                .allocated_bytes(new_canister_memory_usage)
-                .saturating_sub(&memory_allocation.allocated_bytes(old_canister_memory_usage));
-            *subnet_memory_saturation = subnet_memory_saturation.add(log_allocated_bytes.get());
+            let old_allocated_bytes = memory_allocation.allocated_bytes(old_canister_memory_usage);
+            let new_allocated_bytes = memory_allocation.allocated_bytes(new_canister_memory_usage);
+            let log_allocated_bytes = new_allocated_bytes.saturating_sub(&old_allocated_bytes);
+            let log_deallocated_bytes = old_allocated_bytes.saturating_sub(&new_allocated_bytes);
+            *subnet_memory_saturation = subnet_memory_saturation
+                .add(log_allocated_bytes.get())
+                .sub(log_deallocated_bytes.get());
             let limit = requested_limit.get() as usize;
             let log_memory_store = &mut canister.system_state.log_memory_store;
             {
@@ -661,12 +664,13 @@ impl CanisterManager {
                         }
                     }
                 })?;
-            // Account the newly allocated bytes on the subnet memory saturation so
-            // that any subsequent reservation by the caller (e.g. for a canister
-            // history entry) reserves at the post-update saturation. Deallocated
-            // bytes are deliberately not subtracted: keeping the saturation at its
-            // high-water mark only ever over-reserves.
-            *subnet_memory_saturation = subnet_memory_saturation.add(allocated_bytes.get());
+            // Account the bytes the new memory allocation allocated or deallocated
+            // on the subnet memory saturation so that any subsequent reservation by
+            // the caller (e.g. for a canister history entry) reserves at the
+            // post-update saturation.
+            *subnet_memory_saturation = subnet_memory_saturation
+                .add(allocated_bytes.get())
+                .sub(deallocated_bytes.get());
         }
         // Controllers: validate count and apply (only at the end
         // so that cycles balance errors use the original controllers
@@ -2005,12 +2009,12 @@ impl CanisterManager {
     // for it over the true total memory usage.
     //
     // `resource_saturation` must be the subnet memory saturation *at the point of this
-    // call*, i.e. it must account for all bytes allocated since it was derived from
-    // `round_limits.subnet_available_memory`. Otherwise the storage reservation below
-    // would be computed at a stale (too low) saturation and under-reserve. Callers
-    // that allocate bytes before calling this function (in particular those calling it
-    // more than once) therefore have to account those bytes on the saturation, the way
-    // `validate_and_update_canister_settings` does.
+    // call*, i.e. it must account for all bytes allocated and deallocated since it was
+    // derived from `round_limits.subnet_available_memory`. Otherwise the storage
+    // reservation below would be computed at a stale saturation and under- or
+    // over-reserve. Callers that change the memory usage before calling this function
+    // (in particular those calling it more than once) therefore have to account those
+    // bytes on the saturation, the way `validate_and_update_canister_settings` does.
     fn cycles_and_memory_usage_checks_and_updates(
         &self,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,

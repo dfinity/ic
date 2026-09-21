@@ -95,6 +95,15 @@ impl ResourceSaturation {
             capacity: self.capacity,
         }
     }
+
+    /// Returns a new `ResourceSaturation` without the given usage.
+    pub fn sub(&self, usage: u64) -> Self {
+        Self {
+            usage: self.usage.saturating_sub(usage),
+            threshold: self.threshold,
+            capacity: self.capacity,
+        }
+    }
 }
 
 /// Encapsulates the payer and cost of inducting an ingress messages.

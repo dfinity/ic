@@ -1408,6 +1408,13 @@ fn scaling_of_resource_saturation() {
     let rs = ResourceSaturation::new(100, 100, 200);
     // The usage should be capped at the capacity.
     assert_eq!(1000, rs.add(200).reservation_factor(1000));
+
+    let rs = ResourceSaturation::new(150, 100, 200);
+    assert_eq!(250, rs.sub(25).reservation_factor(1000));
+
+    let rs = ResourceSaturation::new(150, 100, 200);
+    // The usage should be capped at zero.
+    assert_eq!(0, rs.sub(1000).reservation_factor(1000));
 }
 
 #[test]

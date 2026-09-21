@@ -4843,6 +4843,91 @@ fn update_settings_reserves_cycles_at_up_to_date_saturation() {
     });
 }
 
+/// The deallocating counterpart of the two tests above: a `log_memory_limit`
+/// shrink in the same `update_settings` call has to lower the saturation at which
+/// the memory allocation and the canister history entry recorded afterwards
+/// reserve cycles.
+#[test]
+fn update_settings_reserves_cycles_at_saturation_lowered_by_deallocation() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(SATURATION_CAPACITY)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(SATURATION_THRESHOLD)
+        .with_resource_saturation_scaling(1)
+        .build();
+
+    // Push the subnet memory usage above the threshold at which cycles are reserved.
+    test.create_canister_with_allocation(SATURATION_CYCLES, None, Some(SATURATION_THRESHOLD))
+        .unwrap();
+
+    // Create the canister to update with a log memory store for the update to
+    // deallocate.
+    let canister_id = test
+        .create_canister_with_settings(
+            SATURATION_CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_memory_limit(SATURATION_LOG_MEMORY_LIMIT)
+                .with_reserved_cycles_limit(SATURATION_CYCLES.get())
+                .build(),
+        )
+        .unwrap();
+    let reserved_before = test
+        .canister_state(canister_id)
+        .system_state
+        .reserved_balance();
+    let subnet_memory_usage_before = saturation_subnet_memory_usage(&test);
+
+    // The update below drops the log memory store, so the memory usage after the
+    // resize is the current memory usage without it. Requesting one byte more than
+    // that as the memory allocation makes both the memory allocation and the
+    // canister history entry recorded afterwards allocate bytes, at a saturation
+    // that the dropped log memory store lowered.
+    let canister = test.canister_state(canister_id);
+    let memory_usage_after_resize =
+        canister.memory_usage() - canister.log_memory_store_memory_usage();
+    let memory_allocation = memory_usage_after_resize + NumBytes::new(1);
+    test.update_settings(
+        canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(0)
+            .with_memory_allocation(memory_allocation.get())
+            .with_controllers((0..10).map(PrincipalId::new_user_test_id).collect())
+            .build(),
+    )
+    .unwrap();
+
+    // The canister history entry outgrew the memory allocation, and the update
+    // freed more memory than it allocated.
+    let memory_usage = test.canister_state(canister_id).memory_usage();
+    assert_gt!(memory_usage, memory_allocation);
+    let subnet_memory_usage = saturation_subnet_memory_usage(&test);
+    assert_lt!(subnet_memory_usage, subnet_memory_usage_before);
+
+    // The memory allocation and the canister history entry together allocated the
+    // bytes by which the memory usage grew past the resize, and both must be
+    // reserved for at the saturation left behind by the deallocation, i.e. the one
+    // reached by undoing those bytes.
+    let allocated_bytes = memory_usage - memory_usage_after_resize;
+    assert_gt!(allocated_bytes.get(), 1);
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .reserved_balance()
+            - reserved_before,
+        test.cycles_account_manager()
+            .storage_reservation_cycles(
+                allocated_bytes,
+                &ResourceSaturation::new(
+                    subnet_memory_usage - allocated_bytes.get(),
+                    SATURATION_THRESHOLD,
+                    SATURATION_CAPACITY
+                ),
+                test.get_own_subnet_cycles_config(),
+            )
+            .real()
+    );
+}
+
 #[test]
 fn update_settings_can_set_reserved_cycles_limit() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
