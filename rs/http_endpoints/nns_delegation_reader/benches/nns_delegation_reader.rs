@@ -1,113 +1,80 @@
-use std::collections::BTreeMap;
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use ic_crypto_tree_hash::{LabeledTree, lookup_path};
+use ic_crypto_tree_hash::LabeledTree;
 use ic_logger::no_op_logger;
-use ic_nns_delegation_reader::{CanisterRangesCheck, CanisterRangesFilter, NNSDelegationBuilder};
+use ic_nns_delegation_reader::{CanisterRangesFilter, NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_delegation_reader_test_utils::create_fake_certificate_delegation;
-use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::ids::SUBNET_0;
 use ic_types::{
     CanisterId,
     messages::{Blob, Certificate},
 };
+use tokio::sync::watch;
 
-fn build_delegation_verify_all_subnet_ranges(criterion: &mut Criterion) {
-    build_delegation_bench(
+fn get_delegation_with_flat_canister_ranges(criterion: &mut Criterion) {
+    get_delegation_bench(
         criterion,
-        CanisterRangesCheck::AllSubnetRanges,
-        "build_delegation_verify_all_subnet_ranges",
+        CanisterRangesFilter::Flat,
+        "get_delegation_with_flat_canister_ranges",
     );
 }
 
-fn build_delegation_verify_canister_in_flat(criterion: &mut Criterion) {
-    build_delegation_bench(
+fn get_delegation_without_canister_ranges(criterion: &mut Criterion) {
+    get_delegation_bench(
         criterion,
-        CanisterRangesCheck::CanisterInFlat(CanisterId::from(42)),
-        "build_delegation_verify_canister_in_flat",
+        CanisterRangesFilter::None,
+        "get_delegation_without_canister_ranges",
     );
 }
 
-fn build_delegation_verify_canister_in_tree(criterion: &mut Criterion) {
-    build_delegation_bench(
+fn get_delegation_with_tree_canister_ranges(criterion: &mut Criterion) {
+    get_delegation_bench(
         criterion,
-        CanisterRangesCheck::CanisterInTree(CanisterId::from(42)),
-        "build_delegation_verify_canister_in_tree",
+        CanisterRangesFilter::Tree(CanisterId::from(42)),
+        "get_delegation_with_tree_canister_ranges",
     );
 }
 
-fn build_delegation_no_ranges_check(criterion: &mut Criterion) {
-    build_delegation_bench(
-        criterion,
-        CanisterRangesCheck::NoCheck(CanisterRangesFilter::None),
-        "build_delegation_no_ranges_check",
-    );
-}
-
-fn build_delegation_bench(
+fn get_delegation_bench(
     criterion: &mut Criterion,
-    ranges_check: CanisterRangesCheck,
+    canister_ranges_filter: CanisterRangesFilter,
     group_name: &str,
 ) {
     let mut group = criterion.benchmark_group(group_name);
 
     let mut bench_function = |canister_id_ranges_count| {
         let canister_id_ranges = (0..canister_id_ranges_count)
-            // Leaving gaps on purpose between ranges to simulate a fragmented routing table
-            .map(|i| (CanisterId::from(3 * i), CanisterId::from(3 * i + 1)))
+            .map(|i| (CanisterId::from(2 * i), CanisterId::from(2 * i + 1)))
             .collect();
         let (delegation, _root_public_key) =
             create_fake_certificate_delegation(&canister_id_ranges, SUBNET_0);
         let certificate: Certificate = serde_cbor::from_slice(&delegation.certificate).unwrap();
-        let labeled_tree = LabeledTree::try_from(certificate.tree.clone()).unwrap();
-        // Extract the public key certified in the delegation so that the verification performed by
-        // `build_verified` succeeds
-        let certified_public_key = match lookup_path(
-            &labeled_tree,
-            &[b"subnet", SUBNET_0.get().as_ref(), b"public_key"],
-        ) {
-            Some(LabeledTree::Leaf(public_key)) => public_key.clone(),
-            _ => panic!("The fake delegation should certify a public key"),
-        };
-        let routing_table = canister_id_ranges
-            .into_iter()
-            .map(|(start, end)| (CanisterIdRange { start, end }, SUBNET_0))
-            .collect::<BTreeMap<_, _>>()
-            .try_into()
-            .unwrap();
-
         let builder = NNSDelegationBuilder::new(
-            certificate,
-            labeled_tree,
+            certificate.clone(),
+            LabeledTree::try_from(certificate.tree.clone()).unwrap(),
             Blob(vec![]),
             SUBNET_0,
             &no_op_logger(),
         );
+        let (_sender, receiver) = watch::channel(Some(builder));
 
-        let build_verified = || {
-            builder
-                .build_verified(
-                    ranges_check,
-                    &routing_table,
-                    |_subnet_id| {
-                        Some(&certified_public_key)
-                    },
-                    &no_op_logger(),
-                )
-                .unwrap_or_else(|err| panic!("Failed to build verified delegation (ranges check: {ranges_check:?}): {err:?}"))
-        };
+        let reader = NNSDelegationReader::new(receiver, no_op_logger());
 
         println!(
             "The delegation size in bytes with {} canister ranges: {}",
             canister_id_ranges_count,
-            build_verified().certificate.len()
+            reader
+                .get_delegation(canister_ranges_filter)
+                .expect("We just set a delegation above")
+                .certificate
+                .len()
         );
 
         group.bench_function(
             format!("{canister_id_ranges_count}_canister_id_ranges"),
             |bencher| {
-                bencher.iter(|| black_box(build_verified()));
+                bencher.iter(|| black_box(reader.get_delegation(canister_ranges_filter)));
             },
         );
     };
@@ -117,12 +84,34 @@ fn build_delegation_bench(
     bench_function(120_000);
 }
 
+fn get_delegation_on_nns(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("get_delegation_on_nns");
+
+    // On NNS there is no delegation
+    let (_, rx) = watch::channel(None);
+    let reader = NNSDelegationReader::new(rx, no_op_logger());
+
+    group.bench_function("tree", |bencher| {
+        bencher.iter(|| {
+            black_box(reader.get_delegation(CanisterRangesFilter::Tree(CanisterId::from(0))))
+        });
+    });
+
+    group.bench_function("flat", |bencher| {
+        bencher.iter(|| black_box(reader.get_delegation(CanisterRangesFilter::Flat)));
+    });
+
+    group.bench_function("none", |bencher| {
+        bencher.iter(|| black_box(reader.get_delegation(CanisterRangesFilter::None)));
+    });
+}
+
 criterion_group!(
     benches,
-    build_delegation_verify_all_subnet_ranges,
-    build_delegation_verify_canister_in_flat,
-    build_delegation_verify_canister_in_tree,
-    build_delegation_no_ranges_check,
+    get_delegation_with_flat_canister_ranges,
+    get_delegation_without_canister_ranges,
+    get_delegation_with_tree_canister_ranges,
+    get_delegation_on_nns,
 );
 
 criterion_main!(benches);
