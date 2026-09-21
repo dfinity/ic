@@ -8,6 +8,10 @@
 //! when they all do, since a total failure is binary and shrinking gradually only spends more
 //! doomed lookups on the way down.
 //!
+//! The window counts **ids**, not lookups: an id resubmitted at a higher gas price spans several
+//! transaction hashes, and a round looks up every one of them, so a round of N ids makes N times
+//! the variants per id lookups.
+//!
 //! The pending set is keyed by transaction hash, so its iteration order is arbitrary but stable.
 //! Fetching its first ids every round would retry the same arbitrary subset forever, and anything
 //! behind an id that cannot be finalized would never be attempted at all. The window therefore

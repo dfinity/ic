@@ -1523,8 +1523,10 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 w.gauge_vec(
                     "cketh_minter_receipt_fetch_window",
                     "How many pipeline ids the next finalization round fetches transaction \
-                     receipts for, per pipeline. Doubles while no lookup fails and shrinks when \
-                     they do, so a sustained low value means the providers are failing.",
+                     receipts for, per pipeline. An id resubmitted at a higher gas price is \
+                     looked up once per variant, so the round's lookups are a multiple of this. \
+                     Doubles while no lookup fails and shrinks when they do, so a sustained low \
+                     value means the providers are failing.",
                 )?
                 .value(
                     &[("pipeline", "withdrawal")],
@@ -1536,9 +1538,10 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
                 w.gauge_vec(
                     "cketh_minter_receipt_fetch_rounds_without_reads",
-                    "Consecutive finalization rounds that could not make a single receipt lookup, \
-                     because the transaction count they start from did not come back. Past a few \
-                     of them the pipeline starts skipping rounds.",
+                    "Consecutive finalization rounds that made no receipt lookup, either because \
+                     the transaction count they start from did not come back or because they \
+                     were skipped over. Past a few of them the pipeline starts skipping rounds, \
+                     and only a round that reads the chain again clears this.",
                 )?
                 .value(
                     &[("pipeline", "withdrawal")],
