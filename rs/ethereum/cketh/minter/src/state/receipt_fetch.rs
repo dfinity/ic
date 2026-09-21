@@ -189,20 +189,16 @@ impl<Id: Copy + Ord> ReceiptFetchWindow<Id> {
             .collect()
     }
 
-    /// Whether this round should skip its receipt fetch altogether, counting it as one more round
-    /// that read nothing.
+    /// Whether this round should skip its receipt fetch altogether. A skipped round reads nothing,
+    /// so the caller records it as such, which is what makes the next attempt come round.
     ///
     /// Deliberately not a general backoff: it only keeps a pipeline that cannot even reach its
     /// receipt lookups — so has no failures to shrink its window with — from re-running at full
     /// cadence forever.
-    pub fn skip_round(&mut self) -> bool {
-        let skip = self.rounds_without_reads >= ROUNDS_WITHOUT_READS_BEFORE_SKIPPING
+    pub fn should_skip_round(&self) -> bool {
+        self.rounds_without_reads >= ROUNDS_WITHOUT_READS_BEFORE_SKIPPING
             && !(self.rounds_without_reads - ROUNDS_WITHOUT_READS_BEFORE_SKIPPING)
-                .is_multiple_of(ROUNDS_PER_ATTEMPT_WHILE_SKIPPING);
-        if skip {
-            self.record_round_without_reads();
-        }
-        skip
+                .is_multiple_of(ROUNDS_PER_ATTEMPT_WHILE_SKIPPING)
     }
 
     /// Records a round that could not make a single receipt lookup, because the chain read the

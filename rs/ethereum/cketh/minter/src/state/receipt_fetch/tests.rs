@@ -240,10 +240,10 @@ mod skipping {
         let mut window = ReceiptFetchWindow::<LedgerBurnIndex>::default();
 
         for _ in 0..ROUNDS_WITHOUT_READS_BEFORE_SKIPPING {
-            assert!(!window.skip_round());
+            assert!(!skip_round(&mut window));
             window.record_round_without_reads();
         }
-        assert!(!window.skip_round());
+        assert!(!skip_round(&mut window));
     }
 
     #[test]
@@ -256,7 +256,7 @@ mod skipping {
         let mut attempted = 0;
         let rounds = 4 * ROUNDS_PER_ATTEMPT_WHILE_SKIPPING;
         for _ in 0..rounds {
-            if !window.skip_round() {
+            if !skip_round(&mut window) {
                 attempted += 1;
                 window.record_round_without_reads();
             }
@@ -271,12 +271,21 @@ mod skipping {
         for _ in 0..10 * ROUNDS_WITHOUT_READS_BEFORE_SKIPPING {
             window.record_round_without_reads();
         }
-        assert!(window.skip_round());
+        assert!(skip_round(&mut window));
 
         window.record_round(RoundOutcome::default());
 
         assert_eq!(window.rounds_without_reads(), 0);
-        assert!(!window.skip_round());
+        assert!(!skip_round(&mut window));
+    }
+
+    /// One round as its caller drives it: a skipped round is one more round that read nothing.
+    fn skip_round(window: &mut ReceiptFetchWindow<LedgerBurnIndex>) -> bool {
+        let skip = window.should_skip_round();
+        if skip {
+            window.record_round_without_reads();
+        }
+        skip
     }
 }
 

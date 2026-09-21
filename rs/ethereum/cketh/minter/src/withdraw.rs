@@ -475,8 +475,12 @@ pub(crate) async fn fetch_receipts_for_round<Id: Copy + Ord + std::fmt::Debug>(
     window: fn(&mut State) -> &mut ReceiptFetchWindow<Id>,
 ) -> BTreeMap<Id, EvmTransactionReceipt> {
     let skipped = mutate_state(|s| {
-        let window = window(s);
-        window.skip_round().then(|| window.rounds_without_reads())
+        let pipeline = window(s);
+        if !pipeline.should_skip_round() {
+            return None;
+        }
+        pipeline.record_round_without_reads();
+        Some(pipeline.rounds_without_reads())
     });
     if let Some(rounds_without_reads) = skipped {
         log!(
