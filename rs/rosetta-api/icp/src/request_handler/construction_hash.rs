@@ -22,10 +22,10 @@ impl RosettaRequestHandler {
                 .rev()
                 .find(|(rt, _)| rt.is_transfer())
         {
-            TransactionIdentifier::try_from_envelope(
-                request_type.clone(),
-                &envelope_pairs[0].update,
-            )
+            let envelope = envelope_pairs.first().ok_or_else(|| {
+                ApiError::invalid_transaction("A request carries no envelope to hash.")
+            })?;
+            TransactionIdentifier::try_from_envelope(request_type.clone(), &envelope.update)
         } else if signed_transaction
             .requests
             .iter()
@@ -44,5 +44,32 @@ impl RosettaRequestHandler {
             transaction_identifier: transaction_identifier.into(),
             metadata: Map::new(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        models::{ConstructionHashRequest, SignedTransaction},
+        request_handler::tests::construction::setup_handler,
+        request_types::RequestType,
+    };
+
+    /// A signed transaction is attacker-supplied, and nothing requires a
+    /// request in it to carry any envelope at all. Hashing the first one must
+    /// therefore not assume there is one.
+    #[test]
+    fn a_request_without_envelopes_is_rejected() {
+        let (handler, network_identifier, _pub_key, _key) = setup_handler();
+        let transaction = SignedTransaction {
+            requests: vec![(RequestType::Send, vec![])],
+        };
+
+        handler
+            .construction_hash(ConstructionHashRequest {
+                network_identifier,
+                signed_transaction: transaction.to_string(),
+            })
+            .expect_err("a request without envelopes has no hash");
     }
 }
