@@ -368,11 +368,12 @@ fn deliver_batches(
 /// Extracts from a data payload everything needed to deliver it as a batch, in the order returned:
 ///
 /// - The [`BatchMessages`] of the batch payload.
-/// - The responses to the system calls that are redirected to consensus. There are three types of
+/// - The responses to the system calls that are redirected to consensus. There are four types of
 ///   calls being handled here:
-///   - Initial NiDKG transcript creation.
-///   - Canister threshold signature creation.
-///   - CanisterHttpResponse handling, i.e. responses to canister http requests.
+///   - Creation of initial NiDKG transcripts
+///   - Resharing of IDKG transcripts
+///   - HTTP outcalls
+///   - Threshold signatures
 /// - The amount of cycles spent on HTTP outcalls as part of the batch.
 fn get_messages_responses_and_http_spent(
     data_payload: &DataPayload,
