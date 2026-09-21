@@ -9538,7 +9538,7 @@ fn take_canister_snapshot_of_frozen_canister_fails_for_free() {
     test.subnet_message(Method::UpdateSettings, payload)
         .unwrap();
 
-    // The frozen canister cannot account for the memory of the snapshot.
+    // The frozen canister cannot pay for the instructions of taking the snapshot.
     let args = TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     let balance_before = test.canister_state(canister_id).system_state.balance();
     let err = test
@@ -9546,9 +9546,9 @@ fn take_canister_snapshot_of_frozen_canister_fails_for_free() {
         .unwrap_err();
     let balance_after = test.canister_state(canister_id).system_state.balance();
 
-    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
-    // The instructions of taking a snapshot are only charged for once the
-    // operation succeeded, so the canister is not charged at all.
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+    // The canister is restored on error, so the failed operation does not cost
+    // the canister anything.
     assert_eq!(balance_before, balance_after);
     assert_eq!(test.canister_state(canister_id).canister_snapshots.len(), 0);
 }
