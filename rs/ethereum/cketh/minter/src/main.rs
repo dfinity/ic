@@ -1411,9 +1411,10 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_unfinalized_transactions",
                     "Transactions behind the `sent` stage of `cketh_minter_unfinalized_requests`, \
                      one per attempt: a request resubmitted at a higher fee contributes one \
-                     transaction, with its own hash, per fee bump. This, not the request count, is \
-                     how many receipts a finalization round fetches, so it is what drives the \
-                     HTTPS-outcall volume.",
+                     transaction, with its own hash, per fee bump. An upper bound on the receipts \
+                     a finalization round fetches, and so on the HTTPS-outcall volume \
+                     finalization costs: a round only asks about transactions whose nonce is \
+                     already below the finalized transaction count.",
                 )?
                 .value(
                     &[("pipeline", "withdrawal")],

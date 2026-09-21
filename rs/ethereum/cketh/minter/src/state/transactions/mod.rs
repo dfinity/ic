@@ -938,8 +938,11 @@ where
     }
 
     /// The transactions behind [`Self::sent_requests_len`], one per attempt: a request resubmitted
-    /// at a higher fee contributes one transaction per fee bump, each with its own hash, and a
-    /// finalization round asks for a receipt for every one of them.
+    /// at a higher fee contributes one transaction per fee bump, each with its own hash.
+    ///
+    /// An upper bound on the receipts a finalization round fetches, not the number it fetches:
+    /// [`Self::sent_transactions_to_finalize`] keeps only the transactions whose nonce is already
+    /// below the finalized transaction count, so a round asks about a subset of these.
     pub fn sent_transactions_len(&self) -> usize {
         self.sent_tx
             .iter()

@@ -2585,7 +2585,22 @@ mod unfinalized_request_counts {
             transactions
                 .sent_transactions_to_finalize(&TransactionCount::TWO)
                 .len(),
-            "the transaction count is exactly the hashes a finalization round fetches receipts for"
+            "no two attempts collide on a hash, so once every nonce has finalized the two agree"
+        );
+        assert_eq!(
+            transactions
+                .sent_transactions_to_finalize(&TransactionCount::ONE)
+                .len(),
+            3,
+            "a round asks only about the transactions whose nonce is below the finalized \
+             transaction count, here the three attempts of the first withdrawal"
+        );
+        assert!(
+            transactions
+                .sent_transactions_to_finalize(&TransactionCount::ONE)
+                .len()
+                < transactions.sent_transactions_len(),
+            "the transaction count bounds what a round fetches from above, it is not what it fetches"
         );
     }
 
