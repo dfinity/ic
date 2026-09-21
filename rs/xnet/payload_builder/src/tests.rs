@@ -983,6 +983,15 @@ async fn handle_advert_actionable() {
             Some((Arc::new(header), CERTIFIED_HEIGHT)),
             recorded_peer_header(&pool)
         );
+
+        // Redundant copies of the same advert are classified as duplicates
+        // and not verified again.
+        for _ in 0..2 {
+            assert_matches!(
+                payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+                Ok(XNetAdvertOutcome::Duplicate)
+            );
+        }
     });
 }
 
@@ -1011,6 +1020,8 @@ async fn handle_advert_in_payload() {
             payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
             Ok(XNetAdvertOutcome::InPayload)
         );
+        // The advertised header was not (verified and) recorded.
+        assert_eq!(None, recorded_peer_header(&pool));
     });
 }
 
@@ -1078,31 +1089,6 @@ async fn handle_advert_duplicate_content() {
     });
 }
 
-/// The redundant copies of an actionable advert, from the source subnet's other
-/// nodes, are classified as duplicates and verified only once.
-#[tokio::test]
-async fn handle_advert_redundant_copies() {
-    with_test_replica_logger(|log| {
-        let advertised = generate_stream(&StreamConfig {
-            message_begin: OWN_SIGNALS_END,
-            message_end: OWN_SIGNALS_END + 4,
-            signal_end: OWN_MESSAGES_BEGIN,
-        });
-        let (payload_builder, _pool) = advert_handler_and_pool(advert_store(&advertised, 1), log);
-
-        assert_matches!(
-            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
-            Ok(XNetAdvertOutcome::Actionable)
-        );
-        for _ in 0..2 {
-            assert_matches!(
-                payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
-                Ok(XNetAdvertOutcome::Duplicate)
-            );
-        }
-    });
-}
-
 /// An advert offering nothing we do not already have is answered with our own
 /// certified header, so its sender can observe our stream's `begin`.
 #[tokio::test]
@@ -1130,13 +1116,22 @@ async fn handle_advert_nothing_new() {
         let expected_reply = own_header.clone();
         store
             .expect_encode_certified_stream_slice()
-            .returning(move |_, _, _, _, _| Ok(own_header.clone()));
-        let (payload_builder, _pool) = advert_handler_and_pool(store, log);
+            .times(2)
+            .returning(move |_, _, _, msg_limit, _| {
+                assert_eq!(msg_limit, Some(0));
+                Ok(own_header.clone())
+            });
+        let (payload_builder, pool) = advert_handler_and_pool(store, log);
 
         for _ in 0..2 {
             assert_matches!(
                 payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
                 Ok(XNetAdvertOutcome::NothingNew)
+            );
+            // Advertised header was recorded regardless.
+            assert_eq!(
+                Some((Arc::new(advertised.header()), CERTIFIED_HEIGHT)),
+                recorded_peer_header(&pool)
             );
             assert_eq!(
                 Some(expected_reply.clone()),
@@ -1199,7 +1194,7 @@ async fn handle_advert_collecting_reject_signal() {
 /// An advert offering new content whose certification does not verify is
 /// rejected and not recorded.
 #[tokio::test]
-async fn handle_advert_invalid() {
+async fn handle_advert_invalid_signature() {
     with_test_replica_logger(|log| {
         let advertised = generate_stream(&StreamConfig {
             message_begin: OWN_SIGNALS_END,
@@ -1215,7 +1210,7 @@ async fn handle_advert_invalid() {
 
         assert_matches!(
             payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
-            Err(XNetAdvertError::Invalid(_))
+            Err(XNetAdvertError::InvalidSignature)
         );
         assert_eq!(None, recorded_peer_header(&pool));
     });

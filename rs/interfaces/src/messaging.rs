@@ -168,14 +168,17 @@ impl XNetAdvertOutcome {
 #[derive(Debug)]
 pub enum XNetAdvertError {
     /// Could not be decoded, or its certification could not be verified.
-    Invalid(String),
+    DecodeError(String),
+    /// Invalid signature.
+    InvalidSignature,
 }
 
 impl XNetAdvertError {
     /// A short, stable name for the error, for use e.g. as a metric label.
     pub fn as_str(&self) -> &'static str {
         match self {
-            XNetAdvertError::Invalid(_) => "invalid",
+            XNetAdvertError::DecodeError(_) => "decode_error",
+            XNetAdvertError::InvalidSignature => "invalid_signature",
         }
     }
 }

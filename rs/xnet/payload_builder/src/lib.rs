@@ -30,7 +30,9 @@ use ic_interfaces::messaging::{
     XNetPayloadValidationError, XNetPayloadValidationFailure,
 };
 use ic_interfaces::validation::ValidationError;
-use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
+use ic_interfaces_certified_stream_store::{
+    CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
@@ -150,8 +152,8 @@ pub trait XNetSlicePool: Send + Sync {
         have_reject_signal_between: &dyn Fn(StreamIndex, StreamIndex) -> bool,
     ) -> XNetAdvertOutcome;
 
-    /// Records the header as the peer's high-water-mark header, unless one with
-    /// a greater certified height is already on record.
+    /// Records a verified header as the peer's high-water-mark header, unless one
+    /// with a greater certified height is already on record.
     fn record_peer_header(
         &self,
         subnet_id: SubnetId,
@@ -1431,7 +1433,7 @@ impl XNetAdvertHandler for XNetPayloadBuilderImpl {
         // Decode without verifying: classifying the claimed header is cheap, and the
         // outcomes that do not act (due to no new content) don't need verification.
         let claimed = decode_slice_header(&advert.payload)
-            .map_err(|err| XNetAdvertError::Invalid(err.to_string()))?;
+            .map_err(|err| XNetAdvertError::DecodeError(err.to_string()))?;
         let outcome = self.classify_advert(source_subnet, &claimed);
         match outcome {
             // Valid or not, there is nothing for us to see here.
@@ -1453,7 +1455,10 @@ impl XNetAdvertHandler for XNetPayloadBuilderImpl {
         let slice = self
             .certified_stream_store
             .decode_certified_stream_slice(source_subnet, registry_version, &advert)
-            .map_err(|err| XNetAdvertError::Invalid(err.to_string()))?;
+            .map_err(|err| match err {
+                DecodeStreamError::InvalidSignature(_) => XNetAdvertError::InvalidSignature,
+                _ => XNetAdvertError::DecodeError(err.to_string()),
+            })?;
         debug_assert_eq!(slice.header(), &claimed, "Inconsistent slice decoding");
 
         // Record every verified peer header: it is our record of how far the peer has
