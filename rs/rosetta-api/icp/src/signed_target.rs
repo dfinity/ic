@@ -16,9 +16,12 @@
 //! `DISBURSE_MATURITY` the neuron index is the only field indicating how much
 //! value moves.
 //!
-//! A transfer has the same problem in a smaller way: it is reported in the
+//! A transfer has the same problem in a smaller way. It is reported in the
 //! token of the ledger this Rosetta instance serves, so a `send_pb` update
-//! addressed to some other ledger would be described in the wrong currency.
+//! addressed to some other ledger would be described in the wrong currency;
+//! and it is reported as debiting the sender's default account, so one that
+//! draws on a subaccount would be described as coming from somewhere it does
+//! not.
 //!
 //! [`verify_signed_target`] closes that gap. It is shared by
 //! `/construction/parse`, `/construction/hash` and the submit path's `Request`
@@ -133,7 +136,22 @@ pub fn verify_signed_target(
     match request_type {
         RequestType::Send => {
             verify_canister(update, ledger_canister_id, "A transfer")?;
-            verify_method_name(update, SEND_PB)
+            verify_method_name(update, SEND_PB)?;
+            // The ledger debits `AccountIdentifier::new(sender, from_subaccount)`,
+            // but both reconstruction paths report the debit against the
+            // sender's default account, so a transfer out of a subaccount would
+            // be displayed as coming from somewhere it does not.
+            // `/construction/payloads` only ever leaves this unset.
+            let args = convert::from_arg(update.arg.0.clone())?;
+            if args.from_subaccount.is_some() {
+                return Err(ApiError::invalid_request(
+                    "The signed transfer draws on a subaccount of the sender, but \
+                     Rosetta would display it as debiting the sender's default \
+                     account. Refusing to name an account other than the one being \
+                     debited.",
+                ));
+            }
+            Ok(())
         }
 
         RequestType::Stake { neuron_index } => {
@@ -765,6 +783,35 @@ mod tests {
         // The amount and the recipient are signed, but the token they are
         // denominated in follows from the ledger being called.
         verify(&RequestType::Send, &send(CanisterId::from_u64(99))).unwrap_err();
+    }
+
+    #[test]
+    fn a_transfer_out_of_a_subaccount_is_rejected() {
+        let send = |from_subaccount| HttpCanisterUpdate {
+            canister_id: Blob(ledger().get().to_vec()),
+            method_name: SEND_PB.to_string(),
+            arg: Blob(convert::to_arg(icp_ledger::SendArgs {
+                memo: icp_ledger::Memo(0),
+                amount: icp_ledger::Tokens::from_e8s(100_000_000),
+                fee: icp_ledger::Tokens::from_e8s(10_000),
+                from_subaccount,
+                to: icp_ledger::AccountIdentifier::from(PrincipalId::new_user_test_id(2)),
+                created_at_time: None,
+            })),
+            nonce: None,
+            sender: Blob(controller().into_vec()),
+            ingress_expiry: 0,
+            sender_info: None,
+        };
+
+        verify(&RequestType::Send, &send(None)).unwrap();
+        // The ledger would debit a subaccount of the sender, but the operations
+        // name the sender's default account.
+        verify(
+            &RequestType::Send,
+            &send(Some(icp_ledger::Subaccount([1; 32]))),
+        )
+        .unwrap_err();
     }
 
     #[test]
