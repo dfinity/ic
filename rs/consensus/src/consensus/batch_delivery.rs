@@ -332,8 +332,6 @@ fn deliver_batches(
             failed_blockmakers: blockmaker_ranking[0..(block.rank.0 as usize)].to_vec(),
         };
 
-        let randomness = randomness_from_crypto_hashable(&tape);
-
         let next_checkpoint_height = dkg_summary.get_next_start_height();
         let current_interval_length = dkg_summary.interval_length;
         let batch = Batch {
@@ -343,7 +341,7 @@ fn deliver_batches(
                 current_interval_length,
             }),
             content: batch_content,
-            randomness,
+            randomness: randomness_from_crypto_hashable(&tape),
             registry_version: block.context.registry_version,
             time: block.context.time,
             blockmaker_metrics: Some(blockmaker_metrics),
