@@ -176,6 +176,27 @@ impl AutomaticDeposits {
             .sent_transactions_to_finalize(finalized_transaction_count)
     }
 
+    /// Sweeps queued on the sweeper pipeline, i.e. with no transaction created for them yet.
+    pub fn queued_sweep_requests_len(&self) -> usize {
+        self.sweeper_transactions.requests_len()
+    }
+
+    /// Sweeps whose transaction has been created but not sent yet.
+    pub fn unsent_sweep_transactions_len(&self) -> usize {
+        self.sweeper_transactions.unsent_transactions_len()
+    }
+
+    /// Sweeps whose transaction has been sent and is still waiting for a receipt, counted once
+    /// per sweep however many times it was resubmitted.
+    pub fn sent_sweep_requests_len(&self) -> usize {
+        self.sweeper_transactions.sent_requests_len()
+    }
+
+    /// The transactions those sweeps are spread over, one per fee bump.
+    pub fn sent_sweep_transactions_len(&self) -> usize {
+        self.sweeper_transactions.sent_transactions_len()
+    }
+
     pub fn record_sweep_request(&mut self, request: SweepRequest) {
         self.sweeper_transactions.record_request(request)
     }

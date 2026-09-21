@@ -59,6 +59,12 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
         self.by_key.is_empty()
     }
 
+    /// The number of entries, which is both the number of primary keys and the number of
+    /// alternative keys since every entry has exactly one of each.
+    pub fn len(&self) -> usize {
+        self.by_key.len()
+    }
+
     pub fn try_insert(
         &mut self,
         key: Key,

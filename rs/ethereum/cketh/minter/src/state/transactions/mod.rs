@@ -915,6 +915,38 @@ where
         self.pending_requests.len()
     }
 
+    /// Requests whose transaction has been created but not sent yet.
+    ///
+    /// A request being resubmitted at a higher fee holds a created transaction as well, and is not
+    /// counted here: its earlier attempt is already out on the network, so it is reported by
+    /// [`Self::sent_requests_len`] instead. That keeps the three stage counts disjoint.
+    pub fn unsent_transactions_len(&self) -> usize {
+        self.created_tx
+            .alt_keys()
+            .filter(|id| !self.sent_tx.contains_alt(*id))
+            .count()
+    }
+
+    /// Requests whose transaction has been sent and has not finalized yet: the backlog that
+    /// [`Self::sent_transactions_to_finalize`] is drawn from, and the first thing to grow when
+    /// finalization stalls.
+    ///
+    /// Counted once per request, so a request resubmitted at a higher fee is a single entry
+    /// however many transactions carry it.
+    pub fn sent_requests_len(&self) -> usize {
+        self.sent_tx.len()
+    }
+
+    /// The transactions behind [`Self::sent_requests_len`], one per attempt: a request resubmitted
+    /// at a higher fee contributes one transaction per fee bump, each with its own hash, and a
+    /// finalization round asks for a receipt for every one of them.
+    pub fn sent_transactions_len(&self) -> usize {
+        self.sent_tx
+            .iter()
+            .map(|(_nonce, _id, txs)| txs.len())
+            .sum()
+    }
+
     pub fn transactions_to_sign_iter(
         &self,
     ) -> impl Iterator<Item = (&TransactionNonce, &R::Id, &R::Transaction)> {
@@ -1236,6 +1268,22 @@ impl WithdrawalTransactions {
     ) -> BTreeMap<Hash, LedgerBurnIndex> {
         self.pipeline
             .sent_transactions_to_finalize(finalized_transaction_count)
+    }
+
+    /// Withdrawals whose transaction has been created but not sent yet.
+    pub fn unsent_transactions_len(&self) -> usize {
+        self.pipeline.unsent_transactions_len()
+    }
+
+    /// Withdrawals whose transaction has been sent and is still waiting for a receipt, counted
+    /// once per withdrawal however many times it was resubmitted.
+    pub fn sent_requests_len(&self) -> usize {
+        self.pipeline.sent_requests_len()
+    }
+
+    /// The transactions those withdrawals are spread over, one per fee bump.
+    pub fn sent_transactions_len(&self) -> usize {
+        self.pipeline.sent_transactions_len()
     }
 
     pub fn requests_batch(&self, requested_batch_size: usize) -> Vec<WithdrawalRequest> {

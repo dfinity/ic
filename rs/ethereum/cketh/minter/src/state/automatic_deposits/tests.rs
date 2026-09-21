@@ -1176,6 +1176,56 @@ async fn should_advance_the_delegation_nonce_once_for_two_sweeps_carrying_the_sa
     }
 }
 
+#[tokio::test]
+async fn should_count_the_sweeps_at_each_stage_of_the_sweeper_pipeline() {
+    /// The counts the backlog metrics read, in the order `(queued, unsent, sent, transactions)`.
+    fn counts(deposits: &AutomaticDeposits) -> (usize, usize, usize, usize) {
+        (
+            deposits.queued_sweep_requests_len(),
+            deposits.unsent_sweep_transactions_len(),
+            deposits.sent_sweep_requests_len(),
+            deposits.sent_sweep_transactions_len(),
+        )
+    }
+
+    let (mut deposits, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+    let id = request.id;
+    assert_eq!(counts(&deposits), (1, 0, 0, 0));
+
+    let transaction = request
+        .create_transaction(
+            deposits.next_sweeper_transaction_nonce(),
+            gas_fee_estimate(),
+            request.gas_limit(),
+            EthereumNetwork::Sepolia,
+        )
+        .expect("BUG: the fixture prices the request with the estimate it creates with");
+    deposits.record_created_sweep_transaction(id, transaction.clone());
+    assert_eq!(counts(&deposits), (0, 1, 0, 0));
+
+    let signed = Signed::from((
+        transaction,
+        TransactionSignature {
+            signature_y_parity: false,
+            r: Default::default(),
+            s: Default::default(),
+        },
+    ));
+    deposits.record_signed_sweep_transaction(signed.clone());
+    assert_eq!(counts(&deposits), (0, 0, 1, 1));
+
+    let receipt = TransactionReceipt {
+        block_hash: Hash([0x11; 32]),
+        block_number: BlockNumber::new(4_190_269),
+        effective_gas_price: signed.transaction().max_fee_per_gas(),
+        gas_used: signed.transaction().gas_limit(),
+        status: TransactionStatus::Success,
+        transaction_hash: signed.hash(),
+    };
+    deposits.record_finalized_sweep_transaction(id, &receipt);
+    assert_eq!(counts(&deposits), (0, 0, 0, 0));
+}
+
 /// Queues the deposits `request` names and hands them to it, as an enqueue does, so that the sweep
 /// can be driven to a receipt.
 fn hand_to_sweep(deposits: &mut AutomaticDeposits, request: &SweepRequest) {
