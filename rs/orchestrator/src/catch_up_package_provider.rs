@@ -452,18 +452,21 @@ impl CatchUpPackageProvider {
             else {
                 // Our membership at the splitting record's version is our post-split subnet. Being
                 // unassigned here is unexpected. Though, this could genuinely happen if we are
-                // lagging behind by a lot and were removed from the subnet *prior* to the split. We
-                // can return now, it makes no sense to continue searching for a previous split: we
-                // prioritize data at the later registry version.
-                return Ok(());
+                // lagging behind by a lot and were removed from the subnet *prior* to the split.
+                // There could still be a previous split of the same subnet: let us continue to scan
+                // for this potential split such that we learn our unassignment through that other
+                // subnet (maybe they still need us for some work, and we're not totally unassigned
+                // yet).
+                continue;
             };
 
             if new_subnet_id != *subnet_id && new_subnet_id != destination_subnet_id {
                 // Any other assignment than source or destination is unexpected. This is very
                 // similar to the previous condition about being unassigned. This could happen if we
                 // were moved to a different subnet prior to the split, independently of the latter.
-                // But there could also very well be a previous split of the same subnet: we would
-                // not want to remove the state by mistake, continue scanning.
+                // But there could still be a previous split of the same subnet: let us continue to
+                // scan for this potential split to move to one of this split's subnets and not
+                // remove the state by mistake.
                 continue;
             }
 
@@ -2064,11 +2067,13 @@ pub(crate) mod tests {
         assert_eq!(subnet_id, SOURCE_SUBNET_ID);
     }
 
-    #[test]
-    fn test_pending_split_detected_below_a_later_split() {
+    #[rstest]
+    #[case::unassigned_between_splits(true)]
+    #[case::assigned_between_splits(false)]
+    fn test_pending_split_detected_below_a_later_split(#[case] unassigned_between_splits: bool) {
         let tmp_dir = tempfile::tempdir().unwrap();
         let source_nodes = vec![node_test_id(1)];
-        let destination_nodes = vec![node_test_id(2)];
+        let destination_nodes = vec![node_test_id(2), node_test_id(3)];
         // We move to the destination subnet.
         let node_id = destination_nodes[0];
         let third_subnet_id = SUBNET_0;
@@ -2076,16 +2081,27 @@ pub(crate) mod tests {
         assert_ne!(third_subnet_id, DESTINATION_SUBNET_ID);
         // Chained splits: after our split, the source subnet is split *again*, into a third
         // subnet. The scan first hits the later split's record, at whose version we are a member
-        // of neither the source nor that split's destination subnet (we are already in ours). It
-        // must keep scanning and still pick up our own split below.
+        // of neither the source nor that split's destination subnet (we are unassigned or we are
+        // already in ours). It must keep scanning and still pick up our own split below.
         let registry = setup_split_registry_customized(
             node_id,
             &source_nodes,
             &destination_nodes,
             |_| NodeRecord::default(),
             |data_provider| {
-                // Only the source subnet's CUP contents record matters for the scan; the third
-                // subnet's own records are never consulted here.
+                if unassigned_between_splits {
+                    add_single_subnet_record(
+                        data_provider,
+                        SPLIT_REGISTRY_VERSION.get() + 2,
+                        DESTINATION_SUBNET_ID,
+                        SubnetRecordBuilder::new()
+                            // Remove us from the committee -> we are unassigned at the later
+                            // split's version.
+                            .with_committee(&[node_test_id(3)])
+                            .build(),
+                    );
+                }
+
                 add_subnet_splitting_record(
                     data_provider,
                     SPLIT_REGISTRY_VERSION + RegistryVersion::from(4),
