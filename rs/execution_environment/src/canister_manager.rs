@@ -1979,8 +1979,9 @@ impl CanisterManager {
 
     // Runs the following checks on cycles and memory usage and performs the corresponding updates:
     // 1. There is enough subnet available memory for the new memory usage.
-    // 2. The canister is not frozen due to its new memory usage.
-    // 3. Cycles for instructions can be withdrawn (in particular, the canister is not frozen afterwards).
+    // 2. Cycles for instructions can be withdrawn w.r.t. the old memory usage
+    //    (in particular, the canister is not frozen afterwards).
+    // 3. The canister is not frozen due to its new memory usage.
     // 4. Storage reservation cycles can be reserved.
     //
     // `new_memory_usage` must be the canister's memory usage *including* any canister
@@ -2030,15 +2031,33 @@ impl CanisterManager {
                 },
             )?;
 
-        // Check that the canister is not frozen due to its new memory usage.
+        // Consume cycles for instructions w.r.t. the old memory usage,
+        // i.e., the memory usage for which the instructions were executed.
         let reveal_top_up = canister.controllers().contains(&sender);
+        let cycles_for_instructions = self
+            .cycles_account_manager
+            .management_canister_cost(instructions, subnet_cycles_config);
+        let message_memory_usage = canister.message_memory_usage();
+        self.cycles_account_manager
+            .consume_cycles_for_final_instructions(
+                &mut canister.system_state,
+                old_memory_usage,
+                message_memory_usage,
+                cycles_for_instructions,
+                subnet_cycles_config,
+                reveal_top_up,
+            )
+            .map_err(CanisterManagerError::NotEnoughCycles)?;
+
+        // Check that the canister is not frozen due to its new memory usage
+        // (no cycles are withdrawn by this check).
         if let Err(err) = self
             .cycles_account_manager
             .can_withdraw_cycles_with_threshold(
                 &canister.system_state,
                 Cycles::zero(),
                 new_memory_usage,
-                canister.message_memory_usage(),
+                message_memory_usage,
                 canister.system_state.reserved_balance(),
                 subnet_cycles_config,
                 reveal_top_up,
@@ -2050,22 +2069,6 @@ impl CanisterManager {
                 required: err.threshold,
             });
         }
-
-        // Consume cycles for instructions.
-        let cycles_for_instructions = self
-            .cycles_account_manager
-            .management_canister_cost(instructions, subnet_cycles_config);
-        let message_memory_usage = canister.message_memory_usage();
-        self.cycles_account_manager
-            .consume_cycles_for_final_instructions(
-                &mut canister.system_state,
-                new_memory_usage,
-                message_memory_usage,
-                cycles_for_instructions,
-                subnet_cycles_config,
-                reveal_top_up,
-            )
-            .map_err(CanisterManagerError::NotEnoughCycles)?;
 
         // Reserve cycles for storage.
         let new_storage_reservation_cycles = self
