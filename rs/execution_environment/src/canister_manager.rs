@@ -1431,11 +1431,11 @@ impl CanisterManager {
         // If validation fails, the canister is not inserted into state, but
         // `round_limits` may have been partially updated, so restore on error.
         let round_limits_snapshot = round_limits.clone();
-        // The canister state before applying the settings: the cycles and memory
+        // Snapshot the canister before applying the settings: the cycles and memory
         // usage checks and updates below account for everything that applying the
         // settings and recording the `canister_creation` canister history entry
         // change w.r.t. it.
-        let old_canister = new_canister.clone();
+        let canister_snapshot = new_canister.clone();
         // Canister creation's first-time log memory buffer allocation is a
         // different event class from user-triggered resize: it starts from an
         // empty log store, so the resize records zero instructions. Use a
@@ -1504,7 +1504,7 @@ impl CanisterManager {
         // for like any other canister memory).
         if let Err(err) = self.cycles_and_memory_usage_checks_and_updates(
             state.get_own_subnet_cycles_config(),
-            &old_canister,
+            &canister_snapshot,
             &mut new_canister,
             sender,
             NumInstructions::new(0),
@@ -1812,6 +1812,7 @@ impl CanisterManager {
     /// `instructions` are the operation's
     /// `CanisterManagerResponse::instructions_to_charge_on_success`, i.e. the ones
     /// it did not charge for itself, so a failing operation is not charged for them.
+    /// They are charged for and accounted for in the round limits here.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn cycles_and_memory_usage_checks_and_updates_after_operation(
         &self,
@@ -1844,7 +1845,8 @@ impl CanisterManager {
     // Runs the following checks on cycles and memory usage and performs the corresponding updates:
     // 1. There is enough subnet available memory for the new memory usage and allocation.
     // 2. Cycles for instructions can be withdrawn w.r.t. the old memory usage
-    //    (in particular, the canister is not frozen afterwards).
+    //    (in particular, the canister is not frozen afterwards). The instructions
+    //    are also accounted for in the round limits.
     // 3. The canister is not frozen due to its new memory usage, memory allocation,
     //    and compute allocation. This check is only performed if the canister's memory
     //    usage, memory allocation, or compute allocation increased: otherwise the
@@ -1863,6 +1865,9 @@ impl CanisterManager {
     // Whether the cycles balance is revealed in errors is determined by the
     // controllers *before* the operation: the sender should still see verbose errors
     // if the operation removed the sender from the canister's controllers.
+    //
+    // `round_limits` are updated in-place (both the subnet available memory and the
+    // instructions) and the caller must revert them in case of `Err`.
     fn cycles_and_memory_usage_checks_and_updates(
         &self,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
@@ -1910,7 +1915,8 @@ impl CanisterManager {
             )?;
 
         // Consume cycles for instructions w.r.t. the old memory usage,
-        // i.e., the memory usage for which the instructions were executed.
+        // i.e., the memory usage for which the instructions were executed,
+        // and account for the instructions in the round limits.
         let reveal_top_up = old_canister.controllers().contains(&sender);
         let cycles_for_instructions = self
             .cycles_account_manager
@@ -1926,6 +1932,7 @@ impl CanisterManager {
                 reveal_top_up,
             )
             .map_err(CanisterManagerError::NotEnoughCycles)?;
+        round_limits.instructions -= as_round_instructions(instructions);
 
         // Check that the canister is not frozen due to its new memory usage, memory
         // allocation, and compute allocation (no cycles are withdrawn by this check).

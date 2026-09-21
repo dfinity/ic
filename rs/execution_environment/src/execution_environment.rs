@@ -693,21 +693,17 @@ impl ExecutionEnvironment {
                 let saved_round_limits = round_limits.clone();
                 let op_result = op(canister, msg, round_limits, &mut consumed_cycles);
                 let result = op_result.and_then(|response| {
-                    let instructions = response.instructions_to_charge_on_success;
                     self.canister_manager
                         .cycles_and_memory_usage_checks_and_updates_after_operation(
                             subnet_cycles_config,
                             &saved_canister,
                             canister,
                             sender,
-                            instructions,
+                            response.instructions_to_charge_on_success,
                             round_limits,
                             &resource_saturation,
                         )
-                        .map(|()| {
-                            round_limits.instructions -= as_round_instructions(instructions);
-                            response
-                        })
+                        .map(|()| response)
                 });
                 match result {
                     Ok(response) => self.process_canister_manager_result(
