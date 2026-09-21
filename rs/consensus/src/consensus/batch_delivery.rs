@@ -205,8 +205,7 @@ fn deliver_batches(
             }
         }
 
-        let mut chain_key_subnet_public_keys = BTreeMap::new();
-        let (mut idkg_subnet_public_keys, idkg_pre_signatures) =
+        let (mut chain_key_subnet_public_keys, idkg_pre_signatures) =
             get_idkg_subnet_public_keys_and_pre_signatures(
                 &block,
                 &summary_block,
@@ -214,8 +213,6 @@ fn deliver_batches(
                 log,
                 block_stats.idkg_stats.as_mut(),
             );
-        chain_key_subnet_public_keys.append(&mut idkg_subnet_public_keys);
-        // Add vetKD keys to this map as well
         let (mut nidkg_subnet_public_keys, nidkg_ids) = get_vetkey_public_keys(dkg_summary, log);
         chain_key_subnet_public_keys.append(&mut nidkg_subnet_public_keys);
         let chain_key_data = ChainKeyData {
