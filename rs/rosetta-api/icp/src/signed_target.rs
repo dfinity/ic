@@ -67,15 +67,30 @@ pub fn verify_signed_envelopes(
     envelopes: &[EnvelopePair],
     ledger_canister_id: &CanisterId,
 ) -> Result<(), ApiError> {
+    verify_signed_target(
+        request_type,
+        representative_envelope(envelopes)?,
+        ledger_canister_id,
+    )
+}
+
+/// Return the update that stands for every envelope of a signed request, or an
+/// error if they do not all carry the same message.
+///
+/// See [`verify_signed_envelopes`] for why they have to. Callers that go on to
+/// check the returned update against the displayed metadata themselves use this
+/// directly, rather than having it checked twice.
+pub fn representative_envelope(
+    envelopes: &[EnvelopePair],
+) -> Result<&HttpCanisterUpdate, ApiError> {
     let representative = envelopes
         .first()
         .ok_or_else(|| ApiError::invalid_request("No request payload provided."))?
         .update_content();
 
-    verify_signed_target(request_type, representative, ledger_canister_id)?;
-
+    let expected = without_expiry(representative);
     for envelope in &envelopes[1..] {
-        if !same_update_modulo_expiry(representative, envelope.update_content()) {
+        if without_expiry(envelope.update_content()) != expected {
             return Err(ApiError::invalid_request(
                 "The envelopes of a signed request must differ only in their ingress \
                  expiry. Refusing a request whose envelopes carry different payloads, \
@@ -83,19 +98,18 @@ pub fn verify_signed_envelopes(
             ));
         }
     }
-    Ok(())
+    Ok(representative)
 }
 
-/// Whether two updates are the same message sent in different ingress windows.
-fn same_update_modulo_expiry(a: &HttpCanisterUpdate, b: &HttpCanisterUpdate) -> bool {
-    // Compare whole updates rather than a field list, so a field added to
-    // `HttpCanisterUpdate` later is covered without touching this.
-    let normalize = |update: &HttpCanisterUpdate| {
-        let mut update = update.clone();
-        update.ingress_expiry = 0;
-        update
-    };
-    normalize(a) == normalize(b)
+/// An update with its ingress expiry cleared, so that two of them compare equal
+/// exactly when they are the same message sent in different ingress windows.
+///
+/// Compares whole updates rather than a field list, so a field added to
+/// `HttpCanisterUpdate` later is covered without touching this.
+fn without_expiry(update: &HttpCanisterUpdate) -> HttpCanisterUpdate {
+    let mut update = update.clone();
+    update.ingress_expiry = 0;
+    update
 }
 
 /// Check that every field of `request_type` that Rosetta will display is
@@ -711,6 +725,7 @@ mod tests {
         )
         .unwrap_err();
     }
+
     #[test]
     fn substituted_command_is_rejected() {
         // The signed command is a disburse of this neuron; the wrapper names a

@@ -9,7 +9,7 @@ use crate::{
         RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
         StopDissolve,
     },
-    signed_target::{verify_signed_envelopes, verify_signed_target},
+    signed_target::{representative_envelope, verify_signed_target},
 };
 use rosetta_core::objects::ObjectMap;
 
@@ -21,7 +21,7 @@ use ic_nns_governance_api::{
 use crate::{models::seconds::Seconds, request::Request};
 use ic_types::{
     PrincipalId,
-    messages::{Blob, HttpCallContent, HttpCanisterUpdate},
+    messages::{Blob, HttpCanisterUpdate},
 };
 use icp_ledger::{AccountIdentifier, Operation, SendArgs};
 use std::convert::TryFrom;
@@ -42,16 +42,13 @@ impl RosettaRequestHandler {
                 .map(|(request_type, envelopes)| {
                     // Each envelope carries its own signature and the submit
                     // path broadcasts whichever one is currently valid, not the
-                    // first, so all of them have to agree with the metadata
-                    // about to be displayed -- not just the one described.
-                    verify_signed_envelopes(
-                        request_type,
-                        envelopes,
-                        self.ledger.ledger_canister_id(),
-                    )?;
-                    match envelopes[0].update.content.clone() {
-                        HttpCallContent::Call { update } => Ok((request_type.clone(), update)),
-                    }
+                    // first, so one of them stands for the rest only once they
+                    // all agree. The loop below then checks that one against
+                    // the metadata about to be displayed.
+                    Ok((
+                        request_type.clone(),
+                        representative_envelope(envelopes)?.clone(),
+                    ))
                 })
                 .collect::<Result<Vec<_>, ApiError>>()?,
             ParsedTransaction::Unsigned(unsigned_transaction) => unsigned_transaction.updates,
@@ -904,6 +901,7 @@ mod tests {
             .clone();
         assert_eq!(memo, serde_json::json!(0), "expected a memo of 0");
     }
+
     /// Everything below rejects a tampered transaction, so the negative
     /// control belongs with them: what `/construction/combine` genuinely
     /// produces must still parse, and must describe the same operations it was
@@ -1133,6 +1131,7 @@ mod tests {
             "unexpected error: {err:?}"
         );
     }
+
     /// Binding the neuron is not enough on its own: the submit path does not
     /// re-derive the command for every request type, so rewriting only the
     /// wrapper's variant used to make `/construction/submit` report one
