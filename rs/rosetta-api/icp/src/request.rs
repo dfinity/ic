@@ -229,12 +229,13 @@ impl Request {
 
     /// Sort of the inverse of `construction_payloads`.
     ///
-    /// Takes the ledger canister this Rosetta instance is configured for so
-    /// that the verification below can bind a transfer to it; that is also why
-    /// this is not a `TryFrom`.
+    /// Takes the canisters this Rosetta instance is configured for so that the
+    /// verification below can bind the request to them; that is also why this
+    /// is not a `TryFrom`.
     pub fn from_signed_request(
         req: &models::Request,
         ledger_canister_id: &CanisterId,
+        governance_canister_id: &CanisterId,
     ) -> Result<Self, ApiError> {
         let (request_type, calls) = req;
 
@@ -244,7 +245,12 @@ impl Request {
         // the wrapper metadata matches the signed payload. It checks every
         // envelope, because `do_request` broadcasts whichever one is currently
         // valid rather than the first.
-        verify_signed_envelopes(request_type, calls, ledger_canister_id)?;
+        verify_signed_envelopes(
+            request_type,
+            calls,
+            ledger_canister_id,
+            governance_canister_id,
+        )?;
 
         let payload: &models::EnvelopePair = calls
             .first()

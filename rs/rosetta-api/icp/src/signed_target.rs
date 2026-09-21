@@ -69,11 +69,13 @@ pub fn verify_signed_envelopes(
     request_type: &RequestType,
     envelopes: &[EnvelopePair],
     ledger_canister_id: &CanisterId,
+    governance_canister_id: &CanisterId,
 ) -> Result<(), ApiError> {
     verify_signed_target(
         request_type,
         representative_envelope(envelopes)?,
         ledger_canister_id,
+        governance_canister_id,
     )
 }
 
@@ -121,13 +123,16 @@ fn without_expiry(update: &HttpCanisterUpdate) -> HttpCanisterUpdate {
 /// Fails closed: a request whose displayed metadata cannot be confirmed against
 /// the signed payload is rejected rather than displayed with a warning.
 ///
-/// `ledger_canister_id` is the ledger this Rosetta instance is configured for.
-/// A transfer is denominated in that ledger's token, so one addressed anywhere
-/// else would be reported in the wrong currency.
+/// `ledger_canister_id` and `governance_canister_id` are the canisters this
+/// Rosetta instance is configured for, and the ones `/construction/payloads`
+/// addresses. A transfer is denominated in that ledger's token and a neuron is
+/// named under that governance canister, so a request addressed anywhere else
+/// describes something this instance does not serve.
 pub fn verify_signed_target(
     request_type: &RequestType,
     update: &HttpCanisterUpdate,
     ledger_canister_id: &CanisterId,
+    governance_canister_id: &CanisterId,
 ) -> Result<(), ApiError> {
     let sender = PrincipalId::try_from(update.sender.0.as_slice()).map_err(|e| {
         ApiError::invalid_request(format!("Could not parse the signed update's sender: {e}"))
@@ -155,7 +160,7 @@ pub fn verify_signed_target(
         }
 
         RequestType::Stake { neuron_index } => {
-            verify_governance_canister(update)?;
+            verify_governance_canister(update, governance_canister_id)?;
             verify_method_name(update, CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT)?;
             verify_nonce_neuron_index(update, *neuron_index)?;
             // `claim_or_refresh_neuron_from_account` identifies the neuron by
@@ -188,7 +193,7 @@ pub fn verify_signed_target(
             neuron_index,
             controller,
         } => {
-            verify_governance_canister(update)?;
+            verify_governance_canister(update, governance_canister_id)?;
             verify_method_name(update, GET_FULL_NEURON_BY_ID_OR_SUBACCOUNT)?;
             // This request type carries no nonce; the subaccount in the signed
             // argument is the only authenticated neuron identifier.
@@ -202,7 +207,7 @@ pub fn verify_signed_target(
         }
 
         RequestType::ListNeurons { page_number } => {
-            verify_governance_canister(update)?;
+            verify_governance_canister(update, governance_canister_id)?;
             verify_method_name(update, LIST_NEURONS)?;
             let args: ic_nns_governance_api::ListNeurons = decode_arg(update, "list neurons")?;
             let signed_page_number = args.page_number.unwrap_or_default();
@@ -231,9 +236,14 @@ pub fn verify_signed_target(
         | RequestType::RemoveHotKey { neuron_index }
         | RequestType::Spawn { neuron_index }
         | RequestType::StakeMaturity { neuron_index }
-        | RequestType::RegisterVote { neuron_index } => {
-            verify_manage_neuron(request_type, update, *neuron_index, None, sender)
-        }
+        | RequestType::RegisterVote { neuron_index } => verify_manage_neuron(
+            request_type,
+            update,
+            *neuron_index,
+            None,
+            sender,
+            governance_canister_id,
+        ),
 
         RequestType::Follow {
             neuron_index,
@@ -248,6 +258,7 @@ pub fn verify_signed_target(
             *neuron_index,
             controller.as_ref(),
             sender,
+            governance_canister_id,
         ),
     }
 }
@@ -259,8 +270,9 @@ fn verify_manage_neuron(
     neuron_index: u64,
     controller: Option<&PublicKeyOrPrincipal>,
     sender: PrincipalId,
+    governance_canister_id: &CanisterId,
 ) -> Result<(), ApiError> {
-    verify_governance_canister(update)?;
+    verify_governance_canister(update, governance_canister_id)?;
     verify_method_name(update, MANAGE_NEURON)?;
     verify_nonce_neuron_index(update, neuron_index)?;
 
@@ -416,12 +428,11 @@ fn verify_nonce_neuron_index(
     Ok(())
 }
 
-fn verify_governance_canister(update: &HttpCanisterUpdate) -> Result<(), ApiError> {
-    verify_canister(
-        update,
-        &ic_nns_constants::GOVERNANCE_CANISTER_ID,
-        "A neuron request",
-    )
+fn verify_governance_canister(
+    update: &HttpCanisterUpdate,
+    governance_canister_id: &CanisterId,
+) -> Result<(), ApiError> {
+    verify_canister(update, governance_canister_id, "A neuron request")
 }
 
 fn verify_canister(
@@ -476,20 +487,25 @@ mod tests {
         PrincipalId::new_user_test_id(1)
     }
 
-    /// The ledger this Rosetta instance is configured for.
+    /// The canisters this Rosetta instance is configured for. Deliberately not
+    /// the mainnet ids, so that a check against a hard-coded one would fail.
     fn ledger() -> CanisterId {
         CanisterId::from_u64(1)
     }
 
+    fn governance() -> CanisterId {
+        CanisterId::from_u64(2)
+    }
+
     fn verify(request_type: &RequestType, update: &HttpCanisterUpdate) -> Result<(), ApiError> {
-        verify_signed_target(request_type, update, &ledger())
+        verify_signed_target(request_type, update, &ledger(), &governance())
     }
 
     fn verify_envelopes(
         request_type: &RequestType,
         envelopes: &[EnvelopePair],
     ) -> Result<(), ApiError> {
-        verify_signed_envelopes(request_type, envelopes, &ledger())
+        verify_signed_envelopes(request_type, envelopes, &ledger(), &governance())
     }
 
     /// Builds the update that `add_neuron_management_payload` would build for a
@@ -508,7 +524,7 @@ mod tests {
             )),
         };
         HttpCanisterUpdate {
-            canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+            canister_id: Blob(governance().get().to_vec()),
             method_name: MANAGE_NEURON.to_string(),
             arg: Blob(Encode!(&manage).unwrap()),
             nonce: Some(Blob(Encode!(&neuron_index).unwrap())),
@@ -614,6 +630,14 @@ mod tests {
         let mut update = manage_neuron_update(controller(), NEURON_INDEX);
         update.canister_id = Blob(PrincipalId::new_user_test_id(3).to_vec());
         verify(&disburse(NEURON_INDEX), &update).unwrap_err();
+
+        // Including the mainnet governance canister, when that is not the one
+        // this instance was configured with. `/construction/derive` names
+        // neurons under the configured canister, so a request against any
+        // other one describes a neuron this instance does not serve.
+        let mut update = manage_neuron_update(controller(), NEURON_INDEX);
+        update.canister_id = Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec());
+        verify(&disburse(NEURON_INDEX), &update).unwrap_err();
     }
 
     #[test]
@@ -666,7 +690,7 @@ mod tests {
             memo: NEURON_INDEX,
         };
         let update = HttpCanisterUpdate {
-            canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+            canister_id: Blob(governance().get().to_vec()),
             method_name: CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT.to_string(),
             arg: Blob(Encode!(&args).unwrap()),
             nonce: Some(Blob(Encode!(&NEURON_INDEX).unwrap())),
@@ -697,7 +721,7 @@ mod tests {
             neuron_subaccounts: None,
         };
         let update = HttpCanisterUpdate {
-            canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+            canister_id: Blob(governance().get().to_vec()),
             method_name: LIST_NEURONS.to_string(),
             arg: Blob(Encode!(&args).unwrap()),
             nonce: None,
@@ -717,7 +741,7 @@ mod tests {
             convert::neuron_subaccount_bytes_from_principal(&sender, NEURON_INDEX).to_vec(),
         );
         let update = HttpCanisterUpdate {
-            canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+            canister_id: Blob(governance().get().to_vec()),
             method_name: GET_FULL_NEURON_BY_ID_OR_SUBACCOUNT.to_string(),
             arg: Blob(Encode!(&args).unwrap()),
             nonce: None,
@@ -823,7 +847,7 @@ mod tests {
                 memo: NEURON_INDEX,
             };
             HttpCanisterUpdate {
-                canister_id: Blob(ic_nns_constants::GOVERNANCE_CANISTER_ID.get().to_vec()),
+                canister_id: Blob(governance().get().to_vec()),
                 method_name: CLAIM_OR_REFRESH_NEURON_FROM_ACCOUNT.to_string(),
                 arg: Blob(Encode!(&args).unwrap()),
                 nonce: Some(Blob(Encode!(&NEURON_INDEX).unwrap())),

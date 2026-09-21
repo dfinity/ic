@@ -23,7 +23,12 @@ impl RosettaRequestHandler {
         // identifier returned here is not the identifier of the transaction
         // the caller is about to submit.
         for (request_type, envelopes) in &signed_transaction.requests {
-            verify_signed_envelopes(request_type, envelopes, self.ledger.ledger_canister_id())?;
+            verify_signed_envelopes(
+                request_type,
+                envelopes,
+                self.ledger.ledger_canister_id(),
+                self.ledger.governance_canister_id(),
+            )?;
         }
 
         let transaction_identifier = if let Some((request_type, envelope_pairs)) =
