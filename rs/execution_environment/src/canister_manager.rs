@@ -83,7 +83,9 @@ const MAX_SLICE_SIZE_BYTES: u64 = 2_000_000;
 pub(crate) struct CanisterManager {
     hypervisor: Arc<Hypervisor>,
     log: ReplicaLogger,
-    /// Critical error for charges exceeding the canister's cycles balance.
+    /// Critical error for charges exceeding the canister's cycles balance:
+    /// the same counter as `ExecutionEnvironmentMetrics::charging_from_balance_error`,
+    /// held directly for the paths that have no `RoundCounters` at hand.
     charging_from_balance_error: IntCounter,
     config: CanisterMgrConfig,
     cycles_account_manager: Arc<CyclesAccountManager>,
@@ -1567,7 +1569,6 @@ impl CanisterManager {
             Arc::clone(&self.fd_factory),
         );
 
-        // The creation fee was already withdrawn from the sender's balance.
         system_state.consume_cycles(creation_fee, &self.log, &self.charging_from_balance_error);
         let mut new_canister = CanisterState::new(
             system_state,

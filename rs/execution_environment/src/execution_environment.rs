@@ -496,6 +496,7 @@ impl ExecutionEnvironment {
         hypervisor: Arc<Hypervisor>,
         canister_manager: Arc<CanisterManager>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+        metrics: ExecutionEnvironmentMetrics,
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
         own_subnet_type: SubnetType,
@@ -510,7 +511,6 @@ impl ExecutionEnvironment {
             "Deterministic time slicing works only with canister sandboxing."
         );
 
-        let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         // Deallocate `SystemStates` and `ExecutionStates` in the background. Sleep for
         // 0.1 ms between deallocations, to spread out the load on the memory allocator
         // (the 0.1 ms was determined by running a benchmark with thousands of messages
