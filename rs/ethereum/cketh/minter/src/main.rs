@@ -1396,7 +1396,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?
                 .value(
                     &[("pipeline", "withdrawal"), ("stage", "unsent")],
-                    s.withdrawal_transactions.unsent_transactions_len() as f64,
+                    s.withdrawal_transactions.unsent_requests_len() as f64,
                 )?
                 .value(
                     &[("pipeline", "withdrawal"), ("stage", "sent")],
@@ -1408,7 +1408,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?
                 .value(
                     &[("pipeline", "sweeper"), ("stage", "unsent")],
-                    s.automatic_deposits.unsent_sweep_transactions_len() as f64,
+                    s.automatic_deposits.unsent_sweep_requests_len() as f64,
                 )?
                 .value(
                     &[("pipeline", "sweeper"), ("stage", "sent")],

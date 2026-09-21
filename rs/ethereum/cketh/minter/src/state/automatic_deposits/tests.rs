@@ -1182,7 +1182,7 @@ async fn should_count_the_sweeps_at_each_stage_of_the_sweeper_pipeline() {
     fn counts(deposits: &AutomaticDeposits) -> (usize, usize, usize, usize) {
         (
             deposits.queued_sweep_requests_len(),
-            deposits.unsent_sweep_transactions_len(),
+            deposits.unsent_sweep_requests_len(),
             deposits.sent_sweep_requests_len(),
             deposits.sent_sweep_transactions_len(),
         )

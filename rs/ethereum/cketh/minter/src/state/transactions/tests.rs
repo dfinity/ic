@@ -2505,7 +2505,7 @@ mod unfinalized_request_counts {
     fn counts(transactions: &WithdrawalTransactions) -> (usize, usize, usize, usize) {
         (
             transactions.requests_len(),
-            transactions.unsent_transactions_len(),
+            transactions.unsent_requests_len(),
             transactions.sent_requests_len(),
             transactions.sent_transactions_len(),
         )

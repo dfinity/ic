@@ -182,8 +182,8 @@ impl AutomaticDeposits {
     }
 
     /// Sweeps whose transaction has been created but not sent yet.
-    pub fn unsent_sweep_transactions_len(&self) -> usize {
-        self.sweeper_transactions.unsent_transactions_len()
+    pub fn unsent_sweep_requests_len(&self) -> usize {
+        self.sweeper_transactions.unsent_requests_len()
     }
 
     /// Sweeps whose transaction has been sent and is still waiting for a receipt, counted once

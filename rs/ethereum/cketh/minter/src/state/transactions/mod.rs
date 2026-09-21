@@ -920,7 +920,7 @@ where
     /// A request being resubmitted at a higher fee holds a created transaction as well, and is not
     /// counted here: its earlier attempt is already out on the network, so it is reported by
     /// [`Self::sent_requests_len`] instead. That keeps the three stage counts disjoint.
-    pub fn unsent_transactions_len(&self) -> usize {
+    pub fn unsent_requests_len(&self) -> usize {
         self.created_tx
             .alt_keys()
             .filter(|id| !self.sent_tx.contains_alt(*id))
@@ -1279,8 +1279,8 @@ impl WithdrawalTransactions {
     }
 
     /// Withdrawals whose transaction has been created but not sent yet.
-    pub fn unsent_transactions_len(&self) -> usize {
-        self.pipeline.unsent_transactions_len()
+    pub fn unsent_requests_len(&self) -> usize {
+        self.pipeline.unsent_requests_len()
     }
 
     /// Withdrawals whose transaction has been sent and is still waiting for a receipt, counted
