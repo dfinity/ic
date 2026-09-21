@@ -203,6 +203,10 @@ impl Registry {
         }
 
         // Set the height, time and state hash of the payload
+        cup_contents.height = payload.height;
+        cup_contents.time = payload.time_ns;
+        cup_contents.state_hash = payload.state_hash.clone();
+
         cup_contents.cup_type = Some(CupType::Recovery(RecoveryArgs {
             height: payload.height,
             time: payload.time_ns,

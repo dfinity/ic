@@ -113,6 +113,9 @@ impl Registry {
             ),
             chain_key_initializations,
             cup_type: Some(CupType::Genesis(GenesisArgs {})),
+            height: 0,
+            time: 0,
+            state_hash: vec![],
             registry_store_uri: None,
             ecdsa_initializations: vec![],
         };

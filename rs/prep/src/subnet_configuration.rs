@@ -402,8 +402,8 @@ impl SubnetConfig {
         let der_pk = threshold_sig_public_key_to_der(pk)?;
         let subnet_id = SubnetId::from(PrincipalId::new_self_authenticating(&der_pk[..]));
 
-        let cup_type = match self.initial_height {
-            0 => CupType::Genesis(GenesisArgs {}),
+        let (cup_type, state_hash) = match self.initial_height {
+            0 => (CupType::Genesis(GenesisArgs {}), vec![]),
             height => {
                 let state_hashes: Vec<_> = initialized_nodes
                     .values()
@@ -419,11 +419,14 @@ impl SubnetConfig {
                     "Generated initial states do not have the same state hash"
                 );
 
-                CupType::Recovery(RecoveryArgs {
-                    height,
-                    time: 0,
-                    state_hash: state_hashes[0].clone(),
-                })
+                (
+                    CupType::Recovery(RecoveryArgs {
+                        height,
+                        time: 0,
+                        state_hash: state_hashes[0].clone(),
+                    }),
+                    state_hashes[0].clone(),
+                )
             }
         };
 
@@ -434,6 +437,9 @@ impl SubnetConfig {
             initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
                 ni_dkg_transcript_high_threshold,
             )),
+            state_hash,
+            height: self.initial_height,
+            time: 0,
             registry_store_uri: None,
             ecdsa_initializations: vec![],
             chain_key_initializations: vec![],
