@@ -290,9 +290,6 @@ fn cmd_get_recovery_cup(
     let cup_contents = CatchUpPackageContents {
         initial_ni_dkg_transcript_low_threshold,
         initial_ni_dkg_transcript_high_threshold,
-        height: cmd.height,
-        time: time.as_nanos_since_unix_epoch(),
-        state_hash: state_hash.clone(),
         registry_store_uri: None,
         ecdsa_initializations: vec![],
         chain_key_initializations: vec![],
