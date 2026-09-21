@@ -4670,90 +4670,104 @@ fn resource_saturation_scaling_works_in_create_canister() {
     );
 }
 
-#[test]
-fn create_canister_reserves_cycles_at_up_to_date_saturation() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const KIB: u64 = 1024;
-    const MIB: u64 = 1024 * KIB;
-    const LOG_MEMORY_LIMIT: u64 = 256 * KIB;
-    // The memory allocation below exceeds the memory usage by less than a canister
-    // history entry, whose reservation only differs measurably between two nearby
-    // saturations if the memory capacity above the threshold is small.
-    const THRESHOLD: u64 = 10 * MIB;
-    const CAPACITY: u64 = THRESHOLD + 3 * MIB;
+/// Constants of the `..._reserves_cycles_at_up_to_date_saturation` tests below.
+/// The memory allocation of those tests exceeds the memory usage by less than a
+/// canister history entry, whose reservation only differs measurably between two
+/// nearby saturations if the memory capacity above the threshold is small.
+const SATURATION_CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+const SATURATION_LOG_MEMORY_LIMIT: u64 = 256 * KIB;
+const SATURATION_THRESHOLD: u64 = 10 * MIB;
+const SATURATION_CAPACITY: u64 = SATURATION_THRESHOLD + 3 * MIB;
 
+/// One run of the operation under test in
+/// `check_reserves_cycles_at_up_to_date_saturation`.
+struct UpToDateSaturationRun {
+    /// The canister the operation ran on.
+    canister_id: CanisterId,
+    /// The canister's reserved balance before the operation.
+    reserved_before: Cycles,
+    /// The subnet memory usage before the operation.
+    subnet_memory_usage_before: u64,
+    /// The canister's memory usage after the operation applied its settings, but
+    /// before it recorded its canister history entry.
+    memory_usage_before_history_entry: NumBytes,
+}
+
+fn saturation_subnet_memory_usage(test: &ExecutionTest) -> u64 {
+    SATURATION_CAPACITY - test.subnet_available_memory().get_execution_memory() as u64
+}
+
+/// Checks that all bytes allocated by `operation` are reserved for as a single
+/// allocation starting at the subnet memory saturation before the operation, on a
+/// subnet whose memory usage is above the threshold at which cycles are reserved.
+///
+/// `operation` runs on a canister of its own each time it is called: first without
+/// a memory allocation, to determine the size of the canister history entry it
+/// records, and then with a memory allocation exceeding the canister's memory
+/// usage by less than that entry. The log memory store, the memory allocation, and
+/// the canister history entry (which outgrows the memory allocation) thus each
+/// allocate bytes, one after the other, so the reservation for the entry has to
+/// account for the two allocations preceding it.
+fn check_reserves_cycles_at_up_to_date_saturation(
+    operation: impl Fn(&mut ExecutionTest, Option<NumBytes>) -> UpToDateSaturationRun,
+) {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY)
+        .with_subnet_execution_memory(SATURATION_CAPACITY)
         .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(THRESHOLD)
+        .with_subnet_memory_threshold(SATURATION_THRESHOLD)
         .with_resource_saturation_scaling(1)
         .build();
 
     // Push the subnet memory usage above the threshold at which cycles are reserved.
-    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
+    test.create_canister_with_allocation(SATURATION_CYCLES, None, Some(SATURATION_THRESHOLD))
         .unwrap();
 
-    let controllers: Vec<_> = (0..10).map(PrincipalId::new_user_test_id).collect();
-    let settings = |memory_allocation: Option<u64>| {
-        CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(LOG_MEMORY_LIMIT)
-            .with_controllers(controllers.clone())
-            .with_maybe_memory_allocation(memory_allocation)
-            .with_reserved_cycles_limit(CYCLES.get())
-            .build()
-    };
-
-    // Determine the memory usage of a canister created with these settings before
-    // its `canister_creation` canister history entry is recorded (i.e. once its log
-    // memory store has been allocated), as well as the size of that entry.
-    let probe_id = test
-        .create_canister_with_settings(CYCLES, settings(None))
-        .unwrap();
-    let history_entry_bytes = test
-        .canister_state(probe_id)
-        .canister_history_memory_usage();
+    // Determine the size of the canister history entry recorded by the operation.
+    let probe = operation(&mut test, None);
+    let history_entry_bytes = test.canister_state(probe.canister_id).memory_usage()
+        - probe.memory_usage_before_history_entry;
     assert_gt!(history_entry_bytes.get(), 1);
-    let memory_usage_before_history_entry =
-        test.canister_state(probe_id).memory_usage() - history_entry_bytes;
 
-    let subnet_memory_usage =
-        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-
-    // Create a canister whose memory allocation exceeds its memory usage after the
-    // log memory store has been allocated, but by less than a canister history
-    // entry. The log memory store, the memory allocation, and the
-    // `canister_creation` canister history entry (which outgrows the memory
-    // allocation) then each allocate bytes, one after the other.
     let memory_allocation =
-        memory_usage_before_history_entry + NumBytes::new(history_entry_bytes.get() / 2);
-    let canister_id = test
-        .create_canister_with_settings(CYCLES, settings(Some(memory_allocation.get())))
-        .unwrap();
+        probe.memory_usage_before_history_entry + NumBytes::new(history_entry_bytes.get() / 2);
+    let run = operation(&mut test, Some(memory_allocation));
+    // The operation allocates the same bytes as the probe run, except that its
+    // canister history entry now outgrows the memory allocation instead of the
+    // memory usage.
+    assert_eq!(
+        run.memory_usage_before_history_entry,
+        probe.memory_usage_before_history_entry
+    );
     assert_gt!(
-        test.canister_state(canister_id).memory_usage(),
+        test.canister_state(run.canister_id).memory_usage(),
         memory_allocation
     );
 
     let allocated_bytes = NumBytes::new(
-        CAPACITY
+        SATURATION_CAPACITY
             - test.subnet_available_memory().get_execution_memory() as u64
-            - subnet_memory_usage,
+            - run.subnet_memory_usage_before,
     );
     assert_gt!(allocated_bytes.get(), 0);
 
-    // All bytes allocated by the creation must be reserved for as a single
-    // allocation starting at the subnet memory saturation before the creation.
+    // All bytes allocated by the operation must be reserved for as a single
+    // allocation starting at the subnet memory saturation before the operation.
     // In particular, the canister history entry must be reserved for at the
     // saturation that already accounts for the log memory store and the memory
     // allocation applied just before it.
     assert_eq!(
-        test.canister_state(canister_id)
+        test.canister_state(run.canister_id)
             .system_state
-            .reserved_balance(),
+            .reserved_balance()
+            - run.reserved_before,
         test.cycles_account_manager()
             .storage_reservation_cycles(
                 allocated_bytes,
-                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                &ResourceSaturation::new(
+                    run.subnet_memory_usage_before,
+                    SATURATION_THRESHOLD,
+                    SATURATION_CAPACITY
+                ),
                 test.get_own_subnet_cycles_config(),
             )
             .real()
@@ -4761,119 +4775,80 @@ fn create_canister_reserves_cycles_at_up_to_date_saturation() {
 }
 
 #[test]
+fn create_canister_reserves_cycles_at_up_to_date_saturation() {
+    check_reserves_cycles_at_up_to_date_saturation(|test, memory_allocation| {
+        let subnet_memory_usage_before = saturation_subnet_memory_usage(test);
+        let canister_id = test
+            .create_canister_with_settings(
+                SATURATION_CYCLES,
+                CanisterSettingsArgsBuilder::new()
+                    .with_log_memory_limit(SATURATION_LOG_MEMORY_LIMIT)
+                    .with_controllers((0..10).map(PrincipalId::new_user_test_id).collect())
+                    .with_maybe_memory_allocation(memory_allocation.map(|bytes| bytes.get()))
+                    .with_reserved_cycles_limit(SATURATION_CYCLES.get())
+                    .build(),
+            )
+            .unwrap();
+        UpToDateSaturationRun {
+            canister_id,
+            // The canister did not exist before, so it had nothing reserved.
+            reserved_before: Cycles::zero(),
+            subnet_memory_usage_before,
+            // The canister history holds exactly the `canister_creation` entry
+            // recorded by the creation.
+            memory_usage_before_history_entry: test.canister_state(canister_id).memory_usage()
+                - test
+                    .canister_state(canister_id)
+                    .canister_history_memory_usage(),
+        }
+    });
+}
+
+#[test]
 fn update_settings_reserves_cycles_at_up_to_date_saturation() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const KIB: u64 = 1024;
-    const MIB: u64 = 1024 * KIB;
-    const LOG_MEMORY_LIMIT: u64 = 256 * KIB;
-    // The memory allocation below exceeds the memory usage by less than a canister
-    // history entry, whose reservation only differs measurably between two nearby
-    // saturations if the memory capacity above the threshold is small.
-    const THRESHOLD: u64 = 10 * MIB;
-    const CAPACITY: u64 = THRESHOLD + 3 * MIB;
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY)
-        .with_subnet_memory_reservation(0)
-        .with_subnet_memory_threshold(THRESHOLD)
-        .with_resource_saturation_scaling(1)
-        .build();
-
-    // Push the subnet memory usage above the threshold at which cycles are reserved.
-    test.create_canister_with_allocation(CYCLES, None, Some(THRESHOLD))
-        .unwrap();
-
-    // Create the canister to update without a log memory store and without a
-    // memory allocation, so that the update below allocates bytes.
-    let canister_id = test
-        .create_canister_with_settings(
-            CYCLES,
+    check_reserves_cycles_at_up_to_date_saturation(|test, memory_allocation| {
+        // Create the canister to update without a log memory store and without a
+        // memory allocation, so that the update below allocates bytes.
+        let canister_id = test
+            .create_canister_with_settings(
+                SATURATION_CYCLES,
+                CanisterSettingsArgsBuilder::new()
+                    .with_log_memory_limit(0)
+                    .with_reserved_cycles_limit(SATURATION_CYCLES.get())
+                    .build(),
+            )
+            .unwrap();
+        let reserved_before = test
+            .canister_state(canister_id)
+            .system_state
+            .reserved_balance();
+        // The memory usage the canister will have once its log memory store has
+        // been resized by the update below (mirrors
+        // `validate_and_update_canister_settings`).
+        let canister = test.canister_state(canister_id);
+        let memory_usage_before_history_entry = canister.memory_usage()
+            - canister.log_memory_store_memory_usage()
+            + canister
+                .system_state
+                .log_memory_store
+                .memory_usage_for_limit(NumBytes::new(SATURATION_LOG_MEMORY_LIMIT));
+        let subnet_memory_usage_before = saturation_subnet_memory_usage(test);
+        test.update_settings(
+            canister_id,
             CanisterSettingsArgsBuilder::new()
-                .with_log_memory_limit(0)
-                .with_reserved_cycles_limit(CYCLES.get())
+                .with_log_memory_limit(SATURATION_LOG_MEMORY_LIMIT)
+                .with_maybe_memory_allocation(memory_allocation.map(|bytes| bytes.get()))
+                .with_controllers((0..10).map(PrincipalId::new_user_test_id).collect())
                 .build(),
         )
         .unwrap();
-
-    // Determine the memory usage of a `controllers_change` canister history entry
-    // by recording one.
-    let memory_usage_before = test.canister_state(canister_id).memory_usage();
-    test.update_settings(
-        canister_id,
-        CanisterSettingsArgsBuilder::new()
-            .with_controllers((0..10).map(PrincipalId::new_user_test_id).collect())
-            .build(),
-    )
-    .unwrap();
-    let history_entry_bytes = test.canister_state(canister_id).memory_usage() - memory_usage_before;
-    assert_gt!(history_entry_bytes.get(), 1);
-
-    let reserved_before = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
-
-    // The memory usage the canister will have once its log memory store has been
-    // resized by the update below, i.e. before the canister history entry is
-    // recorded (mirrors `validate_and_update_canister_settings`).
-    let canister = test.canister_state(canister_id);
-    let memory_usage_before_history_entry = canister.memory_usage()
-        - canister.log_memory_store_memory_usage()
-        + canister
-            .system_state
-            .log_memory_store
-            .memory_usage_for_limit(NumBytes::new(LOG_MEMORY_LIMIT));
-
-    let subnet_memory_usage =
-        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-
-    // Update the log memory limit, the memory allocation, and the controllers in a
-    // single call. The memory allocation exceeds the memory usage after the log
-    // memory store has been resized, but by less than a canister history entry, so
-    // the log memory store, the memory allocation, and the `controllers_change`
-    // canister history entry (which outgrows the memory allocation) each allocate
-    // bytes, one after the other.
-    let memory_allocation =
-        memory_usage_before_history_entry + NumBytes::new(history_entry_bytes.get() / 2);
-    test.update_settings(
-        canister_id,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_memory_limit(LOG_MEMORY_LIMIT)
-            .with_memory_allocation(memory_allocation.get())
-            .with_controllers((10..20).map(PrincipalId::new_user_test_id).collect())
-            .build(),
-    )
-    .unwrap();
-    assert_gt!(
-        test.canister_state(canister_id).memory_usage(),
-        memory_allocation
-    );
-
-    let allocated_bytes = NumBytes::new(
-        CAPACITY
-            - test.subnet_available_memory().get_execution_memory() as u64
-            - subnet_memory_usage,
-    );
-    assert_gt!(allocated_bytes.get(), 0);
-
-    // All bytes allocated by the update must be reserved for as a single
-    // allocation starting at the subnet memory saturation before the update.
-    // In particular, the canister history entry must be reserved for at the
-    // saturation that already accounts for the log memory store and the memory
-    // allocation applied just before it.
-    assert_eq!(
-        test.canister_state(canister_id)
-            .system_state
-            .reserved_balance()
-            - reserved_before,
-        test.cycles_account_manager()
-            .storage_reservation_cycles(
-                allocated_bytes,
-                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-                test.get_own_subnet_cycles_config(),
-            )
-            .real()
-    );
+        UpToDateSaturationRun {
+            canister_id,
+            reserved_before,
+            subnet_memory_usage_before,
+            memory_usage_before_history_entry,
+        }
+    });
 }
 
 #[test]
