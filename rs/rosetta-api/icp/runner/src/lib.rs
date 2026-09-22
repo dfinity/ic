@@ -15,10 +15,10 @@ struct KillOnDrop(Child);
 
 impl KillOnDrop {
     /// Returns the exit status of the Rosetta process if it has exited.
-    fn try_wait(&mut self) -> Result<Option<ExitStatus>, String> {
-        self.0
-            .try_wait()
-            .map_err(|e| format!("Failed to poll the Rosetta process: {e}"))
+    fn try_wait(&mut self) -> Result<Option<ExitStatus>, StartAttemptError> {
+        self.0.try_wait().map_err(|e| {
+            StartAttemptError::fatal(format!("Failed to poll the Rosetta process: {e}"))
+        })
     }
 }
 
@@ -117,6 +117,31 @@ impl RosettaOptionsBuilder {
     }
 }
 
+/// Why an attempt to start Rosetta failed.
+struct StartAttemptError {
+    message: String,
+    /// Whether another attempt makes sense. Only an early exit of the Rosetta
+    /// process (e.g. because the replica was temporarily unreachable) is worth
+    /// retrying; running out of time or failing to poll the process is not.
+    retryable: bool,
+}
+
+impl StartAttemptError {
+    fn exited(message: String) -> Self {
+        Self {
+            message,
+            retryable: true,
+        }
+    }
+
+    fn fatal(message: String) -> Self {
+        Self {
+            message,
+            retryable: false,
+        }
+    }
+}
+
 /// Starts Rosetta and waits until it serves `/network/list`.
 ///
 /// Rosetta exits (with a panic) when it can't reach the ledger while
@@ -124,7 +149,9 @@ impl RosettaOptionsBuilder {
 /// unresponsive, and it only writes its port file after that initialization.
 /// Such an early exit is therefore detected instead of waiting forever for a
 /// port file that will never appear, and starting Rosetta is retried up to
-/// [`MAX_START_ATTEMPTS`] times before giving up with a descriptive panic.
+/// [`MAX_START_ATTEMPTS`] times. All attempts together are bounded by
+/// [`START_TIMEOUT`], after which this function panics with a descriptive
+/// message instead of hanging until the bazel test timeout.
 pub async fn start_rosetta(
     rosetta_bin: &Path,
     state_directory: TempDir,
@@ -137,9 +164,18 @@ pub async fn start_rosetta(
     );
 
     let port_file = state_directory.path().join("port");
+    let deadline = Instant::now() + START_TIMEOUT;
     let mut attempt = 1;
     loop {
-        match try_start_rosetta(rosetta_bin, &state_directory, &port_file, &arguments).await {
+        match try_start_rosetta(
+            rosetta_bin,
+            &state_directory,
+            &port_file,
+            &arguments,
+            deadline,
+        )
+        .await
+        {
             Ok((proc, port)) => {
                 return RosettaContext {
                     proc,
@@ -147,16 +183,30 @@ pub async fn start_rosetta(
                     port,
                 };
             }
-            Err(err) if attempt < MAX_START_ATTEMPTS => {
+            Err(err)
+                if err.retryable
+                    && attempt < MAX_START_ATTEMPTS
+                    && Instant::now() + WAIT_BETWEEN_START_ATTEMPTS < deadline =>
+            {
                 eprintln!(
-                    "Failed to start Rosetta (attempt {attempt}/{MAX_START_ATTEMPTS}): {err}. \
-                     Retrying in {WAIT_BETWEEN_START_ATTEMPTS:?}..."
+                    "Failed to start Rosetta (attempt {attempt}/{MAX_START_ATTEMPTS}): {}. \
+                     Retrying in {WAIT_BETWEEN_START_ATTEMPTS:?}...",
+                    err.message
                 );
                 attempt += 1;
                 sleep(WAIT_BETWEEN_START_ATTEMPTS).await;
             }
+            Err(err) if err.retryable && attempt >= MAX_START_ATTEMPTS => {
+                panic!(
+                    "Failed to start Rosetta after {MAX_START_ATTEMPTS} attempts: {}",
+                    err.message
+                )
+            }
             Err(err) => {
-                panic!("Failed to start Rosetta after {MAX_START_ATTEMPTS} attempts: {err}")
+                panic!(
+                    "Failed to start Rosetta within {START_TIMEOUT:?} ({attempt} attempt(s)): {}",
+                    err.message
+                )
             }
         }
     }
@@ -164,16 +214,18 @@ pub async fn start_rosetta(
 
 /// Spawns Rosetta once and waits until it serves `/network/list`.
 ///
-/// Returns an error when the Rosetta process exits, fails to write its port
-/// file within [`START_TIMEOUT`], or doesn't become ready within
-/// [`NUM_TRIES`] attempts. The spawned process is killed when the returned
-/// [`KillOnDrop`] is dropped, so a failed attempt leaves no process behind.
+/// Returns an error when the Rosetta process exits (retryable), when the
+/// `deadline` passes before it serves `/network/list`, or when it doesn't
+/// become ready within [`NUM_TRIES`] readiness probes. The spawned process is
+/// killed when the returned [`KillOnDrop`] is dropped, so a failed attempt
+/// leaves no process behind.
 async fn try_start_rosetta(
     rosetta_bin: &Path,
     state_directory: &TempDir,
     port_file: &Path,
     arguments: &RosettaOptions,
-) -> Result<(KillOnDrop, u16), String> {
+    deadline: Instant,
+) -> Result<(KillOnDrop, u16), StartAttemptError> {
     if port_file.exists()
         && let Err(e) = std::fs::remove_file(port_file)
         && e.kind() != std::io::ErrorKind::NotFound
@@ -211,22 +263,23 @@ async fn try_start_rosetta(
         )
     }));
 
-    let started_at = Instant::now();
+    // Rosetta only writes its port file after it has successfully initialized
+    // its ledger client, so if it dies before that the file never appears.
     let port = loop {
         if let Some(port) = read_port(port_file) {
             break port;
         }
         if let Some(status) = proc.try_wait()? {
-            return Err(format!(
+            return Err(StartAttemptError::exited(format!(
                 "Rosetta exited with {status} before writing its port file {}",
                 port_file.display()
-            ));
+            )));
         }
-        if started_at.elapsed() > START_TIMEOUT {
-            return Err(format!(
-                "Rosetta didn't write its port file {} within {START_TIMEOUT:?}",
+        if Instant::now() >= deadline {
+            return Err(StartAttemptError::fatal(format!(
+                "Rosetta didn't write its port file {} in time",
                 port_file.display()
-            ));
+            )));
         }
         sleep(WAIT_BETWEEN_ATTEMPTS).await;
     };
@@ -244,15 +297,20 @@ async fn try_start_rosetta(
             break;
         }
         if let Some(status) = proc.try_wait()? {
-            return Err(format!(
+            return Err(StartAttemptError::exited(format!(
                 "Rosetta exited with {status} before serving /network/list on port {port}"
-            ));
+            )));
+        }
+        if Instant::now() >= deadline {
+            return Err(StartAttemptError::fatal(format!(
+                "Rosetta didn't serve /network/list on port {port} in time"
+            )));
         }
         tries_left -= 1;
         if tries_left == 0 {
-            return Err(format!(
+            return Err(StartAttemptError::fatal(format!(
                 "Rosetta didn't serve /network/list on port {port} within {NUM_TRIES} attempts"
-            ));
+            )));
         }
         sleep(WAIT_BETWEEN_ATTEMPTS).await;
     }
