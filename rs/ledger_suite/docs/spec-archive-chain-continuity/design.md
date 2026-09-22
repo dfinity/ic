@@ -311,8 +311,12 @@ The consequence of the corresponding non-goal. `Req 2` and `Req 3` are implement
 **D6 does not reach ICP either**, which is easy to miss because it is ledger-side
 code. D6 serves `Req 8.1`, `8.2` and `8.6`, and all three require an archive to have
 reported an extent. An ICP archive reports none, so the ICP ledger is exempt from
-`Req 7.1`, `7.3`, `7.4` and from `Req 8.1`-`8.4` and `8.6` (`Req 7.5`, `Req 8.7`) and
-keeps deriving both the offset and the archived prefix from its own record. Without
+`Req 7.1`-`7.4` and from `Req 8.1`-`8.4` and `8.6` (`Req 7.5`, `Req 8.7`) and keeps
+deriving both the offset and the archived prefix from its own record. `Req 7.2` is in
+that list for a second, independent reason: ICP's `archives()` returns canister ids
+with no ranges (`icp/ledger.did:246-248`) and it has no `icrc3_get_archives` at all,
+so publishing matching ranges through both would be an interface change this design
+does not make. Without
 those exemptions the requirements would forbid it from creating an archive or
 discarding a block at all, contradicting `Req 10.5`.
 
@@ -476,7 +480,9 @@ Order of work, per D4 and D5:
    different stops, and only one of them depends on the platform. `Req 4.1` is the
    archive comparing the next block's size against its own configured limit and its
    own usage, so it stops *before* asking for memory and cannot be refused — this is
-   the routine case, reached once per archive fill and, under F2, on every fill.
+   the routine case, reached once per archive fill — and on *every* fill once the
+   `remaining_capacity` pre-call is replaced by the reported `at_capacity`, per
+   `Req 4.5` and `4.6` and the `node_and_capacity` subsection below.
    `Req 4.8` is a grow the archive did ask for and was refused; `StableLog::append`
    returns a `Result`, so the current `unwrap_or_else(|_| trap("no space left"))` is
    the archive's own choice and can be handled — but only for the refusals that
@@ -608,7 +614,11 @@ determination itself is the empty append of `Req 10.3`, issued here and bounded 
 `Req 12.1`'s one-empty-append limit.
 
 Reconciliation also maintains what `archives()` publishes, so a Published_Range only
-ever widens to what an archive has reported (`Req 7.2`) — the ledger's published view
+ever widens to what an archive has reported (`Req 7.2`), and an archive that holds
+nothing yet appears in no published range at all (`Req 7.6`) — which is what the code
+already does, since the range entry is pushed on the first successful append rather
+than at creation. A published range is inclusive of both ends, so an empty archive
+has no pair of indices that could describe it — the ledger's published view
 and its internal record are the same data, which is why `Req 8.6` has to be about the
 *source* of that data rather than about which field it is read from.
 
@@ -621,8 +631,19 @@ exception, a single persisted field:
     enum Creating { Idle, Started, Created(CanisterId) }
 
 `Started` before `create_canister`, `Created(id)` as soon as it returns, `Idle` when
-`nodes.push` succeeds. Anything but `Idle` halts (`Req 11.1`) and is exposed
-(`Req 11.2`), with the id when there is one (`Req 11.7`).
+`nodes.push` succeeds. Both non-`Idle` states are exposed (`Req 11.2`), with the id
+when there is one (`Req 11.7`), but **they do not have the same effect and must not
+be collapsed into one halt**:
+
+| state | effect |
+|---|---|
+| `Started` | no blocks move, and nothing resumes on its own (`Req 11.1`, `11.4`) — a canister may exist that cannot be named, so an operator has to look |
+| `Created(id)` | the round *finishes the creation first* and then proceeds (`Req 11.8`) — it is a "do this before archiving" state, not a halt |
+
+Treating every non-`Idle` state as a halt would make `Req 11.8` unreachable, because
+the halt is implemented as a skip in `blocks_to_archive` *before* the guard is taken:
+a `Created(id)` round would be skipped and would never reach the reconciliation it
+exists to perform.
 
 This is ICP's journaling pattern — record intent before the work and the result
 after — which its guidance recommends over trying to avoid traps after an await. It
@@ -723,6 +744,11 @@ class of thing and the figure is cheap to get.
 creation halt (`Req 11.1`), the capability halt (`Req 10.1`) and the coverage halts
 (`Req 8.3`, `8.4`) — all before the guard is taken, so a skipped round costs nothing.
 
+`Req 11.8`'s `Created(id)` state is deliberately **not** in that list. Skipping is
+what a halt does, and this state needs the opposite: the round proceeds, finishes the
+creation, and only then moves blocks. Putting it among the skips is the one mistake
+that makes the self-recovery path dead code.
+
 ### `ledger_canister_core::runtime` — `Runtime::call`
 
 One call site today, `Call::unbounded_wait` (`runtime.rs:68`), used for every
@@ -812,7 +838,7 @@ test is baseline-independent.
 | 9 | archive | genesis into an empty archive with offset 0; then assert a block with no parent hash is refused by an archive whose offset is non-zero, and by one that already holds blocks | `Req 1.5` |
 | 9b | archive | install with no Expected_Parent, append into it, and assert it is stored and the unverifiable-first-append counter rises | `Req 1.4`, `Req 1.6` |
 | 9c | archive | install with an Expected_Parent, then append a first batch whose first block carries a different parent; assert refusal and that nothing is stored. Then append one that matches and assert it is stored and the counter in 1.6 does *not* rise | `Req 1.8`, `Req 1.6` |
-| 10 | archive | **written, and retired by PR 1**: `test_append_blocks_ignores_an_extra_optional_start_index` — the current one-argument archive stores the blocks, ignores the extra argument, and its empty reply reads as absent; a wrong-typed payload is rejected as a negative control. Its `Decode!(.., Option<u64>)` stops describing the archive the moment E1 returns `opt append_result`, so row 11 replaces it rather than extending it. The ICP twin in row 12 stays valid indefinitely, which is why only that one is a release gate | the rollout premise, pre-PR-1 only |
+| 10 | archive | **written, and retired by PR 1**: `test_append_blocks_ignores_an_extra_optional_start_index` — the current one-argument archive stores the blocks, ignores the extra argument, and its empty reply reads as absent; a wrong-typed payload is rejected as a negative control. Its `Decode!(.., Option<u64>)` stops describing the archive the moment the new implementation returns `opt append_result` (`Req 3.1`), so row 11 replaces it rather than extending it. The ICP twin in row 12 stays valid indefinitely, which is why only that one is a release gate | the rollout premise, pre-PR-1 only |
 | 11 | archive | against the new implementation: one argument only; assert blocks stored, empty reply, and that a chain mismatch traps rather than returning a refusal | `Req 5.1`, `5.2`, `5.3`, `5.4` |
 | 12 | archive | **written**: `should_ignore_an_extra_optional_start_index` (`icp/archive/tests/tests.rs`) — the ICP archive's hand-rolled decode tolerates the extra argument, capacity drops by the block size, and the empty reply reads as absent | D3's tolerance; a **release gate** |
 | 13 | archive | assert each counter in `Req 6.1` moves for its own cause and is readable afterwards | `Req 6.1`, `6.2`, `6.3`, `6.4` |

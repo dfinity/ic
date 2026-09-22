@@ -392,18 +392,23 @@ no special cases.
 1. WHEN THE Ledger creates an archive, THE Ledger SHALL set its
    `block_index_offset` to one past the last index the previously created archive
    reported holding.
-2. THE Ledger SHALL publish, through `archives()` and `icrc3_get_archives`, a
-   Published_Range per archive such that the ranges are contiguous and
-   non-overlapping across all of them, and SHALL report the same ranges through
-   both.
+2. THE ICRC Ledger SHALL publish, through `archives()` and `icrc3_get_archives`, a
+   Published_Range for each archive that holds at least one block, such that those
+   ranges are contiguous and non-overlapping across all of them, and SHALL report the
+   same ranges through both.
 3. THE Ledger SHALL derive the offset in 7.1 only from an extent an archive has
    reported, never from a count of blocks it has sent.
 4. WHILE an archive exists whose reported Archive_Range does not begin where the
    previous archive's Archive_Range ends, THE Ledger SHALL NOT store further blocks
    in it and SHALL expose a distinct non-zero metric.
 5. THE ICP Ledger SHALL derive a new archive's `block_index_offset` from its own
-   record instead, and SHALL NOT be held to 7.1, 7.3 or 7.4, because its archives
-   report no Archive_Range to derive one from (per 10.5).
+   record instead, and SHALL NOT be held to 7.1, 7.2, 7.3 or 7.4, because its archives
+   report no Archive_Range to derive one from (per 10.5) and its `archives()` returns
+   canister ids without ranges, with no `icrc3_get_archives` to report them through —
+   so 7.2 would require an interface change this specification does not make.
+6. THE Ledger SHALL omit an archive that holds no blocks from the ranges it publishes
+   until that archive stores its first block, because a published range is inclusive
+   of both ends and an empty archive has no pair of indices that describes it.
 
 ### Requirement 8: No Block Index Ever Becomes Unretrievable
 
@@ -506,11 +511,12 @@ unaddressable canister does not become a series of them.
 
 #### Acceptance Criteria
 
-1. WHILE THE Ledger has begun creating an archive and has neither adopted it as one
-   of its archives nor observed the creation fail, THE Ledger SHALL make no further
-   archiving attempt.
-2. WHILE the condition in 11.1 holds, THE Ledger SHALL expose a distinct non-zero
-   metric.
+1. WHILE THE Ledger has begun creating an archive, has not recorded its identity per
+   11.6, and has not observed the creation fail, THE Ledger SHALL move no further
+   blocks to any archive.
+2. WHILE the condition in 11.1 or in 11.8 holds, THE Ledger SHALL expose a distinct
+   non-zero metric, and SHALL distinguish the two, because one waits for an operator
+   and the other resolves itself.
 3. WHEN THE Ledger observes an archive creation fail *before* the canister exists,
    THE Ledger SHALL NOT enter the state in 11.1, so that an ordinary failure is
    subject to Req 9 rather than halting.
@@ -527,11 +533,11 @@ unaddressable canister does not become a series of them.
 7. WHILE the condition in 11.1 holds and an identity was recorded per 11.6, THE
    Ledger SHALL expose that identity, because an operator otherwise has to recover
    it from canister logs that are unreadable by default.
-8. WHILE THE Ledger is in the state in 11.1 and did record an identity per 11.6, THE
-   Ledger SHALL be permitted to finish the creation on its own — determining what
-   remains to be done by asking the created canister — because a canister it can name
-   is one it can still adopt, and halting for an operator there would demand
-   intervention for something recoverable.
+8. WHILE THE Ledger has recorded a created archive's identity per 11.6 but not yet
+   adopted it, THE Ledger SHALL finish that creation before moving any further blocks
+   — determining what remains to be done by asking the created canister — rather than
+   making no attempt at all as it does under 11.1, because a canister it can name is
+   one it can still adopt and an operator should not be needed for that.
 
 ### Requirement 12: An Archiving Round Makes One Append
 

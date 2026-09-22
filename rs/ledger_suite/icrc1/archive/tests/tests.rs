@@ -137,18 +137,27 @@ fn test_empty_append_blocks_is_accepted_and_stores_nothing() {
     let capacity_before = setup.remaining_capacity();
 
     // One argument only, which is the shape an old ledger actually sends.
-    setup.append_blocks(vec![]);
+    let reply = setup.append_blocks(vec![]);
     assert_eq!(setup.log_length(), 0, "an empty append must store nothing");
     assert_eq!(
         setup.remaining_capacity(),
         capacity_before,
         "a one-argument empty append must not consume capacity"
     );
+    // The reply must stay empty. Asserting this is what stops a future
+    // two-argument archive from answering an index-less caller with a result it
+    // has no code to read.
+    assert_eq!(
+        Decode!(&reply.bytes(), Option<u64>)
+            .expect("an empty reply must decode as a missing trailing optional"),
+        None,
+        "a one-argument empty append must reply empty"
+    );
 
     // Two arguments with the index explicitly absent. This is a *different* wire
     // shape from the call above: `None` is a present trailing argument whose value
     // is `null`, not an omitted one.
-    setup
+    let reply = setup
         .append_blocks_with_start_index(vec![], None)
         .expect("an empty append with a null index should be accepted");
     assert_eq!(setup.log_length(), 0, "still nothing stored");
@@ -156,6 +165,12 @@ fn test_empty_append_blocks_is_accepted_and_stores_nothing() {
         setup.remaining_capacity(),
         capacity_before,
         "a null-index empty append must not consume capacity"
+    );
+    assert_eq!(
+        Decode!(&reply.bytes(), Option<u64>)
+            .expect("an empty reply must decode as a missing trailing optional"),
+        None,
+        "a null-index empty append must reply empty too"
     );
 
     // And with the proposed index, as a new ledger would.
