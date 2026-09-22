@@ -229,9 +229,9 @@ have outlasted a cause that cleared itself, which is why `Req 9.4` exists.
 Transaction-triggered plus a timestamp check rather than a timer: no re-arm hazard,
 and it satisfies the every-await-is-a-call constraint above.
 
-### D2 — Backoff state is `#[serde(skip)]`; what an archive told us is not
+### D2 — Backoff and probe state are `#[serde(skip)]`
 
-Serves `Req 9.3`, `Req 9.9`. Matches `archiving_in_progress`, and makes an upgrade the
+Serves `Req 9.3`, `Req 9.9`, `Req 10.4`. Matches `archiving_in_progress`, and makes an upgrade the
 operator's "resume now" lever, which is the right shape when the upgrade is usually the
 fix.
 
@@ -241,11 +241,11 @@ permits one. `Req 9.9` is therefore the criterion that makes this legal rather t
 contract violation — the behaviour was always intended, but only the design said so.
 
 **The line is whether forgetting it costs anything.** Backoff state forgotten is a
-round attempted sooner, which is the point. But what an *archive* reported is not the
-ledger's own transient state: forgetting it means re-asking a question already answered
-(`Req 10.4`) or losing the distinction between an observed and an inferred range
-(`Req 10.6`), neither of which an upgrade should undo. So D8's capability answer and the
-creation journal are persisted, and this decision covers only the first kind.
+round attempted sooner, which is the point, and a capability answer forgotten is one
+empty append that stores nothing — so `Req 10.4` permits that one re-determination
+explicitly rather than the design engineering around it. What an upgrade must *not*
+forget is an archive that may exist and cannot be named, which is why the creation
+journal is the exception and persists.
 
 ### D3 — One seam, `Wasm::INDEXED_APPENDS`, and no others
 
@@ -333,25 +333,18 @@ variant where a new node already has a tip, but the silent variant is the *empty
 node, which has none — closing that needs the offset check, hence the index, hence the
 interface change.
 
-### D8 — Only a positive capability answer is kept, and it is persisted
+### D8 — Only a positive capability answer is cached
 
-Serves `Req 10.2`, `Req 10.4`, `Req 10.6`. Caching "the tail cannot answer" would
-strand the ledger, because the cache lives in the ledger and upgrading only the
-archive — the scenario `Req 10` exists for — would not clear it. So an absent answer is
-re-probed, spaced by D1's backoff.
+Serves `Req 10.2`, `Req 10.4`. Caching "the tail cannot answer" would strand the
+ledger, because the cache lives in the ledger and upgrading only the archive — the
+scenario `Req 10` exists for — would not clear it. So an absent answer is re-probed,
+spaced by D1's backoff, and a positive answer is cached in `#[serde(skip)]` state.
 
-A positive answer is **persisted**, not `#[serde(skip)]` like the rest of D2's state,
-and this took two revisions to get right. Skipped, it is forgotten on every ledger
-upgrade, so the next round re-probes an archive that has demonstrably already reported —
-which `Req 10.4` forbids without qualification, and which no exception should be written
-for when the state is this cheap to keep.
-
-It is the same field `Req 7.7` needs, which is why there is one rather than two:
-per-node provenance, recording whether each archive's range was *observed* or merely
-inferred. Range values cannot carry that themselves — an inference that happened to be
-correct is indistinguishable from a report — so `Req 10.6` makes it explicit. The
-default for pre-change state is "inferred", which is both the upgrade-safe answer and
-the truthful one, since every range recorded before this change was inferred.
+**Losing it on upgrade is the intended behaviour, not a defect to design around.** The
+tail reports its range on the first round after an upgrade and on every round
+afterwards, so one empty append re-establishes the answer at a cost of nothing — it
+stores no block and consumes no capacity (`Req 3.5`). `Req 10.4` therefore permits that
+single re-determination rather than the ledger persisting state to avoid it.
 
 ### D9 — `ARCHIVE_CALL_TIMEOUT` is the CDK default, 300 s
 
@@ -764,6 +757,14 @@ every block is already held, so it stores nothing and consumes no capacity (`Req
 `Req 2.7`). It is a verification, not a write. And if no published range covers those
 indices at all, that is `Req 8.3`'s uncovered span and a halt.
 
+**This redirect is also what gives `Req 8.2` its input**, which is easy to miss because
+the two read as unrelated. `Req 8.2` asks whether earlier archives' *reported* ranges
+cover a span the tail has left behind, and on a suite predating this work no earlier
+archive has reported anything. The redirect is the one path that makes a non-tail
+archive answer — and it is driven by exactly the condition that raises the question, a
+ledger that has fallen behind. So the ranges arrive when they are needed and not
+otherwise, which is why no sweep of the older archives is required.
+
 An absent reply routes by `Wasm::INDEXED_APPENDS` (D3): halt and count for an ICRC
 ledger (`Req 10.1`), incremental path and count for ICP (`Req 10.5`). The
 determination itself is the empty append of `Req 10.3`, issued here and bounded by
@@ -787,14 +788,12 @@ and its internal record are the same data, which is why `Req 8.6` has to be abou
 losing it is not a hazard: a cold start falls back to the pre-call, which is the same
 value computed the expensive way.
 
-The **persisted** fields are the creation journal and the range provenance:
+Creation state is the exception, and is persisted:
 
     #[serde(default)]                                      // Idle is Default
     creating: Creating,
     #[serde(default)]                                      // empty is Default
     pending_handovers: Vec<CanisterId>,
-    #[serde(default)]                                      // empty = all inferred
-    reported_ranges: Vec<bool>,                            // parallel to nodes
 
     enum Creating { Idle, Started, Created(CanisterId) }   // Default = Idle
 
@@ -868,10 +867,10 @@ reason.
 
 ### Halt conditions, and how each one clears
 
-Eight conditions stop archiving, with three different recovery stories, and they are
+Seven conditions stop archiving, with three different recovery stories, and they are
 easy to conflate because they present identically — archiving stops and blocks
 accumulate. An operator's first question is which one it is, so the metrics must be
-distinct (they are, by `Req 4.10`, `7.7`, `8.3`, `8.4`, `8.8`, `9.7`, `10.1` and `11.2`) and the answer to
+distinct (they are, by `Req 4.10`, `8.3`, `8.4`, `8.8`, `9.7`, `10.1` and `11.2`) and the answer to
 "what now" must be written down:
 
 | condition | criterion | clears |
@@ -880,12 +879,11 @@ distinct (they are, by `Req 4.10`, `7.7`, `8.3`, `8.4`, `8.8`, `9.7`, `10.1` and
 | an archive reports a position below the archived prefix | `Req 8.4` | never — blocks the ledger already stopped serving are held nowhere. Recovery is whatever backup exists, not this system |
 | an archive reports a position above the ledger's own chain tip | `Req 8.8` | operator only. The ledger is on a chain the archive was not built from, which is the snapshot-restore non-goal; the coherent fix is restoring the whole suite to a common point, not resuming |
 | an empty archive reports `at_capacity` | `Req 4.10` | operator only, and cheaply: raise `node_max_memory_size_bytes` above the block that did not fit. Halting is what stops it creating a canister per transaction meanwhile |
-| a legacy archive reports a range contradicting the record | `Req 7.7` | operator only. This is the historical mis-indexing itself, so clearing it means the repair path of D10, computed and proposed deliberately |
 | an archive refused an append on chain or position grounds | `Req 9.7` | not on its own, and deliberately: the archive's counters say which of `1.1`, `2.2` or `2.9` fired, and they call for different investigations |
 | the tail archive reports no range | `Req 10.1` | **itself**, on the next probe once the archive is upgraded (`Req 10.2`). The only self-clearing halt |
 | an archive creation was begun and never accounted for | `Req 11.1` | operator only, explicitly not itself (`Req 11.4`), because a canister may exist that nothing will address |
 
-Two things follow for the implementation. The seven non-clearing halts must be
+Two things follow for the implementation. The six non-clearing halts must be
 distinguishable from the backoff of `Req 9.1` — a ledger that is *waiting* and one
 that has *stopped* look the same from block accumulation alone. And `Req 10.1` is the
 only one whose state may be derived from a cache, since it is the only one expected
@@ -921,39 +919,23 @@ reported anything — but there is a tail, and `Req 10.3`'s probe reports its ra
 before the first roll-over, which is where `Req 7.1` gets its value. Worth a comment
 at the call site, since the probe doubling as the bootstrap is not obvious.
 
-**The tail is not the only legacy node, and the others are the interesting ones**
-(`Req 7.7`). A full archive is never appended to again, so tail-only probing would
-leave every earlier node's range inferred forever — and a mis-indexed node *becomes* a
-non-tail node the moment the next one is created, which is to say the corruption this
-document exists to prevent lands precisely where nothing would ever ask. So each
-archive whose range was inferred is asked once, one per round to stay inside
-`Req 12.1`, and a reported range that contradicts the record halts archiving — leaving
-the published range **as it stands** rather than replacing it, because publishing the
-contradicting range would break `Req 7.2`'s continuity on the strength of the very
-report that says something is wrong, and the repair of D10 needs the ledger's own record
-intact to compute against.
+**Legacy non-tail nodes are deliberately not swept**, which is worth stating because
+the opposite looks prudent. Their ranges were inferred rather than reported, and they
+stay that way: a full archive never receives another block, so no decision the ledger
+makes afterwards reads its range — `Req 7.1` derives an offset from the tail, `Req 8.1`
+gives up blocks on the tail's report, and `Req 8.2`'s coverage question only arises for
+a span the tail has left behind. Asking them would find a historical mis-indexing, but
+the only response available is a halt, and halting archiving repairs nothing that is
+already written; Step 0's Rosetta sync is the deliberate, operator-owned path for that,
+and D10 the repair. So the ledger asks the tail, on the round after each upgrade and on
+every round after that, and that is the whole of it.
 
-It is cheap — an archive per 3 GiB means single digits, one empty append each, no
-operator — and self-terminating, since an archive only has to answer once. It does not
-replace Step 0's Rosetta sync, which verifies block *content* rather than extents, but
-it is the part that runs by itself on every suite.
-
-It knows which archives to ask from the persisted provenance of D8 (`Req 10.6`), not
-from the range values, which cannot distinguish a lucky inference from a report.
-
-**Two details keep it from colliding with what is already there.** A legacy archive
-that has not been upgraded reports nothing, and that is *not* a halt (`Req 7.8`): it is
-counted and left alone, because `Req 10.1`'s halt protects appends and this archive will
-never receive one. And `Req 12.1` allows a round only one empty append, which the
-capability probe of `Req 10.3` may already be using — so the migration yields to it and
-starts only once the tail has answered. That ordering is free, since a ledger whose tail
-cannot report a range is not archiving at all.
-
-**Comparing per archive, not against the prefix.** `Req 8.4` had to be restated for
-this: a non-tail archive legitimately ends below the Archived_Prefix, because later
-archives hold the blocks above it, so comparing any archive's reported position against
-the aggregate prefix would read every correct legacy answer as irrecoverable loss. The
-comparison is against the range published for *that* archive.
+**Comparing per archive, not against the prefix.** `Req 8.4` still had to be restated:
+a non-tail archive legitimately ends below the Archived_Prefix, because later archives
+hold the blocks above it, so comparing any archive's reported position against the
+aggregate prefix would read a correct answer as irrecoverable loss — and `Req 9.8`'s
+redirect does make non-tail archives answer. The comparison is against the range
+published for *that* archive.
 
 **And it is the one comparison that crosses the two conventions**, so it is worth
 writing out. A Published_Range is inclusive at both ends (`Req 7.6`, because an empty
@@ -1013,7 +995,7 @@ class of thing and the figure is cheap to get.
 
 `blocks_to_archive` also carries the skip conditions: the backoff (`Req 9.1`), the
 creation halt (`Req 11.1`), the capability halt (`Req 10.1`), the coverage halts
-(`Req 8.3`, `8.4`, `8.8`) and the two configuration halts (`Req 4.10`, `Req 7.7`) — all before the guard is taken, so a skipped round costs nothing.
+(`Req 8.3`, `8.4`, `8.8`) and the oversized-block halt (`Req 4.10`) — all before the guard is taken, so a skipped round costs nothing.
 
 **Only a state that clears without the ledger doing anything belongs in that list.**
 Skipping happens before the guard is taken, so a skipped round performs no work at
@@ -1025,7 +1007,7 @@ above are therefore wrong as listed:
 | backing off (`Req 9.1`) | **yes** — a wait; time clears it |
 | `Started`, no identity (`Req 11.1`) | **yes** — only an operator clears it |
 | coverage halts (`Req 8.3`, `8.4`, `8.8`) | **yes** — only an operator clears it |
-| `Req 4.10`, `Req 7.7` | **yes** — only an operator clears them |
+| `Req 4.10` | **yes** — only an operator clears it |
 | `Created(id)` (`Req 11.8`) | **no** — the round must finish the creation |
 | capability halt (`Req 10.1`) | **no** — the round must issue the probe |
 
@@ -1222,16 +1204,12 @@ test is baseline-independent.
 | 22g | archive | assert `blocks_stored` is the number actually written across every outcome: the full batch, the suffix of a straddling append, zero for an indexed empty probe, and zero for an append whose first block does not fit | `Req 3.9`, `Req 4.10` |
 | 15h | integration | answer with an empty probe and separately with a first-block-too-large `StoredPartial`, both reporting a range beyond the archived prefix; assert the prefix does not advance on either, although both would pass a gate written on outcome arms alone | `Req 8.9`, `Req 3.9` |
 | 15j | integration | with an archive holding 1000 blocks, re-send only the first 100 and take the `AlreadyHeld` reply; assert the Archived_Prefix advances to 100 and **not** to the reported 1000, and that the removal count matches — the blocks the comparison at index 99 said nothing about | `Req 8.9`, `Req 2.5` |
-| 23e | upgrade | record a reported range for one archive and an inferred one for another, upgrade the ledger, and assert the provenance survives: the reported archive is not re-probed and the inferred one still is. Assert a pre-change state defaults every range to inferred | `Req 10.4`, `Req 10.6` |
-| 23f | integration | have a legacy archive report a range contradicting the record; assert archiving halts, the metric rises, and the published ranges are left contiguous and unchanged rather than taking the contradicting value | `Req 7.7`, `Req 7.2` |
 | 7e | archive | configure `max_memory_size_bytes` below a single block's size and append it with an index; assert nothing is stored, `at_capacity` is true, and `next_index` equals `block_index_offset` — the reply the ledger must halt on | `Req 4.10` |
 | 15e | integration | drive the oversized-block case end to end; assert the ledger halts with its own metric and creates **no** archive, and that an ordinary full tail still rolls over — the two cases that look identical in the flag alone | `Req 4.10`, `Req 4.5` |
 | 15f | integration | report, from a non-tail archive, a position below the aggregate Archived_Prefix but matching its own published range; assert no halt. Then report one short of its own range and assert the halt — the false positive that the aggregate comparison produced for every legacy archive | `Req 8.4` |
 | 15i | unit, `ledger_canister_core` | for an archive published as `[0, 99]`, assert a reported position of `100` does not halt and `99` does — the boundary where the inclusive published range meets the exclusive position, and the one value an off-by-one would miss | `Req 8.4`, `Req 7.6` |
 | 7f | archive | append starting exactly at the Archive_Position but overflowing the configured limit; assert a prefix is stored and the stop reported rather than the whole batch — the Req 4 exception to an otherwise unconditional Req 2.1 | `Req 2.1`, `Req 4.1` |
 | 15g | integration | answer with `BelowRange`, and separately with `Gap`, from appends that carried blocks; assert the Archived_Prefix does not advance on either, then assert it does advance on `AlreadyHeld` — carrying blocks is not verifying one | `Req 8.9` |
-| 23b | integration | start from a suite whose archive ranges were all inferred; assert each archive is asked once, at most one per round, that the published ranges become the reported ones, and that archiving continues normally afterwards. Then make one archive report a range contradicting the record and assert the halt and its metric | `Req 7.7` |
-| 23d | integration | leave a non-tail archive on the old wasm so it reports no range; assert archiving is not halted, the count rises, its published range is left as it stands, and the remaining archives are still migrated. Assert also that a round needing the capability probe issues no migration probe alongside it | `Req 7.8`, `Req 12.1` |
 | 23c | integration | force a mid-round roll-over while PR 3's loops are still in place; assert the created node's Expected_Parent is the parent of the block it actually receives first, not of the round's first block, and that its first append is accepted | `Req 1.8`, the per-creation hash above |
 | 23 | unit, `ledger_canister_core` | create an archive after a round in which the previous one reported `next_index = N`; assert the new `block_index_offset` is exactly `N`, not `N+1` — `next_index` is *already* one past the last held index, and the off-by-one here is the whole of `Req 7.1`. Assert `archives()` tiles with no gap or overlap. Then present a node whose reported range starts elsewhere and assert no blocks are stored in it and the metric rises | `Req 7.1`, `7.2`, `7.3`, `7.4` |
 | 24 | integration | on a ledger whose archives report no extent, assert an archive is still created and blocks are still discarded — the exemptions, which a literal reading of Req 7 and Req 8 would forbid | `Req 7.5`, `Req 8.7` |

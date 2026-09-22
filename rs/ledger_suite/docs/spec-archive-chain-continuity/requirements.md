@@ -74,8 +74,8 @@ comes first.
   the corresponding non-goal.
 - **Tail_Archive**: the archive a ledger currently appends to — the most recently
   created one. Earlier archives are full and no append ever stores a block in one
-  again, though Req 7.7 and Req 9.8 both send them appends that store nothing: one to
-  ask an archive its range, the other to have it confirm blocks it already holds.
+  again, though Req 9.8 sends one an append that stores nothing, to have it confirm
+  blocks it already holds.
 - **Archive_Range**: the contiguous span of global block indices an archive holds,
   from its `block_index_offset` up to but excluding its Archive_Position, **as the
   archive itself reports it** (Req 3). It is observed, not inferred.
@@ -440,27 +440,13 @@ no special cases.
    previous archive's Archive_Range ends, THE Ledger SHALL NOT store further blocks
    in it and SHALL expose a distinct non-zero metric.
 5. THE ICP Ledger SHALL derive a new archive's `block_index_offset` from its own
-   record instead, and SHALL NOT be held to 7.1, 7.2, 7.3, 7.4, 7.7 or 7.8, because its
+   record instead, and SHALL NOT be held to 7.1, 7.2, 7.3 or 7.4, because its
    archives report no Archive_Range to derive one from (per 10.5) and its `archives()`
    returns canister ids without ranges, with no `icrc3_get_archives` to report them
    through — so 7.2 would require an interface change this specification does not make.
 6. THE Ledger SHALL omit an archive that holds no blocks from the ranges it publishes
    until that archive stores its first block, because a published range is inclusive
    of both ends and an empty archive has no pair of indices that describes it.
-7. THE ICRC Ledger SHALL replace the Published_Range of every archive whose range it
-   inferred rather than observed with one that archive has reported, asking at most one
-   such archive per Archiving_Round so that 12.1 still holds, and SHALL instead leave
-   that Published_Range as it stands while making no further archiving attempt and
-   exposing a distinct non-zero metric where a reported range contradicts the record it
-   would replace, because an archive already mis-indexed is never appended to again once
-   it is not the Tail_Archive and so would otherwise never be asked, while publishing
-   the contradicting range would break 7.2's continuity on the strength of the very
-   report that says something is wrong.
-8. WHEN an archive asked per 7.7 reports no Archive_Range, THE ICRC Ledger SHALL leave
-   that archive's Published_Range as it stands and SHALL expose a distinct count, rather
-   than halting as it would for the Tail_Archive per 10.1, because 10.1 protects appends
-   and no append is ever made to an archive that is not the Tail_Archive.
-
 ### Requirement 8: No Block Index Ever Becomes Unretrievable
 
 **User Story:** As a client developer, I want every block index the ledger has ever
@@ -486,7 +472,7 @@ a hole.
    published range reports exactly one past that range's last index and anything lower
    leaves a block it is published as holding held nowhere — compared per archive rather
    than against the Archived_Prefix, which every archive but the Tail_Archive ends
-   legitimately below.
+   legitimately below, and 9.8 has non-tail archives report.
 5. WHEN an Archiving_Round does not complete, THE Ledger SHALL continue to serve
    every index it served before that round.
 6. THE Ledger SHALL NOT rely on its own record of what it sent when deciding what
@@ -573,15 +559,14 @@ unprotected, so that I find out from a metric instead of from a corrupted archiv
    without storing any blocks in it, because learning this from an ordinary append
    would mean the blocks were already stored by the time the answer arrived.
 4. THE ICRC Ledger SHALL NOT repeat the determination in 10.3 on every
-   Archiving_Round once an archive has reported its range.
+   Archiving_Round once an archive has reported its range, except for one determination
+   after an upgrade, because the answer is held in state an upgrade discards and asking
+   again is one empty append that stores nothing — the same allowance 9.9 makes for the
+   backoff, and for the same reason.
 5. THE ICP Ledger SHALL continue archiving against an archive that reports no
    Archive_Range, and SHALL expose a distinct count of how often it does so,
    because its archives do not implement Req 2 or Req 3 and halting would stop ICP
    archiving permanently.
-6. THE ICRC Ledger SHALL record durably, for each archive, whether that archive has
-   reported an Archive_Range, because 10.4 would otherwise be repeated after every
-   upgrade and 7.7 cannot otherwise tell a range it observed from one it inferred — the
-   two being indistinguishable by value whenever the inference happened to be right.
 
 ### Requirement 11: An Unaccounted Archive Creation Halts Archiving
 
