@@ -17,7 +17,7 @@ mod collect {
 
     #[test]
     fn should_return_nothing_for_an_empty_round() {
-        let (receipts, outcome) = collect(vec![]);
+        let (receipts, outcome) = collect_in_hash_order(vec![]);
 
         assert_eq!(receipts, BTreeMap::new());
         assert_eq!(outcome.lookups(), 0);
@@ -26,7 +26,7 @@ mod collect {
 
     #[test]
     fn should_finalize_the_ids_that_answered_and_leave_the_others_pending() {
-        let (receipts, outcome) = collect(vec![
+        let (receipts, outcome) = collect_in_hash_order(vec![
             (hash(1), id(1), Ok(Some(receipt(hash(1))))),
             (hash(2), id(2), Err(failed_lookup())),
             (hash(3), id(3), Ok(Some(receipt(hash(3))))),
@@ -44,7 +44,7 @@ mod collect {
 
     #[test]
     fn should_finalize_a_resubmitted_id_on_the_variant_that_was_mined() {
-        let (receipts, outcome) = collect(vec![
+        let (receipts, outcome) = collect_in_hash_order(vec![
             (hash(1), id(1), Ok(None)),
             (hash(2), id(1), Ok(Some(receipt(hash(2))))),
             (hash(3), id(1), Err(failed_lookup())),
@@ -58,10 +58,8 @@ mod collect {
     }
 
     #[test]
-    fn should_leave_an_id_pending_when_none_of_its_transactions_was_mined() {
-        // Every variant answering "not mined" - a nonce filled by another transaction, or a reorg -
-        // used to trip an assert on the ids that finalized, trapping the canister every round.
-        let (receipts, outcome) = collect(vec![
+    fn should_leave_an_id_pending_without_trapping_when_none_of_its_transactions_was_mined() {
+        let (receipts, outcome) = collect_in_hash_order(vec![
             (hash(1), id(1), Ok(None)),
             (hash(2), id(1), Ok(None)),
             (hash(3), id(2), Ok(Some(receipt(hash(3))))),
@@ -75,7 +73,7 @@ mod collect {
 
     #[test]
     fn should_leave_every_id_pending_when_every_lookup_failed() {
-        let (receipts, outcome) = collect(vec![
+        let (receipts, outcome) = collect_in_hash_order(vec![
             (hash(1), id(1), Err(failed_lookup())),
             (hash(2), id(2), Err(failed_lookup())),
         ]);
@@ -87,10 +85,8 @@ mod collect {
     }
 
     #[test]
-    fn should_abandon_the_round_on_two_different_receipts_for_the_same_id() {
-        // The lookups after the conflicting one have all come back too, so the round still counts
-        // what they returned: what the conflict throws away is the receipts, not the tally.
-        let (receipts, outcome) = collect(vec![
+    fn should_abandon_the_round_but_count_every_lookup_on_two_receipts_for_the_same_id() {
+        let (receipts, outcome) = collect_in_hash_order(vec![
             (hash(1), id(1), Ok(Some(receipt(hash(1))))),
             (hash(2), id(1), Ok(Some(receipt(hash(2))))),
             (hash(3), id(2), Ok(Some(receipt(hash(3))))),
@@ -124,8 +120,6 @@ mod round {
             }
         });
 
-        // A round that is not skipped reads the chain, which no unit test can answer, so reaching
-        // one here fails the test by panicking.
         let receipts = fetch_receipts_for_round(
             Address::new([0_u8; 20]),
             "test",
@@ -146,9 +140,7 @@ mod round {
     }
 }
 
-/// Collects the lookups of one round, whose results reach the reduction in the hash order the
-/// pending map is keyed by.
-fn collect(
+fn collect_in_hash_order(
     lookups: Vec<(Hash, LedgerBurnIndex, ReceiptResult)>,
 ) -> (
     BTreeMap<LedgerBurnIndex, EvmTransactionReceipt>,
@@ -182,7 +174,6 @@ fn hash(seed: u8) -> Hash {
     Hash([seed; 32])
 }
 
-/// The receipt of the transaction with the given hash, as the EVM RPC canister returns it.
 fn receipt(transaction_hash: Hash) -> EvmTransactionReceipt {
     EvmTransactionReceipt {
         block_hash: Hex32::from([0x11_u8; 32]),

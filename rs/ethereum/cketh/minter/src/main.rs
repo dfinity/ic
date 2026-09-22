@@ -1522,11 +1522,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 ];
                 w.gauge_vec(
                     "cketh_minter_receipt_fetch_window",
-                    "How many pipeline ids the next finalization round fetches transaction \
-                     receipts for, per pipeline. An id resubmitted at a higher gas price is \
-                     looked up once per variant, so the round's lookups are a multiple of this. \
-                     Doubles while no lookup fails and shrinks when they do, so a sustained low \
-                     value means the providers are failing.",
+                    "Pipeline ids the next finalization round fetches receipts for, per pipeline.",
                 )?
                 .value(
                     &[("pipeline", "withdrawal")],
@@ -1538,10 +1534,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
                 w.gauge_vec(
                     "cketh_minter_receipt_fetch_rounds_without_reads",
-                    "Consecutive finalization rounds that made no receipt lookup, either because \
-                     the transaction count they start from did not come back or because they \
-                     were skipped over. Past a few of them the pipeline starts skipping rounds, \
-                     and only a round that reads the chain again clears this.",
+                    "Consecutive finalization rounds that made no receipt lookup, per pipeline.",
                 )?
                 .value(
                     &[("pipeline", "withdrawal")],
@@ -1553,9 +1546,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
                 let mut receipt_lookups = w.counter_vec(
                     "cketh_minter_receipt_lookups_total",
-                    "Transaction receipt lookups, by pipeline and outcome. `not_mined` is the \
-                     ordinary answer for a superseded resubmission, `error` is a provider-level \
-                     failure. Resets on upgrade.",
+                    "Transaction receipt lookups, by pipeline and outcome. Resets on upgrade.",
                 )?;
                 for (pipeline, counters) in receipt_fetch {
                     receipt_lookups = receipt_lookups
@@ -1574,10 +1565,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 }
                 let mut abandoned_rounds = w.counter_vec(
                     "cketh_minter_receipt_fetch_abandoned_rounds_total",
-                    "Rounds that threw away their receipts because two different receipts named \
-                     the same id. One id maps to one nonce, so no chain can mine two of its \
-                     transactions: anything above zero is an invariant breach, not an unhealthy \
-                     provider. Resets on upgrade.",
+                    "Rounds dropped because two receipts named the same id. Resets on upgrade.",
                 )?;
                 for (pipeline, counters) in receipt_fetch {
                     abandoned_rounds = abandoned_rounds
@@ -1585,9 +1573,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 }
                 let mut stalled_ids = w.counter_vec(
                     "cketh_minter_receipt_fetch_stalled_ids_total",
-                    "Ids a round left pending because none of their transactions came back with a \
-                     receipt, counted once per round. A withdrawal whose receipt can never be \
-                     retrieved keeps adding to this. Resets on upgrade.",
+                    "Ids left pending with no receipt for any transaction. Resets on upgrade.",
                 )?;
                 for (pipeline, counters) in receipt_fetch {
                     stalled_ids = stalled_ids

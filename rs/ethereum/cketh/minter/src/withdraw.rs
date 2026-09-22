@@ -462,12 +462,8 @@ async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_prov
     }
 }
 
-/// One pipeline's receipt fetch for one round: reads how far the sender's transactions are
-/// finalized, takes as many pending ids as that pipeline's [`ReceiptFetchWindow`] allows, fetches
-/// their receipts, and reports back how the round fared so the window follows the providers.
-///
-/// Returns the receipts that can be recorded now. Whatever is left pending is picked up by a later
-/// round, which resumes past the ids this one took. Sender/id-agnostic, so both pipelines reuse it.
+/// One round of a pipeline's receipt fetch, bounded by its [`ReceiptFetchWindow`]. Both pipelines
+/// reuse it.
 pub(crate) async fn fetch_receipts_for_round<Id: Copy + Ord + std::fmt::Debug>(
     sender: Address,
     context: &str,
@@ -517,18 +513,9 @@ pub(crate) async fn fetch_receipts_for_round<Id: Copy + Ord + std::fmt::Debug>(
     receipts
 }
 
-/// What one receipt lookup reduced to: the receipt of a mined transaction, `None` for a
-/// transaction that was not mined, or the provider-level failure that kept it from answering.
 type ReceiptResult =
     Result<Option<EvmTransactionReceipt>, MultiCallError<Option<EvmTransactionReceipt>>>;
 
-/// Fetch the finalized receipts for the given (transaction hash -> pipeline id) map, returning the
-/// receipts that can be recorded and how the round's lookups fared.
-///
-/// Each id stands on its own: a failed lookup, or an id none of whose transactions was mined,
-/// leaves that id pending for a later round instead of discarding the receipts the round did get.
-/// The one exception is two different receipts for the same id, which no chain can produce and
-/// which therefore abandons the whole round - the receipts, not the count of what came back.
 async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
     txs_to_finalize: BTreeMap<Hash, Id>,
 ) -> (BTreeMap<Id, EvmTransactionReceipt>, RoundOutcome) {
@@ -545,7 +532,6 @@ async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
     collect_finalized_receipts(txs_to_finalize, results)
 }
 
-/// The receipts one round's lookups produced, and how that round fared.
 fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
     txs_to_finalize: BTreeMap<Hash, Id>,
     results: Vec<ReceiptResult>,
@@ -591,15 +577,12 @@ fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
             }
         }
     }
-    // The round's lookups have all come back by the time they are walked, so an abandoned round
-    // still counts what each of them returned; what it does not do is report its ids as stalled,
-    // since they were resolved and then thrown away rather than left unanswered.
+    // The ids of an abandoned round were answered and thrown away, not left unanswered.
     if outcome.is_abandoned() {
         return (BTreeMap::new(), outcome);
     }
-    // Replaces an assert on the ids that did finalize: an id whose transactions all answered "not
-    // mined" - a nonce filled by another transaction, or a reorg - is a withdrawal that stalls,
-    // not a bug, and trapping here would take the whole minter down with it.
+    // Replaces an assert: an id whose transactions all answered "not mined" is a withdrawal that
+    // stalls, not a bug, and trapping here would take the whole minter down with it.
     for id in expected_finalized_ids
         .iter()
         .filter(|id| !receipts.contains_key(id))

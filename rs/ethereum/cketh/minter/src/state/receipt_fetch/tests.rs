@@ -128,7 +128,7 @@ mod selection {
 
     #[test]
     fn should_select_every_transaction_of_the_ids_it_takes() {
-        let pending = pending(&[(1, 3), (2, 1), (3, 2)]);
+        let pending = pending_with_variants(&[(1, 3), (2, 1), (3, 2)]);
         let mut window = window_of(2);
 
         let selected = window.select_next_round(&pending);
@@ -147,8 +147,7 @@ mod selection {
 
     #[test]
     fn should_not_split_the_transactions_of_one_id_across_rounds() {
-        // A withdrawal resubmitted twice spans three hashes, of which at most one has a receipt.
-        let pending = pending(&[(1, 3), (2, 3), (3, 3)]);
+        let pending = pending_with_variants(&[(1, 3), (2, 3), (3, 3)]);
         let mut window = window_of(1);
 
         for expected in [id(1), id(2), id(3), id(1)] {
@@ -160,7 +159,7 @@ mod selection {
 
     #[test]
     fn should_select_at_most_the_whole_pending_set() {
-        let pending = pending(&[(1, 1), (2, 1)]);
+        let pending = pending_with_variants(&[(1, 1), (2, 1)]);
         let mut window = window_of(MAX_RECEIPT_FETCH_WINDOW);
 
         let selected = window.select_next_round(&pending);
@@ -175,7 +174,7 @@ mod cursor {
 
     #[test]
     fn should_walk_the_pending_set_round_after_round() {
-        let pending = pending(&[(1, 1), (2, 1), (3, 1), (4, 1), (5, 1)]);
+        let pending = pending_with_variants(&[(1, 1), (2, 1), (3, 1), (4, 1), (5, 1)]);
         let mut window = window_of(2);
 
         let rounds: Vec<_> = (0..4)
@@ -190,7 +189,6 @@ mod cursor {
             vec![
                 (vec![id(1), id(2)], Some(id(2))),
                 (vec![id(3), id(4)], Some(id(4))),
-                // The third round takes the last id and wraps around to the first.
                 (vec![id(1), id(5)], Some(id(1))),
                 (vec![id(2), id(3)], Some(id(3))),
             ]
@@ -201,10 +199,10 @@ mod cursor {
     fn should_resume_past_the_cursor_after_the_ids_around_it_finalized() {
         let mut window = window_of(2);
 
-        window.select_next_round(&pending(&[(1, 1), (2, 1), (3, 1), (4, 1)]));
+        window.select_next_round(&pending_with_variants(&[(1, 1), (2, 1), (3, 1), (4, 1)]));
         assert_eq!(window.cursor(), Some(id(2)));
 
-        let selected = window.select_next_round(&pending(&[(3, 1), (4, 1)]));
+        let selected = window.select_next_round(&pending_with_variants(&[(3, 1), (4, 1)]));
 
         assert_eq!(ids_of(&selected), vec![id(3), id(4)]);
         assert_eq!(window.cursor(), Some(id(4)));
@@ -214,17 +212,17 @@ mod cursor {
     fn should_wrap_around_when_the_cursor_is_past_everything_pending() {
         let mut window = window_of(2);
 
-        window.select_next_round(&pending(&[(1, 1), (2, 1), (9, 1)]));
+        window.select_next_round(&pending_with_variants(&[(1, 1), (2, 1), (9, 1)]));
         assert_eq!(window.cursor(), Some(id(2)));
 
-        let selected = window.select_next_round(&pending(&[(1, 1), (2, 1)]));
+        let selected = window.select_next_round(&pending_with_variants(&[(1, 1), (2, 1)]));
 
         assert_eq!(ids_of(&selected), vec![id(1), id(2)]);
     }
 
     #[test]
     fn should_take_the_whole_set_once_when_the_window_spans_it_from_a_cursor() {
-        let pending = pending(&[(1, 1), (2, 1), (3, 1)]);
+        let pending = pending_with_variants(&[(1, 1), (2, 1), (3, 1)]);
         let mut window = window_of(3);
         window.cursor = Some(id(2));
 
@@ -242,7 +240,7 @@ mod cursor {
     #[test]
     fn should_leave_the_cursor_alone_on_a_round_that_selected_nothing() {
         let mut window = window_of(2);
-        window.select_next_round(&pending(&[(1, 1), (2, 1)]));
+        window.select_next_round(&pending_with_variants(&[(1, 1), (2, 1)]));
 
         window.select_next_round(&BTreeMap::new());
 
@@ -297,7 +295,6 @@ mod skipping {
         assert!(!skip_round(&mut window));
     }
 
-    /// One round as its caller drives it: a skipped round is one more round that read nothing.
     fn skip_round(window: &mut ReceiptFetchWindow<LedgerBurnIndex>) -> bool {
         let skip = window.should_skip_round();
         if skip {
@@ -307,8 +304,6 @@ mod skipping {
     }
 }
 
-/// An outcome of a round whose lookups returned `receipts` receipts, `not_mined` transactions that
-/// were not mined, and `failures` provider-level failures.
 fn round(receipts: u32, not_mined: u32, failures: u32) -> RoundOutcome {
     let mut outcome = RoundOutcome::default();
     for _ in 0..receipts {
@@ -330,12 +325,15 @@ fn window_of(window: usize) -> ReceiptFetchWindow<LedgerBurnIndex> {
     }
 }
 
-/// The pending transactions of the given ids, each with as many hashes as it was resubmitted.
-fn pending(ids: &[(u8, u8)]) -> BTreeMap<Hash, LedgerBurnIndex> {
+fn pending_with_variants(ids: &[(u8, u8)]) -> BTreeMap<Hash, LedgerBurnIndex> {
     ids.iter()
-        .flat_map(|(id, transactions)| {
-            (0..*transactions)
-                .map(move |transaction| (hash(*id, transaction), LedgerBurnIndex::new(*id as u64)))
+        .flat_map(|(id, variants)| {
+            (0..*variants).map(move |variant| {
+                (
+                    scrambled_hash(*id, variant),
+                    LedgerBurnIndex::new(*id as u64),
+                )
+            })
         })
         .collect()
 }
@@ -351,12 +349,10 @@ fn id(id: u8) -> LedgerBurnIndex {
     LedgerBurnIndex::new(id as u64)
 }
 
-/// A hash whose bytes hide which id it belongs to, so that the hash order the pending set is keyed
-/// by does not follow the id order the rounds walk.
-fn hash(id: u8, transaction: u8) -> Hash {
+fn scrambled_hash(id: u8, variant: u8) -> Hash {
     let mut bytes = [0_u8; 32];
-    bytes[0] = id.wrapping_mul(37).wrapping_add(transaction);
+    bytes[0] = id.wrapping_mul(37).wrapping_add(variant);
     bytes[1] = id;
-    bytes[2] = transaction;
+    bytes[2] = variant;
     Hash(bytes)
 }

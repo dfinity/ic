@@ -7,8 +7,7 @@
 //! ([`crate::withdraw`]), reusing that module's sender-agnostic RPC helpers
 //! (`latest_transaction_count`, `send_signed_transactions`, `fetch_receipts_for_round`), but
 //! signing with the sweeper derivation path (`[3]`) and reading the sweeper address' own
-//! transaction count. Its receipt fetch runs on its own window, so a sweeper problem cannot
-//! throttle user withdrawals.
+//! transaction count.
 
 #[cfg(test)]
 mod tests;

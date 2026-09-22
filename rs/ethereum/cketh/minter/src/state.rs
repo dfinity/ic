@@ -142,13 +142,10 @@ pub struct State {
     /// so it is deliberately left out of [`Self::is_equivalent_to`].
     pub sweep_observations: SweepObservations,
 
-    /// How many withdrawals the next finalization round of the withdrawal pipeline fetches receipts
-    /// for, and where in its pending set that round resumes. Soft state, reset on upgrade, so it is
-    /// deliberately left out of [`Self::is_equivalent_to`].
+    /// Ids the next withdrawal finalization round fetches receipts for. Reset on upgrade.
     pub withdrawal_receipt_fetch: ReceiptFetchWindow<LedgerBurnIndex>,
 
-    /// The same window for the sweeper pipeline, kept apart from the withdrawal one so that a
-    /// sweeper problem does not throttle user withdrawals.
+    /// The same for the sweeper pipeline, kept apart so one cannot throttle the other.
     pub sweeper_receipt_fetch: ReceiptFetchWindow<SweepId>,
 }
 

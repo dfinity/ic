@@ -653,7 +653,6 @@ fn finalize_sweep_through_the_event_log(request: &SweepRequest, runtime: &MockCa
     });
 }
 
-/// The sweeper's receipt fetch runs on its own window, on the pipeline's own ids.
 #[tokio::test]
 async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
     init_state(initial_state());
@@ -663,8 +662,6 @@ async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
         }
     });
 
-    // A round that is not skipped reads the chain, which no unit test can answer, so reaching one
-    // here fails the test by panicking.
     let receipts: BTreeMap<SweepId, _> = fetch_receipts_for_round(
         Address::new([0_u8; 20]),
         "test",

@@ -1827,10 +1827,6 @@ mod eth_balance {
         );
     }
 
-    /// Finalizing the receipts a round did get, rather than discarding them all when one lookup
-    /// fails, makes a gap in `sent_tx` reachable: the withdrawal whose lookup failed stays there
-    /// while a later nonce finalizes. The assert this replaced ruled that out, so pin what the
-    /// pipeline does with it.
     #[test]
     fn should_finalize_a_later_nonce_while_an_earlier_one_stays_pending() {
         let spiked_fee = GasFeeEstimate {
@@ -1893,7 +1889,6 @@ mod eth_balance {
         state
     }
 
-    /// A withdrawal small enough that two of them fit the deposit [`deposited_state`] credits.
     fn withdrawal_flow(
         ledger_burn_index: LedgerBurnIndex,
         nonce: TransactionNonce,
@@ -2115,7 +2110,6 @@ mod eth_balance {
             self.finalize(state, &signed_tx)
         }
 
-        /// Drives the request up to a sent transaction, which then awaits its receipt.
         fn send(&self, state: &mut State) -> SignedEip1559TransactionRequest {
             let accepted_withdrawal_request_event =
                 accepted_withdrawal_request_event(self.withdrawal_request.clone());
@@ -2154,7 +2148,6 @@ mod eth_balance {
             signed_tx
         }
 
-        /// Records the receipt of the transaction the request sent, finalizing it.
         fn finalize(
             &self,
             state: &mut State,
