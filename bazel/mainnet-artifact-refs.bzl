@@ -18,8 +18,8 @@ Every field validated here reaches at least one of:
   * the text of a generated `BUILD.bazel` file: the ICOS binary names, where
     quotes/newlines would inject Starlark, and the ICOS image URLs and hashes, which
     end up verbatim in the shell command of a build-time download genrule
-    (//bazel:mainnet-icos-images.bzl), where `$`, quotes or whitespace would inject
-    shell or Make variables,
+    (//bazel:download.bzl), where `$`, quotes or whitespace would inject shell or
+    Make variables,
   * the `sha256` of `repository_ctx.download` (canisters, binaries), where the empty
     string silently *disables* verification.
 
@@ -323,11 +323,36 @@ def checked_variant(value, context):
     check(variant_error(value), context)
     return value
 
-def checked_url(url, prefix):
-    """`url` if it stayed within `prefix` and looks like a single plain URL.
+def url_error(url, prefix):
+    """Checks that `url` stayed within `prefix` and looks like a single plain URL.
 
-    A postcondition on top of the per-field checks above: it also catches a component
-    that a future change forgets to validate.
+    For an assembled URL this is a postcondition on top of the per-field checks above:
+    it also catches a component that a future change forgets to validate. A URL also
+    ends up verbatim in the shell command of a build-time download genrule
+    (//bazel:download.bzl), so the accepted charset [A-Za-z0-9._-/:] admits no shell
+    metacharacter, no whitespace and no `$` (a genrule Make variable).
+
+    Args:
+      url: the download URL to check; need not be a string.
+      prefix: the literal prefix the URL must not have escaped.
+
+    Returns:
+      An error message, or None if `url` is acceptable.
+    """
+    if type(url) != "string":
+        return "a URL must be a string, got %r" % (url,)
+    if not url.startswith(prefix):
+        return "refusing to fetch %r: expected it to start with %r" % (url, prefix)
+    if ".." in url:
+        return "refusing to fetch %r: contains '..'" % (url,)
+    if url.count("://") != 1:
+        return "refusing to fetch %r: contains more than one '://'" % (url,)
+    if _first_disallowed(url, _TAG_CHARS + ":") != None:
+        return "refusing to fetch %r: contains an unexpected character" % (url,)
+    return None
+
+def checked_url(url, prefix):
+    """`url` if it stayed within `prefix` and looks like a single plain URL, otherwise fails.
 
     Args:
       url: the assembled download URL.
@@ -336,12 +361,5 @@ def checked_url(url, prefix):
     Returns:
       `url`.
     """
-    if not url.startswith(prefix):
-        fail("refusing to fetch %r: expected it to start with %r" % (url, prefix))
-    if ".." in url:
-        fail("refusing to fetch %r: contains '..'" % (url,))
-    if url.count("://") != 1:
-        fail("refusing to fetch %r: contains more than one '://'" % (url,))
-    if _first_disallowed(url, _TAG_CHARS + ":") != None:
-        fail("refusing to fetch %r: contains an unexpected character" % (url,))
+    check(url_error(url, prefix), "download URL")
     return url

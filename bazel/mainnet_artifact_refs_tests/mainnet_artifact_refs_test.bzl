@@ -12,6 +12,7 @@ these very functions.
 """
 
 load("@bazel_skylib//lib:unittest.bzl", "asserts", "unittest")
+load("//bazel:download.bzl", "DEFAULT_URL_PREFIX")
 load(
     "//bazel:mainnet-artifact-refs.bzl",
     "artifact_name_error",
@@ -20,6 +21,7 @@ load(
     "icos_record_error",
     "sha256_error",
     "tag_error",
+    "url_error",
     "variant_error",
 )
 load("//bazel:mainnet-canisters.bzl", "canister_download_url")
@@ -413,6 +415,40 @@ def _download_url_test_impl(ctx):
 
 download_url_test = unittest.make(_download_url_test_impl)
 
+# URLs that are fetched today (rs/tests/BUILD.bazel and the ICOS URL builders):
+# these must never start failing.
+_REAL_URLS = [
+    "https://download.dfinity.systems/farm/universal-vm/ba8b49004163fa15f13c8ebac1e7cb99499043cda9f0a5dee00eca1b95187aee/x86_64-linux/universal-vm.img.zst",
+    "https://download.dfinity.systems/farm/prometheus-vm/6dc09a214f1975ce55a42a560b67b44ac58a61b52e3c3e9cf03dc2d7fbdd5f02/x86_64-linux/prometheus-vm.img.zst",
+    "https://download.dfinity.systems/ic/79c01052b5f7f49d3cf53d04d696cb2893294cd3/guest-os/update-img/update-img.tar.zst",
+]
+
+def _url_test_impl(ctx):
+    env = unittest.begin(ctx)
+
+    for url in _REAL_URLS:
+        asserts.equals(env, None, url_error(url, DEFAULT_URL_PREFIX), "url_error should accept %r" % url)
+    for url in [
+        "",
+        "http://download.dfinity.systems/farm/x",  # not https, so not the prefix
+        "https://evil.example/farm/x",
+        "https://download.dfinity.systems.evil.example/farm/x",
+        "https://download.dfinity.systems/../evil/x",
+        "https://download.dfinity.systems/farm/x https://evil.example/y",  # a second URL for curl
+        "https://download.dfinity.systems/farm/x;id",
+        "https://download.dfinity.systems/farm/$(id)",  # shell and genrule Make variable
+        "https://download.dfinity.systems/farm/x\"",
+        "https://download.dfinity.systems/farm/x\n",
+        "https://download.dfinity.systems/farm/x?next=https://evil.example",  # second '://'
+        "https://download.dfinity.systems/farm/x/https://evil.example/y",  # second '://', allowed characters only
+        "https://download.dfinity.systems/farm/%2e%2e/x",
+    ] + _NON_STRINGS:
+        asserts.true(env, url_error(url, DEFAULT_URL_PREFIX) != None, "url_error should reject %r" % url)
+
+    return unittest.end(env)
+
+url_test = unittest.make(_url_test_impl)
+
 def mainnet_artifact_refs_test_suite(name):
     """Registers every test in this file under a test_suite called `name`.
 
@@ -429,5 +465,6 @@ def mainnet_artifact_refs_test_suite(name):
         poisoned_canisters_json_test,
         sha256_test,
         tag_test,
+        url_test,
         variant_test,
     )
