@@ -3040,6 +3040,9 @@ mod tests {
                     EcdsaCurve::Secp256k1 => {
                         self.generate_idkg_key_transcript(AlgorithmId::ThresholdEcdsaSecp256k1)
                     }
+                    EcdsaCurve::Secp256r1 => {
+                        self.generate_idkg_key_transcript(AlgorithmId::ThresholdEcdsaSecp256r1)
+                    }
                 },
                 MasterPublicKeyId::Schnorr(schnorr_key_id) => match schnorr_key_id.algorithm {
                     SchnorrAlgorithm::Bip340Secp256k1 => {
