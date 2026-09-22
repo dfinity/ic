@@ -1545,7 +1545,14 @@ impl CertifiedSlicePool {
         }
 
         if let Some(pooled) = self.slices.get(&subnet_id) {
-            messages_end = messages_end.max(pooled.payload.messages_end().unwrap_or_default());
+            // The pooled slice's `messages_end` only counts if it extends gap-free the
+            // messages already in payloads (cached stream position).
+            if let Some(messages_begin) = pooled.payload.messages_begin()
+                && messages_begin <= messages_end
+            {
+                messages_end = messages_end.max(pooled.payload.messages_end().unwrap_or_default());
+            }
+            // Its header counts regardless: a header-only slice can always be taken.
             signals_end = signals_end.max(pooled.payload.header.signals_end());
             header_begin = header_begin.max(pooled.payload.header.begin());
             if covered_by(messages_end, signals_end, header_begin) {

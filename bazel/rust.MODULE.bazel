@@ -34,6 +34,16 @@ crate.spec(
     version = "^2.10.0",
 )
 crate.spec(
+    default_features = False,
+    features = [
+        "macros",
+        "compress-brotli",
+        "compress-gzip",
+        "compress-zstd",
+        "http2",
+        "unicode",
+        "compat",
+    ],
     package = "actix-web",
     version = "^4.9.0",
 )
@@ -372,12 +382,12 @@ crate.spec(
     version = "^0.5.1",
 )
 crate.spec(
-    package = "crossbeam",
-    version = "^0.8.4",
-)
-crate.spec(
     package = "crossbeam-channel",
     version = "^0.5.15",
+)
+crate.spec(
+    package = "crossbeam-utils",
+    version = "^0.8.21",
 )
 crate.spec(
     package = "csv",
@@ -925,10 +935,6 @@ crate.spec(
     version = "^0.20.1",
 )
 crate.spec(
-    package = "json-patch",
-    version = "^0.2.6",
-)
-crate.spec(
     package = "json5",
     version = "^0.4.1",
 )
@@ -1239,6 +1245,7 @@ crate.spec(
     rev = "9159b45ecc3540d7fc44c6a6e70a173676cfa771",
 )
 crate.spec(
+    default_features = False,
     package = "predicates",
     version = "^3.1.2",
 )
@@ -1522,6 +1529,7 @@ crate.spec(
     version = "^1.1.0",
 )
 crate.spec(
+    default_features = False,
     package = "scraper",
     version = "^0.24.0",
 )
