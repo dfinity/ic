@@ -286,10 +286,10 @@ fn deliver_batches(
                 }
             }
             BlockPayload::Data(data_payload) => {
-                batch_stats.add_from_payload(&data_payload.batch);
-
                 let (batch_messages, consensus_responses, canister_http_spent) =
                     get_messages_responses_and_http_spent(data_payload, &mut batch_stats, log);
+
+                batch_stats.add_from_payload(&data_payload.batch);
 
                 BatchContent::Data {
                     batch_messages,
