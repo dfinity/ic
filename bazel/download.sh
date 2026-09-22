@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #
-# Usage: mainnet-icos-download.sh URL SHA256 OUT
+# Usage: download.sh URL SHA256 OUT
 #
-# Build-time, sha256-verified download of one mainnet ICOS image. Called from the
-# genrules that //bazel:mainnet-icos-images.bzl writes into the @mainnet_*_images
-# repositories; see that file for why the images are downloaded at build time
-# rather than while the repository is fetched.
+# Build-time, sha256-verified download of one file. Called from the genrule that
+# the `download_file` macro of //bazel:download.bzl declares; see that file for
+# why artifacts are downloaded at build time rather than while a repository is
+# fetched.
 #
 # The action runs under --incompatible_strict_action_env, i.e. with
 # PATH=/bin:/usr/bin:/usr/local/bin and without the client's proxy variables.
-# An environment that needs a proxy to reach download.dfinity.systems has to
-# pass it explicitly, e.g. `--action_env=HTTPS_PROXY=...`.
+# An environment that needs a proxy to reach the download host has to pass it
+# explicitly, e.g. `--action_env=HTTPS_PROXY=...`.
 set -euo pipefail
 
 url="$1"
@@ -54,12 +54,12 @@ while true; do
 
     if [ "$curl_status" -eq 0 ]; then
         # Complete transfer, wrong content. Retry once from scratch to rule out a
-        # corrupted resume, then fail: the JSON pin and the CDN disagree.
+        # corrupted resume, then fail: the pinned hash and the server disagree.
         mismatches=$((mismatches + 1))
         echo "$url: sha256 mismatch: expected $sha256, got $(sha256sum "$part" | cut -d' ' -f1)" >&2
         rm -f "$part"
         if [ "$mismatches" -ge 2 ]; then
-            echo "ERROR: $url does not match the sha256 recorded in mainnet-icos-revisions.json" >&2
+            echo "ERROR: giving up on $url: its content does not match the pinned sha256 $sha256" >&2
             exit 1
         fi
     else

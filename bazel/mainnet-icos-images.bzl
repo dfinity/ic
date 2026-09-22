@@ -2,13 +2,10 @@
 This module defines Bazel targets for the mainnet versions of ICOS images.
 
 The `mainnet_icos_images` repository rule generates a tiny repository whose BUILD
-file downloads the images *at build time*. A fetch-time `repository_ctx.download`
-would run whenever Bazel loads a package of the repository, which
-`bazel query 'rdeps(//..., ...)'` (ci/scripts/targets.py) does for every package
-in the closure of `//...`, i.e. on every PR: ~20 GB of images that PR builds
-never use (https://github.com/bazelbuild/bazel/issues/13190). As build actions
-the downloads run only when a consumer is actually built, and their outputs are
-served from the local action cache and the remote cache like any other output.
+file downloads the images *at build time* with the `download_file` macro of
+//bazel:download.bzl. See that file for why nothing is downloaded while the
+repository is fetched: that would happen on every PR, for ~20 GB of images that
+PR builds never use.
 """
 
 load(
@@ -63,44 +60,20 @@ def icos_dev_image_download_url(git_commit_id, variant, update):
         component = "update-img" if update else "disk-img",
     ), _CDN_PREFIX)
 
-# One genrule per downloaded image.
+# One build-time download per image.
 #
-# `{url}` and `{sha256}` are interpolated verbatim into the genrule `cmd`, i.e.
-# into shell text. That is safe only because both were validated first (see the
+# `{url}` and `{sha256}` become string literals of the generated BUILD file. That
+# is safe only because both were validated first (see the
 # `check(icos_record_error(...))` call in the implementation below): `checked_url`
-# restricts a URL to [A-Za-z0-9._-/:], which contains no shell metacharacter and
-# no `$` (which genrule would treat as a Make variable), and `sha256_error`
-# restricts a hash to 64 lowercase hex characters.
-#
-# The download and its verification live in //bazel:mainnet-icos-download.sh, so
-# the shell is shfmt-checked source instead of escaped Starlark text; the
-# script's digest is part of the action key, as are the URL and the sha256, so
-# the action re-runs exactly when the revisions JSON re-pins the image.
-_DOWNLOAD_GENRULE = """
-genrule(
+# restricts a URL to [A-Za-z0-9._-/:] and `sha256_error` a hash to 64 lowercase
+# hex characters, so neither can contain a quote, a backslash or a newline.
+# `download_file` validates both again before they reach the shell.
+_DOWNLOAD_FILE = """
+download_file(
     name = "download_{name}",
-    outs = ["{out}"],
-    cmd = "$(location @@//bazel:mainnet-icos-download.sh) {url} {sha256} $@",
-    # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
-    # so this Namespace.so-specific execution property is what would open up the network for
-    # the action on an RBE worker. Without a remote executor the property is inert.
-    exec_properties = {{"namespace_requires_network": "true"}},
-    # requires-network: bazel/conf/.bazelrc.build sets --nosandbox_default_allow_network,
-    #   so a locally sandboxed run needs it to leave the sandbox's network namespace.
-    # no-remote-exec: run the download on the machine driving the build (the RBE driver
-    #   container on CI), not on an RBE worker. On 2026-09-16 the worker sandbox had no
-    #   network at all despite the execution property above (every curl failed instantly
-    #   with "Could not resolve host", see
-    #   https://github.com/dfinity/ic/actions/runs/35143842952/job/104955157611), while the
-    #   driver has downloaded these images for months. Remotely executed consumers still
-    #   get the image: Bazel uploads a locally produced output to the remote CAS when a
-    #   remote action needs it as an input. Drop the tag again once a non-cached network
-    #   action has been shown to work on the workers.
-    # manual: never pulled in by a wildcard.
-    # Deliberately no no-cache / no-remote-cache: caching this action is the point.
-    tags = ["manual", "no-remote-exec", "requires-network"],
-    target_compatible_with = ["@platforms//os:linux"],
-    tools = ["@@//bazel:mainnet-icos-download.sh"],
+    out = "{out}",
+    sha256 = "{sha256}",
+    url = "{url}",
 )
 """
 
@@ -169,17 +142,19 @@ def _mainnet_icos_images_impl(repository_ctx):
     # source files as well: a generated file that conflicts with a source file
     # is a load error of the package.
     build = """\
+load("@@//bazel:download.bzl", "download_file")
+
 package(default_visibility = ["//visibility:public"])
 exports_files(["launch-measurements-guest.json"])
 """
-    build += _DOWNLOAD_GENRULE.format(
+    build += _DOWNLOAD_FILE.format(
         name = "disk-img",
         out = "disk-img.tar.zst",
         url = url_fn(git_commit_id, "setup-os", False),
         sha256 = info["setupos_disk_img_hash_dev" if dev else "setupos_disk_img_hash"],
     )
     if is_guestos:
-        build += _DOWNLOAD_GENRULE.format(
+        build += _DOWNLOAD_FILE.format(
             name = "guest-update-img",
             out = "guest-update-img.tar.zst",
             url = url_fn(git_commit_id, "guest-os", True),
