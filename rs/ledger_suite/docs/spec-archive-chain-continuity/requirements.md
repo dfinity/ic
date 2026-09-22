@@ -300,11 +300,15 @@ wrong about it.
    `at_capacity` alone does not separate the two — a growth refused by the platform
    reports it false (4.4) and so does a complete append (4.9).
 8. THE Archive SHALL report a single outcome for every append after which it holds
-   every block it was offered and did not already hold — whatever it already held, and
-   whether it was offered any blocks at all — because the ledger's response to all of
-   these is the same, to reconcile against the reported Archive_Position, and 3.6 asks
-   the outcome to name what the ledger must do rather than how much work the archive
-   did.
+   every block it was offered and did not already hold, whether or not it already held
+   some of them and whether or not it was offered any, except an append whose blocks it
+   already held in full — because the ledger's response to the rest is identical, to
+   reconcile against the reported Archive_Position, while a wholly held append is the
+   only one carrying a content comparison per 2.9, which 8.9 turns on.
+9. THE Archive SHALL report how many of the blocks it was offered it stored, because
+   8.9 turns on whether any block was verified and no outcome of Req 2 settles that on
+   its own — an append carrying nothing per 3.5 and one whose first block did not fit
+   per 4.10 both store none, and neither may advance an Archived_Prefix.
 
 ### Requirement 4: A Capacity Stop Is Reported, Not A Failure
 
@@ -424,7 +428,7 @@ no special cases.
    previous archive's Archive_Range ends, THE Ledger SHALL NOT store further blocks
    in it and SHALL expose a distinct non-zero metric.
 5. THE ICP Ledger SHALL derive a new archive's `block_index_offset` from its own
-   record instead, and SHALL NOT be held to 7.1, 7.2, 7.3, 7.4 7.7 or 7.8, because its
+   record instead, and SHALL NOT be held to 7.1, 7.2, 7.3, 7.4, 7.7 or 7.8, because its
    archives report no Archive_Range to derive one from (per 10.5) and its `archives()`
    returns canister ids without ranges, with no `icrc3_get_archives` to report them
    through — so 7.2 would require an interface change this specification does not make.
@@ -594,19 +598,24 @@ unaddressable canister does not become a series of them.
    blocking adoption nor blocking archiving, because an adopted archive is already
    usable and the handover's last step removes the ledger's own authority over it
    (per 11.11), so making archiving wait on it would risk more than it protects.
-10. WHILE a created archive has been adopted but its control not yet handed over, THE
-   Ledger SHALL retry the handover on later rounds and SHALL expose a distinct
-   non-zero metric until it completes, because until then the archive cannot be
-   upgraded by its intended controllers.
+10. WHILE any created archive has been adopted but its control not yet handed over, THE
+   Ledger SHALL retry each such handover on later rounds and SHALL expose a distinct
+   metric counting the archives still owed one, because until then those archives cannot
+   be upgraded by their intended controllers.
 11. THE Ledger SHALL hand over control in two steps — first adding the configured
    controllers while remaining one itself, then removing itself — so that the first
    step is verifiable by reading the archive's controller list, which it is still
    entitled to do, and the second cannot fail in a way that matters: its only outcomes are that the ledger is still a controller and may
    retry, or that it is not, which is the state the handover was for.
 12. WHEN a retry of the second step is refused because THE Ledger is no longer a
-   controller, THE Ledger SHALL treat the handover as complete and clear the metric in
-   11.10, because the archive is then governable by the configured controllers and
-   nothing further is within the ledger's reach.
+   controller, THE Ledger SHALL treat that archive's handover as complete and remove it
+   from the count in 11.10, because the archive is then governable by the configured
+   controllers and nothing further is within the ledger's reach.
+13. THE Ledger SHALL keep a record of every archive still owed a handover rather than
+   only the most recent, because 11.9 lets archiving continue past a failed handover, so
+   an archive can fill and a later one be adopted while the first is still owed one —
+   and a single slot would drop the earlier archive, leaving it ledger-controlled with
+   nothing recording it.
 
 ### Requirement 12: An Archiving Round Makes One Append
 
