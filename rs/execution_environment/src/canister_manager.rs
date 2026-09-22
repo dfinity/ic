@@ -1831,8 +1831,6 @@ impl CanisterManager {
         let instructions = self.config.upload_wasm_chunk_instructions;
         let cost = self
             .cycles_account_manager
-            .management_canister_cost(instructions, subnet_cycles_config);
-        self.cycles_account_manager
             .consume_cycles_for_management_canister_instructions(
                 &sender,
                 canister,
@@ -2777,7 +2775,8 @@ impl CanisterManager {
             .config
             .canister_snapshot_data_baseline_instructions
             .saturating_add(&NumInstructions::new(num_response_bytes));
-        self.cycles_account_manager
+        let cost = self
+            .cycles_account_manager
             .consume_cycles_for_management_canister_instructions(
                 &sender,
                 canister,
@@ -2785,9 +2784,6 @@ impl CanisterManager {
                 subnet_cycles_config,
             )
             .map_err(CanisterManagerError::NotEnoughCycles)?;
-        let cost = self
-            .cycles_account_manager
-            .management_canister_cost(num_instructions, subnet_cycles_config);
         consumed_cycles.add(cost, num_instructions);
         round_limits.instructions -= as_round_instructions(num_instructions);
         let chunk: Result<Vec<u8>, CanisterManagerError> = match kind {
@@ -2858,6 +2854,7 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
         time: Time,
+        consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2903,16 +2900,29 @@ impl CanisterManager {
             .saturating_add(&new_snapshot_size)
             .saturating_sub(&replace_snapshot_size);
 
-        // Compute cycles for instructions spent creating a snapshot of the given size.
+        // Charge for the instructions spent creating a snapshot of the given size.
         let instructions = self
             .config
             .canister_snapshot_baseline_instructions
             .saturating_add(&new_snapshot_size.get().into());
+        let cost = self
+            .cycles_account_manager
+            .consume_cycles_for_management_canister_instructions(
+                &sender,
+                canister,
+                instructions,
+                subnet_cycles_config,
+            )
+            .map_err(CanisterManagerError::NotEnoughCycles)?;
+        // Record the charge so it survives the canister state rollback on failure.
+        consumed_cycles.add(cost, instructions);
+        round_limits.instructions -= as_round_instructions(instructions);
+
         self.cycles_and_memory_usage_checks_and_updates(
             subnet_cycles_config,
             canister,
             sender,
-            instructions,
+            NumInstructions::new(0),
             round_limits,
             new_memory_usage,
             old_memory_usage,
@@ -3001,7 +3011,8 @@ impl CanisterManager {
         // but the instructions used to copy the data still need to be accounted for.
         // Cycles for instructions should also be charged.
         let (bytes_written, instructions) = self.get_bytes_and_instructions(args);
-        self.cycles_account_manager
+        let cost = self
+            .cycles_account_manager
             .consume_cycles_for_management_canister_instructions(
                 &sender,
                 canister,
@@ -3009,9 +3020,6 @@ impl CanisterManager {
                 subnet_cycles_config,
             )
             .map_err(CanisterManagerError::NotEnoughCycles)?;
-        let cost = self
-            .cycles_account_manager
-            .management_canister_cost(instructions, subnet_cycles_config);
         consumed_cycles.add(cost, instructions);
         round_limits.instructions -= as_round_instructions(instructions);
 
