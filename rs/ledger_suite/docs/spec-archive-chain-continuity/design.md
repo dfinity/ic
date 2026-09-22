@@ -432,14 +432,16 @@ archive cannot parse is a failure mode this design introduces and must answer fo
 Order of work, per D4 and D5:
 
 1. Caller check, unchanged.
-2. If the batch is empty: reply per `Req 3.1`-`3.4` and stop. No placement, no
-   chain check, no counter (`Req 3.5`, `Req 6.5`). This is the capability probe of
-   `Req 10.3`, and short-circuiting is what keeps a probe sent at an index above
-   the archive's position from being counted as a gap.
+2. If the batch is empty **and carries an index**: reply per `Req 3.1`-`3.4` and
+   stop. No placement, no chain check, no counter (`Req 3.5`, `Req 6.5`). This is the
+   capability probe of `Req 10.3`, and short-circuiting is what keeps a probe sent at
+   an index above the archive's position from being counted as a gap.
 3. If the index is absent, skip **steps 4 and 5 only** — there is no index to place,
    so the batch is treated as continuing the tip, `k = 0`. Steps 6 onward still
    apply, and any refusal fails the call instead of returning a description of it
-   (`Req 5.1`, `5.2`).
+   (`Req 5.1`, `5.2`). An index-less batch that is *also* empty therefore falls
+   through to here rather than to step 2: it stores nothing and replies empty, and
+   steps 6 and 7 are no-ops because there is no block to check or store.
 4. Place the index against `block_index_offset` and `block_index_offset +
    log_length` (`Req 2.1`, `2.2`, `2.6`), returning without appending in the
    refusing cases.
@@ -469,9 +471,19 @@ Order of work, per D4 and D5:
 8. Re-read `log_length` and reply (`Req 3.1`-`3.4`), or fail the call if step 3
    applied.
 
-**Step 3 says "steps 4 and 5 only" for a reason.** An index-less append is the only
+**Two ordering traps in this list, both of which have been fallen into.**
+
+*Step 3 says "steps 4 and 5 only" for a reason.* An index-less append is the only
 shape PR 1 sees in production, so skipping the chain check along with placement would
 make PR 1 a no-op against the corruption it exists to stop.
+
+*Step 2 is scoped to an indexed batch for a reason.* Written to catch the empty batch
+first, it also catches an **index-less** empty one and answers it with a result —
+which `Req 5.1` forbids, and which the already-written
+`test_empty_append_blocks_is_accepted_and_stores_nothing` would fail, since it sends
+the one-argument shape and asserts the reply reads as absent. The index test has to
+come first for an index-less caller, and the empty test first only within the indexed
+path.
 
 **Step 7 is a restructuring, not a reuse.** The current check is whole-batch and
 traps: it sums every block's size and compares against `max_memory_size_bytes`
@@ -747,7 +759,7 @@ test is baseline-independent.
 | 5 | archive | append 1000 blocks, then re-append the first 600; assert success, nothing stored, extent unchanged — the case a plausible implementation panics on | `Req 2.5` |
 | 6 | archive | append at an index above the position; assert a gap and nothing stored | `Req 2.2` |
 | 7 | archive | size `max_memory_size_bytes` so a batch only partly fits; assert a short `next_index`, `at_capacity = true`, and that the blocks that fit are readable | `Req 4.1`, `4.2`, `4.3` |
-| 8 | archive | **partly written**: `test_empty_append_blocks_is_accepted_and_stores_nothing` already asserts an empty append stores nothing and consumes no capacity, on both the one-argument and null-index shapes. Extend it against the new implementation to assert a reported extent, and that an empty append at an index above the archive's position is neither refused nor counted | `Req 3.5`, `Req 6.5` |
+| 8 | archive | **partly written**: `test_empty_append_blocks_is_accepted_and_stores_nothing` already asserts an empty append stores nothing and consumes no capacity, on both the one-argument and null-index shapes. Extend it against the new implementation to assert an *indexed* empty append reports an extent, that an indexed empty append above the archive's position is neither refused nor counted, and that both index-less empty shapes still reply **empty** — the last of these is what fails if the empty check is ordered before the index check | `Req 3.5`, `Req 5.1`, `Req 6.5` |
 | 9 | archive | genesis into an empty archive with offset 0; then assert a block with no parent hash is refused by an archive whose offset is non-zero, and by one that already holds blocks | `Req 1.5` |
 | 9b | archive | install with no Expected_Parent, append into it, and assert it is stored and the unverifiable-first-append counter rises | `Req 1.4`, `Req 1.6` |
 | 9c | archive | install with an Expected_Parent, then append a first batch whose first block carries a different parent; assert refusal and that nothing is stored. Then append one that matches and assert it is stored and the counter in 1.6 does *not* rise | `Req 1.8`, `Req 1.6` |
