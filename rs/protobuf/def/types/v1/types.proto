@@ -52,6 +52,7 @@ message NominalCycles {
 enum EcdsaCurve {
   ECDSA_CURVE_UNSPECIFIED = 0;
   ECDSA_CURVE_SECP256K1 = 1;
+  ECDSA_CURVE_SECP256R1 = 2;
 }
 
 message EcdsaKeyId {

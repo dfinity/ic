@@ -1247,12 +1247,16 @@ pub enum EcdsaCurve {
     #[default]
     #[serde(rename = "secp256k1")]
     Secp256k1,
+    /// secp256r1
+    #[serde(rename = "secp256r1")]
+    Secp256r1,
 }
 
 impl From<EcdsaCurve> for u32 {
     fn from(val: EcdsaCurve) -> Self {
         match val {
             EcdsaCurve::Secp256k1 => 0,
+            EcdsaCurve::Secp256r1 => 1,
         }
     }
 }

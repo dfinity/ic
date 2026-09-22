@@ -231,6 +231,7 @@ impl NiDkgTag {
 pub enum EcdsaCurve {
     Unspecified = 0,
     Secp256k1 = 1,
+    Secp256r1 = 2,
 }
 impl EcdsaCurve {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -241,6 +242,7 @@ impl EcdsaCurve {
         match self {
             Self::Unspecified => "ECDSA_CURVE_UNSPECIFIED",
             Self::Secp256k1 => "ECDSA_CURVE_SECP256K1",
+            Self::Secp256r1 => "ECDSA_CURVE_SECP256R1",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -248,6 +250,7 @@ impl EcdsaCurve {
         match value {
             "ECDSA_CURVE_UNSPECIFIED" => Some(Self::Unspecified),
             "ECDSA_CURVE_SECP256K1" => Some(Self::Secp256k1),
+            "ECDSA_CURVE_SECP256R1" => Some(Self::Secp256r1),
             _ => None,
         }
     }
