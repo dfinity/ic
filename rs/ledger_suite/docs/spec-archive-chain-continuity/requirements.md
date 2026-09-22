@@ -122,12 +122,14 @@ comes first.
   accepted deliberately and tracked separately. Req 7.5, Req 8.7, Req 10.5 and
   Req 13.6 pin the behaviour that makes the exemption safe rather than silent — each
   says what the ICP ledger does *instead*, so none of it is left to inference.
-- **Ensuring an archiving failure cannot contradict a transaction's reply.** On a
-  ledger that waits for archiving before replying, a failure after the transaction
-  has committed turns a successful transfer into a rejection, which a client that
-  retries can turn into a double credit. That is a separate change, and it is a
-  prerequisite for switching archiving back on rather than something these
-  requirements deliver.
+- **Building the change that stops an archiving failure contradicting a transaction's
+  reply.** On a ledger that waits for archiving before replying, a failure after the
+  transaction has committed turns a successful transfer into a rejection, which a client
+  that retries can turn into a double credit. Req 9.5 states the property that has to
+  hold, because a contract for archiving failures that said nothing about the reply
+  would be incomplete — but the code that delivers it is a separate change, reviewed
+  separately, and `design.md` orders it as a dependency rather than as one of this
+  specification's PRs. So the requirement is in scope and its implementation is not.
 - **Recovering the cycles in an abandoned archive canister.** A creation that is
   interrupted after the canister exists but before the ledger has recorded its
   identity leaves a canister nobody can address. Req 11 requires that this is
@@ -341,6 +343,11 @@ makes progress under storage pressure instead of repeating work it cannot finish
 9. WHEN THE Archive stored every block it was offered, or stored none because they
    were all already held, THE Archive SHALL report `at_capacity` as false, because a
    ledger reading it as true would create an archive it does not need.
+10. WHEN an archive that holds no blocks reports `at_capacity` as true, THE Ledger SHALL
+   make no further archiving attempt and SHALL expose a distinct non-zero metric rather
+   than creating another archive per 4.5, because a block that does not fit an empty
+   archive will not fit a new one carrying the same configured limit either, and rolling
+   over would create one archive per round for as long as transactions kept arriving.
 
 ### Requirement 5: An Index-Less Append Behaves As It Does Today
 
@@ -417,13 +424,24 @@ no special cases.
    previous archive's Archive_Range ends, THE Ledger SHALL NOT store further blocks
    in it and SHALL expose a distinct non-zero metric.
 5. THE ICP Ledger SHALL derive a new archive's `block_index_offset` from its own
-   record instead, and SHALL NOT be held to 7.1, 7.2, 7.3 or 7.4, because its archives
-   report no Archive_Range to derive one from (per 10.5) and its `archives()` returns
-   canister ids without ranges, with no `icrc3_get_archives` to report them through —
-   so 7.2 would require an interface change this specification does not make.
+   record instead, and SHALL NOT be held to 7.1, 7.2, 7.3, 7.4 7.7 or 7.8, because its
+   archives report no Archive_Range to derive one from (per 10.5) and its `archives()`
+   returns canister ids without ranges, with no `icrc3_get_archives` to report them
+   through — so 7.2 would require an interface change this specification does not make.
 6. THE Ledger SHALL omit an archive that holds no blocks from the ranges it publishes
    until that archive stores its first block, because a published range is inclusive
    of both ends and an empty archive has no pair of indices that describes it.
+7. THE ICRC Ledger SHALL replace the Published_Range of every archive whose range it
+   inferred rather than observed with one that archive has reported, asking at most one
+   such archive per Archiving_Round so that 12.1 still holds, and SHALL make no further
+   archiving attempt and expose a distinct non-zero metric if a reported range
+   contradicts the record it replaces, because an archive that is already mis-indexed is
+   never appended to again once it is not the Tail_Archive and so would otherwise never
+   be asked.
+8. WHEN an archive asked per 7.7 reports no Archive_Range, THE ICRC Ledger SHALL leave
+   that archive's Published_Range as it stands and SHALL expose a distinct count, rather
+   than halting as it would for the Tail_Archive per 10.1, because 10.1 protects appends
+   and no append is ever made to an archive that is not the Tail_Archive.
 
 ### Requirement 8: No Block Index Ever Becomes Unretrievable
 
@@ -442,11 +460,12 @@ a hole.
    covered by no archive, THEN THE Ledger SHALL make no further archiving attempt
    and SHALL expose a distinct non-zero metric, because advancing past them would
    discard blocks no archive holds.
-4. IF an archive reports an Archive_Position below the end of the Archived_Prefix,
-   THEN THE Ledger SHALL make no further archiving attempt, SHALL discard no
-   further blocks, and SHALL expose a distinct non-zero metric, because blocks it
-   has already stopped serving are then held nowhere and no retry can recover
-   them.
+4. IF an archive reports an Archive_Position that falls short of the end of the
+   Published_Range THE Ledger publishes for *that* archive, THEN THE Ledger SHALL make
+   no further archiving attempt, SHALL discard no further blocks, and SHALL expose a
+   distinct non-zero metric, because blocks it has already stopped serving are then held
+   nowhere and no retry can recover them — compared per archive rather than against the
+   Archived_Prefix, which every archive but the Tail_Archive ends legitimately below.
 5. WHEN an Archiving_Round does not complete, THE Ledger SHALL continue to serve
    every index it served before that round.
 6. THE Ledger SHALL NOT rely on its own record of what it sent when deciding what
@@ -460,10 +479,12 @@ a hole.
    never issued was built from a chain the ledger is no longer on, which neither 8.2
    nor 8.4 detects.
 9. THE Ledger SHALL extend the Archived_Prefix only as far as a range reported by an
-   append that carried blocks, and never on the strength of one reported per 3.5 alone,
-   because an empty append puts no block in front of the archive to compare and so
-   cannot tell an archive continuing this ledger's chain from one continuing a fork of
-   it.
+   append after which the archive had either stored at least one block it was offered or
+   compared one of them against a block it already held per 2.9, because every other
+   append — an empty one per 3.5, a gap per 2.2, or one falling wholly below the
+   archive's range per 2.6 — leaves the archive having verified no block of this
+   ledger's chain, so its reported range cannot distinguish an archive continuing this
+   chain from one continuing a fork of it.
 
 ### Requirement 9: Archiving Attempts Are Bounded While Archiving Fails
 
