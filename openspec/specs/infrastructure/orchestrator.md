@@ -155,6 +155,12 @@ The orchestrator fetches, verifies, and persists catch-up packages to determine 
 - **THEN** the `critical_error_cup_deserialization_failed` metric is incremented
 - **AND** the orchestrator attempts to extract the subnet ID from the NiDkgId as a fallback
 
+#### Scenario: Split-aware CUP fetching and replica restart
+- **WHEN** the orchestrator looks for a new CUP and the registry shows a subnet split scheduled between the local CUP's registry version and the latest registry version
+- **THEN** before contacting peers or the registry, it overwrites the subnet ID used for that lookup with the expected post-split subnet ID (source or destination), so the CUP is fetched and verified against the correct post-split membership and public key
+- **AND** if the subnet ID of the newly fetched CUP differs from the local CUP's subnet ID, the orchestrator restarts the replica
+- **AND** this leaves CUP fetching outside of a scheduled split unchanged: it still looks at the local CUP's subnet ID and the latest registry version
+
 ### Requirement: Firewall Management
 The orchestrator monitors the registry for firewall rule changes and updates the node's firewall configuration accordingly.
 
