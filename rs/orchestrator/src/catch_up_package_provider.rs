@@ -241,7 +241,17 @@ impl CatchUpPackageProvider {
             {
                 Ok(Some((proto, cup))) => {
                     // Note: None is < Some(_)
-                    if Some(CatchUpPackageParam::from(&cup)) > param {
+                    if Some(CatchUpPackageParam::from(&cup)) > param
+                        // Ignore CUPs with a registry version ahead of our latest registry version:
+                        // the only scenario this could happen without crypto verification failing
+                        // with `VersionNotAvailable` is if the registry client polled between
+                        // reading the latest registry version and crypto verifying the CUP. If this
+                        // happens, we prefer to ignore the CUP since the peer selection was made
+                        // according to a different registry version (this matters for subnet
+                        // splitting). The next iteration of the loop will select the peers
+                        // according to the updated latest registry version and will succeed.
+                        && cup.content.registry_version() <= registry_version
+                    {
                         return Some(proto);
                     }
                 }
@@ -1950,6 +1960,95 @@ pub(crate) mod tests {
 
         let fetched = cup_provider
             .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID, latest_registry_version)
+            .await
+            .expect("Should fetch the post-split CUP of our own subnet");
+        assert_eq!(fetched.height(), post_split_cup_height);
+        assert_eq!(
+            fetched.subnet_splitting_status(),
+            SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                new_subnet_id: DESTINATION_SUBNET_ID
+            })
+        );
+    }
+
+    /// Reproduces a race condition where the registry client polls between the orchestrator loop
+    /// reading the latest registry version and crypto verifying the CUP.
+    /// In case of a split, peer selection is made according to the latest local registry version.
+    /// If the latter predates the split, we would select old source nodes (i.e. the entire subnet).
+    /// Now imagine we part of the destination subnet, we select a source node, and that node
+    /// already serves the post-split *source* CUP. The signature verification should fail with
+    /// crypto raising a `VersionNotAvailable` since the CUP's registry version will contain the
+    /// split's registry version.
+    /// BUT if the registry client has polled that version in the meantime, the signature
+    /// verification would still succeed, we will then detect that we are not part of the subnet
+    /// anymore and remove our state.
+    /// This test ensures we ignore the peer's CUP in that scenario.
+    #[tokio::test]
+    async fn test_get_latest_cup_ignores_peer_cup_ahead_of_latest_registry_version() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let source_nodes = vec![node_test_id(1)];
+        let destination_nodes = vec![node_test_id(2)];
+        // We move to the destination subnet.
+        let node_id = destination_nodes[0];
+        let local_cup_height = Height::from(100);
+        let post_split_cup_height = Height::from(200);
+
+        // Every peer serves the source subnet's post-split CUP.
+        let (server_addr, served_cup) =
+            start_cup_server(pb::CatchUpPackage::from(make_post_split_cup(
+                source_nodes.clone(),
+                post_split_cup_height,
+                SOURCE_SUBNET_ID,
+            )))
+            .await;
+        // The registry client already knows the split, i.e. the signature verification succeeds.
+        let registry = setup_split_registry_customized(
+            node_id,
+            &source_nodes,
+            &destination_nodes,
+            |_| node_record_serving(server_addr),
+            |_| {},
+        );
+        assert_eq!(registry.get_latest_version(), SPLIT_REGISTRY_VERSION);
+        // The orchestrator loop's latest registry version was observed before the split
+        let stale_registry_version = SPLIT_REGISTRY_VERSION - RegistryVersion::from(1);
+
+        let mut cup_provider = make_cup_provider_with_crypto(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+            Arc::new(SubnetAwareThresholdSigVerifier),
+        );
+
+        let local_cup = pb::CatchUpPackage::from(make_pre_split_source_cup(
+            [source_nodes.clone(), destination_nodes.clone()].concat(),
+            local_cup_height,
+        ));
+
+        let fetched = cup_provider
+            .get_latest_cup(
+                Some(local_cup.clone()),
+                SOURCE_SUBNET_ID,
+                stale_registry_version,
+            )
+            .await
+            .expect("Should fall back to the local CUP");
+        assert_eq!(fetched.height(), local_cup_height);
+        assert_eq!(
+            fetched.subnet_splitting_status(),
+            SubnetSplittingStatus::NotScheduled
+        );
+
+        // Once the registry caught up, the pending split is detected and the fetch is rerouted to
+        // our own subnet, whose post-split CUP is adopted.
+        *served_cup.lock().unwrap() = pb::CatchUpPackage::from(make_post_split_cup(
+            destination_nodes,
+            post_split_cup_height,
+            DESTINATION_SUBNET_ID,
+        ));
+        let fetched = cup_provider
+            .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID, SPLIT_REGISTRY_VERSION)
             .await
             .expect("Should fetch the post-split CUP of our own subnet");
         assert_eq!(fetched.height(), post_split_cup_height);
