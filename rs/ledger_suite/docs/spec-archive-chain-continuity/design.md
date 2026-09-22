@@ -696,6 +696,13 @@ of all across an upgrade. It is set when the archive is adopted, and cleared
 when the handover's second step is confirmed or refused as unauthorized
 (`Req 11.12`) — the two ways the ledger can know it is done.
 
+**It does not need to record which of the two steps is pending**, which is worth
+saying because a reader expecting a two-step journal will look for one. A retry always
+re-runs step one and then step two: step one is idempotent, and if step two has already
+committed then step one is itself unauthorized, which `Req 11.12` clears on. So both
+resumption points converge on the same rule and a single `Option<CanisterId>`
+carries the whole state.
+
 **Two of the three orphan windows stop being write-offs, and only `Idle` may be
 restored.** `create_and_initialize_node_canister` runs `create_canister` →
 `install_code` → `update_settings` → `nodes.push`, each with `?` (`archive.rs:455`,
