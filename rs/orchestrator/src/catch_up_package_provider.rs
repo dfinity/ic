@@ -467,6 +467,12 @@ impl CatchUpPackageProvider {
                 // for this potential split such that we learn our unassignment through that other
                 // subnet (maybe they still need us for some work, and we're not totally unassigned
                 // yet).
+                warn!(
+                    self.logger,
+                    "Unexpectedly unassigned from subnet {} on scheduled split at registry version {}",
+                    subnet_id,
+                    versioned_record.version,
+                );
                 continue;
             };
 
@@ -477,6 +483,13 @@ impl CatchUpPackageProvider {
                 // But there could still be a previous split of the same subnet: let us continue to
                 // scan for this potential split to move to one of this split's subnets and not
                 // remove the state by mistake.
+                warn!(
+                    self.logger,
+                    "Unexpectedly assigned to subnet {} on scheduled split of subnet {} at registry version {}",
+                    new_subnet_id,
+                    subnet_id,
+                    versioned_record.version,
+                );
                 continue;
             }
 
