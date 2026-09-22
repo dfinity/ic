@@ -1,5 +1,7 @@
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::{CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE};
+use ic_config::subnet_config::{
+    CyclesAccountManagerConfig, DEFAULT_REFERENCE_SUBNET_SIZE, SEV_REFERENCE_SUBNET_SIZE,
+};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerSubnetConfig, IngressInductionCost,
     ResourceSaturation,
@@ -797,6 +799,420 @@ fn response_transmission_refund_never_exceeds_the_prepayment() {
                     "unexpected nominal charge for {context}"
                 );
             }
+        }
+    }
+}
+/// The instruction limit used by the aborted execution tests below.
+const ABORTED_EXECUTION_INSTRUCTION_LIMIT: NumInstructions = NumInstructions::new(1_000_000_000);
+
+/// The conditions that the cycles for an execution are prepaid under: the subnet
+/// configuration that scales the fees and the canister's Wasm execution mode.
+#[derive(Copy, Clone, Debug)]
+struct AbortedExecutionSetting {
+    subnet_config: CyclesAccountManagerSubnetConfig,
+    wasm_execution_mode: WasmExecutionMode,
+}
+
+/// The subnet configurations an execution can be prepaid under. They differ in the
+/// three quantities that scale the execution fees, one at a time: the subnet size,
+/// the reference subnet size that the fees are scaled against, and the cost
+/// schedule.
+///
+/// All three are read from the registry at the version of the batch whose round
+/// executes the message, so all three can differ between the round that prepaid an
+/// execution and the round that restarts it after an abort.
+fn aborted_execution_subnet_configs() -> [CyclesAccountManagerSubnetConfig; 4] {
+    [
+        // An application subnet of the default size.
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
+        // A larger subnet, e.g. one that nodes were added to, whose fees are scaled
+        // up proportionally.
+        CyclesAccountManagerSubnetConfig::new(
+            2 * SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
+        // A SEV-enabled subnet, whose fees are scaled against a smaller reference
+        // subnet size.
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            SEV_REFERENCE_SUBNET_SIZE,
+        ),
+        // A subnet on the free cost schedule, which charges nothing real.
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Free,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
+    ]
+}
+
+/// Every combination of the subnet configuration and the Wasm execution mode an
+/// execution can be prepaid under.
+fn aborted_execution_settings() -> Vec<AbortedExecutionSetting> {
+    aborted_execution_subnet_configs()
+        .into_iter()
+        .flat_map(|subnet_config| {
+            [WasmExecutionMode::Wasm32, WasmExecutionMode::Wasm64]
+                .into_iter()
+                .map(move |wasm_execution_mode| AbortedExecutionSetting {
+                    subnet_config,
+                    wasm_execution_mode,
+                })
+        })
+        .collect()
+}
+
+/// An execution that is aborted and restarted is paid for, and reported in the
+/// consumed cycles metrics, exactly as if it had been prepaid under the conditions
+/// in effect when it is restarted.
+///
+/// An aborted execution carries the cycles it prepaid over to its restart instead
+/// of prepaying again, while the refund of the unused instructions is computed
+/// under the conditions in effect when the restarted execution finishes. Adjusting
+/// the carried-over prepayment to those conditions is what keeps the two in line.
+///
+/// Checked at the two points of the prepay, adjust and refund sequence at which the
+/// cycles the canister has paid are determined: right after the adjustment, where
+/// it must have paid the prepayment required at the restart in both its real and
+/// its nominal part, and after the cycles for the instructions the execution did
+/// not use are refunded, where it must have paid for the instructions it did use.
+///
+/// The canister starts out with just enough cycles to cover the larger of the
+/// prepayment and the requirement, so that it has none to spare once it prepaid and
+/// the adjustment withdrew the cycles missing from the prepayment, if any. The
+/// adjustment withdraws `required - prepaid`, which saturates part by part, without
+/// comparing the two first; any other withdrawal, in particular one attempted where
+/// the prepayment covers the requirement in the real part, fails here for lack of
+/// cycles instead of going unnoticed.
+#[test]
+fn restarted_execution_cycles_match_restart_setting() {
+    const EXECUTED_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000);
+    const LIMIT: NumInstructions = ABORTED_EXECUTION_INSTRUCTION_LIMIT;
+
+    for before_abort in aborted_execution_settings() {
+        for at_restart in aborted_execution_settings() {
+            let cycles_account_manager = cycles_account_manager();
+            let context =
+                format!("{before_abort:?} before the abort, {at_restart:?} at the restart");
+
+            // The aborted execution prepaid under the conditions in effect back
+            // then; the restarted one requires the prepayment matching the
+            // conditions in effect now.
+            let prepaid = cycles_account_manager.execution_cost(
+                LIMIT,
+                before_abort.subnet_config,
+                before_abort.wasm_execution_mode,
+            );
+            let required = cycles_account_manager.execution_cost(
+                LIMIT,
+                at_restart.subnet_config,
+                at_restart.wasm_execution_mode,
+            );
+
+            // Once the canister has paid the prepayment, its balance covers exactly
+            // the cycles missing from it, if any, so that any withdrawal beyond
+            // those fails.
+            let mut system_state = SystemStateBuilder::new()
+                .initial_cycles(prepaid.real().max(required.real()))
+                .build();
+            let initial_balance = system_state.balance();
+            system_state.consume_cycles(prepaid);
+
+            let adjusted = cycles_account_manager
+                .adjust_prepaid_execution_cycles(
+                    &mut system_state,
+                    prepaid,
+                    NumBytes::from(0),
+                    MessageMemoryUsage::ZERO,
+                    ComputeAllocation::default(),
+                    LIMIT,
+                    at_restart.subnet_config,
+                    false,
+                    at_restart.wasm_execution_mode,
+                )
+                .unwrap();
+
+            assert_eq!(adjusted, required, "unexpected prepayment for {context}");
+            // Whichever prepayment the aborted execution made, the canister has now
+            // paid the adjusted one: the missing cycles were withdrawn or the excess
+            // ones were refunded.
+            assert_eq!(
+                system_state.balance() + required.real(),
+                initial_balance,
+                "unexpected balance after the adjustment for {context}"
+            );
+            // The consumed cycles metrics report the adjusted prepayment as well.
+            // The counter is only updated once the prepayment is refunded, i.e. not
+            // yet.
+            assert_eq!(
+                consumed_cycles_for_instructions(&system_state),
+                (required.nominal(), NominalCycles::zero()),
+                "unexpected consumed cycles after the adjustment for {context}"
+            );
+
+            // Refund the cycles for the instructions the restarted execution did not
+            // use.
+            let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
+            cycles_account_manager.refund_unused_execution_cycles(
+                &mut system_state,
+                LIMIT - EXECUTED_INSTRUCTIONS,
+                LIMIT,
+                adjusted,
+                &no_op_counter,
+                at_restart.subnet_config,
+                at_restart.wasm_execution_mode,
+                &no_op_logger(),
+            );
+
+            // The canister is charged, and reported to have consumed, the fixed
+            // per-message execution fee plus the cost of the instructions it
+            // executed, both under the conditions in effect at the restart.
+            let expected = cycles_account_manager.execution_cost(
+                EXECUTED_INSTRUCTIONS,
+                at_restart.subnet_config,
+                at_restart.wasm_execution_mode,
+            );
+            assert_eq!(
+                system_state.balance() + expected.real(),
+                initial_balance,
+                "unexpected balance after the refund for {context}"
+            );
+            assert_eq!(
+                consumed_cycles_for_instructions(&system_state),
+                (expected.nominal(), expected.nominal()),
+                "unexpected consumed cycles after the refund for {context}"
+            );
+        }
+    }
+}
+
+/// If the canister's balance does not cover the cycles missing from the prepayment
+/// that an aborted execution carried over, then the adjustment fails and refunds
+/// that prepayment in full: the restarted execution does not run, so the canister
+/// ends up charged nothing at all and reported to have consumed nothing, exactly as
+/// if prepaying the execution from scratch had failed.
+///
+/// That sets the failure apart from the one of
+/// `adjust_prepayment_for_response_execution`, which leaves the canister state
+/// unchanged: a response execution that is not run still settles its prepayment
+/// afterwards, while the caller of this adjustment drops the message right away.
+///
+/// In the second setting below the prepayment falls short of the requirement in the
+/// real part while exceeding it in the nominal one, so that the excess that a
+/// successful adjustment would refund is not zero. That is what pins down the order
+/// of the withdrawal and the refund: were the excess refunded before the failing
+/// withdrawal, the prepayment would be refunded twice over in the nominal part.
+#[test]
+fn adjust_prepaid_execution_cycles_refunds_the_prepayment_on_failure() {
+    const LIMIT: NumInstructions = ABORTED_EXECUTION_INSTRUCTION_LIMIT;
+
+    let normal = CyclesAccountManagerSubnetConfig::new(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+        DEFAULT_REFERENCE_SUBNET_SIZE,
+    );
+    let larger = CyclesAccountManagerSubnetConfig::new(
+        2 * SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+        DEFAULT_REFERENCE_SUBNET_SIZE,
+    );
+    let free = CyclesAccountManagerSubnetConfig::new(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Free,
+        DEFAULT_REFERENCE_SUBNET_SIZE,
+    );
+
+    // The third component is the direction of the nominal part of the prepayment
+    // relative to the nominal part of the requirement.
+    let settings = [
+        // Prepaid on the smaller subnet, so that the requirement on the larger one
+        // exceeds the prepayment in both parts.
+        (
+            AbortedExecutionSetting {
+                subnet_config: normal,
+                wasm_execution_mode: WasmExecutionMode::Wasm32,
+            },
+            AbortedExecutionSetting {
+                subnet_config: larger,
+                wasm_execution_mode: WasmExecutionMode::Wasm32,
+            },
+            Ordering::Less,
+        ),
+        // Prepaid under the free cost schedule, so that the requirement exceeds the
+        // prepayment in the real part; prepaid in the more expensive Wasm execution
+        // mode, so that the prepayment exceeds the requirement in the nominal part.
+        (
+            AbortedExecutionSetting {
+                subnet_config: free,
+                wasm_execution_mode: WasmExecutionMode::Wasm64,
+            },
+            AbortedExecutionSetting {
+                subnet_config: normal,
+                wasm_execution_mode: WasmExecutionMode::Wasm32,
+            },
+            Ordering::Greater,
+        ),
+    ];
+
+    for (before_abort, at_restart, nominal_direction) in settings {
+        let cycles_account_manager = cycles_account_manager();
+        let context = format!("{before_abort:?} before the abort, {at_restart:?} at the restart");
+
+        let prepaid = cycles_account_manager.execution_cost(
+            LIMIT,
+            before_abort.subnet_config,
+            before_abort.wasm_execution_mode,
+        );
+        let required = cycles_account_manager.execution_cost(
+            LIMIT,
+            at_restart.subnet_config,
+            at_restart.wasm_execution_mode,
+        );
+        let missing = required.real() - prepaid.real();
+        assert!(missing > Cycles::zero(), "nothing missing for {context}");
+        assert_eq!(
+            prepaid.nominal().cmp(&required.nominal()),
+            nominal_direction,
+            "unexpected direction of the nominal part for {context}"
+        );
+
+        // Once the canister has paid the prepayment, its balance covers all but one
+        // cycle of the cycles missing from it.
+        let balance = missing - Cycles::new(1);
+        let mut system_state = SystemStateBuilder::new()
+            .initial_cycles(balance + prepaid.real())
+            .build();
+        let initial_balance = system_state.balance();
+        system_state.consume_cycles(prepaid);
+        assert_eq!(system_state.balance(), balance);
+
+        let err = cycles_account_manager
+            .adjust_prepaid_execution_cycles(
+                &mut system_state,
+                prepaid,
+                NumBytes::from(0),
+                MessageMemoryUsage::ZERO,
+                ComputeAllocation::default(),
+                LIMIT,
+                at_restart.subnet_config,
+                false,
+                at_restart.wasm_execution_mode,
+            )
+            .unwrap_err();
+
+        assert_eq!(err.requested, missing, "unexpected shortfall for {context}");
+        // The prepayment is refunded in full, so the canister is back to the balance
+        // it had before the aborted execution prepaid.
+        assert_eq!(
+            system_state.balance(),
+            initial_balance,
+            "unexpected balance for {context}"
+        );
+        assert_eq!(
+            consumed_cycles_for_instructions(&system_state),
+            (NominalCycles::zero(), NominalCycles::zero()),
+            "unexpected consumed cycles for {context}"
+        );
+    }
+}
+
+/// The cycles missing from the prepayment that an aborted execution carried over
+/// are withdrawn while respecting the freezing threshold, exactly as prepaying the
+/// execution from scratch would: a canister that cannot cover the shortfall out of
+/// the balance it holds above its freezing threshold fails the adjustment, even
+/// though it does hold the cycles further down.
+///
+/// Checked at the boundary, i.e. with the balance leaving the canister one cycle
+/// short of the shortfall above its freezing threshold and then with the balance
+/// leaving it exactly the shortfall. A withdrawal that ignored the freezing
+/// threshold would succeed in both cases.
+#[test]
+fn adjust_prepaid_execution_cycles_respects_the_freezing_threshold() {
+    const LIMIT: NumInstructions = ABORTED_EXECUTION_INSTRUCTION_LIMIT;
+    // A non-zero memory usage, so that the canister has a non-zero freezing
+    // threshold to begin with.
+    const MEMORY_USAGE: NumBytes = NumBytes::new(1024 * 1024);
+
+    let cycles_account_manager = cycles_account_manager();
+    let config_before_abort = CyclesAccountManagerSubnetConfig::new(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+        DEFAULT_REFERENCE_SUBNET_SIZE,
+    );
+    // The subnet grew across the abort, so the restarted execution requires more
+    // than the aborted one prepaid.
+    let config_at_restart = CyclesAccountManagerSubnetConfig::new(
+        2 * SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+        DEFAULT_REFERENCE_SUBNET_SIZE,
+    );
+
+    let prepaid =
+        cycles_account_manager.execution_cost(LIMIT, config_before_abort, WASM_EXECUTION_MODE);
+    let required =
+        cycles_account_manager.execution_cost(LIMIT, config_at_restart, WASM_EXECUTION_MODE);
+    let missing = required.real() - prepaid.real();
+    assert!(missing > Cycles::zero());
+
+    // `covered` is the part of the shortfall that the canister holds above its
+    // freezing threshold once it has paid the prepayment.
+    for covered in [missing - Cycles::new(1), missing] {
+        let mut system_state = SystemStateBuilder::new()
+            .freeze_threshold(NumSeconds::from(1_000))
+            .build();
+        let threshold = cycles_account_manager.freeze_threshold_cycles(
+            system_state.freeze_threshold,
+            system_state.memory_allocation,
+            MEMORY_USAGE,
+            MessageMemoryUsage::ZERO,
+            ComputeAllocation::default(),
+            config_at_restart,
+            system_state.reserved_balance(),
+        );
+        assert!(threshold > Cycles::zero(), "zero freezing threshold");
+
+        system_state.set_balance(prepaid.real() + threshold + covered);
+        let initial_balance = system_state.balance();
+        system_state.consume_cycles(prepaid);
+
+        let result = cycles_account_manager.adjust_prepaid_execution_cycles(
+            &mut system_state,
+            prepaid,
+            MEMORY_USAGE,
+            MessageMemoryUsage::ZERO,
+            ComputeAllocation::default(),
+            LIMIT,
+            config_at_restart,
+            false,
+            WASM_EXECUTION_MODE,
+        );
+
+        if covered < missing {
+            // The canister holds the missing cycles, but not above its freezing
+            // threshold, so the adjustment fails and refunds the prepayment in full.
+            let err = result.unwrap_err();
+            assert_eq!(err.requested, missing);
+            assert_eq!(err.threshold, threshold);
+            assert_eq!(system_state.balance(), initial_balance);
+            assert_eq!(
+                consumed_cycles_for_instructions(&system_state),
+                (NominalCycles::zero(), NominalCycles::zero()),
+            );
+        } else {
+            // The canister covers the shortfall above its freezing threshold, so the
+            // adjustment succeeds and leaves it frozen but not below the threshold.
+            assert_eq!(result.unwrap(), required);
+            assert_eq!(system_state.balance(), threshold);
+            assert_eq!(
+                consumed_cycles_for_instructions(&system_state),
+                (required.nominal(), NominalCycles::zero()),
+            );
         }
     }
 }

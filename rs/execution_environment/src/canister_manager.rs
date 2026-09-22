@@ -942,34 +942,57 @@ impl CanisterManager {
         // For installing code, Wasm64 does not differ from Wasm32.
         let wasm_execution_mode = WasmExecutionMode::Wasm32;
 
-        let prepaid_execution_cycles = match prepaid_execution_cycles {
-            Some(prepaid_execution_cycles) => prepaid_execution_cycles,
-            None => {
-                let memory_usage = canister.memory_usage();
-                let message_memory_usage = canister.message_memory_usage();
-                let reveal_top_up = canister.controllers().contains(message.sender());
+        let reveal_top_up = canister.controllers().contains(message.sender());
+        let instruction_limit = execution_parameters.instruction_limits.message();
+        let memory_usage = canister.memory_usage();
+        let message_memory_usage = canister.message_memory_usage();
 
-                match self.cycles_account_manager.prepay_execution_cycles(
+        let result = match prepaid_execution_cycles {
+            // The execution was aborted before it finished and is restarted now: it
+            // keeps the cycles that it prepaid before the abort, adjusted to what
+            // prepaying it now would require. The conditions that the prepayment was
+            // computed under, e.g. the subnet size or the cost schedule, might have
+            // changed since the abort, while the refund of the unused instructions is
+            // computed under the conditions in effect when the restarted execution
+            // finishes.
+            Some(prepaid_execution_cycles) => {
+                self.cycles_account_manager.adjust_prepaid_execution_cycles(
                     &mut canister.system_state,
+                    prepaid_execution_cycles,
                     memory_usage,
                     message_memory_usage,
                     execution_parameters.compute_allocation,
-                    execution_parameters.instruction_limits.message(),
+                    instruction_limit,
                     subnet_cycles_config,
                     reveal_top_up,
                     wasm_execution_mode,
-                ) {
-                    Ok(cycles) => cycles,
-                    Err(err) => {
-                        return DtsInstallCodeResult::Finished {
-                            canister,
-                            message,
-                            call_id,
-                            instructions_used: NumInstructions::from(0),
-                            result: Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
-                        };
-                    }
-                }
+                )
+            }
+            None => self.cycles_account_manager.prepay_execution_cycles(
+                &mut canister.system_state,
+                memory_usage,
+                message_memory_usage,
+                execution_parameters.compute_allocation,
+                instruction_limit,
+                subnet_cycles_config,
+                reveal_top_up,
+                wasm_execution_mode,
+            ),
+        };
+
+        let prepaid_execution_cycles = match result {
+            Ok(cycles) => cycles,
+            Err(err) => {
+                // The canister is charged nothing: prepaying the execution leaves the
+                // balance untouched when it fails, and adjusting the prepayment of a
+                // restarted execution refunds it in full when it fails.
+                return DtsInstallCodeResult::Finished {
+                    canister,
+                    message,
+                    call_id,
+                    instructions_used: NumInstructions::from(0),
+                    result: Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
+                };
             }
         };
 

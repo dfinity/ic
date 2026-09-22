@@ -3,6 +3,7 @@ use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     CallOrigin,
@@ -10,6 +11,7 @@ use ic_replicated_state::{
 };
 use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
+use ic_test_utilities_types::ids::node_test_id;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{NumBytes, NumInstructions, NumOsPages};
@@ -947,6 +949,86 @@ fn dts_abort_of_replicated_execution_works() {
                 - test.canister_execution_cost(b_id).real()
         );
     });
+}
+/// Replaces the nodes of the canisters' own subnet in the network topology, i.e.
+/// simulates a registry change that resizes the subnet between two rounds.
+fn set_own_subnet_size(test: &mut ExecutionTest, subnet_size: usize) {
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    test.state_mut()
+        .metadata
+        .modify_network_topology(|network_topology| {
+            let own_subnet = network_topology
+                .subnets_mut()
+                .get_mut(&own_subnet_id)
+                .unwrap();
+            own_subnet.nodes = (0..subnet_size).map(|i| node_test_id(i as u64)).collect();
+        });
+    assert_eq!(test.get_own_subnet_cycles_config().subnet_size, subnet_size);
+}
+
+/// An execution that is aborted and restarted after its subnet grew is charged for
+/// the instructions it uses at the subnet size in effect when it is restarted.
+///
+/// The aborted execution carries the cycles it prepaid at the old subnet size over
+/// to its restart, while the cycles for the instructions it does not use are
+/// refunded at the new one. Without adjusting the carried-over prepayment to the
+/// new subnet size, the refund for the unused instructions alone would reach the
+/// whole prepayment, where it is capped, and the execution would be free.
+#[test]
+fn dts_aborted_execution_is_charged_at_the_subnet_size_at_the_restart() {
+    let instruction_limit = 100_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(1_000_000)
+        .with_initial_canister_cycles(1_000_000_000_000_000)
+        .with_manual_execution()
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .instruction_counter_is_at_least(2_000_000)
+        .push_bytes(&[42])
+        .append_and_reply()
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(canister_id, "update", payload);
+
+    // The balance and the execution cost accumulated before the execution starts,
+    // i.e. with the induction of the ingress message above already paid for.
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let execution_cost_before = test.canister_execution_cost(canister_id);
+
+    // Run a single slice, so that the execution prepays at the subnet size in
+    // effect now and then pauses, and abort it.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+    test.abort_all_paused_executions();
+
+    // The subnet doubles in size before the aborted execution is restarted, so the
+    // restarted execution costs twice what the aborted one prepaid.
+    let subnet_size_before = test.get_own_subnet_cycles_config().subnet_size;
+    set_own_subnet_size(&mut test, 2 * subnet_size_before);
+
+    test.execute_message(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+    let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![42]));
+
+    // The canister paid for the instructions that the restarted execution used, at
+    // the subnet size in effect when it was restarted: exactly what it would have
+    // paid had the execution never been aborted and run at that subnet size.
+    let charged = test.canister_execution_cost(canister_id) - execution_cost_before;
+    assert_gt!(charged.real(), Cycles::zero());
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        balance_before - charged.real(),
+    );
 }
 
 #[test]
