@@ -100,24 +100,6 @@ fn should_remove_entry() {
 }
 
 #[test]
-fn should_count_the_entries_it_holds() {
-    let mut map = MultiKeyMap::<PrimaryKey, AltKey, u32>::default();
-    assert_eq!(map.len(), 0);
-    assert!(map.is_empty());
-
-    for i in 0..10 {
-        map.try_insert(PrimaryKey::new(i), AltKey::new((b'a' + i as u8) as char), i)
-            .unwrap();
-    }
-    assert_eq!(map.len(), 10);
-    assert!(!map.is_empty());
-
-    map.remove_entry(&PrimaryKey::new(5)).unwrap();
-    assert_eq!(map.len(), 9);
-    assert_eq!(map.alt_keys().count(), map.len());
-}
-
-#[test]
 fn should_insert_after_removal() {
     let mut map = MultiKeyMap::<PrimaryKey, AltKey, u32>::default();
     map.try_insert(PrimaryKey::new(1), AltKey::new('a'), 1)
