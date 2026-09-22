@@ -142,14 +142,14 @@ pub(crate) fn is_tree_consistent_with(
         CanisterRangesCheck::CanisterInFlat(canister_id) => {
             let state_covers = routing_table
                 .lookup_entry(canister_id)
-                .map(|(_, responsible_subnet)| responsible_subnet == subnet_id)
+                .map(|(_, host_subnet)| host_subnet == subnet_id)
                 .unwrap_or(false);
             Ok(do_flat_ranges_cover_canister(tree, subnet_id, canister_id)? == state_covers)
         }
         CanisterRangesCheck::CanisterInTree(canister_id) => {
             let state_covers = routing_table
                 .lookup_entry(canister_id)
-                .map(|(_, responsible_subnet)| responsible_subnet == subnet_id)
+                .map(|(_, host_subnet)| host_subnet == subnet_id)
                 .unwrap_or(false);
             Ok(do_tree_ranges_cover_canister(tree, subnet_id, canister_id)? == state_covers)
         }
