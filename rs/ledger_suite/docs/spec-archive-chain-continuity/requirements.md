@@ -556,8 +556,8 @@ unaddressable canister does not become a series of them.
    upgraded by its intended controllers.
 11. THE Ledger SHALL hand over control in two steps — first adding the configured
    controllers while remaining one itself, then removing itself — so that the first
-   step is verifiable by asking the archive and the second cannot fail in a way that
-   matters: its only outcomes are that the ledger is still a controller and may
+   step is verifiable by reading the archive's controller list, which it is still
+   entitled to do, and the second cannot fail in a way that matters: its only outcomes are that the ledger is still a controller and may
    retry, or that it is not, which is the state the handover was for.
 12. WHEN a retry of the second step is refused because THE Ledger is no longer a
    controller, THE Ledger SHALL treat the handover as complete and clear the metric in

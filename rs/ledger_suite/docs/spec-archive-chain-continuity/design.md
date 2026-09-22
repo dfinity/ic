@@ -852,7 +852,8 @@ settings committed, the ledger is no longer a controller while `pending_handover
 still set — every retry unauthorized, the metric never clearing.
 
 So it goes in two steps (`Req 11.11`). First add the configured controllers while
-keeping the ledger: idempotent, and verifiable at any time by asking the archive.
+keeping the ledger: idempotent, and verifiable at any time by reading the archive's
+controller list, which the ledger is still a controller and so still entitled to do.
 Then remove the ledger — and that step cannot fail in a way that matters, because its
 only two outcomes are "still a controller, retry" and "not a controller", which is
 precisely the state the handover exists to reach. `Req 11.12` therefore treats an
@@ -960,7 +961,7 @@ test is baseline-independent.
 | 17 | integration | reuse the creation-trap harness so the `create_canister` reply is lost; assert `Creating` is `Started`, that it is exposed, and that it does not self-clear — no identity was recorded, so there is nothing to finish | `Req 11.1`, `11.2`, `11.4` |
 | 17b | integration | lose the `install_code` outcome *after* the identity was recorded; assert the ledger resolves it by asking the created canister, finishes the creation without an operator, and adopts that same canister rather than creating a second | `Req 11.6`, `11.8` |
 | 17c | integration | fail a round, then upgrade the ledger; assert the next transaction triggers an Archiving_Round immediately rather than waiting out the spacing | `Req 9.9` |
-| 7d | archive | offer a batch whose second block exceeds the configured limit *and* does not chain; assert the first block is stored, the stop is reported, and the append is not refused — the malformed block was never going to be stored | `Req 1.9`, `Req 4.1` |
+| 7d | archive | offer a batch whose second block exceeds the configured limit and, in turn, either does not chain or does not decode; assert in both cases that the first block is stored, the stop is reported, and the append is neither refused nor counted — the block was never going to be stored | `Req 1.9`, `Req 4.1`, `Req 6.4` |
 | 17d | integration | lose the `update_settings` outcome; assert the archive is already adopted and serving, that archiving continues, that the handover metric is non-zero, and that a later round retries the handover and clears it | `Req 11.9`, `11.10` |
 | 17e | upgrade | decode a pre-change `Archive` state; assert it decodes and that both new fields read their defaults — `Idle` and `None` — so the journal's own release cannot be the upgrade that fails | the two `#[serde(default)]`s above |
 | 17f | upgrade | adopt an archive whose handover has not completed, then upgrade the ledger; assert `pending_handover` survives and the handover is still retried afterwards | `Req 11.10` |
