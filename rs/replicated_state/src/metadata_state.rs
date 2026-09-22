@@ -429,6 +429,22 @@ pub struct OwnSubnetInfo {
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct SubnetMetrics {
+    /// The cycles consumed by the canisters deleted on this subnet: for each
+    /// deleted canister, the cycles it had consumed plus the cycles left over in
+    /// its balance at deletion, which are considered consumed as well.
+    ///
+    /// This scalar already fully accounts for the following entries of
+    /// `consumed_cycles_by_use_case`, so a total that adds it must skip them:
+    ///
+    /// - `DeletedCanisters` holds the leftover cycles of deleted canisters,
+    ///   which are already included here.
+    /// - The canister-level use cases (`Memory`, `ComputeAllocation`,
+    ///   `IngressInduction`, `Instructions`, `RequestAndResponseTransmission`,
+    ///   `Uninstall`, `CanisterCreation`, `BurnedCycles`) only ever end up in
+    ///   that map when a canister is deleted, at which point the deleted
+    ///   canister's total consumption (the sum of these use cases) is also added
+    ///   here. Summing both would double count the cycles consumed by deleted
+    ///   canisters.
     consumed_cycles_by_deleted_canisters: NominalCycles,
     consumed_cycles_http_outcalls: NominalCycles,
     consumed_cycles_ecdsa_outcalls: NominalCycles,
@@ -607,21 +623,8 @@ impl SubnetMetrics {
         for (use_case, cycles) in self.consumed_cycles_by_use_case.iter() {
             match use_case {
                 // Skip the use cases that are already fully accounted for by the
-                // `consumed_cycles_by_deleted_canisters` scalar added above:
-                //
-                // - `DeletedCanisters` holds the leftover cycles of deleted
-                //   canisters, which are already included in
-                //   `consumed_cycles_by_deleted_canisters`.
-                // - The remaining canister-level use cases below
-                //   (`Memory`, `ComputeAllocation`, `IngressInduction`,
-                //   `Instructions`, `RequestAndResponseTransmission`,
-                //   `Uninstall`, `CanisterCreation`, `BurnedCycles`) only ever
-                //   end up in this map when a canister is deleted, at which point
-                //   the deleted canister's total consumption (the sum of these
-                //   use cases) is also added to
-                //   `consumed_cycles_by_deleted_canisters`. Summing them here as
-                //   well would double count the cycles consumed by deleted
-                //   canisters.
+                // `consumed_cycles_by_deleted_canisters` scalar added above; see
+                // its doc comment.
                 CyclesUseCase::DeletedCanisters
                 | CyclesUseCase::Memory
                 | CyclesUseCase::ComputeAllocation
