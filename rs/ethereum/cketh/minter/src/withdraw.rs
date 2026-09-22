@@ -581,8 +581,8 @@ fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
     if outcome.is_abandoned() {
         return (BTreeMap::new(), outcome);
     }
-    // Replaces an assert: an id whose transactions all answered "not mined" is a withdrawal that
-    // stalls, not a bug, and trapping here would take the whole minter down with it.
+    // An id whose transactions all answered "not mined" is a withdrawal that stalls, not a bug, and
+    // trapping here would take the whole minter down with it.
     for id in expected_finalized_ids
         .iter()
         .filter(|id| !receipts.contains_key(id))
