@@ -1,11 +1,5 @@
 """
 This module defines Bazel targets for the mainnet versions of ICOS images.
-
-The `mainnet_icos_images` repository rule generates a tiny repository whose BUILD
-file downloads the images *at build time* with the `download_file` macro of
-//bazel:download.bzl. See that file for why nothing is downloaded while the
-repository is fetched: that would happen on every PR, for ~20 GB of images that
-PR builds never use.
 """
 
 load(
@@ -113,8 +107,8 @@ def _mainnet_icos_images_impl(repository_ctx):
         records carry the hash of the *HostOS* update image in `update_img_hash`,
         so no update image is declared for them.
 
-    Nothing is downloaded while the repository is fetched; see the module
-    docstring for why.
+    Nothing is downloaded while the repository is fetched; see //bazel:download.bzl
+    for why.
     """
 
     parts = list(repository_ctx.attr.parts)

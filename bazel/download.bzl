@@ -56,11 +56,6 @@ def download_file(name, url, sha256, out = None, url_prefix = DEFAULT_URL_PREFIX
     # restricts a URL to [A-Za-z0-9._-/:], which contains no shell metacharacter
     # and no `$` (which genrule would treat as a Make variable), and `sha256_error`
     # restricts a hash to 64 lowercase hex characters.
-    #
-    # The download and its verification live in //bazel:download.sh, so the shell is
-    # shfmt-checked source instead of escaped Starlark text; the script's digest is
-    # part of the action key, as are the URL and the sha256, so the action re-runs
-    # exactly when the artifact is re-pinned.
     native.genrule(
         name = name,
         outs = [out],
@@ -85,7 +80,6 @@ def download_file(name, url, sha256, out = None, url_prefix = DEFAULT_URL_PREFIX
         #   remote action needs it as an input. Drop the tag again once a non-cached network
         #   action has been shown to work on the workers.
         # manual: never pulled in by a wildcard.
-        # Deliberately no no-cache / no-remote-cache: caching this action is the point.
         tags = ["manual", "no-remote-exec", "requires-network"],
         target_compatible_with = ["@platforms//os:linux"],
         tools = [_DOWNLOAD_SCRIPT],
