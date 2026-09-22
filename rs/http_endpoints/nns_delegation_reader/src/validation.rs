@@ -22,7 +22,7 @@
 use crate::reader::CanisterRangesFilter;
 use ic_crypto_tree_hash::{LabeledTree, LookupLowerBoundStatus, lookup_lower_bound, lookup_path};
 use ic_registry_routing_table::RoutingTable;
-use ic_types::{CanisterId, PrincipalId, SubnetId};
+use ic_types::{CanisterId, SubnetId};
 use std::fmt;
 
 /// What to check the canister ranges certified in a delegation against.
@@ -185,10 +185,10 @@ fn do_all_subnet_ranges_match(
     subnet_id: SubnetId,
     routing_table: &RoutingTable,
 ) -> Result<bool, DelegationValidationError> {
-    let subnet_ranges: Vec<(PrincipalId, PrincipalId)> = routing_table
+    let subnet_ranges: Vec<(CanisterId, CanisterId)> = routing_table
         .ranges(subnet_id)
         .iter()
-        .map(|range| (range.start.get(), range.end.get()))
+        .map(|range| (range.start, range.end))
         .collect();
 
     do_flat_ranges_match(tree, subnet_id, &subnet_ranges)
@@ -199,7 +199,7 @@ fn do_all_subnet_ranges_match(
 fn do_flat_ranges_match(
     tree: &LabeledTree<Vec<u8>>,
     subnet_id: SubnetId,
-    state_ranges: &[(PrincipalId, PrincipalId)],
+    state_ranges: &[(CanisterId, CanisterId)],
 ) -> Result<bool, DelegationValidationError> {
     match lookup_path(
         tree,
@@ -282,23 +282,17 @@ fn do_tree_ranges_cover_canister(
 }
 
 /// Returns whether any of the decoded ranges covers `canister_id`. Ranges are closed intervals.
-fn do_ranges_cover_canister(
-    ranges: &[(PrincipalId, PrincipalId)],
-    canister_id: CanisterId,
-) -> bool {
-    ranges.iter().any(|(start, end)| {
-        CanisterId::unchecked_from_principal(*start) <= canister_id
-            && canister_id <= CanisterId::unchecked_from_principal(*end)
-    })
+fn do_ranges_cover_canister(ranges: &[(CanisterId, CanisterId)], canister_id: CanisterId) -> bool {
+    ranges
+        .iter()
+        .any(|(start, end)| *start <= canister_id && canister_id <= *end)
 }
 
 /// Decodes a canister ranges leaf. Canister ranges are stored as self-describing CBOR
 /// of `(start, end)` principal pairs (see the canonical state's
 /// `encode_subnet_canister_ranges`) representing a `[start, end]` closed interval.
-fn decode_ranges(
-    bytes: &[u8],
-) -> Result<Vec<(PrincipalId, PrincipalId)>, DelegationValidationError> {
-    serde_cbor::from_slice::<Vec<(PrincipalId, PrincipalId)>>(bytes)
+fn decode_ranges(bytes: &[u8]) -> Result<Vec<(CanisterId, CanisterId)>, DelegationValidationError> {
+    serde_cbor::from_slice::<Vec<(CanisterId, CanisterId)>>(bytes)
         .map_err(DelegationValidationError::MalformedCanisterRanges)
 }
 
@@ -775,9 +769,9 @@ mod tests {
         #[case] canister_id: u64,
         #[case] expected_coverage: bool,
     ) {
-        let ranges: Vec<(PrincipalId, PrincipalId)> = [range(10, 20), range(100, 200)]
+        let ranges: Vec<(CanisterId, CanisterId)> = [range(10, 20), range(100, 200)]
             .iter()
-            .map(|r| (r.start.get(), r.end.get()))
+            .map(|r| (r.start, r.end))
             .collect();
 
         assert_eq!(
