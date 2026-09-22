@@ -410,6 +410,7 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
             CanisterSettingsArgsBuilder::new()
                 .with_compute_allocation(1)
                 .with_freezing_threshold(0)
+                .with_log_memory_limit(0) // Disable canister logging.
                 .build(),
         ),
     );

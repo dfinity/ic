@@ -33,7 +33,9 @@ use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, expect_canister_did_not_reply,
     get_reject, get_reply,
 };
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
+use ic_test_utilities_metrics::{
+    fetch_histogram_vec_count, fetch_int_counter_vec, metric_vec, nonzero_values,
+};
 use ic_types::{
     CanisterId, CountBytes, NumInstructions, PrincipalId, RegistryVersion,
     canister_http::{CanisterHttpMethod, PricingVersion, Replication, Transform},
@@ -2712,16 +2714,7 @@ fn ingress_message_to_cooling_down_subnet_is_rejected() {
     test.should_accept_ingress_message(canister, "update", vec![])
         .unwrap();
 
-    let own_subnet_id = test.state().metadata.own_subnet_id;
-    test.state_mut()
-        .metadata
-        .modify_network_topology(|network_topology| {
-            network_topology
-                .subnets_mut()
-                .get_mut(&own_subnet_id)
-                .unwrap()
-                .cooling_down = true;
-        });
+    test.set_cooling_down(true);
 
     // Both canister-addressed and subnet-addressed messages are now rejected.
     let err = test
@@ -3375,7 +3368,7 @@ fn execute_canister_http_request() {
                 .canister_state(caller_canister)
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases_as_counters()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&CyclesUseCase::HTTPOutcalls)
                 .unwrap()
         );
@@ -4017,6 +4010,45 @@ fn execute_canister_http_request_pricing_version() {
             assert_eq!(
                 http_request_context.pricing_version, expected,
                 "unexpected pricing version for pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
+
+            // The outcall is only counted once its response is delivered, so the
+            // counter is still zero here. Every (pricing version, replication)
+            // series is registered nonetheless, so none of them read as missing.
+            let delivered = fetch_int_counter_vec(
+                test.metrics_registry(),
+                "execution_http_outcalls_delivered_total",
+            );
+            assert_eq!(
+                delivered.len(),
+                6,
+                "unexpected delivered series for pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
+            assert!(
+                nonzero_values(delivered).is_empty(),
+                "admitting an outcall should not count it as delivered, for \
+                 pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
+
+            // Delivering the response counts the outcall under the version it was
+            // priced with. It is fully replicated, `is_replicated` being unset above.
+            test.deliver_consensus_response(CallbackId::from(0), Payload::Data(vec![]));
+            assert_eq!(
+                nonzero_values(fetch_int_counter_vec(
+                    test.metrics_registry(),
+                    "execution_http_outcalls_delivered_total"
+                )),
+                metric_vec(&[(
+                    &[
+                        ("pricing_version", expected.as_str()),
+                        ("replication", "fully_replicated"),
+                    ],
+                    1
+                )]),
+                "unexpected delivered metric for pricing_version={pricing_version:?} with \
                  flexible_http_requests enabled={flexible_http_requests_enabled}"
             );
         }
@@ -5169,14 +5201,14 @@ fn replicated_query_can_burn_cycles() {
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
-    let burned_cycles_as_counters = *test
+    let burned_cycles_monotonic = *test
         .canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases_as_counters()
+        .consumed_cycles_by_use_cases_monotonic()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
-    assert_eq!(burned_cycles_as_counters, burned_cycles);
+    assert_eq!(burned_cycles_monotonic, burned_cycles);
 }
 
 #[test]
@@ -5221,7 +5253,7 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
         test.canister_state(canister_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::BurnedCycles)
             .is_none()
     );
@@ -5529,7 +5561,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
         let execution_cost_initial = test.canister_execution_cost(a_id);
@@ -5541,7 +5573,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
         let execution_cost_after_message = test.canister_execution_cost(a_id);
@@ -5598,14 +5630,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
         let instruction_consumption_before_response_counters = *test
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
 
@@ -5674,14 +5706,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
         let instruction_consumption_after_response_counters = *test
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
 
@@ -6586,7 +6618,7 @@ impl ExecutionAccounting {
                 .canister_state(canister_id)
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases_as_counters()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&CyclesUseCase::Instructions)
                 .cloned()
                 .unwrap_or_default(),

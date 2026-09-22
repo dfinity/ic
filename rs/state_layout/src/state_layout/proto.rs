@@ -34,6 +34,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             interrupted_during_execution: item.interrupted_during_execution,
             certified_data: item.certified_data.clone(),
             consumed_cycles: Some((&item.consumed_cycles).into()),
+            consumed_cycles_monotonic: Some((&item.consumed_cycles_monotonic).into()),
             stable_memory_size64: item.stable_memory_size.get() as u64,
             heap_delta_debit: item.heap_delta_debit.get(),
             install_code_debit: item.install_code_debit.get(),
@@ -51,8 +52,8 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                     },
                 )
                 .collect(),
-            consumed_cycles_by_use_cases_as_counters: item
-                .consumed_cycles_by_use_cases_as_counters
+            consumed_cycles_by_use_cases_monotonic: item
+                .consumed_cycles_by_use_cases_monotonic
                 .into_iter()
                 .map(
                     |(use_case, cycles)| pb_canister_state_bits::ConsumedCyclesByUseCase {
@@ -102,6 +103,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         let consumed_cycles =
             try_from_option_field(value.consumed_cycles, "CanisterStateBits::consumed_cycles")
                 .unwrap_or_default();
+        let consumed_cycles_monotonic = try_from_option_field(
+            value.consumed_cycles_monotonic,
+            "CanisterStateBits::consumed_cycles_monotonic",
+        )
+        .unwrap_or_default();
 
         let mut controllers = BTreeSet::new();
         for controller in value.controllers.into_iter() {
@@ -138,9 +144,9 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             );
         }
 
-        let mut consumed_cycles_by_use_cases_as_counters = BTreeMap::new();
-        for x in value.consumed_cycles_by_use_cases_as_counters.into_iter() {
-            consumed_cycles_by_use_cases_as_counters.insert(
+        let mut consumed_cycles_by_use_cases_monotonic = BTreeMap::new();
+        for x in value.consumed_cycles_by_use_cases_monotonic.into_iter() {
+            consumed_cycles_by_use_cases_monotonic.insert(
                 CyclesUseCase::try_from(
                     pb_canister_state_bits::CyclesUseCase::try_from(x.use_case).map_err(|_| {
                         ProxyDecodeError::ValueOutOfRange {
@@ -191,6 +197,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             interrupted_during_execution: value.interrupted_during_execution,
             certified_data: value.certified_data,
             consumed_cycles,
+            consumed_cycles_monotonic,
             stable_memory_size: NumWasmPages::from(value.stable_memory_size64 as usize),
             heap_delta_debit: NumBytes::from(value.heap_delta_debit),
             install_code_debit: NumInstructions::from(value.install_code_debit),
@@ -202,7 +209,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             canister_version: value.canister_version,
             canister_creation_timestamp_nanos: value.canister_creation_timestamp_nanos,
             consumed_cycles_by_use_cases,
-            consumed_cycles_by_use_cases_as_counters,
+            consumed_cycles_by_use_cases_monotonic,
             // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
             canister_history: try_from_option_field(
                 value.canister_history,

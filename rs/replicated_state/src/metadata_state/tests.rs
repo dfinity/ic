@@ -2455,6 +2455,55 @@ fn stream_discard_signals_before_drops_all_signals() {
 }
 
 #[test]
+fn stream_next_reject_signal_index() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+
+    // With no reject signals, `None` is returned for any `from_index`.
+    assert_eq!(None, stream.next_reject_signal_index(0.into()));
+    assert_eq!(None, stream.next_reject_signal_index(153.into()));
+
+    stream.reject_signals = VecDeque::from([
+        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::QueueFull, 139.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 142.into()),
+    ]);
+
+    // Before the first reject signal: the first reject signal.
+    assert_eq!(Some(138.into()), stream.next_reject_signal_index(0.into()));
+    assert_eq!(
+        Some(138.into()),
+        stream.next_reject_signal_index(137.into())
+    );
+    // At a reject signal: that same reject signal.
+    assert_eq!(
+        Some(138.into()),
+        stream.next_reject_signal_index(138.into())
+    );
+    assert_eq!(
+        Some(139.into()),
+        stream.next_reject_signal_index(139.into())
+    );
+    assert_eq!(
+        Some(142.into()),
+        stream.next_reject_signal_index(142.into())
+    );
+    // Between reject signals: the following reject signal.
+    assert_eq!(
+        Some(142.into()),
+        stream.next_reject_signal_index(140.into())
+    );
+    // Past all reject signals: `None`.
+    assert_eq!(None, stream.next_reject_signal_index(143.into()));
+    assert_eq!(None, stream.next_reject_signal_index(153.into()));
+}
+
+#[test]
 fn stream_pushing_signals_increments_signals_end() {
     let mut stream = generate_stream(
         MessageConfig {
@@ -2514,7 +2563,6 @@ fn stream_roundtrip_encoding() {
 
     let mut stream = Stream::with_signals(
         messages,
-        130.into(),
         153.into(),
         [RejectSignal::new(
             RejectReason::CanisterMigrating,
@@ -2536,7 +2584,6 @@ fn deserializing_stream_fails_for_bad_signals() {
     let stream = pb_queues::Stream {
         messages_begin: 0,
         messages: Vec::new(),
-        signals_begin: 150,
         signals_end: 153,
         reject_signals: Vec::new(),
         reverse_stream_flags: None,
@@ -2581,15 +2628,6 @@ fn deserializing_stream_fails_for_bad_signals() {
         "reject signals not strictly sorted, received [151, 150]",
     );
 
-    // Deserializing a stream with reject signals before `signals_begin` should fail.
-    assert_invalid_reject_signals(
-        vec![pb_queues::RejectSignal {
-            reason: 1,
-            index: 149,
-        }],
-        "first reject signal RejectSignal { reason: CanisterMigrating, index: 149 } before signals_begin 150",
-    );
-
     // Deserializing a stream with reject signals after `signals_end` should fail.
     assert_invalid_reject_signals(
         vec![pb_queues::RejectSignal {
@@ -2598,14 +2636,6 @@ fn deserializing_stream_fails_for_bad_signals() {
         }],
         "reject signals not strictly sorted, received [153, 153]",
     );
-
-    let bad_stream = pb_queues::Stream {
-        signals_begin: 153,
-        signals_end: 150,
-        ..stream
-    };
-    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(deserialized_result, Err(ProxyDecodeError::Other(err_msg)) if err_msg == "signals_begin 153 after signals_end 150");
 }
 
 #[test]
@@ -2720,10 +2750,12 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     // skipped, or vice versa) changes the total by a unique amount that cannot
     // be masked by other entries cancelling out.
     let mut consumed_cycles_by_use_case = BTreeMap::new();
-    // Use cases covered by a dedicated scalar metric below; these must not be
-    // added to the total again (otherwise the cycles consumed by deleted
-    // canisters / outcalls would be double counted).
+    // Covered by the deleted canisters scalar metric below; must not be added to
+    // the total again (otherwise the cycles consumed by deleted canisters would
+    // be double counted).
     consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
+    // Subnet-level outcall use cases; the legacy scalar fields are migrated into
+    // these entries, so the entries (not the fields) are added to the total.
     consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(2));
     consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(4));
     // Canister-level use cases that only ever enter the map when a canister is
@@ -2758,29 +2790,32 @@ fn consumed_cycles_total_calculates_the_right_amount() {
 
     let subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(16384),
+        // Deliberately out of sync with (and much larger than) the matching
+        // use-case entries: nothing reads the value of the legacy scalar fields
+        // anymore, so they must not contribute to either total.
         consumed_cycles_http_outcalls: NominalCycles::new(32768),
         consumed_cycles_ecdsa_outcalls: NominalCycles::new(65536),
         consumed_cycles_by_use_case,
         ..Default::default()
     };
 
-    // 16384 (deleted canisters) + 32768 (HTTP outcalls) + 65536 (ECDSA outcalls)
+    // 16384 (deleted canisters) + 2 (HTTP outcalls) + 4 (ECDSA outcalls)
     // + 2048 (Schnorr outcalls) + 4096 (VetKd) + 8192 (dropped messages).
     assert_eq!(
         subnet_metrics.consumed_cycles_total(),
-        NominalCycles::new(129024)
+        NominalCycles::new(30726)
     );
 
     // The legacy computation additionally sums the per-use-case entries that a
     // deleted canister contributes to the map (already covered by the deleted
-    // canisters scalar), hence the double counting. On top of the 129024 from
+    // canisters scalar), hence the double counting. On top of the 30726 from
     // the fixed `consumed_cycles_total` above:
-    // 129024 + 8 (memory) + 16 (compute allocation) + 32 (ingress induction)
+    // 30726 + 8 (memory) + 16 (compute allocation) + 32 (ingress induction)
     // + 64 (instructions) + 128 (request and response transmission)
     // + 256 (uninstall) + 512 (canister creation) + 1024 (burned cycles).
     assert_eq!(
         subnet_metrics.consumed_cycles_total_v28(),
-        NominalCycles::new(131064)
+        NominalCycles::new(32766)
     );
 }
 
@@ -2869,7 +2904,7 @@ fn migrate_outcalls_scalar_fields_into_use_cases() {
             (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
             (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
         ]),
-        consumed_cycles_by_use_case_as_counters: BTreeMap::from([
+        consumed_cycles_by_use_case_monotonic: BTreeMap::from([
             (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
             (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
         ]),
@@ -2904,7 +2939,7 @@ fn migrate_outcalls_scalar_fields_into_use_cases() {
     // The migration must NOT touch the monotonic counters map: its HTTP/ECDSA
     // entries stay at their original values (only the just-observed use case
     // grew).
-    let counters = subnet_metrics.get_consumed_cycles_by_use_case_as_counters();
+    let counters = subnet_metrics.get_consumed_cycles_by_use_case_monotonic();
     assert_eq!(
         counters[&CyclesUseCase::HTTPOutcalls],
         NominalCycles::new(60)
@@ -2918,8 +2953,18 @@ fn migrate_outcalls_scalar_fields_into_use_cases() {
         NominalCycles::new(5)
     );
 
-    // The scalar fields are not zeroed (kept as the source of truth / for
-    // downgrade compatibility).
+    // The scalar fields are not zeroed (kept for downgrade compatibility),
+    // even though nothing reads their value anymore.
+    assert_eq!(
+        subnet_metrics.consumed_cycles_http_outcalls,
+        NominalCycles::new(100)
+    );
+    assert_eq!(
+        subnet_metrics.consumed_cycles_ecdsa_outcalls,
+        NominalCycles::new(200)
+    );
+
+    // The getters read the (now migrated) use-case entries.
     assert_eq!(
         subnet_metrics.get_consumed_cycles_http_outcalls(),
         NominalCycles::new(100)
@@ -2940,7 +2985,7 @@ fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
             CyclesUseCase::HTTPOutcalls,
             NominalCycles::new(60),
         )]),
-        consumed_cycles_by_use_case_as_counters: BTreeMap::from([(
+        consumed_cycles_by_use_case_monotonic: BTreeMap::from([(
             CyclesUseCase::HTTPOutcalls,
             NominalCycles::new(60),
         )]),
@@ -2972,7 +3017,7 @@ fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
     // The counters map is not migrated: it only reflects its own increment (5),
     // not the backfilled history.
     assert_eq!(
-        subnet_metrics.get_consumed_cycles_by_use_case_as_counters()[&CyclesUseCase::HTTPOutcalls],
+        subnet_metrics.get_consumed_cycles_by_use_case_monotonic()[&CyclesUseCase::HTTPOutcalls],
         NominalCycles::new(65)
     );
 }
@@ -3008,7 +3053,7 @@ fn migrate_outcalls_scalar_fields_without_any_observation() {
     // The counters map is left untouched, i.e. still empty.
     assert!(
         subnet_metrics
-            .get_consumed_cycles_by_use_case_as_counters()
+            .get_consumed_cycles_by_use_case_monotonic()
             .is_empty()
     );
 
@@ -3016,6 +3061,29 @@ fn migrate_outcalls_scalar_fields_without_any_observation() {
     let before = subnet_metrics.get_consumed_cycles_by_use_case().clone();
     subnet_metrics.migrate_outcalls_cycles_to_use_cases();
     assert_eq!(subnet_metrics.get_consumed_cycles_by_use_case(), &before);
+}
+
+#[test]
+fn subnet_metrics_round_instructions_total_decodes_as_zero_when_absent() {
+    let populated = SubnetMetrics {
+        round_instructions_total: 42,
+        ..Default::default()
+    };
+    let proto = pb_metadata::SubnetMetrics::from(&populated);
+    assert_eq!(proto.round_instructions_total, Some(42));
+
+    // Checkpoints written before the field existed carry no field 13, and must
+    // still load.
+    let without_field = pb_metadata::SubnetMetrics {
+        round_instructions_total: None,
+        ..proto
+    };
+    assert_eq!(
+        SubnetMetrics::try_from(without_field)
+            .unwrap()
+            .round_instructions_total,
+        0
+    );
 }
 
 impl From<(u64, u64)> for BlockmakerStats {

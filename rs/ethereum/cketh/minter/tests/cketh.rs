@@ -1192,6 +1192,8 @@ fn should_derive_minter_address() {
 #[allow(deprecated)]
 #[test]
 fn should_retrieve_minter_info() {
+    const MINIMUM_ETH_DEPOSIT_WEI: u64 = 5_000_000_000_000_000;
+
     let cketh = CkEthSetup::default();
     let max_eth_logs_block_range = cketh.max_logs_block_range();
     let caller: Principal = cketh.caller.into();
@@ -1223,6 +1225,7 @@ fn should_retrieve_minter_info() {
             last_gas_fee_estimate: None,
             erc20_balances: None,
             minimum_deposit_amounts: None,
+            minimum_eth_deposit_amount: Some(Nat::from(MINIMUM_ETH_DEPOSIT_WEI)),
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_deposit_with_subaccount_scraped_block_number: Some(
@@ -1364,11 +1367,42 @@ fn should_export_the_sweeper_funding_metrics() {
 }
 
 #[test]
+fn should_export_the_sweep_pipeline_metrics() {
+    let cketh = CkEthSetup::default();
+    cketh.advance_time(Duration::from_secs(90));
+    cketh.env.tick();
+    cketh
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_armed_deposits 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_longest_armed_age_seconds 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_queued_deposits 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeps_finalized_total\{status="success"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeps_finalized_total\{status="failure"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_unfinalized_sweep_age_seconds 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_balance_scan_candidates_total 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="ok"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="eth_call_error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="decode_error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds 90 \d+");
+}
+
+#[test]
 fn should_export_the_stored_attestation_and_authorization_metrics() {
     CkEthSetup::default()
         .check_minter_metrics()
         .assert_contains_metric_matching(r"cketh_minter_stored_attestations 0 \d+")
-        .assert_contains_metric_matching(r"cketh_minter_stored_authorizations 0 \d+");
+        .assert_contains_metric_matching(r"cketh_minter_stored_authorizations 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_delegated_deposit_addresses 0 \d+");
 }
 
 /// Tests with the EVM RPC canister

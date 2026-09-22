@@ -15,6 +15,8 @@ pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant
 pub(crate) const SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN: &str =
     "scheduler_compute_allocation_invariant_broken";
 pub(crate) const SCHEDULER_CORES_INVARIANT_BROKEN: &str = "scheduler_cores_invariant_broken";
+pub(crate) const CONSUMED_CYCLES_INVARIANT_BROKEN: &str =
+    "scheduler_consumed_cycles_invariant_broken";
 
 pub struct SchedulerMetrics {
     pub(super) canister_age: Histogram,
@@ -26,6 +28,7 @@ pub struct SchedulerMetrics {
     pub(super) executed_canisters_per_round: Histogram,
     pub(super) expired_ingress_messages_count: IntCounter,
     pub(super) round_skipped_due_to_current_heap_delta_above_limit: IntCounter,
+    pub(super) round_skipped_canister_execution_due_to_cooling_down: IntCounter,
     pub(super) execute_round_called: IntCounter,
     pub(super) inner_loop_processed_non_zero_inputs_count: IntCounter,
     pub(super) inner_round_loop_consumed_max_instructions: IntCounter,
@@ -58,6 +61,7 @@ pub struct SchedulerMetrics {
     pub(super) canister_invariants: IntCounter,
     pub(super) scheduler_compute_allocation_invariant_broken: IntCounter,
     pub(super) scheduler_cores_invariant_broken: IntCounter,
+    pub(super) consumed_cycles_invariant_broken: IntCounter,
     pub(super) scheduler_accumulated_priority_deviation: Gauge,
     pub(super) inducted_messages: IntCounterVec,
     pub(super) delivered_pre_signatures: HistogramVec,
@@ -134,6 +138,11 @@ impl SchedulerMetrics {
                 "round_skipped_due_to_current_heap_delta_above_limit",
                 "The number of rounds that were skipped because the current \
                       heap delta size exceeded the allowed max",
+            ),
+            round_skipped_canister_execution_due_to_cooling_down: metrics_registry.int_counter(
+                "round_skipped_canister_execution_due_to_cooling_down",
+                "The number of rounds in which no canister messages were executed \
+                      because the subnet was cooling down",
             ),
             execute_round_called: metrics_registry.int_counter(
                 "execute_round_called",
@@ -305,6 +314,7 @@ impl SchedulerMetrics {
             canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
             scheduler_compute_allocation_invariant_broken: metrics_registry.error_counter(SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN),
             scheduler_cores_invariant_broken: metrics_registry.error_counter(SCHEDULER_CORES_INVARIANT_BROKEN),
+            consumed_cycles_invariant_broken: metrics_registry.error_counter(CONSUMED_CYCLES_INVARIANT_BROKEN),
             scheduler_accumulated_priority_deviation: metrics_registry.gauge(
                 "scheduler_accumulated_priority_deviation",
                 "The standard deviation of accumulated priorities on the subnet."

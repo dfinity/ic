@@ -1,3 +1,4 @@
+mod asset;
 pub mod id;
 
 #[cfg(test)]

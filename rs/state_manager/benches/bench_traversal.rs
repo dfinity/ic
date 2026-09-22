@@ -179,6 +179,7 @@ fn bench_traversal<M: Measurement + 'static>(c: &mut Criterion<M>) {
                 StreamIndex::from(0),
                 StreamIndex::from(100),
                 None,
+                true,
             ))
         });
     });

@@ -117,8 +117,8 @@ system_test_nns(
     guestos_update = "test",
     tags = [
         "colocate",
-        "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
+        "system_test_large",
     ],
     test_timeout = "eternal",
     runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -136,8 +136,8 @@ system_test_nns(
     guestos_update = "test",
     tags = [
         "colocate",
-        "long_test",
         "subnet_recovery",
+        "system_test_large",
     ],
     test_timeout = "eternal",
     runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -155,8 +155,8 @@ system_test_nns(
     guestos_update = "test",
     tags = [
         "colocate",
-        "long_test",
         "subnet_recovery",
+        "system_test_large",
     ],
     test_timeout = "eternal",
     runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
