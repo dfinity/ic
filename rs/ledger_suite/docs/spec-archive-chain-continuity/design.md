@@ -580,9 +580,17 @@ type-erased `VecDeque<EncodedBlock>`, and `node_and_capacity` below it receives 
 reach the `Encode!` at `archive.rs:463-468`. Same boundary as D6's, and for the same
 reason.
 
-**Compatibility.** An old ledger encodes four arguments; the fifth being `opt` means
-candid decodes it as absent, so a new archive installed by an old ledger behaves
-exactly as it does today. That is what keeps the archive-only release safe, and it is
+**Compatibility, in two separate places.** The Candid argument and the stored field
+are different problems and only the first is solved by `opt`. An old ledger encodes
+four arguments; the fifth being `opt` means candid decodes it as absent, so a new
+archive installed by an old ledger behaves exactly as it does today.
+
+The **stored** field needs `#[serde(default)]` returning `None`. `ArchiveConfig` is
+CBOR-decoded from stable memory on every archive upgrade, and it already does this for
+its later-added field (`icrc1/archive/src/main.rs:91`), so without it PR 1 would make
+every existing archive fail its *first* upgrade — the release that adds the protection
+would be the release that breaks the fleet. An upgrade regression test decoding a
+pre-change `ArchiveConfig` is the cheap guard. That is what keeps the archive-only release safe, and it is
 the same tolerance `Req 5` rests on. `archive.did` gains the second argument and the
 result type, both `opt` and so compatible in either direction; verify the whole of it
 with `didc` and the CI Candid check rather than by inspection.
@@ -684,8 +692,9 @@ novel.
 `Req 11.9` moved the handover *after* adoption: `Creating` returns to `Idle` when
 `nodes.push` succeeds, so without it nothing records which adopted archive still owes
 a handover, and `Req 11.10`'s retry and metric would have nothing to work from — least
-of all across an upgrade. It is set when the archive is adopted, and cleared only when
-the handover is confirmed.
+of all across an upgrade. It is set when the archive is adopted, and cleared
+when the handover's second step is confirmed or refused as unauthorized
+(`Req 11.12`) — the two ways the ledger can know it is done.
 
 **Two of the three orphan windows stop being write-offs, and only `Idle` may be
 restored.** `create_and_initialize_node_canister` runs `create_canister` →
@@ -814,26 +823,48 @@ a bounded variant so the choice is per call site (`Req 13.1`, `Req 13.5`):
 |---|---|---|
 | `append_blocks` | bounded, ICRC only | idempotent under `Req 2.4`; ICP exempt per `Req 13.6` |
 | `remaining_capacity` | bounded | read-only, so an unknown outcome is resolved by asking again |
-| `update_settings` | **unbounded** | unresolvable once it has succeeded, so `Req 13.5` forbids bounding it — see below |
+| `update_settings`, adding the controllers | bounded | the ledger is still a controller, so `canister_status` resolves it (`Req 13.7`) |
+| `update_settings`, removing the ledger | **unbounded** | not queryable once it has succeeded, so `Req 13.5` forbids bounding it — see below |
 | `install_code` | bounded | resolvable, see below |
 | `create_canister` | **unbounded** | the only genuinely unresolvable one: an unknown outcome leaves a canister nothing can address |
 
-**`update_settings` is not repeatable, and "setting the same controllers twice is a
-no-op" was wrong.** The call replaces the ledger with the configured controllers
-(`archive.rs:366-372`, `:489-497`), and the management canister validates the caller
-before applying settings (`canister_manager.rs:690`). So once it has succeeded the
-ledger is no longer a controller: it can neither retry nor call `canister_status` to
-find out. An unknown outcome would be indistinguishable from a real failure, and
-`Req 11.8`'s adoption path would stall on it.
+**The handover's last step is not queryable, and "setting the same controllers twice
+is a no-op" was wrong.** The call as written today replaces the ledger with the
+configured controllers in one shot (`archive.rs:366-372`, `:489-497`), and the
+management canister validates the caller before applying settings
+(`canister_manager.rs:690`). So once it has succeeded the ledger is no longer a
+controller: it can neither retry nor call `canister_status` to find out. An unknown
+outcome would be indistinguishable from a real failure, and `Req 11.8`'s adoption path
+would stall on it.
 
-**So it must stay unbounded, and `Req 13.5` already says so.** "THE Ledger SHALL NOT
-stop waiting for a call whose unknown outcome it has no means of resolving
-afterwards" — and this is the second such call after `create_canister`. Bounding it
+**So it stays unbounded, and `Req 13.5` already says so** — this is the second call
+it forbids bounding, after `create_canister`. Bounding it
 would leave a timeout the ledger could never resolve: the settings may have committed
 before the response was lost, after which it can neither retry nor query. Unbounded,
-it always learns the outcome, so a retry only ever follows an *observed* failure,
-which is resolvable because the ledger is then still a controller. Putting it in the
-bounded column was a violation of a criterion this document already contains.
+it always learns the outcome, so a retry only ever follows an *observed* failure.
+Putting it in the bounded column was a violation of a criterion this document already
+contains.
+
+**But unbounded is not sufficient, so the handover is staged.** An
+unbounded call guarantees a *response*, not that the ledger *processes* it: the
+callback can still trap on the irreducible reply buffer, and if it does after the
+settings committed, the ledger is no longer a controller while `pending_handover` is
+still set — every retry unauthorized, the metric never clearing.
+
+So it goes in two steps (`Req 11.11`). First add the configured controllers while
+keeping the ledger: idempotent, and verifiable at any time by asking the archive.
+Then remove the ledger — and that step cannot fail in a way that matters, because its
+only two outcomes are "still a controller, retry" and "not a controller", which is
+precisely the state the handover exists to reach. `Req 11.12` therefore treats an
+unauthorized retry as completion. The archive is governable by its intended
+controllers after step one, so nothing is at risk while step two settles. Only the
+first step is bounded, per the table above: it is the one the ledger can still ask
+about.
+
+The ambiguity is therefore *dissolved* rather than interpreted. `Req 11.12` does read
+an unauthorized rejection as completion, which this design otherwise avoids — but it
+is not the load-bearing part: both readings of that rejection lead to the same end
+state, so the criterion only spares the ledger a retry it would lose anyway.
 
 Ordering is the other half of the fix, and it addresses a different problem —
 **adopt the archive before handing over control** (`Req 11.9`) — so that an observed
@@ -841,9 +872,7 @@ handover failure does not block archiving while it is retried. Adoption ends the
 becomes a separate step the ledger retries on later rounds while it is still a
 controller (`Req 11.10`). A lost handover then leaves a fully adopted, working archive
 that is merely still ledger-controlled — recoverable, and visible on a metric — rather
-than an ambiguous state that blocks archiving. Reading the not-a-controller rejection
-as proof of success would work, but it would make the creation path depend on a reject
-code, which this design avoids everywhere else.
+than an ambiguous state that blocks archiving.
 
 **`install_code` is resolvable, which the earlier reasoning missed.** "`install` mode
 fails if already installed, so it cannot be retried" is true of a *blind* retry and
@@ -935,6 +964,8 @@ test is baseline-independent.
 | 17d | integration | lose the `update_settings` outcome; assert the archive is already adopted and serving, that archiving continues, that the handover metric is non-zero, and that a later round retries the handover and clears it | `Req 11.9`, `11.10` |
 | 17e | upgrade | decode a pre-change `Archive` state; assert it decodes and that both new fields read their defaults — `Idle` and `None` — so the journal's own release cannot be the upgrade that fails | the two `#[serde(default)]`s above |
 | 17f | upgrade | adopt an archive whose handover has not completed, then upgrade the ledger; assert `pending_handover` survives and the handover is still retried afterwards | `Req 11.10` |
+| 17g | integration | complete step one of the handover, then lose step two's outcome; assert a retry refused as unauthorized clears the state and the metric rather than retrying forever | `Req 11.11`, `11.12` |
+| 17h | upgrade | decode a pre-change `ArchiveConfig`; assert it decodes and the Expected_Parent reads absent, so PR 1 is not the release that breaks every archive's first upgrade | the `#[serde(default)]` above |
 | 18b | integration | after the tail returns no range, assert a later round issues the probe once the backoff permits — no blocks moved, one empty append — rather than skipping every round and never resuming | `Req 10.1`, `10.2` |
 | 18 | integration | install an old archive wasm as the tail; assert nothing is archived and the metric rises, then upgrade the archive and assert archiving resumes without a ledger upgrade. Repeat against a ledger whose archives do not implement the protocol and assert it archives normally | `Req 10.1`, `10.2`, `10.5` |
 | 19 | integration | make the tail archive not answer; assert the round ends within `ARCHIVE_CALL_TIMEOUT` and is retried, and that a subsequent round does not store any block twice. Then, with a call still in flight to that archive, assert the ledger can be stopped and upgraded — the property an unbounded call removes | `Req 13.1`, `13.2`, `13.4`, `13.8` |

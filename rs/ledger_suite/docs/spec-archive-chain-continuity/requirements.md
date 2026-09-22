@@ -377,10 +377,10 @@ violation from a capacity problem without access to canister logs.
    count along with everything else the call changed, leaving the cause invisible.
 3. WHEN an append carried a Declared_Index, THE Archive SHALL preserve each count
    in 6.1 across the outcome it counts, so that the count is readable afterwards.
-4. WHEN THE Archive cannot decode a block it was sent, THE Archive SHALL make that
-   outcome distinguishable from a refusal per 1.1, because the two call for
-   different operator responses and a chain mismatch means an invariant has been
-   violated.
+4. WHEN THE Archive cannot decode a block it would otherwise have stored, THE Archive
+   SHALL make that outcome distinguishable from a refusal per 1.1, because the two
+   call for different operator responses and a chain mismatch means an invariant has
+   been violated — and a block beyond its own capacity is outside this, per 1.9.
 5. THE Archive SHALL NOT count an append carrying no blocks under any count in 6.1,
    because such an append is how a ledger asks where an archive stands per 3.5 and
    counting it would raise an operator alarm for an ordinary question.
@@ -547,12 +547,22 @@ unaddressable canister does not become a series of them.
    one it can still adopt and an operator should not be needed for that.
 9. THE Ledger SHALL adopt a created archive before handing its control to the
    configured controllers, and SHALL treat a failure of that handover as neither
-   blocking adoption nor blocking archiving, because the handover replaces the ledger
-   as a controller and so cannot be retried or even checked once it has succeeded.
+   blocking adoption nor blocking archiving, because an adopted archive is already
+   usable and the handover's last step removes the ledger's own authority over it
+   (per 11.11), so making archiving wait on it would risk more than it protects.
 10. WHILE a created archive has been adopted but its control not yet handed over, THE
    Ledger SHALL retry the handover on later rounds and SHALL expose a distinct
-   non-zero metric until it succeeds, because until then the archive cannot be
+   non-zero metric until it completes, because until then the archive cannot be
    upgraded by its intended controllers.
+11. THE Ledger SHALL hand over control in two steps — first adding the configured
+   controllers while remaining one itself, then removing itself — so that the first
+   step is verifiable by asking the archive and the second cannot fail in a way that
+   matters: its only outcomes are that the ledger is still a controller and may
+   retry, or that it is not, which is the state the handover was for.
+12. WHEN a retry of the second step is refused because THE Ledger is no longer a
+   controller, THE Ledger SHALL treat the handover as complete and clear the metric in
+   11.10, because the archive is then governable by the configured controllers and
+   nothing further is within the ledger's reach.
 
 ### Requirement 12: An Archiving Round Makes One Append
 
