@@ -368,12 +368,11 @@ violation from a capacity problem without access to canister logs.
 
 #### Acceptance Criteria
 
-1. THE Archive SHALL expose, over its metrics endpoint, a separate count for every
-   ground on which it stores less than it was offered: each chain ground of Req 1
-   counted separately (1.1, 1.5, 1.7 and 1.8), a covered-range mismatch per 2.9, a
-   gap per 2.2, blocks below its own range per 2.6, a stop at its own limit per 4.3,
-   a platform-refused growth per 4.4, an undecodable block per 6.4, and the
-   unverifiable append of 1.6.
+1. THE Archive SHALL expose, over its metrics endpoint, a separate count for each of:
+   each chain ground of Req 1 counted separately (1.1, 1.5, 1.7 and 1.8), a
+   covered-range mismatch per 2.9, a gap per 2.2, blocks below its own range per 2.6,
+   a stop at its own limit per 4.3, a platform-refused growth per 4.4, an undecodable
+   block per 6.4, and the unverifiable append of 1.6.
 2. THE Archive SHALL NOT fail the call for any outcome counted under 6.1 when the
    append carried a Declared_Index, because failing the call discards the
    count along with everything else the call changed, leaving the cause invisible.

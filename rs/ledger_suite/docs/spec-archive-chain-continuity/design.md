@@ -597,8 +597,9 @@ return type widens to carry the count `archive_blocks` should remove, which may
 include blocks an archive already held.
 
 A `BelowRange` outcome is **not** a halt. It is the ordinary signal that the ledger
-is behind — the coverage guard's input — so it routes to `Req 8.2` and its counter is
-diagnostic rather than alarming (`Req 9.8`). It is the one refusing outcome that does
+is behind — the coverage guard's input — so it routes to `Req 8.2` rather than
+halting (`Req 9.8`), and its counter is a diagnostic rather than a fault
+(`Req 6.7`). It is the one refusing outcome that does
 not stop archiving, which is why it is worth naming here rather than leaving to the
 halt table below.
 
