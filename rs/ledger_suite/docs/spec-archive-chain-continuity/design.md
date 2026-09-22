@@ -311,8 +311,9 @@ The consequence of the corresponding non-goal. `Req 2` and `Req 3` are implement
 **D6 does not reach ICP either**, which is easy to miss because it is ledger-side
 code. D6 serves `Req 8.1`, `8.2` and `8.6`, and all three require an archive to have
 reported an extent. An ICP archive reports none, so the ICP ledger is exempt from
-`Req 7.1`-`7.4` and from `Req 8.1`-`8.4` and `8.6` (`Req 7.5`, `Req 8.7`) and keeps
-deriving both the offset and the archived prefix from its own record. `Req 7.2` is in
+`Req 7.1`-`7.4` and from `Req 8.1`-`8.4`, `8.6`, `8.8` and `8.9` (`Req 7.5`,
+`Req 8.7`) and keeps deriving both the offset and the archived prefix from its own
+record. `Req 7.2` is in
 that list for a second, independent reason: ICP's `archives()` returns canister ids
 with no ranges (`icp/ledger.did:246-248`) and it has no `icrc3_get_archives` at all,
 so publishing matching ranges through both would be an interface change this design
@@ -397,7 +398,7 @@ the computed value.
 ### `ic-icrc1-archive` — `append_blocks`
 
     type append_outcome = variant {
-      Stored;                                      // all of them: Req 2.1, 2.3
+      Stored;                                      // all it did not already hold: Req 2.1, 2.3, 3.5, 3.8
       StoredPartial;                               // a prefix; at_capacity says why: Req 4.1, 4.8
       AlreadyHeld;                                 // Req 2.4
       BelowRange;                                  // Req 2.6
@@ -419,6 +420,19 @@ Both arguments and the result are optional, which is what makes the archive
 releasable alone. The reply's first field is named `block_index_offset`, matching
 the published `init` argument it reports, rather than `start_index` — the request's
 second argument is the index the *batch* starts at, and one word cannot mean both.
+
+**`Stored` is a post-condition, not a count** (`Req 3.8`): *every block you offered
+that I did not already hold, I now hold*. Three cases satisfy it — a clean
+continuation (`Req 2.1`), a straddling append where the leading blocks were already
+held and only the suffix was stored (`Req 2.3`), and the empty probe, where there were
+none (`Req 3.5`). They share an arm because the ledger's response to all three is
+identical: reconcile against `next_index`. How much the archive already held is
+visible in that field for anyone who wants it, and is not something the ledger acts
+on — which is the division `Req 3.6` asks for, the outcome naming the *action* rather
+than the effort.
+
+`StoredPartial` is the one that breaks the post-condition, and that is exactly why it
+is separate: blocks were offered, not already held, and still not stored.
 
 `StoredPartial` exists because `at_capacity` cannot carry that distinction on its
 own (`Req 3.7`): a growth the platform refused reports `at_capacity = false`
@@ -622,8 +636,27 @@ Both loops go (`Req 12.1`, `12.2`): pick a node, send what the round selected, o
 call, reconcile, return. Reconcile `nodes_block_ranges` from the reported
 `block_index_offset` and `next_index` rather than incrementing (`Req 7.3`, `Req 8.6`).
 
-The coverage check (`Req 8.2`, `8.3`) and the backwards check (`Req 8.4`) live here,
-since this is where the ranges are; per D6 they report upward rather than acting. The
+The coverage check (`Req 8.2`, `8.3`), the backwards check (`Req 8.4`) and the
+**forwards** check (`Req 8.8`) live here, since this is where the ranges are; per D6
+they report upward rather than acting.
+
+**The forwards check is the third direction and the one Req 8 was missing.** `Req 8.2`
+catches a reported range starting too high and `Req 8.4` one ending too low, but an
+archive whose `next_index` is above the ledger's *own* chain tip trips neither: its
+range starts at or below the archived prefix and ends above it, which reads as ordinary
+progress. That state is what a ledger-only snapshot restore produces — the archive holds
+indices from a timeline the restored ledger never issued — and reconciling it would
+publish and discard against the fork. So the ledger compares the reported position
+against the next index it would itself issue and halts if the archive is ahead
+(`Req 8.8`).
+
+**And an empty append may not advance the prefix** (`Req 8.9`). A probe reports a range
+but puts no block in front of the archive, so `Req 2.9`'s fork check cannot run: the
+range alone is consistent with an archive continuing a fork of this ledger's chain.
+A probe may therefore *halt* on what it reports — `Req 8.4` and `Req 8.8` are both
+decidable from numbers alone — but only an append that carried blocks may move the
+Archived_Prefix forward. This is the one place where detection and advancement have
+different evidence requirements, and conflating them is how a fork gets archived. The
 return type widens to carry the count `archive_blocks` should remove, which may
 include blocks an archive already held.
 
@@ -651,8 +684,12 @@ and its internal record are the same data, which is why `Req 8.6` has to be abou
 ### `ledger_canister_core::archive` — `Archive` state
 
 `#[serde(skip)]` fields per D2: last-attempt timestamp and consecutive-failure count
-(`Req 9`) and cached capability answer (`Req 10.4`). Creation state is the one
-exception, a single persisted field:
+(`Req 9`), cached capability answer (`Req 10.4`), and the tail's last reported
+`at_capacity` (`Req 4.5`, `4.6`) — without which `node_and_capacity` has nothing to
+decide a roll-over from once the routine `remaining_capacity` pre-call is gone. It is
+skipped rather than persisted because losing it is not a hazard: a cold start falls
+back to the pre-call, which is the same value computed the expensive way. Creation
+state is the one exception, a single persisted field:
 
     #[serde(default)]                                      // Idle is Default
     creating: Creating,
@@ -723,21 +760,22 @@ reason.
 
 ### Halt conditions, and how each one clears
 
-Five conditions stop archiving, with three different recovery stories, and they are
+Six conditions stop archiving, with three different recovery stories, and they are
 easy to conflate because they present identically — archiving stops and blocks
 accumulate. An operator's first question is which one it is, so the metrics must be
-distinct (they are, by `Req 8.3`, `8.4`, `9.7`, `10.1` and `11.2`) and the answer to
+distinct (they are, by `Req 8.3`, `8.4`, `8.8`, `9.7`, `10.1` and `11.2`) and the answer to
 "what now" must be written down:
 
 | condition | criterion | clears |
 |---|---|---|
 | the span below an archive's reported range is covered by no archive | `Req 8.3` | not on its own. No endpoint sets the archived prefix, so it needs an upgrade carrying a migration. Unreachable except from self-inconsistent ledger state |
 | an archive reports a position below the archived prefix | `Req 8.4` | never — blocks the ledger already stopped serving are held nowhere. Recovery is whatever backup exists, not this system |
+| an archive reports a position above the ledger's own chain tip | `Req 8.8` | operator only. The ledger is on a chain the archive was not built from, which is the snapshot-restore non-goal; the coherent fix is restoring the whole suite to a common point, not resuming |
 | an archive refused an append on chain or position grounds | `Req 9.7` | not on its own, and deliberately: the archive's counters say which of `1.1`, `2.2` or `2.9` fired, and they call for different investigations |
 | the tail archive reports no range | `Req 10.1` | **itself**, on the next probe once the archive is upgraded (`Req 10.2`). The only self-clearing halt |
 | an archive creation was begun and never accounted for | `Req 11.1` | operator only, explicitly not itself (`Req 11.4`), because a canister may exist that nothing will address |
 
-Two things follow for the implementation. The four non-clearing halts must be
+Two things follow for the implementation. The five non-clearing halts must be
 distinguishable from the backoff of `Req 9.1` — a ledger that is *waiting* and one
 that has *stopped* look the same from block accumulation alone. And `Req 10.1` is the
 only one whose state may be derived from a cache, since it is the only one expected
@@ -746,8 +784,9 @@ to change without an upgrade.
 ### `ledger_canister_core::archive` — `node_and_capacity`
 
 The roll-over test (`remaining_capacity < needed`, `archive.rs:552`) is restated in
-terms of the last append's `at_capacity` (`Req 4.5`, `4.6`), with the
-`remaining_capacity` pre-call kept only for a cold start or a freshly spawned node.
+terms of the last append's `at_capacity`, held in the skipped field above (`Req 4.5`,
+`4.6`), with the `remaining_capacity` pre-call kept for a cold start or a freshly
+spawned node — which is what makes that field safe to lose on an upgrade.
 This is what makes `Req 12` cheaper than today rather than dearer: a 1000-block ICP
 round is one pre-call plus two appends today, and one append per round with no
 pre-call afterwards.
@@ -762,10 +801,14 @@ before the first roll-over, which is where `Req 7.1` gets its value. Worth a com
 at the call site, since the probe doubling as the bootstrap is not obvious.
 
 That first probe is also a free divergence check: a tail whose reported range
-disagrees with what the ledger had inferred trips `Req 8.2` or `Req 8.4` immediately.
-It covers only the tail, so it does not replace Step 0's Rosetta sync — but it fires
-on every existing suite the moment PR 3 deploys, with no operator action, which the
-sync cannot claim.
+disagrees with what the ledger had inferred trips `Req 8.2`, `Req 8.4` or `Req 8.8`
+immediately. It covers only the tail, so it does not replace Step 0's Rosetta sync —
+but it fires on every existing suite the moment PR 3 deploys, with no operator action,
+which the sync cannot claim.
+
+What it cannot do is *clear* anything: per `Req 8.9` a probe's range never advances the
+Archived_Prefix, only halts on it. The probe is a smoke detector, not a
+reconciliation.
 
 ### `ledger_canister_core::ledger` and `::blockchain` — round selection
 
@@ -777,7 +820,18 @@ trims on the cold-start path. Expose the effective per-round count (`Req 12.4`).
 
 A failed round counts the failure in `ledger_archiving_failures`, the metric the
 ledger already exposes, keeps serving the blocks it did not archive, and leaves the
-triggering transaction's reply untouched (`Req 9.5`, `Req 9.6`) — all of
+triggering transaction's reply untouched (`Req 9.5`, `Req 9.6`).
+
+**A short stop with `at_capacity` false counts as a failed round** (`Req 9.10`), which
+is not obvious because the call *succeeded*. The archive was refused a growth, kept
+what fitted and reported so; the round returns `StoredPartial` and no error. Left
+outside `Req 9`, the ledger would then provoke the same refused growth on every
+following transaction — precisely the per-transaction retry storm `Req 9` exists to
+stop, reached by a path where nothing ever failed. So the round is marked failed for
+spacing and for the failure metric while the reported progress is kept: `Req 4.6`'s
+retry against the same archive still happens, just spaced. A stop at the archive's own
+limit is the opposite case and must *not* count — `at_capacity` true is a full archive,
+answered by creating the next one (`Req 4.5`), not by waiting — all of
 which the cleanup callback must achieve if the round trapped rather than returned,
 which is why the Constraints limit it to a bool and a `u64`.
 
@@ -795,7 +849,7 @@ class of thing and the figure is cheap to get.
 
 `blocks_to_archive` also carries the skip conditions: the backoff (`Req 9.1`), the
 creation halt (`Req 11.1`), the capability halt (`Req 10.1`) and the coverage halts
-(`Req 8.3`, `8.4`) — all before the guard is taken, so a skipped round costs nothing.
+(`Req 8.3`, `8.4`, `8.8`) — all before the guard is taken, so a skipped round costs nothing.
 
 **Only a state that clears without the ledger doing anything belongs in that list.**
 Skipping happens before the guard is taken, so a skipped round performs no work at
@@ -806,7 +860,7 @@ above are therefore wrong as listed:
 |---|---|
 | backing off (`Req 9.1`) | **yes** — a wait; time clears it |
 | `Started`, no identity (`Req 11.1`) | **yes** — only an operator clears it |
-| coverage halts (`Req 8.3`, `8.4`) | **yes** — only an operator clears it |
+| coverage halts (`Req 8.3`, `8.4`, `8.8`) | **yes** — only an operator clears it |
 | `Created(id)` (`Req 11.8`) | **no** — the round must finish the creation |
 | capability halt (`Req 10.1`) | **no** — the round must issue the probe |
 
@@ -964,6 +1018,9 @@ test is baseline-independent.
 | 13 | archive | assert each counter in `Req 6.1` moves for its own cause and is readable afterwards | `Req 6.1`, `6.2`, `6.3`, `6.4` |
 | 14 | unit, `ledger_canister_core` | drive a round whose reconciliation is dropped; with the span covered assert the archived prefix advances to the reported extent, with it uncovered assert the halt and the metric | `Req 8.2`, `8.3` |
 | 15 | unit, `ledger_canister_core` | report an extent below the archived prefix; assert the halt, that no further block stops being served, and the metric | `Req 8.4` |
+| 15b | unit, `ledger_canister_core` | report an extent *above* the next index the ledger would issue — the ledger-only snapshot restore — and assert the halt and its own metric, distinct from 8.3's and 8.4's. Assert too that a reported extent within the tip does not halt, so the check is not simply refusing progress | `Req 8.8` |
+| 15c | unit, `ledger_canister_core` | answer a probe with a range extending past the archived prefix and assert the prefix does **not** advance; then make the same range the reply to an append carrying blocks and assert it does — a probe may halt but never advance | `Req 8.9` |
+| 15d | integration | make a grow refusal recur so every round comes back `StoredPartial` with `at_capacity = false`; assert attempts are spaced per the backoff and counted as failures rather than repeating per transaction, and that the stored prefix is kept. Assert an `at_capacity = true` stop does *not* space, but creates | `Req 9.10` |
 | 16 | integration | stop the archive so `remaining_capacity` is rejected; count attempts over a window, then restart and assert archiving resumes with no intervention | `Req 9.1`–`9.6` |
 | 17 | integration | reuse the creation-trap harness so the `create_canister` reply is lost; assert `Creating` is `Started`, that it is exposed, and that it does not self-clear — no identity was recorded, so there is nothing to finish | `Req 11.1`, `11.2`, `11.4` |
 | 17b | integration | lose the `install_code` outcome *after* the identity was recorded; assert the ledger resolves it by asking the created canister, finishes the creation without an operator, and adopts that same canister rather than creating a second | `Req 11.6`, `11.8` |
@@ -984,6 +1041,7 @@ test is baseline-independent.
 | 22c | archive | append a batch whose first block continues the tip but whose fifth does not continue the fourth; assert `ChainMismatch` at that index and that nothing was stored — the case a first-block-only check accepts | `Req 1.7` |
 | 22d | archive | append a batch containing bytes that do not decode as a block; assert `Undecodable` is returned with its index, nothing is stored, and its counter rises separately from the mismatch counters | `Req 6.4` |
 | 22e | archive | assert every outcome of Req 2 carries the same `block_index_offset` and `next_index` fields, and that `at_capacity` is false on a full store and on a wholly-covered re-send | `Req 3.1`, `3.3`, `3.6`, `Req 4.9` |
+| 22f | archive | assert a clean continuation, a straddling append and an indexed empty probe all report the same outcome, and that a capacity-shortened append reports a different one — the post-condition `Stored` names, rather than a count of blocks written | `Req 3.8`, `Req 3.7` |
 | 23 | unit, `ledger_canister_core` | create an archive after a round in which the previous one reported `next_index = N`; assert the new `block_index_offset` is exactly `N`, not `N+1` — `next_index` is *already* one past the last held index, and the off-by-one here is the whole of `Req 7.1`. Assert `archives()` tiles with no gap or overlap. Then present a node whose reported range starts elsewhere and assert no blocks are stored in it and the metric rises | `Req 7.1`, `7.2`, `7.3`, `7.4` |
 | 24 | integration | on a ledger whose archives report no extent, assert an archive is still created and blocks are still discarded — the exemptions, which a literal reading of Req 7 and Req 8 would forbid | `Req 7.5`, `Req 8.7` |
 | 25 | integration | fail `install_code` gracefully after `create_canister` succeeded; assert archiving halts, that the metric exposes the created canister's id and the id survives a ledger upgrade, and that a failure of `create_canister` itself does not halt | `Req 11.1`, `11.3`, `11.5`, `11.6`, `11.7` |

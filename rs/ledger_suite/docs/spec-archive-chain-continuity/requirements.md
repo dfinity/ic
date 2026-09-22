@@ -160,9 +160,11 @@ comes first.
 - **Restoring a ledger from a canister snapshot as a recovery path.** A ledger
   restored alone resumes issuing block indices its archives already hold with
   different content, so its chain forks from the archived prefix and balances
-  rewind. Req 8 and Req 1 require that such a fork is detected rather than
-  extended into the archives; they do not make the restore safe. The only coherent
-  rollback is the whole suite to a common point, accepting the loss after it.
+  rewind. Req 8.8 requires that such a fork is detected — the archives are then ahead
+  of a chain tip that has moved backwards — and Req 8.9 and Req 1 require that it is
+  not extended into the archives; none of them makes the restore safe. The only
+  coherent rollback is the whole suite to a common point, accepting the loss after
+  it.
 - **Verifying the first append to a freshly created archive from a ledger that
   sends no index.** Such an append is unverifiable in principle: the archive has no
   last block to chain against and the call carries nothing saying where its blocks
@@ -295,6 +297,12 @@ wrong about it.
    SHALL state that as an outcome distinct from having stored all of them, because
    `at_capacity` alone does not separate the two — a growth refused by the platform
    reports it false (4.4) and so does a complete append (4.9).
+8. THE Archive SHALL report a single outcome for every append after which it holds
+   every block it was offered and did not already hold — whatever it already held, and
+   whether it was offered any blocks at all — because the ledger's response to all of
+   these is the same, to reconcile against the reported Archive_Position, and 3.6 asks
+   the outcome to name what the ledger must do rather than how much work the archive
+   did.
 
 ### Requirement 4: A Capacity Stop Is Reported, Not A Failure
 
@@ -444,8 +452,18 @@ a hole.
 6. THE Ledger SHALL NOT rely on its own record of what it sent when deciding what
    to stop serving, only on what an archive has reported holding.
 7. THE ICP Ledger SHALL rely on its own record instead, and SHALL NOT be held to
-   8.1, 8.2, 8.3, 8.4 or 8.6, since there is no reported range to rely on
+   8.1, 8.2, 8.3, 8.4, 8.6, 8.8 or 8.9, since there is no reported range to rely on
    (per 10.5) — the exposure the corresponding non-goal accepts.
+8. WHEN an archive reports an Archive_Position above the next block index THE Ledger
+   would itself issue, THE Ledger SHALL make no further archiving attempt and SHALL
+   expose a distinct non-zero metric, because an archive holding indices the ledger has
+   never issued was built from a chain the ledger is no longer on, which neither 8.2
+   nor 8.4 detects.
+9. THE Ledger SHALL extend the Archived_Prefix only as far as a range reported by an
+   append that carried blocks, and never on the strength of one reported per 3.5 alone,
+   because an empty append puts no block in front of the archive to compare and so
+   cannot tell an archive continuing this ledger's chain from one continuing a fork of
+   it.
 
 ### Requirement 9: Archiving Attempts Are Bounded While Archiving Fails
 
@@ -486,6 +504,11 @@ per interval rather than work per transaction.
    immediately rather than observing the spacing 9.1 would otherwise require, because
    an upgrade is how an operator resumes after a halt and is usually the fix for
    whatever caused the failure.
+10. WHEN an archive stops short of storing every block it was offered and reports
+   `at_capacity` as false, THE Ledger SHALL treat the Archiving_Round as failed for the
+   purposes of 9.1, 9.2 and 9.5 while keeping the progress the archive reported, because
+   the call itself returned successfully and without this the refused growth would be
+   provoked again by every later transaction rather than waited out by 4.6's retry.
 
 ### Requirement 10: A Ledger Will Not Archive Against An Archive That Cannot Report Its Range
 
