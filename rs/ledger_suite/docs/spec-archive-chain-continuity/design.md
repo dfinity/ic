@@ -515,7 +515,12 @@ Order of work, per D4 and D5:
    what fits the archive's own configured limit — and then chain-check **only those**:
    `blocks[k]` against the tip, or against the Expected_Parent when the archive holds
    nothing and was given one (`Req 1.1`, `1.3`, `1.4`, `1.5`, `1.8`), then each
-   subsequent stored block against its predecessor (`Req 1.7`). Capacity is decided
+   subsequent stored block against its predecessor (`Req 1.7`). A block landing at
+   global index zero must additionally carry *no* parent (`Req 1.10`) — the converse of
+   `Req 1.5`, and not implied by it: `Req 1.5` says where a parentless block may go,
+   while without `Req 1.10` an append declared at zero into an empty archive given no
+   Expected_Parent would put a parented block at the genesis position and never be able
+   to tell. Capacity is decided
    before validation, not after, because `Req 1.7` binds the blocks it *stores*: a
    block beyond the limit is never stored, so refusing the whole append because that
    block is malformed or does not chain would contradict `Req 4.1`, which requires the
@@ -741,12 +746,23 @@ conflating them is how a fork gets archived. The
 return type widens to carry the count `archive_blocks` should remove, which may
 include blocks an archive already held.
 
-A `BelowRange` outcome is **not** a halt. It is the ordinary signal that the ledger
-is behind — the coverage guard's input — so it routes to `Req 8.2` rather than
-halting (`Req 9.8`), and its counter is a diagnostic rather than a fault
-(`Req 6.6`). It is the one refusing outcome that does
-not stop archiving, which is why it is worth naming here rather than leaving to the
-halt table below.
+A `BelowRange` outcome is **not** a halt, and since `Req 8.9` it needs somewhere to go.
+It is the ordinary signal that the ledger is behind, and its counter is a diagnostic
+rather than a fault (`Req 6.6`) — the one refusing outcome that does not stop archiving,
+which is why it is worth naming here rather than leaving to the halt table below.
+
+**But it cannot reconcile on its own evidence.** `BelowRange` stores and compares
+nothing (`Req 2.6`), so `Req 8.9` refuses its reported range as grounds for advancing —
+and re-offering the same blocks to the same tail returns `BelowRange` again, forever. So
+the next round offers them to the archive whose Published_Range *covers* them
+(`Req 9.8`), which is the only canister able to answer the question: it replies
+`AlreadyHeld` having compared the last of them (`Req 2.4`, `Req 2.9`), which `Req 8.9`
+accepts, or `ChainMismatch`, which halts per `Req 9.7`. Either way it terminates.
+
+That append is safe against a full archive, which is otherwise never written to again:
+every block is already held, so it stores nothing and consumes no capacity (`Req 2.4`,
+`Req 2.7`). It is a verification, not a write. And if no published range covers those
+indices at all, that is `Req 8.3`'s uncovered span and a halt.
 
 An absent reply routes by `Wasm::INDEXED_APPENDS` (D3): halt and count for an ICRC
 ledger (`Req 10.1`), incremental path and count for ICP (`Req 10.5`). The
@@ -1168,7 +1184,7 @@ test is baseline-independent.
 | 7b | archive | the same over-large batch **without** an index; assert the call fails and the archive holds exactly what it held before — the partial store that would make the suffix unretrievable | `Req 5.5` |
 | 7c | archive | assert a complete append and a partial one are distinguishable from the reply alone: the first reports the whole-batch outcome, the second the partial one, and neither is told apart by `at_capacity` — which reads false for a complete append and for a platform-refused stop alike | `Req 3.6`, `3.7` |
 | 8 | archive | **partly written**: `test_empty_append_blocks_is_accepted_and_stores_nothing` already asserts an empty append stores nothing and consumes no capacity, on both the one-argument and null-index shapes. Extend it against the new implementation to assert an *indexed* empty append reports an extent, that an indexed empty append above the archive's position is neither refused nor counted, and that both index-less empty shapes still reply **empty** — the last of these is what fails if the empty check is ordered before the index check | `Req 3.5`, `Req 5.1`, `Req 6.5` |
-| 9 | archive | genesis into an empty archive with offset 0; then assert a block with no parent hash is refused by an archive whose offset is non-zero, and by one that already holds blocks | `Req 1.5` |
+| 9 | archive | genesis into an empty archive with offset 0; then assert a block with no parent hash is refused by an archive whose offset is non-zero, and by one that already holds blocks. Then the converse: into an empty archive with offset 0 and no Expected_Parent, append at index 0 a block that *does* carry a parent, and assert it is refused — the non-genesis block a check on 1.5 alone admits at index zero | `Req 1.5`, `Req 1.10` |
 | 9b | archive | install with no Expected_Parent, append into it, and assert it is stored and the unverifiable-first-append counter rises | `Req 1.4`, `Req 1.6` |
 | 9c | archive | install with an Expected_Parent, then append a first batch whose first block carries a different parent; assert refusal and that nothing is stored. Then append one that matches and assert it is stored and the counter in 1.6 does *not* rise | `Req 1.8`, `Req 1.6` |
 | 10 | archive | **written, and retired by PR 1**: `test_append_blocks_ignores_an_extra_optional_start_index` — the current one-argument archive stores the blocks, ignores the extra argument, and its empty reply reads as absent; a wrong-typed payload is rejected as a negative control. Its `Decode!(.., Option<u64>)` stops describing the archive the moment the new implementation returns `opt append_result` (`Req 3.1`), so row 11 replaces it rather than extending it. The ICP twin in row 12 stays valid indefinitely, which is why only that one is a release gate | the rollout premise, pre-PR-1 only |
@@ -1197,7 +1213,8 @@ test is baseline-independent.
 | 20 | integration | count `append_blocks` per round against a configuration that is multi-chunk today; assert one, and that the effective per-round metric matches | `Req 12.1`, `12.3`, `12.4` |
 | 21 | measurement | ledger memory across an archive-creation round, as `routine_archiving_does_not_grow_the_ledger` does for a routine one; assert growth below a bound | D2's allocation work |
 | 22 | archive | append `0..999`; then re-send `500..999` from a chain that diverges at 701, and assert `ChainMismatch` is returned, nothing is stored, and the covered-range counter rises while the tip-mismatch counter does not. Then re-send a range that does *not* diverge and assert success — so the check is not simply refusing every re-send | `Req 2.9`, `Req 6.1` |
-| 22b | integration | drive the ledger into a refusal per 1.1, 2.2, 2.9 and 6.4 in turn; assert it stops attempting rather than backing off, and exposes the distinct metric. Then drive a `BelowRange` report and assert it does *not* halt but reconciles | `Req 9.7`, `Req 9.8` |
+| 22b | integration | drive the ledger into a refusal per 1.1, 2.2, 2.9 and 6.4 in turn; assert it stops attempting rather than backing off, and exposes the distinct metric | `Req 9.7` |
+| 22h | integration | drive a `BelowRange` report; assert the ledger does not halt, that the next round offers those blocks to the archive whose published range covers them rather than to the tail again, that the resulting `AlreadyHeld` advances the prefix, and that the loop therefore terminates. Then remove the covering archive's range and assert the uncovered-span halt instead | `Req 9.8`, `Req 8.3`, `Req 8.9` |
 | 22c | archive | append a batch whose first block continues the tip but whose fifth does not continue the fourth; assert `ChainMismatch` at that index and that nothing was stored — the case a first-block-only check accepts | `Req 1.7` |
 | 22d | archive | append a batch containing bytes that do not decode as a block; assert `Undecodable` is returned with its index, nothing is stored, and its counter rises separately from the mismatch counters | `Req 6.4` |
 | 22e | archive | assert every outcome of Req 2 carries the same `block_index_offset` and `next_index` fields, and that `at_capacity` is false on a full store and on a wholly-covered re-send | `Req 3.1`, `3.3`, `3.6`, `Req 4.9` |

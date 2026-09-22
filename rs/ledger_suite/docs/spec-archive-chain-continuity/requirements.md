@@ -73,7 +73,9 @@ comes first.
   means the ICP archive, which is a separate canister and is not changed here — see
   the corresponding non-goal.
 - **Tail_Archive**: the archive a ledger currently appends to — the most recently
-  created one. Earlier archives are full and are never written to again.
+  created one. Earlier archives are full and no append ever stores a block in one
+  again, though Req 7.7 and Req 9.8 both send them appends that store nothing: one to
+  ask an archive its range, the other to have it confirm blocks it already holds.
 - **Archive_Range**: the contiguous span of global block indices an archive holds,
   from its `block_index_offset` up to but excluding its Archive_Position, **as the
   archive itself reports it** (Req 3). It is observed, not inferred.
@@ -188,8 +190,8 @@ comes first.
 
 ## Requirements
 
-*Req 1 through Req 6 bind the ICRC archive only, except Req 4.5 and Req 4.6, which
-bind the ledger. Req 7 through Req 13 bind both ledgers except where a criterion
+*Req 1 through Req 6 bind the ICRC archive only, except Req 4.5, Req 4.6 and Req 4.10,
+which bind the ledger. Req 7 through Req 13 bind both ledgers except where a criterion
 exempts the ICP one. Grouped by behaviour, not by delivery order: the build order is
 `design.md`'s **Delivery / PR sequence**, where each PR covers a set of criteria, and
 this document is what a PR is checked against.*
@@ -235,6 +237,11 @@ lost track of what it sent cannot corrupt the archive by sending them again.
 9. THE Archive SHALL NOT refuse an append on account of a block it was never going to
    store, because a block beyond its own configured limit falls outside 1.7 and
    refusing for it would deny 4.1 the prefix it requires to be stored.
+10. WHEN THE Archive would store a block at global index zero, THE Archive SHALL refuse
+   the append unless that block carries no parent hash, because 1.5 says only where a
+   parentless block may go and not that index zero must hold one — so without this an
+   append declared at zero into an empty archive given no Expected_Parent would place a
+   block with a parent at the genesis position, permanently and unverifiably.
 
 ### Requirement 2: An Append Is Placed By Its Declared Index
 
@@ -392,7 +399,7 @@ violation from a capacity problem without access to canister logs.
 #### Acceptance Criteria
 
 1. THE Archive SHALL expose, over its metrics endpoint, a separate count for each of:
-   each chain ground of Req 1 counted separately (1.1, 1.5, 1.7 and 1.8), a
+   each chain ground of Req 1 counted separately (1.1, 1.5, 1.7, 1.8 and 1.10), a
    covered-range mismatch per 2.9, a gap per 2.2, blocks below its own range per 2.6,
    a stop at its own limit per 4.3, a platform-refused growth per 4.4, an undecodable
    block per 6.4, and the unverifiable append of 1.6.
@@ -534,9 +541,11 @@ per interval rather than work per transaction.
    non-zero metric, rather than spacing further attempts per 9.1, because no retry can
    resolve a mismatch of chain or position or a block the archive cannot parse.
 8. WHEN an archive reports per 2.6 that the blocks offered fall below its own range,
-   THE Ledger SHALL NOT halt per 9.7 and SHALL instead reconcile per 8.2, because
-   this is the ordinary signal that the ledger is behind rather than a sign that
-   anything is wrong.
+   THE Ledger SHALL NOT halt per 9.7 and SHALL instead offer those same blocks, on a
+   later Archiving_Round, to the archive whose Published_Range covers them — or halt per
+   8.3 if none does — because this is the ordinary signal that the ledger is behind, and
+   only the archive actually holding those indices can confirm it in a way 8.9 will
+   accept, re-offering them to the same archive being a report that says nothing new.
 9. WHEN THE Ledger is upgraded, THE Ledger SHALL permit the next Archiving_Round
    immediately rather than observing the spacing 9.1 would otherwise require, because
    an upgrade is how an operator resumes after a halt and is usually the fix for
