@@ -1407,10 +1407,10 @@ fn should_export_the_receipt_fetch_metrics() {
             r#"cketh_minter_receipt_fetch_window\{pipeline="sweeper"\} 10 \d+"#,
         )
         .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_fetch_rounds_without_reads\{pipeline="withdrawal"\} 0 \d+"#,
+            r#"cketh_minter_receipt_fetch_rounds_since_chain_read\{pipeline="withdrawal"\} 0 \d+"#,
         )
         .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_fetch_rounds_without_reads\{pipeline="sweeper"\} 0 \d+"#,
+            r#"cketh_minter_receipt_fetch_rounds_since_chain_read\{pipeline="sweeper"\} 0 \d+"#,
         )
         .assert_contains_metric_matching(
             r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="receipt"\} 0 \d+"#,

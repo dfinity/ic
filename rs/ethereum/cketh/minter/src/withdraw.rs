@@ -475,13 +475,13 @@ pub(crate) async fn fetch_receipts_for_round<Id: Copy + Ord + std::fmt::Debug>(
         if !pipeline.should_skip_round() {
             return None;
         }
-        pipeline.record_round_without_reads();
-        Some(pipeline.rounds_without_reads())
+        pipeline.record_round_without_chain_read();
+        Some(pipeline.rounds_since_chain_read())
     });
-    if let Some(rounds_without_reads) = skipped {
+    if let Some(rounds_since_chain_read) = skipped {
         log!(
             INFO,
-            "[{context}]: SKIPPING: the last {rounds_without_reads} rounds could not read the \
+            "[{context}]: SKIPPING: the last {rounds_since_chain_read} rounds could not read the \
              chain to fetch a single receipt"
         );
         return BTreeMap::new();
@@ -494,7 +494,7 @@ pub(crate) async fn fetch_receipts_for_round<Id: Copy + Ord + std::fmt::Debug>(
                 INFO,
                 "[{context}]: failed to get the finalized transaction count of {sender}: {e:?}"
             );
-            mutate_state(|s| window(s).record_round_without_reads());
+            mutate_state(|s| window(s).record_round_without_chain_read());
             return BTreeMap::new();
         }
     };

@@ -11,7 +11,7 @@ use std::ops::Bound;
 pub const INITIAL_RECEIPT_FETCH_WINDOW: usize = 10;
 pub const MIN_RECEIPT_FETCH_WINDOW: usize = 1;
 pub const MAX_RECEIPT_FETCH_WINDOW: usize = 20;
-pub const ROUNDS_WITHOUT_READS_BEFORE_SKIPPING: u32 = 3;
+pub const ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING: u32 = 3;
 /// One round out of this many is still attempted while rounds are being skipped.
 pub const ROUNDS_PER_ATTEMPT_WHILE_SKIPPING: u32 = 4;
 
@@ -92,7 +92,7 @@ impl RoundOutcome {
 pub struct ReceiptFetchWindow<Id> {
     window: usize,
     cursor: Option<Id>,
-    rounds_without_reads: u32,
+    rounds_since_chain_read: u32,
     receipts_total: u64,
     not_mined_total: u64,
     failures_total: u64,
@@ -105,7 +105,7 @@ impl<Id> Default for ReceiptFetchWindow<Id> {
         Self {
             window: INITIAL_RECEIPT_FETCH_WINDOW,
             cursor: None,
-            rounds_without_reads: 0,
+            rounds_since_chain_read: 0,
             receipts_total: 0,
             not_mined_total: 0,
             failures_total: 0,
@@ -145,18 +145,18 @@ impl<Id: Copy + Ord> ReceiptFetchWindow<Id> {
     /// Deliberately not a general backoff: only a pipeline with no failure to shrink its window
     /// with skips rounds.
     pub fn should_skip_round(&self) -> bool {
-        self.rounds_without_reads >= ROUNDS_WITHOUT_READS_BEFORE_SKIPPING
-            && !(self.rounds_without_reads - ROUNDS_WITHOUT_READS_BEFORE_SKIPPING)
+        self.rounds_since_chain_read >= ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING
+            && !(self.rounds_since_chain_read - ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING)
                 .is_multiple_of(ROUNDS_PER_ATTEMPT_WHILE_SKIPPING)
     }
 
-    pub fn record_round_without_reads(&mut self) {
-        self.rounds_without_reads = self.rounds_without_reads.saturating_add(1);
+    pub fn record_round_without_chain_read(&mut self) {
+        self.rounds_since_chain_read = self.rounds_since_chain_read.saturating_add(1);
     }
 
     /// An empty outcome still proves the providers answered, so rounds stop being skipped.
     pub fn record_round(&mut self, outcome: RoundOutcome) {
-        self.rounds_without_reads = 0;
+        self.rounds_since_chain_read = 0;
         if outcome.lookups() == 0 {
             return;
         }
@@ -186,8 +186,8 @@ impl<Id: Copy + Ord> ReceiptFetchWindow<Id> {
         self.cursor
     }
 
-    pub fn rounds_without_reads(&self) -> u32 {
-        self.rounds_without_reads
+    pub fn rounds_since_chain_read(&self) -> u32 {
+        self.rounds_since_chain_read
     }
 
     pub fn counters(&self) -> ReceiptFetchCounters {

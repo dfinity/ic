@@ -2,8 +2,8 @@ use crate::eth_rpc::Hash;
 use crate::numeric::LedgerBurnIndex;
 use crate::state::receipt_fetch::{
     INITIAL_RECEIPT_FETCH_WINDOW, MAX_RECEIPT_FETCH_WINDOW, MIN_RECEIPT_FETCH_WINDOW,
-    ROUNDS_PER_ATTEMPT_WHILE_SKIPPING, ROUNDS_WITHOUT_READS_BEFORE_SKIPPING, ReceiptFetchCounters,
-    ReceiptFetchWindow, RoundOutcome,
+    ROUNDS_PER_ATTEMPT_WHILE_SKIPPING, ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING,
+    ReceiptFetchCounters, ReceiptFetchWindow, RoundOutcome,
 };
 use std::collections::BTreeMap;
 
@@ -87,10 +87,10 @@ mod adaptation {
         let mut window = window_of(INITIAL_RECEIPT_FETCH_WINDOW);
 
         window.record_round(RoundOutcome::default());
-        window.record_round_without_reads();
+        window.record_round_without_chain_read();
 
         assert_eq!(window.window(), INITIAL_RECEIPT_FETCH_WINDOW);
-        assert_eq!(window.rounds_without_reads(), 1);
+        assert_eq!(window.rounds_since_chain_read(), 1);
     }
 
     #[test]
@@ -255,9 +255,9 @@ mod skipping {
     fn should_attempt_every_round_below_the_threshold() {
         let mut window = ReceiptFetchWindow::<LedgerBurnIndex>::default();
 
-        for _ in 0..ROUNDS_WITHOUT_READS_BEFORE_SKIPPING {
+        for _ in 0..ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING {
             assert!(!skip_round(&mut window));
-            window.record_round_without_reads();
+            window.record_round_without_chain_read();
         }
         assert!(!skip_round(&mut window));
     }
@@ -265,8 +265,8 @@ mod skipping {
     #[test]
     fn should_attempt_one_round_in_a_few_past_the_threshold() {
         let mut window = ReceiptFetchWindow::<LedgerBurnIndex>::default();
-        for _ in 0..ROUNDS_WITHOUT_READS_BEFORE_SKIPPING {
-            window.record_round_without_reads();
+        for _ in 0..ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING {
+            window.record_round_without_chain_read();
         }
 
         let mut attempted = 0;
@@ -274,7 +274,7 @@ mod skipping {
         for _ in 0..rounds {
             if !skip_round(&mut window) {
                 attempted += 1;
-                window.record_round_without_reads();
+                window.record_round_without_chain_read();
             }
         }
 
@@ -284,21 +284,21 @@ mod skipping {
     #[test]
     fn should_stop_skipping_once_a_round_read_the_chain() {
         let mut window = ReceiptFetchWindow::<LedgerBurnIndex>::default();
-        for _ in 0..10 * ROUNDS_WITHOUT_READS_BEFORE_SKIPPING {
-            window.record_round_without_reads();
+        for _ in 0..10 * ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING {
+            window.record_round_without_chain_read();
         }
         assert!(skip_round(&mut window));
 
         window.record_round(RoundOutcome::default());
 
-        assert_eq!(window.rounds_without_reads(), 0);
+        assert_eq!(window.rounds_since_chain_read(), 0);
         assert!(!skip_round(&mut window));
     }
 
     fn skip_round(window: &mut ReceiptFetchWindow<LedgerBurnIndex>) -> bool {
         let skip = window.should_skip_round();
         if skip {
-            window.record_round_without_reads();
+            window.record_round_without_chain_read();
         }
         skip
     }

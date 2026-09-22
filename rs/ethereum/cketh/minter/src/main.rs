@@ -1533,16 +1533,16 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     s.sweeper_receipt_fetch.window() as f64,
                 )?;
                 w.gauge_vec(
-                    "cketh_minter_receipt_fetch_rounds_without_reads",
+                    "cketh_minter_receipt_fetch_rounds_since_chain_read",
                     "Consecutive rounds failing or skipping the finalized-count read, per pipeline.",
                 )?
                 .value(
                     &[("pipeline", "withdrawal")],
-                    s.withdrawal_receipt_fetch.rounds_without_reads() as f64,
+                    s.withdrawal_receipt_fetch.rounds_since_chain_read() as f64,
                 )?
                 .value(
                     &[("pipeline", "sweeper")],
-                    s.sweeper_receipt_fetch.rounds_without_reads() as f64,
+                    s.sweeper_receipt_fetch.rounds_since_chain_read() as f64,
                 )?;
                 let mut receipt_lookups = w.counter_vec(
                     "cketh_minter_receipt_lookups_total",

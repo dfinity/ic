@@ -9,7 +9,7 @@ use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
 use crate::state::audit::{EventType, apply_state_transition, process_event};
 use crate::state::eth_logs_scraping::LogScrapings;
 use crate::state::event::AutomaticDeposit;
-use crate::state::receipt_fetch::ROUNDS_WITHOUT_READS_BEFORE_SKIPPING;
+use crate::state::receipt_fetch::ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING;
 use crate::state::transactions::{PipelineRequest, SweepId, SweepRequest};
 use crate::state::{State, mutate_state, read_state};
 use crate::storage::with_event_iter;
@@ -657,8 +657,8 @@ fn finalize_sweep_through_the_event_log(request: &SweepRequest, runtime: &MockCa
 async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
     init_state(initial_state());
     mutate_state(|s| {
-        for _ in 0..=ROUNDS_WITHOUT_READS_BEFORE_SKIPPING {
-            s.sweeper_receipt_fetch.record_round_without_reads();
+        for _ in 0..=ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING {
+            s.sweeper_receipt_fetch.record_round_without_chain_read();
         }
     });
 
@@ -675,8 +675,8 @@ async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
 
     assert_eq!(receipts, BTreeMap::new());
     assert_eq!(
-        read_state(|s| s.sweeper_receipt_fetch.rounds_without_reads()),
-        ROUNDS_WITHOUT_READS_BEFORE_SKIPPING + 2
+        read_state(|s| s.sweeper_receipt_fetch.rounds_since_chain_read()),
+        ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING + 2
     );
     assert_eq!(
         read_state(|s| s.withdrawal_receipt_fetch),

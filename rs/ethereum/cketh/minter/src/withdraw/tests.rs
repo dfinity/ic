@@ -1,7 +1,7 @@
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::MultiCallError;
 use crate::numeric::LedgerBurnIndex;
-use crate::state::receipt_fetch::{ROUNDS_WITHOUT_READS_BEFORE_SKIPPING, RoundOutcome};
+use crate::state::receipt_fetch::{ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING, RoundOutcome};
 use crate::state::{mutate_state, read_state};
 use crate::test_fixtures::{init_state, initial_state};
 use crate::withdraw::{ReceiptResult, collect_finalized_receipts, fetch_receipts_for_round};
@@ -115,8 +115,8 @@ mod round {
     async fn should_skip_a_round_rather_than_read_the_chain_again() {
         init_state(initial_state());
         mutate_state(|s| {
-            for _ in 0..=ROUNDS_WITHOUT_READS_BEFORE_SKIPPING {
-                s.withdrawal_receipt_fetch.record_round_without_reads();
+            for _ in 0..=ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING {
+                s.withdrawal_receipt_fetch.record_round_without_chain_read();
             }
         });
 
@@ -133,8 +133,8 @@ mod round {
 
         assert_eq!(receipts, BTreeMap::new());
         assert_eq!(
-            read_state(|s| s.withdrawal_receipt_fetch.rounds_without_reads()),
-            ROUNDS_WITHOUT_READS_BEFORE_SKIPPING + 2,
+            read_state(|s| s.withdrawal_receipt_fetch.rounds_since_chain_read()),
+            ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING + 2,
             "a skipped round is one more round that read nothing"
         );
     }
