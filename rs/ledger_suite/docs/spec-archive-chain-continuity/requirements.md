@@ -91,7 +91,10 @@ comes first.
 - **Archiving_Round**: one attempt by a ledger to move blocks to archives,
   triggered by a transaction.
 - **Archived_Prefix**: the blocks a ledger has stopped serving itself because an
-  archive confirmed holding them.
+  archive confirmed holding them. Its *end* means the lowest index the ledger still
+  serves, one past the last it has given up — exclusive, like an Archive_Position and
+  unlike a Published_Range, so that the two compose without an off-by-one. Req 8.4 is
+  the criterion where the inclusive form meets the exclusive one, and says so.
 - **ARCHIVE_CALL_TIMEOUT**, **BACKOFF_INITIAL**, **BACKOFF_CAP**: respectively the
   longest a ledger waits for a response to a call it is willing to stop waiting for,
   the minimum spacing between archiving attempts after the first failure, and the
@@ -242,7 +245,9 @@ history I compute is correct.
 #### Acceptance Criteria
 
 1. WHEN an Indexed_Append's Declared_Index equals the Archive_Position, THE Archive
-   SHALL store all of its blocks.
+   SHALL store all of its blocks, except where Req 4 has it stop short — at its own
+   configured limit per 4.1, or at a growth it asked for and was refused per 4.8 — which
+   is the one case where a correctly placed append stores only a prefix.
 2. WHEN an Indexed_Append's Declared_Index is above the Archive_Position, THE
    Archive SHALL refuse the append as a gap and SHALL store none of its blocks,
    because the blocks between the two positions would otherwise be held by no
@@ -464,12 +469,15 @@ a hole.
    covered by no archive, THEN THE Ledger SHALL make no further archiving attempt
    and SHALL expose a distinct non-zero metric, because advancing past them would
    discard blocks no archive holds.
-4. IF an archive reports an Archive_Position that falls short of the end of the
+4. IF an archive reports an Archive_Position that is not above the last index of the
    Published_Range THE Ledger publishes for *that* archive, THEN THE Ledger SHALL make
    no further archiving attempt, SHALL discard no further blocks, and SHALL expose a
-   distinct non-zero metric, because blocks it has already stopped serving are then held
-   nowhere and no retry can recover them — compared per archive rather than against the
-   Archived_Prefix, which every archive but the Tail_Archive ends legitimately below.
+   distinct non-zero metric, because a Published_Range is inclusive of both ends per 7.6
+   while an Archive_Position is the next index expected, so an archive covering its
+   published range reports exactly one past that range's last index and anything lower
+   leaves a block it is published as holding held nowhere — compared per archive rather
+   than against the Archived_Prefix, which every archive but the Tail_Archive ends
+   legitimately below.
 5. WHEN an Archiving_Round does not complete, THE Ledger SHALL continue to serve
    every index it served before that round.
 6. THE Ledger SHALL NOT rely on its own record of what it sent when deciding what

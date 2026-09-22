@@ -894,6 +894,15 @@ archives hold the blocks above it, so comparing any archive's reported position 
 the aggregate prefix would read every correct legacy answer as irrecoverable loss. The
 comparison is against the range published for *that* archive.
 
+**And it is the one comparison that crosses the two conventions**, so it is worth
+writing out. A Published_Range is inclusive at both ends (`Req 7.6`, because an empty
+archive otherwise has no pair of indices); an Archive_Position is exclusive, being the
+next index expected. An archive published as `[0, 99]` and holding all of it therefore
+reports `100`, and a report of `99` means it holds through `98` — one block short, and
+numerically *equal* to the range end rather than below it. The test is
+`next_index > inclusive_end`, not `>=`, and the glossary now fixes the Archived_Prefix's
+end as exclusive so this is the only place the two conventions meet.
+
 That first probe is also a free divergence check: a tail whose reported range
 disagrees with what the ledger had inferred trips `Req 8.2`, `Req 8.4` or `Req 8.8`
 immediately. It covers only the tail, so it does not replace Step 0's Rosetta sync —
@@ -1153,6 +1162,8 @@ test is baseline-independent.
 | 7e | archive | configure `max_memory_size_bytes` below a single block's size and append it with an index; assert nothing is stored, `at_capacity` is true, and `next_index` equals `block_index_offset` — the reply the ledger must halt on | `Req 4.10` |
 | 15e | integration | drive the oversized-block case end to end; assert the ledger halts with its own metric and creates **no** archive, and that an ordinary full tail still rolls over — the two cases that look identical in the flag alone | `Req 4.10`, `Req 4.5` |
 | 15f | integration | report, from a non-tail archive, a position below the aggregate Archived_Prefix but matching its own published range; assert no halt. Then report one short of its own range and assert the halt — the false positive that the aggregate comparison produced for every legacy archive | `Req 8.4` |
+| 15i | unit, `ledger_canister_core` | for an archive published as `[0, 99]`, assert a reported position of `100` does not halt and `99` does — the boundary where the inclusive published range meets the exclusive position, and the one value an off-by-one would miss | `Req 8.4`, `Req 7.6` |
+| 7f | archive | append starting exactly at the Archive_Position but overflowing the configured limit; assert a prefix is stored and the stop reported rather than the whole batch — the Req 4 exception to an otherwise unconditional Req 2.1 | `Req 2.1`, `Req 4.1` |
 | 15g | integration | answer with `BelowRange`, and separately with `Gap`, from appends that carried blocks; assert the Archived_Prefix does not advance on either, then assert it does advance on `AlreadyHeld` — carrying blocks is not verifying one | `Req 8.9` |
 | 23b | integration | start from a suite whose archive ranges were all inferred; assert each archive is asked once, at most one per round, that the published ranges become the reported ones, and that archiving continues normally afterwards. Then make one archive report a range contradicting the record and assert the halt and its metric | `Req 7.7` |
 | 23d | integration | leave a non-tail archive on the old wasm so it reports no range; assert archiving is not halted, the count rises, its published range is left as it stands, and the remaining archives are still migrated. Assert also that a round needing the capability probe issues no migration probe alongside it | `Req 7.8`, `Req 12.1` |
