@@ -4,7 +4,7 @@
 //!
 //! 1. **Request**: A block maker includes `UpgradePermitAction::Request` in
 //!    its block when it wants to reboot. Validators check outstanding requests
-//!    the allowed max parallel reboots.
+//!    against the allowed max parallel reboots.
 //!
 //! 2. **Authorize**: After the request block is finalized, each node gossips an
 //!    [`crate::consensus::UpgradePermitAuthorizationShare`]. When a block maker
