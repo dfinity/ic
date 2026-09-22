@@ -3,7 +3,6 @@ use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting};
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     CallOrigin,
@@ -11,7 +10,6 @@ use ic_replicated_state::{
 };
 use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
-use ic_test_utilities_types::ids::node_test_id;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{NumBytes, NumInstructions, NumOsPages};
@@ -950,22 +948,6 @@ fn dts_abort_of_replicated_execution_works() {
         );
     });
 }
-/// Replaces the nodes of the canisters' own subnet in the network topology, i.e.
-/// simulates a registry change that resizes the subnet between two rounds.
-fn set_own_subnet_size(test: &mut ExecutionTest, subnet_size: usize) {
-    let own_subnet_id = test.state().metadata.own_subnet_id;
-    test.state_mut()
-        .metadata
-        .modify_network_topology(|network_topology| {
-            let own_subnet = network_topology
-                .subnets_mut()
-                .get_mut(&own_subnet_id)
-                .unwrap();
-            own_subnet.nodes = (0..subnet_size).map(|i| node_test_id(i as u64)).collect();
-        });
-    assert_eq!(test.get_own_subnet_cycles_config().subnet_size, subnet_size);
-}
-
 /// An execution that is aborted and restarted after its subnet grew is charged for
 /// the instructions it uses at the subnet size in effect when it is restarted.
 ///
@@ -1010,7 +992,7 @@ fn dts_aborted_execution_is_charged_at_the_subnet_size_at_the_restart() {
     // The subnet doubles in size before the aborted execution is restarted, so the
     // restarted execution costs twice what the aborted one prepaid.
     let subnet_size_before = test.get_own_subnet_cycles_config().subnet_size;
-    set_own_subnet_size(&mut test, 2 * subnet_size_before);
+    test.set_own_subnet_size(2 * subnet_size_before);
 
     test.execute_message(canister_id);
     assert_eq!(

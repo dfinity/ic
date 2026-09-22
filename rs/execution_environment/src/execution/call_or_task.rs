@@ -70,13 +70,8 @@ pub fn execute_call_or_task(
         let message_memory_usage = canister.message_memory_usage();
 
         let (result, resuming_aborted) = match prepaid_execution_cycles {
-            // The execution was aborted before it finished and is restarted now: it
-            // keeps the cycles that it prepaid before the abort, adjusted to what
-            // prepaying it now would require. The conditions that the prepayment was
-            // computed under, e.g. the subnet size, the cost schedule or the
-            // canister's Wasm execution mode, might have changed since the abort,
-            // while the refund of the unused instructions is computed under the
-            // conditions in effect when the restarted execution finishes.
+            // An aborted execution carries its prepayment over rather than prepaying
+            // again, so it may no longer match what executing it now costs.
             Some(prepaid_execution_cycles) => (
                 round
                     .cycles_account_manager
@@ -111,9 +106,8 @@ pub fn execute_call_or_task(
         let prepaid_execution_cycles = match result {
             Ok(cycles) => cycles,
             Err(err) => {
-                // The canister is charged nothing: prepaying the execution leaves the
-                // balance untouched when it fails, and adjusting the prepayment of a
-                // restarted execution refunds it in full when it fails.
+                // Nothing left to refund below: a failed prepayment leaves the balance
+                // untouched, and a failed adjustment refunds the prepayment itself.
                 if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
                     // `OnLowWasmMemoryHook` was taken from `task_queue` (so the hook status is now
                     // `Executed`), but it could not run because not enough cycles were available.

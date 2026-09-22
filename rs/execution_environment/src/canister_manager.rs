@@ -948,13 +948,8 @@ impl CanisterManager {
         let message_memory_usage = canister.message_memory_usage();
 
         let result = match prepaid_execution_cycles {
-            // The execution was aborted before it finished and is restarted now: it
-            // keeps the cycles that it prepaid before the abort, adjusted to what
-            // prepaying it now would require. The conditions that the prepayment was
-            // computed under, e.g. the subnet size or the cost schedule, might have
-            // changed since the abort, while the refund of the unused instructions is
-            // computed under the conditions in effect when the restarted execution
-            // finishes.
+            // An aborted execution carries its prepayment over rather than prepaying
+            // again, so it may no longer match what executing it now costs.
             Some(prepaid_execution_cycles) => {
                 self.cycles_account_manager.adjust_prepaid_execution_cycles(
                     &mut canister.system_state,
@@ -983,9 +978,8 @@ impl CanisterManager {
         let prepaid_execution_cycles = match result {
             Ok(cycles) => cycles,
             Err(err) => {
-                // The canister is charged nothing: prepaying the execution leaves the
-                // balance untouched when it fails, and adjusting the prepayment of a
-                // restarted execution refunds it in full when it fails.
+                // Nothing to refund here: a failed prepayment leaves the balance
+                // untouched, and a failed adjustment refunds the prepayment itself.
                 return DtsInstallCodeResult::Finished {
                     canister,
                     message,

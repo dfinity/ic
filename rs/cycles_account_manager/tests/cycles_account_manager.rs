@@ -823,21 +823,18 @@ struct AbortedExecutionSetting {
 /// execution and the round that restarts it after an abort.
 fn aborted_execution_subnet_configs() -> [CyclesAccountManagerSubnetConfig; 4] {
     [
-        // An application subnet of the default size.
         CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
             DEFAULT_REFERENCE_SUBNET_SIZE,
         ),
-        // A larger subnet, e.g. one that nodes were added to, whose fees are scaled
-        // up proportionally.
+        // A subnet that nodes were added to, whose fees scale up proportionally.
         CyclesAccountManagerSubnetConfig::new(
             2 * SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
             DEFAULT_REFERENCE_SUBNET_SIZE,
         ),
-        // A SEV-enabled subnet, whose fees are scaled against a smaller reference
-        // subnet size.
+        // A SEV-enabled subnet, whose fees scale against a smaller reference.
         CyclesAccountManagerSubnetConfig::new(
             SMALL_APP_SUBNET_MAX_SIZE,
             CanisterCyclesCostSchedule::Normal,
@@ -872,24 +869,16 @@ fn aborted_execution_settings() -> Vec<AbortedExecutionSetting> {
 /// consumed cycles metrics, exactly as if it had been prepaid under the conditions
 /// in effect when it is restarted.
 ///
-/// An aborted execution carries the cycles it prepaid over to its restart instead
-/// of prepaying again, while the refund of the unused instructions is computed
-/// under the conditions in effect when the restarted execution finishes. Adjusting
-/// the carried-over prepayment to those conditions is what keeps the two in line.
-///
 /// Checked at the two points of the prepay, adjust and refund sequence at which the
-/// cycles the canister has paid are determined: right after the adjustment, where
-/// it must have paid the prepayment required at the restart in both its real and
-/// its nominal part, and after the cycles for the instructions the execution did
-/// not use are refunded, where it must have paid for the instructions it did use.
+/// cycles the canister has paid are determined: right after the adjustment and
+/// again after the cycles for the unused instructions are refunded.
 ///
 /// The canister starts out with just enough cycles to cover the larger of the
 /// prepayment and the requirement, so that it has none to spare once it prepaid and
-/// the adjustment withdrew the cycles missing from the prepayment, if any. The
-/// adjustment withdraws `required - prepaid`, which saturates part by part, without
-/// comparing the two first; any other withdrawal, in particular one attempted where
-/// the prepayment covers the requirement in the real part, fails here for lack of
-/// cycles instead of going unnoticed.
+/// the adjustment withdrew whatever was missing. Any withdrawal beyond the exact
+/// shortfall, in particular one attempted where the prepayment already covers the
+/// requirement in the real part, therefore fails here for lack of cycles instead of
+/// going unnoticed.
 #[test]
 fn restarted_execution_cycles_match_restart_setting() {
     const EXECUTED_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000);
