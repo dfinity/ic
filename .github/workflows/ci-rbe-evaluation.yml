@@ -161,8 +161,9 @@ jobs:
         NAMESPACE_ACTIONS_RESULTS_URL: ${{ env.NAMESPACE_ACTIONS_RESULTS_URL }}
         NAMESPACE_ACTIONS_RESULTS_SERVICE: ${{ env.NAMESPACE_ACTIONS_RESULTS_SERVICE }}
         NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD: ${{ env.NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD }}
-        # Set (to /cache) by the Namespace runner when the profile has a cache volume; the
-        # repository-cache steps below are skipped when it is unset.
+        # Set (to /cache) by the Namespace runner when the profile has a cache volume and
+        # forwarded like the credentials above; the "Prepare the Bazel repository cache"
+        # step checks it and the other repository-cache steps are skipped when it is unset.
         NSC_CACHE_PATH: ${{ env.NSC_CACHE_PATH }}
     timeout-minutes: 250
     steps:
@@ -182,12 +183,24 @@ jobs:
       - uses: ./.github/actions/netrc
 
       - name: Prepare the Bazel repository cache on the Namespace cache volume
-        # spacectl (run by the cache action below) creates the directory on the volume as
-        # the current user (buildifier) while /cache belongs to the host side; pre-create
-        # it with sudo so the mount cannot fail on permissions.
-        if: env.NSC_CACHE_PATH != ''
+        # NSC_CACHE_PATH (/cache) is set by the Namespace runner only when the profile has a
+        # cache volume. It reaches this container through the env block above but is not in
+        # the workflow's `env` context, so `if:` cannot test it; check it in the shell and
+        # publish the result for the steps below. spacectl (run by the cache action) creates
+        # the directory on the volume as the current user (buildifier) while /cache belongs
+        # to the host side; pre-create it with sudo so the mount cannot fail on permissions.
+        id: prepare-cache
         continue-on-error: true
-        run: sudo install -d -o "$(id -u)" -g "$(id -g)" "$NSC_CACHE_PATH/var/cache/bazel-repository-cache"
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${NSC_CACHE_PATH:-}" ]; then
+            echo "No cache volume is attached (NSC_CACHE_PATH is unset); using an ephemeral repository cache."
+            echo "has_volume=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sudo install -d -o "$(id -u)" -g "$(id -g)" "$NSC_CACHE_PATH/var/cache/bazel-repository-cache"
+          echo "has_volume=true" >>"$GITHUB_OUTPUT"
 
       - name: Mount the Bazel repository cache
         # Only runs on master commit the volume (runner-profile setting); every other run
@@ -195,7 +208,7 @@ jobs:
         # evaluation: without the mount the next step is skipped and Bazel keeps its
         # ephemeral default repository cache, as today.
         id: repo-cache
-        if: env.NSC_CACHE_PATH != ''
+        if: steps.prepare-cache.outputs.has_volume == 'true'
         continue-on-error: true
         uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
         with:
