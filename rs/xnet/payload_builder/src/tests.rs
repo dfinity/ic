@@ -568,7 +568,7 @@ impl XNetSlicePool for TestSlicePool {
         XNetAdvertOutcome::Actionable
     }
 
-    fn record_peer_header(&self, _: SubnetId, _: &StreamHeader, _: &ReplicaLogger) {}
+    fn record_peer_header(&self, _: SubnetId, _: &StreamHeader) {}
 }
 
 /// `get_xnet_payload` must not include a slice from a deleted subnet even if
@@ -924,7 +924,10 @@ fn advert_handler_and_pool_for(
     let (registry, _) = get_registry_and_urls_for_test(1, btreemap![]);
 
     let metrics_registry = MetricsRegistry::new();
-    let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
+    let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+        &metrics_registry,
+        log.clone(),
+    )));
     let (refill_trigger, _refill_receiver) = tokio::sync::mpsc::channel(1);
     let payload_builder = XNetPayloadBuilderImpl::new_from_components(
         state_manager as Arc<_>,
@@ -1033,8 +1036,7 @@ async fn handle_advert_new_signals() {
             signal_end: OWN_MESSAGES_BEGIN + 2,
         });
         let header = advertised.header();
-        let (payload_builder, pool) =
-            advert_handler_and_pool(advert_store(&advertised, 1), log.clone());
+        let (payload_builder, pool) = advert_handler_and_pool(advert_store(&advertised, 1), log);
 
         // A header on record covering everything except the new signals.
         let recorded = generate_stream(&StreamConfig {
@@ -1044,7 +1046,7 @@ async fn handle_advert_new_signals() {
         });
         pool.lock()
             .unwrap()
-            .record_peer_header(REMOTE_SUBNET, &recorded.header(), &log);
+            .record_peer_header(REMOTE_SUBNET, &recorded.header());
 
         assert_matches!(
             payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
@@ -1065,12 +1067,11 @@ async fn handle_advert_duplicate_content() {
             signal_end: OWN_MESSAGES_BEGIN,
         });
         let header = advertised.header();
-        let (payload_builder, pool) =
-            advert_handler_and_pool(advert_store(&advertised, 0), log.clone());
+        let (payload_builder, pool) = advert_handler_and_pool(advert_store(&advertised, 0), log);
 
         pool.lock()
             .unwrap()
-            .record_peer_header(REMOTE_SUBNET, &header, &log);
+            .record_peer_header(REMOTE_SUBNET, &header);
 
         assert_matches!(
             payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
@@ -1178,6 +1179,28 @@ async fn handle_advert_collecting_reject_signal() {
                 .handle_advert(REMOTE_SUBNET, make_advert(&advertised(REJECT_SIGNAL + 1))),
             Ok(XNetAdvertOutcome::Actionable)
         );
+    });
+}
+
+/// An advert whose payload is not a canonical stream slice is rejected out of
+/// hand, before any verification.
+#[tokio::test]
+async fn handle_advert_decode_error() {
+    with_test_replica_logger(|log| {
+        // No expectations: verifying an advert we cannot even decode would panic.
+        let store = MockCertifiedStreamStore::new();
+        let (payload_builder, pool) = advert_handler_and_pool(store, log);
+
+        let advert = CertifiedStreamSlice {
+            payload: b"garbage".to_vec(),
+            ..make_advert(&own_stream_for_advert_tests())
+        };
+
+        assert_matches!(
+            payload_builder.handle_advert(REMOTE_SUBNET, advert),
+            Err(XNetAdvertError::DecodeError(_))
+        );
+        assert_eq!(None, recorded_peer_header(&pool));
     });
 }
 

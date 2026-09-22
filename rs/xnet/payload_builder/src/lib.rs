@@ -154,7 +154,7 @@ pub trait XNetSlicePool: Send + Sync {
 
     /// Records a verified header as the peer's high-water-mark header, unless the
     /// one on record is already at or past it in all indices.
-    fn record_peer_header(&self, subnet_id: SubnetId, header: &StreamHeader, log: &ReplicaLogger);
+    fn record_peer_header(&self, subnet_id: SubnetId, header: &StreamHeader);
 }
 
 pub struct XNetPayloadBuilderMetrics {
@@ -417,7 +417,10 @@ impl XNetPayloadBuilderImpl {
         ));
 
         let deterministic_rng_for_testing = Arc::new(None);
-        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(metrics_registry)));
+        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            metrics_registry,
+            log.clone(),
+        )));
         let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(metrics_registry));
         let endpoint_resolver = XNetEndpointResolver::new(
@@ -1460,7 +1463,7 @@ impl XNetAdvertHandler for XNetPayloadBuilderImpl {
         // garbage collected its messages, which is what tells us whether we still owe
         // it an advert.
         self.slice_pool
-            .record_peer_header(source_subnet, slice.header(), &self.log);
+            .record_peer_header(source_subnet, slice.header());
 
         Ok(outcome)
     }
@@ -1746,7 +1749,7 @@ impl PoolRefillTask {
                                     slice,
                                     certified_stream_store.as_ref(),
                                     registry_version,
-                                    log,
+                                    &log,
                                 )
                             } else {
                                 // Complete slice, put it into the pool.
@@ -1763,7 +1766,7 @@ impl PoolRefillTask {
                                     slice,
                                     certified_stream_store.as_ref(),
                                     registry_version,
-                                    log,
+                                    &log,
                                 )
                             }
                         })
@@ -1877,9 +1880,9 @@ impl XNetSlicePool for XNetSlicePoolImpl {
         slice_pool.classify_advert(subnet_id, header, have_reject_signal_between)
     }
 
-    fn record_peer_header(&self, subnet_id: SubnetId, header: &StreamHeader, log: &ReplicaLogger) {
+    fn record_peer_header(&self, subnet_id: SubnetId, header: &StreamHeader) {
         let mut slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.record_peer_header(subnet_id, header, log);
+        slice_pool.record_peer_header(subnet_id, header);
     }
 }
 

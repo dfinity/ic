@@ -1136,17 +1136,19 @@ pub struct CertifiedSlicePool {
     peer_headers: BTreeMap<SubnetId, Arc<StreamHeader>>,
 
     metrics: CertifiedSlicePoolMetrics,
+    log: ReplicaLogger,
 }
 
 impl CertifiedSlicePool {
     /// Creates a new pool instance using the given `MetricsRegistry` for
     /// instrumentation.
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, log: ReplicaLogger) -> Self {
         Self {
             slices: Default::default(),
             stream_positions: Default::default(),
             peer_headers: Default::default(),
             metrics: CertifiedSlicePoolMetrics::new(metrics_registry),
+            log,
         }
     }
 
@@ -1374,18 +1376,18 @@ impl CertifiedSlicePool {
         slice: CertifiedStreamSlice,
         certified_stream_store: &dyn CertifiedStreamStore,
         registry_version: RegistryVersion,
-        log: ReplicaLogger,
+        log: &ReplicaLogger,
     ) -> CertifiedSliceResult<()> {
         validate_slice(
             &slice,
             subnet_id,
             certified_stream_store,
             registry_version,
-            &log,
+            log,
         )?;
         let unpacked = slice.try_into()?;
 
-        let result = pool.lock().unwrap().pool_slice(subnet_id, unpacked, &log);
+        let result = pool.lock().unwrap().pool_slice(subnet_id, unpacked);
         // `pool_slice` returned any displaced slice. Drop it outside the pool lock.
         result.map(|_| ())
     }
@@ -1415,7 +1417,7 @@ impl CertifiedSlicePool {
         partial: CertifiedStreamSlice,
         certified_stream_store: &dyn CertifiedStreamStore,
         registry_version: RegistryVersion,
-        log: ReplicaLogger,
+        log: &ReplicaLogger,
     ) -> CertifiedSliceResult<()> {
         let partial: UnpackedStreamSlice = partial.try_into()?;
 
@@ -1444,10 +1446,10 @@ impl CertifiedSlicePool {
             subnet_id,
             certified_stream_store,
             registry_version,
-            &log,
+            log,
         )?;
 
-        let result = pool.lock().unwrap().pool_slice(subnet_id, slice, &log);
+        let result = pool.lock().unwrap().pool_slice(subnet_id, slice);
         // `pool_slice` returned any displaced slice. Drop it outside the pool lock.
         result.map(|_| ())
     }
@@ -1462,10 +1464,9 @@ impl CertifiedSlicePool {
         &mut self,
         subnet_id: SubnetId,
         mut unpacked: UnpackedStreamSlice,
-        log: &ReplicaLogger,
     ) -> CertifiedSliceResult<Option<UnpackedStreamSlice>> {
         // Record every pulled header, whether or not we end up pooling it.
-        self.record_peer_header(subnet_id, unpacked.payload.header.decoded(), log);
+        self.record_peer_header(subnet_id, unpacked.payload.header.decoded());
 
         // Trim off everything before the cached stream position.
         let stream_position = self.stream_positions.get(&subnet_id);
@@ -1578,12 +1579,7 @@ impl CertifiedSlicePool {
     /// A stream's `begin`, `end` and `signals_end` always advance monotonically, so
     /// a header that is ahead in one and behind in another comes from a peer that
     /// is misbehaving. It is ignored rather than merged.
-    pub fn record_peer_header(
-        &mut self,
-        subnet_id: SubnetId,
-        header: &StreamHeader,
-        log: &ReplicaLogger,
-    ) {
+    pub fn record_peer_header(&mut self, subnet_id: SubnetId, header: &StreamHeader) {
         match self.peer_headers.entry(subnet_id) {
             Entry::Vacant(vacant) => {
                 vacant.insert(Arc::new(header.clone()));
@@ -1606,7 +1602,7 @@ impl CertifiedSlicePool {
                     occupied.insert(Arc::new(header.clone()));
                 } else {
                     error!(
-                        log,
+                        self.log,
                         "{}: Header from subnet {subnet_id} ({header:?}) is inconsistent with the header on record ({recorded:?})",
                         CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER,
                     );
