@@ -2,21 +2,17 @@
 Title:: Setting a subnet up to be "cooled down".
 
 Goal:: Verify that a subnet holding everything a subnet merge has to drain --
-canisters calling each other across subnets in a loop, long-running
-`install_code` calls, and calls waiting for responses that never arrive --
-violates the individual terms of the "merge readiness" condition of the `Subnet
-merging` dashboard (see `bases/apps/ic-dashboards/core/subnet-merging.json` on
-branch `mraszyk/subnet-merging-dashboard` of `dfinity/k8s`), i.e. that the
-condition a subnet merging tool waits for before merging such a subnet away is
-one that the subnet does not satisfy to begin with.
+canisters calling each other across subnets in a loop and long-running
+`install_code` calls -- violates the individual terms of the "merge readiness"
+condition, i.e. that the condition a subnet merging tool waits for before
+merging such a subnet away is one that the subnet does not satisfy to begin
+with. The subnet also holds calls waiting for responses that never arrive: they
+are not drained, but make it possible to assert that a subnet merge populates
+the ingress history properly.
 
 The subnet that is set up to be cooled down, i.e. the one that would be merged
 away, is called `M`; a second Application subnet `T` holds the canisters at the
 other end of `M`'s cross-subnet calls.
-
-This test labels no subnet as "cooling down" and submits no proposal at all: it
-covers the scenario and the terms evaluated on it, not the draining that
-labeling `M` sets off.
 
 "Executing" an update call below always means submitting it as an ingress
 message without waiting for it to complete: most of the calls of this test are
@@ -25,18 +21,15 @@ never meant to complete.
 Runbook::
 0. Set up an IC with an NNS subnet (with the NNS canisters installed) and two
    Application subnets `M` and `T`, of `SUBNET_SIZE` nodes each.
-1. Install a universal canister on each of `M` and `T`: `US` on `M`, `UT` on
+1. Install a universal canister on each of `M` and `T`: `UM` on `M`, `UT` on
    `T`.
-2. Make an ingress call to each of `US` and `UT` with a payload that calls the
-   universal canister on the other subnet in a loop: the reply (or reject)
-   callback of every call fires a new call.
+2. Make an ingress call to each of `UM` and `UT` with a payload that calls the
+   universal canister on the other subnet in a loop.
 3. Wait until both loops have completed a few iterations, i.e. messages are
    actually flowing between `M` and `T` in both directions.
 4. Install the universal canisters of the steps below (`U1`, `U3`, `U5` and `U6`
    on `M`, `U4` and `U7` on `T`) and create five empty canisters `U2a` .. `U2e`
-   on `M`, controlled by `U1`. All of this has to happen before step 5: a
-   long-running `install_code` blocks every other `install_code` on the same
-   subnet.
+   on `M`, controlled by `U1`.
 5. Execute an update call on `U1` that makes five calls to the management
    canister's `install_code` method, one per `U2x`, in mode `install`, with the
    universal canister module and an `arg` that makes `canister_init` burn
@@ -140,12 +133,8 @@ const INSTALL_CODE_TARGETS: [&str; 5] = ["U2a", "U2b", "U2c", "U2d", "U2e"];
 /// An `install_code` message may consume at most
 /// `MAX_INSTRUCTIONS_PER_INSTALL_CODE` = 300B instructions on an Application
 /// subnet (`rs/config/src/subnet_config.rs`) and that budget also has to cover
-/// compiling the module: 6_000 instructions per byte of the decompressed
-/// (~350 KB) universal canister module, i.e. ~2.2B instructions, plus a 20M
-/// base cost. The full compilation cost is charged whenever the module is not
-/// in `expected_compiled_wasms`, which is cleared at every checkpoint, so an
-/// `install_code` that is aborted at a checkpoint and restarted afterwards pays
-/// it; hence the budget for `canister_init` has to leave room for it.
+/// compiling the module; hence the budget for `canister_init` has to leave room
+/// for it.
 const INIT_INSTRUCTIONS: u64 = 295 * B;
 
 /// The global data value that would end the endless loops of `U3`, `U5` and
@@ -176,8 +165,7 @@ const CONDITIONS_BACKOFF: Duration = Duration::from_secs(5);
 const PER_TEST_TIMEOUT: Duration = Duration::from_secs(900);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(1500);
 
-/// The individual conditions the "merge readiness" condition is made of, in the
-/// order the dashboard states them.
+/// The individual conditions the "merge readiness" condition is made of.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Condition {
     RegistryVersion,
@@ -295,23 +283,23 @@ async fn run(env: TestEnv) {
     );
 
     // Step 1: Install a universal canister on each of `M` and `T`.
-    info!(logger, "Step 1: Installing universal canisters US and UT");
-    let us = UniversalCanister::new_with_retries(&m_agent, m_node.effective_canister_id(), &logger)
+    info!(logger, "Step 1: Installing universal canisters UM and UT");
+    let um = UniversalCanister::new_with_retries(&m_agent, m_node.effective_canister_id(), &logger)
         .await;
     let ut = UniversalCanister::new_with_retries(&t_agent, t_node.effective_canister_id(), &logger)
         .await;
     info!(
         logger,
-        "Step 1 done: US={}, UT={}",
-        us.canister_id(),
+        "Step 1 done: UM={}, UT={}",
+        um.canister_id(),
         ut.canister_id(),
     );
 
     // Step 2: Start a loop of calls to the canister on the other subnet on both
     // universal canisters.
-    info!(logger, "Step 2: Starting the US <-> UT call loops");
-    start_call_loop(&us, ut.canister_id()).await;
-    start_call_loop(&ut, us.canister_id()).await;
+    info!(logger, "Step 2: Starting the UM <-> UT call loops");
+    start_call_loop(&um, ut.canister_id()).await;
+    start_call_loop(&ut, um.canister_id()).await;
     info!(logger, "Step 2 done: both call loops started");
 
     // Step 3: Wait until both loops have completed a few iterations.
@@ -319,7 +307,7 @@ async fn run(env: TestEnv) {
         logger,
         "Step 3: Waiting for {MIN_LOOP_ITERATIONS} iterations of both call loops"
     );
-    for (canister, name) in [(&us, "US"), (&ut, "UT")] {
+    for (canister, name) in [(&um, "UM"), (&ut, "UT")] {
         retry_with_msg_async!(
             format!("waiting for {MIN_LOOP_ITERATIONS} iterations of {name}'s call loop"),
             &logger,
@@ -424,15 +412,10 @@ async fn run(env: TestEnv) {
 
 /// Step 7: check that none of the `VIOLATED_CONDITIONS` of the "merge
 /// readiness" condition holds for `m_subnet`, i.e. that the condition a subnet
-/// merging tool waits for is one this scenario does not satisfy: a condition
-/// that held here would be satisfied by a subnet that never had anything to
-/// drain.
+/// merging tool waits for is one this scenario does not satisfy.
 ///
 /// Every term is evaluated repeatedly until all of `VIOLATED_CONDITIONS` are
-/// violated at the same evaluation, because the two stream terms come and go
-/// with the call loops of step 2: a message is held in a stream from the round
-/// it is routed in until the receiving subnet has acknowledged it, so the
-/// streams of even a busy subnet are empty in between.
+/// violated at the same evaluation.
 async fn check_conditions_violated(
     topology: &TopologySnapshot,
     m_subnet: &SubnetSnapshot,
@@ -502,14 +485,12 @@ fn term(terms: &[Term], condition: Condition) -> &Term {
         .unwrap_or_else(|| panic!("the readiness condition has no term for {condition:?}"))
 }
 
-/// Evaluates the terms of the "merge readiness" condition of the `Subnet
-/// merging` dashboard for `subnet` (the subnet that would be merged away) and
-/// `registry_version` (`V`). Returns one term per condition, in the order the
-/// conditions appear in the dashboard's readiness expression.
+/// Evaluates the terms of the "merge readiness" condition for `subnet` (the
+/// subnet that would be merged away) and `registry_version` (`V`). Returns one
+/// term per condition.
 ///
-/// As in the dashboard, every term is evaluated on the median across the
-/// replicas reporting the respective series, and missing data reads as zero
-/// (the dashboard's `or vector(0)` fallback).
+/// Every term is evaluated on the median across the replicas reporting the
+/// respective series, and missing data reads as zero.
 async fn evaluate_merge_readiness(
     topology: &TopologySnapshot,
     subnet: &SubnetSnapshot,
@@ -756,12 +737,6 @@ fn install_code_payload(targets: &[Principal]) -> Vec<u8> {
 /// queues hold nothing but those calls by the time they are inducted.
 async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &Logger) {
     let expected = INSTALL_CODE_TARGETS.len() as f64;
-    // The number of requests enqueued plus executing only reaches `expected`
-    // between the moment the last one is inducted and the moment the first one
-    // completes, so waiting for the current value to reach it would be waiting
-    // for a condition that stops holding. Remember the highest value seen
-    // instead, which only grows.
-    let highest = std::cell::Cell::new(0.0_f64);
     retry_with_msg_async!(
         format!(
             "waiting until all {} `install_code` requests are inducted on subnet {}",
@@ -784,13 +759,8 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
             let executing = sum_of_medians(&metrics, METRIC_SUBNET_CALL_CONTEXTS, |labels| {
                 labels.contains(LABEL_INSTALL_CODE)
             });
-            highest.set(highest.get().max(enqueued + executing));
-            if highest.get() < expected {
-                bail!(
-                    "{enqueued} request(s) enqueued and {executing} executing, at most {} of them \
-                     at once so far",
-                    highest.get(),
-                );
+            if enqueued + executing < expected {
+                bail!("{enqueued} request(s) enqueued and {executing} executing");
             }
             Ok(())
         }

@@ -142,7 +142,7 @@ system_test_nns(
 system_test_nns(
     name = "subnet_cooling_down_test",
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 1 System + 2 Application subnets of 4 nodes each = 12 IC Node VMs * 6 vCPUs.
-    enable_mainnet_nns_variant = False,  # The test exercises the replicas, not the NNS canisters, so the mainnet variant would add no signal.
+    enable_mainnet_nns_variant = False,  # The NNS canisters have not been upgraded in production yet.
     tags = [
         "long_test",  # since it reserves 12 IC Node VMs.
     ],
