@@ -191,7 +191,7 @@ the window is as long as the slowest SNS takes.
 
 **"Can", because the trigger is a trap and only a trap.** A *graceful* `Err` from a
 chunk still records what landed — `remove_archived_blocks(num_sent_blocks)` runs on
-the error branch too (`ledger.rs:483-488`) — so no re-send follows and nothing
+the error branch too (`ledger.rs:485-488`) — so no re-send follows and nothing
 refuses. The halt needs a round that dies *after* a successful append, which means a
 trap in the continuation, and the test plan's own note records that DEFI-2967 could
 not induce that deliberately. So the exposure is real but not routine; what makes it
@@ -426,7 +426,7 @@ the computed value.
       AlreadyHeld;                                 // Req 2.4
       BelowRange;                                  // Req 2.6
       Gap;                                         // Req 2.2
-      ChainMismatch : record { at_index : nat64 };  // Req 1.1, 1.7, 2.9
+      ChainMismatch : record { at_index : nat64 };  // every chain ground of Req 1, and 2.9
       Undecodable   : record { at_index : nat64 };  // Req 6.4
     };
 
@@ -452,10 +452,13 @@ the ledger re-deriving it from what it sent. Hoisting the range out and demoting
 outcome to a field makes `Req 3.3` literally true and `Req 3.6` free.
 
 `ChainMismatch` carries the index at which the divergence was found and serves
-`Req 1.1` at the tip, `Req 1.7` inside the batch, and `Req 2.9` inside a range already
-held. One arm for all three, because the ledger's response is the same — halt per
-`Req 9.7` — while `Req 6.1`'s separate counters give the operator the distinction that
-matters to them. That is D5's division of labour: type what the ledger acts on, count
+*every* chain ground of `Req 1` — `1.1` at the tip, `1.5` for a parentless block
+offered anywhere but index zero, `1.7` inside the batch, `1.8` against a fresh
+archive's Expected_Parent — plus `Req 2.9` inside a range already held. Deliberately
+"every ground of Req 1" rather than a list, so that adding a ground does not silently
+leave it without an arm. One arm for all of them because the ledger's response is the
+same — halt per `Req 9.7` — while `Req 6.1`'s separate counters give the operator the
+distinction that matters to them. That is D5's division of labour: type what the ledger acts on, count
 what an operator diagnoses. `Undecodable` exists because decoding on append is new —
 the current implementation stores opaque bytes and never parses them — so a block the
 archive cannot parse is a failure mode this design introduces and must answer for.
@@ -570,12 +573,17 @@ rather than by inspection.
 
 ### `ic-icrc1-archive` — `encode_metrics`
 
-One counter per cause in `Req 6.1`, plus the decode-failure counter (`Req 6.4`) and
-a counter for an unverifiable first append (`Req 1.6`) and separate counters for a
-tip mismatch and a covered-range mismatch (`Req 6.6`). All commit, because D5
-removed the traps — and `Req 1.6`'s counts a *success*, so it is separate from the
-refusal counters rather than one of them. An empty append is counted by none of
-them (`Req 6.5`).
+One counter per ground enumerated in `Req 6.1`, which is the whole list — the four
+chain grounds of `Req 1` separately, `2.2`, `2.6`, `2.9`, `4.3`, `4.4`, `6.4` and
+`1.6`. The archive exposes none of these today, so all of them are new.
+
+Three of them are not faults and should not read as such. `Req 1.6` counts a
+*success* — the append the archive could not verify — and should read zero once every
+ledger supplies an Expected_Parent. `Req 2.6` is the ordinary "the ledger is behind"
+signal and is diagnostic by `Req 6.7`. `Req 4.3` is normal operation: archives fill
+up. Only the chain grounds, the gap and `6.4` are conditions an operator should act
+on. An empty append is counted by none of them (`Req 6.5`), and all of them commit,
+because D5 removed the traps.
 
 ### `ledger_canister_core::archive` — `send_blocks_to_archive`
 
@@ -807,8 +815,8 @@ test is baseline-independent.
 | 28 | integration | fill the tail so an append comes back `at_capacity = true`; assert the *next* round creates an archive rather than re-offering to the same one, and that a short stop with `at_capacity = false` instead retries the same archive. This is why the flag exists and nothing else tests it | `Req 4.5`, `4.6` |
 | 29 | integration | after each round, assert every index the ledger served before it is still retrievable, and that the ledger stopped serving only indices some archive reports covering — the headline safety property, which rows 14 and 15 approach only from their failure sides | `Req 8.1`, `Req 8.5` |
 | 30 | integration | drive a round that must roll over; assert exactly one archive is created, and that a round which both fills the tail and has blocks left over does not create two | `Req 12.2` |
-| 31 | integration | assert the capability probe stores nothing and consumes no capacity against a live archive, and that a second round against an archive that already answered issues no further probe | `Req 10.3`, `10.4` |
-| 27 | matrix | both token variants for every archive-level row: 1-9, 9b, 9c, 10, 11, 13, 22, 22c, 22d, 22e and 26 | (12) is ICP-only by nature; 22b and 22f are integration rows | yes |
+| 31 | integration | assert the capability probe stores nothing and consumes no capacity against a live archive, that a second round against an archive that already answered issues no further probe, and that a round which does probe sends at most one empty append | `Req 10.3`, `10.4`, `Req 12.5` |
+| 27 | matrix | both token variants for every archive-level row: 1-9, 9b, 9c, 10, 11, 13, 22, 22c, 22d, 22e, 26 and 26b — (12) is ICP-only by nature, and 22b, 22f and 28-31 are integration rows | yes |
 
 **Seams the design owes.** `Req 9` is observable only through the attempt spacing, so
 the failure counter and last-attempt timestamp must be exposed as metrics; `Req 12.1`
@@ -867,7 +875,7 @@ on its own upgrade schedule, and the window between PR 1 and PR 3 is as long as 
 slowest of them takes. That is the strongest argument for keeping the two close
 together, and for not treating PR 1 as a change that can sit in `master` for a while.
 
-*What this release costs.* Three things, and the second is a limit rather than a
+*What this release costs.* Three things, and the last is a limit rather than a
 price.
 
 **The archive starts decoding blocks, which it has never done.** `Req 1.7` needs
@@ -882,8 +890,10 @@ log offline, for each token variant, before PR 1 ships — the wasms and the blo
 bytes are both available, so this costs nothing but time and it is the only way to
 find a historical encoding the current decoder rejects. And **budget the
 instructions**: per-block decode plus hash on a 1 MiB append is not costed anywhere
-in this document, and if it approaches the message limit the append traps, which is
-the same halt by another route.
+in this document, and if it approaches the **per-message instruction** limit the
+append traps, which is the same halt by another route. Note that is a different
+ceiling from the payload limit `Req 12.3` caps: sizing a round to fit one message
+says nothing about the instructions needed to decode and hash it.
 
 An old ledger cannot tell a refusal's cause, so a round that dies after a successful
 append leaves the next round re-sending blocks the archive holds; the archive

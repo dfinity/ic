@@ -69,7 +69,7 @@ comes first.
 - **Archive**: the ICRC archive canister, `ic-icrc1-archive`. Req 1 through Req 6
   are obligations on it alone — the ICP archive is a separate canister and is not
   changed here, per the corresponding non-goal — so "THE Archive" never means the ICP
-  one.
+  one. The exceptions are Req 4.5 and Req 4.6, which say THE Ledger and bind it.
 - **Tail_Archive**: the archive a ledger currently appends to — the most recently
   created one. Earlier archives are full and are never written to again.
 - **Archive_Range**: the contiguous span of global block indices an archive holds,
@@ -190,8 +190,10 @@ comes first.
 
 ## Requirements
 
-*Req 1 through Req 6 bind the ICRC archive only; Req 7 through Req 13 bind both
-ledgers except where a criterion exempts the ICP one. Grouped by behaviour, not by
+*Req 1 through Req 6 bind the ICRC archive only, except Req 4.5 and Req 4.6, which
+bind the ledger — they are the ledger's half of the capacity conversation and are
+delivered with the ledger release. Req 7 through Req 13 bind both ledgers except
+where a criterion exempts the ICP one. Grouped by behaviour, not by
 delivery order. Several requirements depend on each
 other — Req 1's check needs Req 2's placement to know which block it applies to, and
 Req 8 needs Req 3's report to have something to trust — so implementing them one
@@ -367,10 +369,11 @@ violation from a capacity problem without access to canister logs.
 #### Acceptance Criteria
 
 1. THE Archive SHALL expose, over its metrics endpoint, a separate count for every
-   ground on which it refuses or stops short: each chain ground of Req 1 counted
-   separately (1.1, 1.5, 1.7 and 1.8), a covered-range mismatch per 2.9, a gap per
-   2.2, a stop at its own limit per 4.3, a platform-refused growth per 4.4, an
-   undecodable block per 6.4, and the unverifiable append of 1.6.
+   ground on which it stores less than it was offered: each chain ground of Req 1
+   counted separately (1.1, 1.5, 1.7 and 1.8), a covered-range mismatch per 2.9, a
+   gap per 2.2, blocks below its own range per 2.6, a stop at its own limit per 4.3,
+   a platform-refused growth per 4.4, an undecodable block per 6.4, and the
+   unverifiable append of 1.6.
 2. THE Archive SHALL NOT fail the call for any outcome counted under 6.1 when the
    append carried a Declared_Index, because failing the call discards the
    count along with everything else the call changed, leaving the cause invisible.
@@ -388,6 +391,9 @@ violation from a capacity problem without access to canister logs.
    continue the archive's last block, while 2.9 means a range the archive already
    holds was re-sent with different content, which points at a ledger that has been
    rolled back.
+7. THE Archive SHALL count 2.6 as a diagnostic rather than as a fault, because per
+   9.8 it is the ordinary signal that a ledger is behind and an operator alarmed by
+   it would be alarmed by ordinary recovery.
 
 ### Requirement 7: A New Archive Continues The Previous Archive's Range
 
