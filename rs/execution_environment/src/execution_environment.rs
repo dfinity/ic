@@ -694,7 +694,7 @@ impl ExecutionEnvironment {
                 let op_result = op(canister, msg, round_limits, &mut consumed_cycles);
                 let result = op_result.and_then(|response| {
                     self.canister_manager
-                        .cycles_and_memory_usage_checks_and_updates_after_operation(
+                        .cycles_and_memory_usage_checks_and_updates(
                             canister,
                             round_limits,
                             response.instructions_to_charge_on_success,

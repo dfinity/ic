@@ -1794,51 +1794,6 @@ impl CanisterManager {
         Ok(StoredChunksReply(keys))
     }
 
-    /// Runs `cycles_and_memory_usage_checks_and_updates` for the changes that a
-    /// management operation already applied to the canister: `old_canister` is
-    /// the canister state before the operation and the new canister state is the
-    /// updated `canister`, so that the changes include any canister history the
-    /// operation recorded (canister history is accounted for like any other
-    /// canister memory).
-    ///
-    /// The checks and updates are skipped if the operation changed neither the
-    /// canister's memory usage, memory allocation, nor compute allocation, and used
-    /// no instructions to be charged for here, so that operations that do none of
-    /// this remain unaffected by them.
-    ///
-    /// `instructions` are the operation's
-    /// `CanisterManagerResponse::instructions_to_charge_on_success`, i.e. the ones
-    /// it did not charge for itself, so a failing operation is not charged for them.
-    /// They are charged for and accounted for in the round limits here.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn cycles_and_memory_usage_checks_and_updates_after_operation(
-        &self,
-        canister: &mut CanisterState,
-        round_limits: &mut RoundLimits,
-        instructions: NumInstructions,
-        sender: PrincipalId,
-        old_canister: &CanisterState,
-        resource_saturation: &ResourceSaturation,
-        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-    ) -> Result<(), CanisterManagerError> {
-        if canister.memory_usage() == old_canister.memory_usage()
-            && canister.memory_allocation() == old_canister.memory_allocation()
-            && canister.compute_allocation() == old_canister.compute_allocation()
-            && instructions == NumInstructions::new(0)
-        {
-            return Ok(());
-        }
-        self.cycles_and_memory_usage_checks_and_updates(
-            canister,
-            round_limits,
-            instructions,
-            sender,
-            old_canister,
-            resource_saturation,
-            subnet_cycles_config,
-        )
-    }
-
     // Runs the following checks on cycles and memory usage and performs the corresponding updates:
     // 1. There is enough subnet available memory for the new memory usage and allocation.
     // 2. Cycles for instructions can be withdrawn w.r.t. the old memory usage
@@ -1863,9 +1818,14 @@ impl CanisterManager {
     // controllers *before* the operation: the sender should still see verbose errors
     // if the operation removed the sender from the canister's controllers.
     //
+    // `instructions` are the ones the operation did not charge for itself, i.e. its
+    // `CanisterManagerResponse::instructions_to_charge_on_success` when it is invoked
+    // by `execute_mgmt_operation_on_canister`, so a failing operation is not charged
+    // for them.
+    //
     // `round_limits` are updated in-place (both the subnet available memory and the
     // instructions) and the caller must revert them in case of `Err`.
-    fn cycles_and_memory_usage_checks_and_updates(
+    pub(crate) fn cycles_and_memory_usage_checks_and_updates(
         &self,
         canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
