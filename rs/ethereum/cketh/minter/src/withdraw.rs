@@ -545,6 +545,7 @@ fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
     let expected_finalized_ids: BTreeSet<Id> = txs_to_finalize.values().copied().collect();
     let mut outcome = RoundOutcome::default();
     let mut receipts: BTreeMap<Id, EvmTransactionReceipt> = BTreeMap::new();
+    let mut unanswered: BTreeSet<Id> = BTreeSet::new();
     for ((hash, id), result) in zip(txs_to_finalize, results) {
         match result {
             Ok(Some(receipt)) => {
@@ -576,6 +577,7 @@ fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
             }
             Err(e) => {
                 outcome.record_failure();
+                unanswered.insert(id);
                 log!(
                     INFO,
                     "Failed to get transaction receipt for {hash} and id {id:?}: {e:?}. Will retry later",
@@ -588,10 +590,11 @@ fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
         return (BTreeMap::new(), outcome);
     }
     // An id whose transactions all answered "not mined" is a withdrawal that stalls, not a bug, and
-    // trapping here would take the whole minter down with it.
+    // trapping here would take the whole minter down with it. An id a provider failed to answer is
+    // not stalled, only unanswered, and is already counted as a failure.
     for id in expected_finalized_ids
         .iter()
-        .filter(|id| !receipts.contains_key(id))
+        .filter(|id| !receipts.contains_key(id) && !unanswered.contains(id))
     {
         outcome.record_stalled_id();
         log!(

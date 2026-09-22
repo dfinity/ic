@@ -40,7 +40,11 @@ mod collect {
         );
         assert_eq!(outcome.receipts(), 2);
         assert_eq!(outcome.failures(), 1);
-        assert_eq!(outcome.stalled_ids(), 1);
+        assert_eq!(
+            outcome.stalled_ids(),
+            0,
+            "an id a provider failed to answer is unanswered, not stalled"
+        );
         assert!(!outcome.is_abandoned());
     }
 
@@ -74,6 +78,24 @@ mod collect {
     }
 
     #[test]
+    fn should_tell_a_stalled_id_apart_from_one_a_provider_failed_to_answer() {
+        let (receipts, outcome) = collect_in_hash_order(vec![
+            (hash(1), id(1), Ok(None)),
+            (hash(2), id(1), Ok(None)),
+            (hash(3), id(2), Err(failed_lookup())),
+        ]);
+
+        assert_eq!(receipts, BTreeMap::new());
+        assert_eq!(outcome.not_mined(), 2);
+        assert_eq!(outcome.failures(), 1);
+        assert_eq!(
+            outcome.stalled_ids(),
+            1,
+            "only the id every provider answered counts as stalled"
+        );
+    }
+
+    #[test]
     fn should_leave_every_id_pending_when_every_lookup_failed() {
         let (receipts, outcome) = collect_in_hash_order(vec![
             (hash(1), id(1), Err(failed_lookup())),
@@ -83,7 +105,7 @@ mod collect {
         assert_eq!(receipts, BTreeMap::new());
         assert_eq!(outcome.failures(), 2);
         assert_eq!(outcome.failures(), outcome.lookups());
-        assert_eq!(outcome.stalled_ids(), 2);
+        assert_eq!(outcome.stalled_ids(), 0);
     }
 
     #[test]
