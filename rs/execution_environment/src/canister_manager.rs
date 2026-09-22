@@ -1857,7 +1857,7 @@ impl CanisterManager {
     // memory usage *includes* any canister history recorded by the operation
     // (canister history is accounted for like any other canister memory), so that
     // the subnet available execution memory, freezing threshold, and storage
-    // reservation below all account for it over the true total memory usage.
+    // reservation below all account for it.
     //
     // Whether the cycles balance is revealed in errors is determined by the
     // controllers *before* the operation: the sender should still see verbose errors
