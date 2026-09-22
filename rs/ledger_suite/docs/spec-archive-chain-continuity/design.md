@@ -231,9 +231,14 @@ and it satisfies the every-await-is-a-call constraint above.
 
 ### D2 — Backoff and probe state are `#[serde(skip)]`
 
-Serves `Req 9.3`, `Req 10.4`. Matches `archiving_in_progress`, and makes an upgrade
-the operator's "resume now" lever, which is the right shape when the upgrade is
-usually the fix.
+Serves `Req 9.3`, `Req 9.9`, `Req 10.4`. Matches `archiving_in_progress`, and makes
+an upgrade the operator's "resume now" lever, which is the right shape when the
+upgrade is usually the fix.
+
+That lever is a *deviation* from `Req 9.1`, not a consequence of it: after a failed
+round, `Req 9.1` alone would forbid an immediate attempt, and resetting the state
+permits one. `Req 9.9` is therefore the criterion that makes this legal rather than a
+contract violation — the behaviour was always intended, but only the design said so.
 
 ### D3 — One seam, `Wasm::INDEXED_APPENDS`, and no others
 
@@ -536,10 +541,20 @@ the same ledger version — so this buys nothing during the archive-only release
 `Req 1.4`'s window stays open for the ICP ledger and for third-party suites that
 upgrade only the archive. `Req 1.6` counts exactly those.
 
-**Plumbing.** The ledger has the value for free: it is `blocks[0].parent_hash()` of
-the batch it is about to send. But `node_and_capacity` currently receives only
-`blocks[0].size_bytes()`, so the parent hash has to be threaded alongside it to reach
-the `Encode!` at `archive.rs:463-468`.
+**Plumbing, and it is not where it first appears to be.** The value is the first
+block's parent hash, but it cannot be read where the batch is sent: by then the blocks
+are `EncodedBlock`, which exposes only `from_vec`, `into_vec`, `as_slice` and
+`size_bytes` (`ledger_core/src/block.rs:23-39`). `parent_hash()` is a `BlockType`
+method on the *decoded* block (`:114`), so it is available only while the concrete
+block type still is — in `archive_blocks<LA: LedgerAccess>`, where
+`<LA::Ledger as LedgerData>::Block` is known.
+
+So it must be extracted there and threaded down, not computed in
+`send_blocks_to_archive`: that helper is generic over `Rt` and `Wasm` and sees a
+type-erased `VecDeque<EncodedBlock>`, and `node_and_capacity` below it receives only
+`blocks[0].size_bytes()` today. The hash travels as a value alongside that size to
+reach the `Encode!` at `archive.rs:463-468`. Same boundary as D6's, and for the same
+reason.
 
 **Compatibility.** An old ledger encodes four arguments; the fifth being `opt` means
 candid decodes it as absent, so a new archive installed by an old ledger behaves
@@ -711,8 +726,25 @@ a bounded variant so the choice is per call site (`Req 13.1`, `Req 13.5`):
 | `append_blocks` | bounded, ICRC only | idempotent under `Req 2.4`; ICP exempt per `Req 13.6` |
 | `remaining_capacity` | bounded | read-only, so an unknown outcome is resolved by asking again |
 | `update_settings` | bounded | setting the same controllers twice is a no-op |
-| `create_canister` | **unbounded** | an unknown outcome leaves a canister nothing can address |
-| `install_code` | **unbounded** | `install` mode fails if already installed, so it cannot be retried |
+| `install_code` | bounded | resolvable, see below |
+| `create_canister` | **unbounded** | the only genuinely unresolvable one: an unknown outcome leaves a canister nothing can address |
+
+**`install_code` is resolvable, which the earlier reasoning missed.** "`install` mode
+fails if already installed, so it cannot be retried" is true of a *blind* retry and
+false of a reconciled one. At that point the ledger is still the new canister's only
+controller — `update_settings` has not run — so it can call `canister_status` and read
+`module_hash`: absent means the install did not happen and may be retried, present and
+matching means it did. `canister_status` is itself read-only and so resolvable by
+asking again, which terminates the regress.
+
+Leaving it unbounded would contradict `Req 13.7`, since the outcome *is* resolvable,
+and would keep a callback that can block stopping the ledger in the one path where
+that is least welcome.
+
+This shrinks the halt population rather than the safety. `Req 11.8` lets the ledger
+finish a creation whose identity it recorded, so the only case that still needs an
+operator is a lost `create_canister` reply — a canister that exists and cannot be
+named, which is what `Req 11.4` is now scoped to.
 
 An unknown outcome is handled as a failure, which is safe only because the retry is
 idempotent (`Req 13.3`, `13.4`), and is counted distinctly so D9's timeout can be
@@ -911,9 +943,19 @@ the ledger a `ChainMismatch` or `Gap` to read, and a release that can receive an
 unresolvable refusal without knowing to stop would retry it on every transaction. The
 rest of `Req 9` — the backoff itself — is independent and can follow.
 
-**Step 5 — lower `trigger_threshold`**, by NNS proposal. Not a PR. Last, because
-nothing forces re-enablement to a date: after PR 1 and PR 2 archiving is *safe*, and
-after PR 3 and PR 4 a stall heals itself rather than waiting for an operator.
+**Step 5 — lower `trigger_threshold`**, by NNS proposal. Not a PR, and it must not
+precede PR 3.
+
+PR 1 and PR 2 are not enough, which an earlier version of this section got wrong. PR 1
+closes the re-send case and PR 2 removes the double-mint, but the **fresh-archive
+window stays open** until the ledger sends an index and an Expected_Parent — see the
+`init` subsection: a node created for one index and then handed blocks from a
+different chain state is exactly the original corruption, and only PR 3 gives the
+archive what it needs to refuse it. So safety is reached after **PR 3**; PR 4 adds
+recovery, turning a stall that waits for an operator into one that heals itself.
+
+Nothing forces re-enablement to a date, so there is no reason to take it before PR 4
+either.
 
 Expect the backlog to drain at **one message per transaction**, not at
 `num_blocks_to_archive` per transaction — `Req 12.1` makes a round one append, so that

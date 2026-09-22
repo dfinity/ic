@@ -470,6 +470,10 @@ per interval rather than work per transaction.
    THE Ledger SHALL NOT halt per 9.7 and SHALL instead reconcile per 8.2, because
    this is the ordinary signal that the ledger is behind rather than a sign that
    anything is wrong.
+9. WHEN THE Ledger is upgraded, THE Ledger SHALL permit the next Archiving_Round
+   immediately rather than observing the spacing 9.1 would otherwise require, because
+   an upgrade is how an operator resumes after a halt and is usually the fix for
+   whatever caused the failure.
 
 ### Requirement 10: A Ledger Will Not Archive Against An Archive That Cannot Report Its Range
 
@@ -510,9 +514,9 @@ unaddressable canister does not become a series of them.
 3. WHEN THE Ledger observes an archive creation fail *before* the canister exists,
    THE Ledger SHALL NOT enter the state in 11.1, so that an ordinary failure is
    subject to Req 9 rather than halting.
-4. THE Ledger SHALL NOT resume archiving out of the state in 11.1 on its own,
-   because the state means a canister may exist that nothing will ever address and
-   an operator has to look.
+4. WHILE THE Ledger is in the state in 11.1 and recorded no identity per 11.6, THE
+   Ledger SHALL NOT resume archiving on its own, because a canister may then exist
+   that nothing will ever address and an operator has to look.
 5. WHEN THE Ledger observes a failure *after* the canister exists but before its
    identity is recorded, THE Ledger SHALL enter the state in 11.1, because the
    canister is then unaddressable whether the failure was observed or not.
@@ -523,6 +527,11 @@ unaddressable canister does not become a series of them.
 7. WHILE the condition in 11.1 holds and an identity was recorded per 11.6, THE
    Ledger SHALL expose that identity, because an operator otherwise has to recover
    it from canister logs that are unreadable by default.
+8. WHILE THE Ledger is in the state in 11.1 and did record an identity per 11.6, THE
+   Ledger SHALL be permitted to finish the creation on its own — determining what
+   remains to be done by asking the created canister — because a canister it can name
+   is one it can still adopt, and halting for an operator there would demand
+   intervention for something recoverable.
 
 ### Requirement 12: An Archiving Round Makes One Append
 
