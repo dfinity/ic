@@ -534,6 +534,13 @@ One counter per ground enumerated in `Req 6.1`, which is the whole list — the 
 chain grounds of `Req 1` separately, `2.2`, `2.6`, `2.9`, `4.3`, `4.4`, `6.4` and
 `1.6`. The archive exposes none of these today, so all of them are new.
 
+**Separately, because the grounds localise a divergence differently.** `Req 1.1`
+means the blocks offered do not continue the archive's last block; `Req 2.9` means a
+range it already holds was re-sent with different content, which points at a ledger
+that has been rolled back; `Req 1.8` means a fresh archive was handed blocks from a
+different chain state than the one it was created for. One mismatch counter would
+collapse three different investigations into one number.
+
 Three of them are not faults and should not read as such. `Req 1.6` counts a
 *success* — the append the archive could not verify — and should read zero once every
 ledger supplies an Expected_Parent. `Req 2.6` is the ordinary "the ledger is behind"
