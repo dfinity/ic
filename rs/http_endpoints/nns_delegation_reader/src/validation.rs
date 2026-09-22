@@ -281,7 +281,7 @@ fn do_tree_ranges_cover_canister(
     }
 }
 
-/// Returns whether any of the decoded ranges covers `canister_id`.
+/// Returns whether any of the decoded ranges covers `canister_id`. Ranges are closed intervals.
 fn do_ranges_cover_canister(
     ranges: &[(PrincipalId, PrincipalId)],
     canister_id: CanisterId,
@@ -294,7 +294,7 @@ fn do_ranges_cover_canister(
 
 /// Decodes a canister ranges leaf. Canister ranges are stored as self-describing CBOR
 /// of `(start, end)` principal pairs (see the canonical state's
-/// `encode_subnet_canister_ranges`).
+/// `encode_subnet_canister_ranges`) representing a `[start, end]` closed interval.
 fn decode_ranges(
     bytes: &[u8],
 ) -> Result<Vec<(PrincipalId, PrincipalId)>, DelegationValidationError> {
