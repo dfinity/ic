@@ -1,4 +1,8 @@
-/var/log/libvirt/qemu/guestos-serial*.log /var/log/libvirt/qemu/upgrade-guestos-serial*.log {
+# The .log[0-9]* globs clean up logs left behind by the old naming (guestos-serial.log1).
+/var/log/libvirt/qemu/guestos-serial*.log
+/var/log/libvirt/qemu/upgrade-guestos-serial*.log
+/var/log/libvirt/qemu/guestos-serial.log[0-9]*
+/var/log/libvirt/qemu/upgrade-guestos-serial.log[0-9]* {
     daily
     rotate 7
     compress

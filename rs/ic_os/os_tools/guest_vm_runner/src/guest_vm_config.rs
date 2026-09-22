@@ -568,6 +568,66 @@ mod tests {
         );
     }
 
+    // The domains monitor-guestos.sh polls.
+    #[test]
+    fn test_vm_domain_name() {
+        assert_eq!(
+            vm_domain_name(GuestVMType::Default, VmSlot::Plain),
+            "guestos"
+        );
+        assert_eq!(
+            vm_domain_name(GuestVMType::Default, VmSlot::new(1)),
+            "guestos1"
+        );
+        assert_eq!(
+            vm_domain_name(GuestVMType::Default, VmSlot::new(60)),
+            "guestos60"
+        );
+
+        assert_eq!(
+            vm_domain_name(GuestVMType::Upgrade, VmSlot::Plain),
+            "upgrade-guestos"
+        );
+        assert_eq!(
+            vm_domain_name(GuestVMType::Upgrade, VmSlot::new(1)),
+            "upgrade-guestos1"
+        );
+        assert_eq!(
+            vm_domain_name(GuestVMType::Upgrade, VmSlot::new(60)),
+            "upgrade-guestos60"
+        );
+    }
+
+    // Each VM needs its own uuid, or libvirt redefines the same domain.
+    #[test]
+    fn test_vm_domain_uuid() {
+        assert_eq!(
+            vm_domain_uuid(GuestVMType::Default, VmSlot::Plain),
+            "fd897da5-8017-41c8-8575-a706dba30700"
+        );
+        assert_eq!(
+            vm_domain_uuid(GuestVMType::Default, VmSlot::new(1)),
+            "fd897da5-8017-41c8-8575-a706dba30701"
+        );
+        assert_eq!(
+            vm_domain_uuid(GuestVMType::Default, VmSlot::new(60)),
+            "fd897da5-8017-41c8-8575-a706dba3073c"
+        );
+
+        assert_eq!(
+            vm_domain_uuid(GuestVMType::Upgrade, VmSlot::Plain),
+            "1ea49839-7f46-4560-a4c7-fce677bbfb00"
+        );
+        assert_eq!(
+            vm_domain_uuid(GuestVMType::Upgrade, VmSlot::new(1)),
+            "1ea49839-7f46-4560-a4c7-fce677bbfb01"
+        );
+        assert_eq!(
+            vm_domain_uuid(GuestVMType::Upgrade, VmSlot::new(60)),
+            "1ea49839-7f46-4560-a4c7-fce677bbfb3c"
+        );
+    }
+
     #[test]
     fn ensure_tested_with_dev() {
         // Ensure that the test is run with the dev feature enabled.

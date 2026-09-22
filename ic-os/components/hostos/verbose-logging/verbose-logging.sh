@@ -9,14 +9,18 @@ if [[ "${verbose,,}" == "true" ]]; then
     echo "###  STARTING GUESTOS CONSOLE LOGS...  ###" >/dev/tty1
     echo "##########################################" >/dev/tty1
 
-    # A node running several GuestOS has one log per VM slot. Only the first is
-    # followed, since interleaving all of them on tty1 would be unreadable.
-    log="/var/log/libvirt/qemu/guestos-serial.log"
-    for candidate in /var/log/libvirt/qemu/guestos-serial[0-9]*.log; do
-        if [ -f "$candidate" ]; then
-            log="$candidate"
-            break
-        fi
+    # One log per VM slot, unsuffixed on a single-GuestOS node. Follow only the
+    # first; wait for it, since libvirt creates the logs after guestos.target.
+    log=""
+    while [ -z "$log" ]; do
+        for candidate in /var/log/libvirt/qemu/guestos-serial.log \
+            /var/log/libvirt/qemu/guestos-serial[0-9]*.log; do
+            if [ -f "$candidate" ]; then
+                log="$candidate"
+                break
+            fi
+        done
+        [ -n "$log" ] || sleep 5
     done
 
     # log slowly so as not to overwhelm the host terminal
