@@ -6011,6 +6011,8 @@ impl Governance {
                         );
                     }
 
+                    // as_i128 truncates; otherwise this is lossless because reward shares are sums of u64s.
+                    // unsigned_abs does not lose the sign because this is inside the > 0 branch.
                     let reward_shares =
                         BigUint::from(neuron_reward_shares.as_i128().unsigned_abs()).to_bytes_be();
 

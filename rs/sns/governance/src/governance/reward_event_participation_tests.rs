@@ -52,7 +52,7 @@ fn proposal_data(id: u64, ballots: BTreeMap<String, Ballot>) -> ProposalData {
 }
 
 fn governance_with_neurons(neurons: Vec<Neuron>) -> Governance {
-    let previous_reward_event_timestamp_seconds = 10 * ROUND_DURATION_SECONDS;
+    let previous_reward_event_timestamp_seconds = 1_767_225_600; // 2026-01-01 00:00 UTC.
     let mut environment = NativeEnvironment::new(Some(CanisterId::from_u64(1)));
     environment.now = previous_reward_event_timestamp_seconds + ROUND_DURATION_SECONDS;
     let mut proto = basic_governance_proto();
