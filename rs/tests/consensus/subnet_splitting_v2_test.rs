@@ -75,8 +75,6 @@ const CHATTING_CANISTERS_ON_THIRD_SUBNET_COUNT: usize = 3;
 const FIRST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 3;
 const LAST_CHATTING_CANISTER_ID_TO_MIGRATE_OFFSET: usize = 8;
 
-const TEST_ENABLED: bool = false;
-
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -145,15 +143,6 @@ fn subnet_splitting_test(env: TestEnv) {
             so the canisters have some time to chit chat"
         );
         tokio::time::sleep(Duration::from_secs(10)).await;
-
-        if !TEST_ENABLED {
-            info!(
-                env.logger(),
-                "Subnet splititing not enabled yet, skipping the test."
-            );
-
-            return;
-        }
 
         run_subnet_splitting_test(env.clone(), &test_params).await
     })
