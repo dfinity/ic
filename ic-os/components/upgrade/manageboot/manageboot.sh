@@ -230,11 +230,26 @@ case "${ACTION}" in
             BOOT_IMG="$1"
             ROOT_IMG="$2"
         elif [ "$#" == 1 ]; then
-            TMPDIR=$(mktemp -d -t upgrade-image-XXXXXXXXXXXX)
-            trap "rm -rf '${TMPDIR}'" EXIT
-            tar -xaf "$1" -C "${TMPDIR}"
-            BOOT_IMG="${TMPDIR}"/boot.img
-            ROOT_IMG="${TMPDIR}"/root.img
+            # The image is unpacked below ${TMPDIR:-/tmp}, a tmpfs sized at half the RAM.
+            # A run that is SIGKILLed mid-install (e.g. by systemd once stopping
+            # ic-replica exceeds TimeoutStopSec) never reaches its EXIT trap and leaves
+            # its ~1.8 GiB extraction behind; on a 4 GiB node every later extraction
+            # then fails with ENOSPC until reboot. Remove such leftovers first. Only this
+            # branch creates upgrade-image-* directories, and an unmatched glob stays
+            # literal, which the -d test rejects.
+            UPGRADE_TMP_BASE="${TMPDIR:-/tmp}"
+            for stale_dir in "${UPGRADE_TMP_BASE}"/upgrade-image-*; do
+                if [ -d "${stale_dir}" ] && [ ! -L "${stale_dir}" ]; then
+                    write_log "${SYSTEM_TYPE} upgrade-install removing stale upgrade image directory ${stale_dir} ($(du -sh "${stale_dir}" 2>/dev/null | cut -f1)) left by an interrupted run"
+                    rm -rf "${stale_dir}" || write_log "${SYSTEM_TYPE} upgrade-install failed to remove stale upgrade image directory ${stale_dir}"
+                fi
+            done
+
+            UPGRADE_TMPDIR=$(mktemp -d "${UPGRADE_TMP_BASE}/upgrade-image-XXXXXXXXXXXX")
+            trap "rm -rf '${UPGRADE_TMPDIR}'" EXIT
+            tar -xaf "$1" -C "${UPGRADE_TMPDIR}"
+            BOOT_IMG="${UPGRADE_TMPDIR}"/boot.img
+            ROOT_IMG="${UPGRADE_TMPDIR}"/root.img
         else
             usage >&2
             exit 1
