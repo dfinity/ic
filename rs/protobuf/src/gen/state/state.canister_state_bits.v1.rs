@@ -705,8 +705,7 @@ pub struct CanisterStateBits {
     #[prost(uint64, tag = "21")]
     pub interrupted_during_execution: u64,
     /// Total cycles consumed by the canister, as a gauge: increased on prepayment
-    /// and decreased again on refund. Predates `consumed_cycles_monotonic` below,
-    /// so this is the field that holds the canister's full history.
+    /// and decreased again on refund.
     #[prost(message, optional, tag = "22")]
     pub consumed_cycles: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
     /// Total cycles consumed by the canister, monotonic: unlike `consumed_cycles`,
@@ -753,10 +752,7 @@ pub struct CanisterStateBits {
     /// happens the refund amount is subtracted from consumed amount.
     ///
     /// They only reach back to April 2023, so unlike the scalar `consumed_cycles`
-    /// above they are not the canister's full history: the by-use-case breakdown
-    /// was introduced in March 2023 (EXC-1345), but the fix that followed
-    /// (EXC-1376, rolled out in April 2023) moved it from field 35 to this one,
-    /// discarding what the first month had recorded. HTTPS outcalls have no entry
+    /// above they are not the canister's full history. HTTPS outcalls have no entry
     /// here: they are only tracked as a gauge at the subnet level.
     #[prost(message, repeated, tag = "36")]
     pub consumed_cycles_by_use_cases: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
@@ -765,9 +761,8 @@ pub struct CanisterStateBits {
     /// monotonic amounts facilitate programming retrieval of metrics and performing
     /// various aggregations on them more easily than their gauge counterparts.
     ///
-    /// Unlike the gauges above, these have an HTTPOutcalls entry: HTTPS outcalls
-    /// are only tracked as a gauge at the subnet level, but as a monotonic amount
-    /// here too.
+    /// These do have an HTTPOutcalls entry, which HTTPS outcalls otherwise only
+    /// have as a gauge at the subnet level.
     #[prost(message, repeated, tag = "65")]
     pub consumed_cycles_by_use_cases_monotonic: ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(message, optional, tag = "37")]

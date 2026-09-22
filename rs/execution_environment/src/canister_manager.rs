@@ -1269,10 +1269,6 @@ impl CanisterManager {
     }
 
     /// Reports the cycles the canister has consumed, by use case.
-    ///
-    /// Reads the monotonic amounts rather than the gauges, as the endpoint's
-    /// contract is a total that only ever grows (see
-    /// `CanisterMetrics::consumed_cycles_by_use_cases_monotonic`).
     pub(crate) fn get_canister_metrics(
         &self,
         sender: PrincipalId,

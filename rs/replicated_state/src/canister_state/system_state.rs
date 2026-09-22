@@ -333,10 +333,6 @@ impl CanisterMetrics {
 
     /// The total cycles consumed by the canister, as a gauge: raised by every
     /// prepayment and lowered again by its refund.
-    ///
-    /// This gauge predates its monotonic counterpart
-    /// [`Self::consumed_cycles_monotonic`], so it is the one that holds the canister's
-    /// full history.
     pub fn consumed_cycles(&self) -> NominalCycles {
         self.consumed_cycles
     }
@@ -348,11 +344,8 @@ impl CanisterMetrics {
     /// prepayment and lowered again by the refund.
     ///
     /// The scalar counterpart of [`Self::consumed_cycles_by_use_cases_monotonic`],
-    /// covering the use cases that [`Self::consumed_cycles`] covers, i.e. everything
-    /// except HTTPS outcalls, which are only tracked at the subnet level (and, for the
-    /// canister, in the by-use-case map). The two need not add up: this amount and
-    /// the by-use-case ones were introduced at different times, and their gauges
-    /// reach back to different points (see [`Self::consumed_cycles_by_use_cases`]).
+    /// covering everything except HTTPS outcalls. The two need not add up: this
+    /// metric and the by-use-case ones were introduced at different times.
     ///
     /// See `SystemState::outstanding_prepayments` for the invariant that ties the
     /// two together.
@@ -365,11 +358,7 @@ impl CanisterMetrics {
     ///
     /// They only reach back to April 2023, so unlike the scalar
     /// [`Self::consumed_cycles`] -- which has been tracked since the beginning -- they
-    /// are not the canister's full history. The by-use-case breakdown was introduced
-    /// in March 2023 (EXC-1345), but the fix that followed (EXC-1376, rolled out in
-    /// April 2023) moved it to a new proto field, discarding what the first month had
-    /// recorded. Nothing records what a canister consumed per use case before then;
-    /// that part is only present in the scalar gauge.
+    /// are not the canister's full history.
     ///
     /// Has no `HTTPOutcalls` entry: HTTPS outcalls are only tracked as a gauge at the
     /// subnet level.
@@ -421,7 +410,7 @@ impl CanisterMetrics {
     }
 }
 
-/// The prepayments of a canister whose refund is still outstanding, broken down by
+/// A canister's prepayments whose refunds are still outstanding, broken down by
 /// use case.
 ///
 /// Only [`CyclesUseCase::Instructions`] and
@@ -445,9 +434,7 @@ impl OutstandingPrepayments {
         self.instructions + self.transmission
     }
 
-    /// The amount outstanding for `use_case`, i.e. the amount by which that use
-    /// case's entry in [`CanisterMetrics::consumed_cycles_by_use_cases`] exceeds its
-    /// entry in [`CanisterMetrics::consumed_cycles_by_use_cases_monotonic`]. Zero for
+    /// The total amount of outstanding prepayments for `use_case`. Zero for
     /// a use case that is never prepaid, and thus never refunded.
     pub fn for_use_case(&self, use_case: CyclesUseCase) -> NominalCycles {
         match use_case {
