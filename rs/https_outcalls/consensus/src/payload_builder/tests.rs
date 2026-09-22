@@ -88,13 +88,18 @@ const TEST_MAX_PAYLOAD_BYTES: NumBytes = NumBytes::new(2 * MAX_CANISTER_HTTP_PAY
 
 #[test]
 fn default_payload_serializes_to_empty_vec() {
-    assert!(
-        parse::payload_to_bytes(
-            CanisterHttpPayload::default(),
-            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64)
-        )
-        .is_empty()
+    let bytes = parse::payload_to_bytes(
+        CanisterHttpPayload::default(),
+        NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
     );
+    assert!(bytes.is_empty());
+
+    // An empty payload delivers nothing, and reports a zero payload size.
+    let (responses, spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    assert!(responses.is_empty(), "{responses:?}");
+    assert!(spent.initial.is_empty());
+    assert!(spent.asynchronous.is_empty());
+    assert_eq!(stats.payload_bytes, bytes.len());
 }
 
 /// Check that a single well formed request with shares makes it through the block maker
@@ -3276,6 +3281,7 @@ fn flexible_ok_responses_into_messages_success_round_trip() {
     assert_eq!(payloads[1], payload_b);
     assert_eq!(stats.flexible_ok_responses, 1);
     assert_eq!(stats.flexible_ok_responses_candid_failures, 0);
+    assert_eq!(stats.payload_bytes, bytes.len());
 }
 
 #[test]
@@ -3417,6 +3423,7 @@ fn into_messages_emits_initial_spend_reports() {
     assert!(spent.initial.iter().all(|r| r.callback != timeout_callback));
     assert!(spent.asynchronous.is_empty());
     assert_eq!(stats.out_of_cycles, 1);
+    assert_eq!(stats.payload_bytes, bytes.len());
 
     let signers: BTreeSet<NodeId> = [node_test_id(0), node_test_id(1)].into_iter().collect();
     let report = |callback: CallbackId| {
