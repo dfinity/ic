@@ -2,6 +2,7 @@
 
 use super::*;
 use ic_base_types::PrincipalId;
+use ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
 use ic_interfaces_state_manager::CertificationScope;
 use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, NodeRecord},
@@ -10,12 +11,15 @@ use ic_protobuf::registry::{
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     ReplicatedState, Stream,
     metadata_state::StreamMap,
     testing::{ReplicatedStateTesting, StreamTesting},
 };
+use ic_state_manager::stream_encoding;
 use ic_test_utilities::state_manager::FakeStateManager;
+use ic_test_utilities_consensus::fake::Fake;
 use ic_test_utilities_registry::test_subnet_record;
 use ic_test_utilities_types::{
     ids::{
@@ -25,8 +29,11 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    Height, NumBytes, RegistryVersion, SubnetId,
+    CryptoHashOfPartialState, Height, NumBytes, RegistryVersion, SubnetId,
+    consensus::certification::{Certification, CertificationContent},
+    crypto::{CryptoHash, Signed},
     messages::CallbackId,
+    signature::ThresholdSignature,
     time::UNIX_EPOCH,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue},
 };
@@ -234,6 +241,45 @@ pub(crate) fn make_certified_stream_slice_with_msg_limit(
             None,
         )
         .unwrap()
+}
+
+/// Creates an advert for `LOCAL_SUBNET` out of the given stream: a header-only
+/// `CertifiedStreamSlice`, with empty witness and certification.
+///
+/// Unlike `make_certified_stream_slice`, which goes through `FakeStateManager`
+/// and its test-only CBOR encoding, this uses the canonical encoding and can be
+/// handed directly to `decode_slice_header()`.
+pub(crate) fn make_advert(stream: &Stream) -> CertifiedStreamSlice {
+    // `REMOTE_SUBNET`'s state, holding the advertised stream to us.
+    let mut state = ReplicatedState::new(REMOTE_SUBNET, SubnetType::Application);
+    state.with_streams(btreemap![LOCAL_SUBNET => stream.clone()]);
+    state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
+
+    let begin = stream.messages_begin();
+    let (tree, _) = stream_encoding::encode_stream_slice(
+        &state,
+        CERTIFIED_HEIGHT,
+        LOCAL_SUBNET,
+        begin,
+        begin,
+        None,
+        false,
+    );
+
+    CertifiedStreamSlice {
+        payload: stream_encoding::encode_tree(tree),
+        merkle_proof: vec![],
+        certification: Certification {
+            height: CERTIFIED_HEIGHT,
+            height_witness: None,
+            signed: Signed {
+                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
+                    vec![],
+                ))),
+                signature: ThresholdSignature::fake(),
+            },
+        },
+    }
 }
 
 /// Configuration for generating a stream: begin/end indices for messages; and
