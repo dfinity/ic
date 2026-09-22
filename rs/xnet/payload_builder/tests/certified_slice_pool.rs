@@ -1896,7 +1896,8 @@ fn pool_put_after_stream_position_regression(
 }
 
 /// Tests that `classify_advert()` reports the strongest of the reference points
-/// covering the advertised header, as each of them is added in turn.
+/// covering the advertised header, as each of them is added in turn; and that an
+/// advert with one message or one signal more than any of them is actionable.
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn pool_classify_advert(
     #[strategy(arb_stream_slice(
@@ -1926,6 +1927,29 @@ fn pool_classify_advert(
             .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
         let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
 
+        // Adverts with one message resp. one signal beyond the stream, i.e. covered by
+        // none of the reference points below.
+        let extra_message_header = StreamHeaderBuilder::new()
+            .begin(messages_begin)
+            .end(stream.messages_end().increment())
+            .signals_end(stream.signals_end())
+            .build();
+        let extra_signal_header = StreamHeaderBuilder::new()
+            .begin(messages_begin)
+            .end(stream.messages_end())
+            .signals_end(stream.signals_end().increment())
+            .build();
+        let assert_extra_message_or_signal_is_actionable = |pool: &Mutex<CertifiedSlicePool>| {
+            assert_eq!(
+                classify_advert(pool, SRC_SUBNET, &extra_message_header),
+                XNetAdvertOutcome::Actionable
+            );
+            assert_eq!(
+                classify_advert(pool, SRC_SUBNET, &extra_signal_header),
+                XNetAdvertOutcome::Actionable
+            );
+        };
+
         // Nothing on record for a peer we have heard nothing from.
         assert_eq!(
             classify_advert(&pool, SRC_SUBNET, &header),
@@ -1940,13 +1964,25 @@ fn pool_classify_advert(
             classify_advert(&pool, SRC_SUBNET, &header),
             XNetAdvertOutcome::Duplicate
         );
+        assert_extra_message_or_signal_is_actionable(&pool);
 
-        // Fetched, but not included into a block.
+        // Fetched, but not included into a block. We have inducted nothing yet, so
+        // the pooled slice begins exactly where we expect it to.
+        garbage_collect(
+            &pool,
+            btreemap! {
+                SRC_SUBNET => ExpectedIndices {
+                    message_index: messages_begin,
+                    ..Default::default()
+                }
+            },
+        );
         put(&pool, SRC_SUBNET, slice, &store, &log).unwrap();
         assert_eq!(
             classify_advert(&pool, SRC_SUBNET, &header),
             XNetAdvertOutcome::Pooled
         );
+        assert_extra_message_or_signal_is_actionable(&pool);
 
         // Included into a block.
         garbage_collect(
@@ -1962,6 +1998,159 @@ fn pool_classify_advert(
         assert_eq!(
             classify_advert(&pool, SRC_SUBNET, &header),
             XNetAdvertOutcome::InPayload
+        );
+        assert_extra_message_or_signal_is_actionable(&pool);
+    });
+}
+
+/// Tests that `classify_advert()` accumulates each reference point's messages,
+/// signals and `begin` into the ones after it: an advert covered only by the
+/// strongest of each across all reference points is still covered.
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
+fn pool_classify_advert_accumulates_reference_points(
+    #[strategy(arb_stream_slice(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
+    ))]
+    // Filter out streams without signals, so that a stream position with no signals
+    // is behind the pooled slice. Same with `messages_begin()`, to allow for a
+    // reject signal just before it.
+    #[filter(#test_slice.0.signals_end().get() > 0 && #test_slice.0.messages_begin().get() > 0)]
+    test_slice: (Stream, StreamIndex, usize),
+) {
+    let (stream, _, _) = test_slice;
+
+    with_test_replica_logger(|log| {
+        let messages_begin = stream.messages_begin();
+        let msg_count = (stream.messages_end() - messages_begin).get() as usize;
+        let fixture =
+            StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
+
+        let mut store = MockCertifiedStreamStore::new();
+        // Actual return value does not matter as long as it's `Ok(_)`.
+        store
+            .expect_decode_certified_stream_slice()
+            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
+
+        // A pool at the given stream position, holding a slice covering all messages
+        // after that position (and the header); and having the header on record.
+        let pool_at = |stream_position| {
+            // A registry of its own, as each pool registers the same metrics.
+            let pool = Mutex::new(CertifiedSlicePool::new(&MetricsRegistry::new()));
+            let slice = fixture.get_slice(DST_SUBNET, messages_begin, msg_count);
+            put(&pool, SRC_SUBNET, slice, &store, &log).unwrap();
+            garbage_collect(&pool, btreemap! { SRC_SUBNET => stream_position });
+            pool
+        };
+
+        // All of the stream's messages were included into blocks, but none of its
+        // signals: only the stream position covers the advertised messages, only the
+        // (garbage collected, header-only) pooled slice covers the signals.
+        let pool = pool_at(ExpectedIndices {
+            message_index: stream.messages_end(),
+            signal_index: StreamIndex::from(0),
+            max_no_gc_header_begin: messages_begin,
+        });
+        assert_eq!(
+            classify_advert(&pool, SRC_SUBNET, &stream.header()),
+            XNetAdvertOutcome::Pooled
+        );
+
+        // Conversely, with no message included into a block, but the stream position
+        // ahead of the pooled slice in signals: only the pooled slice covers the
+        // advertised messages.
+        let advert = StreamHeaderBuilder::new()
+            .begin(messages_begin)
+            .end(stream.messages_end())
+            .signals_end(stream.signals_end().increment())
+            .build();
+        let reject_signal_at_begin = |from, to| from <= messages_begin && messages_begin < to;
+        let pool = pool_at(ExpectedIndices {
+            message_index: messages_begin,
+            signal_index: stream.signals_end().increment(),
+            max_no_gc_header_begin: messages_begin,
+        });
+        assert_eq!(
+            classify_advert_with(&pool, SRC_SUBNET, &advert, &reject_signal_at_begin),
+            XNetAdvertOutcome::Pooled
+        );
+
+        // All of the stream's messages and signals were included into blocks, but a
+        // reject signal just before `messages_begin` is still to be collected: only the
+        // (header-only) pooled slice, beginning past it, covers the advertised `begin`.
+        let advert = StreamHeaderBuilder::new()
+            .begin(messages_begin)
+            .end(stream.messages_end())
+            .signals_end(stream.signals_end())
+            .build();
+        let reject_signal_before_begin =
+            |from, to| from <= messages_begin.decrement() && messages_begin.decrement() < to;
+        let pool = pool_at(ExpectedIndices {
+            message_index: stream.messages_end(),
+            signal_index: stream.signals_end(),
+            max_no_gc_header_begin: messages_begin.decrement(),
+        });
+        assert_eq!(
+            classify_advert_with(&pool, SRC_SUBNET, &advert, &reject_signal_before_begin),
+            XNetAdvertOutcome::Pooled
+        );
+    });
+}
+
+/// A pooled slice beginning after the next expected message covers none of the
+/// advertised messages: the gap before it has to be fetched before any of them
+/// can be inducted. The advert is thus a duplicate of the header we recorded
+/// when we pooled the slice — something still to be fetched — not `Pooled`.
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
+fn pool_classify_advert_gap_before_pooled_slice(
+    #[strategy(arb_stream_slice(
+        2, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+        CURRENT_CERTIFICATION_VERSION,
+    ))]
+    test_slice: (Stream, StreamIndex, usize),
+) {
+    let (stream, _, _) = test_slice;
+
+    with_test_replica_logger(|log| {
+        let header = stream.header();
+        let messages_begin = stream.messages_begin();
+        let msg_count = (stream.messages_end() - messages_begin).get() as usize;
+        let fixture =
+            StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream.clone());
+        // Everything but the first message, e.g. as pooled while a payload we built
+        // from that message was in flight, before a different block was finalized.
+        let slice = fixture.get_slice(DST_SUBNET, messages_begin.increment(), msg_count - 1);
+
+        let mut store = MockCertifiedStreamStore::new();
+        // Actual return value does not matter as long as it's `Ok(_)`.
+        store
+            .expect_decode_certified_stream_slice()
+            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
+        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics));
+
+        put(&pool, SRC_SUBNET, slice, &store, &log).unwrap();
+        // We are still expecting the first message, so the pooled ones are of no use
+        // to us yet.
+        garbage_collect(
+            &pool,
+            btreemap! {
+                SRC_SUBNET => ExpectedIndices {
+                    message_index: messages_begin,
+                    signal_index: stream.signals_end(),
+                    ..Default::default()
+                }
+            },
+        );
+
+        assert_eq!(
+            classify_advert(&pool, SRC_SUBNET, &header),
+            XNetAdvertOutcome::Duplicate
         );
     });
 }
@@ -2015,9 +2204,10 @@ fn pool_classify_advert_collecting_reject_signal(
         let reject_signal_before_begin =
             |from, to| from <= messages_begin.decrement() && messages_begin.decrement() < to;
 
-        // A stream position accounting for all of the advertised messages and signals.
-        let stream_position = |max_no_gc_header_begin| ExpectedIndices {
-            message_index: stream.messages_end(),
+        // A stream position accounting for all of the advertised signals, with the
+        // given `message_index` and `max_no_gc_header_begin`.
+        let stream_position = |message_index, max_no_gc_header_begin| ExpectedIndices {
+            message_index,
             signal_index: stream.signals_end(),
             max_no_gc_header_begin,
         };
@@ -2037,11 +2227,20 @@ fn pool_classify_advert_collecting_reject_signal(
             XNetAdvertOutcome::Duplicate
         );
 
-        // Fetched, but not included into a block.
+        // Fetched, but not included into a block: we have inducted nothing yet, so
+        // the pooled slice begins exactly where we expect it to.
         put(&pool, SRC_SUBNET, slice, &store, &log).unwrap();
+        garbage_collect(
+            &pool,
+            btreemap! { SRC_SUBNET => stream_position(messages_begin, messages_begin) },
+        );
         assert_eq!(
             classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_at_begin),
             XNetAdvertOutcome::Actionable
+        );
+        garbage_collect(
+            &pool,
+            btreemap! { SRC_SUBNET => stream_position(messages_begin, STREAM_INDEX_MAX) },
         );
         assert_eq!(
             classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_before_begin),
@@ -2052,7 +2251,7 @@ fn pool_classify_advert_collecting_reject_signal(
         // pooled slice is dropped, having nothing left to contribute.
         garbage_collect(
             &pool,
-            btreemap! { SRC_SUBNET => stream_position(messages_begin) },
+            btreemap! { SRC_SUBNET => stream_position(stream.messages_end(), messages_begin) },
         );
         assert_matches!(slice_stats(&pool, SRC_SUBNET), (Some(_), None, 0, 0));
         assert_eq!(
@@ -2065,7 +2264,7 @@ fn pool_classify_advert_collecting_reject_signal(
         // Nothing left to collect.
         garbage_collect(
             &pool,
-            btreemap! { SRC_SUBNET => stream_position(STREAM_INDEX_MAX) },
+            btreemap! { SRC_SUBNET => stream_position(stream.messages_end(), STREAM_INDEX_MAX) },
         );
         assert_eq!(
             classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_at_begin),
