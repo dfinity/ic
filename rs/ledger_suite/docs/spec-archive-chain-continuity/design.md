@@ -397,7 +397,8 @@ the computed value.
 ### `ic-icrc1-archive` — `append_blocks`
 
     type append_outcome = variant {
-      Stored;                                      // Req 2.1, 2.3, 4.1, 4.8
+      Stored;                                      // all of them: Req 2.1, 2.3
+      StoredPartial;                               // a prefix; at_capacity says why: Req 4.1, 4.8
       AlreadyHeld;                                 // Req 2.4
       BelowRange;                                  // Req 2.6
       Gap;                                         // Req 2.2
@@ -418,6 +419,13 @@ Both arguments and the result are optional, which is what makes the archive
 releasable alone. The reply's first field is named `block_index_offset`, matching
 the published `init` argument it reports, rather than `start_index` — the request's
 second argument is the index the *batch* starts at, and one word cannot mean both.
+
+`StoredPartial` exists because `at_capacity` cannot carry that distinction on its
+own (`Req 3.7`): a growth the platform refused reports `at_capacity = false`
+(`Req 4.4`) and so does a complete append (`Req 4.9`), so `Stored` plus a false flag
+would have described both and left the ledger comparing `next_index` against what it
+sent — exactly what `Req 3.6` promises it never has to do. With the outcome split,
+`at_capacity` answers only "why did it stop", never "did it stop".
 
 **A record, not a variant, because the range is unconditional.** `Req 3.1` requires
 the offset and position on *any* answer and `Req 3.3` requires one meaning in every
@@ -834,6 +842,7 @@ test is baseline-independent.
 | 6 | archive | append at an index above the position; assert a gap and nothing stored | `Req 2.2` |
 | 7 | archive | size `max_memory_size_bytes` so a batch only partly fits; append it **with an index** and assert a short `next_index`, `at_capacity = true`, and that the blocks that fit are readable | `Req 4.1`, `4.2`, `4.3` |
 | 7b | archive | the same over-large batch **without** an index; assert the call fails and the archive holds exactly what it held before — the partial store that would make the suffix unretrievable | `Req 5.5` |
+| 7c | archive | assert a complete append and a partial one are distinguishable from the reply alone: the first reports the whole-batch outcome, the second the partial one, and neither is told apart by `at_capacity` — which reads false for a complete append and for a platform-refused stop alike | `Req 3.6`, `3.7` |
 | 8 | archive | **partly written**: `test_empty_append_blocks_is_accepted_and_stores_nothing` already asserts an empty append stores nothing and consumes no capacity, on both the one-argument and null-index shapes. Extend it against the new implementation to assert an *indexed* empty append reports an extent, that an indexed empty append above the archive's position is neither refused nor counted, and that both index-less empty shapes still reply **empty** — the last of these is what fails if the empty check is ordered before the index check | `Req 3.5`, `Req 5.1`, `Req 6.5` |
 | 9 | archive | genesis into an empty archive with offset 0; then assert a block with no parent hash is refused by an archive whose offset is non-zero, and by one that already holds blocks | `Req 1.5` |
 | 9b | archive | install with no Expected_Parent, append into it, and assert it is stored and the unverifiable-first-append counter rises | `Req 1.4`, `Req 1.6` |

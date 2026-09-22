@@ -288,6 +288,10 @@ wrong about it.
 6. THE Archive SHALL state the outcome of an Indexed_Append explicitly alongside the
    values in 3.1, so that a ledger never has to infer which case occurred by
    comparing what it sent against what was reported.
+7. WHEN THE Archive stored some but not all of the blocks it was offered, THE Archive
+   SHALL state that as an outcome distinct from having stored all of them, because
+   `at_capacity` alone does not separate the two — a growth refused by the platform
+   reports it false (4.4) and so does a complete append (4.9).
 
 ### Requirement 4: A Capacity Stop Is Reported, Not A Failure
 
@@ -530,9 +534,9 @@ unaddressable canister does not become a series of them.
    record that identity durably before doing anything else with it, so that a
    later failure leaves a canister an operator can still address rather than one
    nothing can reach.
-7. WHILE the condition in 11.1 holds and an identity was recorded per 11.6, THE
-   Ledger SHALL expose that identity, because an operator otherwise has to recover
-   it from canister logs that are unreadable by default.
+7. WHILE the condition in 11.8 holds, THE Ledger SHALL expose the recorded identity,
+   because an operator otherwise has to recover it from canister logs that are
+   unreadable by default.
 8. WHILE THE Ledger has recorded a created archive's identity per 11.6 but not yet
    adopted it, THE Ledger SHALL finish that creation before moving any further blocks
    — determining what remains to be done by asking the created canister — rather than
