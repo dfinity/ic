@@ -411,9 +411,8 @@ the computed value.
 ### `ic-icrc1-archive` — `append_blocks`
 
     type append_outcome = variant {
-      Stored;                                      // all it did not already hold: Req 2.1, 2.3, 3.5, 3.8
+      Stored;                                      // all it did not already hold: Req 2.1, 2.3, 2.4, 3.5, 3.8
       StoredPartial;                               // a prefix; at_capacity says why: Req 4.1, 4.8
-      AlreadyHeld;                                 // Req 2.4
       BelowRange;                                  // Req 2.6
       Gap;                                         // Req 2.2
       ChainMismatch : record { at_index : nat64 };  // every chain ground of Req 1, and 2.9
@@ -445,14 +444,10 @@ visible in `blocks_stored` for anyone who wants it, and is not something the led
 on — which is the division `Req 3.6` asks for, the outcome naming the *action* rather
 than the effort.
 
-**`AlreadyHeld` satisfies that post-condition too and is still a separate arm**, which
-is the one exception `Req 3.8` names. Folding it into `Stored` reads as the tidier
-option and would destroy something: a wholly held append is the only outcome that
-proves a *content* comparison happened (`Req 2.9`), and `Req 8.9` is built on exactly
-that. Once folded, `Stored` with `blocks_stored = 0` would mean either a re-send that
-compared a block or an empty probe that compared nothing, and telling them apart would
-need the ledger to recall whether it sent any — the inference `Req 3.6` exists to
-remove. So the arm stays and the criterion excepts it.
+**A wholly held re-send is `Stored` too** (`Req 2.4`), for the same reason: the archive
+holds every block offered, and the ledger's response is again to reconcile against the
+reported position. It compared the last of them per `Req 2.9`, which matters to
+`Req 8.9`'s gate — but that does not need an arm of its own, as the next section shows.
 
 `StoredPartial` is the one that breaks the post-condition, and that is exactly why it
 is separate: blocks were offered, not already held, and still not stored.
@@ -714,11 +709,24 @@ nothing was verified; `StoredPartial` covers an append whose very first block di
 fit (`Req 4.10`), where nothing was stored. Both would pass an arm-based gate and
 neither verified anything.
 
-So the gate is `blocks_stored > 0`, or the outcome being `AlreadyHeld`
+So the gate is `blocks_stored > 0`, or `Stored` against a batch that carried blocks
 (`Req 3.9`, `Req 8.9`): a block stored is a block the archive chained against its own
-tip, and `AlreadyHeld` is a block compared against one it holds. That is why the count is
-in the reply rather than derived from position arithmetic — deriving it is exactly the
-inference `Req 3.6` promises the ledger never has to make.
+tip, and the second case is a wholly held re-send, where `Req 2.4` stored none and
+`Req 2.9` compared the last.
+
+**That second test needs no result arm of its own**, which is worth showing because an
+`AlreadyHeld` arm is the obvious way to write it. Consider what `blocks_stored = 0` can
+mean once blocks were offered: a first block too large is `StoredPartial` (`Req 4.10`),
+and below-range, gap, mismatch and undecodable each have an arm already. So inside
+`Stored` the only two cases left are the empty probe and the wholly held re-send, and
+the count of blocks offered separates them.
+
+The ledger reads that count from the batch it sent in the *same message* as the reply it
+is processing, not from anything it has to remember across a commit point or a round —
+so this is not the kind of self-reliance `Req 8.6` and `Req 3.6` rule out. Those forbid
+trusting a record of what was *archived*; how many blocks the round just put in the
+request is not that. That is why the count is in the reply rather than derived from
+position arithmetic — deriving *it* would be the inference `Req 3.6` removes.
 
 **The gate has a ceiling as well as a trigger, and `next_index` is not it.** Having
 verified *a* block does not license advancing to wherever the archive happens to reach.
@@ -749,8 +757,8 @@ nothing (`Req 2.6`), so `Req 8.9` refuses its reported range as grounds for adva
 and re-offering the same blocks to the same tail returns `BelowRange` again, forever. So
 the next round offers them to the archive whose Published_Range *covers* them
 (`Req 9.8`), which is the only canister able to answer the question: it replies
-`AlreadyHeld` having compared the last of them (`Req 2.4`, `Req 2.9`), which `Req 8.9`
-accepts, or `ChainMismatch`, which halts per `Req 9.7`. Either way it terminates.
+`Stored` having stored none and compared the last of them (`Req 2.4`, `Req 2.9`), which
+`Req 8.9` accepts, or `ChainMismatch`, which halts per `Req 9.7`. Either way it terminates.
 
 That append is safe against a full archive, which is otherwise never written to again:
 every block is already held, so it stores nothing and consumes no capacity (`Req 2.4`,
@@ -1196,20 +1204,20 @@ test is baseline-independent.
 | 21 | measurement | ledger memory across an archive-creation round, as `routine_archiving_does_not_grow_the_ledger` does for a routine one; assert growth below a bound | D2's allocation work |
 | 22 | archive | append `0..999`; then re-send `500..999` from a chain that diverges at 701, and assert `ChainMismatch` is returned, nothing is stored, and the covered-range counter rises while the tip-mismatch counter does not. Then re-send a range that does *not* diverge and assert success — so the check is not simply refusing every re-send | `Req 2.9`, `Req 6.1` |
 | 22b | integration | drive the ledger into a refusal per 1.1, 2.2, 2.9 and 6.4 in turn; assert it stops attempting rather than backing off, and exposes the distinct metric | `Req 9.7` |
-| 22h | integration | drive a `BelowRange` report; assert the ledger does not halt, that the next round offers those blocks to the archive whose published range covers them rather than to the tail again, that the resulting `AlreadyHeld` advances the prefix, and that the loop therefore terminates. Then remove the covering archive's range and assert the uncovered-span halt instead | `Req 9.8`, `Req 8.3`, `Req 8.9` |
+| 22h | integration | drive a `BelowRange` report; assert the ledger does not halt, that the next round offers those blocks to the archive whose published range covers them rather than to the tail again, that the resulting wholly-held reply advances the prefix, and that the loop therefore terminates. Then remove the covering archive's range and assert the uncovered-span halt instead | `Req 9.8`, `Req 8.3`, `Req 8.9` |
 | 22c | archive | append a batch whose first block continues the tip but whose fifth does not continue the fourth; assert `ChainMismatch` at that index and that nothing was stored — the case a first-block-only check accepts | `Req 1.7` |
 | 22d | archive | append a batch containing bytes that do not decode as a block; assert `Undecodable` is returned with its index, nothing is stored, and its counter rises separately from the mismatch counters | `Req 6.4` |
 | 22e | archive | assert every outcome of Req 2 carries the same `block_index_offset` and `next_index` fields, and that `at_capacity` is false on a full store and on a wholly-covered re-send | `Req 3.1`, `3.3`, `3.6`, `Req 4.9` |
 | 22f | archive | assert a clean continuation, a straddling append and an indexed empty probe all report the same outcome, that a capacity-shortened append reports a different one, and that a wholly held re-send reports its own — the post-condition `Stored` names, and the one exception to it | `Req 3.8`, `Req 3.7` |
 | 22g | archive | assert `blocks_stored` is the number actually written across every outcome: the full batch, the suffix of a straddling append, zero for an indexed empty probe, and zero for an append whose first block does not fit | `Req 3.9`, `Req 4.10` |
 | 15h | integration | answer with an empty probe and separately with a first-block-too-large `StoredPartial`, both reporting a range beyond the archived prefix; assert the prefix does not advance on either, although both would pass a gate written on outcome arms alone | `Req 8.9`, `Req 3.9` |
-| 15j | integration | with an archive holding 1000 blocks, re-send only the first 100 and take the `AlreadyHeld` reply; assert the Archived_Prefix advances to 100 and **not** to the reported 1000, and that the removal count matches — the blocks the comparison at index 99 said nothing about | `Req 8.9`, `Req 2.5` |
+| 15j | integration | with an archive holding 1000 blocks, re-send only the first 100 and take the wholly-held reply; assert the Archived_Prefix advances to 100 and **not** to the reported 1000, and that the removal count matches — the blocks the comparison at index 99 said nothing about | `Req 8.9`, `Req 2.5` |
 | 7e | archive | configure `max_memory_size_bytes` below a single block's size and append it with an index; assert nothing is stored, `at_capacity` is true, and `next_index` equals `block_index_offset` — the reply the ledger must halt on | `Req 4.10` |
 | 15e | integration | drive the oversized-block case end to end; assert the ledger halts with its own metric and creates **no** archive, and that an ordinary full tail still rolls over — the two cases that look identical in the flag alone | `Req 4.10`, `Req 4.5` |
 | 15f | integration | report, from a non-tail archive, a position below the aggregate Archived_Prefix but matching its own published range; assert no halt. Then report one short of its own range and assert the halt — the false positive that the aggregate comparison produced for every legacy archive | `Req 8.4` |
 | 15i | unit, `ledger_canister_core` | for an archive published as `[0, 99]`, assert a reported position of `100` does not halt and `99` does — the boundary where the inclusive published range meets the exclusive position, and the one value an off-by-one would miss | `Req 8.4`, `Req 7.6` |
 | 7f | archive | append starting exactly at the Archive_Position but overflowing the configured limit; assert a prefix is stored and the stop reported rather than the whole batch — the Req 4 exception to an otherwise unconditional Req 2.1 | `Req 2.1`, `Req 4.1` |
-| 15g | integration | answer with `BelowRange`, and separately with `Gap`, from appends that carried blocks; assert the Archived_Prefix does not advance on either, then assert it does advance on `AlreadyHeld` — carrying blocks is not verifying one | `Req 8.9` |
+| 15g | integration | answer with `BelowRange`, and separately with `Gap`, from appends that carried blocks; assert the Archived_Prefix does not advance on either, then assert it does advance on a wholly-held re-send, and *not* on an empty probe reporting the same range — carrying blocks is not verifying one, and the two zero-stored cases part on the offered count | `Req 8.9`, `Req 3.9` |
 | 23c | integration | force a mid-round roll-over while PR 3's loops are still in place; assert the created node's Expected_Parent is the parent of the block it actually receives first, not of the round's first block, and that its first append is accepted | `Req 1.8`, the per-creation hash above |
 | 23 | unit, `ledger_canister_core` | create an archive after a round in which the previous one reported `next_index = N`; assert the new `block_index_offset` is exactly `N`, not `N+1` — `next_index` is *already* one past the last held index, and the off-by-one here is the whole of `Req 7.1`. Assert `archives()` tiles with no gap or overlap. Then present a node whose reported range starts elsewhere and assert no blocks are stored in it and the metric rises | `Req 7.1`, `7.2`, `7.3`, `7.4` |
 | 24 | integration | on a ledger whose archives report no extent, assert an archive is still created and blocks are still discarded — the exemptions, which a literal reading of Req 7 and Req 8 would forbid | `Req 7.5`, `Req 8.7` |

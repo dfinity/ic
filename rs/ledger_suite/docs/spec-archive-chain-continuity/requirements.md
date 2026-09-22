@@ -313,14 +313,15 @@ wrong about it.
    reports it false (4.4) and so does a complete append (4.9).
 8. THE Archive SHALL report a single outcome for every append after which it holds
    every block it was offered and did not already hold, whether or not it already held
-   some of them and whether or not it was offered any, except an append whose blocks it
-   already held in full — because the ledger's response to the rest is identical, to
-   reconcile against the reported Archive_Position, while a wholly held append is the
-   only one carrying a content comparison per 2.9, which 8.9 turns on.
+   some of them, all of them, or none, and whether or not it was offered any, because
+   the ledger's response to all of these is identical — reconcile against the reported
+   Archive_Position — and 3.9's count with the number of blocks offered already
+   separates the cases that differ.
 9. THE Archive SHALL report how many of the blocks it was offered it stored, because
    8.9 turns on whether any block was verified and no outcome of Req 2 settles that on
-   its own — an append carrying nothing per 3.5 and one whose first block did not fit
-   per 4.10 both store none, and neither may advance an Archived_Prefix.
+   its own — an append carrying nothing per 3.5, one whose first block did not fit per
+   4.10, and a re-send wholly held per 2.4 all store none, and only the last of them may
+   advance an Archived_Prefix.
 
 ### Requirement 4: A Capacity Stop Is Reported, Not A Failure
 
