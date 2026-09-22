@@ -432,7 +432,7 @@ pub(crate) async fn send_signed_transactions<T: SignableTransaction + std::fmt::
     }
 }
 
-async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_provider: &T) {
+async fn finalize_transactions_batch<R: CanisterRuntime>(sender: Address, runtime: &R) {
     if read_state(|s| s.withdrawal_transactions.is_sent_tx_empty()) {
         return;
     }
@@ -440,6 +440,7 @@ async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_prov
     let receipts = fetch_receipts_for_round(
         sender,
         "finalize_transactions_batch",
+        runtime,
         |s, finalized_tx_count| {
             s.withdrawal_transactions
                 .sent_transactions_to_finalize(finalized_tx_count)
@@ -456,7 +457,7 @@ async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_prov
                     withdrawal_id,
                     transaction_receipt: transaction_receipt.into(),
                 },
-                time_provider,
+                runtime,
             );
         });
     }
@@ -464,9 +465,13 @@ async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_prov
 
 /// One round of a pipeline's receipt fetch, bounded by its [`ReceiptFetchWindow`]. Both pipelines
 /// reuse it.
-pub(crate) async fn fetch_receipts_for_round<Id: Copy + Ord + std::fmt::Debug>(
+pub(crate) async fn fetch_receipts_for_round<
+    Id: Copy + Ord + std::fmt::Debug,
+    R: CanisterRuntime,
+>(
     sender: Address,
     context: &str,
+    runtime: &R,
     pending: fn(&State, &TransactionCount) -> BTreeMap<Hash, Id>,
     window: fn(&mut State) -> &mut ReceiptFetchWindow<Id>,
 ) -> BTreeMap<Id, EvmTransactionReceipt> {
@@ -487,7 +492,7 @@ pub(crate) async fn fetch_receipts_for_round<Id: Copy + Ord + std::fmt::Debug>(
         return BTreeMap::new();
     }
 
-    let finalized_tx_count = match finalized_transaction_count(sender).await {
+    let finalized_tx_count = match finalized_transaction_count(sender, runtime).await {
         Ok(finalized_tx_count) => finalized_tx_count,
         Err(e) => {
             log!(
@@ -508,7 +513,7 @@ pub(crate) async fn fetch_receipts_for_round<Id: Copy + Ord + std::fmt::Debug>(
         return BTreeMap::new();
     }
 
-    let (receipts, outcome) = fetch_finalized_receipts(txs_to_finalize).await;
+    let (receipts, outcome) = fetch_finalized_receipts(txs_to_finalize, runtime).await;
     mutate_state(|s| window(s).record_round(outcome));
     receipts
 }
@@ -516,10 +521,11 @@ pub(crate) async fn fetch_receipts_for_round<Id: Copy + Ord + std::fmt::Debug>(
 type ReceiptResult =
     Result<Option<EvmTransactionReceipt>, MultiCallError<Option<EvmTransactionReceipt>>>;
 
-async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
+async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug, R: CanisterRuntime>(
     txs_to_finalize: BTreeMap<Hash, Id>,
+    runtime: &R,
 ) -> (BTreeMap<Id, EvmTransactionReceipt>, RoundOutcome) {
-    let rpc_client = read_state(rpc_client);
+    let rpc_client = runtime.evm_rpc_client();
     let results = join_all(txs_to_finalize.keys().map(async |hash| {
         rpc_client
             .get_transaction_receipt(*hash)
@@ -596,10 +602,12 @@ fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
     (receipts, outcome)
 }
 
-pub(crate) async fn finalized_transaction_count(
+pub(crate) async fn finalized_transaction_count<R: CanisterRuntime>(
     sender: Address,
+    runtime: &R,
 ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-    read_state(rpc_client)
+    runtime
+        .evm_rpc_client()
         .get_transaction_count((sender.into_bytes(), BlockTag::Finalized))
         .with_cycles(MIN_ATTACHED_CYCLES)
         .try_send()

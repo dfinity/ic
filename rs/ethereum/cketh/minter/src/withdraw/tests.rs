@@ -1,9 +1,11 @@
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::MultiCallError;
 use crate::numeric::LedgerBurnIndex;
-use crate::state::receipt_fetch::{ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING, RoundOutcome};
+use crate::state::receipt_fetch::{
+    INITIAL_RECEIPT_FETCH_WINDOW, ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING, RoundOutcome,
+};
 use crate::state::{mutate_state, read_state};
-use crate::test_fixtures::{init_state, initial_state};
+use crate::test_fixtures::{init_state, initial_state, mock, stub_rpc_client};
 use crate::withdraw::{ReceiptResult, collect_finalized_receipts, fetch_receipts_for_round};
 use evm_rpc_types::{
     Hex20, Hex32, Hex256, HexByte, Nat256, TransactionReceipt as EvmTransactionReceipt,
@@ -123,6 +125,7 @@ mod round {
         let receipts = fetch_receipts_for_round(
             Address::new([0_u8; 20]),
             "test",
+            &mock::MockCanisterRuntime::new(),
             |s, finalized_tx_count| {
                 s.withdrawal_transactions
                     .sent_transactions_to_finalize(finalized_tx_count)
@@ -136,6 +139,40 @@ mod round {
             read_state(|s| s.withdrawal_receipt_fetch.rounds_since_chain_read()),
             ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING + 2,
             "a skipped round is one more round that read nothing"
+        );
+    }
+
+    #[tokio::test]
+    async fn should_count_a_round_whose_chain_read_failed() {
+        init_state(initial_state());
+        let mut runtime = mock::MockCanisterRuntime::new();
+        runtime
+            .expect_evm_rpc_client()
+            .times(1)
+            .return_once(|| stub_rpc_client(vec![Err(IcError::CallPerformFailed)]));
+
+        let receipts: BTreeMap<LedgerBurnIndex, _> = fetch_receipts_for_round(
+            Address::new([0_u8; 20]),
+            "test",
+            &runtime,
+            |s, finalized_tx_count| {
+                s.withdrawal_transactions
+                    .sent_transactions_to_finalize(finalized_tx_count)
+            },
+            |s| &mut s.withdrawal_receipt_fetch,
+        )
+        .await;
+
+        assert_eq!(receipts, BTreeMap::new());
+        assert_eq!(
+            read_state(|s| s.withdrawal_receipt_fetch.rounds_since_chain_read()),
+            1,
+            "a round that could not read the chain is what starts the skipping"
+        );
+        assert_eq!(
+            read_state(|s| s.withdrawal_receipt_fetch.window()),
+            INITIAL_RECEIPT_FETCH_WINDOW,
+            "a round that never reached its lookups says nothing about the providers"
         );
     }
 }

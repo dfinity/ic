@@ -17,7 +17,7 @@ use crate::sweep::create_pending_sweeper_requests;
 use crate::test_fixtures::mock::MockCanisterRuntime;
 use crate::test_fixtures::{
     LATEST_BLOCK, account, another_account, automatic_deposit, delegation_response,
-    deposit_address, gas_fee_estimate, init_state, initial_state, only_one, prepay_sweep_gas,
+    deposit_address, gas_fee_estimate, init_state, initial_state, mock, only_one, prepay_sweep_gas,
     state_with_deposit_helper, stub_rpc_client, transaction_signature, usdc, usdt,
 };
 use crate::tx::{
@@ -665,6 +665,7 @@ async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
     let receipts: BTreeMap<SweepId, _> = fetch_receipts_for_round(
         Address::new([0_u8; 20]),
         "test",
+        &mock::MockCanisterRuntime::new(),
         |s, finalized_tx_count| {
             s.automatic_deposits
                 .sent_sweep_transactions_to_finalize(finalized_tx_count)

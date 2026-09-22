@@ -558,7 +558,7 @@ async fn send_transactions_batch(
     send_signed_transactions(sender, &transactions_to_send).await;
 }
 
-async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_provider: &T) {
+async fn finalize_transactions_batch<R: CanisterRuntime>(sender: Address, runtime: &R) {
     if read_state(|s| s.automatic_deposits.is_sent_sweep_tx_empty()) {
         return;
     }
@@ -566,6 +566,7 @@ async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_prov
     let receipts = fetch_receipts_for_round(
         sender,
         "process_sweeper_transactions",
+        runtime,
         |s, finalized_tx_count| {
             s.automatic_deposits
                 .sent_sweep_transactions_to_finalize(finalized_tx_count)
@@ -582,7 +583,7 @@ async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_prov
                     sweep_id,
                     transaction_receipt: transaction_receipt.into(),
                 },
-                time_provider,
+                runtime,
             );
         });
     }
