@@ -66,6 +66,10 @@ comes first.
 
 ## Glossary
 
+- **Archive**: the ICRC archive canister, `ic-icrc1-archive`. Req 1 through Req 6
+  are obligations on it alone — the ICP archive is a separate canister and is not
+  changed here, per the corresponding non-goal — so "THE Archive" never means the ICP
+  one.
 - **Tail_Archive**: the archive a ledger currently appends to — the most recently
   created one. Earlier archives are full and are never written to again.
 - **Archive_Range**: the contiguous span of global block indices an archive holds,
@@ -186,7 +190,9 @@ comes first.
 
 ## Requirements
 
-*Grouped by behaviour, not by delivery order. Several requirements depend on each
+*Req 1 through Req 6 bind the ICRC archive only; Req 7 through Req 13 bind both
+ledgers except where a criterion exempts the ICP one. Grouped by behaviour, not by
+delivery order. Several requirements depend on each
 other — Req 1's check needs Req 2's placement to know which block it applies to, and
 Req 8 needs Req 3's report to have something to trust — so implementing them one
 requirement at a time would mean redoing work. The build order is `design.md`'s
@@ -204,9 +210,9 @@ lost track of what it sent cannot corrupt the archive by sending them again.
 1. WHEN the earliest block of an append that THE Archive does not already hold
    carries a parent hash that is not the hash of the archive's last stored block,
    THE Archive SHALL refuse the append.
-2. WHEN THE Archive refuses an append per 1.1, THE Archive SHALL leave the number
-   of blocks it holds unchanged, because a refusal that stored a prefix would
-   leave the chain in the state the refusal exists to prevent.
+2. WHEN THE Archive refuses an append on any ground in Req 1, THE Archive SHALL
+   leave the number of blocks it holds unchanged, because a refusal that stored a
+   prefix would leave the chain in the state the refusal exists to prevent.
 3. THE Archive SHALL apply 1.1 to that earliest not-already-held block — which
    follows from Req 2 for an Indexed_Append and is the first block for an
    Index_Less_Append — rather than to the append's first block, which may be one the
@@ -360,10 +366,11 @@ violation from a capacity problem without access to canister logs.
 
 #### Acceptance Criteria
 
-1. THE Archive SHALL expose, over its metrics endpoint, a separate count for each
-   of: a refusal per 1.1, a refusal per 2.9, a gap per 2.2, a stop at its own limit
-   per 4.3, a platform-refused growth per 4.4, an undecodable block per 6.4, and an
-   unverifiable append per 1.6.
+1. THE Archive SHALL expose, over its metrics endpoint, a separate count for every
+   ground on which it refuses or stops short: each chain ground of Req 1 counted
+   separately (1.1, 1.5, 1.7 and 1.8), a covered-range mismatch per 2.9, a gap per
+   2.2, a stop at its own limit per 4.3, a platform-refused growth per 4.4, an
+   undecodable block per 6.4, and the unverifiable append of 1.6.
 2. THE Archive SHALL NOT fail the call for any outcome counted under 6.1 when the
    append carried a Declared_Index, because failing the call discards the
    count along with everything else the call changed, leaving the cause invisible.
@@ -393,8 +400,10 @@ no special cases.
 1. WHEN THE Ledger creates an archive, THE Ledger SHALL set its
    `block_index_offset` to one past the last index the previously created archive
    reported holding.
-2. THE Ledger SHALL publish, through `archives()`, a Published_Range per archive
-   such that the ranges are contiguous and non-overlapping across all of them.
+2. THE Ledger SHALL publish, through `archives()` and `icrc3_get_archives`, a
+   Published_Range per archive such that the ranges are contiguous and
+   non-overlapping across all of them, and SHALL report the same ranges through
+   both.
 3. THE Ledger SHALL derive the offset in 7.1 only from an extent an archive has
    reported, never from a count of blocks it has sent.
 4. WHILE an archive exists whose reported Archive_Range does not begin where the
@@ -463,10 +472,10 @@ per interval rather than work per transaction.
    instead ends the round's execution is the subject of the corresponding non-goal.
 6. WHEN an Archiving_Round fails, THE Ledger SHALL NOT prevent a later
    Archiving_Round from being attempted.
-7. WHEN an archive refuses an append per 1.1, 1.7, 2.2, 2.9 or 6.4, THE Ledger SHALL
-   make no further archiving attempt and SHALL expose a distinct non-zero metric,
-   rather than spacing further attempts per 9.1, because no retry can resolve a
-   mismatch of chain or position or a block the archive cannot parse.
+7. WHEN an archive refuses an append on any ground in Req 1, or per 2.2, 2.9 or 6.4,
+   THE Ledger SHALL make no further archiving attempt and SHALL expose a distinct
+   non-zero metric, rather than spacing further attempts per 9.1, because no retry can
+   resolve a mismatch of chain or position or a block the archive cannot parse.
 8. WHEN an archive reports per 2.6 that the blocks offered fall below its own range,
    THE Ledger SHALL NOT halt per 9.7 and SHALL instead reconcile per 8.2, because
    this is the ordinary signal that the ledger is behind rather than a sign that
@@ -542,8 +551,9 @@ rather than several.
 4. THE Ledger SHALL expose the number of blocks an Archiving_Round is permitted to
    carry, so that the enforced value is observable rather than only the configured
    one.
-5. THE Ledger SHALL NOT count an append carrying no blocks, made to satisfy 10.3,
-   against 12.1.
+5. THE Ledger SHALL make at most one append carrying no blocks per Archiving_Round,
+   so that the probe of 10.3 is bounded too and 12.1's "block-carrying" is not a
+   licence to send unboundedly many empty ones.
 
 ### Requirement 13: A Ledger Does Not Wait Indefinitely For An Archive
 

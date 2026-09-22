@@ -185,9 +185,17 @@ Its `post_upgrade` already takes `Option<ArchiveUpgradeArgument>` (`:383`).
 **Every SNS ledger suite runs this archive, with archiving on.** `ic-icrc1-archive`
 is not ckBTC and ckDOGE's alone: `sns/init/src/lib.rs:604-616` installs it for every
 SNS with `trigger_threshold: 2000` and `num_blocks_to_archive: 1000`, so archiving is
-active there today. PR 1's cost — archiving halts until PR 3, retrying every
-transaction — therefore lands on all of them, each upgrading on its own schedule, so
+active there today. PR 1's cost — archiving *can* halt until PR 3, retrying every
+transaction — therefore reaches all of them, each upgrading on its own schedule, so
 the window is as long as the slowest SNS takes.
+
+**"Can", because the trigger is a trap and only a trap.** A *graceful* `Err` from a
+chunk still records what landed — `remove_archived_blocks(num_sent_blocks)` runs on
+the error branch too (`ledger.rs:483-488`) — so no re-send follows and nothing
+refuses. The halt needs a round that dies *after* a successful append, which means a
+trap in the continuation, and the test plan's own note records that DEFI-2967 could
+not induce that deliberately. So the exposure is real but not routine; what makes it
+worth acting on is the number of suites it reaches, not its likelihood on any one.
 
 **Chunking today.** The chunk size is
 `min(archive.max_message_size_bytes, max_ledger_msg_size_bytes)`
@@ -195,9 +203,16 @@ the window is as long as the slowest SNS takes.
 
 | | archive option | effective chunk | 1000 blocks |
 |---|---|---|---|
-| **ICP** | 128 kB (`icp/src/lib.rs:628`; the ledger ceiling `:634` is written only in `init`) | 128 kB | two chunks |
+| **ICP** | 128 kB (`icp/src/lib.rs:628`; the ledger ceiling `:634` is written only in `init`) | 128 kB | two chunks *(unconfirmed — see below)* |
 | **ckBTC, ckDOGE** | `null`, so the 2 MiB default, clamped by a hard-coded 1 MiB `MAX_MESSAGE_SIZE` | 1 MiB | one chunk |
 | **every SNS** | 128 kB (`sns/init/src/lib.rs:610`) | 128 kB | **multi-chunk** |
+
+The ICP row is `LedgerCanisterInitPayloadBuilder`'s default, not observed
+configuration, and it cannot currently be confirmed from metrics: DEFI-1565's
+`ledger_archive_*` settings metrics are not deployed on mainnet, where only
+`ledger_archived_blocks` and `ledger_archived_transactions` exist. Confirm it against
+the deployed ledger before relying on the row — and note that needing to is itself
+the argument DEFI-1565 was making.
 
 "ICRC is single-chunk" is therefore true only of the two ck suites. The chunking
 window is open on ICP *and* on every SNS. Node roll-over makes a round multi-message
@@ -619,7 +634,7 @@ the counter entirely: one field doing both the halt and the record.
 is narrower than "any creation step" and the distinction matters.
 `create_and_initialize_node_canister` runs `create_canister` → `install_code` →
 `update_settings` → `nodes.push`, each with `?`
-(`archive.rs:129, 135-153, 163-179, 182`). A graceful `Err` from `install_code` or
+(`archive.rs:455`, `:461`, `:489`, `:508`). A graceful `Err` from `install_code` or
 `update_settings` therefore returns with **the canister already created** and its id
 dropped on the stack — an orphan by any definition, and two of the three windows the
 Constraints table lists. Decrementing there would hand those windows back to
@@ -766,7 +781,7 @@ test is baseline-independent.
 | 9 | archive | genesis into an empty archive with offset 0; then assert a block with no parent hash is refused by an archive whose offset is non-zero, and by one that already holds blocks | `Req 1.5` |
 | 9b | archive | install with no Expected_Parent, append into it, and assert it is stored and the unverifiable-first-append counter rises | `Req 1.4`, `Req 1.6` |
 | 9c | archive | install with an Expected_Parent, then append a first batch whose first block carries a different parent; assert refusal and that nothing is stored. Then append one that matches and assert it is stored and the counter in 1.6 does *not* rise | `Req 1.8`, `Req 1.6` |
-| 10 | archive | **written**: `test_append_blocks_ignores_an_extra_optional_start_index` — the current one-argument archive stores the blocks, ignores the extra argument, and its empty reply reads as absent; a wrong-typed payload is rejected as a negative control | the rollout premise |
+| 10 | archive | **written, and retired by PR 1**: `test_append_blocks_ignores_an_extra_optional_start_index` — the current one-argument archive stores the blocks, ignores the extra argument, and its empty reply reads as absent; a wrong-typed payload is rejected as a negative control. Its `Decode!(.., Option<u64>)` stops describing the archive the moment E1 returns `opt append_result`, so row 11 replaces it rather than extending it. The ICP twin in row 12 stays valid indefinitely, which is why only that one is a release gate | the rollout premise, pre-PR-1 only |
 | 11 | archive | against the new implementation: one argument only; assert blocks stored, empty reply, and that a chain mismatch traps rather than returning a refusal | `Req 5.1`, `5.2`, `5.3`, `5.4` |
 | 12 | archive | **written**: `should_ignore_an_extra_optional_start_index` (`icp/archive/tests/tests.rs`) — the ICP archive's hand-rolled decode tolerates the extra argument, capacity drops by the block size, and the empty reply reads as absent | D3's tolerance; a **release gate** |
 | 13 | archive | assert each counter in `Req 6.1` moves for its own cause and is readable afterwards | `Req 6.1`, `6.2`, `6.3`, `6.4` |
@@ -784,12 +799,16 @@ test is baseline-independent.
 | 22d | archive | append a batch containing bytes that do not decode as a block; assert `Undecodable` is returned with its index, nothing is stored, and its counter rises separately from the mismatch counters | `Req 6.4` |
 | 22e | archive | assert every outcome of Req 2 carries the same `block_index_offset` and `next_index` fields, and that `at_capacity` is false on a full store and on a wholly-covered re-send | `Req 3.1`, `3.3`, `3.6`, `Req 4.9` |
 | 22f | integration | fail `install_code` after `create_canister` succeeded; assert archiving halts, the metric exposes the created canister's id, and that the id survives a ledger upgrade | `Req 11.1`, `11.6`, `11.7` |
-| 23 | unit, `ledger_canister_core` | create an archive after a round whose reported extent ends at `N`; assert its `block_index_offset` is `N+1` and that `archives()` tiles with no gap or overlap. Then present a node whose reported range starts elsewhere and assert no blocks are stored in it and the metric rises | `Req 7.1`, `7.2`, `7.3`, `7.4` |
+| 23 | unit, `ledger_canister_core` | create an archive after a round in which the previous one reported `next_index = N`; assert the new `block_index_offset` is exactly `N`, not `N+1` — `next_index` is *already* one past the last held index, and the off-by-one here is the whole of `Req 7.1`. Assert `archives()` tiles with no gap or overlap. Then present a node whose reported range starts elsewhere and assert no blocks are stored in it and the metric rises | `Req 7.1`, `7.2`, `7.3`, `7.4` |
 | 24 | integration | on a ledger whose archives report no extent, assert an archive is still created and blocks are still discarded — the exemptions, which a literal reading of Req 7 and Req 8 would forbid | `Req 7.5`, `Req 8.7` |
 | 25 | integration | fail `install_code` gracefully after `create_canister` succeeded; assert the creation counter stays non-zero and archiving halts, and that a failure of `create_canister` itself does not halt | `Req 11.1`, `11.3` |
 | 26 | archive | constrain growth so an append stops short for a reason other than the archive's own limit, using a route that **returns** control — the wasm's declared stable maximum, or a subnet memory cap — and assert `at_capacity` is reported false and the blocks that fit are readable | `Req 4.4` |
 | 26b | archive | induce a reservation refusal with a low `reserved_cycles_limit`; assert the call is rejected, that nothing was stored, and that the ledger takes the graceful path — the negative case that fixes what `Req 4.7` gives up | `Req 4.7` |
-| 27 | matrix | both token variants for 1-9, 10, 11, 13, 22 | — |
+| 28 | integration | fill the tail so an append comes back `at_capacity = true`; assert the *next* round creates an archive rather than re-offering to the same one, and that a short stop with `at_capacity = false` instead retries the same archive. This is why the flag exists and nothing else tests it | `Req 4.5`, `4.6` |
+| 29 | integration | after each round, assert every index the ledger served before it is still retrievable, and that the ledger stopped serving only indices some archive reports covering — the headline safety property, which rows 14 and 15 approach only from their failure sides | `Req 8.1`, `Req 8.5` |
+| 30 | integration | drive a round that must roll over; assert exactly one archive is created, and that a round which both fills the tail and has blocks left over does not create two | `Req 12.2` |
+| 31 | integration | assert the capability probe stores nothing and consumes no capacity against a live archive, and that a second round against an archive that already answered issues no further probe | `Req 10.3`, `10.4` |
+| 27 | matrix | both token variants for every archive-level row: 1-9, 9b, 9c, 10, 11, 13, 22, 22c, 22d, 22e and 26 | (12) is ICP-only by nature; 22b and 22f are integration rows | yes |
 
 **Seams the design owes.** `Req 9` is observable only through the attempt spacing, so
 the failure counter and last-attempt timestamp must be exposed as metrics; `Req 12.1`
@@ -848,7 +867,23 @@ on its own upgrade schedule, and the window between PR 1 and PR 3 is as long as 
 slowest of them takes. That is the strongest argument for keeping the two close
 together, and for not treating PR 1 as a change that can sit in `master` for a while.
 
-*What this release costs.* Two things, and the second is a limit rather than a price.
+*What this release costs.* Three things, and the second is a limit rather than a
+price.
+
+**The archive starts decoding blocks, which it has never done.** `Req 1.7` needs
+every stored block's `parent_hash`, so PR 1 parses block bytes that were written by
+many ledger versions across years of SNS history. A block that fails to decode is
+refused, and for an index-less append — the only shape PR 1 sees — a refusal *traps*
+(`Req 5.2`), so a single decode regression halts archiving on that suite and stays
+halted. This is the largest new risk in PR 1 and it is not in the protocol at all.
+
+Two things follow. **Pre-flight it**: decode every block in a real mainnet archive
+log offline, for each token variant, before PR 1 ships — the wasms and the block
+bytes are both available, so this costs nothing but time and it is the only way to
+find a historical encoding the current decoder rejects. And **budget the
+instructions**: per-block decode plus hash on a 1 MiB append is not costed anywhere
+in this document, and if it approaches the message limit the append traps, which is
+the same halt by another route.
 
 An old ledger cannot tell a refusal's cause, so a round that dies after a successful
 append leaves the next round re-sending blocks the archive holds; the archive
@@ -873,14 +908,19 @@ corruption path open while removing the symptom that reveals it.
 
 **PR 3 — ledger, bookkeeping.** Reconciliation from the reported extent, the coverage
 and backwards checks, offset derivation, the capability probe and the seam.
-*Acceptance:* `Req 4` (4.5, 4.6), `Req 7`, `Req 8`, `Req 10`. On the ICP ledger the
+*Acceptance:* `Req 4` (4.5, 4.6), `Req 7`, `Req 8`, `Req 9` (9.7, 9.8), `Req 10`. On the ICP ledger the
 acceptance is `Req 7.5`, `Req 8.7` and `Req 10.5` — the exemptions — rather than the
 criteria they except, since its archives report nothing to reconcile against.
 
 **PR 4 — ledger, round shape and retries.** Byte-based selection, one append per
 round, the backoff, the creation counter, the bounded calls, the allocation work and
 the comment.
-*Acceptance:* `Req 9`, `Req 11`, `Req 12`, `Req 13`.
+*Acceptance:* `Req 9` (9.1-9.6), `Req 11`, `Req 12`, `Req 13`.
+
+`Req 9.7` and `Req 9.8` are deliberately in PR 3 rather than here: PR 3 is what gives
+the ledger a `ChainMismatch` or `Gap` to read, and a release that can receive an
+unresolvable refusal without knowing to stop would retry it on every transaction. The
+rest of `Req 9` — the backoff itself — is independent and can follow.
 
 **Step 5 — lower `trigger_threshold`**, by NNS proposal. Not a PR. Last, because
 nothing forces re-enablement to a date: after PR 1 and PR 2 archiving is *safe*, and

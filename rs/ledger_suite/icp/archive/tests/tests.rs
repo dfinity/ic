@@ -61,8 +61,8 @@ impl Setup {
         let encoded_blocks = vec![encoded_block];
         self.pocket_ic
             .update_call(
-                candid::Principal::from(self.archive_canister_id),
-                candid::Principal::from(self.archive_canister_id),
+                Principal::from(self.archive_canister_id),
+                Principal::from(self.archive_canister_id),
                 "append_blocks",
                 Encode!(&encoded_blocks).expect("should encode vec![encoded_block]"),
             )
@@ -77,8 +77,8 @@ impl Setup {
         start_index: Option<u64>,
     ) -> Result<Vec<u8>, pocket_ic::RejectResponse> {
         self.pocket_ic.update_call(
-            candid::Principal::from(self.archive_canister_id),
-            candid::Principal::from(self.archive_canister_id),
+            Principal::from(self.archive_canister_id),
+            Principal::from(self.archive_canister_id),
             "append_blocks",
             Encode!(&encoded_blocks, &start_index).expect("should encode the extended argument"),
         )
@@ -189,8 +189,8 @@ fn should_ignore_an_extra_optional_start_index() {
     // Negative control, so the assertions above are not vacuous: this archive
     // does surface a decode failure for a genuinely wrong payload.
     let wrong_type = setup.pocket_ic.update_call(
-        candid::Principal::from(setup.archive_canister_id),
-        candid::Principal::from(setup.archive_canister_id),
+        Principal::from(setup.archive_canister_id),
+        Principal::from(setup.archive_canister_id),
         "append_blocks",
         Encode!(&42_u64).expect("should encode the wrong type"),
     );
