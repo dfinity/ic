@@ -425,7 +425,6 @@ impl CanisterManager {
                 old_canister_memory_usage,
                 &subnet_memory_saturation,
             )?;
-            round_limits.instructions -= as_round_instructions(log_resize_instructions);
             let log_resize_cost = self
                 .cycles_account_manager
                 .management_canister_cost(log_resize_instructions, subnet_cycles_config);
@@ -1981,7 +1980,8 @@ impl CanisterManager {
     // Runs the following checks on cycles and memory usage and performs the corresponding updates:
     // 1. There is enough subnet available memory for the new memory usage.
     // 2. Cycles for instructions can be withdrawn w.r.t. the old memory usage
-    //    (in particular, the canister is not frozen afterwards).
+    //    (in particular, the canister is not frozen afterwards). The instructions
+    //    are also accounted for in the round limits.
     // 3. The canister is not frozen due to its new memory usage.
     // 4. Storage reservation cycles can be reserved.
     //
@@ -2033,7 +2033,8 @@ impl CanisterManager {
             )?;
 
         // Consume cycles for instructions w.r.t. the old memory usage,
-        // i.e., the memory usage for which the instructions were executed.
+        // i.e., the memory usage for which the instructions were executed,
+        // and account for the instructions in the round limits.
         let reveal_top_up = canister.controllers().contains(&sender);
         let cycles_for_instructions = self
             .cycles_account_manager
@@ -2049,6 +2050,7 @@ impl CanisterManager {
                 reveal_top_up,
             )
             .map_err(CanisterManagerError::NotEnoughCycles)?;
+        round_limits.instructions -= as_round_instructions(instructions);
 
         // Check that the canister is not frozen due to its new memory usage
         // (no cycles are withdrawn by this check).
@@ -2225,7 +2227,6 @@ impl CanisterManager {
             old_memory_usage,
             resource_saturation,
         )?;
-        round_limits.instructions -= as_round_instructions(instructions);
 
         let reply = CanisterSnapshotResponse::new(
             &snapshot_id,
@@ -2607,7 +2608,6 @@ impl CanisterManager {
             old_memory_usage,
             resource_saturation,
         )?;
-        round_limits.instructions -= as_round_instructions(instructions_for_snapshot_size);
 
         let heap_delta = new_canister.heap_delta();
 
@@ -2918,7 +2918,6 @@ impl CanisterManager {
             old_memory_usage,
             resource_saturation,
         )?;
-        round_limits.instructions -= as_round_instructions(instructions);
 
         // Delete old snapshot identified by `replace_snapshot`, recording the deletion
         // so that its directory is also deleted from the tip.
