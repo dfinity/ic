@@ -99,7 +99,7 @@ fn default_payload_serializes_to_empty_vec() {
     assert!(responses.is_empty(), "{responses:?}");
     assert!(spent.initial.is_empty());
     assert!(spent.asynchronous.is_empty());
-    assert_eq!(stats.payload_bytes, bytes.len());
+    assert_eq!(stats.payload_bytes, 0);
 }
 
 /// Check that a single well formed request with shares makes it through the block maker
