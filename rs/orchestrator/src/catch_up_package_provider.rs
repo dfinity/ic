@@ -435,7 +435,7 @@ impl CatchUpPackageProvider {
             // The record was last written at or before the local CUP's registry version: any
             // recorded split here or below is a past one.
             if versioned_record.version <= local_cup_registry_version {
-                break;
+                return Ok(());
             }
             // Continue the scan from the record's last write to avoid scanning every single
             // registry version
@@ -497,9 +497,7 @@ impl CatchUpPackageProvider {
             return Ok(());
         }
 
-        // No split was found that is ahead of the local CUP.
-
-        Ok(())
+        // Unreachable: the loop always exits with a `return` statement
     }
 
     /// Persist the given CUP to disk.
