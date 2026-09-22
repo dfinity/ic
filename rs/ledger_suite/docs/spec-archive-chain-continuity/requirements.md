@@ -225,6 +225,9 @@ lost track of what it sent cannot corrupt the archive by sending them again.
    SHALL refuse an append whose first stored block does not carry that hash as its
    parent, so that the only block it will ever store without checking a parent hash
    is the genesis block.
+9. THE Archive SHALL NOT refuse an append on account of a block it was never going to
+   store, because a block beyond its own configured limit falls outside 1.7 and
+   refusing for it would deny 4.1 the prefix it requires to be stored.
 
 ### Requirement 2: An Append Is Placed By Its Declared Index
 

@@ -467,9 +467,15 @@ Order of work, per D4 and D5:
    difference (`Req 2.9`). One comparison suffices rather than sampling: blocks are
    hash-chained, so a divergence at or below that index propagates forward to it and
    cannot heal — if the last covered block matches, every block below it does.
-6. Chain-check `blocks[k]` against the tip, or against the Expected_Parent when the
-   archive holds nothing and was given one (`Req 1.1`, `1.3`, `1.4`, `1.5`, `1.8`), then
-   each subsequent stored block against its predecessor (`Req 1.7`). The second half
+6. Determine which blocks will actually be stored — the suffix from `k`, trimmed to
+   what fits the archive's own configured limit — and then chain-check **only those**:
+   `blocks[k]` against the tip, or against the Expected_Parent when the archive holds
+   nothing and was given one (`Req 1.1`, `1.3`, `1.4`, `1.5`, `1.8`), then each
+   subsequent stored block against its predecessor (`Req 1.7`). Capacity is decided
+   before validation, not after, because `Req 1.7` binds the blocks it *stores*: a
+   block beyond the limit is never stored, so refusing the whole append because that
+   block is malformed or does not chain would contradict `Req 4.1`, which requires the
+   prefix to be stored and the stop reported. The second half
    is one hash per stored block, which is what makes `Req 2.8` a property the archive
    enforces rather than one it inherits from the sender — worth the cost precisely
    because the rest of this design exists to stop trusting what the ledger asserts.
@@ -498,11 +504,15 @@ Order of work, per D4 and D5:
 8. Re-read `log_length` and reply (`Req 3.1`-`3.4`), or fail the call if step 3
    applied.
 
-**Two ordering traps in this list, both of which have been fallen into.**
+**Three ordering traps in this list, every one of which has been fallen into.**
 
 *Step 3 says "steps 4 and 5 only" for a reason.* An index-less append is the only
 shape PR 1 sees in production, so skipping the chain check along with placement would
 make PR 1 a no-op against the corruption it exists to stop.
+
+*Capacity is decided before validation for a reason.* Validating a block the archive
+was never going to store, and refusing the append because of it, denies `Req 4.1` the
+prefix it requires — see step 6. `Req 1.9` states it as an obligation.
 
 *Step 2 is scoped to an indexed batch for a reason.* Written to catch the empty batch
 first, it also catches an **index-less** empty one and answers it with a result —
@@ -638,6 +648,9 @@ exception, a single persisted field:
 
     #[serde(default)]                                      // Idle is Default
     creating: Creating,
+    #[serde(default)]                                      // None is Default
+    pending_handover: Option<CanisterId>,
+
     enum Creating { Idle, Started, Created(CanisterId) }   // Default = Idle
 
 `Started` before `create_canister`, `Created(id)` as soon as it returns, `Idle` when
@@ -666,6 +679,13 @@ every pre-change state — the journal would break the first upgrade it shipped 
 before it could help with anything. `Archive` already does this for its later-added
 fields (`archive.rs:33, 36, 39, 148`), so the pattern is established rather than
 novel.
+
+`pending_handover` is a second field for the same reason, and it is needed because
+`Req 11.9` moved the handover *after* adoption: `Creating` returns to `Idle` when
+`nodes.push` succeeds, so without it nothing records which adopted archive still owes
+a handover, and `Req 11.10`'s retry and metric would have nothing to work from — least
+of all across an upgrade. It is set when the archive is adopted, and cleared only when
+the handover is confirmed.
 
 **Two of the three orphan windows stop being write-offs, and only `Idle` may be
 restored.** `create_and_initialize_node_canister` runs `create_canister` →
@@ -794,7 +814,7 @@ a bounded variant so the choice is per call site (`Req 13.1`, `Req 13.5`):
 |---|---|---|
 | `append_blocks` | bounded, ICRC only | idempotent under `Req 2.4`; ICP exempt per `Req 13.6` |
 | `remaining_capacity` | bounded | read-only, so an unknown outcome is resolved by asking again |
-| `update_settings` | bounded, but see below | not repeatable once it has succeeded |
+| `update_settings` | **unbounded** | unresolvable once it has succeeded, so `Req 13.5` forbids bounding it — see below |
 | `install_code` | bounded | resolvable, see below |
 | `create_canister` | **unbounded** | the only genuinely unresolvable one: an unknown outcome leaves a canister nothing can address |
 
@@ -806,8 +826,18 @@ ledger is no longer a controller: it can neither retry nor call `canister_status
 find out. An unknown outcome would be indistinguishable from a real failure, and
 `Req 11.8`'s adoption path would stall on it.
 
-The fix is ordering, not interpretation: **adopt the archive before handing over
-control** (`Req 11.9`). Adoption ends the creation's critical path, and the handover
+**So it must stay unbounded, and `Req 13.5` already says so.** "THE Ledger SHALL NOT
+stop waiting for a call whose unknown outcome it has no means of resolving
+afterwards" — and this is the second such call after `create_canister`. Bounding it
+would leave a timeout the ledger could never resolve: the settings may have committed
+before the response was lost, after which it can neither retry nor query. Unbounded,
+it always learns the outcome, so a retry only ever follows an *observed* failure,
+which is resolvable because the ledger is then still a controller. Putting it in the
+bounded column was a violation of a criterion this document already contains.
+
+Ordering is the other half of the fix, and it addresses a different problem —
+**adopt the archive before handing over control** (`Req 11.9`) — so that an observed
+handover failure does not block archiving while it is retried. Adoption ends the creation's critical path, and the handover
 becomes a separate step the ledger retries on later rounds while it is still a
 controller (`Req 11.10`). A lost handover then leaves a fully adopted, working archive
 that is merely still ledger-controlled — recoverable, and visible on a metric — rather
@@ -901,8 +931,10 @@ test is baseline-independent.
 | 17 | integration | reuse the creation-trap harness so the `create_canister` reply is lost; assert `Creating` is `Started`, that it is exposed, and that it does not self-clear — no identity was recorded, so there is nothing to finish | `Req 11.1`, `11.2`, `11.4` |
 | 17b | integration | lose the `install_code` outcome *after* the identity was recorded; assert the ledger resolves it by asking the created canister, finishes the creation without an operator, and adopts that same canister rather than creating a second | `Req 11.6`, `11.8` |
 | 17c | integration | fail a round, then upgrade the ledger; assert the next transaction triggers an Archiving_Round immediately rather than waiting out the spacing | `Req 9.9` |
+| 7d | archive | offer a batch whose second block exceeds the configured limit *and* does not chain; assert the first block is stored, the stop is reported, and the append is not refused — the malformed block was never going to be stored | `Req 1.9`, `Req 4.1` |
 | 17d | integration | lose the `update_settings` outcome; assert the archive is already adopted and serving, that archiving continues, that the handover metric is non-zero, and that a later round retries the handover and clears it | `Req 11.9`, `11.10` |
-| 17e | upgrade | decode a pre-change `Archive` state; assert it decodes and the creation journal reads `Idle`, so the journal's own release cannot be the upgrade that fails | the `#[serde(default)]` above |
+| 17e | upgrade | decode a pre-change `Archive` state; assert it decodes and that both new fields read their defaults — `Idle` and `None` — so the journal's own release cannot be the upgrade that fails | the two `#[serde(default)]`s above |
+| 17f | upgrade | adopt an archive whose handover has not completed, then upgrade the ledger; assert `pending_handover` survives and the handover is still retried afterwards | `Req 11.10` |
 | 18b | integration | after the tail returns no range, assert a later round issues the probe once the backoff permits — no blocks moved, one empty append — rather than skipping every round and never resuming | `Req 10.1`, `10.2` |
 | 18 | integration | install an old archive wasm as the tail; assert nothing is archived and the metric rises, then upgrade the archive and assert archiving resumes without a ledger upgrade. Repeat against a ledger whose archives do not implement the protocol and assert it archives normally | `Req 10.1`, `10.2`, `10.5` |
 | 19 | integration | make the tail archive not answer; assert the round ends within `ARCHIVE_CALL_TIMEOUT` and is retried, and that a subsequent round does not store any block twice. Then, with a call still in flight to that archive, assert the ledger can be stopped and upgraded — the property an unbounded call removes | `Req 13.1`, `13.2`, `13.4`, `13.8` |
