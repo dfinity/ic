@@ -1534,7 +1534,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
                 w.gauge_vec(
                     "cketh_minter_receipt_fetch_rounds_without_reads",
-                    "Consecutive finalization rounds that made no receipt lookup, per pipeline.",
+                    "Consecutive rounds failing or skipping the finalized-count read, per pipeline.",
                 )?
                 .value(
                     &[("pipeline", "withdrawal")],
