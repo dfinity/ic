@@ -7,6 +7,10 @@ package types.v1;
 import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
+message UpgradePayload {
+  repeated UpgradeAction actions = 1;
+}
+
 message UpgradeAction {
   oneof action {
     RequestUpgradePermit request_permit = 1;

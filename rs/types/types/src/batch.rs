@@ -25,10 +25,9 @@ pub use self::{
     },
     ingress::{IngressPayload, IngressPayloadError},
     self_validating::{MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload},
-    upgrade::{bytes_to_upgrade_payload, upgrade_payload_to_bytes},
+    upgrade::UpgradePayload,
     xnet::XNetPayload,
 };
-use crate::consensus::upgrade::UpgradePermitAction;
 use crate::{
     Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
@@ -206,7 +205,7 @@ pub struct BatchMessages {
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
     pub query_stats: Option<QueryStatsPayload>,
-    pub upgrade: Vec<UpgradePermitAction>,
+    pub upgrade: UpgradePayload,
 }
 
 /// Error type that can occur during an `BatchPayload::into_messages` call
@@ -232,12 +231,8 @@ impl BatchPayload {
             bitcoin_adapter_responses: self.self_validating.0,
             query_stats: QueryStatsPayload::deserialize(&self.query_stats)
                 .map_err(IntoMessagesError::QueryStatsPayloadError)?,
-            upgrade: if self.upgrade.is_empty() {
-                Vec::new()
-            } else {
-                bytes_to_upgrade_payload(&self.upgrade)
-                    .map_err(IntoMessagesError::UpgradePayloadError)?
-            },
+            upgrade: UpgradePayload::deserialize(&self.upgrade)
+                .map_err(IntoMessagesError::UpgradePayloadError)?,
         })
     }
 

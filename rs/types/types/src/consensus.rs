@@ -1804,8 +1804,8 @@ impl PbArtifact for UpgradePermitAuthorizationShare {
     type PbMessageError = ProxyDecodeError;
 }
 
-impl From<UpgradePermitAuthorizationRequest> for pb::UpgradePermitRequest {
-    fn from(content: UpgradePermitAuthorizationRequest) -> Self {
+impl From<&UpgradePermitAuthorizationRequest> for pb::UpgradePermitRequest {
+    fn from(content: &UpgradePermitAuthorizationRequest) -> Self {
         pb::UpgradePermitRequest {
             requestor: Some(node_id_into_protobuf(content.requestor)),
             request_height: content.request_height.get(),
@@ -1827,7 +1827,7 @@ impl TryFrom<pb::UpgradePermitRequest> for UpgradePermitAuthorizationRequest {
 impl From<UpgradePermitAuthorizationShare> for pb::UpgradePermitAuthorizationShare {
     fn from(share: UpgradePermitAuthorizationShare) -> Self {
         pb::UpgradePermitAuthorizationShare {
-            request: Some(pb::UpgradePermitRequest::from(share.content)),
+            request: Some(pb::UpgradePermitRequest::from(&share.content)),
             signature: Some(pb::BasicSignature::from(share.signature)),
         }
     }

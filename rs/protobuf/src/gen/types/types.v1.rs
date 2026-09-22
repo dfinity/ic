@@ -1862,6 +1862,11 @@ impl ChainKeyErrorCode {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradePayload {
+    #[prost(message, repeated, tag = "1")]
+    pub actions: ::prost::alloc::vec::Vec<UpgradeAction>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpgradeAction {
     #[prost(oneof = "upgrade_action::Action", tags = "1, 2, 3")]
     pub action: ::core::option::Option<upgrade_action::Action>,

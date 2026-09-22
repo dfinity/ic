@@ -2,34 +2,61 @@ use ic_base_types::NumBytes;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use pb::upgrade_action::Action;
+use prost::Message as _;
+use prost::encoding::encoded_len_varint;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use super::{iterator_to_bytes, slice_to_messages};
 use crate::consensus::UpgradePermitAuthorizationRequest;
 use crate::consensus::upgrade::UpgradePermitAction;
 use crate::signature::{BasicSignature, BasicSignatureBatch};
 
-/// Serializes a list of [`UpgradePermitAction`]s to a length-delimited protobuf
-/// stream, respecting the `max_size` budget. Actions that don't fit are
-/// silently dropped.
-pub fn upgrade_payload_to_bytes(actions: Vec<UpgradePermitAction>, max_size: NumBytes) -> Vec<u8> {
-    let message_iterator = actions.into_iter().map(pb::UpgradeAction::from);
-    iterator_to_bytes(message_iterator, max_size)
+/// The upgrade permit actions of a block's batch payload.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+pub struct UpgradePayload {
+    pub actions: Vec<UpgradePermitAction>,
 }
 
-/// Deserializes a length-delimited protobuf stream into a list of
-/// [`UpgradePermitAction`]s. An empty byte slice yields an empty list.
-pub fn bytes_to_upgrade_payload(data: &[u8]) -> Result<Vec<UpgradePermitAction>, ProxyDecodeError> {
-    let messages: Vec<pb::UpgradeAction> =
-        slice_to_messages(data).map_err(ProxyDecodeError::DecodeError)?;
-    messages
-        .into_iter()
-        .map(UpgradePermitAction::try_from)
-        .collect()
+impl UpgradePayload {
+    /// Serialize this payload into a vector.
+    ///
+    /// This function will drop actions that do not fit to guarantee that the
+    /// payload fits into the `byte_limit`. Smaller actions after a dropped
+    /// action can still be included.
+    pub fn serialize_with_limit(&self, byte_limit: NumBytes) -> Vec<u8> {
+        let mut proto = pb::UpgradePayload::default();
+        let mut remaining = byte_limit.get() as usize;
+        for action in &self.actions {
+            let entry = pb::UpgradeAction::from(action);
+            // One repeated field entry: the key, the varint length, and the
+            // message bytes.
+            let entry_len =
+                1 + encoded_len_varint(entry.encoded_len() as u64) + entry.encoded_len();
+            if entry_len > remaining {
+                continue;
+            }
+            remaining -= entry_len;
+            proto.actions.push(entry);
+        }
+        proto.encode_to_vec()
+    }
+
+    /// Deserializes an [`UpgradePayload`]. An empty byte slice yields an empty
+    /// payload.
+    pub fn deserialize(data: &[u8]) -> Result<Self, ProxyDecodeError> {
+        let proto = pb::UpgradePayload::decode(data).map_err(ProxyDecodeError::DecodeError)?;
+        Ok(Self {
+            actions: proto
+                .actions
+                .into_iter()
+                .map(UpgradePermitAction::try_from)
+                .collect::<Result<_, _>>()?,
+        })
+    }
 }
 
-impl From<UpgradePermitAction> for pb::UpgradeAction {
-    fn from(action: UpgradePermitAction) -> Self {
+impl From<&UpgradePermitAction> for pb::UpgradeAction {
+    fn from(action: &UpgradePermitAction) -> Self {
         let proto_action = match action {
             UpgradePermitAction::Request(request) => {
                 Action::RequestPermit(pb::RequestUpgradePermit {
@@ -43,14 +70,17 @@ impl From<UpgradePermitAction> for pb::UpgradeAction {
                 request: Some(pb::UpgradePermitRequest::from(request)),
                 signatures: signatures
                     .signatures_map
-                    .into_iter()
+                    .iter()
                     .map(|(signer, signature)| {
-                        pb::BasicSignature::from(BasicSignature { signature, signer })
+                        pb::BasicSignature::from(BasicSignature {
+                            signature: signature.clone(),
+                            signer: *signer,
+                        })
                     })
                     .collect(),
             }),
             UpgradePermitAction::Return { node } => Action::ReturnPermit(pb::ReturnUpgradePermit {
-                node: Some(crate::node_id_into_protobuf(node)),
+                node: Some(crate::node_id_into_protobuf(*node)),
             }),
         };
         Self {
@@ -112,85 +142,120 @@ mod tests {
     use super::*;
     use crate::Height;
     use crate::NodeId;
+    use crate::crypto::{BasicSig, BasicSigOf};
     use ic_base_types::PrincipalId;
 
     fn node(node_index: u64) -> NodeId {
         NodeId::from(PrincipalId::new_node_test_id(node_index))
     }
 
+    fn round_trip(payload: UpgradePayload) {
+        let bytes = payload.serialize_with_limit(NumBytes::new(u64::MAX));
+        let decoded = UpgradePayload::deserialize(&bytes).unwrap();
+        assert_eq!(payload, decoded);
+    }
+
     #[test]
     fn test_round_trip_request() {
-        let actions = vec![UpgradePermitAction::Request(
-            UpgradePermitAuthorizationRequest {
-                requestor: node(3),
-                request_height: Height::new(42),
-            },
-        )];
-        let bytes = upgrade_payload_to_bytes(actions.clone(), NumBytes::new(u64::MAX));
-        let decoded = bytes_to_upgrade_payload(&bytes).unwrap();
-        assert_eq!(actions, decoded);
+        round_trip(UpgradePayload {
+            actions: vec![UpgradePermitAction::Request(
+                UpgradePermitAuthorizationRequest {
+                    requestor: node(3),
+                    request_height: Height::new(42),
+                },
+            )],
+        });
     }
 
     #[test]
     fn test_round_trip_authorize() {
-        let actions = vec![UpgradePermitAction::Authorize {
-            request: UpgradePermitAuthorizationRequest {
-                requestor: node(5),
-                request_height: Height::new(3),
-            },
-            signatures: BasicSignatureBatch {
-                signatures_map: BTreeMap::new(),
-            },
-        }];
-        let bytes = upgrade_payload_to_bytes(actions.clone(), NumBytes::new(u64::MAX));
-        let decoded = bytes_to_upgrade_payload(&bytes).unwrap();
-        assert_eq!(actions, decoded);
-    }
-
-    #[test]
-    fn test_round_trip_return() {
-        let actions = vec![UpgradePermitAction::Return { node: node(7) }];
-        let bytes = upgrade_payload_to_bytes(actions.clone(), NumBytes::new(u64::MAX));
-        let decoded = bytes_to_upgrade_payload(&bytes).unwrap();
-        assert_eq!(actions, decoded);
-    }
-
-    #[test]
-    fn test_round_trip_empty() {
-        let bytes = upgrade_payload_to_bytes(vec![], NumBytes::new(u64::MAX));
-        assert!(bytes.is_empty());
-        let decoded = bytes_to_upgrade_payload(&bytes).unwrap();
-        assert!(decoded.is_empty());
-    }
-
-    #[test]
-    fn test_round_trip_multiple_actions() {
-        let actions = vec![
-            UpgradePermitAction::Request(UpgradePermitAuthorizationRequest {
-                requestor: node(1),
-                request_height: Height::new(10),
-            }),
-            UpgradePermitAction::Authorize {
+        round_trip(UpgradePayload {
+            actions: vec![UpgradePermitAction::Authorize {
                 request: UpgradePermitAuthorizationRequest {
-                    requestor: node(2),
-                    request_height: Height::new(4),
+                    requestor: node(5),
+                    request_height: Height::new(3),
                 },
                 signatures: BasicSignatureBatch {
                     signatures_map: BTreeMap::new(),
                 },
-            },
-            UpgradePermitAction::Return { node: node(3) },
-        ];
-        let bytes = upgrade_payload_to_bytes(actions.clone(), NumBytes::new(u64::MAX));
-        let decoded = bytes_to_upgrade_payload(&bytes).unwrap();
-        assert_eq!(actions, decoded);
+            }],
+        });
     }
 
     #[test]
-    fn test_max_size_drops_overflow() {
-        // With max_size = 0, no actions should be encoded.
-        let actions = vec![UpgradePermitAction::Return { node: node(1) }];
-        let bytes = upgrade_payload_to_bytes(actions, NumBytes::new(0));
-        assert!(bytes.is_empty());
+    fn test_round_trip_return() {
+        round_trip(UpgradePayload {
+            actions: vec![UpgradePermitAction::Return { node: node(7) }],
+        });
+    }
+
+    #[test]
+    fn test_round_trip_empty() {
+        round_trip(UpgradePayload { actions: vec![] });
+    }
+
+    #[test]
+    fn test_serialize_with_limit_drops_overflow() {
+        // A limit of 0 cannot fit any action, so nothing is serialized.
+        let payload = UpgradePayload {
+            actions: vec![UpgradePermitAction::Return { node: node(1) }],
+        };
+        assert!(payload.serialize_with_limit(NumBytes::new(0)).is_empty());
+    }
+
+    #[test]
+    fn test_serialize_with_limit_skips_actions_that_do_not_fit() {
+        // The authorize action does not fit the limit, but the smaller return
+        // action after it still does.
+        let payload = UpgradePayload {
+            actions: vec![
+                UpgradePermitAction::Authorize {
+                    request: UpgradePermitAuthorizationRequest {
+                        requestor: node(1),
+                        request_height: Height::new(4),
+                    },
+                    signatures: BasicSignatureBatch {
+                        signatures_map: BTreeMap::from([(
+                            node(2),
+                            BasicSigOf::new(BasicSig(vec![0x42; 64])),
+                        )]),
+                    },
+                },
+                UpgradePermitAction::Return { node: node(3) },
+            ],
+        };
+        let return_entry_len = UpgradePayload {
+            actions: vec![UpgradePermitAction::Return { node: node(3) }],
+        }
+        .serialize_with_limit(NumBytes::new(u64::MAX))
+        .len();
+        let bytes = payload.serialize_with_limit(NumBytes::new(return_entry_len as u64));
+        let decoded = UpgradePayload::deserialize(&bytes).unwrap();
+        assert_eq!(
+            decoded.actions,
+            vec![UpgradePermitAction::Return { node: node(3) }]
+        );
+    }
+
+    #[test]
+    fn test_round_trip_multiple_actions() {
+        round_trip(UpgradePayload {
+            actions: vec![
+                UpgradePermitAction::Request(UpgradePermitAuthorizationRequest {
+                    requestor: node(1),
+                    request_height: Height::new(10),
+                }),
+                UpgradePermitAction::Authorize {
+                    request: UpgradePermitAuthorizationRequest {
+                        requestor: node(2),
+                        request_height: Height::new(4),
+                    },
+                    signatures: BasicSignatureBatch {
+                        signatures_map: BTreeMap::new(),
+                    },
+                },
+                UpgradePermitAction::Return { node: node(3) },
+            ],
+        });
     }
 }
