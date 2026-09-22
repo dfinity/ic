@@ -193,7 +193,8 @@ enum Condition {
 /// * `RefundPool`, because nothing in this scenario produces an anonymous
 ///   refund, and a refund would be routed out of the pool in the next round
 ///   anyway: the pool only holds on to refunds whose destination subnet is
-///   cooling down while this one is not.
+///   cooling down while this one is not, or whose stream is full (which would
+///   require a more complex test setup).
 const VIOLATED_CONDITIONS: [Condition; 5] = [
     Condition::IncomingStreams,
     Condition::OutgoingStreams,
