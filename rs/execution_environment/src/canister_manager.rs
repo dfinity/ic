@@ -2857,6 +2857,7 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
         time: Time,
+        consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2902,22 +2903,36 @@ impl CanisterManager {
             .saturating_add(&new_snapshot_size)
             .saturating_sub(&replace_snapshot_size);
 
-        // Compute cycles for instructions spent creating a snapshot of the given size.
+        // Charge for the instructions spent creating a snapshot of the given size.
         let instructions = self
             .config
             .canister_snapshot_baseline_instructions
             .saturating_add(&new_snapshot_size.get().into());
+        let cost = self
+            .cycles_account_manager
+            .management_canister_cost(instructions, subnet_cycles_config);
+        self.cycles_account_manager
+            .consume_cycles_for_management_canister_instructions(
+                &sender,
+                canister,
+                instructions,
+                subnet_cycles_config,
+            )
+            .map_err(CanisterManagerError::NotEnoughCycles)?;
+        // Record the charge so it survives the canister state rollback on failure.
+        consumed_cycles.add(cost, instructions);
+        round_limits.instructions -= as_round_instructions(instructions);
+
         self.cycles_and_memory_usage_checks_and_updates(
             subnet_cycles_config,
             canister,
             sender,
-            instructions,
+            NumInstructions::new(0),
             round_limits,
             new_memory_usage,
             old_memory_usage,
             resource_saturation,
         )?;
-        round_limits.instructions -= as_round_instructions(instructions);
 
         // Delete old snapshot identified by `replace_snapshot`, recording the deletion
         // so that its directory is also deleted from the tip.
