@@ -17,7 +17,10 @@ readable without it.*
 > and `Req 8.1` looks absolute until `Req 8.7` excepts the ICP ledger. A criterion
 > read in isolation will therefore look either too weak or too strong more often
 > than not. Where that is load-bearing the criterion says "per N.M"; where it is not
-> stated, assume a sibling is carrying it and check before concluding a gap.
+> stated, assume a sibling is carrying it and check before concluding a gap. Whole
+> requirements interlock the same way — Req 1's check needs Req 2's placement to know
+> which block it applies to, and Req 8 needs Req 3's report to have something to
+> trust — which is why the build order below is by PR rather than by requirement.
 
 ## Introduction
 
@@ -66,10 +69,9 @@ comes first.
 
 ## Glossary
 
-- **Archive**: the ICRC archive canister, `ic-icrc1-archive`. Req 1 through Req 6
-  are obligations on it alone — the ICP archive is a separate canister and is not
-  changed here, per the corresponding non-goal — so "THE Archive" never means the ICP
-  one. The exceptions are Req 4.5 and Req 4.6, which say THE Ledger and bind it.
+- **Archive**: the ICRC archive canister, `ic-icrc1-archive`. "THE Archive" never
+  means the ICP archive, which is a separate canister and is not changed here — see
+  the corresponding non-goal.
 - **Tail_Archive**: the archive a ledger currently appends to — the most recently
   created one. Earlier archives are full and are never written to again.
 - **Archive_Range**: the contiguous span of global block indices an archive holds,
@@ -90,13 +92,11 @@ comes first.
   triggered by a transaction.
 - **Archived_Prefix**: the blocks a ledger has stopped serving itself because an
   archive confirmed holding them.
-- **ARCHIVE_CALL_TIMEOUT**: the longest a ledger waits for a response to a call it
-  is willing to stop waiting for. Req 13 fixes the behaviour; `design.md` settles
-  the number.
-- **BACKOFF_INITIAL**: the minimum spacing between archiving attempts after the
-  first failure. Req 9 fixes the behaviour; `design.md` settles the number.
-- **BACKOFF_CAP**: the ceiling that spacing grows to under repeated failure. Req 9
-  fixes the behaviour; `design.md` settles the number.
+- **ARCHIVE_CALL_TIMEOUT**, **BACKOFF_INITIAL**, **BACKOFF_CAP**: respectively the
+  longest a ledger waits for a response to a call it is willing to stop waiting for,
+  the minimum spacing between archiving attempts after the first failure, and the
+  ceiling that spacing grows to under repeated failure. Req 13 and Req 9 fix the
+  behaviour; `design.md` settles the numbers.
 - **`block_index_offset`**: the archive's published second `init` argument, the
   global index of the first block it will ever hold. It is fixed for the life of
   the canister.
@@ -142,30 +142,21 @@ comes first.
   covers the refusals that *do* return control, and this class is out of reach of any
   protocol change (Req 4.7).
 
-  The answer to it is configuration, not protocol, and there are two levers. Raising
-  the archive's `reserved_cycles_limit` — 5 T by default — is what the platform's own
-  guidance suggests for this error, alongside moving to a subnet with lower memory
-  usage. Reserving the memory up front is the stronger form: a canister with a
-  reserved allocation is charged when the allocation is made, so growth inside it
-  requires no further reservation and cannot be refused on these grounds at all. That
-  is the drafted `memory_allocation` proposals, and it is why they are a dependency
-  of this work rather than an adjacent nicety.
+  The answer to it is configuration, not protocol — a higher `reserved_cycles_limit`,
+  or better a reserved `memory_allocation`, inside which growth needs no further
+  reservation and so cannot be refused on these grounds at all. That is why the
+  drafted proposals are a dependency of this work rather than an adjacent nicety;
+  `design.md` has the mechanism.
 - **Bounding a ledger's memory growth.** Switching archiving back on bounds only the
   blocks a ledger retains — `trigger_threshold` of them, about 1.2 MiB at 2000 — which
-  is the smaller part of what a transaction costs it. A maximal `icrc2_approve` takes
-  ~1040 B of a ledger's stable memory, of which only the ~624 B block is archived; the
-  ~416 B of allowance and expiration entries stay for as long as the approval does. So
-  archiving slows spam-driven growth by roughly 2.5x rather than bounding it, and no
-  `memory_allocation` covers the remainder: stable memory never shrinks, so usage once
-  reached is a permanent floor on what the canister is billed, `max(allocation,
-  usage)`, even after those blocks are archived away — which is also why switching
-  archiving on earlier is worth more than sizing the allocation larger. The heap is
-  the bounded half and resets on upgrade: the dedup window is capped at
-  `MAX_TRANSACTIONS_IN_WINDOW` and self-throttles below it — admitting the first half
-  freely and rate-limiting after that, so 384 MiB is the ceiling and throttling
-  engages around half of it. Rate
-  limiting, the transfer fee and allowance pruning are the levers for the rest, and
-  each is separate work.
+  is the smaller part of what a transaction costs it: of the ~1040 B a maximal
+  `icrc2_approve` takes, only the ~624 B block is archived, and the ~416 B of allowance
+  and expiration entries stay for as long as the approval does. So archiving slows
+  spam-driven growth by roughly 2.5x rather than bounding it, and no `memory_allocation`
+  covers the remainder, because stable memory never shrinks and usage once reached is a
+  permanent floor on what the canister is billed. The heap is the bounded half and
+  resets on upgrade. Rate limiting, the transfer fee and allowance pruning are the
+  levers for the rest, and each is separate work.
 - **Restoring a ledger from a canister snapshot as a recovery path.** A ledger
   restored alone resumes issuing block indices its archives already hold with
   different content, so its chain forks from the archived prefix and balances
@@ -191,15 +182,10 @@ comes first.
 ## Requirements
 
 *Req 1 through Req 6 bind the ICRC archive only, except Req 4.5 and Req 4.6, which
-bind the ledger — they are the ledger's half of the capacity conversation and are
-delivered with the ledger release. Req 7 through Req 13 bind both ledgers except
-where a criterion exempts the ICP one. Grouped by behaviour, not by
-delivery order. Several requirements depend on each
-other — Req 1's check needs Req 2's placement to know which block it applies to, and
-Req 8 needs Req 3's report to have something to trust — so implementing them one
-requirement at a time would mean redoing work. The build order is `design.md`'s
-**Delivery / PR sequence**, where each PR covers a set of criteria; this document is
-what a PR is checked against.*
+bind the ledger. Req 7 through Req 13 bind both ledgers except where a criterion
+exempts the ICP one. Grouped by behaviour, not by delivery order: the build order is
+`design.md`'s **Delivery / PR sequence**, where each PR covers a set of criteria, and
+this document is what a PR is checked against.*
 
 ### Requirement 1: Chain Continuity Is Enforced On Every Stored Block
 
@@ -372,7 +358,10 @@ violation from a capacity problem without access to canister logs.
    each chain ground of Req 1 counted separately (1.1, 1.5, 1.7 and 1.8), a
    covered-range mismatch per 2.9, a gap per 2.2, blocks below its own range per 2.6,
    a stop at its own limit per 4.3, a platform-refused growth per 4.4, an undecodable
-   block per 6.4, and the unverifiable append of 1.6.
+   block per 6.4, and the unverifiable append of 1.6. Separately, because the grounds
+   localise a divergence differently — 1.1 means the blocks offered do not continue
+   the archive's last block, while 2.9 means a range it already holds was re-sent with
+   different content, which points at a ledger that has been rolled back.
 2. THE Archive SHALL NOT fail the call for any outcome counted under 6.1 when the
    append carried a Declared_Index, because failing the call discards the
    count along with everything else the call changed, leaving the cause invisible.
@@ -385,12 +374,7 @@ violation from a capacity problem without access to canister logs.
 5. THE Archive SHALL NOT count an append carrying no blocks under any count in 6.1,
    because such an append is how a ledger asks where an archive stands per 3.5 and
    counting it would raise an operator alarm for an ordinary question.
-6. THE Archive SHALL count a refusal per 2.9 separately from one per 1.1, because
-   the two localise the divergence differently — 1.1 means the blocks offered do not
-   continue the archive's last block, while 2.9 means a range the archive already
-   holds was re-sent with different content, which points at a ledger that has been
-   rolled back.
-7. THE Archive SHALL count 2.6 as a diagnostic rather than as a fault, because per
+6. THE Archive SHALL count 2.6 as a diagnostic rather than as a fault, because per
    9.8 it is the ordinary signal that a ledger is behind and an operator alarmed by
    it would be alarmed by ordinary recovery.
 
@@ -416,8 +400,7 @@ no special cases.
    in it and SHALL expose a distinct non-zero metric.
 5. THE ICP Ledger SHALL derive a new archive's `block_index_offset` from its own
    record instead, and SHALL NOT be held to 7.1, 7.3 or 7.4, because its archives
-   report no Archive_Range and it would otherwise be unable to create an archive at
-   all (per 10.5).
+   report no Archive_Range to derive one from (per 10.5).
 
 ### Requirement 8: No Block Index Ever Becomes Unretrievable
 
@@ -446,9 +429,8 @@ a hole.
 6. THE Ledger SHALL NOT rely on its own record of what it sent when deciding what
    to stop serving, only on what an archive has reported holding.
 7. THE ICP Ledger SHALL rely on its own record instead, and SHALL NOT be held to
-   8.1, 8.2, 8.3, 8.4 or 8.6, because its archives report no Archive_Range and it
-   would otherwise be unable to stop serving any block (per 10.5) — the exposure the
-   corresponding non-goal accepts.
+   8.1, 8.2, 8.3, 8.4 or 8.6, since there is no reported range to rely on
+   (per 10.5) — the exposure the corresponding non-goal accepts.
 
 ### Requirement 9: Archiving Attempts Are Bounded While Archiving Fails
 
@@ -548,7 +530,8 @@ rather than several.
 #### Acceptance Criteria
 
 1. THE Ledger SHALL send at most one block-carrying `append_blocks` per
-   Archiving_Round.
+   Archiving_Round, and at most one carrying no blocks, so that the probe of 10.3 is
+   bounded too rather than left outside the count.
 2. THE Ledger SHALL create at most one archive per Archiving_Round.
 3. THE Ledger SHALL choose the blocks for an Archiving_Round so that they fit one
    inter-canister message, measured in bytes rather than counted in blocks,
@@ -556,9 +539,6 @@ rather than several.
 4. THE Ledger SHALL expose the number of blocks an Archiving_Round is permitted to
    carry, so that the enforced value is observable rather than only the configured
    one.
-5. THE Ledger SHALL make at most one append carrying no blocks per Archiving_Round,
-   so that the probe of 10.3 is bounded too and 12.1's "block-carrying" is not a
-   licence to send unboundedly many empty ones.
 
 ### Requirement 13: A Ledger Does Not Wait Indefinitely For An Archive
 
