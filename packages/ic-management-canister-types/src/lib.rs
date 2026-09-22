@@ -2120,6 +2120,10 @@ pub struct FetchCanisterLogsResult {
 ///
 /// Breakdown of cycles consumed by a canister.
 ///
+/// The amounts cover everything consumed since April 2023, as far back as any
+/// per-use-case record of a canister goes; [`Self::http_outcalls`] is the one
+/// exception (see there).
+///
 /// See [`CanisterMetricsResult::cycles_consumed`].
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
@@ -2145,6 +2149,9 @@ pub struct CyclesConsumed {
     /// Cycles consumed for canister creation.
     pub canister_creation: Nat,
     /// Cycles consumed for HTTP outcalls.
+    ///
+    /// Unlike the other fields, covers only the outcalls made since May 2026: no
+    /// per-canister total from before then is retained.
     pub http_outcalls: Nat,
     /// Cycles burned (i.e. not returned to the canister).
     pub burned_cycles: Nat,

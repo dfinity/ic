@@ -1282,6 +1282,7 @@ impl CanisterManager {
         }
     }
 
+    /// Reports the cycles the canister has consumed, by use case.
     pub(crate) fn get_canister_metrics(
         &self,
         sender: PrincipalId,
