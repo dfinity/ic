@@ -9516,8 +9516,8 @@ fn failed_create_snapshot_from_metadata_charges_for_instructions() {
     let canister_id = test
         .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
         .unwrap();
-    // Exhaust the subnet available execution memory so that the memory of the
-    // snapshot cannot be accounted for against it.
+    // Leave no subnet execution memory available, so that there is none left
+    // for the snapshot and the operation fails with `SubnetOversubscribed`.
     test.set_available_execution_memory(0);
 
     let args = UploadCanisterSnapshotMetadataArgs::new(

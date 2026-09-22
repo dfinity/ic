@@ -1831,8 +1831,6 @@ impl CanisterManager {
         let instructions = self.config.upload_wasm_chunk_instructions;
         let cost = self
             .cycles_account_manager
-            .management_canister_cost(instructions, subnet_cycles_config);
-        self.cycles_account_manager
             .consume_cycles_for_management_canister_instructions(
                 &sender,
                 canister,
@@ -2776,7 +2774,8 @@ impl CanisterManager {
             .config
             .canister_snapshot_data_baseline_instructions
             .saturating_add(&NumInstructions::new(num_response_bytes));
-        self.cycles_account_manager
+        let cost = self
+            .cycles_account_manager
             .consume_cycles_for_management_canister_instructions(
                 &sender,
                 canister,
@@ -2784,9 +2783,6 @@ impl CanisterManager {
                 subnet_cycles_config,
             )
             .map_err(CanisterManagerError::NotEnoughCycles)?;
-        let cost = self
-            .cycles_account_manager
-            .management_canister_cost(num_instructions, subnet_cycles_config);
         consumed_cycles.add(cost, num_instructions);
         round_limits.instructions -= as_round_instructions(num_instructions);
         let chunk: Result<Vec<u8>, CanisterManagerError> = match kind {
@@ -2910,8 +2906,6 @@ impl CanisterManager {
             .saturating_add(&new_snapshot_size.get().into());
         let cost = self
             .cycles_account_manager
-            .management_canister_cost(instructions, subnet_cycles_config);
-        self.cycles_account_manager
             .consume_cycles_for_management_canister_instructions(
                 &sender,
                 canister,
@@ -3016,7 +3010,8 @@ impl CanisterManager {
         // but the instructions used to copy the data still need to be accounted for.
         // Cycles for instructions should also be charged.
         let (bytes_written, instructions) = self.get_bytes_and_instructions(args);
-        self.cycles_account_manager
+        let cost = self
+            .cycles_account_manager
             .consume_cycles_for_management_canister_instructions(
                 &sender,
                 canister,
@@ -3024,9 +3019,6 @@ impl CanisterManager {
                 subnet_cycles_config,
             )
             .map_err(CanisterManagerError::NotEnoughCycles)?;
-        let cost = self
-            .cycles_account_manager
-            .management_canister_cost(instructions, subnet_cycles_config);
         consumed_cycles.add(cost, instructions);
         round_limits.instructions -= as_round_instructions(instructions);
 

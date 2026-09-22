@@ -440,13 +440,17 @@ impl CyclesAccountManager {
 
     /// Withdraws and consumes the cost of executing the given number of
     /// instructions in the management canister.
+    ///
+    /// Returns the consumed cycles, so that callers which need to record the
+    /// charge do not have to recompute it (and risk recording an amount other
+    /// than the one actually charged).
     pub fn consume_cycles_for_management_canister_instructions(
         &self,
         sender: &PrincipalId,
         canister: &mut CanisterState,
         amount: NumInstructions,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-    ) -> Result<(), CanisterOutOfCyclesError> {
+    ) -> Result<CompoundCycles<Instructions>, CanisterOutOfCyclesError> {
         let memory_usage = canister.memory_usage();
         let message_memory = canister.message_memory_usage();
         let cycles = self.management_canister_cost(amount, subnet_cycles_config);
@@ -459,6 +463,7 @@ impl CyclesAccountManager {
             subnet_cycles_config,
             reveal_top_up,
         )
+        .map(|_| cycles)
     }
 
     /// Prepays the cost of executing a message with the given number of
