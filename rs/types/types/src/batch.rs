@@ -414,7 +414,7 @@ mod tests {
             canister_http,
             query_stats,
             chain_key,
-            upgrade: _,
+            upgrade,
         } = BatchPayload::default();
 
         assert_eq!(ingress.total_ids_size_estimate(), NumBytes::new(0));
@@ -423,6 +423,7 @@ mod tests {
         assert_eq!(canister_http.len(), 0);
         assert_eq!(query_stats.len(), 0);
         assert_eq!(chain_key.len(), 0);
+        assert_eq!(upgrade.len(), 0);
     }
 
     /// This is a quick test to check the invariant, that the [`Default`] implementation
