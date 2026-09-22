@@ -445,6 +445,10 @@ pub struct SubnetMetrics {
     ///   canister's total consumption (the sum of these use cases) is also added
     ///   here. Summing both would double count the cycles consumed by deleted
     ///   canisters.
+    ///
+    /// The scalar predates the `consumed_cycles_by_use_case` map, so it may be
+    /// strictly larger than the sum of the entries above: deletions from before
+    /// use-case tracking are recorded in it alone.
     consumed_cycles_by_deleted_canisters: NominalCycles,
     consumed_cycles_http_outcalls: NominalCycles,
     consumed_cycles_ecdsa_outcalls: NominalCycles,
