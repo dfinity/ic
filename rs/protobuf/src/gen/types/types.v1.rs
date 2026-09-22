@@ -1496,8 +1496,6 @@ pub struct Block {
     pub query_stats_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "17")]
     pub chain_key_payload_bytes: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "18")]
-    pub upgrade_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "11")]
     pub payload_hash: ::prost::alloc::vec::Vec<u8>,
 }

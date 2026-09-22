@@ -149,7 +149,7 @@ use ic_types::{
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
         ChainKeyData, ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
-        UpgradePayload, ValidationContext, XNetPayload,
+        ValidationContext, XNetPayload,
     },
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpRequestId,
@@ -3172,7 +3172,6 @@ impl StateMachine {
                     .map(|p| p.get().to_vec())
                     .unwrap_or_default(),
                 query_stats: payload.query_stats,
-                upgrade: UpgradePayload::default(),
             },
             chain_key_data: ChainKeyData {
                 master_public_keys: self.chain_key_subnet_public_keys.clone(),
