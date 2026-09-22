@@ -68,19 +68,7 @@ def download_file(name, url, sha256, out = None, url_prefix = DEFAULT_URL_PREFIX
         # so this Namespace.so-specific execution property is what would open up the network for
         # the action on an RBE worker. Without a remote executor the property is inert.
         exec_properties = {"namespace_requires_network": "true"},
-        # requires-network: bazel/conf/.bazelrc.build sets --nosandbox_default_allow_network,
-        #   so a locally sandboxed run needs it to leave the sandbox's network namespace.
-        # no-remote-exec: run the download on the machine driving the build (the RBE driver
-        #   container on CI), not on an RBE worker. On 2026-09-16 the worker sandbox had no
-        #   network at all despite the execution property above (every curl failed instantly
-        #   with "Could not resolve host", see
-        #   https://github.com/dfinity/ic/actions/runs/35143842952/job/104955157611), while the
-        #   driver has downloaded the mainnet ICOS images for months. Remotely executed consumers
-        #   still get the file: Bazel uploads a locally produced output to the remote CAS when a
-        #   remote action needs it as an input. Drop the tag again once a non-cached network
-        #   action has been shown to work on the workers.
-        # manual: never pulled in by a wildcard.
-        tags = ["manual", "no-remote-exec", "requires-network"],
+        tags = ["manual", "requires-network"],
         target_compatible_with = ["@platforms//os:linux"],
         tools = [_DOWNLOAD_SCRIPT],
         visibility = visibility,
