@@ -15,7 +15,6 @@ use crate::{
         InvalidSelfValidatingPayloadReason, SelfValidatingPayloadValidationError,
         SelfValidatingPayloadValidationFailure,
     },
-    upgrade::InvalidUpgradePayloadReason,
     validation::{ValidationError, ValidationResult},
 };
 use ic_base_types::{NumBytes, SubnetId};
@@ -76,7 +75,6 @@ pub enum InvalidPayloadReason {
     InvalidCanisterHttpPayload(InvalidCanisterHttpPayloadReason),
     InvalidQueryStatsPayload(InvalidQueryStatsPayloadReason),
     InvalidChainKeyPayload(InvalidChainKeyPayloadReason),
-    InvalidUpgradePayload(InvalidUpgradePayloadReason),
     /// The overall block size is too large, even though the individual payloads are valid
     PayloadTooBig {
         expected: NumBytes,
