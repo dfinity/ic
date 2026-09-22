@@ -79,6 +79,7 @@ mod crypto_hash_stability {
         EquivocationProof, Finalization, FinalizationContent, FinalizationShare, HashedBlock,
         HashedRandomBeacon, Notarization, NotarizationContent, NotarizationShare, Payload,
         RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank,
+        UpgradePermitAuthorizationRequest, UpgradePermitAuthorizationShare,
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
@@ -449,6 +450,42 @@ mod crypto_hash_stability {
             hex::encode(hash.get_ref().0.as_slice()),
             "05ed4e7823575286d45e2f39d4b5f0bb8bb2dab4388765e0750067eb2999c09e",
             "Hash of DkgMessage changed"
+        );
+    }
+
+    /// Test stability of UpgradePermitAuthorizationRequest hash output
+    #[test]
+    fn upgrade_permit_authorization_request_stability() {
+        let data = UpgradePermitAuthorizationRequest {
+            requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
+            request_height: Height::from(42),
+        };
+        let hash = crypto_hash(&data);
+        assert_eq!(
+            hex::encode(hash.get_ref().0.as_slice()),
+            "c01cc8564217818aaedb7d2441000413c44b75e5a7769ad25b8f7f30fe9b15a4",
+            "Hash of UpgradePermitAuthorizationRequest changed"
+        );
+    }
+
+    /// Test stability of UpgradePermitAuthorizationShare hash output
+    #[test]
+    fn upgrade_permit_authorization_share_stability() {
+        let data: UpgradePermitAuthorizationShare = Signed {
+            content: UpgradePermitAuthorizationRequest {
+                requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
+                request_height: Height::from(42),
+            },
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![0x42; 64])),
+                signer: NodeId::from(PrincipalId::new_node_test_id(42)),
+            },
+        };
+        let hash = crypto_hash(&data);
+        assert_eq!(
+            hex::encode(hash.get_ref().0.as_slice()),
+            "c8468fda9b05e8d21600642039b055bc97fc86226395b84f36ac351c00451bec",
+            "Hash of UpgradePermitAuthorizationShare changed"
         );
     }
 
