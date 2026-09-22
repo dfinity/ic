@@ -244,14 +244,13 @@ pub(crate) fn make_certified_stream_slice_with_msg_limit(
 }
 
 /// Creates an advert for `LOCAL_SUBNET` out of the given stream: a header-only
-/// `CertifiedStreamSlice`, canonically encoded so that it actually decodes, with
-/// a certification at `CERTIFIED_HEIGHT`.
+/// `CertifiedStreamSlice`, with empty witness and certification.
 ///
 /// Unlike `make_certified_stream_slice`, which goes through `FakeStateManager`
-/// and its CBOR encoding, this can be handed to `decode_slice_header()`.
+/// and its test-only CBOR encoding, this uses the canonical encoding and can be
+/// handed directly to `decode_slice_header()`.
 pub(crate) fn make_advert(stream: &Stream) -> CertifiedStreamSlice {
-    // `REMOTE_SUBNET`'s state, holding the advertised stream to us. Not our own
-    // state: the canonical traversal skips the loopback stream.
+    // `REMOTE_SUBNET`'s state, holding the advertised stream to us.
     let mut state = ReplicatedState::new(REMOTE_SUBNET, SubnetType::Application);
     state.with_streams(btreemap![LOCAL_SUBNET => stream.clone()]);
     state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;

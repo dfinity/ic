@@ -1577,8 +1577,7 @@ impl CertifiedSlicePool {
     ///
     /// A stream's `begin`, `end` and `signals_end` always advance monotonically, so
     /// a header that is ahead in one and behind in another comes from a peer that
-    /// is misbehaving. It is ignored rather than merged, so that the record stays a
-    /// header that the peer actually certified.
+    /// is misbehaving. It is ignored rather than merged.
     pub fn record_peer_header(
         &mut self,
         subnet_id: SubnetId,

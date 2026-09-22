@@ -167,9 +167,9 @@ impl XNetAdvertOutcome {
 /// The reason for rejecting a XNet advert.
 #[derive(Debug)]
 pub enum XNetAdvertError {
-    /// Could not be decoded, or its certification could not be verified.
+    /// Could not be decoded.
     DecodeError(String),
-    /// Invalid signature.
+    /// Invalid certification or mismatching witness.
     InvalidSignature,
 }
 
