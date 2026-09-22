@@ -288,13 +288,24 @@ async fn try_start_rosetta(
     // wait because rosetta may be recovering from existing state
     let mut tries_left = NUM_TRIES;
     loop {
-        let res = http_client
-            .post(format!("http://localhost:{port}/network/list").as_str())
-            .header("Content-Type", "application/json")
-            .send()
-            .await;
-        if res.is_ok_and(|res| res.status().is_success()) {
-            break;
+        // Bound the probe itself by the deadline too, so that a Rosetta that
+        // accepts connections but never answers can't exceed the budget.
+        let res = tokio::time::timeout_at(
+            tokio::time::Instant::from_std(deadline),
+            http_client
+                .post(format!("http://localhost:{port}/network/list").as_str())
+                .header("Content-Type", "application/json")
+                .send(),
+        )
+        .await;
+        match res {
+            Ok(Ok(res)) if res.status().is_success() => break,
+            Ok(_) => {}
+            Err(_elapsed) => {
+                return Err(StartAttemptError::fatal(format!(
+                    "Rosetta didn't serve /network/list on port {port} in time"
+                )));
+            }
         }
         if let Some(status) = proc.try_wait()? {
             return Err(StartAttemptError::exited(format!(
