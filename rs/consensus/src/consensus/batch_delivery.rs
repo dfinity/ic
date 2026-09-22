@@ -280,7 +280,7 @@ fn deliver_batches(
                         batch_messages: BatchMessages::default(),
                         chain_key_data,
                         consensus_responses: vec![],
-                        canister_http_spent: Default::default(),
+                        canister_http_spent: CanisterHttpSpent::default(),
                         requires_full_state_hash: true,
                     }
                 }
