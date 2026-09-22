@@ -60,7 +60,9 @@ use ic_recovery::{
 use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::ic::{
+    AmountOfMemoryKiB, InternetComputer, Node, Subnet, VmResourceOverrides,
+};
 use ic_system_test_driver::driver::test_env_api::{get_dependency_path_from_env, scp_send_to};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
@@ -96,6 +98,11 @@ const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
 
+/// Memory of the VMs whose GuestOS gets upgraded during the recovery. `manageboot.sh` extracts the
+/// ~1.8 GiB update image into `/tmp`, a tmpfs of half the RAM; if ic-recovery's `UploadState` step
+/// interrupts the install, the leaked extraction must still leave room for the retry.
+const GUESTOS_UPGRADE_VM_MEMORY: AmountOfMemoryKiB = AmountOfMemoryKiB::new(8 * 1024 * 1024);
+
 struct SetupConfig {
     nns_nodes: usize,
     source_nodes: usize,
@@ -103,6 +110,7 @@ struct SetupConfig {
     unassigned_nodes: usize,
     nns_dkg_interval: u64,
     app_dkg_interval: u64,
+    guestos_upgrade: bool,
 }
 
 impl SetupConfig {
@@ -114,6 +122,7 @@ impl SetupConfig {
             unassigned_nodes: 0,
             nns_dkg_interval: DKG_INTERVAL,
             app_dkg_interval: DKG_INTERVAL,
+            guestos_upgrade: false,
         }
     }
 
@@ -160,6 +169,13 @@ impl SetupConfig {
         self.app_dkg_interval = dkg_interval;
         self
     }
+
+    /// The test upgrades the GuestOS of the recovered subnet's nodes (a `TestConfig` with `upgrade`
+    /// set, recovering on the same nodes), which needs `GUESTOS_UPGRADE_VM_MEMORY`.
+    fn with_guestos_upgrade(mut self) -> Self {
+        self.guestos_upgrade = true;
+        self
+    }
 }
 
 pub fn setup_large_chain_keys(env: TestEnv) {
@@ -173,12 +189,19 @@ pub fn setup_large_chain_keys(env: TestEnv) {
 }
 
 pub fn setup_same_nodes_huge_dkg_interval(env: TestEnv) {
-    let config = SetupConfig::new().with_app_dkg_interval(DKG_INTERVAL_HUGE);
+    let config = SetupConfig::new()
+        .with_app_dkg_interval(DKG_INTERVAL_HUGE)
+        .with_guestos_upgrade();
     setup(env, config);
 }
 
 pub fn setup_same_nodes_chain_keys(env: TestEnv) {
     let config = SetupConfig::new().with_chain_keys();
+    setup(env, config);
+}
+
+pub fn setup_same_nodes_chain_keys_upgrade(env: TestEnv) {
+    let config = SetupConfig::new().with_chain_keys().with_guestos_upgrade();
     setup(env, config);
 }
 
@@ -191,6 +214,11 @@ pub fn setup_failover_nodes_chain_keys(env: TestEnv) {
 
 pub fn setup_same_nodes(env: TestEnv) {
     let config = SetupConfig::new();
+    setup(env, config);
+}
+
+pub fn setup_same_nodes_upgrade(env: TestEnv) {
+    let config = SetupConfig::new().with_guestos_upgrade();
     setup(env, config);
 }
 
@@ -215,6 +243,13 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
         })
         .collect();
 
+    // Only the nodes of the recovered app subnet get upgraded: those of the app subnet created
+    // here or, if there is none, the unassigned nodes from which the test creates the app subnet.
+    let upgraded_vm_resource_overrides = VmResourceOverrides {
+        memory_kibibytes: cfg.guestos_upgrade.then_some(GUESTOS_UPGRADE_VM_MEMORY),
+        ..Default::default()
+    };
+
     let mut ic = InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -231,13 +266,18 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
                     idkg_key_rotation_period_ms: None,
                     max_parallel_pre_signature_transcripts_in_creation: None,
                 }),
-        )
-        .with_unassigned_nodes(cfg.unassigned_nodes);
+        );
+    for _ in 0..cfg.unassigned_nodes {
+        ic = ic.with_unassigned_node(
+            Node::new().with_resource_overrides(upgraded_vm_resource_overrides),
+        );
+    }
     if cfg.app_nodes > 0 {
         ic = ic.add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(cfg.app_dkg_interval))
-                .add_nodes(cfg.app_nodes),
+                .add_nodes(cfg.app_nodes)
+                .with_resource_overrides(upgraded_vm_resource_overrides),
         );
     }
 
