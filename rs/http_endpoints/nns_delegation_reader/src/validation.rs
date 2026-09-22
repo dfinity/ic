@@ -36,13 +36,13 @@ pub enum CanisterRangesCheck {
     /// correctly, the two locations should always match.
     AllSubnetRanges,
     /// Check that the ranges certified at `/subnet/<subnet_id>/canister_ranges` cover the
-    /// given canister id if and only if the state assigns it to the delegated subnet.
+    /// given canister ID if and only if the state assigns it to the delegated subnet.
     /// It is not a problem if other parts of the certified ranges are inconsistent with
     /// the state. Ranges certified at `/canister_ranges/<subnet_id>` are ignored.
     CanisterInFlat(CanisterId),
     /// Check that the ranges certified at `/canister_ranges/<subnet_id>` cover the given
-    /// canister id if and only if the state assigns it to the delegated subnet. Only the
-    /// single leaf which could cover the canister id is read, so it is not a problem if
+    /// canister ID if and only if the state assigns it to the delegated subnet. Only the
+    /// single leaf which could cover the canister ID is read, so it is not a problem if
     /// other parts of the certified ranges are inconsistent with the state. The
     /// `/subnet/<subnet_id>/canister_ranges` leaf is ignored.
     CanisterInTree(CanisterId),
@@ -251,8 +251,8 @@ fn do_flat_ranges_cover_canister(
 /// subtree cover `canister_id`.
 ///
 /// The leaves are keyed by the start of the first range they contain, so the only leaf
-/// which could cover the canister id is the one with the largest label which is not
-/// greater than the canister id; no other leaf is read.
+/// which could cover the canister ID is the one with the largest label which is not
+/// greater than the canister ID; no other leaf is read.
 fn do_tree_ranges_cover_canister(
     tree: &LabeledTree<Vec<u8>>,
     subnet_id: SubnetId,
@@ -271,7 +271,7 @@ fn do_tree_ranges_cover_canister(
                 "unexpected subtree at /canister_ranges/{subnet_id}/{label}"
             )))
         }
-        // All the leaves' ranges start beyond the canister id, so none covers it.
+        // All the leaves' ranges start beyond the canister ID, so none covers it.
         LookupLowerBoundStatus::LabelNotFound => Ok(false),
         LookupLowerBoundStatus::PrefixNotFound => {
             Err(DelegationValidationError::UnexpectedTreeShape(format!(
@@ -729,7 +729,7 @@ mod tests {
     }
 
     /// The per-canister checks only require the delegation and the state to agree on the
-    /// given canister id's membership; inconsistencies in other parts of the certified
+    /// given canister ID's membership; inconsistencies in other parts of the certified
     /// ranges are ignored. The state assigns [10, 20] and [100, 200] to the subnet.
     #[rstest]
     #[case::covered_by_both(15, vec![range(10, 20), range(100, 200)], true)]
@@ -758,7 +758,7 @@ mod tests {
         );
     }
 
-    /// The ranges are inclusive at both ends: a canister id falling exactly on a range's
+    /// The ranges are inclusive at both ends: a canister ID falling exactly on a range's
     /// start or end is covered.
     #[rstest]
     #[case::before_first_range(9, false)]
@@ -844,7 +844,7 @@ mod tests {
     }
 
     /// The tree-location per-canister check reads only the single leaf which could cover
-    /// the canister id, so a malformed *other* leaf does not affect it.
+    /// the canister ID, so a malformed *other* leaf does not affect it.
     #[test]
     fn tree_location_check_ignores_malformed_other_leaves() {
         let subnet_id = SUBNET_1;
