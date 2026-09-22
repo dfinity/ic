@@ -301,9 +301,9 @@ makes progress under storage pressure instead of repeating work it cannot finish
    configured storage limit, THE Archive SHALL store the blocks before it and SHALL
    report the Archive_Position it reached, which it can always do because it decides
    this from its own configuration and its own usage without asking for memory.
-2. THE Archive SHALL NOT itself discard blocks it has already stored in order to
-   refuse an append, because under a persistent cause each attempt would then make
-   no progress at all.
+2. WHEN an append carried a Declared_Index, THE Archive SHALL NOT itself discard
+   blocks it has already stored in order to refuse it, because under a persistent
+   cause each attempt would then make no progress at all.
 3. WHEN THE Archive stops short because it has reached its own configured storage
    limit, THE Archive SHALL report `at_capacity` as true.
 4. WHEN THE Archive stops short because it was observably refused more memory, THE
@@ -320,8 +320,9 @@ makes progress under storage pressure instead of repeating work it cannot finish
    control and can neither keep a partial result nor report anything — the exposure
    the corresponding non-goal accepts, and one 4.1 is untouched by, since reaching a
    configured limit asks for no memory and so cannot be refused.
-8. WHEN THE Archive is instead refused memory it asked for, and the refusal returns
-   control to it, THE Archive SHALL behave as in 4.1.
+8. WHEN THE Archive is instead refused memory it asked for while storing an
+   Indexed_Append, and the refusal returns control to it, THE Archive SHALL behave as
+   in 4.1.
 9. WHEN THE Archive stored every block it was offered, or stored none because they
    were all already held, THE Archive SHALL report `at_capacity` as false, because a
    ledger reading it as true would create an archive it does not need.
@@ -345,6 +346,11 @@ so that the archive can be released on its own.
    are distinct encodings and both are produced in practice.
 4. THE Archive SHALL NOT require a Declared_Index, because requiring one would
    break every ledger not yet upgraded.
+5. IF THE Archive cannot store every block of an Index_Less_Append, THEN THE Archive
+   SHALL store none of them and SHALL fail the call, rather than storing a prefix as
+   it would under 4.1, because such a caller receives no reply to read and would
+   account for the whole batch — leaving the unstored suffix in no archive and no
+   longer served by the ledger.
 
 ### Requirement 6: Every Refusal And Short Stop Is Counted
 

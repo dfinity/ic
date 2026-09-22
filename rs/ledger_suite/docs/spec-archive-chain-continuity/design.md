@@ -456,8 +456,16 @@ Order of work, per D4 and D5:
    is one hash per stored block, which is what makes `Req 2.8` a property the archive
    enforces rather than one it inherits from the sender — worth the cost precisely
    because the rest of this design exists to stop trusting what the ledger asserts.
-7. Append the suffix, stopping short where it must (`Req 4.1`, `4.2`, `4.8`), and
-   report `at_capacity` false whenever nothing stopped short (`Req 4.9`). Note the one
+7. Append the suffix. **For an indexed append**, stop short where it must
+   (`Req 4.1`, `4.2`, `4.8`) and report `at_capacity` false whenever nothing stopped
+   short (`Req 4.9`). **For an index-less one it is all-or-nothing** (`Req 5.5`): if
+   the whole batch does not fit, store none of it and fail the call, which is what the
+   archive does today. Partial progress is only safe for a caller that can be *told*
+   it was partial — an index-less caller gets an empty reply, reads success as the
+   whole batch, and removes all of it, so a stored prefix would leave the suffix in no
+   archive and no longer served by the ledger. That is the one case where rolling back
+   what was stored is the safe act rather than the wasteful one, which is why
+   `Req 4.2` is scoped to indexed appends. Note the one
    wasted round this leaves: an archive that stores its last block exactly fills, still
    answers false, and is found full on the next round — which then spawns. Two
    different stops, and only one of them depends on the platform. `Req 4.1` is the
@@ -758,7 +766,8 @@ test is baseline-independent.
 | 4 | archive | append `N..N+499`, then `N..N+999`; assert the extent becomes 1000 not 1500, every index resolves, and the chain check did not refuse on the covered prefix | `Req 2.3`, `Req 1.3` |
 | 5 | archive | append 1000 blocks, then re-append the first 600; assert success, nothing stored, extent unchanged — the case a plausible implementation panics on | `Req 2.5` |
 | 6 | archive | append at an index above the position; assert a gap and nothing stored | `Req 2.2` |
-| 7 | archive | size `max_memory_size_bytes` so a batch only partly fits; assert a short `next_index`, `at_capacity = true`, and that the blocks that fit are readable | `Req 4.1`, `4.2`, `4.3` |
+| 7 | archive | size `max_memory_size_bytes` so a batch only partly fits; append it **with an index** and assert a short `next_index`, `at_capacity = true`, and that the blocks that fit are readable | `Req 4.1`, `4.2`, `4.3` |
+| 7b | archive | the same over-large batch **without** an index; assert the call fails and the archive holds exactly what it held before — the partial store that would make the suffix unretrievable | `Req 5.5` |
 | 8 | archive | **partly written**: `test_empty_append_blocks_is_accepted_and_stores_nothing` already asserts an empty append stores nothing and consumes no capacity, on both the one-argument and null-index shapes. Extend it against the new implementation to assert an *indexed* empty append reports an extent, that an indexed empty append above the archive's position is neither refused nor counted, and that both index-less empty shapes still reply **empty** — the last of these is what fails if the empty check is ordered before the index check | `Req 3.5`, `Req 5.1`, `Req 6.5` |
 | 9 | archive | genesis into an empty archive with offset 0; then assert a block with no parent hash is refused by an archive whose offset is non-zero, and by one that already holds blocks | `Req 1.5` |
 | 9b | archive | install with no Expected_Parent, append into it, and assert it is stored and the unverifiable-first-append counter rises | `Req 1.4`, `Req 1.6` |
