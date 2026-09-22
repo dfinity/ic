@@ -22,7 +22,7 @@ use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
         CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPayloadValidationFailure,
-        InvalidCanisterHttpPayloadReason,
+        InvalidCanisterHttpPayloadReason, ResponseVisibility,
     },
     consensus::{InvalidPayloadReason, PayloadValidationError, PayloadValidationFailure},
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
@@ -1786,6 +1786,7 @@ pub(crate) fn add_received_artifacts_to_pool(
 
         pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
             artifact.share,
+            ResponseVisibility::Publish,
         )]);
     }
 }
@@ -1806,6 +1807,7 @@ pub(crate) fn add_received_shares_to_pool(
 
         pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
             artifact.share,
+            ResponseVisibility::Publish,
         )]);
     }
 }
@@ -1819,6 +1821,7 @@ pub(crate) fn add_own_share_to_pool(
     pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
         share.clone(),
         content.clone(),
+        ResponseVisibility::Withhold,
     )]);
 }
 

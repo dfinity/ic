@@ -7,6 +7,7 @@
 //! implementation details.
 
 use super::*;
+use base64::prelude::*;
 use std::fmt;
 
 #[cfg(test)]
@@ -14,13 +15,13 @@ mod tests;
 
 impl fmt::Debug for IndividualSignatureBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", base64::encode(&self.0[..]))
+        write!(f, "{:?}", BASE64_STANDARD.encode(&self.0[..]))
     }
 }
 
 impl fmt::Debug for CombinedSignatureBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", base64::encode(&self.0[..]))
+        write!(f, "{:?}", BASE64_STANDARD.encode(&self.0[..]))
     }
 }
 

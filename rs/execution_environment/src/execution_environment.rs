@@ -317,7 +317,7 @@ pub(crate) struct ConsumedCyclesForInstructions<'a> {
 }
 
 impl<'a> ConsumedCyclesForInstructions<'a> {
-    fn new(
+    pub(crate) fn new(
         cycles_account_manager: &'a CyclesAccountManager,
         cost_schedule: CanisterCyclesCostSchedule,
         log: &'a ReplicaLogger,
@@ -338,6 +338,15 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
     ) {
         self.consumed_cycles += cycles;
         self.instructions_used += instructions;
+    }
+
+    /// Returns `true` if nothing has been accumulated, i.e. `apply` would be a
+    /// no-op. Used to assert that paths which deliberately throw the
+    /// accumulator away cannot lose a charge.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.consumed_cycles.is_zero()
+            && self.instructions_used.get() == 0
+            && self.install_code_debit.get() == 0
     }
 
     /// Accumulates instructions that count towards the `install_code` rate
@@ -383,6 +392,16 @@ impl<'a> ConsumedCyclesForInstructions<'a> {
             );
         }
         round_limits.instructions -= as_round_instructions(self.instructions_used);
+    }
+}
+
+impl fmt::Debug for ConsumedCyclesForInstructions<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConsumedCyclesForInstructions")
+            .field("consumed_cycles", &self.consumed_cycles)
+            .field("instructions_used", &self.instructions_used)
+            .field("install_code_debit", &self.install_code_debit)
+            .finish()
     }
 }
 
@@ -746,7 +765,7 @@ impl ExecutionEnvironment {
                                 new_price.nominal(),
                             );
                             self.metrics
-                                .observe_http_outcall_request(context, &response);
+                                .observe_http_outcall_delivered(context, &response);
 
                             let max_response_size = match context.max_response_bytes {
                                 Some(response_size) => response_size.get(),
@@ -2720,13 +2739,14 @@ impl ExecutionEnvironment {
         );
         self.execute_mgmt_operation_on_canister(
             canister_id,
-            |canister, _msg, round_limits, _consumed_cycles| {
+            |canister, _msg, round_limits, consumed_cycles| {
                 self.canister_manager.update_settings(
                     timestamp_nanos,
                     origin,
                     settings,
                     canister,
                     round_limits,
+                    consumed_cycles,
                     saturation,
                     subnet_cycles_config,
                     &self.metrics,
@@ -3440,11 +3460,12 @@ impl ExecutionEnvironment {
             // `ExecutionRound` is numerically the finalized consensus block
             // height; see `rs/messaging/src/state_machine.rs`.
             block_height: candid::Nat::from(current_round.get()),
-            // `num_canisters` and `update_transactions_total` are written at the
-            // *end* of a round (`message_routing.rs`, `scheduler.rs`), so a call
-            // executing in round N reports the end-of-round-(N-1) values. That
-            // one-round lag is what `read_state` reports for height N-1 too, so the
-            // two agree; it is nonetheless not literally "current".
+            // `num_canisters`, `update_transactions_total` and
+            // `million_round_instructions_total` are written at the *end* of a round
+            // (`message_routing.rs`, `scheduler.rs`), so a call executing in round N
+            // reports the end-of-round-(N-1) values. For the two with `read_state`
+            // counterparts that same lag applies there at height N-1, so they agree;
+            // it is nonetheless not literally "current".
             num_canisters: candid::Nat::from(metrics.num_canisters),
             // Read from the stored `SubnetMetrics` field rather than recomputed
             // live, so that the value agrees with the certified state tree. Note
@@ -3455,6 +3476,9 @@ impl ExecutionEnvironment {
             canister_state_bytes: candid::Nat::from(metrics.canister_state_bytes.get()),
             consumed_cycles_total: candid::Nat::from(consumed_cycles_total.get()),
             update_transactions_total: candid::Nat::from(metrics.update_transactions_total),
+            million_round_instructions_total: candid::Nat::from(
+                metrics.round_instructions_total.div_ceil(1_000_000),
+            ),
         };
         Ok(Encode!(&res).unwrap())
     }
@@ -4890,9 +4914,15 @@ impl ExecutionEnvironment {
                                 None => false,
                             }
                         }
-                        // Should only happen for old stop requests that existed
-                        // before call ids were added.
-                        None => false,
+                        // Only happens for old stop requests that existed before
+                        // call ids were added. There is no recorded time to
+                        // expire such a request against, but call ids predate
+                        // any replica version still in use, so these requests
+                        // are all long past the timeout: expire them
+                        // unconditionally. Otherwise they could never be timed
+                        // out at all.
+                        // TODO(EXC-1466): Remove along with the optional call id.
+                        None => true,
                     }
                 });
             if stopped {

@@ -77,6 +77,10 @@ const STUCK_STATE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 #[cfg(test)]
 const STUCK_STATE_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// With SEV enabled, QEMU needs several minutes after the GuestOS powered off to release the
+/// encrypted guest RAM.
+const SEV_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
 /// The GuestOS will log one of these marker texts on the serial output.
 const GUESTOS_BOOT_SUCCESS_MARKER: &str = "GUESTOS BOOT SUCCESS";
 const GUESTOS_BOOT_FAILURE_MARKER: &str = "GUESTOS BOOT FAILURE";
@@ -313,9 +317,9 @@ impl VirtualMachine {
     }
 
     /// Sends an ACPI power-off signal to the GuestOS and waits for it to stop cleanly.
-    /// If the GuestOS does not stop within `GRACEFUL_SHUTDOWN_TIMEOUT`, this returns and the
+    /// If the GuestOS does not stop within the given timeout, this returns and the
     /// `Drop` impl will force-destroy the domain as a fallback.
-    async fn shutdown_gracefully(&self) {
+    async fn shutdown_gracefully(&self, graceful_shutdown_timeout: Duration) {
         match self.get_domain() {
             Ok(domain) => {
                 if let Err(e) = domain.shutdown() {
@@ -330,11 +334,11 @@ impl VirtualMachine {
             }
         }
 
-        match tokio::time::timeout(GRACEFUL_SHUTDOWN_TIMEOUT, self.wait_for_shutdown()).await {
+        match tokio::time::timeout(graceful_shutdown_timeout, self.wait_for_shutdown()).await {
             Ok(()) => info!("GuestOS shut down gracefully"),
             Err(_) => warn!(
                 "GuestOS did not shut down within {:?}, proceeding with force shutdown",
-                GRACEFUL_SHUTDOWN_TIMEOUT
+                graceful_shutdown_timeout
             ),
         }
     }
@@ -805,12 +809,22 @@ impl GuestVmService {
         vm: &VirtualMachine,
         termination_token: CancellationToken,
     ) -> Result<(), GuestVmServiceError> {
+        let graceful_shutdown_timeout = if self
+            .hostos_config
+            .icos_settings
+            .enable_trusted_execution_environment
+        {
+            SEV_GRACEFUL_SHUTDOWN_TIMEOUT
+        } else {
+            GRACEFUL_SHUTDOWN_TIMEOUT
+        };
+
         tokio::select! {
             biased;
             // Wait for either VM shutdown event or stop signal
             _ = termination_token.cancelled() => {
                 info!("Shutting down VM gracefully");
-                vm.shutdown_gracefully().await;
+                vm.shutdown_gracefully(graceful_shutdown_timeout).await;
                 Ok(())
             },
             _ = vm.wait_for_shutdown() => {

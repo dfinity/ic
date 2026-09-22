@@ -65,16 +65,18 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_flexible_test",
-    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
+    cpus = MIN_LOCAL_CPUS + 9 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 9 IC Node VMs (1 system + 2 * 4 app) + 1 UVM (httpbin), 6 vCPUs each.
     enable_uvm = True,
     tags = [
-        "long_test",  # since it exercises many outcall scenarios.
+        "long_test",  # since it exercises many outcall scenarios, on two subnets.
     ],
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/rust_canisters/canister_test",
+        "//rs/types/cycles",
+        "//rs/types/types",
     ],
 )
 
@@ -196,6 +198,19 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "canister_http_unresponsive_replica_test",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
+    enable_uvm = True,
+    tags = [
+        "long_test",  # it waits out the delivered request context's timeout.
+    ],
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
+    },
+    deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
+)
+
+system_test_nns(
     name = "canister_http_non_replicated_test",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
     enable_uvm = True,
@@ -286,11 +301,6 @@ rust_binary(
 
 system_test_nns(
     name = "nns_delegation_mainnet_nns_version_test",
-    # The nodes run the mainnet GuestOS, whose replica predates
-    # `extra_api_boundary_node_trust_anchors_pem`. It therefore only trusts
-    # publicly issued API boundary node certificates, which rules out the local
-    # backend's own CA. Drop this once the field has reached mainnet.
-    backend = "farm",
     cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 4 single-node subnets + 1 API BN, 6 vCPUs each.
     guestos = "mainnet_nns",
     guestos_update = True,

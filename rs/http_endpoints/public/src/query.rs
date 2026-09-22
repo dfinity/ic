@@ -14,7 +14,7 @@ use axum::{
     extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
 };
-use crossbeam::atomic::AtomicCell;
+use crossbeam_utils::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;

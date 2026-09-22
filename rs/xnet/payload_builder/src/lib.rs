@@ -10,11 +10,12 @@ mod tests;
 #[cfg(test)]
 mod xnet_client_tests;
 
-pub use proximity::{GenRangeFn, ProximityMap, UNHEALTHY_NODE_TTL, UnhealthyNodes};
+pub use proximity::{GenRangeFn, ProximityMap, UnhealthyNodes};
 
 use crate::certified_slice_pool::{
     CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes,
 };
+use crate::proximity::UNHEALTHY_NODE_TTL;
 use async_trait::async_trait;
 use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
@@ -42,6 +43,7 @@ use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetListRegistry}
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, replicated_state::ReplicatedStateMessageRouting};
 use ic_types::batch::{ValidationContext, XNetPayload};
+use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
 use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex};
@@ -58,14 +60,46 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 use tokio::{runtime, sync::mpsc};
 
-/// Message and signal indices into a XNet stream or stream slice.
+/// A `StreamIndex` past every index a stream can reasonably hold, used as a
+/// bound that nothing reaches.
+pub const STREAM_INDEX_MAX: StreamIndex = StreamIndex::new(u64::MAX);
+
+/// Message, signal and `header.begin()` indices into a XNet stream or stream
+/// slice.
 ///
 /// Used when computing the expected indices of a stream during payload building
-/// and validation. Or as cutoff points when dealing with stream slices.
-#[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Default)]
+/// and validation. And as cutoff points when trimming pooled stream slices.
+///
+/// The first two are the next indices we expect, the third the last one we have
+/// no use for.
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ExpectedIndices {
+    /// Next expected message index. This is the most recent `messages.end()` in
+    /// past payloads, when present; else `signals_end` of our outgoing stream.
     pub message_index: StreamIndex,
+
+    /// Next expected signal index. This is the most recent `signals_end` in past
+    /// payloads, when present; else `messages_begin()` of our outgoing stream.
     pub signal_index: StreamIndex,
+
+    /// Highest `header.begin()` that would not let us garbage collect any reject
+    /// signal: the index of the first reject signal we would still hold, after
+    /// inducting the past payloads; `STREAM_INDEX_MAX` if we would hold none.
+    ///
+    /// A slice with a `header.begin()` past this is worth inducting even with no
+    /// messages and no new signals.
+    pub max_no_gc_header_begin: StreamIndex,
+}
+
+impl Default for ExpectedIndices {
+    fn default() -> Self {
+        Self {
+            message_index: StreamIndex::from(0),
+            signal_index: StreamIndex::from(0),
+            // No reject signals to garbage collect.
+            max_no_gc_header_begin: STREAM_INDEX_MAX,
+        }
+    }
 }
 
 /// Interface for a pool of incoming `CertifiedStreamSlices`.
@@ -74,12 +108,14 @@ pub trait XNetSlicePool: Send + Sync {
     /// respecting the given message count and byte limits; or, if the provided
     /// `byte_limit` is too small for a header-only slice, returns `Ok(None)`.
     ///
-    /// If all messages are taken, the slice is removed from the pool.
+    /// If the pooled slice begins after `begin.message_index`, its messages cannot
+    /// be taken (yet), so a header-only slice is returned.
+    ///
+    /// If `Ok(Some(_))` is returned and no messages are left, the slice is removed
+    /// from the pool.
     ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` and drops
-    /// the pooled slice if malformed. Returns `Err(TakeBeforeSliceBegin)` and
-    /// drops the pooled slice if `begin`'s `message_index` is before the
-    /// first pooled message.
+    /// the pooled slice if malformed.
     fn take_slice(
         &self,
         subnet_id: SubnetId,
@@ -121,6 +157,8 @@ pub struct XNetPayloadBuilderMetrics {
     pub validate_payload_duration: HistogramVec,
     /// Track outstanding background query tasks
     pub outstanding_queries: IntGauge,
+    /// Count of pulled slices larger than the requested size.
+    pub pull_size_too_large: IntCounter,
     /// Critical error: failed `count_bytes()` on valid slice.
     pub critical_error_slice_count_bytes_failed: IntCounter,
     /// Critical error: mismatch between the byte sizes computed by `take_slice()`,
@@ -195,6 +233,10 @@ impl XNetPayloadBuilderMetrics {
             outstanding_queries: metrics_registry.int_gauge(
                 METRIC_OUTSTANDING_XNET_QUERIES,
                 "Number of xnet queries that have not finished",
+            ),
+            pull_size_too_large: metrics_registry.int_counter(
+                "xnet_builder_pull_size_too_large_count",
+                "Count of pulled slices larger than the requested size",
             ),
             critical_error_slice_count_bytes_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED),
@@ -355,10 +397,7 @@ impl XNetPayloadBuilderImpl {
         ));
 
         let deterministic_rng_for_testing = Arc::new(None);
-        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            Arc::clone(&certified_stream_store),
-            metrics_registry,
-        )));
+        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(metrics_registry)));
         let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(metrics_registry));
         let endpoint_resolver = XNetEndpointResolver::new(
@@ -372,6 +411,7 @@ impl XNetPayloadBuilderImpl {
             Arc::clone(&certified_slice_pool),
             endpoint_resolver,
             Arc::clone(&xnet_client),
+            Arc::clone(&certified_stream_store),
             runtime_handle,
             Arc::clone(&metrics),
             log.clone(),
@@ -439,7 +479,10 @@ impl XNetPayloadBuilderImpl {
     /// when that exists; or `messages_begin()` of the outgoing `Stream` to
     /// `subnet_id` in `state`.
     ///
-    /// Returns the default value `(0, 0)` when no stream or slices from the
+    /// The maximum no-GC `header.begin()` is the first reject signal at or beyond
+    /// the most recent `header.begin()` from `subnet_id` in `payloads`.
+    ///
+    /// Returns `ExpectedIndices::default()` when no stream to or slices from the
     /// given subnet exist.
     fn expected_indices_for_stream(
         &self,
@@ -452,6 +495,13 @@ impl XNetPayloadBuilderImpl {
         // signal index, if present.
         let mut most_recent_signal_index = None;
 
+        // For the maximum no-GC `header.begin()`, start with the most recent (max)
+        // `header.begin()` of any slice from `payloads` (or else, zero). Then find the
+        // first reject signal at or beyond that index, if any.
+        let mut max_header_begin = StreamIndex::from(0);
+
+        let stream = state.streams().get(&subnet_id);
+
         // Look for the most recent stream slice from `subnet_id`, if any.
         for payload in payloads.iter() {
             if let Some(certified_stream) = payload.stream_slices.get(&subnet_id) {
@@ -459,26 +509,31 @@ impl XNetPayloadBuilderImpl {
                     .certified_stream_store
                     .decode_valid_certified_stream_slice(certified_stream)
                     .expect("failed to decode past certified stream");
+                most_recent_signal_index.get_or_insert_with(|| slice.header().signals_end());
+                max_header_begin = max_header_begin.max(slice.header().begin());
                 if let Some(messages) = slice.messages() {
                     return ExpectedIndices {
                         message_index: messages.end(),
-                        signal_index: most_recent_signal_index
-                            .unwrap_or_else(|| slice.header().signals_end()),
+                        signal_index: most_recent_signal_index.unwrap(),
+                        max_no_gc_header_begin: stream
+                            .and_then(|s| s.next_reject_signal_index(max_header_begin))
+                            .unwrap_or(STREAM_INDEX_MAX),
                     };
                 }
-                most_recent_signal_index.get_or_insert_with(|| slice.header().signals_end());
             }
         }
 
         // No stream slice from `subnet_id` in `payloads`, look in `state`.
-        state
-            .streams()
-            .get(&subnet_id)
-            .map(|stream| ExpectedIndices {
-                message_index: stream.signals_end(),
-                signal_index: most_recent_signal_index.unwrap_or_else(|| stream.messages_begin()),
-            })
-            .unwrap_or_default()
+        let Some(stream) = stream else {
+            return ExpectedIndices::default();
+        };
+        ExpectedIndices {
+            message_index: stream.signals_end(),
+            signal_index: most_recent_signal_index.unwrap_or_else(|| stream.messages_begin()),
+            max_no_gc_header_begin: stream
+                .next_reject_signal_index(max_header_begin)
+                .unwrap_or(STREAM_INDEX_MAX),
+        }
     }
 
     /// Computes the expected message and signal indices for every known subnet
@@ -712,10 +767,14 @@ impl XNetPayloadBuilderImpl {
             ));
         }
 
-        if slice.messages().is_none() && slice.header().signals_end() == expected.signal_index {
-            // Empty slice: no messages and no additional signals (in addition to what we
-            // have in state and any intervening payloads). Not actually invalid, but
-            // we don't want it in a payload.
+        if slice.messages().is_none()
+            && slice.header().signals_end() == expected.signal_index
+            && slice.header().begin() <= expected.max_no_gc_header_begin
+        {
+            // Empty slice: no messages, no additional signals and no newly GC-ed messages
+            // that would allow us to GC any reject signals (in addition to what we have in
+            // the intervening payloads). Not actually invalid, but we don't want it in a
+            // payload.
             return SliceValidationResult::Empty;
         }
 
@@ -819,6 +878,11 @@ impl XNetPayloadBuilderImpl {
                     .messages()
                     .map_or(expected.message_index, |messages| messages.end()),
                 signals_end: slice.header().signals_end(),
+                max_no_gc_header_begin: state
+                    .streams()
+                    .get(&subnet_id)
+                    .and_then(|stream| stream.next_reject_signal_index(slice.header().begin()))
+                    .unwrap_or(STREAM_INDEX_MAX),
                 message_count: slice.messages().map_or(0, |messages| messages.len()),
                 byte_size,
             },
@@ -1255,6 +1319,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 SliceValidationResult::Valid {
                     messages_end,
                     signals_end,
+                    max_no_gc_header_begin,
                     message_count,
                     byte_size,
                 } => {
@@ -1262,7 +1327,12 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                     self.metrics
                         .slice_payload_size
                         .observe(certified_slice.payload.len() as f64);
-                    new_stream_positions.push((*subnet_id, messages_end, signals_end));
+                    new_stream_positions.push((
+                        *subnet_id,
+                        messages_end,
+                        signals_end,
+                        max_no_gc_header_begin,
+                    ));
                     payload_byte_size += byte_size;
                 }
             }
@@ -1272,12 +1342,15 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
         {
             self.slice_pool.observe_pool_size_bytes();
 
-            for (subnet_id, message_index, signal_index) in new_stream_positions {
+            for (subnet_id, message_index, signal_index, max_no_gc_header_begin) in
+                new_stream_positions
+            {
                 self.slice_pool.garbage_collect_slice(
                     subnet_id,
                     ExpectedIndices {
                         message_index,
                         signal_index,
+                        max_no_gc_header_begin,
                     },
                 );
             }
@@ -1361,8 +1434,8 @@ pub fn adjusted_byte_limit(slice_byte_size: usize) -> usize {
     slice_byte_size.saturating_sub(350) * 98 / 100
 }
 
-/// Computes `RefillStreamSliceIndices` for every subnet whose stream slices should be refilled
-/// in the given certified slice pool owned by the given subnet.
+/// Computes `RefillStreamSliceIndices` for every subnet with a cached stream
+/// position in the given certified slice pool owned by the given subnet.
 pub fn refill_stream_slice_indices(
     pool_lock: Arc<Mutex<CertifiedSlicePool>>,
     own_subnet_id: SubnetId,
@@ -1415,11 +1488,10 @@ pub fn refill_stream_slice_indices(
             ),
         };
 
-        if slice_byte_limit < SLICE_BYTE_SIZE_MIN {
-            // No more space left in the pool for this slice, skip it.
-            continue;
-        }
-
+        // Poll every subnet regardless of how low `slice_byte_limit` is:
+        //  * A header-only suffix may usefully replace the pooled slice's.
+        //  * A complete slice will always include the first message, if any. We rely on
+        //    this to avoid stalling streams indefinitely behind large messages.
         result.insert(
             subnet_id,
             RefillStreamSliceIndices {
@@ -1443,7 +1515,10 @@ pub struct PoolRefillTask {
     /// Async client for querying `XNetEndpoints`.
     xnet_client: Arc<dyn XNetClient>,
 
-    /// tokio runtime to be used for spawning async query tasks.
+    /// Used for validating slices before they are pooled.
+    certified_stream_store: Arc<dyn CertifiedStreamStore>,
+
+    /// Tokio runtime to be used for spawning async query tasks.
     runtime_handle: runtime::Handle,
 
     metrics: Arc<XNetPayloadBuilderMetrics>,
@@ -1457,6 +1532,7 @@ impl PoolRefillTask {
         pool: Arc<Mutex<CertifiedSlicePool>>,
         endpoint_resolver: XNetEndpointResolver,
         xnet_client: Arc<dyn XNetClient>,
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
         runtime_handle: runtime::Handle,
         metrics: Arc<XNetPayloadBuilderMetrics>,
         log: ReplicaLogger,
@@ -1466,6 +1542,7 @@ impl PoolRefillTask {
             pool,
             endpoint_resolver,
             xnet_client,
+            certified_stream_store,
             runtime_handle: runtime_handle.clone(),
             metrics,
             log,
@@ -1506,6 +1583,7 @@ impl PoolRefillTask {
             let xnet_client = self.xnet_client.clone();
             let metrics = Arc::clone(&self.metrics);
             let pool = Arc::clone(&self.pool);
+            let certified_stream_store = Arc::clone(&self.certified_stream_store);
             let log = self.log.clone();
             self.runtime_handle.spawn(async move {
                 let since = Instant::now();
@@ -1517,17 +1595,51 @@ impl PoolRefillTask {
                 match query_result {
                     Ok(slice) => {
                         let logger = log.clone();
+                        let pull_size_too_large = metrics.pull_size_too_large.clone();
                         let res = tokio::task::spawn_blocking(move || {
+                            // Helper to log and instrument pulled slices above the requested byte limit.
+                            // For now, only track such occurrences. In the future, we may drop them.
+                            let observe_pull_size_too_large = |limit: usize, actual: usize| {
+                                warn!(
+                                    log,
+                                    "Stream from {subnet_id}: pulled payload size ({actual}) exceeds byte limit ({limit})",
+                                );
+                                pull_size_too_large.inc();
+                            };
+
                             if indices.witness_begin != indices.msg_begin {
-                                // Pulled a stream suffix, append to pooled slice.
-                                pool.lock()
-                                    .unwrap()
-                                    .append(subnet_id, slice, registry_version, log)
+                                // Slice suffix, append to pooled slice.
+
+                                if slice.payload.len() > indices.byte_limit * 11 / 10 + 1024 {
+                                    // Payload is larger than what we requested, only bump an error metric for now.
+                                    observe_pull_size_too_large(indices.byte_limit, slice.payload.len());
+                                }
+
+                                CertifiedSlicePool::append(
+                                    &pool,
+                                    subnet_id,
+                                    slice,
+                                    certified_stream_store.as_ref(),
+                                    registry_version,
+                                    log,
+                                )
                             } else {
-                                // Pulled a complete stream, replace pooled slice (if any).
-                                pool.lock()
-                                    .unwrap()
-                                    .put(subnet_id, slice, registry_version, log)
+                                // Complete slice, put it into the pool.
+
+                                let byte_limit = indices.byte_limit.max(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get() as usize);
+                                if slice.payload.len() > byte_limit * 11 / 10 + 1024 {
+                                    // Payload is larger than what we requested, only bump an error metric for now.
+                                    observe_pull_size_too_large(byte_limit, slice.payload.len());
+                                }
+
+                                CertifiedSlicePool::put(
+                                    &pool,
+                                    subnet_id,
+                                    slice,
+                                    certified_stream_store.as_ref(),
+                                    registry_version,
+                                    log,
+                                )
                             }
                         })
                         .await;
@@ -1643,6 +1755,9 @@ enum SliceValidationResult {
     Valid {
         messages_end: StreamIndex,
         signals_end: StreamIndex,
+        /// See `ExpectedIndices::max_no_gc_header_begin`, computed as if this slice
+        /// had been inducted.
+        max_no_gc_header_begin: StreamIndex,
         message_count: usize,
         byte_size: usize,
     },
