@@ -112,12 +112,7 @@ pub(super) fn extract_remote_dkgs_from_highest_block(
         .into_inner();
 
     match block.payload.as_ref() {
-        BlockPayload::Summary(summary) => summary
-            .dkg
-            .transcripts_for_remote_subnets
-            .as_ref()
-            .cloned()
-            .unwrap_or_default(),
+        BlockPayload::Summary(_) => vec![],
         BlockPayload::Data(data) => data.dkg.transcripts_for_remote_subnets.clone(),
     }
 }
