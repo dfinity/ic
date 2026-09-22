@@ -133,7 +133,7 @@ pub struct EventSource {
 
 impl fmt::Display for EventSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{}:{}", self.transaction_hash, self.log_index)
+        write!(f, "{}:{}", self.transaction_hash, self.log_index)
     }
 }
 

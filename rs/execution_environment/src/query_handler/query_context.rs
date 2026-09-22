@@ -90,10 +90,10 @@ fn wasm_query_method(
 }
 
 /// Executes a single user query along with its outgoing query calls.
-pub(super) struct QueryContext<'a> {
-    log: &'a ReplicaLogger,
-    hypervisor: &'a Hypervisor,
-    canister_manager: &'a CanisterManager,
+pub(super) struct QueryContext {
+    log: ReplicaLogger,
+    hypervisor: Arc<Hypervisor>,
+    canister_manager: Arc<CanisterManager>,
     own_subnet_type: SubnetType,
     // The state against which all queries in the context will be executed.
     state: Labeled<Arc<ReplicatedState>>,
@@ -110,8 +110,8 @@ pub(super) struct QueryContext<'a> {
     // Walltime at which the query has started to execute.
     query_context_time_start: Instant,
     query_context_time_limit: Duration,
-    metrics: &'a QueryHandlerMetrics,
-    local_query_execution_stats: Option<&'a QueryStatsCollector>,
+    metrics: QueryHandlerMetrics,
+    local_query_execution_stats: Option<Arc<QueryStatsCollector>>,
     /// How many times each tracked System API call was invoked during the query execution.
     system_api_call_counters: SystemApiCallCounters,
     /// A map of canister IDs evaluated and executed at least once in this query context
@@ -127,12 +127,12 @@ pub(super) struct QueryContext<'a> {
     instruction_observation: Option<Arc<AtomicU64>>,
 }
 
-impl<'a> QueryContext<'a> {
+impl QueryContext {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
-        log: &'a ReplicaLogger,
-        hypervisor: &'a Hypervisor,
-        canister_manager: &'a CanisterManager,
+        log: ReplicaLogger,
+        hypervisor: Arc<Hypervisor>,
+        canister_manager: Arc<CanisterManager>,
         own_subnet_type: SubnetType,
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Option<Vec<u8>>,
@@ -147,8 +147,8 @@ impl<'a> QueryContext<'a> {
         instruction_overhead_per_query_call: NumInstructions,
         composite_queries: FlagStatus,
         canister_id: CanisterId,
-        metrics: &'a QueryHandlerMetrics,
-        local_query_execution_stats: Option<&'a QueryStatsCollector>,
+        metrics: QueryHandlerMetrics,
+        local_query_execution_stats: Option<Arc<QueryStatsCollector>>,
         cycles_account_manager: Arc<CyclesAccountManager>,
         instruction_observation: Option<Arc<AtomicU64>>,
     ) -> Self {
@@ -446,7 +446,7 @@ impl<'a> QueryContext<'a> {
                 self.state.get_ref().time(),
                 execution_parameters,
                 self.network_topology.clone(),
-                self.hypervisor,
+                &self.hypervisor,
                 &mut self.round_limits,
                 &self.metrics.query_critical_error,
                 own_subnet_cycles_config,
@@ -479,7 +479,7 @@ impl<'a> QueryContext<'a> {
             egress_payload_size: egress_payload_size as u64,
         };
         self.add_evaluated_canister_stats(canister.canister_id(), &stats);
-        if let Some(query_stats) = self.local_query_execution_stats {
+        if let Some(query_stats) = self.local_query_execution_stats.as_deref() {
             query_stats.set_epoch_from_height(self.state.height());
             query_stats.register_query_statistics(canister.canister_id(), &stats);
         }
@@ -589,14 +589,14 @@ impl<'a> QueryContext<'a> {
         let callback = common::unregister_callback(
             &mut canister,
             &response,
-            self.log,
+            &self.log,
             &self.metrics.query_critical_error,
         )
         .ok_or_else(err)?;
         let (call_context, call_context_id) = common::get_call_context(
             &canister,
             &callback,
-            self.log,
+            &self.log,
             &self.metrics.query_critical_error,
         )
         .ok_or_else(err)?;
@@ -944,7 +944,7 @@ impl<'a> QueryContext<'a> {
 
         let since = Instant::now(); // Start logging execution time.
         let (result, instructions) = match execute_subnet_query(
-            self.canister_manager,
+            &self.canister_manager,
             self.state.get_ref(),
             request.sender.get(),
             method,

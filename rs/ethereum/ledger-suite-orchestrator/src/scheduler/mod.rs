@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 mod metrics;
 #[cfg(test)]
 pub mod test_fixtures;
@@ -45,6 +47,8 @@ use std::time::Duration;
 const SEC_NANOS: u64 = 1_000_000_000;
 
 const THREE_GIGA_BYTES: u64 = 3_221_225_472;
+
+const ARCHIVING_DISABLED_TRIGGER_THRESHOLD: usize = 4_200_000_000;
 
 pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
 
@@ -991,7 +995,7 @@ fn icrc1_archive_options(
     cycles_for_archive_creation: Nat,
 ) -> ArchiveOptions {
     ArchiveOptions {
-        trigger_threshold: 2_000,
+        trigger_threshold: ARCHIVING_DISABLED_TRIGGER_THRESHOLD,
         num_blocks_to_archive: 1_000,
         node_max_memory_size_bytes: Some(THREE_GIGA_BYTES),
         max_message_size_bytes: None,

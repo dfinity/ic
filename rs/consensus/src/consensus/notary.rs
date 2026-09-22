@@ -133,7 +133,7 @@ impl Notary {
             &self.log,
             height,
             rank,
-            &self.replica_config.replica_version,
+            self.replica_config.replica_version(),
         )?;
 
         let now_relative = self.time_source.get_relative_time();
@@ -188,7 +188,7 @@ impl Notary {
         let content = NotarizationContent::new(
             block.height(),
             block.get_hash().clone(),
-            self.replica_config.replica_version.clone(),
+            self.replica_config.replica_version().clone(),
         );
         match self
             .crypto
@@ -421,7 +421,7 @@ mod tests {
             } = DependenciesBuilder::new(pool_config, 1)
                 .with_dkg_interval_length(dkg_interval_length)
                 .build();
-            let replica_version = replica_config.replica_version.clone();
+            let replica_version = replica_config.replica_version().clone();
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -618,7 +618,7 @@ mod tests {
             } = DependenciesBuilder::new(pool_config, 1)
                 .with_dkg_interval_length(dkg_interval_length)
                 .build();
-            let replica_version = replica_config.replica_version.clone();
+            let replica_version = replica_config.replica_version().clone();
             state_manager
                 .get_mut()
                 .expect_latest_certified_height()
@@ -729,7 +729,7 @@ mod tests {
                     state_manager.as_ref(),
                     membership.as_ref(),
                     Rank(0),
-                    &replica_config.replica_version,
+                    replica_config.replica_version(),
                     &logger,
                 ),
                 NotaryDelay::ReachedMaxNotarizationCertificationGap { .. }
@@ -755,7 +755,7 @@ mod tests {
                     state_manager.as_ref(),
                     membership.as_ref(),
                     Rank(0),
-                    &replica_config.replica_version,
+                    replica_config.replica_version(),
                     &logger,
                 ),
                 NotaryDelay::CanNotarizeAfter(Duration::from_secs(0))
@@ -783,7 +783,7 @@ mod tests {
                     state_manager.as_ref(),
                     membership.as_ref(),
                     Rank(0),
-                    &replica_config.replica_version,
+                    replica_config.replica_version(),
                     &logger,
                 ),
                 NotaryDelay::ReachedMaxNotarizationCUPGap { .. }
@@ -825,7 +825,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &replica_config.replica_version,
+                replica_config.replica_version(),
                 &logger,
             );
             assert_eq!(
@@ -841,7 +841,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &replica_config.replica_version,
+                replica_config.replica_version(),
                 &logger,
             );
             assert_eq!(
@@ -857,7 +857,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &replica_config.replica_version,
+                replica_config.replica_version(),
                 &logger,
             );
             assert_eq!(
@@ -874,7 +874,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &replica_config.replica_version,
+                replica_config.replica_version(),
                 &logger,
             );
             assert_eq!(
@@ -893,7 +893,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &replica_config.replica_version,
+                replica_config.replica_version(),
                 &logger,
             );
             assert_eq!(
@@ -963,7 +963,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &replica_config.replica_version,
+                replica_config.replica_version(),
                 &logger,
             );
             assert_eq!(
@@ -985,7 +985,7 @@ mod tests {
                 state_manager.as_ref(),
                 membership.as_ref(),
                 Rank(0),
-                &replica_config.replica_version,
+                replica_config.replica_version(),
                 &logger,
             );
             assert_eq!(

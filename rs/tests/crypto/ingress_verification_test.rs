@@ -1,6 +1,7 @@
 /* tag::catalog[]
 end::catalog[] */
 use anyhow::Result;
+use base64::prelude::*;
 use candid::Encode;
 use ic_agent::Identity;
 use ic_agent::export::Principal;
@@ -2686,7 +2687,7 @@ fn webauthn_sign_message<F: FnOnce(&[u8]) -> Vec<u8>>(msg: &[u8], sign_fn: F) ->
 
     let client_data = ClientData {
         r#type: "webauthn.get".to_string(),
-        challenge: base64::encode_config(msg, base64::URL_SAFE_NO_PAD),
+        challenge: BASE64_URL_SAFE_NO_PAD.encode(msg),
         origin: "ic-ingress-verification-test".to_string(),
     };
 

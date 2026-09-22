@@ -6,6 +6,7 @@ use crate::consensus::{
     metrics::ValidatorMetrics,
     status::{self, Status},
 };
+use ic_consensus_cup_utils::{CatchUpPackageVerificationError, verify_catch_up_package};
 use ic_consensus_dkg as dkg;
 use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
@@ -88,7 +89,6 @@ enum ValidationFailure {
     DkgPayloadValidationFailed(DkgPayloadValidationFailure),
     IDkgPayloadValidationFailed(IDkgPayloadValidationFailure),
     DkgSummaryNotFound(Height),
-    TranscriptNotFound(Height, NiDkgTag),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
     StateManagerError(StateManagerError),
@@ -114,6 +114,7 @@ enum InvalidArtifactReason {
     MismatchedRank(Rank, Option<Rank>),
     MembershipError(MembershipError),
     InappropriateDkgId(NiDkgId),
+    TranscriptNotFound(Height, NiDkgTag),
     SignerNotInThresholdCommittee(NodeId),
     SignerNotInMultiSigCommittee(NodeId),
     InvalidPayload(InvalidPayloadReason),
@@ -325,7 +326,7 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
             &NiDkgTag::HighThreshold,
         )
         .ok_or_else(|| {
-            ValidationFailure::TranscriptNotFound(self.height(), NiDkgTag::HighThreshold)
+            InvalidArtifactReason::TranscriptNotFound(self.height(), NiDkgTag::HighThreshold)
         })?;
         if !high_threshold_transcript
             .committee
@@ -396,14 +397,23 @@ impl SignatureVerify for CatchUpPackage {
             }
         };
 
-        crypto
-            .verify_combined_threshold_sig_by_public_key(
-                &self.signature.signature,
-                &self.content,
-                subnet_id_to_validate_against,
-                cup_registry_version,
-            )
-            .map_err(ValidatorError::from)
+        verify_catch_up_package(crypto, subnet_id_to_validate_against, self).map_err(
+            |err| match err {
+                CatchUpPackageVerificationError::HighThresholdTranscriptNotFound => {
+                    InvalidArtifactReason::TranscriptNotFound(
+                        self.height(),
+                        NiDkgTag::HighThreshold,
+                    )
+                    .into()
+                }
+                CatchUpPackageVerificationError::InappropriateDkgId { signer_dkg_id, .. } => {
+                    InvalidArtifactReason::InappropriateDkgId(signer_dkg_id).into()
+                }
+                CatchUpPackageVerificationError::SignatureVerificationFailed(err) => {
+                    ValidatorError::from(err)
+                }
+            },
+        )
     }
 }
 
@@ -867,7 +877,7 @@ impl Validator {
         artifact: &S,
     ) -> ValidationResult<ValidatorError> {
         let version = artifact.version();
-        let expected_version = &self.replica_config.replica_version;
+        let expected_version = self.replica_config.replica_version();
         if version != expected_version {
             return Err(InvalidArtifactReason::ReplicaVersionMismatch.into());
         }
@@ -988,7 +998,7 @@ impl Validator {
         T: NotaryIssued + HasVersion,
     {
         let version = notary_issued.content.version();
-        let expected_version = &self.replica_config.replica_version;
+        let expected_version = self.replica_config.replica_version();
         if version != expected_version {
             return Some(ChangeAction::RemoveFromUnvalidated(
                 notary_issued.into_message(),
@@ -1298,7 +1308,7 @@ impl Validator {
             self.registry_client.as_ref(),
             self.replica_config.subnet_id,
             pool_reader,
-            &self.replica_config.replica_version,
+            self.replica_config.replica_version(),
             &self.log,
         ) else {
             return Err(ValidationFailure::FailedToGetConsensusStatus.into());
@@ -2204,7 +2214,7 @@ pub mod test {
     };
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
-        ids::{node_test_id, subnet_test_id, test_replica_version},
+        ids::{node_test_id, subnet_test_id, test_platform_version},
         messages::SignedIngressBuilder,
     };
     use ic_types::{
@@ -2823,7 +2833,7 @@ pub mod test {
             // validated
             let tape_1 = RandomTape::fake(RandomTapeContent::new(
                 Height::from(1),
-                replica_config.replica_version.clone(),
+                replica_config.replica_version().clone(),
             ));
             pool.insert_validated(tape_1);
 
@@ -2854,7 +2864,7 @@ pub mod test {
 
             // Insert random tape at height 4, check if it is ignored
             let content =
-                RandomTapeContent::new(Height::from(4), replica_config.replica_version.clone());
+                RandomTapeContent::new(Height::from(4), replica_config.replica_version().clone());
             let signature = ThresholdSignature::fake();
             let tape_4 = RandomTape { content, signature };
             pool.insert_unvalidated(tape_4.clone());
@@ -2877,7 +2887,8 @@ pub mod test {
             pool.apply(changeset);
 
             // Set expected batch height to height 4, check if tape_3 is ignored
-            let content = RandomTapeContent::new(Height::from(3), replica_config.replica_version);
+            let content =
+                RandomTapeContent::new(Height::from(3), replica_config.replica_version().clone());
             let signature = ThresholdSignature::fake();
             let tape_3 = RandomTape { content, signature };
             pool.insert_unvalidated(tape_3);
@@ -3117,7 +3128,7 @@ pub mod test {
                     registry.as_ref(),
                     replica_config.subnet_id,
                     &PoolReader::new(&pool),
-                    &replica_config.replica_version,
+                    replica_config.replica_version(),
                     &no_op_logger()
                 ),
                 Some(Status::Halting | Status::Halted)
@@ -3710,7 +3721,7 @@ pub mod test {
                     registry.as_ref(),
                     replica_config.subnet_id,
                     &PoolReader::new(&pool),
-                    &replica_config.replica_version,
+                    replica_config.replica_version(),
                     &no_op_logger(),
                 ),
                 Some(Status::Halting | Status::Halted)
@@ -4243,10 +4254,10 @@ pub mod test {
                     certified_height: Height::from(42),
                     time: ic_types::time::UNIX_EPOCH,
                 },
-                replica_config.replica_version.clone(),
+                replica_config.replica_version().clone(),
             );
             let fake_beacon = RandomBeacon::fake(RandomBeaconContent {
-                version: replica_config.replica_version,
+                version: replica_config.replica_version().clone(),
                 height: cup_height,
                 parent: CryptoHashOf::from(CryptoHash(vec![])),
             });
@@ -4258,7 +4269,7 @@ pub mod test {
             let beacon = pool_reader
                 .get_random_beacon(cup_height)
                 .unwrap_or(fake_beacon);
-            let catch_up_package = CatchUpPackage::fake(CatchUpContent::new(
+            let catch_up_package = fake_catch_up_package(CatchUpContent::new(
                 HashedBlock::new(ic_types::crypto::crypto_hash, block),
                 HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon),
                 CryptoHashOf::from(CryptoHash(vec![])),
@@ -4329,6 +4340,43 @@ pub mod test {
                 Some(ChangeAction::RemoveFromUnvalidated(
                     ConsensusMessage::CatchUpPackage(catch_up_package)
                 ))
+            );
+        })
+    }
+
+    /// A CUP whose signer is not the high-threshold DKG id of its DKG summary must be handled as
+    /// invalid, even if the signature itself verifies (the fake crypto accepts every signature).
+    #[test]
+    fn test_should_not_validate_catch_up_package_with_inappropriate_signer() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let ValidatorAndDependencies {
+                validator,
+                state_manager,
+                mut pool,
+                ..
+            } = ValidatorAndDependenciesBuilder::new(pool_config, 4).build();
+
+            pool.advance_round_normal_operation_n(DKG_INTERVAL_LENGTH);
+            // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
+            pool.prepare_round().dont_add_catch_up_package().advance();
+
+            let finalization = pool.validated().finalization().get_highest().unwrap();
+            let mut catch_up_package = pool.make_catch_up_package(finalization.height());
+            catch_up_package.signature.signer.dealer_subnet = subnet_test_id(1337);
+            assert!(catch_up_package.check_integrity());
+            pool.insert_unvalidated(catch_up_package);
+
+            state_manager
+                .get_mut()
+                .expect_latest_state_height()
+                .return_const(Height::new(1));
+
+            let changeset = validator.validate_catch_up_packages(&PoolReader::new(&pool));
+            assert_eq!(changeset.len(), 1);
+            assert_matches!(
+                &changeset[0],
+                ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackage(_), reason)
+                    if reason.contains("InappropriateDkgId")
             );
         })
     }
@@ -4573,7 +4621,7 @@ pub mod test {
             let content = NotarizationContent::new(
                 block.height(),
                 ic_types::crypto::crypto_hash(block.as_ref()),
-                replica_config.replica_version,
+                replica_config.replica_version().clone(),
             );
             let mut notarization = Notarization::fake(content);
             notarization.signature.signers =
@@ -4814,7 +4862,7 @@ pub mod test {
             let mut notarization = Notarization::fake(NotarizationContent::new(
                 block.height(),
                 block.content.get_hash().clone(),
-                replica_config.replica_version,
+                replica_config.replica_version().clone(),
             ));
             notarization.signature.signers =
                 vec![node_test_id(1), node_test_id(2), node_test_id(3)];
@@ -5270,7 +5318,7 @@ pub mod test {
                         let content = NotarizationContent::new(
                             block.height(),
                             block.content.get_hash().clone(),
-                            replica_config.replica_version.clone(),
+                            replica_config.replica_version().clone(),
                         );
                         let mut notarization = Notarization::fake(content);
                         let random_beacon = PoolReader::new(&pool).get_random_beacon_tip();
@@ -5437,7 +5485,7 @@ pub mod test {
                 .with_replica_config(ReplicaConfig {
                     node_id: validator_node_id,
                     subnet_id: SOURCE_SUBNET_ID,
-                    replica_version: test_replica_version(),
+                    platform_version: test_platform_version(),
                 })
                 .build();
                 // Manually insert DKG transcripts at the splitting version to simulate what the
@@ -5467,7 +5515,7 @@ pub mod test {
                     ReplicaConfig {
                         node_id: cup_share_node_id,
                         subnet_id: SOURCE_SUBNET_ID,
-                        replica_version: test_replica_version(),
+                        platform_version: test_platform_version(),
                     },
                     membership,
                     crypto,
@@ -5696,7 +5744,7 @@ pub mod test {
             .with_replica_config(ReplicaConfig {
                 node_id: validator_node_id,
                 subnet_id: SOURCE_SUBNET_ID,
-                replica_version: test_replica_version(),
+                platform_version: test_platform_version(),
             })
             .build();
 

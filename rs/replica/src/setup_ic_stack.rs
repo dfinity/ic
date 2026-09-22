@@ -28,7 +28,7 @@ use ic_replicated_state::{ReplicatedState, metrics::ReplicatedStateInvariants};
 use ic_state_manager::{StateManagerImpl, state_sync::StateSync};
 use ic_tracing::ReloadHandles;
 use ic_types::{
-    Height, NodeId, ReplicaVersion, SubnetId,
+    Height, NodeId, PlatformVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
@@ -67,7 +67,7 @@ pub fn construct_ic_stack(
     config: Config,
     node_id: NodeId,
     subnet_id: SubnetId,
-    replica_version: ReplicaVersion,
+    platform_version: PlatformVersion,
     registry: Arc<impl RegistryClient + 'static>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
@@ -142,13 +142,13 @@ pub fn construct_ic_stack(
     create_consensus_pool_dir(&config);
     ensure_persistent_pool_replica_version_compatibility(
         artifact_pool_config.persistent_pool_db_path(),
-        &replica_version,
+        &platform_version.replica_version,
     );
 
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
         node_id,
         subnet_id,
-        &replica_version,
+        &platform_version.replica_version,
         // Note: it's important to pass the original proto which came from the command line (as
         // opposed to, for example, a proto which was first deserialized and then serialized
         // again). Since the proto file could have been produced and signed by nodes running a
@@ -324,7 +324,7 @@ pub fn construct_ic_stack(
         node_id,
         subnet_id,
         subnet_type,
-        replica_version.clone(),
+        platform_version.clone(),
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::new(state_sync) as Arc<_>,
@@ -362,7 +362,7 @@ pub fn construct_ic_stack(
         Arc::clone(&crypto) as Arc<_>,
         node_id,
         subnet_id,
-        replica_version,
+        platform_version,
         root_subnet_id,
         log.clone(),
         consensus_pool_cache,

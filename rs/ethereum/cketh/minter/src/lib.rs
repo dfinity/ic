@@ -1,4 +1,5 @@
 pub mod address;
+pub mod asset;
 pub mod attestation;
 pub mod balance_scan;
 pub mod blocklist;

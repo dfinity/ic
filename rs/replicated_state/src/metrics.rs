@@ -56,7 +56,7 @@ pub struct ReplicatedStateMetrics {
     available_canister_ids: IntGauge,
     consumed_cycles: Gauge,
     consumed_cycles_by_use_case: GaugeVec,
-    consumed_cycles_by_use_case_as_counters: CounterVec,
+    consumed_cycles_by_use_case_monotonic: CounterVec,
     input_queue_messages: IntGaugeVec,
     input_queues_size_bytes: IntGaugeVec,
     subnet_input_queue_messages: IntGaugeVec,
@@ -171,7 +171,7 @@ impl ReplicatedStateMetrics {
                 "Number of cycles consumed by use cases.",
                 &["use_case"],
             ),
-            consumed_cycles_by_use_case_as_counters: metrics_registry.counter_vec(
+            consumed_cycles_by_use_case_monotonic: metrics_registry.counter_vec(
                 "replicated_state_consumed_cycles_from_replica_start_as_counters",
                 "Number of cycles consumed by use cases.",
                 &["use_case"],
@@ -319,7 +319,7 @@ impl ReplicatedStateMetrics {
             "replicated_state_consumed_cycles_by_use_case",
         );
         metrics_registry.register_alias(
-            &metrics.consumed_cycles_by_use_case_as_counters,
+            &metrics.consumed_cycles_by_use_case_monotonic,
             "replicated_state_consumed_cycles_by_use_case_as_counters",
         );
 
@@ -337,15 +337,15 @@ impl ReplicatedStateMetrics {
         }
     }
 
-    fn observe_consumed_cycles_by_use_case_as_counters(
+    fn observe_consumed_cycles_by_use_case_monotonic(
         &self,
-        consumed_cycles_by_use_case_as_counters: &BTreeMap<CyclesUseCase, NominalCycles>,
+        consumed_cycles_by_use_case_monotonic: &BTreeMap<CyclesUseCase, NominalCycles>,
     ) {
-        for (use_case, cycles) in consumed_cycles_by_use_case_as_counters.iter() {
-            self.consumed_cycles_by_use_case_as_counters
+        for (use_case, cycles) in consumed_cycles_by_use_case_monotonic.iter() {
+            self.consumed_cycles_by_use_case_monotonic
                 .with_label_values(&[use_case.as_str()])
                 .reset();
-            self.consumed_cycles_by_use_case_as_counters
+            self.consumed_cycles_by_use_case_monotonic
                 .with_label_values(&[use_case.as_str()])
                 .inc_by(cycles.get() as f64);
         }
@@ -415,7 +415,7 @@ impl ReplicatedStateMetrics {
         let mut num_aborted_install = 0;
 
         let mut consumed_cycles_total_by_use_case = BTreeMap::new();
-        let mut consumed_cycles_total_by_use_case_as_counters = BTreeMap::new();
+        let mut consumed_cycles_total_by_use_case_monotonic = BTreeMap::new();
 
         let mut ingress_queue_message_count = 0;
         let mut ingress_queue_size_bytes = 0;
@@ -487,11 +487,11 @@ impl ReplicatedStateMetrics {
             let mut counter_metrics_map = canister
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases_as_counters()
+                .consumed_cycles_by_use_cases_monotonic()
                 .clone();
             counter_metrics_map.remove(&CyclesUseCase::HTTPOutcalls);
             join_consumed_cycles_by_use_case(
-                &mut consumed_cycles_total_by_use_case_as_counters,
+                &mut consumed_cycles_total_by_use_case_monotonic,
                 &counter_metrics_map,
             );
             let queues = canister.system_state.queues();
@@ -563,7 +563,7 @@ impl ReplicatedStateMetrics {
                 .get_consumed_cycles_by_use_case(),
         );
         join_consumed_cycles_by_use_case(
-            &mut consumed_cycles_total_by_use_case_as_counters,
+            &mut consumed_cycles_total_by_use_case_monotonic,
             state
                 .metadata
                 .subnet_metrics
@@ -582,8 +582,8 @@ impl ReplicatedStateMetrics {
         );
 
         self.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
-        self.observe_consumed_cycles_by_use_case_as_counters(
-            &consumed_cycles_total_by_use_case_as_counters,
+        self.observe_consumed_cycles_by_use_case_monotonic(
+            &consumed_cycles_total_by_use_case_monotonic,
         );
 
         for (key_id, count) in &state.metadata.subnet_metrics.threshold_signature_agreements {
