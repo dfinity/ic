@@ -2,9 +2,10 @@
 use crate::{execution_environment::CanisterOutOfCyclesError, validation::ValidationError};
 use ic_error_types::ErrorCode;
 use ic_types::{
-    CanisterId, Height, NumBytes, Time,
+    CanisterId, Height, NumBytes, SubnetId, Time,
     batch::{Batch, ValidationContext, XNetPayload},
     consensus::Payload,
+    xnet::CertifiedStreamSlice,
 };
 
 /// Errors that `MessageRouting` may return.
@@ -102,6 +103,23 @@ pub trait XNetPayloadBuilder: Send + Sync {
     }
 }
 
+/// Interface for handling XNet adverts: certified stream headers pushed by a
+/// source subnet to advertise that it holds something we may not have seen.
+pub trait XNetAdvertHandler: Send + Sync {
+    /// Handles an advert claiming to come from `source_subnet`, verifying it
+    /// before acting on new content or replying to it.
+    fn handle_advert(
+        &self,
+        source_subnet: SubnetId,
+        advert: CertifiedStreamSlice,
+    ) -> Result<XNetAdvertOutcome, XNetAdvertError>;
+
+    /// Our certified stream header for `subnet_id`, to be returned in reply to a
+    /// `NothingNew` advert. `None` if we have no stream to `subnet_id`, or
+    /// nothing certified yet.
+    fn certified_header(&self, subnet_id: SubnetId) -> Option<CertifiedStreamSlice>;
+}
+
 /// The outcome of handling a XNet advert: the strongest statement the receiver
 /// can make about the advertised content.
 ///
@@ -142,6 +160,25 @@ impl XNetAdvertOutcome {
             XNetAdvertOutcome::Pooled => "pooled",
             XNetAdvertOutcome::Duplicate => "duplicate",
             XNetAdvertOutcome::Actionable => "actionable",
+        }
+    }
+}
+
+/// The reason for rejecting a XNet advert.
+#[derive(Debug)]
+pub enum XNetAdvertError {
+    /// Could not be decoded.
+    DecodeError(String),
+    /// Invalid certification or mismatching witness.
+    InvalidSignature,
+}
+
+impl XNetAdvertError {
+    /// A short, stable name for the error, for use e.g. as a metric label.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            XNetAdvertError::DecodeError(_) => "decode_error",
+            XNetAdvertError::InvalidSignature => "invalid_signature",
         }
     }
 }

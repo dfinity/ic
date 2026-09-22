@@ -3326,7 +3326,7 @@ impl ExecutionEnvironment {
         let time = state.time();
         self.execute_mgmt_operation_on_canister(
             canister_id,
-            |canister, _msg, round_limits, _consumed_cycles| {
+            |canister, _msg, round_limits, consumed_cycles| {
                 self.canister_manager.create_snapshot_from_metadata(
                     sender,
                     canister,
@@ -3335,6 +3335,7 @@ impl ExecutionEnvironment {
                     round_limits,
                     &resource_saturation,
                     time,
+                    consumed_cycles,
                 )
             },
             state,

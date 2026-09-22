@@ -863,7 +863,7 @@ impl PocketXNetImpl {
                                 slice,
                                 self.certified_stream_store.as_ref(),
                                 registry_version,
-                                log.clone(),
+                                &log,
                             )
                             .unwrap();
                         } else {
@@ -874,7 +874,7 @@ impl PocketXNetImpl {
                                 slice,
                                 self.certified_stream_store.as_ref(),
                                 registry_version,
-                                log.clone(),
+                                &log,
                             )
                             .unwrap();
                         }
@@ -1791,8 +1791,10 @@ impl StateMachineBuilder {
         // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
         let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
-        let certified_slice_pool =
-            Arc::new(Mutex::new(CertifiedSlicePool::new(&sm.metrics_registry)));
+        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            &sm.metrics_registry,
+            sm.replica_logger.clone(),
+        )));
         let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
         let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new_from_components(
