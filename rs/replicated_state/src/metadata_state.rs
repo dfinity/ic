@@ -429,6 +429,26 @@ pub struct OwnSubnetInfo {
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct SubnetMetrics {
+    /// The cycles consumed by the canisters deleted on this subnet: for each
+    /// deleted canister, the cycles it had consumed plus the cycles left over in
+    /// its balance at deletion, which are considered consumed as well.
+    ///
+    /// This scalar already fully accounts for the following entries of
+    /// `consumed_cycles_by_use_case`, so a total that adds it must skip them:
+    ///
+    /// - `DeletedCanisters` holds the leftover cycles of deleted canisters,
+    ///   which are already included here.
+    /// - The canister-level use cases (`Memory`, `ComputeAllocation`,
+    ///   `IngressInduction`, `Instructions`, `RequestAndResponseTransmission`,
+    ///   `Uninstall`, `CanisterCreation`, `BurnedCycles`) only ever end up in
+    ///   that map when a canister is deleted, at which point the deleted
+    ///   canister's total consumption (the sum of these use cases) is also added
+    ///   here. Summing both would double count the cycles consumed by deleted
+    ///   canisters.
+    ///
+    /// The scalar predates the `consumed_cycles_by_use_case` map, so it may be
+    /// strictly larger than the sum of the entries above: deletions from before
+    /// use-case tracking are recorded in it alone.
     consumed_cycles_by_deleted_canisters: NominalCycles,
     consumed_cycles_http_outcalls: NominalCycles,
     consumed_cycles_ecdsa_outcalls: NominalCycles,
@@ -487,12 +507,18 @@ impl SubnetMetrics {
         self.consumed_cycles_http_outcalls += cycles;
     }
 
+    /// Cycles consumed by HTTP outcalls (`CyclesUseCase::HTTPOutcalls`).
     pub fn get_consumed_cycles_http_outcalls(&self) -> NominalCycles {
-        self.consumed_cycles_http_outcalls
+        self.get_consumed_cycles_subnet_use_case(CyclesUseCase::HTTPOutcalls)
     }
 
     pub fn observe_consumed_cycles_ecdsa_outcalls(&mut self, cycles: NominalCycles) {
         self.consumed_cycles_ecdsa_outcalls += cycles;
+    }
+
+    /// Cycles consumed by ECDSA outcalls (`CyclesUseCase::ECDSAOutcalls`).
+    pub fn get_consumed_cycles_ecdsa_outcalls(&self) -> NominalCycles {
+        self.get_consumed_cycles_subnet_use_case(CyclesUseCase::ECDSAOutcalls)
     }
 
     /// Migrates the cycles consumed by HTTP and ECDSA outcalls that are tracked
@@ -525,9 +551,9 @@ impl SubnetMetrics {
     /// untouched (backfilling it would introduce a spurious counter jump).
     ///
     /// The scalar fields are intentionally kept (and kept up to date) rather
-    /// than zeroed, so that they remain the source of truth for readers such as
-    /// `consumed_cycles_total` (which still reads them for now) and so that
-    /// downgrading to an earlier replica version observes the correct totals.
+    /// than zeroed, even though nothing reads their value anymore (all readers
+    /// go through `consumed_cycles_by_use_case`), so that downgrading to an
+    /// earlier replica version observes the correct totals.
     pub fn migrate_outcalls_cycles_to_use_cases(&mut self) {
         for (scalar, use_case) in [
             (
@@ -550,33 +576,28 @@ impl SubnetMetrics {
         }
     }
 
-    pub fn get_consumed_cycles_ecdsa_outcalls(&self) -> NominalCycles {
-        self.consumed_cycles_ecdsa_outcalls
-    }
-
-    /// Cycles consumed by Schnorr threshold-signature outcalls. Unlike ECDSA and
-    /// HTTP outcalls, this use case has no dedicated field; it is only tracked in
-    /// the by-use-case map (it can never originate from a deleted canister, so
-    /// the map entry is exactly the subnet-level consumption).
+    /// Cycles consumed by Schnorr threshold-signature outcalls
+    /// (`CyclesUseCase::SchnorrOutcalls`).
     pub fn get_consumed_cycles_schnorr_outcalls(&self) -> NominalCycles {
-        self.consumed_cycles_by_use_case
-            .get(&CyclesUseCase::SchnorrOutcalls)
-            .copied()
-            .unwrap_or_else(NominalCycles::zero)
+        self.get_consumed_cycles_subnet_use_case(CyclesUseCase::SchnorrOutcalls)
     }
 
-    /// Cycles consumed by VetKd outcalls. See `get_consumed_cycles_schnorr_outcalls`.
+    /// Cycles consumed by VetKd outcalls (`CyclesUseCase::VetKd`).
     pub fn get_consumed_cycles_vetkd(&self) -> NominalCycles {
-        self.consumed_cycles_by_use_case
-            .get(&CyclesUseCase::VetKd)
-            .copied()
-            .unwrap_or_else(NominalCycles::zero)
+        self.get_consumed_cycles_subnet_use_case(CyclesUseCase::VetKd)
     }
 
-    /// Cycles lost due to dropped messages. See `get_consumed_cycles_schnorr_outcalls`.
+    /// Cycles lost due to dropped messages (`CyclesUseCase::DroppedMessages`).
     pub fn get_consumed_cycles_dropped_messages(&self) -> NominalCycles {
+        self.get_consumed_cycles_subnet_use_case(CyclesUseCase::DroppedMessages)
+    }
+
+    /// Cycles consumed by a subnet-level use case, i.e. one that is never
+    /// charged to a canister's balance and can thus never originate from a
+    /// deleted canister.
+    fn get_consumed_cycles_subnet_use_case(&self, use_case: CyclesUseCase) -> NominalCycles {
         self.consumed_cycles_by_use_case
-            .get(&CyclesUseCase::DroppedMessages)
+            .get(&use_case)
             .copied()
             .unwrap_or_else(NominalCycles::zero)
     }
@@ -603,34 +624,13 @@ impl SubnetMetrics {
         let mut total = NominalCycles::zero();
 
         total += self.consumed_cycles_by_deleted_canisters;
-        total += self.consumed_cycles_http_outcalls;
-        total += self.consumed_cycles_ecdsa_outcalls;
 
         for (use_case, cycles) in self.consumed_cycles_by_use_case.iter() {
             match use_case {
                 // Skip the use cases that are already fully accounted for by the
-                // scalar metrics added above:
-                //
-                // - `ECDSAOutcalls` and `HTTPOutcalls` are supersets of the
-                //   corresponding use case entries (see
-                //   `consumed_cycles_ecdsa_outcalls` and
-                //   `consumed_cycles_http_outcalls`).
-                // - `DeletedCanisters` holds the leftover cycles of deleted
-                //   canisters, which are already included in
-                //   `consumed_cycles_by_deleted_canisters`.
-                // - The remaining canister-level use cases below
-                //   (`Memory`, `ComputeAllocation`, `IngressInduction`,
-                //   `Instructions`, `RequestAndResponseTransmission`,
-                //   `Uninstall`, `CanisterCreation`, `BurnedCycles`) only ever
-                //   end up in this map when a canister is deleted, at which point
-                //   the deleted canister's total consumption (the sum of these
-                //   use cases) is also added to
-                //   `consumed_cycles_by_deleted_canisters`. Summing them here as
-                //   well would double count the cycles consumed by deleted
-                //   canisters.
-                CyclesUseCase::ECDSAOutcalls
-                | CyclesUseCase::HTTPOutcalls
-                | CyclesUseCase::DeletedCanisters
+                // `consumed_cycles_by_deleted_canisters` scalar added above; see
+                // its doc comment.
+                CyclesUseCase::DeletedCanisters
                 | CyclesUseCase::Memory
                 | CyclesUseCase::ComputeAllocation
                 | CyclesUseCase::IngressInduction
@@ -641,9 +641,11 @@ impl SubnetMetrics {
                 | CyclesUseCase::BurnedCycles => {}
                 // The remaining use cases are only ever recorded at the subnet
                 // level (never charged to a canister's balance), so they are not
-                // covered by any of the scalar metrics above and must be added to
-                // the total.
-                CyclesUseCase::SchnorrOutcalls
+                // covered by the scalar metric above and must be added to the
+                // total.
+                CyclesUseCase::ECDSAOutcalls
+                | CyclesUseCase::HTTPOutcalls
+                | CyclesUseCase::SchnorrOutcalls
                 | CyclesUseCase::VetKd
                 | CyclesUseCase::DroppedMessages => total += *cycles,
             }
@@ -693,19 +695,17 @@ impl SubnetMetrics {
         let mut total = NominalCycles::zero();
 
         total += self.consumed_cycles_by_deleted_canisters;
-        total += self.consumed_cycles_http_outcalls;
-        total += self.consumed_cycles_ecdsa_outcalls;
 
         for (use_case, cycles) in self.consumed_cycles_by_use_case.iter() {
             match use_case {
-                // For ecdsa outcalls, http outcalls and deleted canisters, skip
-                // updating the total using the use case specific metric as the
-                // update above should be sufficient (the old metric is a superset).
+                // For deleted canisters, skip updating the total using the use
+                // case specific metric as the update above should be sufficient
+                // (the old metric is a superset).
+                CyclesUseCase::DeletedCanisters => {}
+                // For the remaining use cases simply add the values to the total.
                 CyclesUseCase::ECDSAOutcalls
                 | CyclesUseCase::HTTPOutcalls
-                | CyclesUseCase::DeletedCanisters => {}
-                // For the remaining use cases simply add the values to the total.
-                CyclesUseCase::Memory
+                | CyclesUseCase::Memory
                 | CyclesUseCase::ComputeAllocation
                 | CyclesUseCase::IngressInduction
                 | CyclesUseCase::Instructions
