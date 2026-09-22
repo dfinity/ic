@@ -636,7 +636,9 @@ and its internal record are the same data, which is why `Req 8.6` has to be abou
 (`Req 9`) and cached capability answer (`Req 10.4`). Creation state is the one
 exception, a single persisted field:
 
-    enum Creating { Idle, Started, Created(CanisterId) }
+    #[serde(default)]                                      // Idle is Default
+    creating: Creating,
+    enum Creating { Idle, Started, Created(CanisterId) }   // Default = Idle
 
 `Started` before `create_canister`, `Created(id)` as soon as it returns, `Idle` when
 `nodes.push` succeeds. Both non-`Idle` states are exposed (`Req 11.2`), with the id
@@ -657,6 +659,13 @@ This is ICP's journaling pattern — record intent before the work and the resul
 after — which its guidance recommends over trying to avoid traps after an await. It
 is persisted rather than `#[serde(skip)]` like the rest of D2's state, because an
 orphan must outlive an upgrade or the upgrade becomes a way to forget it.
+
+Being persisted, it needs `#[serde(default)]` with `Idle` as `Default`. `Archive` is
+CBOR-decoded on every ledger upgrade, so a required new field would fail to decode
+every pre-change state — the journal would break the first upgrade it shipped in,
+before it could help with anything. `Archive` already does this for its later-added
+fields (`archive.rs:33, 36, 39, 148`), so the pattern is established rather than
+novel.
 
 **Two of the three orphan windows stop being write-offs, and only `Idle` may be
 restored.** `create_and_initialize_node_canister` runs `create_canister` →
@@ -752,10 +761,28 @@ class of thing and the figure is cheap to get.
 creation halt (`Req 11.1`), the capability halt (`Req 10.1`) and the coverage halts
 (`Req 8.3`, `8.4`) — all before the guard is taken, so a skipped round costs nothing.
 
-`Req 11.8`'s `Created(id)` state is deliberately **not** in that list. Skipping is
-what a halt does, and this state needs the opposite: the round proceeds, finishes the
-creation, and only then moves blocks. Putting it among the skips is the one mistake
-that makes the self-recovery path dead code.
+**Only a state that clears without the ledger doing anything belongs in that list.**
+Skipping happens before the guard is taken, so a skipped round performs no work at
+all — right for a wait, wrong for anything needing an action to clear. Two entries
+above are therefore wrong as listed:
+
+| state | in the skip list? |
+|---|---|
+| backing off (`Req 9.1`) | **yes** — a wait; time clears it |
+| `Started`, no identity (`Req 11.1`) | **yes** — only an operator clears it |
+| coverage halts (`Req 8.3`, `8.4`) | **yes** — only an operator clears it |
+| `Created(id)` (`Req 11.8`) | **no** — the round must finish the creation |
+| capability halt (`Req 10.1`) | **no** — the round must issue the probe |
+
+`Req 10.1` is the same mistake in a second place, and worth naming because fixing the
+first did not catch it. An old tail returns no range, so every later transaction exits
+at the skip and never issues the probe that `Req 10.2` and D8 depend on — meaning
+upgrading only the archive would never resume archiving, which is the entire scenario
+`Req 10` exists for. Once the backoff permits, that state must enter a **probe-only
+round**: no blocks, one empty append, a decision.
+
+The general rule, since this class has now appeared twice: **a state that needs the
+ledger to *do* something cannot be expressed as a skip.**
 
 ### `ledger_canister_core::runtime` — `Runtime::call`
 
@@ -767,9 +794,26 @@ a bounded variant so the choice is per call site (`Req 13.1`, `Req 13.5`):
 |---|---|---|
 | `append_blocks` | bounded, ICRC only | idempotent under `Req 2.4`; ICP exempt per `Req 13.6` |
 | `remaining_capacity` | bounded | read-only, so an unknown outcome is resolved by asking again |
-| `update_settings` | bounded | setting the same controllers twice is a no-op |
+| `update_settings` | bounded, but see below | not repeatable once it has succeeded |
 | `install_code` | bounded | resolvable, see below |
 | `create_canister` | **unbounded** | the only genuinely unresolvable one: an unknown outcome leaves a canister nothing can address |
+
+**`update_settings` is not repeatable, and "setting the same controllers twice is a
+no-op" was wrong.** The call replaces the ledger with the configured controllers
+(`archive.rs:366-372`, `:489-497`), and the management canister validates the caller
+before applying settings (`canister_manager.rs:690`). So once it has succeeded the
+ledger is no longer a controller: it can neither retry nor call `canister_status` to
+find out. An unknown outcome would be indistinguishable from a real failure, and
+`Req 11.8`'s adoption path would stall on it.
+
+The fix is ordering, not interpretation: **adopt the archive before handing over
+control** (`Req 11.9`). Adoption ends the creation's critical path, and the handover
+becomes a separate step the ledger retries on later rounds while it is still a
+controller (`Req 11.10`). A lost handover then leaves a fully adopted, working archive
+that is merely still ledger-controlled — recoverable, and visible on a metric — rather
+than an ambiguous state that blocks archiving. Reading the not-a-controller rejection
+as proof of success would work, but it would make the creation path depend on a reject
+code, which this design avoids everywhere else.
 
 **`install_code` is resolvable, which the earlier reasoning missed.** "`install` mode
 fails if already installed, so it cannot be retried" is true of a *blind* retry and
@@ -857,6 +901,9 @@ test is baseline-independent.
 | 17 | integration | reuse the creation-trap harness so the `create_canister` reply is lost; assert `Creating` is `Started`, that it is exposed, and that it does not self-clear — no identity was recorded, so there is nothing to finish | `Req 11.1`, `11.2`, `11.4` |
 | 17b | integration | lose the `install_code` outcome *after* the identity was recorded; assert the ledger resolves it by asking the created canister, finishes the creation without an operator, and adopts that same canister rather than creating a second | `Req 11.6`, `11.8` |
 | 17c | integration | fail a round, then upgrade the ledger; assert the next transaction triggers an Archiving_Round immediately rather than waiting out the spacing | `Req 9.9` |
+| 17d | integration | lose the `update_settings` outcome; assert the archive is already adopted and serving, that archiving continues, that the handover metric is non-zero, and that a later round retries the handover and clears it | `Req 11.9`, `11.10` |
+| 17e | upgrade | decode a pre-change `Archive` state; assert it decodes and the creation journal reads `Idle`, so the journal's own release cannot be the upgrade that fails | the `#[serde(default)]` above |
+| 18b | integration | after the tail returns no range, assert a later round issues the probe once the backoff permits — no blocks moved, one empty append — rather than skipping every round and never resuming | `Req 10.1`, `10.2` |
 | 18 | integration | install an old archive wasm as the tail; assert nothing is archived and the metric rises, then upgrade the archive and assert archiving resumes without a ledger upgrade. Repeat against a ledger whose archives do not implement the protocol and assert it archives normally | `Req 10.1`, `10.2`, `10.5` |
 | 19 | integration | make the tail archive not answer; assert the round ends within `ARCHIVE_CALL_TIMEOUT` and is retried, and that a subsequent round does not store any block twice. Then, with a call still in flight to that archive, assert the ledger can be stopped and upgraded — the property an unbounded call removes | `Req 13.1`, `13.2`, `13.4`, `13.8` |
 | 20 | integration | count `append_blocks` per round against a configuration that is multi-chunk today; assert one, and that the effective per-round metric matches | `Req 12.1`, `12.3`, `12.4` |

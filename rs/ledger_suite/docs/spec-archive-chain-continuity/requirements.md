@@ -493,8 +493,8 @@ unprotected, so that I find out from a metric instead of from a corrupted archiv
 #### Acceptance Criteria
 
 1. WHILE the Tail_Archive does not report an Archive_Range when asked per 3.5, THE
-   ICRC Ledger SHALL make no archiving attempt and SHALL expose a distinct non-zero
-   metric.
+   ICRC Ledger SHALL move no blocks to any archive and SHALL expose a distinct
+   non-zero metric, while still being able to ask again per 10.2.
 2. WHEN the Tail_Archive begins reporting an Archive_Range, THE ICRC Ledger SHALL
    resume archiving without operator action and without being upgraded.
 3. THE ICRC Ledger SHALL determine whether the Tail_Archive reports its range
@@ -542,6 +542,14 @@ unaddressable canister does not become a series of them.
    — determining what remains to be done by asking the created canister — rather than
    making no attempt at all as it does under 11.1, because a canister it can name is
    one it can still adopt and an operator should not be needed for that.
+9. THE Ledger SHALL adopt a created archive before handing its control to the
+   configured controllers, and SHALL treat a failure of that handover as neither
+   blocking adoption nor blocking archiving, because the handover replaces the ledger
+   as a controller and so cannot be retried or even checked once it has succeeded.
+10. WHILE a created archive has been adopted but its control not yet handed over, THE
+   Ledger SHALL retry the handover on later rounds and SHALL expose a distinct
+   non-zero metric until it succeeds, because until then the archive cannot be
+   upgraded by its intended controllers.
 
 ### Requirement 12: An Archiving Round Makes One Append
 
