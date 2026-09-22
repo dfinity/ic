@@ -185,11 +185,13 @@ enum Condition {
 ///   evaluates the condition at the version of its own topology snapshot, which
 ///   every subnet has long observed, rather than at the version a proposal
 ///   labeling `M` as "cooling down" would create.
-/// * `SubnetOutputQueues`, because a response of the management canister only
-///   sits in a subnet output queue until the stream builder of the very next
-///   round routes it into the loopback stream. Observing that requires
-///   scraping the metrics in that one round out of the hundreds each
-///   `install_code` call takes.
+/// * `SubnetOutputQueues`, because the stream builder routes the responses of
+///   the management canister out of the subnet output queues in the same round
+///   they are produced in, i.e. before the metrics are observed on the state
+///   committed at the end of that round. It only holds on to a response whose
+///   stream is full or whose destination subnet is cooling down while this one
+///   is not, and the responses of this scenario all go into the loopback
+///   stream, which is never considered full.
 /// * `RefundPool`, because nothing in this scenario produces an anonymous
 ///   refund, and a refund would be routed out of the pool in the next round
 ///   anyway: the pool only holds on to refunds whose destination subnet is
@@ -634,7 +636,7 @@ async fn evaluate_merge_readiness(
 /// triggered this iteration) as soon as it has fired the call to `peer`. This
 /// keeps the number of open call contexts bounded (had it not replied, every
 /// iteration would have left behind one open call context) and it makes each
-/// iteration consist of one loopback call plus one cross-subnet call.
+/// iteration consist of one self-call plus one cross-subnet call.
 async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
     // The continuation, executed by the reply and reject callbacks of the call
     // to `peer`: call `canister` itself with the loop body it holds in its
