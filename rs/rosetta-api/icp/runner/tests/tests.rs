@@ -66,3 +66,23 @@ fn smoke_test() {
         );
     });
 }
+
+/// Rosetta exits when it can't reach the replica while initializing, before
+/// it writes its port file. Starting it against a port nothing listens on must
+/// therefore fail with a descriptive panic after a bounded number of attempts
+/// instead of waiting for the port file forever, which used to hang the
+/// system tests until the bazel timeout.
+#[test]
+#[should_panic(expected = "Failed to start Rosetta after")]
+fn start_rosetta_fails_fast_when_the_replica_is_unreachable() {
+    let rt = Runtime::new().unwrap();
+    let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
+    let rosetta_state_directory =
+        tempfile::TempDir::new().expect("failed to create a temporary directory");
+    // Port 1 (tcpmux) is reserved, so connections to it are refused immediately.
+    rt.block_on(start_rosetta(
+        &rosetta_bin,
+        rosetta_state_directory,
+        RosettaOptionsBuilder::new("http://localhost:1".to_string()).build(),
+    ));
+}

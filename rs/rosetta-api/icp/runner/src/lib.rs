@@ -1,13 +1,26 @@
 pub mod constants;
-use crate::constants::{NUM_TRIES, WAIT_BETWEEN_ATTEMPTS};
+use crate::constants::{
+    MAX_START_ATTEMPTS, NUM_TRIES, START_TIMEOUT, WAIT_BETWEEN_ATTEMPTS,
+    WAIT_BETWEEN_START_ATTEMPTS,
+};
 use candid::Principal;
 use std::path::Path;
-use std::process::{Child, Command};
+use std::process::{Child, Command, ExitStatus};
 use std::str::FromStr;
+use std::time::Instant;
 use tempfile::TempDir;
 use tokio::time::sleep;
 
 struct KillOnDrop(Child);
+
+impl KillOnDrop {
+    /// Returns the exit status of the Rosetta process if it has exited.
+    fn try_wait(&mut self) -> Result<Option<ExitStatus>, String> {
+        self.0
+            .try_wait()
+            .map_err(|e| format!("Failed to poll the Rosetta process: {e}"))
+    }
+}
 
 pub struct RosettaContext {
     proc: KillOnDrop,
@@ -30,6 +43,11 @@ impl RosettaContext {
 
 impl Drop for KillOnDrop {
     fn drop(&mut self) {
+        // A process that has already exited (and been reaped by `try_wait`) can't be killed.
+        if let Ok(Some(status)) = self.0.try_wait() {
+            println!("Rosetta had already exited with {status}");
+            return;
+        }
         match self.0.kill() {
             Ok(_) => println!("Rosetta has been successfully stopped"),
             Err(err) => println!("Rosetta was NOT successfully stopped: {err:?}"),
@@ -99,6 +117,14 @@ impl RosettaOptionsBuilder {
     }
 }
 
+/// Starts Rosetta and waits until it serves `/network/list`.
+///
+/// Rosetta exits (with a panic) when it can't reach the ledger while
+/// initializing, e.g. because the (PocketIC) replica is temporarily
+/// unresponsive, and it only writes its port file after that initialization.
+/// Such an early exit is therefore detected instead of waiting forever for a
+/// port file that will never appear, and starting Rosetta is retried up to
+/// [`MAX_START_ATTEMPTS`] times before giving up with a descriptive panic.
 pub async fn start_rosetta(
     rosetta_bin: &Path,
     state_directory: TempDir,
@@ -111,8 +137,45 @@ pub async fn start_rosetta(
     );
 
     let port_file = state_directory.path().join("port");
+    let mut attempt = 1;
+    loop {
+        match try_start_rosetta(rosetta_bin, &state_directory, &port_file, &arguments).await {
+            Ok((proc, port)) => {
+                return RosettaContext {
+                    proc,
+                    state_directory,
+                    port,
+                };
+            }
+            Err(err) if attempt < MAX_START_ATTEMPTS => {
+                eprintln!(
+                    "Failed to start Rosetta (attempt {attempt}/{MAX_START_ATTEMPTS}): {err}. \
+                     Retrying in {WAIT_BETWEEN_START_ATTEMPTS:?}..."
+                );
+                attempt += 1;
+                sleep(WAIT_BETWEEN_START_ATTEMPTS).await;
+            }
+            Err(err) => {
+                panic!("Failed to start Rosetta after {MAX_START_ATTEMPTS} attempts: {err}")
+            }
+        }
+    }
+}
+
+/// Spawns Rosetta once and waits until it serves `/network/list`.
+///
+/// Returns an error when the Rosetta process exits, fails to write its port
+/// file within [`START_TIMEOUT`], or doesn't become ready within
+/// [`NUM_TRIES`] attempts. The spawned process is killed when the returned
+/// [`KillOnDrop`] is dropped, so a failed attempt leaves no process behind.
+async fn try_start_rosetta(
+    rosetta_bin: &Path,
+    state_directory: &TempDir,
+    port_file: &Path,
+    arguments: &RosettaOptions,
+) -> Result<(KillOnDrop, u16), String> {
     if port_file.exists()
-        && let Err(e) = std::fs::remove_file(port_file.clone())
+        && let Err(e) = std::fs::remove_file(port_file)
         && e.kind() != std::io::ErrorKind::NotFound
     {
         panic!("Unable to remove port file: {e:?}");
@@ -122,13 +185,13 @@ pub async fn start_rosetta(
     cmd.arg("--ic-url")
         .arg(&arguments.ic_url)
         .arg("--port-file")
-        .arg(port_file.clone())
+        .arg(port_file)
         .arg("--store-type")
         .arg(arguments.store_type.clone());
 
     if arguments.store_type == "sqlite" {
         cmd.arg("--store-location")
-            .arg(std::fs::canonicalize(&state_directory).unwrap());
+            .arg(std::fs::canonicalize(state_directory).unwrap());
     }
 
     if let Some(ledger_id) = arguments.ledger_id {
@@ -139,7 +202,7 @@ pub async fn start_rosetta(
         cmd.arg("--offline");
     }
 
-    let proc = KillOnDrop(cmd.spawn().unwrap_or_else(|e| {
+    let mut proc = KillOnDrop(cmd.spawn().unwrap_or_else(|e| {
         panic!(
             "Failed to execute ic-rosetta-api (path = {}, exists? = {}): {}",
             rosetta_bin.display(),
@@ -148,12 +211,25 @@ pub async fn start_rosetta(
         )
     }));
 
-    while !port_file.exists() {
+    let started_at = Instant::now();
+    let port = loop {
+        if let Some(port) = read_port(port_file) {
+            break port;
+        }
+        if let Some(status) = proc.try_wait()? {
+            return Err(format!(
+                "Rosetta exited with {status} before writing its port file {}",
+                port_file.display()
+            ));
+        }
+        if started_at.elapsed() > START_TIMEOUT {
+            return Err(format!(
+                "Rosetta didn't write its port file {} within {START_TIMEOUT:?}",
+                port_file.display()
+            ));
+        }
         sleep(WAIT_BETWEEN_ATTEMPTS).await;
-    }
-
-    let port = std::fs::read_to_string(port_file).expect("Expected port in port file");
-    let port = u16::from_str(&port).expect("Expected port in port file");
+    };
 
     let http_client = reqwest::Client::new();
     // wait because rosetta may be recovering from existing state
@@ -163,21 +239,31 @@ pub async fn start_rosetta(
             .post(format!("http://localhost:{port}/network/list").as_str())
             .header("Content-Type", "application/json")
             .send()
-            .await
-            .expect("Failed to send request");
-        if res.status().is_success() {
+            .await;
+        if res.is_ok_and(|res| res.status().is_success()) {
             break;
         }
-        sleep(WAIT_BETWEEN_ATTEMPTS).await;
+        if let Some(status) = proc.try_wait()? {
+            return Err(format!(
+                "Rosetta exited with {status} before serving /network/list on port {port}"
+            ));
+        }
         tries_left -= 1;
         if tries_left == 0 {
-            panic!("Failed to start Rosetta");
+            return Err(format!(
+                "Rosetta didn't serve /network/list on port {port} within {NUM_TRIES} attempts"
+            ));
         }
+        sleep(WAIT_BETWEEN_ATTEMPTS).await;
     }
 
-    RosettaContext {
-        proc,
-        state_directory,
-        port,
-    }
+    Ok((proc, port))
+}
+
+/// Reads the port Rosetta listens on from its port file, or returns `None`
+/// while the file doesn't exist yet or hasn't been completely written.
+fn read_port(port_file: &Path) -> Option<u16> {
+    std::fs::read_to_string(port_file)
+        .ok()
+        .and_then(|port| u16::from_str(port.trim()).ok())
 }

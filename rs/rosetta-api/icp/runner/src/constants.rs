@@ -4,3 +4,12 @@ pub const DEFAULT_DECIMAL_PLACES: u8 = 8;
 pub const DEFAULT_TOKEN_SYMBOL: &str = "ICP";
 pub const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
 pub const NUM_TRIES: u64 = 1000;
+/// How long a single attempt to start Rosetta may take to write its port file
+/// before the attempt is given up. A healthy start takes well under a second.
+pub const START_TIMEOUT: Duration = Duration::from_secs(60);
+/// How often starting Rosetta is attempted before giving up. Rosetta exits
+/// when the ledger is unreachable during its initialization, which happens
+/// when the (PocketIC) replica is temporarily unresponsive.
+pub const MAX_START_ATTEMPTS: u32 = 10;
+/// How long to wait between two attempts to start Rosetta.
+pub const WAIT_BETWEEN_START_ATTEMPTS: Duration = Duration::from_secs(1);
