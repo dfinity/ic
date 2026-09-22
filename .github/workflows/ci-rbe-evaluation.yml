@@ -186,6 +186,7 @@ jobs:
         # the current user (buildifier) while /cache belongs to the host side; pre-create
         # it with sudo so the mount cannot fail on permissions.
         if: env.NSC_CACHE_PATH != ''
+        continue-on-error: true
         run: sudo install -d -o "$(id -u)" -g "$(id -g)" "$NSC_CACHE_PATH/var/cache/bazel-repository-cache"
 
       - name: Mount the Bazel repository cache
@@ -528,4 +529,5 @@ jobs:
         # On master this is what gets committed; its growth over time tells whether the
         # cache needs pruning before Namespace's reset-when-full kicks in.
         if: ${{ !cancelled() && steps.repo-cache.outcome == 'success' }}
+        continue-on-error: true
         run: du -h --max-depth=1 /var/cache/bazel-repository-cache && df -h /var/cache/bazel-repository-cache
