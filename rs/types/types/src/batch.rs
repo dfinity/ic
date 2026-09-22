@@ -205,7 +205,6 @@ pub struct BatchMessages {
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
     pub query_stats: Option<QueryStatsPayload>,
-    pub upgrade: UpgradePayload,
 }
 
 /// Error type that can occur during an `BatchPayload::into_messages` call
@@ -213,7 +212,6 @@ pub struct BatchMessages {
 pub enum IntoMessagesError {
     IngressPayloadError(IngressPayloadError),
     QueryStatsPayloadError(ProxyDecodeError),
-    UpgradePayloadError(ProxyDecodeError),
 }
 
 impl BatchPayload {
@@ -231,8 +229,6 @@ impl BatchPayload {
             bitcoin_adapter_responses: self.self_validating.0,
             query_stats: QueryStatsPayload::deserialize(&self.query_stats)
                 .map_err(IntoMessagesError::QueryStatsPayloadError)?,
-            upgrade: UpgradePayload::deserialize(&self.upgrade)
-                .map_err(IntoMessagesError::UpgradePayloadError)?,
         })
     }
 
