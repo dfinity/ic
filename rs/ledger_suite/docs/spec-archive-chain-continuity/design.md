@@ -701,8 +701,9 @@ Cap the selection at `min(num_blocks_to_archive, one message)` in bytes, in
 selection precedes any await (`Req 12.3`). `take_prefix(remaining_capacity)` still
 trims on the cold-start path. Expose the effective per-round count (`Req 12.4`).
 
-A failed round counts the failure, keeps serving the blocks it did not archive, and
-leaves the triggering transaction's reply untouched (`Req 9.5`, `Req 9.6`) — all of
+A failed round counts the failure in `ledger_archiving_failures`, the metric the
+ledger already exposes, keeps serving the blocks it did not archive, and leaves the
+triggering transaction's reply untouched (`Req 9.5`, `Req 9.6`) — all of
 which the cleanup callback must achieve if the round trapped rather than returned,
 which is why the Constraints limit it to a bool and a `u64`.
 
@@ -710,6 +711,13 @@ Splitting large stable-memory work across messages is the platform's own answer 
 memory-exhaustion errors, and `Req 12` does it for the append side; block removal
 stays one message per round, so if that proves too much for one message, splitting it
 too is the prescription rather than an invention.
+
+**Whether it is too much is unmeasured, and worth measuring before assuming either
+way.** `remove_archived_blocks` loops `pop_first()` once per block, so the cost scales
+with `min(num_blocks_to_archive, MAX_BLOCKS_TO_ARCHIVE)` — 18,000 at the cap — and it
+is listed as a trap source on that reasoning rather than on a number. `Req 12` shrinks
+each round's removal, which probably settles it, but canbench already measures this
+class of thing and the figure is cheap to get.
 
 `blocks_to_archive` also carries the skip conditions: the backoff (`Req 9.1`), the
 creation halt (`Req 11.1`), the capability halt (`Req 10.1`) and the coverage halts
