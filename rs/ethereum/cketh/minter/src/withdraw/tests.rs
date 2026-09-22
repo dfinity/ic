@@ -125,7 +125,7 @@ mod round {
         let receipts = fetch_receipts_for_round(
             Address::new([0_u8; 20]),
             "test",
-            &mock::MockCanisterRuntime::new(),
+            &no_rpc_runtime(),
             |s, finalized_tx_count| {
                 s.withdrawal_transactions
                     .sent_transactions_to_finalize(finalized_tx_count)
@@ -175,6 +175,12 @@ mod round {
             "a round that never reached its lookups says nothing about the providers"
         );
     }
+}
+
+fn no_rpc_runtime() -> mock::MockCanisterRuntime {
+    let mut runtime = mock::MockCanisterRuntime::new();
+    runtime.expect_evm_rpc_client().never();
+    runtime
 }
 
 fn collect_in_hash_order(

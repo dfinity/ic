@@ -142,10 +142,12 @@ pub struct State {
     /// so it is deliberately left out of [`Self::is_equivalent_to`].
     pub sweep_observations: SweepObservations,
 
-    /// Ids the next withdrawal finalization round fetches receipts for. Reset on upgrade.
+    /// Ids the next withdrawal finalization round fetches receipts for. Not event-sourced, so
+    /// it is reset on upgrade and deliberately left out of [`Self::is_equivalent_to`].
     pub withdrawal_receipt_fetch: ReceiptFetchWindow<LedgerBurnIndex>,
 
-    /// The same for the sweeper pipeline, kept apart so one cannot throttle the other.
+    /// The same for the sweeper pipeline, likewise left out, and kept apart from the withdrawal
+    /// window so one pipeline cannot throttle the other.
     pub sweeper_receipt_fetch: ReceiptFetchWindow<SweepId>,
 }
 

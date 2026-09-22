@@ -665,7 +665,7 @@ async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
     let receipts: BTreeMap<SweepId, _> = fetch_receipts_for_round(
         Address::new([0_u8; 20]),
         "test",
-        &mock::MockCanisterRuntime::new(),
+        &no_rpc_runtime(),
         |s, finalized_tx_count| {
             s.automatic_deposits
                 .sent_sweep_transactions_to_finalize(finalized_tx_count)
@@ -684,6 +684,12 @@ async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
         Default::default(),
         "a sweeper problem must not throttle user withdrawals"
     );
+}
+
+fn no_rpc_runtime() -> mock::MockCanisterRuntime {
+    let mut runtime = mock::MockCanisterRuntime::new();
+    runtime.expect_evm_rpc_client().never();
+    runtime
 }
 
 fn one_pending_sweep() -> SweepRequest {

@@ -11,6 +11,8 @@ use std::ops::Bound;
 pub const INITIAL_RECEIPT_FETCH_WINDOW: usize = 10;
 pub const MIN_RECEIPT_FETCH_WINDOW: usize = 1;
 pub const MAX_RECEIPT_FETCH_WINDOW: usize = 20;
+/// A pipeline whose chain read keeps failing makes no lookup, so has no failure to shrink its
+/// window with, and would otherwise repeat at full cadence forever.
 pub const ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING: u32 = 3;
 /// One round out of this many is still attempted while rounds are being skipped.
 pub const ROUNDS_PER_ATTEMPT_WHILE_SKIPPING: u32 = 4;
