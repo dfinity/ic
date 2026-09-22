@@ -351,8 +351,7 @@ fn id(id: u8) -> LedgerBurnIndex {
 
 fn scrambled_hash(id: u8, variant: u8) -> Hash {
     let mut bytes = [0_u8; 32];
-    bytes[0] = id.wrapping_mul(37).wrapping_add(variant);
-    bytes[1] = id;
-    bytes[2] = variant;
+    bytes[0] = u8::MAX - id;
+    bytes[1] = variant;
     Hash(bytes)
 }
