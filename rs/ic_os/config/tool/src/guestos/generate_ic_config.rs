@@ -207,25 +207,22 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         None => "null".to_string(),
     };
 
-    let engine_management_canister_id = match guestos_config
+    let engine_management_canister_id = serde_json::to_string(&match guestos_config
         .guestos_settings
         .engine_management_canister_id
         .as_deref()
     {
         Some(id) => Some(id),
-        // Mainnet's engine management canister is well-known, so mainnet nodes
-        // do not have to configure it explicitly.
+        // Mainnet's engine management canister is well-known, so mainnet
+        // nodes do not have to configure it explicitly.
         None if guestos_config.icos_settings.deployment_environment
             == DeploymentEnvironment::Mainnet =>
         {
             Some(ic_config::cloud_engine::MAINNET_ENGINE_MANAGEMENT_CANISTER_ID)
         }
         None => None,
-    }
-    .map(serde_json::to_string)
-    .transpose()
-    .context("Failed to encode the engine management canister id")?
-    .unwrap_or_else(|| "null".to_string());
+    })
+    .context("Failed to encode the engine management canister id")?;
 
     Ok(IcConfigTemplate {
         // TODO https://dfinity.atlassian.net/browse/NODE-1909

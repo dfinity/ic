@@ -789,6 +789,7 @@ mod tests {
         // the engine's configuration.
         ensure_gateway(&mut manager, None).expect("nothing to do should not fail");
 
+        assert_eq!(manager.current_config, None);
         let log = log.lock().unwrap();
         assert!(!log.running);
         assert_eq!(log.starts, 0);
@@ -806,6 +807,10 @@ mod tests {
         )
         .unwrap();
 
+        assert_eq!(
+            manager.current_config,
+            Some(EngineConfig::for_test("engine.example.com"))
+        );
         let log = log.lock().unwrap();
         assert!(log.running);
         assert_eq!(log.starts, 1);
@@ -843,6 +848,10 @@ mod tests {
         )
         .unwrap();
 
+        assert_eq!(
+            manager.current_config,
+            Some(EngineConfig::for_test("two.example.com"))
+        );
         let log = log.lock().unwrap();
         assert!(log.running);
         assert_eq!(log.starts, 2);
@@ -871,6 +880,10 @@ mod tests {
             Some(EngineConfig::for_test("two.example.com")),
         )
         .unwrap();
+        assert_eq!(
+            manager.current_config,
+            Some(EngineConfig::for_test("one.example.com"))
+        );
         {
             let log = log.lock().unwrap();
             assert_eq!(log.stops, 1);
@@ -893,6 +906,11 @@ mod tests {
             Some(EngineConfig::for_test("two.example.com")),
         )
         .unwrap();
+        assert_eq!(
+            manager.current_config,
+            Some(EngineConfig::for_test("two.example.com"))
+        );
+
         let log = log.lock().unwrap();
         assert!(log.running);
         assert_eq!(log.starts, 2);
@@ -912,6 +930,7 @@ mod tests {
 
         ensure_gateway(&mut manager, None).unwrap();
 
+        assert_eq!(manager.current_config, None);
         let log = log.lock().unwrap();
         assert!(!log.running);
         assert_eq!(log.stops, 1);
@@ -948,6 +967,13 @@ mod tests {
         assert_eq!(
             env.get(&OsString::from("ACME_DNS_IC_DNS_LB_TOKEN")),
             Some(&OsString::from(config.dns_api_key.clone()))
+        );
+        assert!(
+            env.get(&OsString::from("ACME_ACCOUNT_CREDS"))
+                .is_some_and(|creds| creds
+                    .to_string_lossy()
+                    .contains(&config.acme_account.key_pkcs8)),
+            "{env:?}"
         );
         // The shipped file stays the base layer.
         assert_eq!(

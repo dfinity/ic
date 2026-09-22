@@ -59,6 +59,9 @@ pub(super) fn validate_engine_config(
             Ok(parsed) if parsed.cannot_be_a_base() => Err(CloudEngineError::failed(format!(
                 "{url} cannot be used as a base URL"
             ))),
+            Ok(parsed) if parsed.as_str().contains(',') => Err(CloudEngineError::failed(format!(
+                "{url} must not contain a comma"
+            ))),
             Ok(parsed) => Ok(parsed),
             Err(err) => Err(CloudEngineError::failed(format!(
                 "{url} is not a URL: {err}"
@@ -338,7 +341,12 @@ mod tests {
             );
         }
 
-        for url in ["not-a-url", "mailto:someone@example.com"] {
+        // A comma parses as part of the host, and would split the list.
+        for url in [
+            "not-a-url",
+            "mailto:someone@example.com",
+            "https://dns1.example.com,dns2.example.com/",
+        ] {
             assert_matches!(
                 parse(
                     HttpGatewayConfig {

@@ -1,10 +1,4 @@
 //! Client for the per-engine `engine-operator` canister.
-//!
-//! Every record is deliberately all-`opt` on the canister side so that the
-//! interface can grow without a breaking change; candid drops wire fields that
-//! are absent from these types, so added fields cannot break here either.
-//! Field *names* are part of the contract though: candid keys records by name
-//! hash, so a rename on either side silently decodes as absent.
 
 use super::error::{CloudEngineError, CloudEngineResult};
 use candid::{CandidType, Decode, Encode, Principal};

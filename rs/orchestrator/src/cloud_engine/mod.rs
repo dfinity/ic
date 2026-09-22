@@ -22,7 +22,10 @@ use ic_agent::Agent;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::{CanisterId, RegistryVersion, SubnetId, time::current_time};
 use operator::OperatorClient;
-use std::sync::{Arc, RwLock};
+use std::{
+    net::SocketAddr,
+    sync::{Arc, RwLock},
+};
 use url::Url;
 
 /// Value of the `outcome` label of `cloud_engine_config_fetches`.
@@ -40,10 +43,8 @@ pub(crate) struct CloudEngineManager {
     registry: Arc<RegistryHelper>,
     /// Which subnet this node serves, as the upgrade loop determined it.
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
-    crypto: Arc<dyn NodeRegistrationCrypto>,
-    replica_url: Url,
-    /// Built on first use and then reused: everything it depends on is stable.
-    operator_agent: Option<Agent>,
+    /// Signs as this node, which is how the operator canister recognizes it.
+    operator_agent: Agent,
     discovery: Discovery,
     /// The last configuration that passed validation, shared with the process
     /// manager that runs `ic-gateway`. Only ever replaced by another valid one,
@@ -55,35 +56,57 @@ pub(crate) struct CloudEngineManager {
 }
 
 impl CloudEngineManager {
-    /// `replica_url` addresses the replica running on this node.
+    /// `None` when this node cannot read an engine configuration at all: no
+    /// engine management canister to find the operator through, or no agent to
+    /// reach it with.
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         crypto: Arc<dyn NodeRegistrationCrypto>,
-        engine_management_canister_id: CanisterId,
-        replica_url: Url,
+        engine_management_canister_id: Option<CanisterId>,
+        replica_listen_addr: SocketAddr,
         current_config: Arc<RwLock<Option<EngineConfig>>>,
         metrics: Arc<OrchestratorMetrics>,
         logger: ReplicaLogger,
-    ) -> Self {
+    ) -> Option<Self> {
+        let engine_management_canister_id = engine_management_canister_id?;
+
+        // The replica listens on a wildcard address, so only its port is of use
+        // here: the operator canister is on this node's own subnet.
+        let replica_url = Url::parse(&format!("http://127.0.0.1:{}", replica_listen_addr.port()))
+            .inspect_err(|err| warn!(logger, "Cannot address the local replica: {err}"))
+            .ok()?;
+        let operator_agent = agent::node_signed(
+            registry.get_registry_client(),
+            crypto,
+            replica_url,
+            registry.get_latest_version(),
+            &logger,
+        )
+        .inspect_err(|err| {
+            warn!(
+                logger,
+                "Cannot build the agent to the engine operator: {err}"
+            )
+        })
+        .ok()?;
+
         let discovery = Discovery::new(
             Arc::clone(&registry),
             engine_management_canister_id,
             logger.clone(),
         );
 
-        Self {
+        Some(Self {
             registry,
             subnet_assignment,
-            crypto,
-            replica_url,
-            operator_agent: None,
+            operator_agent,
             discovery,
             current_config,
             consecutive_not_ready: 0,
             metrics,
             logger,
-        }
+        })
     }
 
     /// Refreshes the engine configuration, keeping the previous one on failure.
@@ -95,15 +118,26 @@ impl CloudEngineManager {
         };
         let version = self.registry.get_latest_version();
 
-        let outcome = match self.registry.is_cloud_engine_subnet(subnet_id, version) {
-            Ok(true) => self.fetch(subnet_id, version).await,
+        match self.registry.is_cloud_engine_subnet(subnet_id, version) {
+            Ok(true) => {}
             // Only all-in-one nodes have an engine operator to ask.
             Ok(false) => return,
-            Err(err) => Err(CloudEngineError::failed(format!(
-                "could not determine the type of subnet {subnet_id}: {err}"
-            ))),
-        };
+            // Whether this node is an engine is still unknown, so this says
+            // nothing about the operator and must not touch it.
+            Err(err) => {
+                self.metrics
+                    .cloud_engine_config_fetches
+                    .with_label_values(&[OUTCOME_ERROR])
+                    .inc();
+                warn!(
+                    every_n_seconds => 60,
+                    self.logger, "Could not determine the type of subnet {}: {}", subnet_id, err
+                );
+                return;
+            }
+        }
 
+        let outcome = self.fetch(subnet_id, version).await;
         self.apply(outcome);
     }
 
@@ -171,32 +205,12 @@ impl CloudEngineManager {
         version: RegistryVersion,
     ) -> CloudEngineResult<EngineConfig> {
         let operator_id = self.discovery.resolve(own_subnet, version).await?;
-
-        let operator_agent = self.operator_agent(version)?;
-        let operator = OperatorClient::new(&operator_agent, operator_id);
+        let operator = OperatorClient::new(&self.operator_agent, operator_id);
 
         let http_gateway_config = operator.http_gateway_config().await?;
         let acme_credentials = operator.acme_credentials().await?;
 
         validate_engine_config(http_gateway_config, acme_credentials)
-    }
-
-    /// The agent the operator canister is called with, built on first use.
-    fn operator_agent(&mut self, version: RegistryVersion) -> CloudEngineResult<Agent> {
-        if let Some(agent) = &self.operator_agent {
-            return Ok(agent.clone());
-        }
-
-        let agent = agent::node_signed(
-            self.registry.get_registry_client(),
-            Arc::clone(&self.crypto),
-            self.replica_url.clone(),
-            version,
-            &self.logger,
-        )?;
-        self.operator_agent = Some(agent.clone());
-
-        Ok(agent)
     }
 }
 
@@ -213,7 +227,8 @@ fn outcome_label(outcome: &CloudEngineResult<EngineConfig>) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
+    use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+    use ic_interfaces_registry::RegistryClient;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -238,18 +253,31 @@ mod tests {
             ProtoRegistryDataProvider::new(),
         )));
         registry_client.update_to_latest_version();
-        let registry = Arc::new(RegistryHelper::new(NODE_1, registry_client, no_op_logger()));
+        let registry = Arc::new(RegistryHelper::new(
+            NODE_1,
+            Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
+            no_op_logger(),
+        ));
+        // The constructor signs as this node, so the keys have to be real.
+        let crypto = Arc::new(
+            TempCryptoComponent::builder()
+                .with_registry(registry_client)
+                .with_node_id(NODE_1)
+                .with_keys(NodeKeysToGenerate::only_node_signing_key())
+                .build(),
+        );
 
         let mut manager = CloudEngineManager::new(
             registry,
             Arc::new(RwLock::new(SubnetAssignment::Unknown)),
-            Arc::new(CryptoReturningOk::default()),
-            CanisterId::from_u64(1000),
-            Url::parse("http://127.0.0.1:8080/").unwrap(),
+            crypto,
+            Some(CanisterId::from_u64(1000)),
+            SocketAddr::from(([127, 0, 0, 1], 8080)),
             Arc::new(RwLock::new(None)),
             Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new())),
             no_op_logger(),
-        );
+        )
+        .expect("the manager should be constructible");
         manager.discovery.remember(operator());
 
         manager
@@ -317,6 +345,8 @@ mod tests {
             assert_eq!(manager.consecutive_not_ready, attempt);
         }
 
+        assert_eq!(manager.discovery.remembered(), Some(operator()));
+
         manager.apply(Err(CloudEngineError::NotReady));
 
         // An operator that never recognizes this node is likely not ours.
@@ -331,7 +361,7 @@ mod tests {
     #[test]
     fn any_other_outcome_restores_the_not_ready_budget() {
         let mut manager = manager_for_test();
-        for _ in 0..MAX_CONSECUTIVE_NOT_READY - 1 {
+        for _ in 1..MAX_CONSECUTIVE_NOT_READY {
             manager.apply(Err(CloudEngineError::NotReady));
         }
 

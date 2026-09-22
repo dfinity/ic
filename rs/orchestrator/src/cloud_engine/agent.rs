@@ -59,7 +59,7 @@ fn random_api_boundary_node_url(
                 .inspect_err(|err| {
                     warn!(
                         logger,
-                        "Ignoring the malformed API boundary node domain '{}': {}", domain, err
+                        "Ignoring the malformed API boundary node domain '{domain}': {err}",
                     )
                 })
                 .ok()
@@ -90,10 +90,7 @@ fn build<I: Identity + 'static>(
         Err(err) => {
             // If we cannot determine the NNS public key, we log a warning but still proceed. The
             // agent will use the mainnet public key hardcoded in the agent library.
-            warn!(
-                logger,
-                "Failed to get NNS public key from registry: {}", err
-            );
+            warn!(logger, "Failed to get NNS public key from registry: {err}");
         }
     }
 

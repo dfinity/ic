@@ -46,7 +46,6 @@ use std::{
 };
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
-use url::Url;
 
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
@@ -376,30 +375,15 @@ impl Orchestrator {
             logger.clone(),
         );
 
-        // A node without an engine management canister cannot discover its
-        // operator, so it has no engine configuration to fetch.
-        let cloud_engine_manager = config.cloud_engine.engine_management_canister_id.and_then(
-            |engine_management_canister_id| {
-                // The operator canister is on this node's own subnet and is
-                // therefore reachable over the loopback interface.
-                let replica_url = Url::parse(&format!(
-                    "http://127.0.0.1:{}",
-                    config.http_handler.listen_addr.port()
-                ))
-                .inspect_err(|err| warn!(logger, "Cannot address the local replica: {}", err))
-                .ok()?;
-
-                Some(CloudEngineManager::new(
-                    Arc::clone(&registry),
-                    Arc::clone(&subnet_assignment),
-                    Arc::clone(&crypto) as _,
-                    engine_management_canister_id,
-                    replica_url,
-                    engine_config,
-                    Arc::clone(&metrics),
-                    logger.clone(),
-                ))
-            },
+        let cloud_engine_manager = CloudEngineManager::new(
+            Arc::clone(&registry),
+            Arc::clone(&subnet_assignment),
+            Arc::clone(&crypto) as _,
+            config.cloud_engine.engine_management_canister_id,
+            config.http_handler.listen_addr,
+            engine_config,
+            Arc::clone(&metrics),
+            logger.clone(),
         );
 
         let firewall = Firewall::new(
