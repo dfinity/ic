@@ -442,11 +442,13 @@ no special cases.
    of both ends and an empty archive has no pair of indices that describes it.
 7. THE ICRC Ledger SHALL replace the Published_Range of every archive whose range it
    inferred rather than observed with one that archive has reported, asking at most one
-   such archive per Archiving_Round so that 12.1 still holds, and SHALL make no further
-   archiving attempt and expose a distinct non-zero metric if a reported range
-   contradicts the record it replaces, because an archive that is already mis-indexed is
-   never appended to again once it is not the Tail_Archive and so would otherwise never
-   be asked.
+   such archive per Archiving_Round so that 12.1 still holds, and SHALL instead leave
+   that Published_Range as it stands while making no further archiving attempt and
+   exposing a distinct non-zero metric where a reported range contradicts the record it
+   would replace, because an archive already mis-indexed is never appended to again once
+   it is not the Tail_Archive and so would otherwise never be asked, while publishing
+   the contradicting range would break 7.2's continuity on the strength of the very
+   report that says something is wrong.
 8. WHEN an archive asked per 7.7 reports no Archive_Range, THE ICRC Ledger SHALL leave
    that archive's Published_Range as it stands and SHALL expose a distinct count, rather
    than halting as it would for the Tail_Archive per 10.1, because 10.1 protects appends
@@ -490,13 +492,15 @@ a hole.
    expose a distinct non-zero metric, because an archive holding indices the ledger has
    never issued was built from a chain the ledger is no longer on, which neither 8.2
    nor 8.4 detects.
-9. THE Ledger SHALL extend the Archived_Prefix only as far as a range reported by an
-   append after which the archive had either stored at least one block it was offered or
-   compared one of them against a block it already held per 2.9, because every other
-   append — an empty one per 3.5, a gap per 2.2, or one falling wholly below the
-   archive's range per 2.6 — leaves the archive having verified no block of this
-   ledger's chain, so its reported range cannot distinguish an archive continuing this
-   chain from one continuing a fork of it.
+9. THE Ledger SHALL extend the Archived_Prefix only as far as one past the
+   highest-indexed block of an append that the receiving archive either stored or
+   compared against a block it already held per 2.9, and never as far as the
+   Archive_Position that append reported, because an append that verified nothing —
+   an empty one per 3.5, a gap per 2.2, or one falling wholly below the archive's range
+   per 2.6 — is no evidence at all, while one that verified a block at index N is
+   evidence only about the indices at and below N, a hash chain propagating a divergence
+   forward rather than backward, so blocks the archive holds above N remain
+   uncompared.
 
 ### Requirement 9: Archiving Attempts Are Bounded While Archiving Fails
 
@@ -565,6 +569,10 @@ unprotected, so that I find out from a metric instead of from a corrupted archiv
    Archive_Range, and SHALL expose a distinct count of how often it does so,
    because its archives do not implement Req 2 or Req 3 and halting would stop ICP
    archiving permanently.
+6. THE ICRC Ledger SHALL record durably, for each archive, whether that archive has
+   reported an Archive_Range, because 10.4 would otherwise be repeated after every
+   upgrade and 7.7 cannot otherwise tell a range it observed from one it inferred — the
+   two being indistinguishable by value whenever the inference happened to be right.
 
 ### Requirement 11: An Unaccounted Archive Creation Halts Archiving
 
