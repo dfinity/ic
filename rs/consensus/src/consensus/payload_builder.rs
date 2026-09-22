@@ -50,10 +50,12 @@ impl PayloadBuilderImpl {
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        upgrade_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
         let section_builder = vec![
+            BatchPayloadSectionBuilder::Upgrade(upgrade_payload_builder),
             BatchPayloadSectionBuilder::Ingress(ingress_selector),
             BatchPayloadSectionBuilder::SelfValidating(self_validating_payload_builder),
             BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
@@ -290,6 +292,7 @@ pub(crate) mod test {
             FakeCanisterHttpPayloadBuilder::new().with_responses(canister_http_responses);
         let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
         let chain_key_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let upgrade_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
 
         PayloadBuilderImpl::new(
             subnet_test_id(0),
@@ -301,6 +304,7 @@ pub(crate) mod test {
             Arc::new(canister_http_payload_builder),
             Arc::new(query_stats_payload_builder),
             Arc::new(chain_key_payload_builder),
+            Arc::new(upgrade_payload_builder),
             MetricsRegistry::new(),
             no_op_logger(),
         )
@@ -420,12 +424,13 @@ pub(crate) mod test {
     #[test]
     // NOTE: this test is sensitive to the order in which the individual payload builders are executed.
     // At the time of the writing the test the order for a block at height 1 is:
-    // 1. chain_key
+    // 1. upgrade
     // 2. ingress
     // 3. bitcoin
-    // 3. xnet
-    // 4. canister hhtp
-    // 5. query_stats
+    // 4. xnet
+    // 5. canister http
+    // 6. query_stats
+    // 7. chain_key
     fn test_get_payload_respect_limits() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies { registry, .. } = DependenciesBuilder::new(pool_config, 1).build();
@@ -442,7 +447,9 @@ pub(crate) mod test {
                 registry,
                 MocksSettings {
                     chain_key_payload_to_return: vec![0; CHAIN_KEY_PAYLOAD_SIZE.get() as usize],
+                    upgrade_payload_to_return: vec![],
                     expected_chain_key_payload_size_limit: MAX_BLOCK_SIZE,
+                    expected_upgrade_payload_size_limit: MAX_BLOCK_SIZE - CHAIN_KEY_PAYLOAD_SIZE,
                     ingress_payload_size_to_return: INGRESS_PAYLOAD_SIZE,
                     expected_ingress_payload_size_limit: MAX_BLOCK_SIZE - CHAIN_KEY_PAYLOAD_SIZE,
                     bitcoin_payload_size_to_return: BITCOIN_PAYLOAD_SIZE,
@@ -515,10 +522,12 @@ pub(crate) mod test {
                 query_stats_payload_to_return: vec![0; MB as usize],
                 chain_key_payload_to_return: vec![0; 512 * KB as usize],
                 http_outcalls_payload_to_return: vec![0; 256 * KB as usize],
+                upgrade_payload_to_return: vec![0; 32 * KB as usize],
                 bitcoin_payload_size_to_return: NumBytes::new(128 * KB),
                 xnet_payload_size_to_return: NumBytes::new(64 * KB),
                 // The fields below are irrelevant for the test
                 expected_chain_key_payload_size_limit: ZERO_BYTES,
+                expected_upgrade_payload_size_limit: ZERO_BYTES,
                 expected_ingress_payload_size_limit: ZERO_BYTES,
                 expected_bitcoin_payload_size_limit: ZERO_BYTES,
                 expected_xnet_payload_size_limit: ZERO_BYTES,
@@ -547,6 +556,7 @@ pub(crate) mod test {
                         canister_http: settings.http_outcalls_payload_to_return,
                         query_stats: settings.query_stats_payload_to_return,
                         chain_key: settings.chain_key_payload_to_return,
+                        upgrade: settings.upgrade_payload_to_return,
                     },
                     dkg: DkgDataPayload::new_empty(Height::from(0)),
                     idkg: None,
@@ -574,6 +584,8 @@ pub(crate) mod test {
         expected_ingress_payload_size_limit: NumBytes,
         chain_key_payload_to_return: Vec<u8>,
         expected_chain_key_payload_size_limit: NumBytes,
+        upgrade_payload_to_return: Vec<u8>,
+        expected_upgrade_payload_size_limit: NumBytes,
         bitcoin_payload_size_to_return: NumBytes,
         expected_bitcoin_payload_size_limit: NumBytes,
         xnet_payload_size_to_return: NumBytes,
@@ -659,6 +671,11 @@ pub(crate) mod test {
                 settings.expected_query_stats_size_limit,
             );
 
+        let upgrade_payload_builder = MockBatchPayloadBuilder::new().with_response_and_max_size(
+            settings.upgrade_payload_to_return,
+            settings.expected_upgrade_payload_size_limit,
+        );
+
         PayloadBuilderImpl::new(
             subnet_test_id(0),
             node_test_id(0),
@@ -669,6 +686,7 @@ pub(crate) mod test {
             Arc::new(canister_http_payload_builder),
             Arc::new(query_stats_payload_builder),
             Arc::new(chain_key_payload_builder),
+            Arc::new(upgrade_payload_builder),
             MetricsRegistry::new(),
             no_op_logger(),
         )

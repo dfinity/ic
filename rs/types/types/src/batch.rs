@@ -179,6 +179,7 @@ pub struct BatchPayload {
     pub canister_http: Vec<u8>,
     pub query_stats: Vec<u8>,
     pub chain_key: Vec<u8>,
+    pub upgrade: Vec<u8>,
 }
 
 /// Batch properties collected form the last DKG summary block.
@@ -204,6 +205,7 @@ pub struct BatchMessages {
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
     pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
     pub query_stats: Option<QueryStatsPayload>,
+    pub upgrade: UpgradePayload,
 }
 
 /// Error type that can occur during an `BatchPayload::into_messages` call
@@ -211,6 +213,7 @@ pub struct BatchMessages {
 pub enum IntoMessagesError {
     IngressPayloadError(IngressPayloadError),
     QueryStatsPayloadError(ProxyDecodeError),
+    UpgradePayloadError(ProxyDecodeError),
 }
 
 impl BatchPayload {
@@ -228,6 +231,8 @@ impl BatchPayload {
             bitcoin_adapter_responses: self.self_validating.0,
             query_stats: QueryStatsPayload::deserialize(&self.query_stats)
                 .map_err(IntoMessagesError::QueryStatsPayloadError)?,
+            upgrade: UpgradePayload::deserialize(&self.upgrade)
+                .map_err(IntoMessagesError::UpgradePayloadError)?,
         })
     }
 
@@ -239,6 +244,7 @@ impl BatchPayload {
             canister_http,
             query_stats,
             chain_key,
+            upgrade,
         } = &self;
 
         ingress.is_empty()
@@ -247,6 +253,7 @@ impl BatchPayload {
             && canister_http.is_empty()
             && query_stats.is_empty()
             && chain_key.is_empty()
+            && upgrade.is_empty()
     }
 }
 
@@ -407,6 +414,7 @@ mod tests {
             canister_http,
             query_stats,
             chain_key,
+            upgrade,
         } = BatchPayload::default();
 
         assert_eq!(ingress.total_ids_size_estimate(), NumBytes::new(0));
@@ -415,6 +423,7 @@ mod tests {
         assert_eq!(canister_http.len(), 0);
         assert_eq!(query_stats.len(), 0);
         assert_eq!(chain_key.len(), 0);
+        assert_eq!(upgrade.len(), 0);
     }
 
     /// This is a quick test to check the invariant, that the [`Default`] implementation
@@ -431,6 +440,7 @@ mod tests {
             canister_http,
             query_stats,
             chain_key,
+            upgrade,
         } = &payload;
 
         assert!(ingress.is_empty());
@@ -439,6 +449,7 @@ mod tests {
         assert!(canister_http.is_empty());
         assert!(query_stats.is_empty());
         assert!(chain_key.is_empty());
+        assert!(upgrade.is_empty());
     }
 
     #[test]

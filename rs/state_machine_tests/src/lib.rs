@@ -13,6 +13,7 @@ use ic_config::{
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_cup_utils::make_registry_cup;
+use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilder;
 use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool, crypto::SignVerify};
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
@@ -149,7 +150,7 @@ use ic_types::{
     batch::{
         Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterHttpSpent,
         ChainKeyData, ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
-        ValidationContext, XNetPayload,
+        UpgradePayload, ValidationContext, XNetPayload,
     },
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequestContext, CanisterHttpRequestId,
@@ -1285,6 +1286,7 @@ pub struct StateMachine {
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
     local_query_execution_stats: Arc<QueryStatsCollector>,
     chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
+    upgrade_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
 }
@@ -1859,6 +1861,7 @@ impl StateMachineBuilder {
             sm.canister_http_payload_builder.clone(),
             sm.query_stats_payload_builder.clone(),
             sm.chain_key_payload_builder.clone(),
+            sm.upgrade_payload_builder.clone(),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),
         ));
@@ -2213,6 +2216,7 @@ impl StateMachine {
         ));
 
         let chain_key_payload_builder = Arc::new(MockBatchPayloadBuilder::new().expect_noop());
+        let upgrade_payload_builder = Arc::new(UpgradePayloadBuilder);
 
         let cancellation_token = tokio_util::sync::CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
@@ -2479,6 +2483,7 @@ impl StateMachine {
             query_stats_payload_builder: pocket_query_stats_payload_builder,
             local_query_execution_stats: execution_services.local_query_execution_stats,
             chain_key_payload_builder,
+            upgrade_payload_builder,
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
         }
@@ -3172,6 +3177,7 @@ impl StateMachine {
                     .map(|p| p.get().to_vec())
                     .unwrap_or_default(),
                 query_stats: payload.query_stats,
+                upgrade: UpgradePayload::default(),
             },
             chain_key_data: ChainKeyData {
                 master_public_keys: self.chain_key_subnet_public_keys.clone(),

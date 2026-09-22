@@ -11,6 +11,7 @@ ic-config = { path = "../config" }
 ic-consensus-certification = { path = "./certification" }
 ic-consensus-idkg = { path = "./idkg" }
 ic-consensus-dkg = { path = "./dkg" }
+ic-consensus-upgrade = { path = "./upgrade" }
 ic-consensus-utils = { path = "./utils" }
 ic-consensus-chain-key = { path = "./chain_key" }
 ic-crypto-prng = { path = "../crypto/prng" }

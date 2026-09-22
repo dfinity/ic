@@ -8024,6 +8024,7 @@ dependencies = [
  "ic-consensus-dkg",
  "ic-consensus-idkg",
  "ic-consensus-mocks",
+ "ic-consensus-upgrade",
  "ic-consensus-utils",
  "ic-crypto-prng",
  "ic-crypto-temp-crypto",
@@ -8320,6 +8321,15 @@ dependencies = [
  "ic-types",
  "mockall",
  "slog",
+]
+
+[[package]]
+name = "ic-consensus-upgrade"
+version = "0.9.0"
+dependencies = [
+ "ic-interfaces",
+ "ic-types",
+ "ic-types-test-utils",
 ]
 
 [[package]]
@@ -13729,6 +13739,7 @@ dependencies = [
  "ic-consensus-features",
  "ic-consensus-idkg",
  "ic-consensus-manager",
+ "ic-consensus-upgrade",
  "ic-consensus-utils",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-tls-interfaces",
@@ -14793,6 +14804,7 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-cup-utils",
+ "ic-consensus-upgrade",
  "ic-consensus-utils",
  "ic-crypto-iccsa",
  "ic-crypto-test-utils-crypto-returning-ok",

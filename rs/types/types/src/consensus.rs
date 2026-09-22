@@ -1299,6 +1299,7 @@ impl From<&Block> for pb::Block {
             canister_http_payload_bytes,
             query_stats_payload_bytes,
             chain_key_payload_bytes,
+            upgrade_payload_bytes,
             idkg_payload,
         ) = if payload.is_summary() {
             (
@@ -1306,6 +1307,7 @@ impl From<&Block> for pb::Block {
                 None,
                 None,
                 None,
+                vec![],
                 vec![],
                 vec![],
                 vec![],
@@ -1321,6 +1323,7 @@ impl From<&Block> for pb::Block {
                 batch.canister_http.clone(),
                 batch.query_stats.clone(),
                 batch.chain_key.clone(),
+                batch.upgrade.clone(),
                 payload.as_data().idkg.as_ref().map(|idkg| idkg.into()),
             )
         };
@@ -1339,6 +1342,7 @@ impl From<&Block> for pb::Block {
             canister_http_payload_bytes,
             query_stats_payload_bytes,
             chain_key_payload_bytes,
+            upgrade_payload_bytes,
             idkg_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
@@ -1370,6 +1374,7 @@ impl TryFrom<pb::Block> for Block {
             canister_http: block.canister_http_payload_bytes,
             query_stats: block.query_stats_payload_bytes,
             chain_key: block.chain_key_payload_bytes,
+            upgrade: block.upgrade_payload_bytes,
         };
 
         let payload = match dkg_payload {

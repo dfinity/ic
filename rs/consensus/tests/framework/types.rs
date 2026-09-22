@@ -6,6 +6,7 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
 use ic_consensus_idkg::IDkgImpl;
+use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilder;
 use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
@@ -176,6 +177,7 @@ pub struct ConsensusDependencies {
     pub(crate) canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub(crate) query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub(crate) chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
+    pub(crate) upgrade_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
     pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
@@ -239,6 +241,7 @@ impl ConsensusDependencies {
             canister_http_payload_builder: Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             query_stats_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             chain_key_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
+            upgrade_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             state_manager,
             thread_pool: build_thread_pool(MAX_CONSENSUS_THREADS),
             metrics_registry,
