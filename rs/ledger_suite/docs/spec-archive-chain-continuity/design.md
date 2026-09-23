@@ -823,12 +823,22 @@ determination itself is the empty append of `Req 10.3`, issued here and bounded 
 
 Reconciliation also maintains what `archives()` publishes, so a Published_Range only
 ever widens to what an archive has reported (`Req 7.2`), and an archive that holds
-nothing yet appears in no published range at all (`Req 7.6`) — which is what the code
-already does, since the range entry is pushed on the first successful append rather
-than at creation. A published range is inclusive of both ends, so an empty archive
-has no pair of indices that could describe it — the ledger's published view
-and its internal record are the same data, which is why `Req 8.5` has to be about the
-*source* of that data rather than about which field it is read from.
+nothing yet appears in no published range at all (`Req 7.6`). **The current code does
+not give that for free, and an earlier draft said it did.** Today the first range entry
+is derived from the batch — `push((0, chunk_len - 1))` for the first node,
+`last_height + chunk_len` for the rest (`archive.rs:285-301`) — which was safe only
+while no append was ever empty. A successful indexed probe to a fresh archive has
+`chunk_len = 0`, so that arithmetic underflows or publishes a range for a block that does
+not exist. The rule is therefore stated rather than inherited: a range entry is inserted
+or widened **only from the reply's `block_index_offset` and `next_index`, and only when
+`next_index > block_index_offset`** — a reply with the two equal describes an archive
+holding nothing and leaves the entry absent. The batch length plays no part, and the
+`chunk_len` arithmetic goes with the loops it belonged to.
+
+A published range is inclusive of both ends, so an empty archive has no pair of indices
+that could describe it — the ledger's published view and its internal record are the
+same data, which is why `Req 8.5` has to be about the *source* of that data rather than
+about which field it is read from.
 
 ### `ledger_canister_core::archive` — `Archive` state
 
@@ -1333,6 +1343,7 @@ test is baseline-independent.
 | 29 | integration | after each round, assert every index the ledger served before it is still retrievable, and that the ledger stopped serving only indices some archive reports covering — the headline safety property, which rows 14 and 15 approach only from their failure sides | `Req 8.1`, `Req 8.4` |
 | 30 | integration | drive a round that must roll over; assert exactly one archive is created, and that a round which both fills the tail and has blocks left over does not create two | `Req 12.2` |
 | 31 | integration | assert the capability probe stores nothing and consumes no capacity against a live archive, that a second round against an archive that already answered issues no further probe, and that a round which does probe sends at most one empty append | `Req 10.3`, `10.4`, `Req 12.1` |
+| 31b | unit, `ledger_canister_core` | send the capability probe to a freshly created archive and take its reply with `next_index == block_index_offset`; assert no range entry is inserted, `archives()` omits it, and nothing underflows — the `chunk_len - 1` arithmetic the probe would have hit | `Req 7.6`, `Req 3.5` |
 | 27 | matrix | both token variants for every archive-level row: 1-9, 9b, 9c, 10, 11, 13, 22, 22c, 22d, 22e, 26 and 26b — (12) is ICP-only by nature, and 22b, 25 and 28-31 are integration rows | yes |
 
 **Seams the design owes.** `Req 9` is observable only through the attempt spacing, so
