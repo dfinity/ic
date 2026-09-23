@@ -74,7 +74,7 @@ comes first.
   the corresponding non-goal.
 - **Tail_Archive**: the archive a ledger currently appends to — the most recently
   created one. Earlier archives are full and no append ever stores a block in one
-  again, though Req 10.6 and Req 9.8 send one appends that store nothing — first to ask
+  again, though Req 10.6 and Req 9.8 send it appends that store nothing — first to ask
   whether it reports its range, then to have it confirm blocks it already holds.
 - **Archive_Range**: the contiguous span of global block indices an archive holds,
   from its `block_index_offset` up to but excluding its Archive_Position, **as the
@@ -499,7 +499,7 @@ a hole.
 6. THE Ledger SHALL NOT rely on its own record of what it sent when deciding what
    to stop serving, only on what an archive has reported holding.
 7. THE ICP Ledger SHALL rely on its own record instead, and SHALL NOT be held to
-   8.1, 8.2, 8.3, 8.4, 8.6, 8.8 or 8.9, since there is no reported range to rely on
+   8.1, 8.2, 8.3, 8.4, 8.6, 8.8, 8.9 or 8.10, since there is no reported range to rely on
    (per 10.5) — the exposure the corresponding non-goal accepts.
 8. WHEN an archive reports an Archive_Position above the next block index THE Ledger
    would itself issue, THE Ledger SHALL make no further archiving attempt and SHALL
@@ -515,6 +515,14 @@ a hole.
    evidence only about the indices at and below N, a hash chain propagating a divergence
    forward rather than backward, so blocks the archive holds above N remain
    uncompared.
+10. WHEN an archive other than the Tail_Archive reports an Archive_Range that differs
+   in either end from the Published_Range THE Ledger publishes for it, THE Ledger SHALL
+   leave that Published_Range as it stands, make no further archiving attempt, and
+   expose a distinct non-zero metric, because a full archive's offset is fixed and it is
+   never appended to again, so its range cannot legitimately have changed — and widening
+   the published range to match a report that reaches into the next archive would break
+   7.2, while a report starting above the published start leaves blocks held nowhere
+   that 9.8 would redirect to it forever.
 
 ### Requirement 9: Archiving Attempts Are Bounded While Archiving Fails
 
