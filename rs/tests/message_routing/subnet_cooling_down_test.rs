@@ -1,14 +1,12 @@
 /* tag::catalog[]
 Title:: Setting a subnet up to be "cooled down".
 
-Goal:: Verify that a subnet holding everything a subnet merge has to drain --
-canisters calling each other across subnets in a loop and long-running
-`install_code` calls -- violates the individual terms of the "merge readiness"
-condition, i.e. that the condition a subnet merging tool waits for before
-merging such a subnet away is one that the subnet does not satisfy to begin
-with. The subnet also holds calls waiting for responses that never arrive: they
-are not drained, but make it possible to assert that a subnet merge populates
-the ingress history properly.
+Goal:: Verify that a subnet holding what a subnet merge has to drain violates
+the individual terms of the "merge readiness" condition, i.e. that the
+condition a subnet merging tool waits for before merging such a subnet away is
+one that the subnet does not satisfy to begin with. The subnet also holds calls
+waiting for responses that never arrive: they are not drained, but make it
+possible to assert that a subnet merge populates the ingress history properly.
 
 The subnet that is set up to be cooled down, i.e. the one that would be merged
 away, is called `M`; a second Application subnet `T` holds the canisters at the
@@ -36,9 +34,11 @@ Runbook::
    `INIT_INSTRUCTIONS` instructions. Wait until all five requests have left
    `U1`'s output queue, i.e. until they are enqueued in `M`'s subnet input
    queues or already executing.
-6. Start three endless loops, each of which runs until the global data of the
-   looping canister is set to `LOOP_BREAK_TRIGGER`, which this test never does:
-   a. execute an update call on `U3` that loops on `U3` itself;
+6. Start three endless loops, each of which calls the management canister's
+   `canister_status` method for the looping canister over and over until the
+   global data of that canister is set to `LOOP_BREAK_TRIGGER`, which this test
+   never does:
+   a. execute an update call on `U3` (on `M`) with the loop as its payload;
    b. execute an update call on `U4` (on `T`) that calls `U5` (on `M`) with the
       loop as its payload, so that `M` holds a canister looping in a call from
       another subnet that it can never respond to;
@@ -51,10 +51,9 @@ Runbook::
    `M` and `M` holds messages in its own streams (the loops of step 2), the
    ingress history holds terminal entries (the calls of the steps above that
    did complete), `M`'s subnet input queues hold messages (`U1`'s `install_code`
-   requests and the management canister calls the endless loops make) and its
-   subnet call context manager holds call contexts (the `install_code` calls
-   that are executing). The remaining three terms are expected to hold and are
-   only logged; `VIOLATED_CONDITIONS` says why.
+   requests) and its subnet call context manager holds call contexts (the
+   `install_code` calls that are executing). The remaining three terms are
+   expected to hold and are only logged; `VIOLATED_CONDITIONS` says why.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -193,12 +192,9 @@ enum Condition {
 ///   is not, and the responses of this scenario all go into the loopback
 ///   stream, which is never considered full.
 /// * `RefundPool`, because nothing in this scenario produces an anonymous
-///   refund, and a refund would be routed out of the pool by the stream
-///   builder of the round it is produced in anyway, or of the next round if it
-///   is produced by shedding a best-effort message (which happens after the
-///   stream builder): the pool only holds on to refunds whose destination
-///   subnet is cooling down while this one is not, or whose stream is full
-///   (which would require a more complex test setup).
+///   refund, and the pool only holds on to refunds whose destination subnet
+///   is cooling down while this one is not, or whose stream is full (which
+///   would require a more complex test setup).
 const VIOLATED_CONDITIONS: [Condition; 5] = [
     Condition::IncomingStreams,
     Condition::OutgoingStreams,
@@ -684,10 +680,8 @@ async fn start_call_loop(canister: &UniversalCanister<'_>, peer: Principal) {
 /// executing, and then loop until the global data is set to
 /// `LOOP_BREAK_TRIGGER`, which this test never does.
 ///
-/// Every iteration of the loop is a management canister `canister_status` call
-/// for the executing canister itself, so the loop also keeps the subnet input
-/// queues of the subnet holding that canister busy. The canister never responds
-/// to the call it is executing, so that call context stays open forever.
+/// The canister never responds to the call it is executing, so that call
+/// context stays open forever.
 fn endless_loop() -> Vec<u8> {
     wasm()
         .inc_global_counter()
