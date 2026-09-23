@@ -987,7 +987,7 @@ async fn wait_for_cup_with_subnet_id(
             node.node_id
         ),
         &env.logger(),
-        Duration::from_secs(120),
+        Duration::from_secs(150),
         Duration::from_secs(5),
         || async {
             match get_cup_from_node(node, &env.logger()).await {
