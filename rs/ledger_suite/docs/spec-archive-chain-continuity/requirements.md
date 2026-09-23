@@ -224,9 +224,10 @@ lost track of what it sent cannot corrupt the archive by sending them again.
    SHALL NOT refuse an Index_Less_Append on the grounds of 1.1, because it then has
    nothing at all to compare against — neither a stored block nor a declared one.
 5. WHEN the earliest block an append would store carries no parent hash, THE Archive
-   SHALL store it only if it holds no blocks and its `block_index_offset` is zero,
-   because a block without a parent is the genesis block and belongs at index zero
-   or nowhere.
+   SHALL store it only at global index zero — an archive holding nothing whose
+   `block_index_offset` is zero, and for an Indexed_Append a Declared_Index of zero as
+   well, any other index being a gap per 2.2 — because a block without a parent is the
+   genesis block and belongs at index zero or nowhere.
 6. WHEN THE Archive stores blocks while holding none and having been given no
    Expected_Parent, THE Archive SHALL count that append distinctly, because it is
    the one append whose content the archive cannot verify by any means and the count
