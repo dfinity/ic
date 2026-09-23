@@ -589,6 +589,12 @@ per interval rather than work per transaction.
    purposes of 9.1, 9.2 and 9.5 while keeping the progress the archive reported, because
    the call itself returned successfully and without this the refused growth would be
    provoked again by every later transaction rather than waited out by 4.6's retry.
+11. WHILE a halt per 4.10, 8.3, 8.4, 8.8, 8.10, 8.11 or 9.7 holds, THE Ledger SHALL
+   attempt no Archiving_Round until it is next upgraded, and SHALL re-establish the halt
+   from the first reply after that upgrade if the cause persists, because each of these
+   is learned from one reply and re-derivable from the next, so forgetting it on upgrade
+   costs one attempt — exactly the lever 9.9 grants an operator — whereas 11.1's cause
+   cannot be re-derived and so survives an upgrade per 11.4.
 
 ### Requirement 10: A Ledger Will Not Archive Against An Archive That Cannot Report Its Range
 

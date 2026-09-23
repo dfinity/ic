@@ -242,9 +242,9 @@ have outlasted a cause that cleared itself, which is why `Req 9.4` exists.
 Transaction-triggered plus a timestamp check rather than a timer: no re-arm hazard,
 and it satisfies the every-await-is-a-call constraint above.
 
-### D2 — Backoff and probe state are `#[serde(skip)]`
+### D2 — Backoff, probe and halt state are `#[serde(skip)]`
 
-Serves `Req 9.3`, `Req 9.9`, `Req 10.4`. Matches `archiving_in_progress`, and makes an upgrade the
+Serves `Req 9.3`, `Req 9.9`, `Req 9.11`, `Req 10.4`. Matches `archiving_in_progress`, and makes an upgrade the
 operator's "resume now" lever, which is the right shape when the upgrade is usually the
 fix.
 
@@ -860,7 +860,8 @@ and its internal record are the same data, which is why `Req 8.6` has to be abou
 ### `ledger_canister_core::archive` — `Archive` state
 
 `#[serde(skip)]` fields per D2: last-attempt timestamp and consecutive-failure count
-(`Req 9`), and the tail's last reported `at_capacity` (`Req 4.5`, `4.6`) — without which
+(`Req 9`), the halt reason below (`Req 9.11`), and the tail's last reported
+`at_capacity` (`Req 4.5`, `4.6`) — without which
 `node_and_capacity` has nothing to decide a roll-over from once the routine
 `remaining_capacity` pre-call is gone. That one is skipped rather than persisted because
 losing it is not a hazard: a cold start falls back to the pre-call, which is the same
@@ -990,6 +991,30 @@ distinguishable from the backoff of `Req 9.1` — a ledger that is *waiting* and
 that has *stopped* look the same from block accumulation alone. And `Req 10.1` and
 `Req 10.6` are the only ones whose state may be derived from a cache, since they are the
 only ones expected to change without a *ledger* upgrade.
+
+**Where the halt lives, and what clears it** (`Req 9.11`). Seven of the eight are
+learned from one archive reply and are invisible to the next round unless something
+records them — the ranges are unchanged after a `ChainMismatch`, so `blocks_to_archive`
+could not re-derive the refusal and would send again. So the round that learns one sets
+
+    #[serde(skip)]
+    halted: Option<Halt>,
+
+    enum Halt { OversizedBlock, UncoveredSpan, PositionShort, PositionAhead,
+                RangeMoved, StartMoved, Refused(RefusedGround) }
+    // Req 4.10, 8.3, 8.4, 8.8, 8.10, 8.11, 9.7 respectively
+
+which `blocks_to_archive` reads before the guard, and which is the source for each halt's
+metric. It is **skipped, not persisted**, and that is a decision rather than an
+omission: every one of these seven is re-derivable from the next reply — the archive will
+refuse again, report the same position again — so forgetting it on upgrade costs one
+attempt that re-establishes it, and that one attempt is precisely the "resume now" lever
+D2 gives an operator. Nothing else clears it: no timer, no successful unrelated call, no
+metric read. The eighth, `Req 11.1`, is the exception in both directions — it is
+`Creating::Started`, it is persisted, and an upgrade does *not* clear it (`Req 11.4`) —
+because an orphaned canister cannot be re-derived from anything. That is D2's line
+drawn through the halts: persist what only the past knows, skip what the next reply
+will say again.
 
 ### `ledger_canister_core::archive` — `node_and_capacity`
 
@@ -1289,6 +1314,7 @@ test is baseline-independent.
 | 17 | integration | reuse the creation-trap harness so the `create_canister` reply is lost; assert `Creating` is `Started`, that it is exposed, and that it does not self-clear — no identity was recorded, so there is nothing to finish | `Req 11.1`, `11.2`, `11.4` |
 | 17b | integration | lose the `install_code` outcome *after* the identity was recorded; assert the ledger resolves it by asking the created canister, finishes the creation without an operator, and adopts that same canister rather than creating a second | `Req 11.6`, `11.8` |
 | 17c | integration | fail a round, then upgrade the ledger; assert the next transaction triggers an Archiving_Round immediately rather than waiting out the spacing | `Req 9.9` |
+| 17l | integration | drive a `ChainMismatch` halt, then run several further transactions and assert no append is sent; upgrade the ledger with the archive unchanged and assert exactly one append is sent and the halt is re-established with its metric; then fix the archive, upgrade again, and assert archiving resumes — the three clearing semantics of one field | `Req 9.11`, `Req 9.7`, `Req 9.9` |
 | 7d | archive | offer a batch whose second block exceeds the configured limit and, in turn, either does not chain or does not decode; assert in both cases that the first block is stored, the stop is reported, and the append is neither refused nor counted — the block was never going to be stored | `Req 1.9`, `Req 4.1`, `Req 6.4` |
 | 17d | integration | lose the `update_settings` outcome; assert the archive is already adopted and serving, that archiving continues, that the handover metric is non-zero, and that a later round retries the handover and clears it | `Req 11.9`, `11.10` |
 | 17e | upgrade | decode a pre-change `Archive` state; assert it decodes and that both new fields read their defaults — `Idle` and an empty `pending_handovers` — so the journal's own release cannot be the upgrade that fails | the two `#[serde(default)]`s above |
@@ -1447,7 +1473,7 @@ criteria they except, since its archives report nothing to reconcile against.
 **PR 4 — ledger, round shape and retries.** Byte-based selection, one append per
 round, the backoff, the creation journal, the bounded calls, the allocation work and
 the comment.
-*Acceptance:* `Req 9` (9.1-9.6, 9.9, 9.10), `Req 11`, `Req 12`, `Req 13`. `Req 9.5`'s
+*Acceptance:* `Req 9` (9.1-9.6, 9.9-9.11), `Req 11`, `Req 12`, `Req 13`. `Req 9.5`'s
 reply clause is the exception: PR 2 delivers that half, and PR 4 delivers the rest of
 the criterion — the failure count and the blocks staying served.
 
