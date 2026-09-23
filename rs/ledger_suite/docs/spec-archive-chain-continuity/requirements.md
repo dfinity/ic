@@ -258,17 +258,19 @@ history I compute is correct.
 
 #### Acceptance Criteria
 
-1. WHEN an Indexed_Append's Declared_Index equals the Archive_Position, THE Archive
-   SHALL store all of its blocks, except where Req 4 has it stop short — at its own
-   configured limit per 4.1, or at a growth it asked for and was refused per 4.8 — which
-   is the one case where a correctly placed append stores only a prefix.
+1. WHEN an Indexed_Append's Declared_Index equals the Archive_Position and no ground in
+   Req 1, 2.9 or 6.4 refuses it, THE Archive SHALL store all of its blocks, except where
+   Req 4 has it stop short — at its own configured limit per 4.1, or at a growth it asked
+   for and was refused per 4.8 — which is the one case where a correctly placed and
+   unrefused append stores only a prefix.
 2. WHEN an Indexed_Append's Declared_Index is above the Archive_Position, THE
    Archive SHALL refuse the append as a gap and SHALL store none of its blocks,
    because the blocks between the two positions would otherwise be held by no
    archive.
-3. WHEN an Indexed_Append's Declared_Index falls at or within the Archive_Range and
-   the append extends beyond the Archive_Position, THE Archive SHALL store only
-   those blocks at or above the Archive_Position.
+3. WHEN an Indexed_Append's Declared_Index falls at or within the Archive_Range, the
+   append extends beyond the Archive_Position, and no ground in Req 1, 2.9 or 6.4
+   refuses it, THE Archive SHALL store only those blocks at or above the
+   Archive_Position, subject to the same Req 4 stop as 2.1.
 4. WHEN every block of an Indexed_Append is at an index the archive already holds
    and the comparison in 2.9 finds no difference, THE Archive SHALL store none of
    them and SHALL report success, because a ledger that lost an acknowledgement must
@@ -315,11 +317,12 @@ wrong about it.
 6. THE Archive SHALL state the outcome of an Indexed_Append explicitly alongside the
    values in 3.1, so that a ledger never has to infer which case occurred by
    comparing what it sent against what was reported.
-7. WHEN THE Archive stored fewer than all of the blocks it was offered and did not
-   already hold, THE Archive SHALL state that as an outcome distinct from the one in
-   3.8, including when it stored none of them per 4.10, because `at_capacity` alone does
-   not separate the two — a growth refused by the platform reports it false (4.4) and so
-   does a complete append (4.9).
+7. WHEN THE Archive stopped short per 4.1 or 4.8 and so stored fewer than all of the
+   blocks it was offered and did not already hold, THE Archive SHALL state that as an
+   outcome distinct from the one in 3.8 and from every refusal of Req 1, 2.2, 2.6, 2.9
+   and 6.4, including when it stored none of them per 4.10, because `at_capacity` alone
+   does not separate a short stop from a complete append — a growth refused by the
+   platform reports it false (4.4) and so does a complete append (4.9).
 8. THE Archive SHALL report a single outcome for every append after which it holds
    every block it was offered and did not already hold, whether or not it already held
    some of them, all of them, or none, and whether or not it was offered any, because
