@@ -9,9 +9,7 @@ use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
 use crate::state::audit::{EventType, apply_state_transition, process_event};
 use crate::state::eth_logs_scraping::LogScrapings;
 use crate::state::event::AutomaticDeposit;
-use crate::state::receipt_fetch::{
-    INITIAL_RECEIPT_FETCH_WINDOW, ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING, ReceiptFetchCounters,
-};
+use crate::state::receipt_fetch::ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING;
 use crate::state::transactions::{PipelineRequest, SweepId, SweepRequest};
 use crate::state::{State, mutate_state, read_state};
 use crate::storage::with_event_iter;
@@ -665,6 +663,7 @@ async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
                 .record_round_without_chain_read();
         }
     });
+    let withdrawals_before = read_state(|s| s.withdrawal_transactions.clone());
 
     let receipts: BTreeMap<SweepId, _> =
         fetch_receipts_for_round(Address::new([0_u8; 20]), &no_rpc_runtime(), |s| {
@@ -681,20 +680,8 @@ async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
         ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING + 2
     );
     assert_eq!(
-        read_state(|s| (
-            s.withdrawal_transactions
-                .pipeline()
-                .rounds_since_chain_read(),
-            s.withdrawal_transactions.pipeline().receipt_fetch_window(),
-            s.withdrawal_transactions
-                .pipeline()
-                .receipt_fetch_counters(),
-        )),
-        (
-            0,
-            INITIAL_RECEIPT_FETCH_WINDOW,
-            ReceiptFetchCounters::default()
-        ),
+        read_state(|s| s.withdrawal_transactions.clone()),
+        withdrawals_before,
         "a sweeper problem must not throttle user withdrawals"
     );
 }
