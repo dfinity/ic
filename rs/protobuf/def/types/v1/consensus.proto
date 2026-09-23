@@ -10,7 +10,6 @@ import "registry/subnet/v1/subnet.proto";
 import "types/v1/artifact.proto";
 import "types/v1/dkg.proto";
 import "types/v1/idkg.proto";
-import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
 message CertificationMessage {
