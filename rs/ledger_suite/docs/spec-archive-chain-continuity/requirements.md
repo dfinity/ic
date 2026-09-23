@@ -14,7 +14,7 @@ readable without it.*
 > **Read the requirements as a set.** The criteria interlock, and several are
 > deliberately permissive on their own because a sibling constrains the case they
 > leave open — `Req 1.4` allows what `Req 2.1` forbids once an index is present,
-> and `Req 8.1` looks absolute until `Req 8.7` excepts the ICP ledger. A criterion
+> and `Req 8.1` looks absolute until `Req 8.6` excepts the ICP ledger. A criterion
 > read in isolation will therefore look either too weak or too strong more often
 > than not. Where that is load-bearing the criterion says "per N.M"; where it is not
 > stated, assume a sibling is carrying it and check before concluding a gap. Whole
@@ -73,9 +73,7 @@ comes first.
   means the ICP archive, which is a separate canister and is not changed here — see
   the corresponding non-goal.
 - **Tail_Archive**: the archive a ledger currently appends to — the most recently
-  created one. Earlier archives are full and no append ever stores a block in one
-  again, though Req 10.6 and Req 9.8 send it appends that store nothing — first to ask
-  whether it reports its range, then to have it confirm blocks it already holds.
+  created one. Earlier archives are full and are never contacted again.
 - **Archive_Range**: the contiguous span of global block indices an archive holds,
   from its `block_index_offset` up to but excluding its Archive_Position, **as the
   archive itself reports it** (Req 3). It is observed, not inferred.
@@ -83,7 +81,7 @@ comes first.
   `archives()`. It is the ledger's own record — derived from what archives have
   reported for every archive created since this change, and inferred for those that
   predate it — so it is not evidence about an archive on its own; Req 7.2 constrains
-  what it may say, and Req 8.4 what contradicts it.
+  what it may say, and Req 8.3 what contradicts it.
 - **Archive_Position**: the next global block index an archive expects, i.e. the
   index one past the last block it holds. Reported as `next_index`.
 - **Declared_Index**: the global index an append states its first block belongs
@@ -96,7 +94,7 @@ comes first.
 - **Archived_Prefix**: the blocks a ledger has stopped serving itself because an
   archive confirmed holding them. Its *end* means the lowest index the ledger still
   serves, one past the last it has given up — exclusive, like an Archive_Position and
-  unlike a Published_Range, so that the two compose without an off-by-one. Req 8.4 is
+  unlike a Published_Range, so that the two compose without an off-by-one. Req 8.3 is
   the criterion where the inclusive form meets the exclusive one, and says so.
 - **ARCHIVE_CALL_TIMEOUT**, **BACKOFF_INITIAL**, **BACKOFF_CAP**: respectively the
   longest a ledger waits for a response to a call it is willing to stop waiting for,
@@ -125,7 +123,7 @@ comes first.
   canister from the ICRC archive and is not changed here, so the ICP ledger gains
   the ledger-side obligations but not the addressed-append ones. This leaves the ICP
   suite exposed to the divergence described above until that port lands, which is
-  accepted deliberately and tracked separately. Req 7.5, Req 8.7, Req 10.5 and
+  accepted deliberately and tracked separately. Req 7.5, Req 8.6, Req 10.5 and
   Req 13.6 pin the behaviour that makes the exemption safe rather than silent — each
   says what the ICP ledger does *instead*, so none of it is left to inference.
 - **Building the change that stops an archiving failure contradicting a transaction's
@@ -168,8 +166,8 @@ comes first.
 - **Restoring a ledger from a canister snapshot as a recovery path.** A ledger
   restored alone resumes issuing block indices its archives already hold with
   different content, so its chain forks from the archived prefix and balances
-  rewind. Req 8.8 requires that such a fork is detected — the archives are then ahead
-  of a chain tip that has moved backwards — and Req 8.9 and Req 1 require that it is
+  rewind. Req 8.7 requires that such a fork is detected — the archives are then ahead
+  of a chain tip that has moved backwards — and Req 8.8 and Req 1 require that it is
   not extended into the archives; none of them makes the restore safe. The only
   coherent rollback is the whole suite to a common point, accepting the loss after
   it.
@@ -286,11 +284,12 @@ history I compute is correct.
 8. WHEN blocks are retrieved by index from an archive after any sequence of
    appends permitted by 2.1 through 2.7 and 2.9, THE Archive SHALL return, for each
    index, the block whose position in the chain is that index.
-9. WHEN every block of an Indexed_Append is at an index the archive already holds,
-   THE Archive SHALL compare the last such block against the block it holds at that
-   index and SHALL refuse the append if they differ, because a ledger whose chain
-   has forked would otherwise be told its re-send succeeded and learn nothing until
-   it reached the archive's position.
+9. WHEN an Indexed_Append carries one or more blocks at indices the archive already
+   holds — all of them or only a leading prefix — THE Archive SHALL compare the last
+   such block against the block it holds at that index and SHALL refuse the append if
+   they differ, because a ledger whose chain has forked would otherwise be told its
+   re-send succeeded and learn nothing, and because a straddling re-send into a full
+   archive stores nothing and so has no other block the archive could check.
 
 ### Requirement 3: An Append Reports The Archive's Range
 
@@ -334,7 +333,7 @@ wrong about it.
    call for three different ledger responses.
 10. THE Archive SHALL report whether the append's blocks were checked against a block it
    already held or against its Expected_Parent — false for the unverifiable append of
-   1.6 and for any append that stored and compared nothing — because 8.9 must not
+   1.6 and for any append that stored and compared nothing — because 8.8 must not
    advance on the one store that checked nothing, and only the archive knows whether it
    had anything to check against: a ledger cannot tell whether the tail it inherited from
    an older ledger was ever given a hash.
@@ -434,9 +433,6 @@ violation from a capacity problem without access to canister logs.
 5. THE Archive SHALL NOT count an append carrying no blocks under any count in 6.1,
    because such an append is how a ledger asks where an archive stands per 3.5 and
    counting it would raise an operator alarm for an ordinary question.
-6. THE Archive SHALL count 2.6 as a diagnostic rather than as a fault, because per
-   9.8 it is the ordinary signal that a ledger is behind and an operator alarmed by
-   it would be alarmed by ordinary recovery.
 
 ### Requirement 7: A New Archive Continues The Previous Archive's Range
 
@@ -483,17 +479,13 @@ a hole.
 
 1. THE Ledger SHALL NOT stop serving a block index unless an archive has reported
    an Archive_Range covering it.
-2. WHEN THE Archive reports an Archive_Range whose start is above the end of the
-   Archived_Prefix, THE Ledger SHALL extend the Archived_Prefix only as far as
-   earlier archives' reported ranges cover the intervening indices.
-3. IF the indices between the Archived_Prefix and an archive's reported range fall
-   outside every Published_Range THE Ledger publishes, THEN THE Ledger SHALL make no
-   further archiving attempt and SHALL expose a distinct non-zero metric, because
-   advancing past them would discard blocks no archive holds — whereas indices that do
-   fall inside some archive's Published_Range are not this case but 9.8's, where the
-   covering archive has merely not been asked yet, and halting here would pre-empt that
-   recovery.
-4. IF an archive reports an Archive_Position that is not above the last index of the
+2. WHEN the Tail_Archive reports an Archive_Range whose start is above the end of the
+   Archived_Prefix, THE Ledger SHALL make no further archiving attempt and SHALL expose
+   a distinct non-zero metric, because the indices between the two are held by the
+   tail's predecessors only if the ledger's record is right, and a record that has
+   fallen behind the tail's own start is the same wrong record 9.8 halts on from the
+   archive's side — so advancing on it would discard blocks that may be held nowhere.
+3. IF an archive reports an Archive_Position that is not above the last index of the
    Published_Range THE Ledger publishes for *that* archive, THEN THE Ledger SHALL make
    no further archiving attempt, SHALL discard no further blocks, and SHALL expose a
    distinct non-zero metric, because a Published_Range is inclusive of both ends per 7.6
@@ -501,21 +493,21 @@ a hole.
    published range reports exactly one past that range's last index and anything lower
    leaves a block it is published as holding held nowhere — compared per archive rather
    than against the Archived_Prefix, which every archive but the Tail_Archive ends
-   legitimately below, and 9.8 has non-tail archives report.
-5. WHEN an Archiving_Round does not complete, THE Ledger SHALL continue to serve
+   legitimately below.
+4. WHEN an Archiving_Round does not complete, THE Ledger SHALL continue to serve
    every index it served before that round.
-6. THE Ledger SHALL NOT rely on its own record of what it sent when deciding what
+5. THE Ledger SHALL NOT rely on its own record of what it sent when deciding what
    to stop serving, only on what an archive has reported holding.
-7. THE ICP Ledger SHALL rely on its own record instead, and SHALL NOT be held to
-   8.1, 8.2, 8.3, 8.4, 8.6, 8.8, 8.9, 8.10 or 8.11, since there is no reported range to
+6. THE ICP Ledger SHALL rely on its own record instead, and SHALL NOT be held to
+   8.1, 8.2, 8.3, 8.5, 8.7, 8.8 or 8.9, since there is no reported range to
    rely on
    (per 10.5) — the exposure the corresponding non-goal accepts.
-8. WHEN an archive reports an Archive_Position above the next block index THE Ledger
+7. WHEN an archive reports an Archive_Position above the next block index THE Ledger
    would itself issue, THE Ledger SHALL make no further archiving attempt and SHALL
    expose a distinct non-zero metric, because an archive holding indices the ledger has
    never issued was built from a chain the ledger is no longer on, which neither 8.2
-   nor 8.4 detects.
-9. THE Ledger SHALL extend the Archived_Prefix only as far as one past the
+   nor 8.3 detects.
+8. THE Ledger SHALL extend the Archived_Prefix only as far as one past the
    highest-indexed block of an append the receiving archive reports per 3.10 as checked
    — stored after a parent check against a block it held or its Expected_Parent, or
    compared per 2.9 — and never as far as the Archive_Position that append reported,
@@ -525,15 +517,7 @@ a hole.
    evidence only about the indices at and below N, a hash chain propagating a divergence
    forward rather than backward, so blocks the archive holds above N remain
    uncompared.
-10. WHEN an archive other than the Tail_Archive reports an Archive_Range that differs
-   in either end from the Published_Range THE Ledger publishes for it, THE Ledger SHALL
-   leave that Published_Range as it stands, make no further archiving attempt, and
-   expose a distinct non-zero metric, because a full archive's offset is fixed and it is
-   never appended to again, so its range cannot legitimately have changed — and widening
-   the published range to match a report that reaches into the next archive would break
-   7.2, while a report starting above the published start leaves blocks held nowhere
-   that 9.8 would redirect to it forever.
-11. WHEN any archive, the Tail_Archive included, reports a `block_index_offset` that
+9. WHEN any archive, the Tail_Archive included, reports a `block_index_offset` that
    differs from the start of the Published_Range THE Ledger publishes for it — or, for an
    archive that holds no blocks yet, from the offset 7.1 derived for it, which is zero
    for the first archive a suite ever has — THE Ledger SHALL leave its record as it
@@ -574,14 +558,12 @@ per interval rather than work per transaction.
    non-zero metric, rather than spacing further attempts per 9.1, because no retry can
    resolve a mismatch of chain or position or a block the archive cannot parse.
 8. WHEN an archive reports per 2.6 that the blocks offered fall below its own range,
-   THE Ledger SHALL NOT halt per 9.7 and SHALL instead offer, on a later
-   Archiving_Round and subject to 10.6, those of the same blocks that fall inside the
-   Published_Range of the archive covering the first of them — no block beyond that
-   range's end, the remainder waiting for a later round — or halt per 8.3 if no range
-   covers it, because only the archive actually holding those indices can confirm them
-   in a way 8.9 will accept, and a batch that ran past its range end would be neither
-   wholly held, so 2.9 would compare nothing, nor storable, so 8.9 could never advance
-   and the recovery would not terminate.
+   THE Ledger SHALL make no further archiving attempt and SHALL expose a distinct
+   non-zero metric, separate from 9.7's, because once 2.9 compares the held prefix of a
+   straddling append this can no longer follow from a lost reconciliation, leaving only a
+   ledger whose record of what it has archived is wrong — a restored snapshot, or a suite
+   that had already diverged — which is a different investigation from a fork and one no
+   retry can resolve.
 9. WHEN THE Ledger is upgraded, THE Ledger SHALL permit the next Archiving_Round
    immediately rather than observing the spacing 9.1 would otherwise require, because
    an upgrade is how an operator resumes after a halt and is usually the fix for
@@ -591,7 +573,7 @@ per interval rather than work per transaction.
    purposes of 9.1, 9.2 and 9.5 while keeping the progress the archive reported, because
    the call itself returned successfully and without this the refused growth would be
    provoked again by every later transaction rather than waited out by 4.6's retry.
-11. WHILE a halt per 4.10, 8.3, 8.4, 8.8, 8.10, 8.11 or 9.7 holds, THE Ledger SHALL
+11. WHILE a halt per 4.10, 8.2, 8.3, 8.7, 8.9, 9.7 or 9.8 holds, THE Ledger SHALL
    attempt no Archiving_Round until it is next upgraded, and SHALL re-establish the halt
    from the first reply after that upgrade if the cause persists, because each of these
    is learned from one reply and re-derivable from the next, so forgetting it on upgrade
@@ -623,12 +605,6 @@ unprotected, so that I find out from a metric instead of from a corrupted archiv
    Archive_Range, and SHALL expose a distinct count of how often it does so,
    because its archives do not implement Req 2 or Req 3 and halting would stop ICP
    archiving permanently.
-6. WHEN THE ICRC Ledger would offer blocks per 9.8 to an archive other than the
-   Tail_Archive, THE ICRC Ledger SHALL first determine, as in 10.3, that this archive
-   reports its range, and WHILE it does not SHALL offer it no blocks and SHALL expose a
-   distinct non-zero metric while remaining able to ask again, because an archive that
-   ignores the Declared_Index would append the blocks as new — the very corruption this
-   specification exists to prevent — and would reply with nothing the ledger could read.
 
 ### Requirement 11: An Unaccounted Archive Creation Halts Archiving
 
