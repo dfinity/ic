@@ -224,6 +224,18 @@ jobs:
         if: steps.repo-cache.outcome == 'success'
         run: echo "common --repository_cache=/var/cache/bazel-repository-cache" >>/tmp/bazel-rbe.bazelrc
 
+      - name: Report the cache volume usage before the build
+        # Whether this run is warm or cold: the cache action reports "found and restored" as
+        # soon as the directory exists, which the prepare step guarantees, so only du tells.
+        # The volume also carries content outside the repository cache (11-17 GB in the runs
+        # of 2026-09-23, identity unknown), and df of /tmp shows which filesystem backs the
+        # container's overlay root, i.e. the default TMPDIR (see the build step).
+        if: steps.repo-cache.outcome == 'success'
+        continue-on-error: true
+        run: |
+          sudo du -xh --max-depth=4 /cache | sort -h | tail -n 20
+          df -h /cache / /tmp "$HOME"
+
       - name: Infer Bazel Args
         id: infer-bazel-args
         shell: bash
@@ -320,6 +332,15 @@ jobs:
         run: |
           set -euo pipefail
 
+          # The ic-os image actions run locally (see the container options above) and each
+          # writes several GB of scratch under $TMPDIR, by default /tmp: the container's
+          # overlay root, which shares the Namespace cache volume and filled it up when 13
+          # of them ran at once (run 35833276307). $HOME is on the runner's 160 GB ephemeral
+          # disk. Bazel's local strategy hands actions the client's TMPDIR (--action_env has
+          # no effect on it), so exporting it here is what redirects the scratch.
+          export TMPDIR="$HOME/tmp"
+          mkdir -p "$TMPDIR"
+
           worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c"
 
           # Directory for the Build Event Protocol and execution profile files,
@@ -377,6 +398,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          # Same scratch redirect as in the build step, for locally executed tests and actions.
+          export TMPDIR="$HOME/tmp"
+          mkdir -p "$TMPDIR"
 
           worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c"
 
@@ -538,9 +563,14 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-      - name: Report the Bazel repository cache size
-        # On master this is what gets committed; its growth over time tells whether the
-        # cache needs pruning before Namespace's reset-when-full kicks in.
+      - name: Report the cache volume usage at the end
+        # On master this is what gets committed; compared with the report before the build
+        # it tells what this run added to the volume and whether the cache needs pruning
+        # before Namespace's reset-when-full kicks in. $HOME/tmp should be empty: the ic-os
+        # actions remove their scratch on exit.
         if: ${{ !cancelled() && steps.repo-cache.outcome == 'success' }}
         continue-on-error: true
-        run: du -h --max-depth=1 /var/cache/bazel-repository-cache && df -h /var/cache/bazel-repository-cache
+        run: |
+          sudo du -xh --max-depth=4 /cache | sort -h | tail -n 20
+          df -h /cache / /tmp "$HOME"
+          du -sh "$HOME/tmp" || true
