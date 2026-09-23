@@ -21,7 +21,9 @@ use ic_types::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
     },
 };
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 pub mod bouncer_metrics;
 pub mod chain_key;
@@ -33,6 +35,20 @@ pub mod subnet_splitting;
 /// When purging consensus or certification artifacts, we always keep a
 /// minimum chain length below the catch-up height.
 pub const MINIMUM_CHAIN_LENGTH: u64 = 50;
+
+/// The number of threads of the thread pool that consensus uses to build and
+/// validate block payloads in parallel.
+pub const MAX_CONSENSUS_THREADS: usize = 16;
+
+/// Builds a rayon thread pool with the given number of threads.
+pub fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
+    Arc::new(
+        ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .expect("Failed to create thread pool"),
+    )
+}
 
 /// Rotate on_state_change calls with a round robin schedule to ensure fairness.
 #[derive(Default)]

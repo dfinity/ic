@@ -60,6 +60,7 @@ impl Ic00MethodPermissions {
             | Ic00Method::BitcoinGetSuccessors
             | Ic00Method::NodeMetricsHistory
             | Ic00Method::SubnetInfo
+            | Ic00Method::SubnetMetrics
             | Ic00Method::ProvisionalCreateCanisterWithCycles
             | Ic00Method::ProvisionalTopUpCanister
             | Ic00Method::StoredChunks

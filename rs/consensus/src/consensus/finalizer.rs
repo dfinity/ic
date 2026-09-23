@@ -235,7 +235,7 @@ impl Finalizer {
             self.pick_block_to_finality_sign(pool, height)?
                 .get_hash()
                 .clone(),
-            self.replica_config.replica_version.clone(),
+            self.replica_config.replica_version().clone(),
         );
         let signature = self
             .crypto

@@ -2,9 +2,10 @@
 use crate::{execution_environment::CanisterOutOfCyclesError, validation::ValidationError};
 use ic_error_types::ErrorCode;
 use ic_types::{
-    CanisterId, Height, NumBytes, Time,
+    CanisterId, Height, NumBytes, SubnetId, Time,
     batch::{Batch, ValidationContext, XNetPayload},
     consensus::Payload,
+    xnet::CertifiedStreamSlice,
 };
 
 /// Errors that `MessageRouting` may return.
@@ -99,6 +100,86 @@ pub trait XNetPayloadBuilder: Send + Sync {
                 }
             })
             .collect()
+    }
+}
+
+/// Interface for handling XNet adverts: certified stream headers pushed by a
+/// source subnet to advertise that it holds something we may not have seen.
+pub trait XNetAdvertHandler: Send + Sync {
+    /// Handles an advert claiming to come from `source_subnet`, verifying it
+    /// before acting on new content or replying to it.
+    fn handle_advert(
+        &self,
+        source_subnet: SubnetId,
+        advert: CertifiedStreamSlice,
+    ) -> Result<XNetAdvertOutcome, XNetAdvertError>;
+
+    /// Our certified stream header for `subnet_id`, to be returned in reply to a
+    /// `NothingNew` advert. `None` if we have no stream to `subnet_id`, or
+    /// nothing certified yet.
+    fn certified_header(&self, subnet_id: SubnetId) -> Option<CertifiedStreamSlice>;
+}
+
+/// The outcome of handling a XNet advert: the strongest statement the receiver
+/// can make about the advertised content.
+///
+/// The variants are nested: an earlier variant implies all the later ones. The
+/// contexts they are compared against are, from strongest to weakest: certified
+/// state, cached stream position, pooled slice, recorded header.
+#[derive(Debug, Eq, PartialEq)]
+pub enum XNetAdvertOutcome {
+    /// Advertised content is all in our certified state: reply with
+    /// `certified_header()`, proving to the sender that they are behind.
+    NothingNew,
+
+    /// Advertised content is all accounted for by the cached stream position, i.e.
+    /// already included into blocks as far as this node knows. Nothing to fetch.
+    InPayload,
+
+    /// Advertised content is all covered by the pooled slice: not yet all included
+    /// into blocks, but nothing more to fetch. Sender is ahead of our block making
+    /// as far as this node knows.
+    Pooled,
+
+    /// Advertised content is all covered by the peer's _recorded header_: already
+    /// known to us, but not (fully) fetched. Re-enqueues a fetch if the earlier
+    /// attempt failed.
+    Duplicate,
+
+    /// Advertised content goes beyond the peer's _recorded header_: something this
+    /// node has not seen before. Enqueues a fetch.
+    Actionable,
+}
+
+impl XNetAdvertOutcome {
+    /// A short, stable name for the outcome, for use e.g. as a metric label.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            XNetAdvertOutcome::NothingNew => "nothing_new",
+            XNetAdvertOutcome::InPayload => "in_payload",
+            XNetAdvertOutcome::Pooled => "pooled",
+            XNetAdvertOutcome::Duplicate => "duplicate",
+            XNetAdvertOutcome::Actionable => "actionable",
+        }
+    }
+}
+
+/// The reason for rejecting a XNet advert.
+#[derive(Debug)]
+pub enum XNetAdvertError {
+    /// Could not be decoded.
+    DecodeError(String),
+    /// Invalid certification or mismatching witness.
+    InvalidSignature,
+}
+
+impl XNetAdvertError {
+    /// A short, stable name for the error, for use e.g. as a metric label.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            XNetAdvertError::DecodeError(_) => "decode_error",
+            XNetAdvertError::InvalidSignature => "invalid_signature",
+        }
     }
 }
 

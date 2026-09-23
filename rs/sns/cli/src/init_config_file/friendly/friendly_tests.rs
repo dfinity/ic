@@ -283,12 +283,13 @@ fn test_convert_to_create_service_nervous_system() {
         "{observed_logo:?}",
     );
 
-    let observed_logo_content = base64::decode(
-        observed_logo
-            .strip_prefix("data:image/png;base64,")
-            .unwrap(),
-    )
-    .unwrap();
+    let observed_logo_content = BASE64_STANDARD
+        .decode(
+            observed_logo
+                .strip_prefix("data:image/png;base64,")
+                .unwrap(),
+        )
+        .unwrap();
     let expected_logo_content = std::fs::read(test_root_dir.join("test.png")).unwrap();
     assert!(
         // == is used instead of the usual assert_eq!, because when the observed
@@ -360,12 +361,13 @@ fn test_convert_to_create_service_nervous_system() {
         .unwrap()
         .base64_encoding
         .unwrap();
-    let decoded_observed_token_logo = base64::decode(
-        observed_token_logo
-            .strip_prefix("data:image/png;base64,")
-            .unwrap(),
-    )
-    .unwrap();
+    let decoded_observed_token_logo = BASE64_STANDARD
+        .decode(
+            observed_token_logo
+                .strip_prefix("data:image/png;base64,")
+                .unwrap(),
+        )
+        .unwrap();
     assert!(
         // == is used instead of the usual assert_eq!, because when the observed
         // value is not as expected, assert_eq! would produce a ton of spam, due

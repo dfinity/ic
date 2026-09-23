@@ -1,17 +1,20 @@
 name: Upload Artifacts
 description: |
-  Run an artifact upload command and set a step summary. This expects the upload command to write one line per artifact to stdout.
+  Run an artifact upload command and set a step summary. The upload command must write one
+  sha256sum-format line per uploaded file ("<sha256>  ic/<path>") to stdout; the collected
+  lines form the upload manifest exposed through the `manifest-path` output, which the
+  calling job attests.
 inputs:
   upload-command:
     required: true
   name:
     required: true
-  manifest-name:
-    required: true
 outputs:
-  manifest-sha256:
-    description: sha256 of the uploaded manifest
-    value: ${{ steps.manifest.outputs.sha256 }}
+  manifest-path:
+    description: |
+      Path of the upload manifest: one "<sha256>  ic/<path>" line per uploaded file
+      (sha256sum format, suitable for actions/attest's `subject-checksums` input).
+    value: ${{ steps.manifest.outputs.path }}
 
 runs:
   using: "composite"
@@ -46,7 +49,7 @@ runs:
         set -euo pipefail
         manifest="$RUNNER_TEMP/upload-manifest.sha256sums"
 
-        # Fail closed rather than attest garbage: the manifest must be
+        # Fail rather than attest garbage: the manifest must be
         # non-empty and every line must be "<64-hex>  ic/<path>".
         if ! [ -s "$manifest" ]; then
           echo "upload manifest is missing or empty: $manifest" >&2
@@ -57,11 +60,4 @@ runs:
           exit 1
         fi
 
-        echo "sha256=$(sha256sum "$manifest" | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
-
-    - name: Upload manifest
-      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-      with:
-        name: ${{ inputs.manifest-name }}
-        path: ${{ runner.temp }}/upload-manifest.sha256sums
-        if-no-files-found: error
+        echo "path=$manifest" >>"$GITHUB_OUTPUT"

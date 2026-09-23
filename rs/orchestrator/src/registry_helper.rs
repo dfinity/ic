@@ -164,7 +164,7 @@ impl RegistryHelper {
         version: RegistryVersion,
         subnet_id: SubnetId,
     ) -> OrchestratorResult<CatchUpPackage> {
-        make_registry_cup(&*self.registry_client, subnet_id, &self.logger)
+        make_registry_cup(&*self.registry_client, subnet_id, version, &self.logger)
             .ok_or(OrchestratorError::MakeRegistryCupError(subnet_id, version))
     }
 
@@ -220,9 +220,9 @@ impl RegistryHelper {
         node_id: NodeId,
         version: RegistryVersion,
     ) -> OrchestratorResult<Option<SubnetId>> {
-        Ok(self
-            .get_subnet_id_and_type_from_node_id(node_id, version)?
-            .map(|(subnet_id, _subnet_type)| subnet_id))
+        self.registry_client
+            .get_subnet_id_from_node_id(node_id, version)
+            .map_err(OrchestratorError::RegistryClientError)
     }
 
     pub(crate) fn get_subnet_type(

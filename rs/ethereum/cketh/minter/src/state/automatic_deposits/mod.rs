@@ -1,9 +1,10 @@
 #[cfg(test)]
 mod tests;
 
+use crate::asset::{Asset, Erc20Asset, EthAsset};
 use crate::attestation::AttestationRequest;
+use crate::balance_scan::batcher::Delegation;
 use crate::deposit_address::DepositAddress;
-use crate::endpoints::{DepositErc20Error, DepositErc20Response, DepositStatus, DetectedDeposit};
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::logs::INFO;
@@ -48,9 +49,10 @@ const SECS_PER_BLOCK: u64 = 12;
 // Use 1 transaction per block to a minter-controlled address as a crude upper-bound.
 const MAX_ACTIVE_DEPOSITS: NonZeroUsize = NonZeroUsize::new(7_000).unwrap();
 
-/// Maximum number of ERC-20 tokens a single account may have armed at once. Bounds an
-/// account's share of every scan tick, so a caller cannot arm the whole supported set.
-const MAX_TOKENS_PER_ACCOUNT: usize = 5;
+/// Maximum number of assets (ETH and ERC-20 tokens together) a single account may have armed at
+/// once. Bounds an account's share of every scan tick, so a caller cannot arm the whole supported
+/// set.
+const MAX_ASSETS_PER_ACCOUNT: usize = 5;
 
 /// Registry of minter-controlled ckERC20 deposits, each a user account paired with an
 /// ERC-20 token it wants to deposit. Every account's tokens share one deposit address,
@@ -81,12 +83,33 @@ pub struct AutomaticDeposits {
     /// tuple that delegates the old one.
     ///
     /// Nothing prunes this map: it grows with the number of accounts that have ever been swept, and
-    /// entries naming a retired helper stay behind forever. [`Self::authorizations_len`] is exported
-    /// as a metric so that growth is visible before it needs bounding.
+    /// entries naming a retired helper stay behind forever. [`Self::authorizations_len`] is
+    /// exported as a metric so that growth is visible before it needs bounding.
     authorizations: BTreeMap<AuthorizationRequest, TransactionSignature>,
+    /// The nonce each deposit address' next authorization must spend, for the addresses a sweep has
+    /// already delegated. Absent means zero: an address no finalized sweep has carried an
+    /// authorization for is still at the nonce it was derived with.
+    ///
+    /// A counter, not a chain read: it advances by one for every finalized sweep that carried an
+    /// authorization at the nonce tracked here, whether the EVM applied or skipped it. The minter
+    /// alone holds the key to a deposit address and only ever signs at the tracked nonce, so the
+    /// counter never runs ahead of the address' nonce on chain. It can run behind it: every signed
+    /// authorization is public through `get_events`, and EIP-7702 lets anyone send one, so an
+    /// authorization a stranger applied moves the address without moving the counter. The next
+    /// sweep carrying an authorization then spends a nonce the chain has passed, is skipped, and
+    /// still advances the counter, so a rotation lands one sweep late rather than never.
+    delegation_nonces: BTreeMap<DepositAddress, TransactionNonce>,
     /// The dedicated sweeper address' transaction pipeline: sweeps sent from the sweeper address on
     /// its own nonce sequence, independent of the main-address withdrawal pipeline.
     sweeper_transactions: SweeperTransactionPipeline,
+    /// How many deposits the balance scan found at or above their asset's minimum, i.e. how many
+    /// pairs have ever entered the sweep queue. Every event the log replays bumps it, so an upgrade
+    /// restores it rather than resetting it, as it does for the two sweep counters below.
+    balance_scan_candidates: u64,
+    /// How many sweeps finalized, by receipt. A failed sweep moved nothing and dropped every
+    /// deposit it named, so the two apart say whether a rising queue is being drained or discarded.
+    successful_sweeps: u64,
+    failed_sweeps: u64,
 }
 
 impl AutomaticDeposits {
@@ -188,6 +211,11 @@ impl AutomaticDeposits {
     /// leave the queue on success because the funds moved, and on failure because the minter does
     /// not retry them.
     ///
+    /// Each authorization the sweep carried at the nonce its address had reached applied, so that
+    /// address advances by one — whatever the receipt says, since an authorization applies before
+    /// the call it rides with and survives its revert. An authorization carried at any other nonce
+    /// was skipped and moves nothing, which is what makes re-sending one harmless.
+    ///
     /// # Panics
     ///
     /// If the sweep has no processed request, or a deposit it named is not queued or is held by
@@ -204,11 +232,41 @@ impl AutomaticDeposits {
             .sweeper_transactions
             .get_processed_request(&id)
             .expect("BUG: missing sweep request");
-        let token = request.token;
+        let asset = request.asset;
         let accounts: Vec<_> = request.items.iter().map(|item| item.item.account).collect();
+        let applied_authorizations: Vec<_> = request
+            .items
+            .iter()
+            .filter_map(|item| {
+                let spent = item.authorization.as_ref()?.nonce;
+                let tracked = self.delegation_nonce(&item.item.deposit);
+                assert!(
+                    spent <= tracked,
+                    "BUG: {id:?} carried an authorization of {} at nonce {spent:?}, ahead of the nonce {tracked:?} the minter tracks for it, which only the authorizations its own finalized sweeps carried move",
+                    item.item.deposit.as_address()
+                );
+                (spent == tracked).then_some((item.item.deposit, spent))
+            })
+            .collect();
+
+        for (address, spent) in applied_authorizations {
+            self.delegation_nonces.insert(
+                address,
+                spent
+                    .checked_increment()
+                    .expect("BUG: a deposit address cannot spend its last nonce"),
+            );
+        }
+
+        match receipt.status {
+            TransactionStatus::Success => {
+                self.successful_sweeps = self.successful_sweeps.saturating_add(1)
+            }
+            TransactionStatus::Failure => self.failed_sweeps = self.failed_sweeps.saturating_add(1),
+        }
 
         for account in accounts {
-            let request = DepositRequest::new(account, token);
+            let request = DepositRequest::new(account, asset);
             let entry = self
                 .sweep
                 .remove(&request)
@@ -240,13 +298,21 @@ impl AutomaticDeposits {
             sweep,
             attestations,
             authorizations,
+            delegation_nonces,
             sweeper_transactions,
+            balance_scan_candidates,
+            successful_sweeps,
+            failed_sweeps,
         } = self;
 
         ensure_eq!(watchlist, &other.watchlist);
         ensure_eq!(sweep, &other.sweep);
         ensure_eq!(attestations, &other.attestations);
         ensure_eq!(authorizations, &other.authorizations);
+        ensure_eq!(delegation_nonces, &other.delegation_nonces);
+        ensure_eq!(balance_scan_candidates, &other.balance_scan_candidates);
+        ensure_eq!(successful_sweeps, &other.successful_sweeps);
+        ensure_eq!(failed_sweeps, &other.failed_sweeps);
         sweeper_transactions.is_equivalent_to(&other.sweeper_transactions)
     }
 
@@ -278,14 +344,82 @@ impl AutomaticDeposits {
         self.authorizations.insert(request, signature);
     }
 
-    /// Arm the `(account, token)` pair, whose deposit `address` is derived for `account`.
+    /// What each of `targets` needs from a sweep calling `delegate` on `chain_id`, decided from the
+    /// delegation `delegations` read on chain for its address: no authorization at all once the
+    /// address is delegated to that contract, otherwise the authorization naming the chain, the
+    /// contract, and the nonce the authorization must spend. The batch names the contract it
+    /// decided against, so the sweep can refuse to call any other.
+    ///
+    /// A target whose address holds contract code, or whose delegation the read did not yield, is
+    /// left out rather than swept: no authorization can be applied to the first, and the second is
+    /// unknown ground. Both stay queued for a later tick.
+    ///
+    /// An authorization is signed for the nonce the minter tracks for the address, which is the
+    /// nonce the address has reached on chain: zero until a sweep has delegated it, one more per
+    /// authorization of the minter's that has applied since. That is what rotates an address
+    /// delegated to another contract onto the configured one — the protocol applies an
+    /// authorization only at the authority's current nonce, so a rotation signed for zero would be
+    /// skipped forever. Two sweeps carrying the same authorization stay correct in any order they
+    /// land: the second one is skipped.
+    pub fn sweep_delegations(
+        &self,
+        targets: &[SweepTarget],
+        delegations: &BTreeMap<DepositAddress, Delegation>,
+        chain_id: u64,
+        delegate: Address,
+    ) -> DelegatedSweepBatch {
+        let authorize = |target: &SweepTarget, nonce| {
+            Some(AuthorizationRequest::new(
+                target.account(),
+                chain_id,
+                delegate,
+                nonce,
+            ))
+        };
+        let targets = targets
+            .iter()
+            .filter_map(|target| {
+                let authorization = match delegations.get(&target.address()) {
+                    Some(Delegation::Delegated(installed)) if *installed == delegate => None,
+                    Some(Delegation::NotDelegated) | Some(Delegation::Delegated(_)) => {
+                        authorize(target, self.delegation_nonce(&target.address()))
+                    }
+                    Some(Delegation::Other) | None => {
+                        log!(
+                            INFO,
+                            "[sweep_delegations]: LEAVING OUT {}: its delegation is unknown or it holds contract code",
+                            target.address().as_address()
+                        );
+                        return None;
+                    }
+                };
+                Some(DelegatedSweepTarget {
+                    target: *target,
+                    authorization,
+                })
+            })
+            .collect();
+        DelegatedSweepBatch { delegate, targets }
+    }
+
+    /// The nonce the next authorization of `address` must be signed for, which is the nonce
+    /// the address has reached on chain: zero until a sweep has delegated it, and one more per
+    /// authorization of the minter's that applied to it since.
+    pub fn delegation_nonce(&self, address: &DepositAddress) -> TransactionNonce {
+        self.delegation_nonces
+            .get(address)
+            .copied()
+            .unwrap_or(TransactionNonce::ZERO)
+    }
+
+    /// Arm the `(account, asset)` pair, whose deposit `address` is derived for `account`.
     ///
     /// Returns the watched pair together with the timestamp until which a deposit to it is
     /// guaranteed to be noticed. Re-registering a pair that is still armed returns the
     /// already-stored request and its original validity window without re-arming it, fails with
-    /// [`DepositErc20Error::TooManyTokensForAccount`] when the account already has
-    /// [`MAX_TOKENS_PER_ACCOUNT`] tokens armed, and with
-    /// [`DepositErc20Error::TooManyActiveDeposits`] when the watchlist is full of live entries.
+    /// [`RegisterDepositError::TooManyAssetsForAccount`] when the account already has
+    /// [`MAX_ASSETS_PER_ACCOUNT`] assets armed, and with
+    /// [`RegisterDepositError::TooManyActiveDeposits`] when the watchlist is full of live entries.
     ///
     /// # Panics
     ///
@@ -294,18 +428,18 @@ impl AutomaticDeposits {
         &mut self,
         now: Timestamp,
         account: Account,
-        token: Address,
+        asset: Asset,
         address: DepositAddress,
-    ) -> Result<Entry<ScanProgress>, DepositErc20Error> {
-        let request = DepositRequest::new(account, token);
+    ) -> Result<Entry<ScanProgress>, RegisterDepositError> {
+        let request = DepositRequest::new(account, asset);
         assert!(
             !self.sweep.contains_key(&request),
             "BUG: cannot arm {request:?}, it already has funds queued for sweeping"
         );
         if self.watchlist.get_entry(now, &request).is_none()
-            && self.armed_token_count(now, &account) >= MAX_TOKENS_PER_ACCOUNT
+            && self.armed_asset_count(now, &account) >= MAX_ASSETS_PER_ACCOUNT
         {
-            return Err(DepositErc20Error::TooManyTokensForAccount);
+            return Err(RegisterDepositError::TooManyAssetsForAccount);
         }
         match self
             .watchlist
@@ -318,16 +452,25 @@ impl AutomaticDeposits {
                     .expect("BUG: the entry is live right after insert or AlreadyPresent");
                 Ok(entry.clone())
             }
-            Err(InsertError::AtCapacity { .. }) => Err(DepositErc20Error::TooManyActiveDeposits),
+            Err(InsertError::AtCapacity { .. }) => Err(RegisterDepositError::TooManyActiveDeposits),
         }
     }
 
-    /// The number of tokens `account` currently has armed (live as of `now`).
-    fn armed_token_count(&self, now: Timestamp, account: &Account) -> usize {
+    /// The number of assets `account` currently has armed (live as of `now`).
+    fn armed_asset_count(&self, now: Timestamp, account: &Account) -> usize {
+        self.armed_iter(now)
+            .filter(|(request, _)| &request.account == account)
+            .count()
+    }
+
+    /// Every `(account, asset)` pair still armed as of `now`, i.e. whose scan window is open.
+    fn armed_iter(
+        &self,
+        now: Timestamp,
+    ) -> impl Iterator<Item = (&DepositRequest, &Entry<ScanProgress>)> {
         self.watchlist
             .iter()
-            .filter(|(request, entry)| &request.account == account && entry.expires_at >= now)
-            .count()
+            .filter(move |(_, entry)| entry.expires_at >= now)
     }
 
     /// Rebuild the watchlist exactly from a registry previously produced by
@@ -355,7 +498,7 @@ impl AutomaticDeposits {
                         owner: deposit.owner,
                         subaccount: deposit.subaccount,
                     },
-                    deposit.erc20_contract_address,
+                    deposit.asset,
                 ),
                 Entry {
                     value: ScanProgress {
@@ -370,22 +513,19 @@ impl AutomaticDeposits {
         self.watchlist = TimedSizedMap::from_ordered_entries(ttl, capacity, entries);
     }
 
-    /// Iterate the live [`ScanTarget`]s that are due for a balance scan as of the given
-    /// latest block height, using elapsed blocks as a proxy for elapsed time against the
-    /// backoff schedule. `now` filters expired entries.
+    /// The live [`ScanTarget`]s that are due for a balance scan as of the given latest block
+    /// height, using elapsed blocks as a proxy for elapsed time against the backoff schedule,
+    /// partitioned by the asset kind whose batcher can read them. `now` filters expired entries.
     ///
     /// Each target carries everything a scan of it needs (address, scan count), so the scanner
     /// never looks the entry up again: a scan spans several await points, and a concurrent
     /// [`Self::watch_deposit`] can evict an entry whose window closed at any of them — re-reading
     /// it could come back empty and drop funds already observed on-chain.
-    pub fn scan_targets_iter(
-        &self,
-        now: Timestamp,
-        latest_block: BlockNumber,
-    ) -> impl Iterator<Item = ScanTarget> + '_ {
-        self.watchlist.iter().filter_map(move |(request, entry)| {
+    pub fn due_scan_targets(&self, now: Timestamp, latest_block: BlockNumber) -> ScanTargets {
+        let mut targets = ScanTargets::default();
+        for (request, entry) in self.watchlist.iter() {
             if entry.expires_at < now {
-                return None;
+                continue;
             }
             let progress = &entry.value;
             let due = match progress.last_scanned_block {
@@ -403,12 +543,25 @@ impl AutomaticDeposits {
                     }
                 }
             };
-            due.then_some(ScanTarget {
-                request: *request,
-                address: progress.address,
-                scan_count: progress.scan_count,
-            })
-        })
+            if !due {
+                continue;
+            }
+            match request.asset {
+                Asset::Erc20(token) => targets.erc20.push(ScanTarget {
+                    account: request.account,
+                    asset: Erc20Asset::new(token),
+                    address: progress.address,
+                    scan_count: progress.scan_count,
+                }),
+                Asset::Eth => targets.eth.push(ScanTarget {
+                    account: request.account,
+                    asset: EthAsset,
+                    address: progress.address,
+                    scan_count: progress.scan_count,
+                }),
+            }
+        }
+        targets
     }
 
     /// The live watchlist entry for the `(account, token)` pair, or `None` if the pair is not
@@ -438,8 +591,9 @@ impl AutomaticDeposits {
     /// # Panics
     ///
     /// If `(account, token)` is already queued. A funded pair leaves the watchlist and is never
-    /// re-scanned, so each pair reaches the queue at most once; a second entry means the log records
-    /// the same funds twice, leaving `scanned_balance` — what the sweeper acts on — ambiguous.
+    /// re-scanned, so each pair reaches the queue at most once; a second entry means the log
+    /// records the same funds twice, leaving `scanned_balance` — what the sweeper acts on —
+    /// ambiguous.
     ///
     /// Note the blast radius: [`apply_state_transition`] runs on replay as well as live, so this
     /// panic traps `post_upgrade` and no upgrade succeeds until a repairing version ships. That is
@@ -454,7 +608,7 @@ impl AutomaticDeposits {
             owner: deposit.owner,
             subaccount: deposit.subaccount,
         };
-        let request = DepositRequest::new(account, deposit.erc20_contract_address);
+        let request = DepositRequest::new(account, deposit.asset);
         self.watchlist.remove(&request);
         let previous = self.sweep.insert(
             request,
@@ -468,9 +622,10 @@ impl AutomaticDeposits {
         );
         assert!(
             previous.is_none(),
-            "BUG: sweep queue already has an entry for account {account:?} token {}",
-            deposit.erc20_contract_address
+            "BUG: sweep queue already has an entry for account {account:?} asset {}",
+            deposit.asset
         );
+        self.balance_scan_candidates = self.balance_scan_candidates.saturating_add(1);
     }
 
     /// Snapshot of the watchlist, faithful enough to reconstruct it exactly via
@@ -485,7 +640,7 @@ impl AutomaticDeposits {
             .map(|(request, deposit)| DepositAddressRegistration {
                 owner: request.account.owner,
                 subaccount: request.account.subaccount,
-                erc20_contract_address: request.token,
+                asset: request.asset,
                 address: deposit.value.address,
                 expires_at_nanos: deposit.expires_at,
                 last_scanned_block: deposit.value.last_scanned_block,
@@ -503,8 +658,49 @@ impl AutomaticDeposits {
         self.watchlist.len()
     }
 
+    /// How many `(account, asset)` pairs are armed and still being scanned as of `now`. No greater
+    /// than [`Self::watchlist_len`], which also counts entries whose window has closed but that
+    /// nothing has evicted yet.
+    pub fn armed_len(&self, now: Timestamp) -> usize {
+        self.armed_iter(now).count()
+    }
+
+    /// How long the oldest still-armed pair has been waiting for a deposit to be detected, or
+    /// `None` when nothing is armed. Every pair is armed for the same window, so the oldest is the
+    /// one expiring first.
+    pub fn longest_armed_age(&self, now: Timestamp) -> Option<Duration> {
+        let window_nanos = u64::try_from(self.watchlist.ttl().as_nanos()).unwrap_or(u64::MAX);
+        let expires_at = self
+            .armed_iter(now)
+            .map(|(_, entry)| entry.expires_at)
+            .min()?;
+        let armed_at = expires_at.as_nanos().saturating_sub(window_nanos);
+        Some(Duration::from_nanos(
+            now.as_nanos().saturating_sub(armed_at),
+        ))
+    }
+
     pub fn sweep_len(&self) -> usize {
         self.sweep.len()
+    }
+
+    /// When the oldest sweep still awaiting finalization was decided, or `None` when every sweep
+    /// the pipeline holds has finalized.
+    pub fn oldest_unfinalized_sweep(&self) -> Option<u64> {
+        self.sweeper_transactions
+            .oldest_unfinalized_request_timestamp()
+    }
+
+    pub fn balance_scan_candidates(&self) -> u64 {
+        self.balance_scan_candidates
+    }
+
+    pub fn successful_sweeps(&self) -> u64 {
+        self.successful_sweeps
+    }
+
+    pub fn failed_sweeps(&self) -> u64 {
+        self.failed_sweeps
     }
 
     pub fn attestations_len(&self) -> usize {
@@ -515,52 +711,46 @@ impl AutomaticDeposits {
         self.authorizations.len()
     }
 
+    pub fn delegation_nonces_len(&self) -> usize {
+        self.delegation_nonces.len()
+    }
+
     /// Where `request`'s deposit currently stands, or `None` if the pair is neither armed nor has
     /// funds queued for sweeping (so it must be registered). Reports
-    /// [`DepositStatus::AwaitingSweep`] once funds have been detected and queued, otherwise
-    /// [`DepositStatus::Scanning`] while the address is armed and being scanned as of `now`.
-    /// `minimum_deposit_amount` is the balance the address must hold for the scan to detect it,
-    /// reported back to the caller alongside the status.
+    /// [`DepositStage::AwaitingSweep`] once funds have been detected and queued, otherwise
+    /// [`DepositStage::Scanning`] while the address is armed and being scanned as of `now`.
     pub fn deposit_status(
         &self,
         now: Timestamp,
         request: &DepositRequest,
-        minimum_deposit_amount: Erc20Value,
-    ) -> Option<DepositErc20Response> {
+    ) -> Option<DepositStatusInfo> {
         if let Some(entry) = self.sweep.get(request) {
-            return Some(DepositErc20Response {
-                address: entry.address.to_string(),
-                minimum_deposit_amount: minimum_deposit_amount.into(),
-                status: DepositStatus::AwaitingSweep(DetectedDeposit {
-                    erc20_contract_address: request.token().to_string(),
-                    scanned_balance: entry.scanned_balance.into(),
-                    detected_at_block: entry.last_scanned_block.into(),
-                }),
+            return Some(DepositStatusInfo {
+                address: entry.address,
+                stage: DepositStage::AwaitingSweep {
+                    scanned_balance: entry.scanned_balance,
+                    detected_at_block: entry.last_scanned_block,
+                },
             });
         }
-        self.get_entry(now, request)
-            .map(|entry| DepositErc20Response {
-                address: entry.value.address.to_string(),
-                minimum_deposit_amount: minimum_deposit_amount.into(),
-                status: DepositStatus::Scanning {
-                    valid_until: entry.expires_at.as_nanos(),
-                    last_scanned_block: entry.value.last_scanned_block.map(Into::into),
-                    scan_count: entry.value.scan_count as u64,
-                },
-            })
+        self.get_entry(now, request).map(|entry| DepositStatusInfo {
+            address: entry.value.address,
+            stage: DepositStage::Scanning {
+                valid_until: entry.expires_at,
+                last_scanned_block: entry.value.last_scanned_block,
+                scan_count: entry.value.scan_count,
+            },
+        })
     }
 
-    /// The queued deposits a sweep could take next, batched by token, skipping those a sweep
+    /// The queued deposits a sweep could take next, batched by asset, skipping those a sweep
     /// already holds: taking them twice would move a balance the minter has already accounted for.
-    pub fn requests_batch(
-        &self,
-        requested_batch_size: usize,
-    ) -> BTreeMap<Address, Vec<SweepTarget>> {
+    pub fn requests_batch(&self, requested_batch_size: usize) -> BTreeMap<Asset, Vec<SweepTarget>> {
         let mut batches = BTreeMap::new();
         for (deposit_request, sweep_entry) in
             self.sweep.iter().filter(|(_, entry)| entry.is_sweepable())
         {
-            let batch: &mut Vec<_> = batches.entry(deposit_request.token).or_default();
+            let batch: &mut Vec<_> = batches.entry(deposit_request.asset).or_default();
             if batch.len() < requested_batch_size {
                 batch.push(SweepTarget {
                     account: deposit_request.account,
@@ -571,7 +761,7 @@ impl AutomaticDeposits {
         batches
     }
 
-    /// Record that `sweep_id` took these accounts' deposits of `token`: each leaves the pool of
+    /// Record that `sweep_id` took these accounts' deposits of `asset`: each leaves the pool of
     /// sweepable entries until the sweep is done with it.
     ///
     /// # Panics
@@ -581,11 +771,11 @@ impl AutomaticDeposits {
     pub fn record_sweep_scheduled(
         &mut self,
         sweep_id: SweepId,
-        token: Address,
+        asset: Asset,
         accounts: impl IntoIterator<Item = Account>,
     ) {
         for account in accounts {
-            let request = DepositRequest::new(account, token);
+            let request = DepositRequest::new(account, asset);
             let entry = self
                 .sweep
                 .get_mut(&request)
@@ -606,59 +796,109 @@ impl Default for AutomaticDeposits {
             sweep: BTreeMap::new(),
             attestations: BTreeMap::new(),
             authorizations: BTreeMap::new(),
+            delegation_nonces: BTreeMap::new(),
             sweeper_transactions: SweeperTransactionPipeline::new(TransactionNonce::ZERO),
+            balance_scan_candidates: 0,
+            successful_sweeps: 0,
+            failed_sweeps: 0,
         }
     }
 }
 
-/// What `deposit_erc20` asks for, and the unit of registration, scanning, and sweeping: a user
-/// `account` paired with the ERC-20 `token` contract it intends to deposit. Nothing has been
+/// What `deposit_erc20` and `deposit_eth` ask for, and the unit of registration, scanning, and
+/// sweeping: a user `account` paired with the [`Asset`] it intends to deposit. Nothing has been
 /// deposited yet — the request only arms the pair so a later deposit to it is noticed.
 ///
-/// All of an account's tokens share one derived deposit address, but each pair is armed, scanned,
+/// All of an account's assets share one derived deposit address, but each pair is armed, scanned,
 /// and swept independently.
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct DepositRequest {
     account: Account,
-    token: Address,
+    asset: Asset,
 }
 
 impl DepositRequest {
-    pub fn new(account: Account, token: Address) -> Self {
-        Self { account, token }
+    pub fn new(account: Account, asset: Asset) -> Self {
+        Self { account, asset }
     }
 
     pub fn account(&self) -> Account {
         self.account
     }
 
-    pub fn token(&self) -> Address {
-        self.token
+    pub fn asset(&self) -> Asset {
+        self.asset
     }
 }
 
-/// A [`DepositRequest`] due for a balance scan, carrying everything a scan of it needs read off the
+/// Where a deposit pair currently stands, in the minter's own types: the candid layer shapes
+/// it per endpoint (the ERC-20 status names a contract, the ETH one does not).
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct DepositStatusInfo {
+    pub address: DepositAddress,
+    pub stage: DepositStage,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum DepositStage {
+    Scanning {
+        valid_until: Timestamp,
+        last_scanned_block: Option<BlockNumber>,
+        scan_count: u32,
+    },
+    AwaitingSweep {
+        scanned_balance: Erc20Value,
+        detected_at_block: BlockNumber,
+    },
+}
+
+/// Why arming a deposit pair was refused.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum RegisterDepositError {
+    TooManyAssetsForAccount,
+    TooManyActiveDeposits,
+    KeyNotInitialized,
+}
+
+/// The due targets of one balance-scan tick, partitioned by asset kind: each vector can only
+/// be fed to the batcher that reads its kind's balances.
+#[derive(Default, Debug)]
+pub struct ScanTargets {
+    pub erc20: Vec<ScanTarget<Erc20Asset>>,
+    pub eth: Vec<ScanTarget<EthAsset>>,
+}
+
+impl ScanTargets {
+    pub fn is_empty(&self) -> bool {
+        self.erc20.is_empty() && self.eth.is_empty()
+    }
+}
+
+/// A deposit pair due for a balance scan, carrying everything a scan of it needs read off the
 /// watchlist up front: the deposit `address` derived for its account and the `scan_count` before
 /// this scan. Self-contained so the scanner never re-reads the watchlist (which a concurrent
-/// arming could have evicted from) after its outcalls.
+/// arming could have evicted from) after its outcalls. The asset is carried as a type
+/// ([`EthAsset`] or [`Erc20Asset`]), so a target cannot reach the wrong batcher, and only
+/// [`AutomaticDeposits::due_scan_targets`] constructs one.
 #[derive(Clone, Copy, Debug)]
-pub struct ScanTarget {
-    request: DepositRequest,
+pub struct ScanTarget<A> {
+    account: Account,
+    asset: A,
     address: DepositAddress,
     scan_count: u32,
 }
 
-impl ScanTarget {
+impl<A: Copy + Into<Asset>> ScanTarget<A> {
     pub fn request(&self) -> DepositRequest {
-        self.request
+        DepositRequest::new(self.account, self.asset.into())
     }
 
     pub fn account(&self) -> Account {
-        self.request.account
+        self.account
     }
 
-    pub fn token(&self) -> Address {
-        self.request.token
+    pub fn asset(&self) -> Asset {
+        self.asset.into()
     }
 
     pub fn address(&self) -> DepositAddress {
@@ -667,6 +907,12 @@ impl ScanTarget {
 
     pub fn scan_count(&self) -> u32 {
         self.scan_count
+    }
+}
+
+impl ScanTarget<Erc20Asset> {
+    pub fn token(&self) -> Address {
+        self.asset.contract_address()
     }
 }
 
@@ -737,4 +983,28 @@ impl AsRef<Account> for SweepTarget {
     fn as_ref(&self) -> &Account {
         &self.account
     }
+}
+
+/// A [`SweepTarget`] and the EIP-7702 authorization the sweep must carry for it, `None` once its
+/// address is already delegated to the sweeper contract the sweep calls.
+#[derive(Clone, Debug)]
+pub struct DelegatedSweepTarget {
+    pub target: SweepTarget,
+    pub authorization: Option<AuthorizationRequest>,
+}
+
+impl AsRef<Account> for DelegatedSweepTarget {
+    fn as_ref(&self) -> &Account {
+        self.target.as_ref()
+    }
+}
+
+/// The targets of one sweep, and the sweeper contract their delegations were classified against.
+///
+/// The sweep may only call that contract: a target carrying no authorization was read as already
+/// delegated to it, so a sweep calling anything else would reach code no read ever checked.
+#[derive(Clone, Debug)]
+pub struct DelegatedSweepBatch {
+    pub delegate: Address,
+    pub targets: Vec<DelegatedSweepTarget>,
 }

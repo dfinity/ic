@@ -27,6 +27,7 @@ ic-types = { path = "../../types/types" }
 ic-types-cycles = { path = "../../types/cycles" }
 prometheus = { workspace = true }
 rand = { workspace = true }
+rayon = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]

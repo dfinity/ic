@@ -24,6 +24,7 @@ def icos_build(
         malicious = False,
         build_alternative_guestos_image = False,
         upgrades = True,
+        fast_upgrades = False,
         vuln_scan = True,
         visibility = None,
         tags = None,
@@ -39,6 +40,7 @@ def icos_build(
       malicious: if True, bundle the `malicious_replica`
       build_alternative_guestos_image: if True, build the proposal-aware alternative GuestOS image variant, e.g. for a recovery
       upgrades: if True, build upgrade images as well
+      fast_upgrades: if True, also build the fast-upgrade overlay. GuestOS only
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
       tags: See Bazel documentation
@@ -48,6 +50,9 @@ def icos_build(
     Returns:
       A struct containing the labels of the images that were built.
     """
+
+    if fast_upgrades and not upgrades:
+        fail("fast_upgrades requires upgrades to be set")
 
     # we "declare" lots of different image combinations, though most of
     # them are not actually used. Because CI jobs make heavy use of '//...'
@@ -75,6 +80,30 @@ def icos_build(
             name = "test_version_txt",
             srcs = [":copy_version_txt"],
             outs = ["version-test.txt"],
+            cmd = "sed -e 's/.*/&-test/' < $< > $@",
+            visibility = ["//visibility:public"],
+            tags = ["manual"],
+        )
+
+    # A separate copy of the version file installed as replica_version.txt in
+    # the rootfs, holding the version of the replica and related binaries.
+    # During a fast upgrade, the overlay ships a new version and the file will
+    # be mounted over. version.txt above is not mounted over so it can be used
+    # to read the base GuestOS version.
+    copy_file(
+        name = "copy_replica_version_txt",
+        src = ic_version,
+        out = "replica_version.txt",
+        allow_symlink = True,
+        visibility = ["//visibility:public"],
+        tags = ["manual"],
+    )
+
+    if upgrades:
+        native.genrule(
+            name = "test_replica_version_txt",
+            srcs = [":copy_replica_version_txt"],
+            outs = ["replica_version-test.txt"],
             cmd = "sed -e 's/.*/&-test/' < $< > $@",
             visibility = ["//visibility:public"],
             tags = ["manual"],
@@ -214,6 +243,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         partition_root_hash = partition_root + "-hash"
         partition_boot_tzst = "partition-boot" + test_suffix + ".tzst"
         version_txt = "version" + test_suffix + ".txt"
+        replica_version_txt = "replica_version" + test_suffix + ".txt"
         boot_args = "boot" + test_suffix + "_args"
         launch_measurements = "launch-measurements" + test_suffix + ".json"
 
@@ -226,7 +256,10 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
             strip_paths = PARTITION_ROOT_STRIP_PATHS,
             extra_files = {
                 k: v
-                for k, v in (image_deps["rootfs"].items() + [(version_txt, "/opt/ic/share/version.txt:0644")])
+                for k, v in (image_deps["rootfs"].items() + [
+                    (version_txt, "/opt/ic/share/version.txt:0644"),
+                    (replica_version_txt, "/opt/ic/share/replica_version.txt:0644"),
+                ])
             },
             target_compatible_with = ["@platforms//os:linux"],
             tags = ["manual", "no-cache"],
@@ -473,14 +506,44 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         for test_suffix in ["", "-test"]:
             update_image_tar = "update-img" + test_suffix + ".tar"
 
-            upgrade_image(
-                name = update_image_tar,
-                boot_partition = ":partition-boot-alternative.tzst" if build_alternative_guestos_image else ":partition-boot" + test_suffix + ".tzst",
-                root_partition = ":partition-root" + test_suffix + ".tzst",
-                tags = ["manual", "no-cache"],
-                target_compatible_with = ["@platforms//os:linux"],
-                version_file = ":version" + test_suffix + ".txt",
+            overlay_out = "overlay" + test_suffix + ".tzst"
+            if fast_upgrades:
+                upgrade_overlay_binaries = image_deps.get(
+                    "upgrade_overlay_binaries",
+                    [],
+                )
+                overlay_binary_files = {
+                    binary_label: image_deps["rootfs"][binary_label]
+                    for binary_label in upgrade_overlay_binaries
+                }
+                overlay_component_files = {
+                    label: install_path + ":0644"
+                    for label, install_path in image_deps.get("upgrade_overlay_files", {}).items()
+                }
+                replica_version_file = {
+                    ":replica_version" + test_suffix + ".txt": "/opt/ic/share/replica_version.txt:0644",
+                }
+                ext4_image(
+                    name = overlay_out,
+                    extra_files = overlay_binary_files | overlay_component_files | replica_version_file,
+                    file_contexts = ":file_contexts",
+                    partition_size = "1G",
+                    target_compatible_with = ["@platforms//os:linux"],
+                    tags = ["manual", "no-cache"],
+                )
+
+            upgrade_image_kwargs = {
+                "name": update_image_tar,
+                "boot_partition": ":partition-boot-alternative.tzst" if build_alternative_guestos_image else ":partition-boot" + test_suffix + ".tzst",
+                "root_partition": ":partition-root" + test_suffix + ".tzst",
+                "tags": ["manual", "no-cache"],
+                "target_compatible_with": ["@platforms//os:linux"],
+                "version_file": ":version" + test_suffix + ".txt",
+            } | (
+                {"upgrade_overlay": ":" + overlay_out} if fast_upgrades else {}
             )
+
+            upgrade_image(**upgrade_image_kwargs)
 
             zstd_compress(
                 name = update_image_tar + ".zst",

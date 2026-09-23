@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 16.0.0 - 2026-09-01
+
 ### Added
 - Added the `SubnetCoolingDown` variant to the `ErrorCode` enum: ingress messages addressed to a subnet that is "cooling down" are rejected with this error code.
+- Added the `CanisterStatusAccessDenied` variant to the `ErrorCode` enum: a call to the `canister_status` endpoint of the management canister is rejected with this error code if the caller is not allowed to access the canister status according to the `status_visibility` canister setting.
 - The function `PocketIc::mock_flexible_canister_http_response` and the type `MockFlexibleCanisterHttpResponse` to mock the responses
   of the committee nodes of a pending *flexible* canister HTTP outcall, i.e. one made through the `flexible_http_request`
   management canister endpoint.
@@ -25,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and which an `http_request` can select through its `pricing_version` field.
 
 ### Changed
+- The functions `PocketIc::auto_progress`, `PocketIc::make_live`, and their variants only return
+  after the certified time of the PocketIC instance has been updated for the first time
+  (the same applies to building an instance with automatic progress enabled).
+- No hard TTL is set on PocketIC servers started implicitly by the library (e.g. by `PocketIc::new` or `PocketIcBuilder::build`); previously a default of 10 minutes was used.
+  The hard TTL is an absolute deadline measured from the server's launch which is not extended by activity, so a test suite whose total runtime exceeded it had its server terminated while still serving requests, failing in-flight calls with `Connection reset by peer`.
+  Orphaned servers remain bounded by the (activity-based) soft TTL.
+  Callers who want a hard TTL can still set one explicitly via `StartServerParams::hard_ttl` and pass the resulting server URL to `PocketIcBuilder::with_server_url`.
 - Mocked canister HTTP responses report the cycles their node actually spent on the outcall, instead of reporting no spend at all.
   This applies to both `PocketIc::mock_canister_http_response` and `PocketIc::mock_flexible_canister_http_response`.
   The spend is derived from the size of the mocked response; unlike a real node, a mocked one is charged no response time, so
@@ -33,21 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reported.
 - A node that cannot pay for gossiping its mocked reject reports an out-of-cycles reject instead of the mocked one, matching what
   a node of a real subnet does under pay-as-you-go pricing.
-
-## 16.0.0 - 2026-08-31
-
-### Added
-- Added the `SubnetCoolingDown` variant to the `ErrorCode` enum: ingress messages addressed to a subnet that is "cooling down" are rejected with this error code.
-- Added the `CanisterStatusAccessDenied` variant to the `ErrorCode` enum: a call to the `canister_status` endpoint of the management canister is rejected with this error code if the caller is not allowed to access the canister status according to the `status_visibility` canister setting.
-
-### Changed
-- The functions `PocketIc::auto_progress`, `PocketIc::make_live`, and their variants only return
-  after the certified time of the PocketIC instance has been updated for the first time
-  (the same applies to building an instance with automatic progress enabled).
-- No hard TTL is set on PocketIC servers started implicitly by the library (e.g. by `PocketIc::new` or `PocketIcBuilder::build`); previously a default of 10 minutes was used.
-  The hard TTL is an absolute deadline measured from the server's launch which is not extended by activity, so a test suite whose total runtime exceeded it had its server terminated while still serving requests, failing in-flight calls with `Connection reset by peer`.
-  Orphaned servers remain bounded by the (activity-based) soft TTL.
-  Callers who want a hard TTL can still set one explicitly via `StartServerParams::hard_ttl` and pass the resulting server URL to `PocketIcBuilder::with_server_url`.
 
 
 

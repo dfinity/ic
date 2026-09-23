@@ -28,13 +28,14 @@ use crate::{
 };
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
-use ic_cdk::call::{Error as IcCdkCallError, RejectCode};
+use ic_cdk::call::Error as IcCdkCallError;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{
     MAX_NEURONS_FOR_DIRECT_PARTICIPANTS, i2d, ledger::compute_neuron_staking_subaccount_bytes,
 };
 use ic_nervous_system_proto::pb::v1::Principals;
+use ic_nervous_system_runtime::into_reject_code_and_message;
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
 use ic_sns_governance::pb::v1::{
     ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId, NeuronIds,
@@ -108,30 +109,8 @@ impl From<(Option<i32>, String)> for CanisterCallError {
 }
 
 impl From<IcCdkCallError> for CanisterCallError {
-    // The match is deliberately exhaustive (rather than using a catch-all arm) so
-    // that a new `IcCdkCallError` variant forces us to revisit this mapping
-    // instead of silently classifying it as `RejectCode::SysTransient`.
     fn from(err: IcCdkCallError) -> Self {
-        let (code, description) = match err {
-            IcCdkCallError::CallRejected(rejected) => (
-                rejected.raw_reject_code() as i32,
-                rejected.reject_message().to_string(),
-            ),
-
-            // A response that cannot be decoded means the callee misbehaved.
-            IcCdkCallError::CandidDecodeFailed(err) => {
-                (RejectCode::CanisterError as i32, err.to_string())
-            }
-
-            // Neither of these ever left this canister, so the call may well
-            // succeed if retried.
-            IcCdkCallError::InsufficientLiquidCycleBalance(err) => {
-                (RejectCode::SysTransient as i32, err.to_string())
-            }
-            IcCdkCallError::CallPerformFailed(err) => {
-                (RejectCode::SysTransient as i32, err.to_string())
-            }
-        };
+        let (code, description) = into_reject_code_and_message(err);
 
         Self {
             code: Some(code),

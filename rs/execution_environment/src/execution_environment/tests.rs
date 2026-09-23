@@ -33,7 +33,9 @@ use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, expect_canister_did_not_reply,
     get_reject, get_reply,
 };
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
+use ic_test_utilities_metrics::{
+    fetch_histogram_vec_count, fetch_int_counter_vec, metric_vec, nonzero_values,
+};
 use ic_types::{
     CanisterId, CountBytes, NumInstructions, PrincipalId, RegistryVersion,
     canister_http::{CanisterHttpMethod, PricingVersion, Replication, Transform},
@@ -2712,16 +2714,7 @@ fn ingress_message_to_cooling_down_subnet_is_rejected() {
     test.should_accept_ingress_message(canister, "update", vec![])
         .unwrap();
 
-    let own_subnet_id = test.state().metadata.own_subnet_id;
-    test.state_mut()
-        .metadata
-        .modify_network_topology(|network_topology| {
-            network_topology
-                .subnets_mut()
-                .get_mut(&own_subnet_id)
-                .unwrap()
-                .cooling_down = true;
-        });
+    test.set_cooling_down(true);
 
     // Both canister-addressed and subnet-addressed messages are now rejected.
     let err = test
@@ -3375,7 +3368,7 @@ fn execute_canister_http_request() {
                 .canister_state(caller_canister)
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases_as_counters()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&CyclesUseCase::HTTPOutcalls)
                 .unwrap()
         );
@@ -3984,12 +3977,14 @@ fn execute_canister_http_request_pricing_version() {
 
             let own_subnet = subnet_test_id(1);
             let caller_canister = canister_test_id(10);
-            let mut builder = ExecutionTestBuilder::new()
+            let builder = ExecutionTestBuilder::new()
                 .with_own_subnet_id(own_subnet)
                 .with_caller(own_subnet, caller_canister);
-            if flexible_http_requests_enabled {
-                builder = builder.with_flexible_http_requests_enabled();
-            }
+            let builder = if flexible_http_requests_enabled {
+                builder.with_flexible_http_requests_enabled()
+            } else {
+                builder.with_flexible_http_requests_disabled()
+            };
             let mut test = builder.build();
             std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
                 .subnet_features
@@ -4017,23 +4012,62 @@ fn execute_canister_http_request_pricing_version() {
                 "unexpected pricing version for pricing_version={pricing_version:?} with \
                  flexible_http_requests enabled={flexible_http_requests_enabled}"
             );
+
+            // The outcall is only counted once its response is delivered, so the
+            // counter is still zero here. Every (pricing version, replication)
+            // series is registered nonetheless, so none of them read as missing.
+            let delivered = fetch_int_counter_vec(
+                test.metrics_registry(),
+                "execution_http_outcalls_delivered_total",
+            );
+            assert_eq!(
+                delivered.len(),
+                6,
+                "unexpected delivered series for pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
+            assert!(
+                nonzero_values(delivered).is_empty(),
+                "admitting an outcall should not count it as delivered, for \
+                 pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
+
+            // Delivering the response counts the outcall under the version it was
+            // priced with. It is fully replicated, `is_replicated` being unset above.
+            test.deliver_consensus_response(CallbackId::from(0), Payload::Data(vec![]));
+            assert_eq!(
+                nonzero_values(fetch_int_counter_vec(
+                    test.metrics_registry(),
+                    "execution_http_outcalls_delivered_total"
+                )),
+                metric_vec(&[(
+                    &[
+                        ("pricing_version", expected.as_str()),
+                        ("replication", "fully_replicated"),
+                    ],
+                    1
+                )]),
+                "unexpected delivered metric for pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
         }
     }
 }
 
 #[test]
-fn execute_flexible_canister_http_request_free_subnet_uses_legacy() {
-    // On a free subnet, flexible outcalls are available by default (without the
-    // `flexible_http_requests` feature flag) and fall back to legacy pricing,
-    // where pricing is moot because a free subnet charges nothing.
+fn execute_flexible_canister_http_request_free_subnet_uses_pay_as_you_go() {
+    // With the `flexible_http_requests` feature flag enabled, pay-as-you-go
+    // applies to every subnet, free ones included. Pricing is moot there — a free
+    // subnet charges nothing — but the request is still routed through the new
+    // pricing model rather than the legacy fallback.
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(10);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
         .with_cost_schedule(CanisterCyclesCostSchedule::Free)
-        // The feature flag is deliberately left disabled: the free-subnet path
-        // does not depend on it.
+        .with_flexible_http_requests_enabled()
         .build();
 
     let args = flexible_http_request_args(caller_canister);
@@ -4051,8 +4085,10 @@ fn execute_flexible_canister_http_request_free_subnet_uses_legacy() {
     let http_request_context = canister_http_request_contexts
         .get(&CallbackId::from(0))
         .unwrap();
-    // The request is routed through legacy pricing with flexible replication.
-    assert_eq!(http_request_context.pricing_version, PricingVersion::Legacy);
+    assert_eq!(
+        http_request_context.pricing_version,
+        PricingVersion::PayAsYouGo
+    );
     assert!(
         matches!(
             http_request_context.replication,
@@ -4062,9 +4098,9 @@ fn execute_flexible_canister_http_request_free_subnet_uses_legacy() {
         http_request_context.replication
     );
 
-    // Legacy pricing on a free subnet charges nothing: the full payment is
-    // retained (to be refunded when the response is delivered) and nothing is
-    // marked refundable through the pay-as-you-go mechanism.
+    // A free subnet charges nothing whatever the pricing model: the full payment
+    // is retained (to be refunded when the response is delivered) and there is no
+    // allowance to spend, hence nothing to refund out of one.
     assert_eq!(http_request_context.request.payment, payment);
     assert_eq!(
         http_request_context.refund_status.refundable_cycles,
@@ -4077,18 +4113,17 @@ fn execute_flexible_canister_http_request_free_subnet_uses_legacy() {
 }
 
 #[test]
-fn execute_flexible_canister_http_request_system_subnet_uses_legacy() {
+fn execute_flexible_canister_http_request_system_subnet_uses_pay_as_you_go() {
     // System subnets charge nothing for HTTP outcalls despite a normal cost
-    // schedule, so flexible outcalls are available there by default (without the
-    // feature flag) and fall back to legacy pricing.
+    // schedule. Like a free subnet, they are still routed through pay-as-you-go
+    // once the `flexible_http_requests` feature flag is enabled.
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(10);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
-        // A system subnet keeps the default (normal) cost schedule but charges
-        // zero for HTTP outcalls; the feature flag is left disabled.
         .with_subnet_type(SubnetType::System)
+        .with_flexible_http_requests_enabled()
         .build();
 
     let args = flexible_http_request_args(caller_canister);
@@ -4106,9 +4141,10 @@ fn execute_flexible_canister_http_request_system_subnet_uses_legacy() {
     let http_request_context = canister_http_request_contexts
         .get(&CallbackId::from(0))
         .unwrap();
-    // Routed through legacy pricing with flexible replication, just like a
-    // free-cost-schedule subnet.
-    assert_eq!(http_request_context.pricing_version, PricingVersion::Legacy);
+    assert_eq!(
+        http_request_context.pricing_version,
+        PricingVersion::PayAsYouGo
+    );
     assert!(
         matches!(
             http_request_context.replication,
@@ -4121,8 +4157,8 @@ fn execute_flexible_canister_http_request_system_subnet_uses_legacy() {
     // A system subnet charges nothing for HTTP outcalls despite its normal cost
     // schedule, so `try_add_http_context_to_replicated_state` treats it as free
     // just like a free-cost-schedule subnet: the full payment is retained (to be
-    // refunded when the response is delivered) and nothing is marked refundable
-    // through the pay-as-you-go mechanism.
+    // refunded when the response is delivered) and there is no allowance to
+    // spend, hence nothing to refund out of one.
     assert_eq!(http_request_context.request.payment, payment);
     assert_eq!(
         http_request_context.refund_status.refundable_cycles,
@@ -4230,13 +4266,14 @@ fn execute_flexible_canister_http_request_insufficient_payment() {
 #[test]
 fn execute_flexible_canister_http_request_disabled() {
     // On a paying subnet, flexible outcalls under pay-as-you-go pricing are
-    // gated behind the `flexible_http_requests` feature flag, which is disabled
-    // by default.
+    // gated behind the `flexible_http_requests` feature flag: with the flag
+    // disabled they are not offered at all.
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(10);
     let mut test = ExecutionTestBuilder::new()
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_disabled()
         .build();
 
     let args = flexible_http_request_args(caller_canister);
@@ -4259,6 +4296,86 @@ fn execute_flexible_canister_http_request_disabled() {
     assert_eq!(
         get_reject_message(test.xnet_messages()[0].clone()),
         "This API is not enabled on this subnet"
+    );
+}
+
+#[test]
+fn execute_flexible_canister_http_request_disabled_falls_back_to_legacy_when_free() {
+    // A disabled flag does not take flexible outcalls away from subnets where
+    // they are free: there they fall back to legacy pricing, which is moot when
+    // nothing is charged. These fallbacks are what still distinguishes the flag
+    // being off from it being on.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_flexible_http_requests_disabled()
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    test.inject_call_to_ic00(
+        Method::FlexibleHttpRequest,
+        args.encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+    assert_eq!(
+        canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap()
+            .pricing_version,
+        PricingVersion::Legacy
+    );
+}
+
+#[test]
+fn execute_flexible_canister_http_request_disabled_falls_back_to_legacy_on_system_subnet() {
+    // Same fallback as on a free cost schedule, via a different route: a system
+    // subnet keeps a normal cost schedule but charges zero for HTTP outcalls, so
+    // it is treated as free here. Flexible outcalls therefore remain available
+    // with the flag disabled, under legacy pricing.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_subnet_type(SubnetType::System)
+        .with_flexible_http_requests_disabled()
+        .build();
+    assert_eq!(
+        test.state().get_own_cost_schedule(),
+        CanisterCyclesCostSchedule::Normal
+    );
+
+    let args = flexible_http_request_args(caller_canister);
+    test.inject_call_to_ic00(
+        Method::FlexibleHttpRequest,
+        args.encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+    assert_eq!(
+        canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap()
+            .pricing_version,
+        PricingVersion::Legacy
     );
 }
 
@@ -5084,14 +5201,14 @@ fn replicated_query_can_burn_cycles() {
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
-    let burned_cycles_as_counters = *test
+    let burned_cycles_monotonic = *test
         .canister_state(canister_id)
         .system_state
         .canister_metrics()
-        .consumed_cycles_by_use_cases_as_counters()
+        .consumed_cycles_by_use_cases_monotonic()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
-    assert_eq!(burned_cycles_as_counters, burned_cycles);
+    assert_eq!(burned_cycles_monotonic, burned_cycles);
 }
 
 #[test]
@@ -5136,7 +5253,7 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
         test.canister_state(canister_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::BurnedCycles)
             .is_none()
     );
@@ -5444,7 +5561,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
         let execution_cost_initial = test.canister_execution_cost(a_id);
@@ -5456,7 +5573,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
         let execution_cost_after_message = test.canister_execution_cost(a_id);
@@ -5513,14 +5630,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
         let instruction_consumption_before_response_counters = *test
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
 
@@ -5589,14 +5706,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
         let instruction_consumption_after_response_counters = *test
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::Instructions)
             .unwrap();
 
@@ -6501,7 +6618,7 @@ impl ExecutionAccounting {
                 .canister_state(canister_id)
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases_as_counters()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&CyclesUseCase::Instructions)
                 .cloned()
                 .unwrap_or_default(),

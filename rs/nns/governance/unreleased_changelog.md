@@ -9,9 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
-* `UpdateCanisterSettings` and `CreateCanisterAndInstallCode` proposals can now
-  set `reserved_cycles_limit`, the upper bound on the cycles a canister may hold
-  in reserved cycles.
+* Added a new `NnsFunction` variant `MergeSubnets`, which proposes to merge a
+  subnet into another subnet: in the routing table, reassigns all canister
+  ranges hosted by the source subnet to the destination subnet. The source
+  subnet is not deleted.
 
 ## Changed
 

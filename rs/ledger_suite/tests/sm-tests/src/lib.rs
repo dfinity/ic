@@ -21,10 +21,10 @@ use ic_ledger_suite_in_memory_ledger::{
     AllowancesRecentlyPurged, InMemoryLedger, verify_ledger_state,
 };
 use ic_ledger_suite_state_machine_helpers::{
-    AllowanceProvider, balance_of, fee, get_archive_blocks, get_archive_remaining_capacity,
-    get_archive_transaction, get_archive_transactions, get_blocks, get_canister_info,
-    get_transactions, icrc3_get_blocks, icrc21_consent_message, list_archives, metadata,
-    minting_account, parse_metric, send_approval, send_transfer, send_transfer_from,
+    AllowanceProvider, balance_of, fee, get_all_ledger_and_archive_blocks, get_archive_blocks,
+    get_archive_remaining_capacity, get_archive_transaction, get_archive_transactions, get_blocks,
+    get_canister_info, get_transactions, icrc3_get_blocks, icrc21_consent_message, list_archives,
+    metadata, minting_account, parse_metric, send_approval, send_transfer, send_transfer_from,
     supported_block_types, supported_standards, total_supply, transfer,
 };
 use ic_ledger_suite_state_machine_tests_constants::{
@@ -1371,6 +1371,174 @@ pub fn test_archive_duplicate_controllers(ledger_wasm: Vec<u8>) {
     let p100 = PrincipalId::new_user_test_id(100);
 
     test_controllers(vec![p100], &ledger_wasm, encode_init_args);
+}
+
+pub fn test_change_trigger_threshold_before_archive_spawned<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    const UNREACHABLE_TRIGGER_THRESHOLD: usize = 1_000_000_000;
+    assert!(
+        UNREACHABLE_TRIGGER_THRESHOLD as u64 > ARCHIVE_TRIGGER_THRESHOLD * 10,
+        "UNREACHABLE_TRIGGER_THRESHOLD shall be at least 10x larger than ARCHIVE_TRIGGER_THRESHOLD"
+    );
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let (env, ledger_id) = setup(
+        ledger_wasm.clone(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+
+    for i in 0..(ARCHIVE_TRIGGER_THRESHOLD - 2) {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
+    }
+    assert_eq!(
+        list_archives(&env, ledger_id),
+        vec![],
+        "no archive should have been spawned yet"
+    );
+
+    let raise_threshold = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(UNREACHABLE_TRIGGER_THRESHOLD),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(
+        ledger_id,
+        ledger_wasm.clone(),
+        Encode!(&raise_threshold).unwrap(),
+    )
+    .expect("failed to raise trigger_threshold before an archive was spawned");
+
+    for i in 0..(2 * ARCHIVE_TRIGGER_THRESHOLD) {
+        transfer(&env, ledger_id, p1.0, p2.0, 20_000 + i).expect("transfer failed");
+    }
+    assert_eq!(
+        list_archives(&env, ledger_id),
+        vec![],
+        "archiving should be suppressed by the raised trigger_threshold"
+    );
+    let blocks = icrc3_get_blocks(&env, ledger_id, 0, 4 * ARCHIVE_TRIGGER_THRESHOLD as usize);
+    assert!(
+        blocks.archived_blocks.is_empty(),
+        "no block should have been archived, got {:?}",
+        blocks.archived_blocks
+    );
+    assert_eq!(
+        blocks.blocks.len() as u64,
+        1 + (ARCHIVE_TRIGGER_THRESHOLD - 2) + 2 * ARCHIVE_TRIGGER_THRESHOLD,
+        "every block should still be held by the ledger"
+    );
+
+    let restore_threshold = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(ARCHIVE_TRIGGER_THRESHOLD as usize),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&restore_threshold).unwrap())
+        .expect("failed to restore trigger_threshold");
+
+    transfer(&env, ledger_id, p1.0, p2.0, 30_000).expect("transfer failed");
+    assert_eq!(
+        list_archives(&env, ledger_id).len(),
+        1,
+        "restoring the trigger threshold should archive the accumulated backlog"
+    );
+}
+
+/// Verify that all the blocks of a ledger can be retrieved also when the ledger itself holds more
+/// blocks than it returns in a single `get_blocks` response, e.g., since archiving was disabled by
+/// raising the archiving trigger threshold.
+pub fn test_get_all_blocks_with_archiving_disabled<T, Tokens>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+    Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
+{
+    // The maximum number of blocks returned in a single ledger `get_blocks` response.
+    const MAX_BLOCKS_PER_LEDGER_RESPONSE: u64 = 2_000;
+    const UNREACHABLE_TRIGGER_THRESHOLD: usize = 1_000_000_000;
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let (env, ledger_id) = setup(
+        ledger_wasm.clone(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 1_000_000_000_000)],
+    );
+
+    // Generate enough blocks to trigger archiving, so that the blocks end up being spread over
+    // both the archive and the ledger.
+    for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
+    }
+    assert_eq!(
+        list_archives(&env, ledger_id).len(),
+        1,
+        "an archive should have been spawned"
+    );
+
+    // Suppress archiving, so that all the following blocks are retained by the ledger itself.
+    let raise_threshold = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(UNREACHABLE_TRIGGER_THRESHOLD),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&raise_threshold).unwrap())
+        .expect("failed to raise trigger_threshold");
+
+    // Generate more blocks than the ledger returns in a single `get_blocks` response.
+    for i in 0..=MAX_BLOCKS_PER_LEDGER_RESPONSE {
+        transfer(&env, ledger_id, p1.0, p2.0, 20_000 + i).expect("transfer failed");
+    }
+    let archives = list_archives(&env, ledger_id);
+    let num_archived_blocks = archives
+        .iter()
+        .map(|archive| archive.block_range_end.0.to_u64().unwrap() + 1)
+        .max()
+        .expect("an archive should have been spawned");
+    let chain_length = get_blocks(&env, Principal::from(ledger_id), 0, 0).chain_length;
+    let blocks_in_ledger = chain_length - num_archived_blocks;
+    assert!(
+        blocks_in_ledger > MAX_BLOCKS_PER_LEDGER_RESPONSE,
+        "the ledger should hold more blocks ({blocks_in_ledger}) than it returns in a single \
+         response ({MAX_BLOCKS_PER_LEDGER_RESPONSE})"
+    );
+
+    // Retrieving all the blocks should require multiple calls to the ledger.
+    let blocks = get_all_ledger_and_archive_blocks::<Tokens>(&env, ledger_id, None, None);
+    assert_eq!(
+        blocks.len() as u64,
+        chain_length,
+        "not all the ledger and archive blocks were retrieved"
+    );
+    // The same should hold when retrieving a sub-range of the blocks.
+    let num_blocks = chain_length - 1;
+    let blocks =
+        get_all_ledger_and_archive_blocks::<Tokens>(&env, ledger_id, Some(1), Some(num_blocks));
+    assert_eq!(
+        blocks.len() as u64,
+        num_blocks,
+        "not all the requested ledger and archive blocks were retrieved"
+    );
+
+    // Reconstruct the ledger state from all the retrieved blocks, and verify it against the state
+    // of the ledger itself. This catches any blocks that were retrieved more than once, or not at
+    // all.
+    verify_ledger_state::<Tokens>(&env, ledger_id, None, AllowancesRecentlyPurged::No);
 }
 
 pub fn test_upgrade_archive_options<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)

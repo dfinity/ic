@@ -44,8 +44,9 @@ use ic_management_canister_types_private::{
     InstallCodeArgsV2, Method, NodeMetricsHistoryArgs, NodeMetricsHistoryResponse,
     OnLowWasmMemoryHookStatus, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     RenameCanisterArgs, RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs,
-    SubnetInfoResponse, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
-    UploadChunkReply, WasmMemoryPersistence,
+    SubnetInfoResponse, SubnetMetricsArgs, SubnetMetricsResponse, TakeCanisterSnapshotArgs,
+    UpdateSettingsArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, UploadChunkReply,
+    WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -6007,7 +6008,7 @@ fn consumed_instruction_cycles(
     };
     (
         instructions(canister_metrics.consumed_cycles_by_use_cases()),
-        instructions(canister_metrics.consumed_cycles_by_use_cases_as_counters()),
+        instructions(canister_metrics.consumed_cycles_by_use_cases_monotonic()),
     )
 }
 
@@ -6326,6 +6327,167 @@ fn subnet_info_ingress_fails() {
             ErrorCode::CanisterContractViolation,
             "cannot be called by a user",
         );
+}
+
+/// Sends the given payload to `subnet_metrics` as an inter-canister call from a
+/// canister on a remote subnet, executes it, and returns the decoded response or
+/// the reject.
+fn subnet_metrics_raw_call(
+    test: &mut ExecutionTest,
+    payload: Vec<u8>,
+) -> Result<SubnetMetricsResponse, (RejectCode, String)> {
+    test.inject_call_to_ic00(Method::SubnetMetrics, payload, Cycles::zero());
+    test.execute_subnet_message();
+    // Route the response back towards the caller (on a different subnet) so that
+    // it can be inspected via `xnet_messages`.
+    test.induct_messages();
+    // The response to the one injected call is the only message crossing the
+    // subnet boundary.
+    assert_eq!(test.xnet_messages().len(), 1);
+    match &test.get_xnet_response(0).response_payload {
+        ic_types::messages::Payload::Data(bytes) => {
+            Ok(Decode!(bytes, SubnetMetricsResponse).unwrap())
+        }
+        ic_types::messages::Payload::Reject(context) => {
+            Err((context.code(), context.message().to_string()))
+        }
+    }
+}
+
+/// As [`subnet_metrics_raw_call`], with a well-formed payload naming `subnet_id`.
+fn subnet_metrics_call(
+    test: &mut ExecutionTest,
+    subnet_id: PrincipalId,
+) -> Result<SubnetMetricsResponse, (RejectCode, String)> {
+    subnet_metrics_raw_call(test, SubnetMetricsArgs { subnet_id }.encode())
+}
+
+#[test]
+fn subnet_metrics_ingress_update_fails_at_ingress_filter() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let payload = SubnetMetricsArgs {
+        subnet_id: own_subnet_id.get(),
+    }
+    .encode();
+
+    let result = test.should_accept_ingress_message(IC_00, Method::SubnetMetrics, payload);
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            "ic00 method subnet_metrics can not be called via ingress messages"
+        ))
+    );
+}
+
+#[test]
+fn subnet_metrics_ingress_update_fails_at_execution() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let payload = SubnetMetricsArgs {
+        subnet_id: own_subnet_id.get(),
+    }
+    .encode();
+    test.subnet_message(Method::SubnetMetrics, payload)
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterContractViolation,
+            "subnet_metrics cannot be called by a user",
+        );
+}
+
+#[test]
+fn subnet_metrics_ingress_query_fails() {
+    let own_subnet_id = subnet_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .build();
+    let payload = SubnetMetricsArgs {
+        subnet_id: own_subnet_id.get(),
+    }
+    .encode();
+    test.non_replicated_query(CanisterId::ic_00(), "subnet_metrics", payload)
+        .unwrap_err()
+        .assert_contains(
+            ErrorCode::CanisterMethodNotFound,
+            "Query method subnet_metrics not found.",
+        );
+}
+
+/// The endpoint reports the raw counter in millions, rounded up, so that it
+/// cannot be read as a fine-grained per-block activity signal.
+#[test]
+fn subnet_metrics_reports_round_instructions_in_millions_rounded_up() {
+    for (raw, expected) in [
+        (0_u64, 0_u64),
+        (1, 1),
+        (999_999, 1),
+        (1_000_000, 1),
+        (1_000_001, 2),
+        (2_000_000, 2),
+        (u64::MAX, u64::MAX.div_ceil(1_000_000)),
+    ] {
+        let own_subnet_id = subnet_test_id(1);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet_id)
+            .with_caller(subnet_test_id(2), canister_test_id(1))
+            .build();
+        test.state_mut()
+            .metadata
+            .subnet_metrics
+            .round_instructions_total = raw;
+
+        let response = subnet_metrics_call(&mut test, own_subnet_id.get()).unwrap();
+
+        assert_eq!(
+            response.million_round_instructions_total,
+            candid::Nat::from(expected),
+            "raw count {raw}"
+        );
+    }
+}
+
+#[test]
+fn subnet_metrics_foreign_subnet_id_is_rejected() {
+    let own_subnet_id = subnet_test_id(1);
+    let other_subnet_id = subnet_test_id(3);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .with_caller(subnet_test_id(2), caller_canister)
+        .build();
+
+    let (code, message) = subnet_metrics_call(&mut test, other_subnet_id.get()).unwrap_err();
+    assert_eq!(code, RejectCode::CanisterReject);
+    assert!(
+        message.contains("does not match current subnet ID"),
+        "unexpected reject message: {message}"
+    );
+}
+
+#[test]
+fn subnet_metrics_malformed_payload_is_rejected() {
+    let own_subnet_id = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet_id)
+        .with_caller(subnet_test_id(2), caller_canister)
+        .build();
+
+    let (code, message) =
+        subnet_metrics_raw_call(&mut test, EmptyBlob.encode()).expect_err("expected a reject");
+    // The Candid decode failure surfaces as `ErrorCode::InvalidManagementPayload`
+    // (`candid_error_to_user_error`), which maps to `RejectCode::CanisterReject`.
+    assert_eq!(code, RejectCode::CanisterReject);
+    assert!(
+        message.contains("Error decoding candid"),
+        "unexpected reject message: {message}"
+    );
 }
 
 #[test]
@@ -8167,6 +8329,7 @@ fn create_canister_memory_allocation_makes_subnet_oversubscribed() {
         .set_balance(Cycles::new(1_000_000_000_000_000_000));
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
         .build();
@@ -8191,6 +8354,7 @@ fn create_canister_memory_allocation_makes_subnet_oversubscribed() {
     // There should be not enough memory for CAPACITY/2 because universal
     // canister already consumed some
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
         .build();
@@ -8227,6 +8391,7 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
         .set_balance(Cycles::new(u128::MAX));
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_compute_allocation(50)
         .build();
@@ -8249,6 +8414,7 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
     Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_compute_allocation(25)
         .build();
@@ -8272,6 +8438,7 @@ fn create_canister_computes_allocation_makes_subnet_oversubscribed() {
 
     // Create a canister with compute allocation.
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(1)
         .with_compute_allocation(30)
         .build();
@@ -8447,6 +8614,7 @@ fn create_canister_insufficient_cycles_for_memory_allocation() {
         .unwrap();
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_freezing_threshold(0) // No freezing threshold.
         .with_memory_allocation(excessive_memory)
         .build();
@@ -8639,6 +8807,7 @@ fn create_canister_reverts_round_limits_on_failure() {
             canister_change_origin_from_principal(&sender),
             Some(100_000_000_000_000),
             CanisterSettingsBuilder::new()
+                .with_log_memory_limit(NumBytes::new(0))
                 .with_compute_allocation(ComputeAllocation::try_from(50_u64).unwrap())
                 .with_memory_allocation(MemoryAllocation::from(NumBytes::new(MIB)))
                 .with_reserved_cycles_limit(Cycles::zero())
@@ -8684,6 +8853,7 @@ fn create_canister_fails_with_reserved_cycles_limit_exceeded() {
 
     // Set the memory allocation to exceed the reserved cycles limit.
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_log_memory_limit(0)
         .with_memory_allocation(1_000_000)
         .with_reserved_cycles_limit(1)
         .build();
@@ -9333,4 +9503,57 @@ fn can_retrieve_canister_metrics_for_canister_normal_schedule() {
     let canister_id = test.universal_canister().unwrap();
 
     assert_canister_metrics_can_be_retrieved(&mut test, canister_id, cost_schedule);
+}
+
+// The instructions of `upload_canister_snapshot_metadata` are charged for
+// upfront, i.e. also if the operation fails afterwards. Regression test that the
+// charge is recorded in `ConsumedCyclesForInstructions` and thus survives the
+// canister state rollback on failure, i.e. that it is re-applied to the restored
+// canister.
+#[test]
+fn failed_create_snapshot_from_metadata_charges_for_instructions() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(1_000_000_000_000_000))
+        .unwrap();
+    // Leave no subnet execution memory available, so that there is none left
+    // for the snapshot and the operation fails with `SubnetOversubscribed`.
+    test.set_available_execution_memory(0);
+
+    let args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,
+        1234,
+        vec![],
+        1 << 16,
+        1 << 16,
+        vec![],
+        None,
+        None,
+    );
+    let instructions = NumInstructions::new(
+        SchedulerConfig::application_subnet()
+            .canister_snapshot_baseline_instructions
+            .get()
+            + args.snapshot_size_bytes().get(),
+    );
+    let expected_charge = test
+        .cycles_account_manager()
+        .management_canister_cost(instructions, test.get_own_subnet_cycles_config())
+        .real();
+    assert_ne!(expected_charge, Cycles::zero());
+
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let err = test
+        .subnet_message(Method::UploadCanisterSnapshotMetadata, args.encode())
+        .unwrap_err();
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    // The operation is rolled back, so no snapshot is created and the subnet
+    // available execution memory is unchanged, but the instructions charged for
+    // upfront are charged for nonetheless.
+    assert_eq!(test.canister_state(canister_id).canister_snapshots.len(), 0);
+    assert_eq!(test.subnet_available_memory().get_execution_memory(), 0);
+    assert_eq!(balance_before - balance_after, expected_charge);
 }

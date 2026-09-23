@@ -4,6 +4,7 @@ use dashboard::DashboardTemplate;
 use ic_canister_log::log;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{AddressValidationError, validate_address_as_destination};
+use ic_cketh_minter::asset::Asset;
 use ic_cketh_minter::balance_scan::{balance_scan, min_deposit};
 use ic_cketh_minter::deposit::{refresh_latest_block_height, scrape_logs};
 use ic_cketh_minter::endpoints::ckerc20::{
@@ -14,16 +15,16 @@ use ic_cketh_minter::endpoints::events::{
 };
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DepositErc20Arg,
-    DepositErc20Error, DepositErc20Response, DepositMode, Eip1559TransactionPrice,
-    Eip1559TransactionPriceArg, Erc20Balance, Erc20MinimumDeposit, GasFeeEstimate, MinterInfo,
-    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail, WithdrawalError,
-    WithdrawalSearchParameter,
+    DepositErc20Error, DepositErc20Response, DepositEthArg, DepositEthError, DepositEthResponse,
+    DepositMode, Eip1559TransactionPrice, Eip1559TransactionPriceArg, Erc20Balance,
+    Erc20MinimumDeposit, GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus,
+    WithdrawalArg, WithdrawalDetail, WithdrawalError, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{
     EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent,
 };
-use ic_cketh_minter::guard::{deposit_erc20_guard, retrieve_withdraw_guard};
+use ic_cketh_minter::guard::{deposit_registration_guard, retrieve_withdraw_guard};
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
@@ -31,8 +32,11 @@ use ic_cketh_minter::memo::{self, BurnMemo};
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::runtime::IC_CANISTER_RUNTIME;
 use ic_cketh_minter::state::audit::{Event, EventType, process_event};
-use ic_cketh_minter::state::automatic_deposits::DepositRequest;
+use ic_cketh_minter::state::automatic_deposits::{
+    DepositRequest, DepositStatusInfo, RegisterDepositError,
+};
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
+use ic_cketh_minter::state::sweep_observations::SweepObservations;
 use ic_cketh_minter::state::transactions::{
     AuthorizedSweepItem, Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed,
     ReimbursementIndex, ReimbursementRequest, SweepRequest,
@@ -139,6 +143,10 @@ fn init(arg: MinterArg) {
                 *cell.borrow_mut() =
                     Some(State::try_from(init_arg).expect("BUG: failed to initialize minter"))
             });
+            mutate_state(|s| {
+                s.sweep_observations =
+                    SweepObservations::started_at(Timestamp::from_nanos(ic_cdk::api::time()))
+            });
         }
         MinterArg::UpgradeArg(_) => {
             ic_cdk::trap("cannot init canister state with upgrade args");
@@ -203,13 +211,37 @@ async fn minter_address() -> String {
 }
 
 #[update]
+async fn deposit_eth(arg: DepositEthArg) -> Result<DepositEthResponse, DepositEthError> {
+    let caller = validate_caller_not_anonymous();
+    // Held for the whole call, including across the ECDSA public key fetch in `arm_deposit`, so
+    // that the status check and the registration that follows it cannot be interleaved with
+    // another deposit registration from the same principal.
+    let _guard = deposit_registration_guard(caller).unwrap_or_else(|e| {
+        ic_cdk::trap(format!(
+            "Failed retrieving guard for principal {caller}: {e:?}"
+        ))
+    });
+    let subaccount = match arg.mode {
+        DepositMode::Unsponsored { subaccount } => subaccount,
+    };
+    let account = Account {
+        owner: caller,
+        subaccount,
+    };
+    Ok(DepositEthResponse::new(
+        arm_deposit(account, Asset::Eth).await?,
+        min_deposit(&Asset::Eth),
+    ))
+}
+
+#[update]
 async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, DepositErc20Error> {
     validate_ckerc20_active();
     let caller = validate_caller_not_anonymous();
-    // Held for the whole call, including across the ECDSA public key fetch below, so that the
-    // status check and the registration that follows it cannot be interleaved with another
-    // `deposit_erc20` from the same principal.
-    let _guard = deposit_erc20_guard(caller).unwrap_or_else(|e| {
+    // Held for the whole call, including across the ECDSA public key fetch in `arm_deposit`, so
+    // that the status check and the registration that follows it cannot be interleaved with
+    // another deposit registration from the same principal.
+    let _guard = deposit_registration_guard(caller).unwrap_or_else(|e| {
         ic_cdk::trap(format!(
             "Failed retrieving guard for principal {caller}: {e:?}"
         ))
@@ -233,14 +265,21 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
         owner: caller,
         subaccount,
     };
-    let request = DepositRequest::new(account, token);
-    let minimum_deposit_amount = min_deposit(&token);
+    Ok(DepositErc20Response::new(
+        arm_deposit(account, Asset::Erc20(token)).await?,
+        token,
+        min_deposit(&Asset::Erc20(token)),
+    ))
+}
+
+async fn arm_deposit(
+    account: Account,
+    asset: Asset,
+) -> Result<DepositStatusInfo, RegisterDepositError> {
+    let request = DepositRequest::new(account, asset);
     let now = Timestamp::from_nanos(ic_cdk::api::time());
 
-    if let Some(status) = read_state(|s| {
-        s.automatic_deposits
-            .deposit_status(now, &request, minimum_deposit_amount)
-    }) {
+    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &request)) {
         return Ok(status);
     }
 
@@ -253,18 +292,14 @@ async fn deposit_erc20(arg: DepositErc20Arg) -> Result<DepositErc20Response, Dep
     // after an upgrade, before the key is cached). Returning its status here keeps `register_deposit_
     // address` from trying to re-arm an already-swept pair. From here on the call is synchronous, so
     // no further scan can interleave before the registration below.
-    if let Some(status) = read_state(|s| {
-        s.automatic_deposits
-            .deposit_status(now, &request, minimum_deposit_amount)
-    }) {
+    if let Some(status) = read_state(|s| s.automatic_deposits.deposit_status(now, &request)) {
         return Ok(status);
     }
-    mutate_state(|s| s.register_deposit_address(now, account, token))?;
-    Ok(read_state(|s| {
-        s.automatic_deposits
-            .deposit_status(now, &request, minimum_deposit_amount)
-    })
-    .expect("BUG: a just-registered pair must report a Scanning status"))
+    mutate_state(|s| s.register_deposit_address(now, account, asset))?;
+    Ok(
+        read_state(|s| s.automatic_deposits.deposit_status(now, &request))
+            .expect("BUG: a just-registered pair must report a Scanning status"),
+    )
 }
 
 #[query]
@@ -339,7 +374,10 @@ async fn get_minter_info() -> MinterInfo {
                     .supported_ck_erc20_tokens()
                     .map(|token| Erc20MinimumDeposit {
                         erc20_contract_address: token.erc20_contract_address.to_string(),
-                        minimum_deposit_amount: min_deposit(&token.erc20_contract_address).into(),
+                        minimum_deposit_amount: min_deposit(&Asset::Erc20(
+                            token.erc20_contract_address,
+                        ))
+                        .into(),
                     })
                     .collect();
                 (Some(balances), Some(tokens), Some(minimum_deposit_amounts))
@@ -378,6 +416,7 @@ async fn get_minter_info() -> MinterInfo {
             ),
             erc20_balances,
             minimum_deposit_amounts,
+            minimum_eth_deposit_amount: Some(min_deposit(&Asset::Eth).into()),
             last_eth_scraped_block_number,
             last_erc20_scraped_block_number,
             last_deposit_with_subaccount_scraped_block_number,
@@ -522,6 +561,7 @@ async fn withdrawal_status(parameter: WithdrawalSearchParameter) -> Vec<Withdraw
 }
 
 #[update]
+#[allow(clippy::result_large_err)]
 async fn withdraw_erc20(
     WithdrawErc20Arg {
         amount,
@@ -885,7 +925,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                         .map(|r| CandidDepositAddressRegistration {
                             owner: r.owner,
                             subaccount: r.subaccount,
-                            erc20_contract_address: r.erc20_contract_address.to_string(),
+                            asset: r.asset.into(),
                             address: r.address.to_string(),
                             expires_at_nanos: r.expires_at_nanos.as_nanos(),
                             last_scanned_block: r.last_scanned_block.map(Into::into),
@@ -897,7 +937,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     owner: deposit.owner,
                     subaccount: deposit.subaccount,
                     address: deposit.address.to_string(),
-                    erc20_contract_address: deposit.erc20_contract_address.to_string(),
+                    asset: deposit.asset.into(),
                     last_scanned_block: deposit.last_scanned_block.into(),
                     scan_count: deposit.scan_count.into(),
                     scanned_balance: deposit.scanned_balance.into(),
@@ -1046,14 +1086,14 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 EventType::AcceptedSweepRequest(SweepRequest {
                     id,
                     destination,
-                    token,
+                    asset,
                     items,
                     max_transaction_fee,
                     created_at,
                 }) => EP::AcceptedSweepRequest {
                     sweep_id: id.0.into(),
                     destination: destination.to_string(),
-                    token: token.to_string(),
+                    asset: asset.into(),
                     items: map_authorized_sweep_items(&items),
                     max_transaction_fee: max_transaction_fee.into(),
                     created_at,
@@ -1219,6 +1259,14 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             }
         }
 
+        /// Whole seconds elapsed at `now_nanos` since `since_nanos`, or zero when there is nothing
+        /// to age.
+        fn age_seconds(now_nanos: u64, since_nanos: Option<u64>) -> f64 {
+            since_nanos
+                .map(|since_nanos| (now_nanos.saturating_sub(since_nanos) / 1_000_000_000) as f64)
+                .unwrap_or(0.0)
+        }
+
         fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
             const WASM_PAGE_SIZE_IN_BYTES: f64 = 65536.0;
 
@@ -1311,14 +1359,13 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?;
 
                 let now_nanos = ic_cdk::api::time();
-                let age_nanos = now_nanos.saturating_sub(
-                    s.withdrawal_transactions
-                        .oldest_incomplete_request_timestamp()
-                        .unwrap_or(now_nanos),
-                );
                 w.encode_gauge(
                     "cketh_oldest_incomplete_eth_withdrawal_request_age_seconds",
-                    (age_nanos / 1_000_000_000) as f64,
+                    age_seconds(
+                        now_nanos,
+                        s.withdrawal_transactions
+                            .oldest_incomplete_request_timestamp(),
+                    ),
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
@@ -1332,6 +1379,141 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_stored_authorizations",
                     s.automatic_deposits.authorizations_len() as f64,
                     "Number of delegation authorizations the minter has signed and stored.",
+                )?;
+
+                let now = Timestamp::from_nanos(now_nanos);
+                w.encode_gauge(
+                    "cketh_minter_armed_deposits",
+                    s.automatic_deposits.armed_len(now) as f64,
+                    "Number of (account, asset) pairs currently armed and being scanned for a \
+                     deposit.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_longest_armed_age_seconds",
+                    s.automatic_deposits
+                        .longest_armed_age(now)
+                        .map(|age| age.as_secs() as f64)
+                        .unwrap_or(0.0),
+                    "Age of the oldest armed pair still waiting for a deposit to be detected; 0 if \
+                     none is armed. For dashboards, not alerts: a pair armed and never funded \
+                     keeps it near the scan window, which is ordinary user behaviour.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_queued_deposits",
+                    s.automatic_deposits.sweep_len() as f64,
+                    "Detected deposits waiting for a sweep to move them.",
+                )?;
+                w.counter_vec(
+                    "cketh_minter_sweeps_finalized_total",
+                    "Sweeps that finalized, by outcome. A failed sweep moved nothing and dropped \
+                     every deposit it named, each of which has to be armed afresh.",
+                )?
+                .value(
+                    &[("status", "success")],
+                    s.automatic_deposits.successful_sweeps() as f64,
+                )?
+                .value(
+                    &[("status", "failure")],
+                    s.automatic_deposits.failed_sweeps() as f64,
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_unfinalized_sweep_age_seconds",
+                    age_seconds(now_nanos, s.automatic_deposits.oldest_unfinalized_sweep()),
+                    "Age of the oldest sweep awaiting finalization; 0 if none is outstanding.",
+                )?;
+                w.encode_counter(
+                    "cketh_minter_balance_scan_candidates_total",
+                    s.automatic_deposits.balance_scan_candidates() as f64,
+                    "Deposits the balance scan found at or above their asset's minimum, i.e. that \
+                     entered the sweep queue.",
+                )?;
+                w.counter_vec(
+                    "cketh_minter_balance_scan_chunks_total",
+                    "Balance-scan batches attempted, by outcome: `ok` returned balances, the \
+                     others yielded none. Resets on upgrade.",
+                )?
+                .value(
+                    &[("outcome", "ok")],
+                    s.sweep_observations.balance_scan_chunks_read() as f64,
+                )?
+                .value(
+                    &[("outcome", "eth_call_error")],
+                    s.sweep_observations.balance_scan_call_errors() as f64,
+                )?
+                .value(
+                    &[("outcome", "decode_error")],
+                    s.sweep_observations.balance_scan_decode_errors() as f64,
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_last_balance_scan_age_seconds",
+                    s.sweep_observations
+                        .last_balance_scan_age(now)
+                        .map(|age| age.as_secs() as f64)
+                        .unwrap_or(0.0),
+                    "Time since the last balance scan completed, or since the minter last started \
+                     if none has completed since.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_delegated_deposit_addresses",
+                    s.automatic_deposits.delegation_nonces_len() as f64,
+                    "Number of deposit addresses whose EIP-7702 delegation the minter has applied at least once.",
+                )?;
+
+                w.encode_counter(
+                    "cketh_minter_sweeper_funding_cketh_burned_total",
+                    s.sweeper_funding.cumulative_burned().as_f64(),
+                    "Cumulative ckETH burned from the fee account to prepay sweep gas.",
+                )?;
+                w.encode_counter(
+                    "cketh_minter_sweeper_funding_eth_spent_total",
+                    s.sweeper_funding.cumulative_spent().as_f64(),
+                    "Cumulative ETH debited from the minter's main address for sweeping.",
+                )?;
+                w.counter_vec(
+                    "cketh_minter_sweeper_funding_finalized_total",
+                    "Funding transactions that finalized, by outcome.",
+                )?
+                .value(
+                    &[("status", "success")],
+                    s.sweeper_funding.successful_fundings() as f64,
+                )?
+                .value(
+                    &[("status", "failure")],
+                    s.sweeper_funding.failed_fundings() as f64,
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_burned_not_yet_spent",
+                    s.sweeper_funding.burned_not_yet_spent().as_f64(),
+                    "ckETH burned for sweeping and not yet spent, i.e. how far burn runs ahead of \
+                     spend. A funding that failed on chain leaves its whole undelivered amount \
+                     here, so this jumps alongside a failure.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_gas_balance",
+                    s.sweeper_funding.sweeper_balance_lower_bound().as_f64(),
+                    "Prepaid sweep gas: a lower bound on the sweeper address' ETH balance, from the \
+                     fundings the minter recorded as finalized.",
+                )?;
+                let funding_config = s.sweeper_funding_config();
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_low_water_mark",
+                    funding_config.low_water_mark.as_f64(),
+                    "Balance below which the sweeper address is topped up.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_target",
+                    funding_config.target.as_f64(),
+                    "Balance the sweeper address is topped up to.",
+                )?;
+                w.encode_gauge(
+                    "cketh_minter_sweeper_funding_in_flight_age_seconds",
+                    age_seconds(
+                        now_nanos,
+                        s.withdrawal_transactions
+                            .outstanding_sweeper_funding()
+                            .and_then(|funding| funding.created_at),
+                    ),
+                    "Age of the sweeper funding awaiting finalization; 0 if none is outstanding.",
                 )?;
 
                 w.encode_gauge(

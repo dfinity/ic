@@ -194,7 +194,7 @@ type VetKdKeyId = record { curve: VetKdCurve; name: text };
 
 type VetKdCurve = variant { bls12_381_g2 };
 
-type EcdsaCurve = variant { secp256k1 };
+type EcdsaCurve = variant { secp256k1; secp256r1 };
 
 type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
 
@@ -306,6 +306,11 @@ type IPv4Config = record {
   prefix_length : nat32;
   gateway_ip_addr : text;
   ip_addr : text;
+};
+
+type MergeSubnetsPayload = record {
+  source_subnet : principal;
+  destination_subnet : principal;
 };
 
 type MigrateCanistersPayload = record {
@@ -646,6 +651,7 @@ service : {
   get_node_providers_monthly_xdr_rewards : (opt GetNodeProvidersMonthlyXdrRewardsRequest) -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
   get_subnet : (GetSubnetRequest) -> (GetSubnetResponse) query;
   get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (GetSubnetForCanisterResponse) query;
+  merge_subnets : (MergeSubnetsPayload) -> ();
   migrate_canisters: (MigrateCanistersPayload) -> (MigrateCanistersResponse);
   migrate_node_operator_directly : (MigrateNodeOperatorPayload) -> ();
   prepare_canister_migration : (PrepareCanisterMigrationPayload) -> ();

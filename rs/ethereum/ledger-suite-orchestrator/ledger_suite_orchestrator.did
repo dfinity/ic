@@ -49,6 +49,30 @@ type UpgradeArg = record {
    // Those ledger suites are *NOT* necessarily ckERC20 tokens.
    // This assumes that the orchestrator is a controller of all the canisters in the list.
    manage_ledger_suites: opt vec InstalledLedgerSuite;
+
+   // Upgrade argument forwarded to every managed ledger canister when upgrading it.
+   // Requires `ledger_compressed_wasm_hash` to be set, since ledger canisters are only
+   // upgraded when that field is present.
+   ledger_upgrade_arg: opt LedgerUpgradeArg;
+};
+
+// Subset of the ICRC1 ledger `UpgradeArgs` (see the ledger's Candid file) that the
+// orchestrator forwards to its managed ledger canisters.
+type LedgerUpgradeArg = record {
+    change_archive_options : opt ChangeArchiveOptions;
+};
+
+// Changes the parameters used to spawn and maintain archive canisters.
+// Same type as `ChangeArchiveOptions` in the ICRC1 ledger's Candid file.
+type ChangeArchiveOptions = record {
+    num_blocks_to_archive : opt nat64;
+    max_transactions_per_response : opt nat64;
+    trigger_threshold : opt nat64;
+    max_message_size_bytes : opt nat64;
+    cycles_for_archive_creation : opt nat64;
+    node_max_memory_size_bytes : opt nat64;
+    controller_id : opt principal;
+    more_controller_ids : opt vec principal;
 };
 
 type AddErc20Arg = record {

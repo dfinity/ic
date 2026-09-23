@@ -80,8 +80,11 @@ const MAINNET_NNS_DAPP_CANISTER_ID: &str = "qoctq-giaaa-aaaaa-aaaea-cai";
 // made on top of the current mainnet version and not including the incompatible changes.
 // After switching to `Head`/`Commit` it is then advised to switch back to `Mainnet` when the
 // changes reach mainnet NNS to avoid compatibility bugs.
+
+// TODO: Turn to `Mainnet` after #11437 reaches mainnet NNS
 const IC_REPLAY_VERSION: BinaryVersion = BinaryVersion::Head;
-const IC_RECOVERY_VERSION: BinaryVersion = BinaryVersion::Mainnet;
+// TODO: Turn to `Mainnet` after #11203 reaches mainnet NNS
+const IC_RECOVERY_VERSION: BinaryVersion = BinaryVersion::Head;
 #[allow(dead_code)]
 enum BinaryVersion {
     Mainnet,
@@ -552,6 +555,8 @@ fn ic_replay(env: &TestEnv, mut mutate_cmd: impl FnMut(&mut Command)) -> Output 
         .arg(subnet_id.to_string())
         .arg("--data-root")
         .arg(&nns_state_dir)
+        .arg("--replica-version")
+        .arg(get_mainnet_nns_revision().unwrap().to_string())
         .arg(&ic_config_file);
     mutate_cmd(&mut cmd);
     info!(logger, "{cmd:?} ...");
