@@ -74,8 +74,8 @@ comes first.
   the corresponding non-goal.
 - **Tail_Archive**: the archive a ledger currently appends to — the most recently
   created one. Earlier archives are full and no append ever stores a block in one
-  again, though Req 9.8 sends one an append that stores nothing, to have it confirm
-  blocks it already holds.
+  again, though Req 10.6 and Req 9.8 send one appends that store nothing — first to ask
+  whether it reports its range, then to have it confirm blocks it already holds.
 - **Archive_Range**: the contiguous span of global block indices an archive holds,
   from its `block_index_offset` up to but excluding its Archive_Position, **as the
   archive itself reports it** (Req 3). It is observed, not inferred.
@@ -534,11 +534,14 @@ per interval rather than work per transaction.
    non-zero metric, rather than spacing further attempts per 9.1, because no retry can
    resolve a mismatch of chain or position or a block the archive cannot parse.
 8. WHEN an archive reports per 2.6 that the blocks offered fall below its own range,
-   THE Ledger SHALL NOT halt per 9.7 and SHALL instead offer those same blocks, on a
-   later Archiving_Round, to the archive whose Published_Range covers them — or halt per
-   8.3 if none does — because this is the ordinary signal that the ledger is behind, and
-   only the archive actually holding those indices can confirm it in a way 8.9 will
-   accept, re-offering them to the same archive being a report that says nothing new.
+   THE Ledger SHALL NOT halt per 9.7 and SHALL instead offer, on a later
+   Archiving_Round and subject to 10.6, those of the same blocks that fall inside the
+   Published_Range of the archive covering the first of them — no block beyond that
+   range's end, the remainder waiting for a later round — or halt per 8.3 if no range
+   covers it, because only the archive actually holding those indices can confirm them
+   in a way 8.9 will accept, and a batch that ran past its range end would be neither
+   wholly held, so 2.9 would compare nothing, nor storable, so 8.9 could never advance
+   and the recovery would not terminate.
 9. WHEN THE Ledger is upgraded, THE Ledger SHALL permit the next Archiving_Round
    immediately rather than observing the spacing 9.1 would otherwise require, because
    an upgrade is how an operator resumes after a halt and is usually the fix for
@@ -574,6 +577,12 @@ unprotected, so that I find out from a metric instead of from a corrupted archiv
    Archive_Range, and SHALL expose a distinct count of how often it does so,
    because its archives do not implement Req 2 or Req 3 and halting would stop ICP
    archiving permanently.
+6. WHEN THE ICRC Ledger would offer blocks per 9.8 to an archive other than the
+   Tail_Archive, THE ICRC Ledger SHALL first determine, as in 10.3, that this archive
+   reports its range, and WHILE it does not SHALL offer it no blocks and SHALL expose a
+   distinct non-zero metric while remaining able to ask again, because an archive that
+   ignores the Declared_Index would append the blocks as new — the very corruption this
+   specification exists to prevent — and would reply with nothing the ledger could read.
 
 ### Requirement 11: An Unaccounted Archive Creation Halts Archiving
 
