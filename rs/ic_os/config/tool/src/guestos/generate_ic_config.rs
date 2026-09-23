@@ -463,6 +463,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_template_substitution_with_mainnet_engine_management_canister_id() {
+        let mut guestos_config = create_test_guestos_config();
+        guestos_config.icos_settings.deployment_environment = DeploymentEnvironment::Mainnet;
+        let template = get_config_vars(&guestos_config).unwrap();
+        let output_content = render_ic_config(template).unwrap();
+
+        // Mainnet takes the id from the well-known constant instead of the
+        // config, and that one has to end up quoted just the same.
+        let parsed_config: ConfigOptional = ConfigSource::Literal(output_content)
+            .load()
+            .expect("Failed to parse generated config");
+        assert_eq!(
+            parsed_config
+                .cloud_engine
+                .as_ref()
+                .unwrap()
+                .engine_management_canister_id
+                .unwrap()
+                .to_string(),
+            ic_config::cloud_engine::MAINNET_ENGINE_MANAGEMENT_CANISTER_ID
+        );
+    }
+
     fn create_test_guestos_config() -> GuestOSConfig {
         GuestOSConfig {
             network_settings: NetworkSettings {
