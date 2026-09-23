@@ -80,9 +80,10 @@ comes first.
   from its `block_index_offset` up to but excluding its Archive_Position, **as the
   archive itself reports it** (Req 3). It is observed, not inferred.
 - **Published_Range**: the span a ledger publishes for an archive through
-  `archives()`. It is the ledger's own record, derived from what archives have
-  reported, so it is not evidence about an archive on its own — Req 7.2 constrains
-  what it may say.
+  `archives()`. It is the ledger's own record — derived from what archives have
+  reported for every archive created since this change, and inferred for those that
+  predate it — so it is not evidence about an archive on its own; Req 7.2 constrains
+  what it may say, and Req 8.4 what contradicts it.
 - **Archive_Position**: the next global block index an archive expects, i.e. the
   index one past the last block it holds. Reported as `next_index`.
 - **Declared_Index**: the global index an append states its first block belongs
@@ -307,10 +308,11 @@ wrong about it.
 6. THE Archive SHALL state the outcome of an Indexed_Append explicitly alongside the
    values in 3.1, so that a ledger never has to infer which case occurred by
    comparing what it sent against what was reported.
-7. WHEN THE Archive stored some but not all of the blocks it was offered, THE Archive
-   SHALL state that as an outcome distinct from having stored all of them, because
-   `at_capacity` alone does not separate the two — a growth refused by the platform
-   reports it false (4.4) and so does a complete append (4.9).
+7. WHEN THE Archive stored fewer than all of the blocks it was offered and did not
+   already hold, THE Archive SHALL state that as an outcome distinct from the one in
+   3.8, including when it stored none of them per 4.10, because `at_capacity` alone does
+   not separate the two — a growth refused by the platform reports it false (4.4) and so
+   does a complete append (4.9).
 8. THE Archive SHALL report a single outcome for every append after which it holds
    every block it was offered and did not already hold, whether or not it already held
    some of them, all of them, or none, and whether or not it was offered any, because
@@ -448,6 +450,7 @@ no special cases.
 6. THE Ledger SHALL omit an archive that holds no blocks from the ranges it publishes
    until that archive stores its first block, because a published range is inclusive
    of both ends and an empty archive has no pair of indices that describes it.
+
 ### Requirement 8: No Block Index Ever Becomes Unretrievable
 
 **User Story:** As a client developer, I want every block index the ledger has ever
@@ -461,10 +464,13 @@ a hole.
 2. WHEN THE Archive reports an Archive_Range whose start is above the end of the
    Archived_Prefix, THE Ledger SHALL extend the Archived_Prefix only as far as
    earlier archives' reported ranges cover the intervening indices.
-3. IF the indices between the Archived_Prefix and an archive's reported range are
-   covered by no archive, THEN THE Ledger SHALL make no further archiving attempt
-   and SHALL expose a distinct non-zero metric, because advancing past them would
-   discard blocks no archive holds.
+3. IF the indices between the Archived_Prefix and an archive's reported range fall
+   outside every Published_Range THE Ledger publishes, THEN THE Ledger SHALL make no
+   further archiving attempt and SHALL expose a distinct non-zero metric, because
+   advancing past them would discard blocks no archive holds — whereas indices that do
+   fall inside some archive's Published_Range are not this case but 9.8's, where the
+   covering archive has merely not been asked yet, and halting here would pre-empt that
+   recovery.
 4. IF an archive reports an Archive_Position that is not above the last index of the
    Published_Range THE Ledger publishes for *that* archive, THEN THE Ledger SHALL make
    no further archiving attempt, SHALL discard no further blocks, and SHALL expose a
@@ -616,8 +622,9 @@ unaddressable canister does not become a series of them.
 11. THE Ledger SHALL hand over control in two steps — first adding the configured
    controllers while remaining one itself, then removing itself — so that the first
    step is verifiable by reading the archive's controller list, which it is still
-   entitled to do, and the second cannot fail in a way that matters: its only outcomes are that the ledger is still a controller and may
-   retry, or that it is not, which is the state the handover was for.
+   entitled to do, and the second cannot fail in a way that matters: its only outcomes
+   are that the ledger is still a controller and may retry, or that it is not, which is
+   the state the handover was for.
 12. WHEN a retry of the second step is refused because THE Ledger is no longer a
    controller, THE Ledger SHALL treat that archive's handover as complete and remove it
    from the count in 11.10, because the archive is then governable by the configured

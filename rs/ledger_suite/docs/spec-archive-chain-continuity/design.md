@@ -450,7 +450,9 @@ reported position. It compared the last of them per `Req 2.9`, which matters to
 `Req 8.9`'s gate — but that does not need an arm of its own, as the next section shows.
 
 `StoredPartial` is the one that breaks the post-condition, and that is exactly why it
-is separate: blocks were offered, not already held, and still not stored.
+is separate: blocks were offered, not already held, and still not stored. `Req 3.7`
+counts *fewer than all* rather than *some*, so the zero-stored case of `Req 4.10` lands
+here and not in `Stored` — which matters, because `Req 8.9`'s gate relies on it.
 
 `StoredPartial` exists because `at_capacity` cannot carry that distinction on its
 own (`Req 3.7`): a growth the platform refused reports `at_capacity = false`
@@ -1281,7 +1283,7 @@ clean sync *is* the verification.
 the chain check on the first stored block, capacity reporting, the counters, and the
 `.did`. The ledger is unchanged, so it sends no index and reads no result — which is
 why `Req 5` is in this PR and not a later one.
-*Acceptance:* `Req 1`, `Req 2`, `Req 3`, `Req 4` (4.1-4.4, 4.7, 4.8), `Req 5`,
+*Acceptance:* `Req 1`, `Req 2`, `Req 3`, `Req 4` (4.1-4.4, 4.7-4.9), `Req 5`,
 `Req 6`.
 
 *Who this lands on.* Every ICRC suite, not only the two ck ones, on each suite's own
@@ -1335,7 +1337,7 @@ criteria they except, since its archives report nothing to reconcile against.
 **PR 4 — ledger, round shape and retries.** Byte-based selection, one append per
 round, the backoff, the creation journal, the bounded calls, the allocation work and
 the comment.
-*Acceptance:* `Req 9` (9.1-9.6, 9.10), `Req 11`, `Req 12`, `Req 13`. `Req 9.5`'s
+*Acceptance:* `Req 9` (9.1-9.6, 9.9, 9.10), `Req 11`, `Req 12`, `Req 13`. `Req 9.5`'s
 reply clause is the exception: PR 2 delivers that half, and PR 4 delivers the rest of
 the criterion — the failure count and the blocks staying served.
 
