@@ -93,6 +93,7 @@ mod crypto_hash_stability {
     use crate::consensus::{RandomBeaconShare, RandomTape, RandomTapeShare};
     use crate::crypto::AlgorithmId;
     use crate::crypto::CryptoHashableTestDummy;
+    use crate::crypto::SignedBytesWithoutDomainSeparator;
     use crate::crypto::canister_threshold_sig::{
         ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
         idkg::{
@@ -453,18 +454,19 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of UpgradePermitAuthorizationRequest hash output
+    /// Test stability of the signed bytes of UpgradePermitAuthorizationRequest
     #[test]
-    fn upgrade_permit_authorization_request_stability() {
+    fn upgrade_permit_authorization_request_signed_bytes_stability() {
         let data = UpgradePermitAuthorizationRequest {
             requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
             request_height: Height::from(42),
         };
-        let hash = crypto_hash(&data);
+        let mut bytes = vec![];
+        data.write_signed_bytes_without_domain_separator(&mut bytes);
         assert_eq!(
-            hex::encode(hash.get_ref().0.as_slice()),
-            "c01cc8564217818aaedb7d2441000413c44b75e5a7769ad25b8f7f30fe9b15a4",
-            "Hash of UpgradePermitAuthorizationRequest changed"
+            hex::encode(bytes),
+            "a269726571756573746f724a2a00000000000000fd016e726571756573745f686569676874182a",
+            "Signed bytes of UpgradePermitAuthorizationRequest changed"
         );
     }
 

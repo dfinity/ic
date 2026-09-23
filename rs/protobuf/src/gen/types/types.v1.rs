@@ -1874,11 +1874,11 @@ pub mod upgrade_permit_action {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Action {
         #[prost(message, tag = "1")]
-        RequestUpgradePermit(super::RequestUpgradePermit),
+        RequestPermit(super::RequestUpgradePermit),
         #[prost(message, tag = "2")]
-        AuthorizeUpgradePermit(super::AuthorizeUpgradePermit),
+        AuthorizePermit(super::AuthorizeUpgradePermit),
         #[prost(message, tag = "3")]
-        ReturnUpgradePermit(super::ReturnUpgradePermit),
+        ReturnPermit(super::ReturnUpgradePermit),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

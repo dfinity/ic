@@ -7,7 +7,7 @@ use crate::canister_http::{
 use crate::consensus::{
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
     CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradePermitAuthorizationRequest,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradePermitAuthorizationShare,
     certification::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
@@ -70,14 +70,7 @@ mod private {
     impl CryptoHashDomainSeal for EquivocationProof {}
     impl CryptoHashDomainSeal for BlockPayload {}
 
-    impl CryptoHashDomainSeal for UpgradePermitAuthorizationRequest {}
-    impl CryptoHashDomainSeal
-        for Signed<
-            UpgradePermitAuthorizationRequest,
-            BasicSignature<UpgradePermitAuthorizationRequest>,
-        >
-    {
-    }
+    impl CryptoHashDomainSeal for UpgradePermitAuthorizationShare {}
 
     impl CryptoHashDomainSeal for RandomBeaconContent {}
     impl CryptoHashDomainSeal for Signed<RandomBeaconContent, ThresholdSignature<RandomBeaconContent>> {}
@@ -231,15 +224,7 @@ impl CryptoHashDomain for EquivocationProof {
     }
 }
 
-impl CryptoHashDomain for UpgradePermitAuthorizationRequest {
-    fn domain(&self) -> String {
-        DomainSeparator::UpgradePermitAuthorizationRequest.to_string()
-    }
-}
-
-impl CryptoHashDomain
-    for Signed<UpgradePermitAuthorizationRequest, BasicSignature<UpgradePermitAuthorizationRequest>>
-{
+impl CryptoHashDomain for UpgradePermitAuthorizationShare {
     fn domain(&self) -> String {
         DomainSeparator::UpgradePermitAuthorizationShare.to_string()
     }

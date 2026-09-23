@@ -2,16 +2,16 @@
 //!
 //! The permit flow works in three stages:
 //!
-//! 1. **Request**: A block maker includes `UpgradePermitAction::RequestUpgradePermit` in
+//! 1. **Request**: A block maker includes `UpgradePermitAction::RequestPermit` in
 //!    its block when it wants to reboot. Validators check outstanding requests
 //!    against the allowed max parallel reboots.
 //!
-//! 2. **Authorize**: After the request block is finalized, each node gossips an
+//! 2. **Authorize**: After the request block is finalized, nodes gossip an
 //!    [`UpgradePermitAuthorizationShare`]. When a block maker collects enough
-//!    shares, it includes `UpgradePermitAction::AuthorizeUpgradePermit` in its block.
+//!    shares, it includes `UpgradePermitAction::AuthorizePermit` in its block.
 //!
 //! 3. **Return**: After rebooting, the node includes
-//!    `UpgradePermitAction::ReturnUpgradePermit` to release the slot.
+//!    `UpgradePermitAction::ReturnPermit` to release the slot.
 
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
@@ -33,17 +33,17 @@ pub enum UpgradePermitAction {
     /// Request permission to reboot. The block maker requests for itself.
     /// `request_height` is the height of the block containing this request,
     /// used for timeout tracking.
-    RequestUpgradePermit(UpgradePermitAuthorizationRequest),
+    RequestPermit(UpgradePermitAuthorizationRequest),
     /// Authorize a node to reboot — the signed request and the basic
     /// signatures over it collected from the staying members.
-    AuthorizeUpgradePermit(
+    AuthorizePermit(
         Signed<
             UpgradePermitAuthorizationRequest,
             BasicSignatureBatch<UpgradePermitAuthorizationRequest>,
         >,
     ),
     /// Release a previously authorized permit (reboot complete).
-    ReturnUpgradePermit { node: NodeId },
+    ReturnPermit { node: NodeId },
 }
 
 /// UpgradePermitAuthorizationRequest holds the values that are signed in an
@@ -152,7 +152,7 @@ impl TryFrom<pb::UpgradePermitAuthorizationShare> for UpgradePermitAuthorization
 impl From<UpgradePermitAuthorizationShareId> for pb::UpgradePermitAuthorizationShareId {
     fn from(id: UpgradePermitAuthorizationShareId) -> Self {
         Self {
-            hash: id.hash.clone().get().0,
+            hash: id.hash.get().0,
             height: id.height.get(),
         }
     }
@@ -163,7 +163,7 @@ impl TryFrom<pb::UpgradePermitAuthorizationShareId> for UpgradePermitAuthorizati
 
     fn try_from(id: pb::UpgradePermitAuthorizationShareId) -> Result<Self, Self::Error> {
         Ok(Self {
-            hash: CryptoHash(id.hash.clone()).into(),
+            hash: CryptoHash(id.hash).into(),
             height: Height::from(id.height),
         })
     }

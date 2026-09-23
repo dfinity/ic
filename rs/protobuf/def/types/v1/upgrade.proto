@@ -13,9 +13,9 @@ message UpgradePayload {
 
 message UpgradePermitAction {
   oneof action {
-    RequestUpgradePermit request_upgrade_permit = 1;
-    AuthorizeUpgradePermit authorize_upgrade_permit = 2;
-    ReturnUpgradePermit return_upgrade_permit = 3;
+    RequestUpgradePermit request_permit = 1;
+    AuthorizeUpgradePermit authorize_permit = 2;
+    ReturnUpgradePermit return_permit = 3;
   }
 }
 
