@@ -601,8 +601,8 @@ async fn install_counting_canisters(env: &TestEnv) -> Vec<CanisterId> {
         retry_with_msg_async!(
             format!("Making an update call to the counter canister with id {canister_id}"),
             &env.logger(),
-            std::time::Duration::from_secs(120),
-            std::time::Duration::from_secs(5),
+            Duration::from_secs(120),
+            Duration::from_secs(5),
             || async {
                 agent
                     .get()
@@ -987,8 +987,8 @@ async fn wait_for_cup_with_subnet_id(
             node.node_id
         ),
         &env.logger(),
-        std::time::Duration::from_secs(120),
-        std::time::Duration::from_secs(5),
+        Duration::from_secs(120),
+        Duration::from_secs(5),
         || async {
             match get_cup_from_node(node, &env.logger()).await {
                 Ok(cup) if cup.content.registry_version() < minimum_registry_version => {
