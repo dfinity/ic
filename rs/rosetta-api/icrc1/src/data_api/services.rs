@@ -2290,6 +2290,88 @@ mod test {
             assert!(error.0.retriable, "{error:?}");
         }
 
+        // The same holds when the block is named by its hash, alone or together with its index,
+        // since the bound is applied to the block the identifier resolves to.
+        let hash_of = |index: usize| hex::encode(blocks[index].clone().get_block_hash());
+        for block_id in [
+            PartialBlockIdentifier {
+                index: None,
+                hash: Some(hash_of(2)),
+            },
+            PartialBlockIdentifier {
+                index: Some(2),
+                hash: Some(hash_of(2)),
+            },
+        ] {
+            let error = account_balance_with_metadata(
+                &storage_client,
+                &b.into(),
+                &Some(block_id.clone()),
+                &None,
+                metadata.decimals,
+                metadata.symbol.clone(),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(error.0.code, 14, "{block_id:?}: {error:?}");
+            assert!(error.0.retriable, "{block_id:?}: {error:?}");
+        }
+
+        // A processed block named by its hash, alone or together with its index, is answered at
+        // that block.
+        for block_id in [
+            PartialBlockIdentifier {
+                index: None,
+                hash: Some(hash_of(1)),
+            },
+            PartialBlockIdentifier {
+                index: Some(1),
+                hash: Some(hash_of(1)),
+            },
+        ] {
+            let response = account_balance_with_metadata(
+                &storage_client,
+                &b.into(),
+                &Some(block_id.clone()),
+                &None,
+                metadata.decimals,
+                metadata.symbol.clone(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(response.block_identifier.index, 1, "{block_id:?}");
+            assert_eq!(
+                response.balances[0].value.to_string(),
+                "100000",
+                "{block_id:?}"
+            );
+        }
+
+        // An index and a hash that name different blocks do not identify a block at all, so the
+        // request is rejected as an invalid block identifier whichever of the two is unprocessed.
+        for block_id in [
+            PartialBlockIdentifier {
+                index: Some(1),
+                hash: Some(hash_of(2)),
+            },
+            PartialBlockIdentifier {
+                index: Some(2),
+                hash: Some(hash_of(1)),
+            },
+        ] {
+            let error = account_balance_with_metadata(
+                &storage_client,
+                &b.into(),
+                &Some(block_id.clone()),
+                &None,
+                metadata.decimals,
+                metadata.symbol.clone(),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(error.0.code, 3, "{block_id:?}: {error:?}");
+        }
+
         // Once the balance pass has caught up, both forms answer at block 2.
         storage_client.update_account_balances().await.unwrap();
 

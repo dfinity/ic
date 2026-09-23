@@ -222,6 +222,7 @@ struct RosettaTestingEnvironmentBuilder {
     port: u16,
     icrc1_symbol: Option<String>,
     log_file_path: Option<String>,
+    store_dir: Option<String>,
 }
 
 /// Timeout for the Rosetta client to wait for transactions to be added to the blockchain.
@@ -237,6 +238,7 @@ impl RosettaTestingEnvironmentBuilder {
             port: setup.port,
             icrc1_symbol: None,
             log_file_path: None,
+            store_dir: None,
         }
     }
 
@@ -257,6 +259,12 @@ impl RosettaTestingEnvironmentBuilder {
 
     pub fn with_log_file_path(mut self, log_file_path: String) -> Self {
         self.log_file_path = Some(log_file_path);
+        self
+    }
+
+    /// Makes Rosetta use a file-backed store in the given directory instead of an in-memory one.
+    pub fn with_store_dir(mut self, store_dir: String) -> Self {
+        self.store_dir = Some(store_dir);
         self
     }
 
@@ -321,6 +329,12 @@ impl RosettaTestingEnvironmentBuilder {
                         .unwrap_or(DEFAULT_TOKEN_SYMBOL.to_string()),
                 ),
                 log_file: self.log_file_path.clone(),
+                store_type: if self.store_dir.is_some() {
+                    "file".to_owned()
+                } else {
+                    RosettaOptions::default().store_type
+                },
+                multi_tokens_store_dir: self.store_dir.clone(),
                 ..RosettaOptions::default()
             },
         )
@@ -476,6 +490,153 @@ fn test_network_options() {
         );
         assert_eq!(network_options.allow.errors.len(), 14);
         assert!(network_options.allow.historical_balance_lookup);
+    });
+}
+
+/// Rosetta must not answer `/account/balance` above the highest block for which account balances
+/// have been computed, even though `/block` already serves the higher blocks. The database is
+/// prepared with a block that has been stored but not processed, and Rosetta is started offline so
+/// that its synchronization does not process it before the queries are made.
+#[test]
+fn test_account_balance_is_not_served_above_the_highest_processed_block() {
+    use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
+    use ic_icrc_rosetta::common::storage::types::{
+        IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
+    };
+
+    let rt = Runtime::new().unwrap();
+    let setup = Setup::builder().build();
+    let store_dir = tempfile::TempDir::new().unwrap();
+
+    let a = Account {
+        owner: Principal::anonymous(),
+        subaccount: None,
+    };
+    let b = Account {
+        owner: Principal::management_canister(),
+        subaccount: None,
+    };
+    let block = |operation, timestamp, index| {
+        RosettaBlock::from_icrc_ledger_block(
+            IcrcBlock {
+                parent_hash: None,
+                transaction: IcrcTransaction {
+                    operation,
+                    created_at_time: Some(timestamp),
+                    memo: None,
+                },
+                effective_fee: None,
+                timestamp,
+                fee_collector: None,
+                fee_collector_block_index: None,
+                btype: None,
+            },
+            index,
+        )
+    };
+    // The balance of `b` is 100_000 at block 1 and 40_000 at block 2.
+    let blocks = [
+        block(
+            IcrcOperation::Mint {
+                to: a,
+                amount: Nat::from(1_000_000_u64),
+                fee: None,
+            },
+            1000,
+            0,
+        ),
+        block(
+            IcrcOperation::Transfer {
+                from: a,
+                to: b,
+                spender: None,
+                amount: Nat::from(100_000_u64),
+                fee: Some(Nat::from(10_000_u64)),
+            },
+            2000,
+            1,
+        ),
+        block(
+            IcrcOperation::Transfer {
+                from: b,
+                to: a,
+                spender: None,
+                amount: Nat::from(50_000_u64),
+                fee: Some(Nat::from(10_000_u64)),
+            },
+            3000,
+            2,
+        ),
+    ];
+
+    rt.block_on(async {
+        // Rosetta stores the database of a token in `<ledger id>.db` in the store directory.
+        {
+            let storage_client = StorageClient::new_persistent(
+                &store_dir
+                    .path()
+                    .join(format!("{}.db", setup.icrc1_ledger_canister_id)),
+            )
+            .await
+            .unwrap();
+            storage_client
+                .store_blocks(blocks[..2].to_vec())
+                .await
+                .unwrap();
+            storage_client.update_account_balances().await.unwrap();
+            storage_client
+                .store_blocks(blocks[2..].to_vec())
+                .await
+                .unwrap();
+        }
+
+        let env = RosettaTestingEnvironmentBuilder::new(&setup)
+            .with_offline_rosetta(true)
+            .with_store_dir(store_dir.path().to_str().unwrap().to_owned())
+            .build()
+            .await;
+
+        // `/block` serves the stored but unprocessed block, while `/network/status` reports the
+        // highest processed block.
+        let block_2 = env
+            .rosetta_client
+            .block(
+                env.network_identifier.clone(),
+                PartialBlockIdentifier {
+                    index: Some(2),
+                    hash: None,
+                },
+            )
+            .await
+            .expect("Unable to call block")
+            .block
+            .expect("Block 2 should be served");
+        assert_eq!(block_2.block_identifier.index, 2);
+        let network_status = env
+            .rosetta_client
+            .network_status(env.network_identifier.clone())
+            .await
+            .expect("Unable to call network_status");
+        assert_eq!(network_status.current_block_identifier.index, 1);
+
+        // A balance at the processed block is served.
+        let response = env
+            .rosetta_client
+            .account_balance(1, b.into(), env.network_identifier.clone())
+            .await
+            .expect("Unable to call account_balance");
+        assert_eq!(response.block_identifier.index, 1);
+        assert_eq!(response.balances[0].value, "100000");
+
+        // A balance at the unprocessed block is rejected with a retriable error rather than being
+        // answered with the balance at block 1 labelled as block 2.
+        let error = env
+            .rosetta_client
+            .account_balance(2, b.into(), env.network_identifier.clone())
+            .await
+            .expect_err("The balance at an unprocessed block should not be served");
+        assert_eq!(error.0.code, 14, "{error:?}");
+        assert!(error.0.retriable, "{error:?}");
     });
 }
 
