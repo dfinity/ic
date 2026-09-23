@@ -96,3 +96,94 @@ fn build<I: Identity + 'static>(
 
     Ok(agent)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_matches::assert_matches;
+    use ic_logger::no_op_logger;
+    use ic_protobuf::registry::{
+        api_boundary_node::v1::ApiBoundaryNodeRecord, node::v1::NodeRecord,
+    };
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3};
+    use ic_types::NodeId;
+
+    const VERSION: RegistryVersion = RegistryVersion::new(1);
+
+    /// A registry with one ordinary node plus the given API boundary nodes,
+    /// each carrying the domain it is paired with.
+    fn registry_with(api_boundary_nodes: &[(NodeId, Option<&str>)]) -> Arc<FakeRegistryClient> {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        // Has a domain but is no API boundary node, so it must never be used.
+        add_node(&data_provider, NODE_3, Some("replica.example.com"));
+        for (node_id, domain) in api_boundary_nodes {
+            add_api_boundary_node(&data_provider, *node_id, *domain);
+        }
+
+        let registry = Arc::new(FakeRegistryClient::new(data_provider));
+        registry.update_to_latest_version();
+
+        registry
+    }
+
+    fn add_node(data_provider: &ProtoRegistryDataProvider, node_id: NodeId, domain: Option<&str>) {
+        data_provider
+            .add(
+                &make_node_record_key(node_id),
+                VERSION,
+                Some(NodeRecord {
+                    domain: domain.map(str::to_string),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+    }
+
+    fn add_api_boundary_node(
+        data_provider: &ProtoRegistryDataProvider,
+        node_id: NodeId,
+        domain: Option<&str>,
+    ) {
+        data_provider
+            .add(
+                &make_api_boundary_node_record_key(node_id),
+                VERSION,
+                Some(ApiBoundaryNodeRecord::default()),
+            )
+            .unwrap();
+        add_node(data_provider, node_id, domain);
+    }
+
+    #[test]
+    fn an_api_boundary_node_is_addressed_by_https() {
+        let registry = registry_with(&[(NODE_1, Some("bn1.example.com"))]);
+
+        let url = random_api_boundary_node_url(registry.as_ref(), VERSION, &no_op_logger())
+            .expect("the registered API boundary node should be usable");
+
+        assert_eq!(url.as_str(), "https://bn1.example.com/");
+    }
+
+    #[test]
+    fn an_api_boundary_node_without_a_domain_is_skipped() {
+        let registry = registry_with(&[(NODE_1, None), (NODE_2, Some("bn2.example.com"))]);
+
+        let url = random_api_boundary_node_url(registry.as_ref(), VERSION, &no_op_logger())
+            .expect("the one with a domain should be used");
+
+        assert_eq!(url.as_str(), "https://bn2.example.com/");
+    }
+
+    #[test]
+    fn a_registry_without_api_boundary_nodes_has_no_url() {
+        let registry = registry_with(&[]);
+
+        assert_matches!(
+            random_api_boundary_node_url(registry.as_ref(), VERSION, &no_op_logger()),
+            Err(CloudEngineError::Failed(msg)) if msg.contains("no usable API boundary node")
+        );
+    }
+}

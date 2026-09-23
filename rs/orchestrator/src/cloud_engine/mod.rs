@@ -9,6 +9,8 @@ mod agent;
 pub(crate) mod config;
 mod discovery;
 mod error;
+#[cfg(test)]
+mod integration_tests;
 mod operator;
 
 use crate::{

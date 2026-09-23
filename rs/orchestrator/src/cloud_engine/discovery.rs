@@ -29,6 +29,9 @@ pub(super) struct Discovery {
     registry: Arc<RegistryHelper>,
     engine_management_canister_id: CanisterId,
     resolved: Option<CanisterId>,
+    /// Set only by tests, see [`Self::use_agent`].
+    #[cfg(test)]
+    agent_override: Option<Agent>,
     logger: ReplicaLogger,
 }
 
@@ -42,6 +45,8 @@ impl Discovery {
             registry,
             engine_management_canister_id,
             resolved: None,
+            #[cfg(test)]
+            agent_override: None,
             logger,
         }
     }
@@ -60,16 +65,27 @@ impl Discovery {
             return Ok(operator);
         }
 
-        let agent = agent::anonymous_via_api_boundary_node(
-            self.registry.get_registry_client(),
-            version,
-            &self.logger,
-        )?;
+        let agent = self.management_agent(version)?;
         let operator = self.lookup_operator(&agent, own_subnet).await?;
         info!(self.logger, "Resolved the engine operator: {}", operator);
         self.resolved = Some(operator);
 
         Ok(operator)
+    }
+
+    /// The engine management canister lives off this node's subnet, so it is
+    /// only reachable through an API boundary node.
+    fn management_agent(&self, version: RegistryVersion) -> CloudEngineResult<Agent> {
+        #[cfg(test)]
+        if let Some(agent) = &self.agent_override {
+            return Ok(agent.clone());
+        }
+
+        agent::anonymous_via_api_boundary_node(
+            self.registry.get_registry_client(),
+            version,
+            &self.logger,
+        )
     }
 
     /// Forgets the resolved id, so the next [`Self::resolve`] asks the engine
@@ -121,10 +137,16 @@ impl Discovery {
     }
 }
 
-/// Lets the tests of the parent module observe whether a resolved operator id
-/// survives an outcome.
 #[cfg(test)]
 impl Discovery {
+    /// Bypass the API boundary node and use the given agent directly as the test
+    /// environment doesn't provide an API BN with a valid certificate.
+    pub(super) fn use_agent(&mut self, agent: Agent) {
+        self.agent_override = Some(agent);
+    }
+
+    /// Lets the tests of the parent module observe whether a resolved operator
+    /// id survives an outcome.
     pub(super) fn remembered(&self) -> Option<CanisterId> {
         self.resolved
     }

@@ -1,0 +1,56 @@
+// A mock for the cloud engine canisters that a cloud engine node reads. One wasm
+// covers both roles (engine management canister and engine operator canister), so
+// a test installs it twice.
+//
+// The records mirror the real interfaces field for field, but only the ones
+// relevant for the orchestrator.
+
+type Error = variant {
+	Unauthorized;
+	NotFound;
+	BadRequest : text;
+	Internal : text;
+};
+
+type GetHttpGatewayConfigResult = record {
+	base_domains : opt vec text;
+	dns_api_urls : opt vec text;
+	dns_api_key : opt text;
+};
+type GetHttpGatewayConfigResponse = variant {
+	ok : GetHttpGatewayConfigResult;
+	err : Error;
+};
+
+type GetHttpGatewayAcmeCredentialsResult = record {
+	id : opt text;
+	key_pkcs8 : opt text;
+	directory : opt text;
+};
+type GetHttpGatewayAcmeCredentialsResponse = variant {
+	ok : GetHttpGatewayAcmeCredentialsResult;
+	err : Error;
+};
+
+type GetEngineOperatorBySubnetArgs = record {
+	subnet_id : opt principal;
+};
+type GetEngineOperatorBySubnetResult = record {
+	engine_operator_id : opt principal;
+};
+
+service : {
+	// The engine management canister's endpoint.
+	getEngineOperatorBySubnet : (GetEngineOperatorBySubnetArgs) -> (GetEngineOperatorBySubnetResult) query;
+
+	getHttpGatewayConfig : () -> (GetHttpGatewayConfigResponse) query;
+	getHttpGatewayAcmeCredentials : () -> (GetHttpGatewayAcmeCredentialsResponse) query;
+
+	// Test controls, not part of the real interfaces.
+	set_engine_operator : (principal, principal) -> ();
+	set_config : (GetHttpGatewayConfigResult) -> ();
+	set_acme_credentials : (GetHttpGatewayAcmeCredentialsResult) -> ();
+	// While set, both reads answer `err Unauthorized`, the way an operator
+	// that has not read its subnet's node list yet does.
+	set_unauthorized : (bool) -> ();
+};
