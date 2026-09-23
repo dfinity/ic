@@ -65,16 +65,18 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_flexible_test",
-    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
+    cpus = MIN_LOCAL_CPUS + 9 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 9 IC Node VMs (1 system + 2 * 4 app) + 1 UVM (httpbin), 6 vCPUs each.
     enable_uvm = True,
     tags = [
-        "long_test",  # since it exercises many outcall scenarios.
+        "long_test",  # since it exercises many outcall scenarios, on two subnets.
     ],
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/rust_canisters/canister_test",
+        "//rs/types/cycles",
+        "//rs/types/types",
     ],
 )
 
@@ -193,6 +195,19 @@ system_test_nns(
         "@crate_index//:reqwest",
         "@crate_index//:tokio",
     ],
+)
+
+system_test_nns(
+    name = "canister_http_unresponsive_replica_test",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
+    enable_uvm = True,
+    tags = [
+        "long_test",  # it waits out the delivered request context's timeout.
+    ],
+    runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
+        "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
+    },
+    deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
 )
 
 system_test_nns(

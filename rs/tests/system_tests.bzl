@@ -60,7 +60,7 @@ def system_test(
         If "local" the non `_local` variants will be tagged as "manual".
         If None, both the `_local` and the non `_local` variants won't be tagged as "manual" and will run by default.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
-      enable_uvm: if True, depend on the @farm_universal_vm_img for local system-tests.
+      enable_uvm: if True, depend on //rs/tests:universal_vm_img (the Universal VM disk image) for local system-tests.
       enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
       prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
       prometheus_vm_resources: a structure describing the required resources of the PrometheusVm. For example:
@@ -300,10 +300,10 @@ def system_test(
         _local_only_deps[image_name + "_PATH"] = image_path
 
     if enable_uvm:
-        _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
+        _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "//rs/tests:universal_vm_img"
 
     if enable_metrics:
-        _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
+        _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "//rs/tests:prometheus_vm_img"
 
     _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "@dnsmasq//:dnsmasq"
     _local_only_deps["ENV_DEPS__QEMU_IMG_PATH"] = "@qemu_img_prebuilt_linux_amd64//:qemu-img"
@@ -366,8 +366,11 @@ def system_test(
         },
         env_inherit = env_inherit,
         tags = tags + ["local_system_test"] + (["manual"] if backend == "farm" else []),
-        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly:
-        exec_properties = {"cpu": str(reserved_cpus)} if reserved_cpus != None else {},
+        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly.
+        # The `test.` prefix scopes the reservation to the `test` exec group, i.e. to the test action only. Without it
+        # the reservation would also apply to every other action this target owns and those would needlessly reserve
+        # `reserved_cpus` cores on an RBE worker:
+        exec_properties = {"test.cpu": str(reserved_cpus)} if reserved_cpus != None else {},
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,

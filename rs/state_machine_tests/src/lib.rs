@@ -32,7 +32,7 @@ use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
-    canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
+    canister_http::{CanisterHttpChangeAction, CanisterHttpPool, ResponseVisibility},
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
@@ -817,6 +817,8 @@ struct PocketXNetImpl {
     subnets: Arc<dyn Subnets>,
     /// The certified slice pool of the `StateMachine` for which the XNet layer is mocked.
     pool: Arc<Mutex<CertifiedSlicePool>>,
+    /// Used for validating the slices before pooling them.
+    certified_stream_store: Arc<dyn CertifiedStreamStore>,
     /// The subnet ID of the `StateMachine` for which the XNet layer is mocked.
     own_subnet_id: SubnetId,
 }
@@ -825,11 +827,13 @@ impl PocketXNetImpl {
     fn new(
         subnets: Arc<dyn Subnets>,
         pool: Arc<Mutex<CertifiedSlicePool>>,
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
         own_subnet_id: SubnetId,
     ) -> Self {
         Self {
             subnets,
             pool,
+            certified_stream_store,
             own_subnet_id,
         }
     }
@@ -853,18 +857,26 @@ impl PocketXNetImpl {
                     Ok(slice) => {
                         if indices.witness_begin != indices.msg_begin {
                             // Pulled a stream suffix, append to pooled slice.
-                            self.pool
-                                .lock()
-                                .unwrap()
-                                .append(subnet_id, slice, registry_version, log.clone())
-                                .unwrap();
+                            CertifiedSlicePool::append(
+                                &self.pool,
+                                subnet_id,
+                                slice,
+                                self.certified_stream_store.as_ref(),
+                                registry_version,
+                                &log,
+                            )
+                            .unwrap();
                         } else {
                             // Pulled a complete stream, replace pooled slice (if any).
-                            self.pool
-                                .lock()
-                                .unwrap()
-                                .put(subnet_id, slice, registry_version, log.clone())
-                                .unwrap();
+                            CertifiedSlicePool::put(
+                                &self.pool,
+                                subnet_id,
+                                slice,
+                                self.certified_stream_store.as_ref(),
+                                registry_version,
+                                &log,
+                            )
+                            .unwrap();
                         }
                     }
                     Err(EncodeStreamError::NoStreamForSubnet(_)) => (),
@@ -1780,8 +1792,8 @@ impl StateMachineBuilder {
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
         let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
         let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            certified_stream_store,
             &sm.metrics_registry,
+            sm.replica_logger.clone(),
         )));
         let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
@@ -1830,7 +1842,12 @@ impl StateMachineBuilder {
 
         // Put `PocketXNetImpl` into `StateMachine`
         // which contains no `PocketXNetImpl` after creation.
-        let pocket_xnet_impl = PocketXNetImpl::new(subnets, certified_slice_pool, subnet_id);
+        let pocket_xnet_impl = PocketXNetImpl::new(
+            subnets,
+            certified_slice_pool,
+            certified_stream_store,
+            subnet_id,
+        );
         *sm.pocket_xnet.write().unwrap() = Some(pocket_xnet_impl);
         // Instantiate a `PayloadBuilderImpl` and put it into `StateMachine`
         // which contains no `PayloadBuilderImpl` after creation.
@@ -2849,7 +2866,11 @@ impl StateMachine {
                 signature,
             };
             self.canister_http_pool.write().unwrap().apply(vec![
-                CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
+                CanisterHttpChangeAction::AddToValidated(
+                    share.clone(),
+                    response.clone(),
+                    ResponseVisibility::Withhold,
+                ),
             ]);
         }
     }
@@ -3209,7 +3230,7 @@ impl StateMachine {
         let batch = Batch {
             batch_number,
             batch_summary,
-            blockmaker_metrics,
+            blockmaker_metrics: Some(blockmaker_metrics),
             content,
             randomness: Randomness::from(seed),
             registry_version: self.registry_client.get_latest_version(),

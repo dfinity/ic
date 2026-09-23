@@ -3,6 +3,7 @@ use crate::server::ConnInfo;
 use attestation::attestation_package::{
     AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
+use attestation::attestation_report::AttestationReportExt;
 use config_types::TrustedExecutionEnvironmentConfig;
 use der::asn1::OctetStringRef;
 use guest_upgrade_shared::api::{
@@ -160,6 +161,9 @@ impl DiskEncryptionKeyExchangeServiceImpl {
                     Key::DiskEncryptionKey {
                         device_path: &self.store_device_path,
                     },
+                    my_attestation_report.launch_tcb_as_u64().map_err(|e| {
+                        Status::internal(format!("Failed to read launch TCB from report: {e:#}"))
+                    })?,
                 )
                 .map_err(|e| Status::internal(format!("Failed to get disk encryption key: {e:?}")))?
                 .into_bytes(),

@@ -64,6 +64,8 @@ fn main() -> Result<()> {
         .add_test(systest!(test))
         // This test takes consistently around 20 mintues, so setting 30 minutes to be safe.
         .with_timeout_per_test(Duration::from_secs(30 * 60))
+        // Floods the adapter on purpose, so a full adapter queue is expected here.
+        .remove_metrics_to_check("canister_http_pool_manager_errors")
         .execute_from_args()?;
 
     Ok(())

@@ -481,12 +481,12 @@ mod tests {
             let bouncer = bouncer_factory.new_bouncer(&dkg_pool);
 
             let height_500_id = DkgMessageId {
-                hash: CryptoHash(vec![0]).into(),
                 height: Height::from(500),
+                hash: CryptoHash(vec![0]).into(),
             };
             let height_1000_id = DkgMessageId {
-                hash: CryptoHash(vec![1]).into(),
                 height: Height::from(1000),
+                hash: CryptoHash(vec![1]).into(),
             };
             assert_eq!(bouncer(&height_500_id), BouncerValue::Wants);
             assert_eq!(bouncer(&height_1000_id), BouncerValue::MaybeWantsLater);
@@ -1054,7 +1054,6 @@ mod tests {
                 for dkg_id in summary.dkg.configs.keys() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                 }
-                assert_eq!(summary.dkg.transcripts_for_remote_subnets.as_ref(), None);
                 // Verify that the remote_dkg_attempts are set to `Completed`.
                 assert_eq!(
                     summary.dkg.remote_dkg_attempts.get(&target_id),

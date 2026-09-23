@@ -45,6 +45,7 @@ fn stream_encode_decode_roundtrip(
         stream_slice.header().begin(),
         stream_slice.header().end(),
         None,
+        true,
     )
     .0;
     let bytes = encode_tree(tree_encoding.clone());
@@ -83,6 +84,7 @@ fn stream_encode_with_size_limit(
         stream_slice.header().begin(),
         stream_slice.header().end(),
         Some(size_limit),
+        true,
     )
     .0;
     let bytes = encode_tree(tree_encoding.clone());
@@ -103,4 +105,53 @@ fn stream_encode_with_size_limit(
         }
         Err(e) => panic!("Failed to decode tree {tree_encoding:?}: {e}"),
     }
+}
+
+/// A zero byte limit yields a header-only slice iff `include_one` is `false`.
+#[test_strategy::proptest]
+fn stream_encode_with_strict_size_limit(
+    #[strategy(arb_stream(
+        1, // min_size
+        10, // max_size
+        0, // min_signal_count
+        10, // max_signal_count
+        MAX_SUPPORTED_CERTIFICATION_VERSION,
+    ))]
+    stream: Stream,
+) {
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+
+    let subnet = subnet_test_id(42);
+    let stream_slice: StreamSlice = stream.clone().into();
+    state.modify_streams(|streams| {
+        streams.insert(subnet, stream);
+    });
+    state.metadata.certification_version = MAX_SUPPORTED_CERTIFICATION_VERSION;
+
+    let encode = |include_one| {
+        let bytes = encode_tree(
+            encode_stream_slice(
+                &state,
+                Height::new(0),
+                subnet,
+                stream_slice.header().begin(),
+                stream_slice.header().end(),
+                Some(0),
+                include_one,
+            )
+            .0,
+        );
+        decode_stream_slice(&bytes[..])
+            .expect("failed to decode slice")
+            .1
+    };
+
+    assert_eq!(
+        None,
+        encode(false).messages().map(|messages| messages.len())
+    );
+    assert_eq!(
+        Some(1),
+        encode(true).messages().map(|messages| messages.len())
+    );
 }

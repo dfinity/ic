@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use anyhow::bail;
+use anyhow::{bail, ensure};
 use attestation::SevAttestationPackage;
 use attestation::attestation_package::SevRootCertificateVerification;
 use config_types::{
@@ -24,9 +24,13 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::add_replica_version_record;
 use ic_types::ReplicaVersion;
 use rand::RngCore;
+use sev::firmware::host::TcbVersion;
+use sev::parser::ByteParser;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
-use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
+use sev_guest_testing::{
+    DEFAULT_GENERATION, FakeAttestationReportSigner, MockSevGuestFirmwareBuilder,
+};
 use std::future::Future;
 use std::net::Ipv6Addr;
 use std::str::FromStr;
@@ -34,7 +38,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
 use tempfile::NamedTempFile;
-use vsock_lib::MockVSockClient;
+use vsock_lib::client::MockVsockClient;
 use vsock_lib::protocol::{Command, Payload};
 
 static FREE_PORT: AtomicU16 = AtomicU16::new(DEFAULT_SERVER_PORT);
@@ -52,6 +56,14 @@ const BOGUS_CUSTOM_DATA: [u8; 64] = [255; 64];
 const DEFAULT_CHIP_ID: [u8; 64] = [88; 64];
 /// Chip ID that is different from the expected one.
 const DIFFERENT_CHIP_ID: [u8; 64] = [123; 64];
+
+fn default_launch_tcb_as_u64() -> u64 {
+    u64::from_le_bytes(
+        TcbVersion::new(None, 1, 0, 0, 0)
+            .to_bytes_with(DEFAULT_GENERATION)
+            .unwrap(),
+    )
+}
 
 #[derive(Debug, Clone)]
 struct TestConfig {
@@ -183,6 +195,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
                         .server_sign_attestation_reports
                         .then_some(fake_attestation_report_signer.clone()),
                 )
+                .with_launch_tcb(TcbVersion::new(None, 1, 0, 0, 0))
                 .with_measurement(config.server_measurement),
             client_sev_firmware: MockSevGuestFirmwareBuilder::new()
                 .with_chip_id(config.client_chip_id)
@@ -212,6 +225,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             Key::DiskEncryptionKey {
                 device_path: self.store_device.path(),
             },
+            default_launch_tcb_as_u64(),
         )
         .expect("Failed to derive the served Store key")
         .into_bytes()
@@ -234,12 +248,15 @@ impl DiskEncryptionKeyExchangeTestFixture {
             .withf(move |device_path, luks_header_path, _| {
                 device_path == store_device_path && luks_header_path == store_luks_header_path
             })
-            .returning(move |_, _, _| Ok(can_open));
+            .returning(move |_, _, _| {
+                ensure!(can_open, "cannot open");
+                Ok(())
+            });
     }
 
     /// Run the key exchange test and return (server status, client status).
     async fn run_key_exchange_test(&self) -> (anyhow::Result<()>, anyhow::Result<()>) {
-        let mut vsock_client = MockVSockClient::default();
+        let mut vsock_client = MockVsockClient::default();
         let client_agent = self.create_client_agent();
 
         let (client_result_send, client_result_recv) = tokio::sync::oneshot::channel();
@@ -256,7 +273,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
                         .send(client_result)
                         .expect("Failed to send client result")
                 });
-                Ok(Payload::NoPayload)
+                Ok(Ok(Payload::NoPayload))
             });
 
         let server_agent = self.create_server_agent(vsock_client);
@@ -278,7 +295,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
 
     fn create_server_agent(
         &self,
-        vsock_client: MockVSockClient,
+        vsock_client: MockVsockClient,
     ) -> DiskEncryptionKeyExchangeServerAgent {
         let server_sev_firmware = self.server_sev_firmware.clone();
         DiskEncryptionKeyExchangeServerAgent::new(
@@ -502,7 +519,7 @@ async fn test_server_is_unreachable() {
 
 #[tokio::test]
 async fn test_server_timeout() {
-    let mut vsock_client = MockVSockClient::default();
+    let mut vsock_client = MockVsockClient::default();
 
     vsock_client
         .expect_send_command()
@@ -511,7 +528,7 @@ async fn test_server_timeout() {
         .return_once(move |_| {
             println!("Not starting upgrade client - simulating timeout");
             // Don't start the client - this will cause the server to timeout
-            Ok(Payload::NoPayload)
+            Ok(Ok(Payload::NoPayload))
         });
 
     let replica_version = ReplicaVersion::try_from(REPLICA_VERSION).unwrap();
@@ -602,7 +619,7 @@ async fn test_can_open_disk() {
 async fn test_replica_version_not_in_registry() {
     let fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
     let result = fixture
-        .create_server_agent(MockVSockClient::default())
+        .create_server_agent(MockVsockClient::default())
         .exchange_keys(&ReplicaVersion::from_str("replica_version_missing").unwrap())
         .await
         .expect_err("Key exchange should fail when the target replica version is missing");
@@ -617,13 +634,13 @@ async fn test_replica_version_not_in_registry() {
 
 #[tokio::test]
 async fn test_start_upgrade_vm_command_fails() {
-    let mut vsock_client = MockVSockClient::default();
+    let mut vsock_client = MockVsockClient::default();
 
     vsock_client
         .expect_send_command()
         .once()
         .withf(|command| matches!(command, Command::StartUpgradeGuestVM))
-        .return_once(move |_| Err("boom".to_string()));
+        .return_once(move |_| Ok(Err("boom".to_string())));
 
     let replica_version = ReplicaVersion::try_from(REPLICA_VERSION).unwrap();
     let result = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default())

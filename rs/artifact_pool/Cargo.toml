@@ -23,7 +23,7 @@ nix = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }
-serde-bytes-repr = "0.1.5"
+serde-bytes-repr = "0.3.0"
 serde_json = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }

@@ -53,7 +53,8 @@ const MAX_CODE_SIZE: usize = 24_576;
 /// [EIP-3860]: https://eips.ethereum.org/EIPS/eip-3860
 const MAX_INITCODE_SIZE: usize = 2 * MAX_CODE_SIZE;
 
-/// Maximum number of `balanceOf` sub-calls in a single deployless-batcher `eth_call`.
+/// Maximum number of entries in a single deployless-batcher `eth_call`, shared by all three
+/// batcher programs.
 ///
 /// A create-style `eth_call` is bounded at both ends: the initcode it carries is rejected beyond
 /// [`MAX_INITCODE_SIZE`] (EIP-3860), and the blob the program `RETURN`s is rejected beyond
@@ -73,6 +74,15 @@ const MAX_INITCODE_SIZE: usize = 2 * MAX_CODE_SIZE;
 /// registered pairs into chunks of this size and advances each chunk all-or-nothing, so a
 /// whole-call failure re-does that chunk on the next tick — and a chunk that always exceeds a
 /// provider limit fails *every* time, permanently stalling its pairs.
+///
+/// The value is derived from the ERC-20 encoding, yet it caps [`ETH_BATCHER_INITCODE`] and
+/// [`DELEGATION_BATCHER_INITCODE`] batches too, with margin on both ends. All three programs
+/// return one word per entry, the delegation one behind a single leading word, so the returned
+/// blob allows at least `MAX_CODE_SIZE / WORD - 1` entries; and both single-word-argument
+/// programs have a far looser initcode side than the ERC-20 one (one word per entry after a 78-
+/// resp. 84-byte program, so 1532 entries) that never binds.
+/// `full_batch_of_eth_balance_reads_fits_both_node_limits` and
+/// `full_batch_of_delegation_reads_fits_both_node_limits` pin this.
 pub const MAX_CALLS_PER_BATCH: usize = {
     let by_initcode_size = (MAX_INITCODE_SIZE - BATCHER_INITCODE.len() - WORD) / (2 * WORD);
     let by_returned_code_size = MAX_CODE_SIZE / WORD;
@@ -82,6 +92,69 @@ pub const MAX_CALLS_PER_BATCH: usize = {
         by_returned_code_size
     }
 };
+
+/// Deployless ETH balance-batcher creation bytecode.
+///
+/// The native-ETH sibling of [`BATCHER_INITCODE`], executed the same way (create-style
+/// `eth_call`, `to` omitted). It reads its inputs from the calldata appended right after this
+/// bytecode (`[n][ holder x n ]`, one 32-byte word each) and, for each holder, reads its ETH
+/// balance with the `BALANCE` opcode — no sub-calls, so unlike the ERC-20 batcher nothing here
+/// can fail and the program has no revert path. On success it returns the balances as a flat
+/// `n x 32`-byte array (no ABI array header), decoded positionally by [`decode_balance_batch`].
+///
+/// The program is fixed regardless of `n` (only the appended args grow). It was assembled from
+/// the opcode listing in `eth_initcode_matches_readable_assembly` and validated against a live
+/// anvil node; see `rs/ethereum/cketh/minter/tests/deposit_from_cex.rs`.
+pub const ETH_BATCHER_INITCODE: [u8; 78] = [
+    0x60, 0x20, 0x61, 0x00, 0x4e, 0x60, 0x00, 0x39, 0x60, 0x00, 0x60, 0x20, 0x52, 0x5b, 0x60, 0x00,
+    0x51, 0x60, 0x20, 0x51, 0x10, 0x15, 0x61, 0x00, 0x44, 0x57, 0x60, 0x20, 0x60, 0x20, 0x51, 0x60,
+    0x20, 0x02, 0x61, 0x00, 0x6e, 0x01, 0x60, 0x40, 0x39, 0x60, 0x40, 0x51, 0x31, 0x60, 0x20, 0x51,
+    0x60, 0x20, 0x02, 0x60, 0x60, 0x01, 0x52, 0x60, 0x20, 0x51, 0x60, 0x01, 0x01, 0x60, 0x20, 0x52,
+    0x61, 0x00, 0x0d, 0x56, 0x5b, 0x60, 0x00, 0x51, 0x60, 0x20, 0x02, 0x60, 0x60, 0xf3,
+];
+
+/// Deployless delegation-batcher creation bytecode.
+///
+/// The sibling of [`ETH_BATCHER_INITCODE`] reading code instead of balances, executed the same
+/// way (create-style `eth_call`, `to` omitted). It reads its inputs from the calldata appended
+/// right after this bytecode (`[n][ address x n ]`, one 32-byte word each) and, for each address,
+/// copies the first 32 bytes of its code with `EXTCODECOPY` — which zero-pads beyond the code
+/// size, so every entry is a full word whether the account holds no code, an EIP-7702 designator
+/// (23 bytes) or a contract. No sub-calls, so like the ETH batcher nothing here can fail and the
+/// program has no revert path. It returns the prefixes as a flat `n x 32`-byte array (no ABI
+/// array header) behind one zero word, classified positionally by [`decode_delegation_batch`].
+///
+/// The leading zero word is what keeps the call legal: a create-style call treats the returned
+/// blob as the code of the contract it would deploy, and [EIP-3541] rejects code whose first byte
+/// is `0xef` — the first byte of every delegation designator, so a batch starting with a delegated
+/// address would otherwise fail as a whole (`CreateContractStartingWithEF`).
+///
+/// [EIP-3541]: https://eips.ethereum.org/EIPS/eip-3541
+///
+/// The program is fixed regardless of `n` (only the appended args grow). It was assembled from
+/// the opcode listing in `delegation_initcode_matches_readable_assembly` and validated against a
+/// live anvil node; see `rs/ethereum/cketh/minter/tests/deposit_from_cex.rs`.
+pub const DELEGATION_BATCHER_INITCODE: [u8; 84] = [
+    0x60, 0x20, 0x61, 0x00, 0x54, 0x60, 0x00, 0x39, 0x60, 0x00, 0x60, 0x20, 0x52, 0x5b, 0x60, 0x00,
+    0x51, 0x60, 0x20, 0x51, 0x10, 0x15, 0x61, 0x00, 0x47, 0x57, 0x60, 0x20, 0x60, 0x20, 0x51, 0x60,
+    0x20, 0x02, 0x61, 0x00, 0x74, 0x01, 0x60, 0x40, 0x39, 0x60, 0x20, 0x60, 0x00, 0x60, 0x20, 0x51,
+    0x60, 0x20, 0x02, 0x60, 0x80, 0x01, 0x60, 0x40, 0x51, 0x3c, 0x60, 0x20, 0x51, 0x60, 0x01, 0x01,
+    0x60, 0x20, 0x52, 0x61, 0x00, 0x0d, 0x56, 0x5b, 0x60, 0x00, 0x51, 0x60, 0x01, 0x01, 0x60, 0x20,
+    0x02, 0x60, 0x60, 0xf3,
+];
+
+/// Words the delegation batcher returns ahead of the per-address prefixes: the zero word that
+/// keeps the returned blob deployable under EIP-3541.
+const DELEGATION_BATCH_LEADING_WORDS: usize = 1;
+
+/// Prefix of the code an EIP-7702 delegation designator installs at an authority, per
+/// [EIP-7702]: the code of a delegated account is exactly `0xef0100 || delegate`.
+///
+/// [EIP-7702]: https://eips.ethereum.org/EIPS/eip-7702
+const DELEGATION_DESIGNATOR_PREFIX: [u8; 3] = [0xef, 0x01, 0x00];
+
+/// Length of an EIP-7702 delegation designator: its 3-byte prefix plus the 20-byte delegate.
+const DELEGATION_DESIGNATOR_LEN: usize = DELEGATION_DESIGNATOR_PREFIX.len() + 20;
 
 /// Function selector for `balanceOf(address)`, i.e. `keccak256("balanceOf(address)")[..4]`.
 /// Embedded in [`BATCHER_INITCODE`] right after its leading `PUSH32` opcode; asserted by tests.
@@ -95,11 +168,16 @@ pub struct BalanceOfCall {
     pub holder: DepositAddress,
 }
 
-/// Error encountered while decoding a balance-batch return blob.
+/// Error encountered while decoding the return blob of a batcher program.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum BatcherDecodeError {
-    /// The return blob is not exactly `n` 32-byte words.
+    /// The return blob does not have the length the decoder expects for the entry count it was
+    /// given: one 32-byte word per entry, plus whatever fixed words the program puts ahead of
+    /// them.
     WrongLength { expected: usize, got: usize },
+    /// The entry count calls for a blob whose length does not fit in a `usize`, so no blob can
+    /// ever match it.
+    UnrepresentableLength { entries: usize },
 }
 
 /// Build the create-call `input` for a batch of `balanceOf` sub-calls:
@@ -115,15 +193,30 @@ pub fn encode_balance_batch(calls: &[BalanceOfCall]) -> Vec<u8> {
     out
 }
 
-/// Decode the flat `n x 32`-byte return blob into `n` balances, in call order.
+/// Build the create-call `input` for a batch of ETH balance reads:
+/// `ETH_BATCHER_INITCODE ++ [n] ++ [ holder x n ]`, every value a 32-byte word.
+pub fn encode_eth_balance_batch(holders: &[DepositAddress]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(ETH_BATCHER_INITCODE.len() + WORD * (1 + holders.len()));
+    out.extend_from_slice(&ETH_BATCHER_INITCODE);
+    out.extend_from_slice(&word_from_usize(holders.len()));
+    for holder in holders {
+        out.extend_from_slice(&left_padded_address(holder.as_address()));
+    }
+    out
+}
+
+/// Decode the flat `n x 32`-byte return blob of either batcher into `n` balances, in call order.
 ///
-/// Every entry is a genuine `balanceOf` result: the batcher reverts the whole
-/// call if any sub-call fails, so a successful return means all `n` balances are
-/// present (a failed batch surfaces as an `eth_call` error upstream, never as a
-/// `0` here). Returns `Err` if the blob length is not exactly `n` words; never
-/// panics.
+/// Every entry is a genuine balance, never a `0` standing in for a failure, because neither
+/// program can return a partial result: [`BATCHER_INITCODE`] reverts the whole call if any
+/// `balanceOf` sub-call fails, and [`ETH_BATCHER_INITCODE`] has no failure path at all — the
+/// `BALANCE` opcode makes no sub-calls. A failed batch therefore surfaces as an `eth_call` error
+/// upstream, never as a `0` here. Returns `Err` if the blob length is not exactly `n` words, or if
+/// `n` is so large that that length does not fit in a `usize`; never panics.
 pub fn decode_balance_batch(ret: &[u8], n: usize) -> Result<Vec<Erc20Value>, BatcherDecodeError> {
-    let expected = n * WORD;
+    let expected = n
+        .checked_mul(WORD)
+        .ok_or(BatcherDecodeError::UnrepresentableLength { entries: n })?;
     if ret.len() != expected {
         return Err(BatcherDecodeError::WrongLength {
             expected,
@@ -138,6 +231,94 @@ pub fn decode_balance_batch(ret: &[u8], n: usize) -> Result<Vec<Erc20Value>, Bat
         balances.push(Erc20Value::from_be_bytes(word));
     }
     Ok(balances)
+}
+
+/// What the code at a deposit address says about its EIP-7702 delegation.
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+pub enum Delegation {
+    /// The address holds no code, so no delegation is installed.
+    NotDelegated,
+    /// The address holds an EIP-7702 delegation designator naming this delegate.
+    Delegated(Address),
+    /// The address holds code that is not a delegation designator, i.e. a deployed contract.
+    /// Such an address must never be swept: a tuple cannot be applied to it.
+    Other,
+}
+
+/// Build the create-call `input` for a batch of delegation reads:
+/// `DELEGATION_BATCHER_INITCODE ++ [n] ++ [ address x n ]`, every value a 32-byte word.
+pub fn encode_delegation_batch(addresses: &[DepositAddress]) -> Vec<u8> {
+    let mut out =
+        Vec::with_capacity(DELEGATION_BATCHER_INITCODE.len() + WORD * (1 + addresses.len()));
+    out.extend_from_slice(&DELEGATION_BATCHER_INITCODE);
+    out.extend_from_slice(&word_from_usize(addresses.len()));
+    for address in addresses {
+        out.extend_from_slice(&left_padded_address(address.as_address()));
+    }
+    out
+}
+
+/// Decode the return blob of [`DELEGATION_BATCHER_INITCODE`] — one leading zero word, then
+/// `address_count x 32` bytes — into `address_count` delegations, in call order.
+///
+/// Each word after the first is the first 32 bytes of an account's code, zero-padded beyond its
+/// size. The accounts read are [`DepositAddress`]es, whose address is the hash of a public key
+/// the minter derives, never the hash of a deployer and nonce or of `CREATE2` inputs, so no
+/// contract can be deployed at one and the only code such an account can ever hold is a
+/// delegation designator. That classifies each word unambiguously:
+/// * an all-zero word means no code at all, hence no delegation;
+/// * `0xef0100 || delegate || 9 zero bytes` is a code of exactly 23 bytes whose only possible
+///   origin is an applied [EIP-7702] authorization tuple, since [EIP-3541] keeps every deployed
+///   contract out of the `0xef` space;
+/// * anything else is deployed contract code.
+///
+/// Returns `Err` if the blob length is not exactly `address_count + 1` words, or if
+/// `address_count` is so large that that length does not fit in a `usize`; never panics.
+///
+/// The first classification rests on the account being a deposit address and does not generalize:
+/// [EIP-3541] reserves only the `0xef` prefix, so a contract whose runtime code starts with 32
+/// zero bytes — `STOP` padded out, say — would read as [`Delegation::NotDelegated`] here.
+///
+/// [EIP-3541]: https://eips.ethereum.org/EIPS/eip-3541
+/// [EIP-7702]: https://eips.ethereum.org/EIPS/eip-7702
+pub fn decode_delegation_batch(
+    returned_blob: &[u8],
+    address_count: usize,
+) -> Result<Vec<Delegation>, BatcherDecodeError> {
+    let expected = DELEGATION_BATCH_LEADING_WORDS
+        .checked_add(address_count)
+        .and_then(|words| words.checked_mul(WORD))
+        .ok_or(BatcherDecodeError::UnrepresentableLength {
+            entries: address_count,
+        })?;
+    if returned_blob.len() != expected {
+        return Err(BatcherDecodeError::WrongLength {
+            expected,
+            got: returned_blob.len(),
+        });
+    }
+    Ok(returned_blob[DELEGATION_BATCH_LEADING_WORDS * WORD..]
+        .as_chunks::<WORD>()
+        .0
+        .iter()
+        .map(classify_code_prefix)
+        .collect())
+}
+
+fn classify_code_prefix(prefix: &[u8; WORD]) -> Delegation {
+    if prefix.iter().all(|byte| *byte == 0) {
+        return Delegation::NotDelegated;
+    }
+    let (designator, padding) = prefix.split_at(DELEGATION_DESIGNATOR_LEN);
+    let is_designator = designator.starts_with(&DELEGATION_DESIGNATOR_PREFIX)
+        && padding.iter().all(|byte| *byte == 0);
+    if !is_designator {
+        return Delegation::Other;
+    }
+    let delegate: [u8; 20] = designator[DELEGATION_DESIGNATOR_PREFIX.len()..]
+        .try_into()
+        .expect("BUG: a designator holds exactly 20 address bytes");
+    Delegation::Delegated(Address::new(delegate))
 }
 
 fn left_padded_address(address: &Address) -> [u8; WORD] {
