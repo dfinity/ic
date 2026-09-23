@@ -310,7 +310,7 @@ mockall::mock! {
             &self, message: &CanisterHttpResponseReceipt,
         ) -> CryptoResult<BasicSigOf<CanisterHttpResponseReceipt>>;
 
-        pub fn sign_basic_upgrade_permit_auth(
+        pub fn sign_basic_upgrade_permit_authorization_request(
             &self, message: &UpgradePermitAuthorizationRequest,
         ) -> CryptoResult<BasicSigOf<UpgradePermitAuthorizationRequest>>;
 
@@ -495,27 +495,27 @@ mockall::mock! {
         ) -> CryptoResult<()>;
 
         // UpgradePermitAuthorizationRequest
-        pub fn verify_basic_sig_upgrade_permit_auth(
+        pub fn verify_basic_sig_upgrade_permit_authorization_request(
             &self,
             signature: &BasicSigOf<UpgradePermitAuthorizationRequest>,
             message: &UpgradePermitAuthorizationRequest, signer: NodeId,
             registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
-        pub fn combine_basic_sig_upgrade_permit_auth(
+        pub fn combine_basic_sig_upgrade_permit_authorization_request(
             &self,
             signatures: BTreeMap<NodeId, BasicSigOf<UpgradePermitAuthorizationRequest>>,
             registry_version: RegistryVersion,
         ) -> CryptoResult<BasicSignatureBatch<UpgradePermitAuthorizationRequest>>;
 
-        pub fn verify_basic_sig_batch_upgrade_permit_auth(
+        pub fn verify_basic_sig_batch_upgrade_permit_authorization_request(
             &self,
             signature_batch: &BasicSignatureBatch<UpgradePermitAuthorizationRequest>,
             message: &UpgradePermitAuthorizationRequest,
             registry_version: RegistryVersion,
         ) -> CryptoResult<()>;
 
-        pub fn verify_basic_sig_batch_multi_msg_upgrade_permit_auth(
+        pub fn verify_basic_sig_batch_multi_msg_upgrade_permit_authorization_request(
             &self,
             inputs: Vec<(
                 NodeId,
@@ -823,7 +823,7 @@ impl_basic_signer!(IDkgOpeningContent, sign_basic_idkg_opening);
 impl_basic_signer!(CanisterHttpResponseReceipt, sign_basic_http);
 impl_basic_signer!(
     UpgradePermitAuthorizationRequest,
-    sign_basic_upgrade_permit_auth
+    sign_basic_upgrade_permit_authorization_request
 );
 impl_basic_signer!(QueryResponseHash, sign_basic_query);
 
@@ -878,10 +878,10 @@ impl_basic_sig_verifier!(
 );
 impl_basic_sig_verifier!(
     UpgradePermitAuthorizationRequest,
-    verify_basic_sig_upgrade_permit_auth,
-    combine_basic_sig_upgrade_permit_auth,
-    verify_basic_sig_batch_upgrade_permit_auth,
-    verify_basic_sig_batch_multi_msg_upgrade_permit_auth
+    verify_basic_sig_upgrade_permit_authorization_request,
+    combine_basic_sig_upgrade_permit_authorization_request,
+    verify_basic_sig_batch_upgrade_permit_authorization_request,
+    verify_basic_sig_batch_multi_msg_upgrade_permit_authorization_request
 );
 
 impl_threshold_signer!(CertificationContent, sign_threshold_certification);

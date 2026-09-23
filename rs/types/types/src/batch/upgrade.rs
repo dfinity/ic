@@ -1,18 +1,17 @@
 use ic_base_types::NumBytes;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
-use pb::upgrade_action::Action;
+use pb::upgrade_permit_action::Action;
 use prost::Message as _;
-use prost::encoding::encoded_len_varint;
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::consensus::UpgradePermitAuthorizationRequest;
 use crate::consensus::upgrade::UpgradePermitAction;
+use crate::crypto::Signed;
 use crate::signature::{BasicSignature, BasicSignatureBatch};
 
 /// The upgrade permit actions of a block's batch payload.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub struct UpgradePayload {
     pub actions: Vec<UpgradePermitAction>,
 }
@@ -27,11 +26,11 @@ impl UpgradePayload {
         let mut proto = pb::UpgradePayload::default();
         let mut remaining = byte_limit.get() as usize;
         for action in &self.actions {
-            let entry = pb::UpgradeAction::from(action);
+            let entry = pb::UpgradePermitAction::from(action);
             // One repeated field entry: the key, the varint length, and the
             // message bytes.
-            let entry_len =
-                1 + encoded_len_varint(entry.encoded_len() as u64) + entry.encoded_len();
+            let len = entry.encoded_len();
+            let entry_len = 1 + prost::length_delimiter_len(len) + len;
             if entry_len > remaining {
                 continue;
             }
@@ -55,33 +54,37 @@ impl UpgradePayload {
     }
 }
 
-impl From<&UpgradePermitAction> for pb::UpgradeAction {
+impl From<&UpgradePermitAction> for pb::UpgradePermitAction {
     fn from(action: &UpgradePermitAction) -> Self {
         let proto_action = match action {
-            UpgradePermitAction::Request(request) => {
-                Action::RequestPermit(pb::RequestUpgradePermit {
-                    request: Some(pb::UpgradePermitRequest::from(request)),
+            UpgradePermitAction::RequestUpgradePermit(request) => {
+                Action::RequestUpgradePermit(pb::RequestUpgradePermit {
+                    request: Some(pb::UpgradePermitAuthorizationRequest::from(request)),
                 })
             }
-            UpgradePermitAction::Authorize {
-                request,
-                signatures,
-            } => Action::AuthorizePermit(pb::AuthorizeUpgradePermit {
-                request: Some(pb::UpgradePermitRequest::from(request)),
-                signatures: signatures
-                    .signatures_map
-                    .iter()
-                    .map(|(signer, signature)| {
-                        pb::BasicSignature::from(BasicSignature {
-                            signature: signature.clone(),
-                            signer: *signer,
+            UpgradePermitAction::AuthorizeUpgradePermit(authorization) => {
+                Action::AuthorizeUpgradePermit(pb::AuthorizeUpgradePermit {
+                    request: Some(pb::UpgradePermitAuthorizationRequest::from(
+                        &authorization.content,
+                    )),
+                    signatures: authorization
+                        .signature
+                        .signatures_map
+                        .iter()
+                        .map(|(signer, signature)| {
+                            pb::BasicSignature::from(BasicSignature {
+                                signature: signature.clone(),
+                                signer: *signer,
+                            })
                         })
-                    })
-                    .collect(),
-            }),
-            UpgradePermitAction::Return { node } => Action::ReturnPermit(pb::ReturnUpgradePermit {
-                node: Some(crate::node_id_into_protobuf(*node)),
-            }),
+                        .collect(),
+                })
+            }
+            UpgradePermitAction::ReturnUpgradePermit { node } => {
+                Action::ReturnUpgradePermit(pb::ReturnUpgradePermit {
+                    node: Some(crate::node_id_into_protobuf(*node)),
+                })
+            }
         };
         Self {
             action: Some(proto_action),
@@ -89,28 +92,31 @@ impl From<&UpgradePermitAction> for pb::UpgradeAction {
     }
 }
 
-impl TryFrom<pb::UpgradeAction> for UpgradePermitAction {
+impl TryFrom<pb::UpgradePermitAction> for UpgradePermitAction {
     type Error = ProxyDecodeError;
 
-    fn try_from(proto: pb::UpgradeAction) -> Result<Self, Self::Error> {
-        let action = proto
-            .action
-            .ok_or(ProxyDecodeError::MissingField("UpgradeAction::action"))?;
+    fn try_from(proto: pb::UpgradePermitAction) -> Result<Self, Self::Error> {
+        let action = proto.action.ok_or(ProxyDecodeError::MissingField(
+            "UpgradePermitAction::action",
+        ))?;
         Ok(match action {
-            Action::RequestPermit(request) => UpgradePermitAction::Request(try_from_option_field(
-                request.request,
-                "RequestUpgradePermit::request",
-            )?),
-            Action::AuthorizePermit(authorize) => UpgradePermitAction::Authorize {
-                request: try_from_option_field(
-                    authorize.request,
-                    "AuthorizeUpgradePermit::request",
-                )?,
-                signatures: signature_batch(authorize.signatures)?,
-            },
-            Action::ReturnPermit(return_permit) => UpgradePermitAction::Return {
-                node: crate::node_id_try_from_option(return_permit.node)?,
-            },
+            Action::RequestUpgradePermit(request) => UpgradePermitAction::RequestUpgradePermit(
+                try_from_option_field(request.request, "RequestUpgradePermit::request")?,
+            ),
+            Action::AuthorizeUpgradePermit(authorize) => {
+                UpgradePermitAction::AuthorizeUpgradePermit(Signed {
+                    content: try_from_option_field(
+                        authorize.request,
+                        "AuthorizeUpgradePermit::request",
+                    )?,
+                    signature: signature_batch(authorize.signatures)?,
+                })
+            }
+            Action::ReturnUpgradePermit(return_permit) => {
+                UpgradePermitAction::ReturnUpgradePermit {
+                    node: crate::node_id_try_from_option(return_permit.node)?,
+                }
+            }
         })
     }
 }
@@ -123,14 +129,13 @@ fn signature_batch(
     let mut signatures_map = BTreeMap::new();
     for signature in signatures {
         let signature: BasicSignature<UpgradePermitAuthorizationRequest> = signature.try_into()?;
-        if signatures_map
-            .insert(signature.signer, signature.signature)
-            .is_some()
-        {
+        if let Some(previous) = signatures_map.insert(signature.signer, signature.signature) {
+            // Unwrap is fine, entry has just been inserted
+            let new = signatures_map.get(&signature.signer).unwrap();
             return Err(ProxyDecodeError::DuplicateEntry {
                 key: format!("{:?}", signature.signer),
-                v1: "signature".to_string(),
-                v2: "signature".to_string(),
+                v1: format!("{previous:?}"),
+                v2: format!("{new:?}"),
             });
         }
     }
@@ -158,7 +163,7 @@ mod tests {
     #[test]
     fn test_round_trip_request() {
         round_trip(UpgradePayload {
-            actions: vec![UpgradePermitAction::Request(
+            actions: vec![UpgradePermitAction::RequestUpgradePermit(
                 UpgradePermitAuthorizationRequest {
                     requestor: node(3),
                     request_height: Height::new(42),
@@ -170,22 +175,22 @@ mod tests {
     #[test]
     fn test_round_trip_authorize() {
         round_trip(UpgradePayload {
-            actions: vec![UpgradePermitAction::Authorize {
-                request: UpgradePermitAuthorizationRequest {
+            actions: vec![UpgradePermitAction::AuthorizeUpgradePermit(Signed {
+                content: UpgradePermitAuthorizationRequest {
                     requestor: node(5),
                     request_height: Height::new(3),
                 },
-                signatures: BasicSignatureBatch {
+                signature: BasicSignatureBatch {
                     signatures_map: BTreeMap::new(),
                 },
-            }],
+            })],
         });
     }
 
     #[test]
     fn test_round_trip_return() {
         round_trip(UpgradePayload {
-            actions: vec![UpgradePermitAction::Return { node: node(7) }],
+            actions: vec![UpgradePermitAction::ReturnUpgradePermit { node: node(7) }],
         });
     }
 
@@ -198,7 +203,7 @@ mod tests {
     fn test_serialize_with_limit_drops_overflow() {
         // A limit of 0 cannot fit any action, so nothing is serialized.
         let payload = UpgradePayload {
-            actions: vec![UpgradePermitAction::Return { node: node(1) }],
+            actions: vec![UpgradePermitAction::ReturnUpgradePermit { node: node(1) }],
         };
         assert!(payload.serialize_with_limit(NumBytes::new(0)).is_empty());
     }
@@ -209,23 +214,23 @@ mod tests {
         // action after it still does.
         let payload = UpgradePayload {
             actions: vec![
-                UpgradePermitAction::Authorize {
-                    request: UpgradePermitAuthorizationRequest {
+                UpgradePermitAction::AuthorizeUpgradePermit(Signed {
+                    content: UpgradePermitAuthorizationRequest {
                         requestor: node(1),
                         request_height: Height::new(4),
                     },
-                    signatures: BasicSignatureBatch {
+                    signature: BasicSignatureBatch {
                         signatures_map: BTreeMap::from([(
                             node(2),
                             BasicSigOf::new(BasicSig(vec![0x42; 64])),
                         )]),
                     },
-                },
-                UpgradePermitAction::Return { node: node(3) },
+                }),
+                UpgradePermitAction::ReturnUpgradePermit { node: node(3) },
             ],
         };
         let return_entry_len = UpgradePayload {
-            actions: vec![UpgradePermitAction::Return { node: node(3) }],
+            actions: vec![UpgradePermitAction::ReturnUpgradePermit { node: node(3) }],
         }
         .serialize_with_limit(NumBytes::new(u64::MAX))
         .len();
@@ -233,7 +238,7 @@ mod tests {
         let decoded = UpgradePayload::deserialize(&bytes).unwrap();
         assert_eq!(
             decoded.actions,
-            vec![UpgradePermitAction::Return { node: node(3) }]
+            vec![UpgradePermitAction::ReturnUpgradePermit { node: node(3) }]
         );
     }
 
@@ -241,20 +246,20 @@ mod tests {
     fn test_round_trip_multiple_actions() {
         round_trip(UpgradePayload {
             actions: vec![
-                UpgradePermitAction::Request(UpgradePermitAuthorizationRequest {
+                UpgradePermitAction::RequestUpgradePermit(UpgradePermitAuthorizationRequest {
                     requestor: node(1),
                     request_height: Height::new(10),
                 }),
-                UpgradePermitAction::Authorize {
-                    request: UpgradePermitAuthorizationRequest {
+                UpgradePermitAction::AuthorizeUpgradePermit(Signed {
+                    content: UpgradePermitAuthorizationRequest {
                         requestor: node(2),
                         request_height: Height::new(4),
                     },
-                    signatures: BasicSignatureBatch {
+                    signature: BasicSignatureBatch {
                         signatures_map: BTreeMap::new(),
                     },
-                },
-                UpgradePermitAction::Return { node: node(3) },
+                }),
+                UpgradePermitAction::ReturnUpgradePermit { node: node(3) },
             ],
         });
     }

@@ -73,15 +73,15 @@ pub trait Crypto:
     // IDkgOpeningContent
     + BasicSigner<IDkgOpeningContent>
     + BasicSigVerifier<IDkgOpeningContent>
-    // UpgradePermitAuthorizationRequest
-    + BasicSigner<UpgradePermitAuthorizationRequest>
-    + BasicSigVerifier<UpgradePermitAuthorizationRequest>
     + IDkgProtocol
     + ThresholdEcdsaSigner
     + ThresholdEcdsaSigVerifier
     + ThresholdSchnorrSigner
     + ThresholdSchnorrSigVerifier
     + VetKdProtocol
+    // UpgradePermitAuthorizationRequest
+    + BasicSigner<UpgradePermitAuthorizationRequest>
+    + BasicSigVerifier<UpgradePermitAuthorizationRequest>
     // CanisterHttpResponse
     + BasicSigner<CanisterHttpResponseReceipt>
     + BasicSigVerifier<CanisterHttpResponseReceipt>
@@ -144,8 +144,6 @@ impl<T> Crypto for T where
         + BasicSigVerifier<IDkgComplaintContent>
         + BasicSigner<IDkgOpeningContent>
         + BasicSigVerifier<IDkgOpeningContent>
-        + BasicSigner<UpgradePermitAuthorizationRequest>
-        + BasicSigVerifier<UpgradePermitAuthorizationRequest>
         + BasicSigner<CanisterHttpResponseReceipt>
         + BasicSigVerifier<CanisterHttpResponseReceipt>
         + BasicSigner<QueryResponseHash>
@@ -155,6 +153,8 @@ impl<T> Crypto for T where
         + ThresholdSchnorrSigner
         + ThresholdSchnorrSigVerifier
         + VetKdProtocol
+        + BasicSigner<UpgradePermitAuthorizationRequest>
+        + BasicSigVerifier<UpgradePermitAuthorizationRequest>
         + BasicSigVerifierByPublicKey<MessageId>
         + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
         + ThresholdSigner<CatchUpContent>

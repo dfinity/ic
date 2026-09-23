@@ -8,28 +8,28 @@ import "types/v1/signature.proto";
 import "types/v1/types.proto";
 
 message UpgradePayload {
-  repeated UpgradeAction actions = 1;
+  repeated UpgradePermitAction actions = 1;
 }
 
-message UpgradeAction {
+message UpgradePermitAction {
   oneof action {
-    RequestUpgradePermit request_permit = 1;
-    AuthorizeUpgradePermit authorize_permit = 2;
-    ReturnUpgradePermit return_permit = 3;
+    RequestUpgradePermit request_upgrade_permit = 1;
+    AuthorizeUpgradePermit authorize_upgrade_permit = 2;
+    ReturnUpgradePermit return_upgrade_permit = 3;
   }
 }
 
-message UpgradePermitRequest {
+message UpgradePermitAuthorizationRequest {
   types.v1.NodeId requestor = 1;
   uint64 request_height = 2;
 }
 
 message RequestUpgradePermit {
-  UpgradePermitRequest request = 1;
+  UpgradePermitAuthorizationRequest request = 1;
 }
 
 message AuthorizeUpgradePermit {
-  UpgradePermitRequest request = 1;
+  UpgradePermitAuthorizationRequest request = 1;
   repeated types.v1.BasicSignature signatures = 2;
 }
 
@@ -38,6 +38,6 @@ message ReturnUpgradePermit {
 }
 
 message UpgradePermitAuthorizationShare {
-  UpgradePermitRequest request = 1;
+  UpgradePermitAuthorizationRequest request = 1;
   types.v1.BasicSignature signature = 2;
 }

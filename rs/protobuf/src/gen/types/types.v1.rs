@@ -1317,7 +1317,7 @@ pub struct DkgMessageId {
     pub height: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct UpgradePermitAuthMessageId {
+pub struct UpgradePermitAuthorizationShareId {
     #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "2")]
@@ -1862,27 +1862,27 @@ impl ChainKeyErrorCode {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpgradePayload {
     #[prost(message, repeated, tag = "1")]
-    pub actions: ::prost::alloc::vec::Vec<UpgradeAction>,
+    pub actions: ::prost::alloc::vec::Vec<UpgradePermitAction>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct UpgradeAction {
-    #[prost(oneof = "upgrade_action::Action", tags = "1, 2, 3")]
-    pub action: ::core::option::Option<upgrade_action::Action>,
+pub struct UpgradePermitAction {
+    #[prost(oneof = "upgrade_permit_action::Action", tags = "1, 2, 3")]
+    pub action: ::core::option::Option<upgrade_permit_action::Action>,
 }
-/// Nested message and enum types in `UpgradeAction`.
-pub mod upgrade_action {
+/// Nested message and enum types in `UpgradePermitAction`.
+pub mod upgrade_permit_action {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Action {
         #[prost(message, tag = "1")]
-        RequestPermit(super::RequestUpgradePermit),
+        RequestUpgradePermit(super::RequestUpgradePermit),
         #[prost(message, tag = "2")]
-        AuthorizePermit(super::AuthorizeUpgradePermit),
+        AuthorizeUpgradePermit(super::AuthorizeUpgradePermit),
         #[prost(message, tag = "3")]
-        ReturnPermit(super::ReturnUpgradePermit),
+        ReturnUpgradePermit(super::ReturnUpgradePermit),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct UpgradePermitRequest {
+pub struct UpgradePermitAuthorizationRequest {
     #[prost(message, optional, tag = "1")]
     pub requestor: ::core::option::Option<NodeId>,
     #[prost(uint64, tag = "2")]
@@ -1891,12 +1891,12 @@ pub struct UpgradePermitRequest {
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RequestUpgradePermit {
     #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<UpgradePermitRequest>,
+    pub request: ::core::option::Option<UpgradePermitAuthorizationRequest>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizeUpgradePermit {
     #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<UpgradePermitRequest>,
+    pub request: ::core::option::Option<UpgradePermitAuthorizationRequest>,
     #[prost(message, repeated, tag = "2")]
     pub signatures: ::prost::alloc::vec::Vec<BasicSignature>,
 }
@@ -1908,7 +1908,7 @@ pub struct ReturnUpgradePermit {
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct UpgradePermitAuthorizationShare {
     #[prost(message, optional, tag = "1")]
-    pub request: ::core::option::Option<UpgradePermitRequest>,
+    pub request: ::core::option::Option<UpgradePermitAuthorizationRequest>,
     #[prost(message, optional, tag = "2")]
     pub signature: ::core::option::Option<BasicSignature>,
 }
