@@ -1435,6 +1435,7 @@ impl CanisterManager {
         // settings and recording the `canister_creation` canister history entry
         // change w.r.t. it.
         let canister_snapshot = new_canister.clone();
+        debug_assert_eq!(canister_snapshot.memory_usage(), NumBytes::new(0));
         // Canister creation's first-time log memory buffer allocation is a
         // different event class from user-triggered resize: it starts from an
         // empty log store, so the resize records zero instructions. Use a
@@ -1822,9 +1823,6 @@ impl CanisterManager {
     // `CanisterManagerResponse::instructions_to_charge_on_success` when it is invoked
     // by `execute_mgmt_operation_on_canister`, so a failing operation is not charged
     // for them.
-    //
-    // `round_limits` are updated in-place (both the subnet available memory and the
-    // instructions) and the caller must revert them in case of `Err`.
     pub(crate) fn cycles_and_memory_usage_checks_and_updates(
         &self,
         canister: &mut CanisterState,
