@@ -1524,7 +1524,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 ];
                 w.gauge_vec(
                     "cketh_minter_receipt_fetch_window",
-                    "Pipeline ids the next finalization round fetches receipts for, per pipeline.",
+                    "Maximum pipeline ids one finalization round fetches receipts for, per pipeline.",
                 )?
                 .value(
                     &[("pipeline", "withdrawal")],
