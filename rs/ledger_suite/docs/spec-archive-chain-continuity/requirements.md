@@ -326,10 +326,16 @@ wrong about it.
    Archive_Position — and 3.9's count with the number of blocks offered already
    separates the cases that differ.
 9. THE Archive SHALL report how many of the blocks it was offered it stored, because
-   8.9 turns on whether any block was verified and no outcome of Req 2 settles that on
-   its own — an append carrying nothing per 3.5, one whose first block did not fit per
-   4.10, and a re-send wholly held per 2.4 all store none, and only the last of them may
-   advance an Archived_Prefix.
+   3.7, 3.8 and 4.10 all turn on that number and no outcome of Req 2 settles it on its
+   own — an append carrying nothing per 3.5, one whose first block did not fit per 4.10,
+   and a re-send wholly held per 2.4 all store none, for three different reasons that
+   call for three different ledger responses.
+10. THE Archive SHALL report whether the append's blocks were checked against a block it
+   already held or against its Expected_Parent — false for the unverifiable append of
+   1.6 and for any append that stored and compared nothing — because 8.9 must not
+   advance on the one store that checked nothing, and only the archive knows whether it
+   had anything to check against: a ledger cannot tell whether the tail it inherited from
+   an older ledger was ever given a hash.
 
 ### Requirement 4: A Capacity Stop Is Reported, Not A Failure
 
@@ -499,7 +505,8 @@ a hole.
 6. THE Ledger SHALL NOT rely on its own record of what it sent when deciding what
    to stop serving, only on what an archive has reported holding.
 7. THE ICP Ledger SHALL rely on its own record instead, and SHALL NOT be held to
-   8.1, 8.2, 8.3, 8.4, 8.6, 8.8, 8.9 or 8.10, since there is no reported range to rely on
+   8.1, 8.2, 8.3, 8.4, 8.6, 8.8, 8.9, 8.10 or 8.11, since there is no reported range to
+   rely on
    (per 10.5) — the exposure the corresponding non-goal accepts.
 8. WHEN an archive reports an Archive_Position above the next block index THE Ledger
    would itself issue, THE Ledger SHALL make no further archiving attempt and SHALL
@@ -507,11 +514,12 @@ a hole.
    never issued was built from a chain the ledger is no longer on, which neither 8.2
    nor 8.4 detects.
 9. THE Ledger SHALL extend the Archived_Prefix only as far as one past the
-   highest-indexed block of an append that the receiving archive either stored or
-   compared against a block it already held per 2.9, and never as far as the
-   Archive_Position that append reported, because an append that verified nothing —
-   an empty one per 3.5, a gap per 2.2, or one falling wholly below the archive's range
-   per 2.6 — is no evidence at all, while one that verified a block at index N is
+   highest-indexed block of an append the receiving archive reports per 3.10 as checked
+   — stored after a parent check against a block it held or its Expected_Parent, or
+   compared per 2.9 — and never as far as the Archive_Position that append reported,
+   because an append that verified nothing — an empty one per 3.5, a gap per 2.2, one
+   falling wholly below the archive's range per 2.6, or the unverifiable first append
+   of 1.6 — is no evidence at all, while one that verified a block at index N is
    evidence only about the indices at and below N, a hash chain propagating a divergence
    forward rather than backward, so blocks the archive holds above N remain
    uncompared.
@@ -523,6 +531,14 @@ a hole.
    the published range to match a report that reaches into the next archive would break
    7.2, while a report starting above the published start leaves blocks held nowhere
    that 9.8 would redirect to it forever.
+11. WHEN any archive, the Tail_Archive included, reports a `block_index_offset` that
+   differs from the start of the Published_Range THE Ledger publishes for it — or, for an
+   archive that holds no blocks yet, from the offset 7.1 derived for it, which is zero
+   for the first archive a suite ever has — THE Ledger SHALL leave its record as it
+   stands, make no further archiving attempt, and expose a distinct non-zero metric,
+   because an offset is fixed for the life of the canister, so the report and the record
+   cannot both be right, and rewriting the start from the report would leave every index
+   between the two held nowhere.
 
 ### Requirement 9: Archiving Attempts Are Bounded While Archiving Fails
 
@@ -665,6 +681,10 @@ unaddressable canister does not become a series of them.
    an archive can fill and a later one be adopted while the first is still owed one —
    and a single slot would drop the earlier archive, leaving it ledger-controlled with
    nothing recording it.
+14. THE Ledger SHALL have committed the record in 11.13 before making either handover
+   call for that archive, because a trap in the call's callback rolls back everything the
+   same message wrote, and one arriving after the archive's controllers had already
+   changed would leave it partly handed over with no entry left to retry or to clear.
 
 ### Requirement 12: An Archiving Round Makes One Append
 
