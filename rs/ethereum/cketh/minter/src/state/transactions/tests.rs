@@ -3884,6 +3884,7 @@ impl WithdrawalTransactionsBuilder {
                 sent_tx: self.sent_tx,
                 finalized_tx: self.finalized_tx,
                 next_nonce: self.next_nonce,
+                receipt_fetch: Default::default(),
             },
             maybe_reimburse: self.maybe_reimburse,
             reimbursement_requests: self.reimbursement_requests,
