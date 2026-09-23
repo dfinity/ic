@@ -210,9 +210,6 @@ thread_local! {
     static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
         = const { Cell::new(true) };
 
-    // Enabled in test builds (i.e. governance-canister-test) so that system
-    // tests can exercise subnet splitting end to end. Still off in the release
-    // build, until the feature is rolled out.
     static ENABLE_SUBNET_SPLITTING_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(any(feature = "test"))) };
 
