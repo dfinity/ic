@@ -137,7 +137,11 @@ jobs:
     name: Bazel Test All on RBE
     continue-on-error: true
     needs: [config]
-    runs-on: namespace-profile-rbe-driver-amd64-linux-16x32
+    # container.mount-scratch gives the runner a real ephemeral filesystem at /namespace/scratch
+    # (features are appended to the profile name, see
+    # https://namespace.so/docs/solutions/github-actions/runner-controls); the ic-os image
+    # builds put their scratch there, see the "Prepare the scratch directory" step below.
+    runs-on: namespace-profile-rbe-driver-amd64-linux-16x32;container.mount-scratch=true
     container:
       image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c
       # ic-os image builds run 'podman build' (rootless) and are forced to run locally in
@@ -152,6 +156,8 @@ jobs:
         # "Mount the Bazel repository cache" step bind-mounts a directory of it into this
         # container; mount(2) needs CAP_SYS_ADMIN, which --privileged above grants.
         - /cache:/cache
+        # The runner's scratch filesystem, see runs-on above.
+        - /namespace/scratch:/namespace/scratch
       # Forward the Namespace credentials into the container so the
       # namespace-actions/upload-artifact step can authenticate against Namespace
       # Artifact Storage from inside the job container. See:
@@ -224,6 +230,30 @@ jobs:
         if: steps.repo-cache.outcome == 'success'
         run: echo "common --repository_cache=/var/cache/bazel-repository-cache" >>/tmp/bazel-rbe.bazelrc
 
+      - name: Prepare the scratch directory for the ic-os image builds
+        # The ic-os image actions run locally (see the container options above) and each
+        # writes several GB of scratch under $TMPDIR, by default /tmp: this container's
+        # overlay root, a containerd snapshot on the Namespace cache volume, which filled up
+        # when 13 of them ran at once (run 35833276307). $HOME is no alternative: it is on
+        # the runner's root disk, an overlayfs with layers on different filesystems, where
+        # directory inode numbers are not stable, so tar ("Directory renamed before its
+        # status could be extracted") and fakeroot, which track files by inode, break.
+        # /namespace/scratch is a real filesystem (runs-on above). Without it, or if the
+        # bind mount only created a directory on the root disk, the builds keep using /tmp.
+        id: scratch
+        shell: bash
+        run: |
+          set -euo pipefail
+          scratch=/namespace/scratch
+          if ! mountpoint -q "$scratch" || [ "$(stat -f -c %T "$scratch")" = overlayfs ]; then
+            echo "No scratch filesystem at $scratch; the ic-os image builds keep using /tmp."
+            echo "tmpdir=" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sudo install -d -o "$(id -u)" -g "$(id -g)" "$scratch/tmp"
+          echo "tmpdir=$scratch/tmp" >>"$GITHUB_OUTPUT"
+          df -h "$scratch"
+
       - name: Report the cache volume usage before the build
         # Whether this run is warm or cold: the cache action reports "found and restored" as
         # soon as the directory exists, which the prepare step guarantees, so only du tells.
@@ -232,9 +262,11 @@ jobs:
         # root filesystem, i.e. its /tmp), which is why df of / reports the volume itself.
         if: steps.repo-cache.outcome == 'success'
         continue-on-error: true
+        env:
+          ICOS_TMPDIR: ${{ steps.scratch.outputs.tmpdir }}
         run: |
           sudo du -xh --max-depth=4 /cache | sort -h | tail -n 20
-          df -h /cache / /tmp "$HOME"
+          df -h /cache / /tmp "$HOME" ${ICOS_TMPDIR:+"$ICOS_TMPDIR"}
 
       - name: Infer Bazel Args
         id: infer-bazel-args
@@ -329,20 +361,15 @@ jobs:
       - name: Bazel Build with RBE
         timeout-minutes: 90
         shell: bash
+        env:
+          ICOS_TMPDIR: ${{ steps.scratch.outputs.tmpdir }}
         run: |
           set -euo pipefail
 
-          # The ic-os image actions run locally (see the container options above) and each
-          # writes several GB of scratch under $TMPDIR, by default /tmp: the container's
-          # overlay root, a containerd snapshot on the Namespace cache volume, which filled
-          # up when 13 of them ran at once (run 35833276307). $HOME is on the runner's
-          # 160 GB root disk instead. Bazel's local strategy hands actions the client's
-          # TMPDIR (--action_env has no effect on it), so exporting it here is what
-          # redirects the scratch. That disk is an overlayfs with layers on different
-          # filesystems, where readdir and stat disagree on directory inode numbers; diroid
-          # therefore keys fakeroot's ownership map by st_ino (rs/ic_os/build_tools/diroid).
-          export TMPDIR="$HOME/tmp"
-          mkdir -p "$TMPDIR"
+          # Bazel's local strategy hands actions the client's TMPDIR (--action_env has no
+          # effect on it), so exporting it here is what moves the ic-os image builds'
+          # scratch to the scratch filesystem; see the "Prepare the scratch directory" step.
+          if [ -n "${ICOS_TMPDIR:-}" ]; then export TMPDIR="$ICOS_TMPDIR"; fi
 
           worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c"
 
@@ -399,12 +426,13 @@ jobs:
       - name: Bazel Test with RBE
         timeout-minutes: 120
         shell: bash
+        env:
+          ICOS_TMPDIR: ${{ steps.scratch.outputs.tmpdir }}
         run: |
           set -euo pipefail
 
           # Same scratch redirect as in the build step, for locally executed tests and actions.
-          export TMPDIR="$HOME/tmp"
-          mkdir -p "$TMPDIR"
+          if [ -n "${ICOS_TMPDIR:-}" ]; then export TMPDIR="$ICOS_TMPDIR"; fi
 
           worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c"
 
@@ -569,11 +597,13 @@ jobs:
       - name: Report the cache volume usage at the end
         # On master this is what gets committed; compared with the report before the build
         # it tells what this run added to the volume and whether the cache needs pruning
-        # before Namespace's reset-when-full kicks in. $HOME/tmp should be empty: the ic-os
-        # actions remove their scratch on exit.
+        # before Namespace's reset-when-full kicks in. The scratch directory should be
+        # empty: the ic-os actions remove their scratch on exit.
         if: ${{ !cancelled() && steps.repo-cache.outcome == 'success' }}
         continue-on-error: true
+        env:
+          ICOS_TMPDIR: ${{ steps.scratch.outputs.tmpdir }}
         run: |
           sudo du -xh --max-depth=4 /cache | sort -h | tail -n 20
-          df -h /cache / /tmp "$HOME"
-          du -sh "$HOME/tmp" || true
+          df -h /cache / /tmp "$HOME" ${ICOS_TMPDIR:+"$ICOS_TMPDIR"}
+          if [ -n "${ICOS_TMPDIR:-}" ]; then du -sh "$ICOS_TMPDIR"; fi
