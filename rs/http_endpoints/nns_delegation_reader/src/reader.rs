@@ -19,7 +19,7 @@ use crate::validation::{
     is_tree_consistent_with,
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 /// Filter for the canister ranges in the NNS delegation.
 pub enum CanisterRangesFilter {
     /// Keep the `/subnet/<subnet_id>/canister_ranges` leaf and purge
@@ -35,10 +35,18 @@ pub enum CanisterRangesFilter {
     None,
 }
 
+/// The canister ranges to serve a delegation with after the given check passed: the
+/// location which was checked, or the explicitly requested ranges for
+/// [`CanisterRangesCheck::NoCheck`].
 impl From<CanisterRangesCheck> for CanisterRangesFilter {
     fn from(ranges_check: CanisterRangesCheck) -> Self {
         match ranges_check {
             CanisterRangesCheck::AllSubnetRanges => CanisterRangesFilter::Flat,
+            CanisterRangesCheck::CanisterInFlat(_canister_id) => CanisterRangesFilter::Flat,
+            CanisterRangesCheck::CanisterInTree(canister_id) => {
+                CanisterRangesFilter::Tree(canister_id)
+            }
+            CanisterRangesCheck::NoCheck(canister_ranges_filter) => canister_ranges_filter,
         }
     }
 }
@@ -424,6 +432,7 @@ mod tests {
     use ic_nns_delegation_reader_test_utils::create_fake_certificate_delegation;
     use ic_registry_routing_table::CanisterIdRange;
     use ic_test_utilities_types::ids::SUBNET_0;
+    use rstest::rstest;
 
     fn path_exists(delegation: &CertificateDelegation, path: &[&[u8]]) -> bool {
         let parsed_delegation: Certificate =
@@ -738,6 +747,55 @@ mod tests {
         assert!(
             !path_exists(&delegation, &[b"canister_ranges"]),
             "The tree canister ranges should have been purged"
+        );
+    }
+
+    #[rstest]
+    #[case::canister_in_flat(
+        CanisterRangesCheck::CanisterInFlat(CanisterId::from(150)),
+        false,
+        true
+    )]
+    #[case::canister_in_tree(
+        CanisterRangesCheck::CanisterInTree(CanisterId::from(150)),
+        true,
+        false
+    )]
+    #[case::no_check_flat(CanisterRangesCheck::NoCheck(CanisterRangesFilter::Flat), false, true)]
+    #[case::no_check_tree(
+        CanisterRangesCheck::NoCheck(CanisterRangesFilter::Tree(CanisterId::from(150))),
+        true,
+        false
+    )]
+    #[case::no_check_none(CanisterRangesCheck::NoCheck(CanisterRangesFilter::None), false, false)]
+    fn build_verified_serves_the_requested_ranges(
+        #[case] canister_ranges_check: CanisterRangesCheck,
+        #[case] expects_tree_ranges: bool,
+        #[case] expects_flat_ranges: bool,
+    ) {
+        let (builder, public_key) = create_consistency_check_fixture();
+
+        let delegation = builder
+            .build_verified(
+                canister_ranges_check,
+                &routing_table_with(RANGES),
+                |_subnet_id| Some(&public_key),
+                &no_op_logger(),
+            )
+            .expect("the delegation should be consistent with the state view");
+
+        assert_eq!(
+            path_exists(
+                &delegation,
+                &[b"subnet", SUBNET_0.get().as_ref(), b"canister_ranges"],
+            ),
+            expects_flat_ranges,
+            "The delegation should be served with the requested canister ranges filter"
+        );
+        assert_eq!(
+            path_exists(&delegation, &[b"canister_ranges"]),
+            expects_tree_ranges,
+            "The delegation should be served with the requested canister ranges filter"
         );
     }
 
