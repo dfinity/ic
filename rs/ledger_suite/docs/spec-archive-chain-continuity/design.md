@@ -158,8 +158,8 @@ this design:
 | allocation | already committed | consequence |
 |---|---|---|
 | `create_canister` reply | canister exists, cycles gone | orphan; `Req 11` detects it and halts |
-| `install_code` reply, or a graceful `Err` from it | + wasm installed | same — and note this arrives as an ordinary `Err`, not only as a trap |
-| `update_settings` reply, or a graceful `Err` from it | + controllers replaced | same |
+| `install_code` reply, or a graceful `Err` from it | + wasm **possibly** installed — a reject may precede or follow the install | same — and note this arrives as an ordinary `Err`, not only as a trap, so a retry must first ask `canister_status` for `module_hash` rather than assume either way |
+| `update_settings` reply, or a graceful `Err` from it | + controllers **possibly** changed | same — reconcile by reading the controller list before retrying |
 | `remaining_capacity` reply, existing node | the transaction | round skipped, spaced by `Req 9` |
 | `remaining_capacity` reply, new node | + node recorded | round skipped; next round finds it |
 | `append_blocks` reply | the archive holds the blocks | `Req 2.4` makes the re-send a no-op |
@@ -348,7 +348,18 @@ interface change.
 
 ### D8 — Only a positive capability answer is cached
 
-Serves `Req 10.2`, `Req 10.4`. Caching "the tail cannot answer" would strand the
+Serves `Req 10.2`, `Req 10.4`. **It also assumes archives are never downgraded below
+PR 1 while a ledger is at PR 3 or later**, and that is an operational rule, not something
+the ledger can enforce: a cached positive answer means the next append carries blocks
+without a probe, and an archive rolled back to the old wasm would store them blindly
+before returning the empty reply that makes the ledger notice. The exposure is one append
+and is harmful only if that append was a re-send — but it is exactly the original
+corruption, so Delivery states the prohibition rather than the design pretending to a
+defence it does not have. Re-probing before every append would close it at the cost of
+doubling every round's calls, which is not worth it against an operator action the
+release order already forbids.
+
+Caching "the tail cannot answer" would strand the
 ledger, because the cache lives in the ledger and upgrading only the archive — the
 scenario `Req 10` exists for — would not clear it. So an absent answer is re-probed,
 spaced by D1's backoff, and a positive answer is cached in `#[serde(skip)]` state.
@@ -635,7 +646,7 @@ type-erased `VecDeque<EncodedBlock>`, and `node_and_capacity` below it receives 
 reach the `Encode!` at `archive.rs:463-468`. Same boundary as D6's, and for the same
 reason.
 
-**It is one hash per creation point, not one per round.** Capturing the parent of the
+**It is one hash per creation point, not one per round** (`Req 7.7`). Capturing the parent of the
 round's *first* block once would be wrong wherever a round creates a node after already
 sending earlier chunks — the new node's first block is then the deque front, not
 `blocks[0]`, so it would be initialised with a parent it will never see and would refuse
@@ -1241,11 +1252,12 @@ test is baseline-independent.
 | 10b | unit, candid | encode a reply of `(None::<append_result>,)` and decode it as `()` the way the old ledger's `candid_tuple::<()>()` does; assert success — the surplus absent `opt` is consumed as `Reserved` by `done()`, and this is the premise that lets the archive ship before the ledger | `Req 5.1`; a **release gate** |
 | 11 | archive | against the new implementation: one argument only; assert blocks stored, empty reply, and that a chain mismatch traps rather than returning a refusal | `Req 5.1`, `5.2`, `5.3`, `5.4` |
 | 12 | archive | **written**: `should_ignore_an_extra_optional_start_index` (`icp/archive/tests/tests.rs`) — the ICP archive's hand-rolled decode tolerates the extra argument, capacity drops by the block size, and the empty reply reads as absent | D3's tolerance; a **release gate** |
-| 13 | archive | assert each counter in `Req 6.1` moves for its own cause and is readable afterwards | `Req 6.1`, `6.2`, `6.3`, `6.4` |
-| 14 | unit, `ledger_canister_core` | drive a round whose reconciliation is dropped; with the span covered assert the archived prefix advances to the reported extent, with it uncovered assert the halt and the metric | `Req 8.2`, `8.3` |
-| 15 | unit, `ledger_canister_core` | report an extent below the archived prefix; assert the halt, that no further block stops being served, and the metric | `Req 8.4` |
+| 13 | archive | on indexed appends, assert each counter in `Req 6.1` moves for its own cause and is readable afterwards; then drive the same refusals index-less and assert the call fails and no counter moved — the trap that keeps them uncountable | `Req 6.1`, `6.2`, `6.3`, `6.4`, `Req 5.2` |
+| 14 | unit, `ledger_canister_core` | drive a round whose reconciliation is dropped; with the span covered assert the archived prefix advances to one past the highest block the retry verified — **not** to the reported extent, which may lie beyond it — and with it uncovered assert the halt and the metric | `Req 8.2`, `8.3`, `Req 8.9` |
+| 15 | unit, `ledger_canister_core` | report, for an archive, a position that does not reach past the last index of its own Published_Range; assert the halt, that no further block stops being served, and the metric | `Req 8.4` |
 | 15b | unit, `ledger_canister_core` | report an extent *above* the next index the ledger would issue — the ledger-only snapshot restore — and assert the halt and its own metric, distinct from 8.3's and 8.4's. Assert too that a reported extent within the tip does not halt, so the check is not simply refusing progress | `Req 8.8` |
-| 15c | unit, `ledger_canister_core` | answer a probe with a range extending past the archived prefix and assert the prefix does **not** advance; then make the same range the reply to an append carrying blocks and assert it does — a probe may halt but never advance | `Req 8.9` |
+| 15c | unit, `ledger_canister_core` | answer a probe with a range extending past the archived prefix and assert the prefix does **not** advance; then make the same range the reply to an append that stored or compared blocks and assert it advances only to one past the highest of them — a probe may halt but never advance, and a verifying append advances only as far as it verified | `Req 8.9` |
+| 23g | integration | create a non-genesis archive and read back the Expected_Parent it was installed with; assert it is the hash of the block at `block_index_offset - 1` and that the archive's first append is accepted — then omit it under test and assert the unverifiable-append counter rises instead, which is the window an omitting ledger leaves open | `Req 7.7`, `Req 1.6`, `Req 1.8` |
 | 15d | integration | make a grow refusal recur so every round comes back `StoredPartial` with `at_capacity = false`; assert attempts are spaced per the backoff and counted as failures rather than repeating per transaction, and that the stored prefix is kept. Assert an `at_capacity = true` stop does *not* space, but creates | `Req 9.10` |
 | 16 | integration | stop the archive so `remaining_capacity` is rejected; count attempts over a window, then restart and assert archiving resumes with no intervention | `Req 9.1`–`9.6` |
 | 17 | integration | reuse the creation-trap harness so the `create_canister` reply is lost; assert `Creating` is `Started`, that it is exposed, and that it does not self-clear — no identity was recorded, so there is nothing to finish | `Req 11.1`, `11.2`, `11.4` |
@@ -1333,6 +1345,12 @@ reason.
 The suite upgrade order (Constraints) means a new ledger meets old archives unless the
 releases are split. Do not reorder the suite; split instead, so each release is safe in
 the normal index-ledger-archives sequence.
+
+**And never roll an archive back below PR 1 while its ledger is at PR 3 or later.** D8
+explains why the ledger cannot defend against it: its cached capability answer sends the
+next batch without a probe, and an old archive stores it blindly. If an archive release
+has to be reverted, revert the ledger first, or revert to a build that still carries
+PR 1's `append_blocks`.
 
 **Step 0 — Rosetta verification.** Not a PR. A sync from genesis on ckBTC, ckDOGE and
 ICP, because nothing here repairs an already-diverged suite and the answer reorders

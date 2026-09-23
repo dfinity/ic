@@ -184,6 +184,12 @@ comes first.
   archiving rather than only the bad case. `Req 1.6` makes the window countable so
   it is visible while it lasts and demonstrably shut once ledgers send an index.
 
+- **Defending against an archive being downgraded beneath its ledger.** Once a ledger
+  has learned that its Tail_Archive reports its range (Req 10.4), it sends blocks
+  without asking again, and an archive rolled back to a build that ignores the
+  Declared_Index would store them as new before replying with nothing. The ledger
+  cannot tell in advance; `design.md` states the release-order rule that prevents it
+  and bounds the exposure to a single append.
 - **Making the archive's canister logs readable.** Some obligations here are
   satisfiable only through a metric because a canister's log is not readable by
   default. Changing that is a governance proposal, not a code change, and is out
@@ -401,11 +407,13 @@ violation from a capacity problem without access to canister logs.
 
 #### Acceptance Criteria
 
-1. THE Archive SHALL expose, over its metrics endpoint, a separate count for each of:
-   each chain ground of Req 1 counted separately (1.1, 1.5, 1.7, 1.8 and 1.10), a
-   covered-range mismatch per 2.9, a gap per 2.2, blocks below its own range per 2.6,
-   a stop at its own limit per 4.3, a platform-refused growth per 4.4, an undecodable
-   block per 6.4, and the unverifiable append of 1.6.
+1. THE Archive SHALL expose, over its metrics endpoint, a separate count of
+   Indexed_Appends for each of: each chain ground of Req 1 counted separately (1.1,
+   1.5, 1.7, 1.8 and 1.10), a covered-range mismatch per 2.9, a gap per 2.2, blocks
+   below its own range per 2.6, a stop at its own limit per 4.3, a platform-refused
+   growth per 4.4, an undecodable block per 6.4, and the unverifiable append of 1.6 —
+   an Index_Less_Append being outside every count but the last, since its refusals fail
+   the call per 5.2 and a failed call keeps no count.
 2. THE Archive SHALL NOT fail the call for any outcome counted under 6.1 when the
    append carried a Declared_Index, because failing the call discards the
    count along with everything else the call changed, leaving the cause invisible.
@@ -443,13 +451,19 @@ no special cases.
    previous archive's Archive_Range ends, THE Ledger SHALL NOT store further blocks
    in it and SHALL expose a distinct non-zero metric.
 5. THE ICP Ledger SHALL derive a new archive's `block_index_offset` from its own
-   record instead, and SHALL NOT be held to 7.1, 7.2, 7.3 or 7.4, because its
+   record instead, and SHALL NOT be held to 7.1, 7.2, 7.3, 7.4 or 7.7, because its
    archives report no Archive_Range to derive one from (per 10.5) and its `archives()`
    returns canister ids without ranges, with no `icrc3_get_archives` to report them
    through — so 7.2 would require an interface change this specification does not make.
 6. THE Ledger SHALL omit an archive that holds no blocks from the ranges it publishes
    until that archive stores its first block, because a published range is inclusive
    of both ends and an empty archive has no pair of indices that describes it.
+7. WHEN THE ICRC Ledger creates an archive whose `block_index_offset` is above zero,
+   THE ICRC Ledger SHALL supply as its Expected_Parent the hash of the block at
+   `block_index_offset - 1`, taken from the block it will actually send first rather
+   than from the round's first block, because 1.8 binds only an archive that was
+   *given* the hash — a ledger that omitted it would leave every fresh archive in 1.4's
+   unverifiable window while satisfying every other criterion here.
 
 ### Requirement 8: No Block Index Ever Becomes Unretrievable
 
