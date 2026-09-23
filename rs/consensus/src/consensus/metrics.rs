@@ -159,7 +159,9 @@ impl BatchStats {
         self.xnet_bytes_delivered += payload.xnet.size_bytes();
         self.ingress_ids
             .extend(payload.ingress.message_ids().cloned());
-        self.canister_http.payload_bytes = payload.canister_http.len();
+
+        // `self.canister_http.payload_bytes` is filled in `<CanisterHttpPayloadBuilderImpl as
+        // IntoMessages<_>::into_messages` together with the rest of `CanisterHttpBatchStats`.
     }
 }
 
