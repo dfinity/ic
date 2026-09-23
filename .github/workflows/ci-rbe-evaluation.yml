@@ -148,6 +148,10 @@ jobs:
         --privileged --mount type=tmpfs,target="/tmp/containers"
       volumes:
         - /var/run/nsc/:/var/run/nsc/
+        # The runner profile's Namespace cache volume (always /cache on the host). The
+        # "Mount the Bazel repository cache" step bind-mounts a directory of it into this
+        # container; mount(2) needs CAP_SYS_ADMIN, which --privileged above grants.
+        - /cache:/cache
       # Forward the Namespace credentials into the container so the
       # namespace-actions/upload-artifact step can authenticate against Namespace
       # Artifact Storage from inside the job container. See:
@@ -157,6 +161,10 @@ jobs:
         NAMESPACE_ACTIONS_RESULTS_URL: ${{ env.NAMESPACE_ACTIONS_RESULTS_URL }}
         NAMESPACE_ACTIONS_RESULTS_SERVICE: ${{ env.NAMESPACE_ACTIONS_RESULTS_SERVICE }}
         NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD: ${{ env.NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD }}
+        # Set (to /cache) by the Namespace runner when the profile has a cache volume and
+        # forwarded like the credentials above; the "Prepare the Bazel repository cache"
+        # step checks it and the other repository-cache steps are skipped when it is unset.
+        NSC_CACHE_PATH: ${{ env.NSC_CACHE_PATH }}
     timeout-minutes: 250
     steps:
       - uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0
@@ -173,6 +181,48 @@ jobs:
           fetch-depth: ${{ case(github.event_name == 'pull_request', 256, 1) }}
           ref: ${{ inputs.commit-sha }}
       - uses: ./.github/actions/netrc
+
+      - name: Prepare the Bazel repository cache on the Namespace cache volume
+        # NSC_CACHE_PATH (/cache) is set by the Namespace runner only when the profile has a
+        # cache volume. It reaches this container through the env block above but is not in
+        # the workflow's `env` context, so `if:` cannot test it; check it in the shell and
+        # publish the result for the steps below. spacectl (run by the cache action) creates
+        # the directory on the volume as the current user (buildifier) while /cache belongs
+        # to the host side; pre-create it with sudo so the mount cannot fail on permissions.
+        id: prepare-cache
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${NSC_CACHE_PATH:-}" ]; then
+            echo "No cache volume is attached (NSC_CACHE_PATH is unset); using an ephemeral repository cache."
+            echo "has_volume=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sudo install -d -o "$(id -u)" -g "$(id -g)" "$NSC_CACHE_PATH/var/cache/bazel-repository-cache"
+          echo "has_volume=true" >>"$GITHUB_OUTPUT"
+
+      - name: Mount the Bazel repository cache
+        # Only runs on master commit the volume (runner-profile setting); every other run
+        # reads master's last successful commit. A cache outage must not fail the RBE
+        # evaluation: without the mount the next step is skipped and Bazel keeps its
+        # ephemeral default repository cache, as today.
+        id: repo-cache
+        if: steps.prepare-cache.outputs.has_volume == 'true'
+        continue-on-error: true
+        uses: namespacelabs/nscloud-cache-action@1124a6f3ce44e5cf84cc22111530961f4d2a15f9 # v1.7.0
+        with:
+          path: /var/cache/bazel-repository-cache
+          spacectl-version: 0.12.3
+
+      - name: Configure the Bazel repository cache
+        # /tmp/bazel-rbe.bazelrc is read by every bazel invocation of this job (both
+        # targets.py queries, the build and the test step), so one `common` line reaches
+        # all of them and they keep sharing one server. Bazel puts its repo contents cache
+        # (the extracted repositories) under the same directory, so a warm run neither
+        # downloads nor extracts.
+        if: steps.repo-cache.outcome == 'success'
+        run: echo "common --repository_cache=/var/cache/bazel-repository-cache" >>/tmp/bazel-rbe.bazelrc
 
       - name: Infer Bazel Args
         id: infer-bazel-args
@@ -236,6 +286,20 @@ jobs:
           mkdir -p "$HOME/bazel-targets"
           /usr/bin/time ci/scripts/targets.py "${bazel_startup_args[@]}" build "${targets_args[@]}" >"$HOME/bazel-targets/build-targets"
           /usr/bin/time ci/scripts/targets.py "${bazel_startup_args[@]}" test "${targets_args[@]}" >"$HOME/bazel-targets/test-targets"
+
+      - name: Warm the Bazel repository cache for the PR queries
+        # Only master runs commit the Namespace cache volume, and a master run queries
+        # plain //... and builds one configuration, so on its own it never fetches the
+        # repositories that only the rdeps(//..., ...) query of PR runs loads (other
+        # platforms' toolchains, unselected select() branches). Load the same closure here
+        # so PR runs find every repository in the cache. Same server as the steps around it.
+        if: github.event_name == 'push' && env.BRANCH_NAME == 'master' && steps.repo-cache.outcome == 'success'
+        timeout-minutes: 15
+        continue-on-error: true
+        shell: bash
+        run: |
+          /usr/bin/time bazel --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-rbe.bazelrc \
+            query --keep_going 'deps(//...)' >/dev/null
 
       - name: Upload target files to Namespace Artifact Storage
         uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
@@ -473,3 +537,10 @@ jobs:
             /tmp/test-logs/tests-bazel-output.log
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Report the Bazel repository cache size
+        # On master this is what gets committed; its growth over time tells whether the
+        # cache needs pruning before Namespace's reset-when-full kicks in.
+        if: ${{ !cancelled() && steps.repo-cache.outcome == 'success' }}
+        continue-on-error: true
+        run: du -h --max-depth=1 /var/cache/bazel-repository-cache && df -h /var/cache/bazel-repository-cache
