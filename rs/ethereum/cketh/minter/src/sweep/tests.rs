@@ -9,7 +9,9 @@ use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
 use crate::state::audit::{EventType, apply_state_transition, process_event};
 use crate::state::eth_logs_scraping::LogScrapings;
 use crate::state::event::AutomaticDeposit;
-use crate::state::receipt_fetch::ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING;
+use crate::state::receipt_fetch::{
+    INITIAL_RECEIPT_FETCH_WINDOW, ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING, ReceiptFetchCounters,
+};
 use crate::state::transactions::{PipelineRequest, SweepId, SweepRequest};
 use crate::state::{State, mutate_state, read_state};
 use crate::storage::with_event_iter;
@@ -658,30 +660,41 @@ async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
     init_state(initial_state());
     mutate_state(|s| {
         for _ in 0..=ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING {
-            s.sweeper_receipt_fetch.record_round_without_chain_read();
+            s.automatic_deposits
+                .sweeper_pipeline_mut()
+                .record_round_without_chain_read();
         }
     });
 
-    let receipts: BTreeMap<SweepId, _> = fetch_receipts_for_round(
-        Address::new([0_u8; 20]),
-        "test",
-        &no_rpc_runtime(),
-        |s, finalized_tx_count| {
-            s.automatic_deposits
-                .sent_sweep_transactions_to_finalize(finalized_tx_count)
-        },
-        |s| &mut s.sweeper_receipt_fetch,
-    )
-    .await;
+    let receipts: BTreeMap<SweepId, _> =
+        fetch_receipts_for_round(Address::new([0_u8; 20]), &no_rpc_runtime(), |s| {
+            s.automatic_deposits.sweeper_pipeline_mut()
+        })
+        .await;
 
     assert_eq!(receipts, BTreeMap::new());
     assert_eq!(
-        read_state(|s| s.sweeper_receipt_fetch.rounds_since_chain_read()),
+        read_state(|s| s
+            .automatic_deposits
+            .sweeper_pipeline()
+            .rounds_since_chain_read()),
         ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING + 2
     );
     assert_eq!(
-        read_state(|s| s.withdrawal_receipt_fetch),
-        Default::default(),
+        read_state(|s| (
+            s.withdrawal_transactions
+                .pipeline()
+                .rounds_since_chain_read(),
+            s.withdrawal_transactions.pipeline().receipt_fetch_window(),
+            s.withdrawal_transactions
+                .pipeline()
+                .receipt_fetch_counters(),
+        )),
+        (
+            0,
+            INITIAL_RECEIPT_FETCH_WINDOW,
+            ReceiptFetchCounters::default()
+        ),
         "a sweeper problem must not throttle user withdrawals"
     );
 }

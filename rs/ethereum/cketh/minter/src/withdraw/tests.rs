@@ -140,25 +140,23 @@ mod round {
         init_state(initial_state());
         mutate_state(|s| {
             for _ in 0..=ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING {
-                s.withdrawal_receipt_fetch.record_round_without_chain_read();
+                s.withdrawal_transactions
+                    .pipeline_mut()
+                    .record_round_without_chain_read();
             }
         });
 
-        let receipts = fetch_receipts_for_round(
-            Address::new([0_u8; 20]),
-            "test",
-            &no_rpc_runtime(),
-            |s, finalized_tx_count| {
-                s.withdrawal_transactions
-                    .sent_transactions_to_finalize(finalized_tx_count)
-            },
-            |s| &mut s.withdrawal_receipt_fetch,
-        )
+        let receipts = fetch_receipts_for_round(Address::new([0_u8; 20]), &no_rpc_runtime(), |s| {
+            s.withdrawal_transactions.pipeline_mut()
+        })
         .await;
 
         assert_eq!(receipts, BTreeMap::new());
         assert_eq!(
-            read_state(|s| s.withdrawal_receipt_fetch.rounds_since_chain_read()),
+            read_state(|s| s
+                .withdrawal_transactions
+                .pipeline()
+                .rounds_since_chain_read()),
             ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING + 2,
             "a skipped round is one more round that read nothing"
         );
@@ -173,26 +171,23 @@ mod round {
             .times(1)
             .return_once(|| stub_rpc_client(vec![Err(IcError::CallPerformFailed)]));
 
-        let receipts: BTreeMap<LedgerBurnIndex, _> = fetch_receipts_for_round(
-            Address::new([0_u8; 20]),
-            "test",
-            &runtime,
-            |s, finalized_tx_count| {
-                s.withdrawal_transactions
-                    .sent_transactions_to_finalize(finalized_tx_count)
-            },
-            |s| &mut s.withdrawal_receipt_fetch,
-        )
-        .await;
+        let receipts: BTreeMap<LedgerBurnIndex, _> =
+            fetch_receipts_for_round(Address::new([0_u8; 20]), &runtime, |s| {
+                s.withdrawal_transactions.pipeline_mut()
+            })
+            .await;
 
         assert_eq!(receipts, BTreeMap::new());
         assert_eq!(
-            read_state(|s| s.withdrawal_receipt_fetch.rounds_since_chain_read()),
+            read_state(|s| s
+                .withdrawal_transactions
+                .pipeline()
+                .rounds_since_chain_read()),
             1,
             "a round that could not read the chain is what starts the skipping"
         );
         assert_eq!(
-            read_state(|s| s.withdrawal_receipt_fetch.window()),
+            read_state(|s| s.withdrawal_transactions.pipeline().receipt_fetch_window()),
             INITIAL_RECEIPT_FETCH_WINDOW,
             "a round that never reached its lookups says nothing about the providers"
         );

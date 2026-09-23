@@ -16,7 +16,6 @@ use crate::numeric::{
 use crate::runtime::CanisterRuntime;
 use crate::state::automatic_deposits::{AutomaticDeposits, RegisterDepositError, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
-use crate::state::receipt_fetch::ReceiptFetchWindow;
 use crate::state::sweep_observations::SweepObservations;
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
 use crate::state::transactions::{
@@ -141,14 +140,6 @@ pub struct State {
     /// What the sweep pipeline's chain reads looked like since the last upgrade. Not event-sourced,
     /// so it is deliberately left out of [`Self::is_equivalent_to`].
     pub sweep_observations: SweepObservations,
-
-    /// Ids the next withdrawal finalization round fetches receipts for. Not event-sourced, so
-    /// it is reset on upgrade and deliberately left out of [`Self::is_equivalent_to`].
-    pub withdrawal_receipt_fetch: ReceiptFetchWindow<LedgerBurnIndex>,
-
-    /// The same for the sweeper pipeline, likewise left out, and kept apart from the withdrawal
-    /// window so one pipeline cannot throttle the other.
-    pub sweeper_receipt_fetch: ReceiptFetchWindow<SweepId>,
 }
 
 #[derive(Eq, PartialEq, Debug)]
