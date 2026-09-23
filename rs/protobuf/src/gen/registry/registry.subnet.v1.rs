@@ -203,11 +203,7 @@ pub mod catch_up_package_contents {
 #[derive(
     serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq, Hash, ::prost::Message,
 )]
-pub struct GenesisArgs {
-    /// Initial height of the subnet
-    #[prost(uint64, tag = "1")]
-    pub height: u64,
-}
+pub struct GenesisArgs {}
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RecoveryArgs {
     /// The blockchain height that the CUP should have

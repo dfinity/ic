@@ -192,8 +192,8 @@ message CatchUpPackageContents {
 }
 
 message GenesisArgs {
-  // Initial height of the subnet
-  uint64 height = 1;
+  reserved 1;
+  reserved "height";
 }
 
 message RecoveryArgs {
