@@ -256,7 +256,7 @@ impl CanisterHttpPoolManagerImpl {
                     .send(CanisterHttpRequest {
                         id: *id,
                         context: context.clone(),
-                        socks_proxy_addrs: socks_proxy_addrs.clone(),
+                        socks_proxy_addrs: socks_proxy_addrs.as_ref().clone(),
                     })
                 {
                     warn!(
@@ -633,6 +633,10 @@ pub mod test {
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
+    use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
+    use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
+    use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
@@ -641,7 +645,7 @@ pub mod test {
     use ic_types::ReplicaVersion;
     use ic_types::crypto::crypto_hash;
     use ic_types::{
-        Height, NumBytes, NumberOfNodes, RegistryVersion,
+        Height, NodeId, NumBytes, NumberOfNodes, RegistryVersion,
         crypto::{CryptoHash, CryptoHashOf},
         messages::CallbackId,
         time::UNIX_EPOCH,
@@ -3644,6 +3648,207 @@ pub mod test {
                     CanisterHttpChangeAction::MoveToValidated(_),
                     "free-subnet share was wrongly rejected: {:?}",
                     changes[0]
+                );
+            })
+        });
+    }
+
+    /// Registers `count` API boundary nodes, each with a distinct IPv6 endpoint
+    /// unless `with_http` denies them one, and returns their ids paired with
+    /// the SOCKS proxy address that endpoint resolves to.
+    fn add_boundary_nodes(
+        deps: &Dependencies,
+        count: u64,
+        registry_version: RegistryVersion,
+        with_http: bool,
+    ) -> Vec<(NodeId, String)> {
+        // Numbered past the subnet's own nodes, whose records must stay untouched.
+        let ids = 101..=100 + count;
+        let nodes: Vec<(NodeId, String)> = ids
+            .clone()
+            .map(|i| (node_test_id(i), format!("socks5h://[2001:db8::{i}]:1080")))
+            .collect();
+
+        for (i, (node_id, _)) in ids.zip(&nodes) {
+            deps.registry_data_provider
+                .add(
+                    &make_api_boundary_node_record_key(*node_id),
+                    registry_version,
+                    Some(ApiBoundaryNodeRecord::default()),
+                )
+                .unwrap();
+            deps.registry_data_provider
+                .add(
+                    &make_node_record_key(*node_id),
+                    registry_version,
+                    Some(NodeRecord {
+                        http: with_http.then(|| ConnectionEndpoint {
+                            ip_addr: format!("2001:db8::{i}"),
+                            port: 8080,
+                        }),
+                        ..Default::default()
+                    }),
+                )
+                .unwrap();
+        }
+        deps.registry.update_to_latest_version();
+        nodes
+    }
+
+    /// Drives one round of `make_new_requests` and returns the SOCKS proxy
+    /// addresses the pool manager handed to the adapter.
+    fn socks_proxy_addrs_sent_by_pool_manager(
+        deps: Dependencies,
+        subnet_type: SubnetType,
+        metrics_registry: MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> Vec<String> {
+        let Dependencies {
+            pool,
+            replica_config,
+            crypto,
+            state_manager,
+            registry,
+            ..
+        } = deps;
+
+        let request =
+            test_request_context(Replication::FullyReplicated, PricingVersion::Legacy, None);
+        state_manager
+            .get_mut()
+            .expect_get_latest_state()
+            .return_const(Labeled::new(
+                Height::from(1),
+                Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                    CallbackId::from(7),
+                    request,
+                )]))),
+            ));
+
+        let sent = Arc::new(Mutex::new(None));
+        let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+        shim_mock
+            .expect_try_receive()
+            .return_const(Err(TryReceiveError::Empty));
+        #[allow(clippy::result_large_err)]
+        shim_mock.expect_send().times(1).returning({
+            let sent = Arc::clone(&sent);
+            move |request: CanisterHttpRequest| {
+                *sent.lock().unwrap() = Some(request.socks_proxy_addrs);
+                Ok(())
+            }
+        });
+        let shim: Arc<Mutex<CanisterHttpAdapterClient>> = Arc::new(Mutex::new(Box::new(shim_mock)));
+
+        let pool_manager = CanisterHttpPoolManagerImpl::new(
+            state_manager as Arc<_>,
+            shim,
+            crypto,
+            pool.get_cache(),
+            replica_config,
+            subnet_type,
+            Arc::clone(&registry) as Arc<_>,
+            metrics_registry,
+            log,
+        );
+        let canister_http_pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        pool_manager.generate_change_set(&canister_http_pool);
+
+        let mut addrs = sent
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("the pool manager sent no request to the adapter");
+        addrs.sort();
+        addrs
+    }
+
+    /// The pool manager must proxy through the API boundary nodes that match
+    /// its own subnet type: `System` subnets through the *system* nodes, every
+    /// other subnet type through the *app* ones.
+    #[test]
+    fn test_pool_manager_sends_socks_proxy_addrs_of_its_subnet_type() {
+        for subnet_type in [SubnetType::System, SubnetType::Application] {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                with_test_replica_logger(|log| {
+                    let deps = DependenciesBuilder::new(pool_config.clone(), 4).build();
+
+                    // `get_{system,app}_api_boundary_node_ids` splits the sorted
+                    // ids in half, so several nodes are needed for a non-empty,
+                    // distinguishable split.
+                    let registry_version = RegistryVersion::from(2);
+                    let nodes = add_boundary_nodes(&deps, 4, registry_version, true);
+
+                    let addrs_of = |ids: Vec<NodeId>| {
+                        let mut addrs: Vec<String> = ids
+                            .iter()
+                            .map(|node_id| {
+                                nodes
+                                    .iter()
+                                    .find(|(id, _)| id == node_id)
+                                    .expect("unknown boundary node id")
+                                    .1
+                                    .clone()
+                            })
+                            .collect();
+                        addrs.sort();
+                        addrs
+                    };
+                    let expected_system = addrs_of(
+                        deps.registry
+                            .get_system_api_boundary_node_ids(registry_version)
+                            .unwrap(),
+                    );
+                    let expected_app = addrs_of(
+                        deps.registry
+                            .get_app_api_boundary_node_ids(registry_version)
+                            .unwrap(),
+                    );
+                    assert_ne!(expected_system, expected_app);
+                    let expected = match subnet_type {
+                        SubnetType::System => expected_system,
+                        SubnetType::Application
+                        | SubnetType::VerifiedApplication
+                        | SubnetType::CloudEngine => expected_app,
+                    };
+
+                    let actual = socks_proxy_addrs_sent_by_pool_manager(
+                        deps,
+                        subnet_type,
+                        MetricsRegistry::new(),
+                        log,
+                    );
+
+                    assert_eq!(
+                        actual, expected,
+                        "subnet type {subnet_type:?} used the wrong API boundary nodes"
+                    );
+                })
+            });
+        }
+    }
+
+    /// A boundary node the pool manager cannot resolve is left out of the
+    /// request and reported under the pool manager's own error metric.
+    #[test]
+    fn test_pool_manager_reports_unresolved_socks_proxies() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let deps = DependenciesBuilder::new(pool_config.clone(), 4).build();
+                add_boundary_nodes(&deps, 4, RegistryVersion::from(2), false);
+
+                let metrics_registry = MetricsRegistry::new();
+                let addrs = socks_proxy_addrs_sent_by_pool_manager(
+                    deps,
+                    SubnetType::Application,
+                    metrics_registry.clone(),
+                    log,
+                );
+
+                assert!(addrs.is_empty());
+                assert_eq!(
+                    metric_vec(&[(&[("type", "socks_proxy_addrs_unresolved")], 1)]),
+                    fetch_int_counter_vec(&metrics_registry, "canister_http_pool_manager_errors")
                 );
             })
         });

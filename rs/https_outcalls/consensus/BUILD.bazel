@@ -70,6 +70,7 @@ rust_test(
         "//rs/monitoring/metrics",
         "//rs/protobuf",
         "//rs/registry/helpers",
+        "//rs/registry/keys",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",

@@ -23,9 +23,14 @@ pub mod errors {
 /// Records a resolution failure, by the label the caller reports it under.
 pub type ErrorObserver = Arc<dyn Fn(&str) + Send + Sync>;
 
+#[derive(Clone)]
 pub struct ResolvedSocksProxies {
-    pub addrs: Vec<String>,
+    pub addrs: Arc<Vec<String>>,
     pub errors: Vec<&'static str>,
+}
+
+fn socks_proxy_addr(ip_addr: &str) -> String {
+    format!("socks5h://[{ip_addr}]:{SOCKS_PROXY_PORT}")
 }
 
 /// `System` subnets are proxied through the *system* API boundary nodes, every
@@ -60,7 +65,10 @@ pub fn socks_proxy_addrs_at(
         errors.push(errors::SOCKS_PROXY_ADDRS_UNRESOLVED);
     }
 
-    ResolvedSocksProxies { addrs, errors }
+    ResolvedSocksProxies {
+        addrs: Arc::new(addrs),
+        errors,
+    }
 }
 
 fn socks_proxy_addr_of(
@@ -90,18 +98,20 @@ fn socks_proxy_addr_of(
                 None
             })
         })
-        .map(|http_info| format!("socks5h://[{0}]:{SOCKS_PROXY_PORT}", http_info.ip_addr))
+        .map(|http_info| socks_proxy_addr(&http_info.ip_addr))
 }
 
-/// The resolved addresses, memoized per registry version: they are a pure
-/// function of it, so there is no staleness to invalidate, and resolving costs
-/// a lookup per boundary node. Failures are reported on every call, memoized or
-/// not, so a persistent one keeps being visible.
+/// The resolved addresses, memoized per registry version. A registry client
+/// serves reads at a version it has already published from an immutable local
+/// snapshot, so both the addresses and any failure to resolve them are a pure
+/// function of that version: nothing to invalidate, and no transient failure
+/// that a retry within the version could clear. Failures are reported on every
+/// call, memoized or not, so a persistent one keeps being visible.
 pub struct SocksProxyCache {
     registry_client: Arc<dyn RegistryClient>,
     subnet_type: SubnetType,
     log: ReplicaLogger,
-    memo: RwLock<Option<(RegistryVersion, Arc<ResolvedSocksProxies>)>>,
+    memo: RwLock<Option<(RegistryVersion, ResolvedSocksProxies)>>,
     observe_error: Option<ErrorObserver>,
 }
 
@@ -127,26 +137,26 @@ impl SocksProxyCache {
 
     /// Never fails: an unreadable registry yields no proxies, degrading an
     /// outcall to a direct attempt rather than failing it.
-    pub fn addrs(&self) -> Vec<String> {
+    pub fn addrs(&self) -> Arc<Vec<String>> {
         let registry_version = self.registry_client.get_latest_version();
 
         let resolved = {
             let memo = self.memo.read().unwrap();
             match memo.as_ref() {
                 Some((memoized_version, resolved)) if *memoized_version == registry_version => {
-                    Arc::clone(resolved)
+                    resolved.clone()
                 }
                 _ => {
                     drop(memo);
-                    let resolved = Arc::new(socks_proxy_addrs_at(
+                    let resolved = socks_proxy_addrs_at(
                         &*self.registry_client,
                         registry_version,
                         self.subnet_type,
                         &self.log,
-                    ));
+                    );
                     // Losing a race only costs a recomputation: an entry is
                     // served only while its version is still the latest.
-                    *self.memo.write().unwrap() = Some((registry_version, Arc::clone(&resolved)));
+                    *self.memo.write().unwrap() = Some((registry_version, resolved.clone()));
                     resolved
                 }
             }
@@ -157,7 +167,7 @@ impl SocksProxyCache {
                 observe_error(error);
             }
         }
-        resolved.addrs.clone()
+        resolved.addrs
     }
 }
 
@@ -173,36 +183,39 @@ mod tests {
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::Time;
     use ic_types::registry::RegistryClientError;
+    use std::ops::RangeInclusive;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use strum::IntoEnumIterator;
 
     const VERSION: RegistryVersion = RegistryVersion::new(2);
 
-    /// Registers `count` API boundary nodes, each with a distinct IPv6 endpoint,
-    /// and returns their ids paired with the address they should resolve to.
-    fn registry_with_boundary_nodes(
-        count: u64,
-        with_http: impl Fn(u64) -> bool,
-    ) -> (Arc<FakeRegistryClient>, Vec<(NodeId, String)>) {
-        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        let nodes: Vec<(NodeId, String)> = (1..=count)
+    /// Registers one API boundary node per id in `ids`, each with a distinct
+    /// IPv6 endpoint unless `with_http` denies it one, and returns the ids
+    /// paired with that endpoint's address.
+    fn add_boundary_nodes(
+        data_provider: &ProtoRegistryDataProvider,
+        ids: RangeInclusive<u64>,
+        version: RegistryVersion,
+        with_http: impl Fn(NodeId) -> bool,
+    ) -> Vec<(NodeId, String)> {
+        let nodes: Vec<(NodeId, String)> = ids
             .map(|i| (node_test_id(i), format!("2001:db8::{i}")))
             .collect();
 
-        for (i, (node_id, ip_addr)) in (1..=count).zip(&nodes) {
+        for (node_id, ip_addr) in &nodes {
             data_provider
                 .add(
                     &make_api_boundary_node_record_key(*node_id),
-                    VERSION,
+                    version,
                     Some(ApiBoundaryNodeRecord::default()),
                 )
                 .unwrap();
             data_provider
                 .add(
                     &make_node_record_key(*node_id),
-                    VERSION,
+                    version,
                     Some(NodeRecord {
-                        http: with_http(i).then(|| ConnectionEndpoint {
+                        http: with_http(*node_id).then(|| ConnectionEndpoint {
                             ip_addr: ip_addr.clone(),
                             port: 8080,
                         }),
@@ -211,78 +224,71 @@ mod tests {
                 )
                 .unwrap();
         }
+        nodes
+    }
 
+    fn registry_with_boundary_nodes_impl(
+        count: u64,
+        with_http: impl Fn(NodeId) -> bool,
+    ) -> (Arc<FakeRegistryClient>, Vec<(NodeId, String)>) {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        let nodes = add_boundary_nodes(&data_provider, 1..=count, VERSION, with_http);
         let registry = Arc::new(FakeRegistryClient::new(data_provider));
         registry.update_to_latest_version();
         (registry, nodes)
     }
 
-    fn expected_addr(ip_addr: &str) -> String {
-        format!("socks5h://[{ip_addr}]:1080")
+    fn registry_with_boundary_nodes(
+        count: u64,
+    ) -> (Arc<FakeRegistryClient>, Vec<(NodeId, String)>) {
+        registry_with_boundary_nodes_impl(count, |_| true)
     }
 
-    #[test]
-    fn resolves_to_socks5h_address_on_port_1080() {
-        let (registry, nodes) = registry_with_boundary_nodes(4, |_| true);
-        let all_addrs: Vec<String> = nodes
+    fn registry_with_unresolvable_boundary_nodes(
+        count: u64,
+    ) -> (Arc<FakeRegistryClient>, Vec<(NodeId, String)>) {
+        registry_with_boundary_nodes_impl(count, |_| false)
+    }
+
+    fn registry_with_one_unresolvable_boundary_node(
+        count: u64,
+        unresolvable: NodeId,
+    ) -> (Arc<FakeRegistryClient>, Vec<(NodeId, String)>) {
+        registry_with_boundary_nodes_impl(count, move |node_id| node_id != unresolvable)
+    }
+
+    /// The address that the boundary node `node_id` of `nodes` resolves to.
+    fn addr_of(nodes: &[(NodeId, String)], node_id: &NodeId) -> String {
+        let (_, ip_addr) = nodes
             .iter()
-            .map(|(_, ip_addr)| expected_addr(ip_addr))
-            .collect();
+            .find(|(id, _)| id == node_id)
+            .expect("unknown boundary node id");
+        socks_proxy_addr(ip_addr)
+    }
 
-        let addrs = socks_proxy_addrs_at(
-            &*registry,
-            VERSION,
-            SubnetType::Application,
-            &no_op_logger(),
-        )
-        .addrs;
-
-        let expected_len = registry
-            .get_app_api_boundary_node_ids(VERSION)
-            .unwrap()
-            .len();
-        assert_eq!(addrs.len(), expected_len);
-        for addr in &addrs {
-            assert!(
-                all_addrs.contains(addr),
-                "unexpected address {addr}, expected one of {all_addrs:?}"
-            );
-        }
+    fn sorted_addrs(resolved: ResolvedSocksProxies) -> Vec<String> {
+        let mut addrs = resolved.addrs.to_vec();
+        addrs.sort();
+        addrs
     }
 
     /// System subnets are proxied through the system API boundary nodes, every
-    /// other subnet type through the app ones. The two sets are disjoint, which
-    /// is what makes this test able to tell them apart.
+    /// other subnet type through the app ones. The two sets have to differ for
+    /// this test to tell them apart.
     #[test]
     fn selects_boundary_nodes_by_subnet_type() {
-        let (registry, nodes) = registry_with_boundary_nodes(4, |_| true);
-        let addr_of = |node_id: &NodeId| {
-            let ip_addr = &nodes
-                .iter()
-                .find(|(id, _)| id == node_id)
-                .expect("unknown boundary node id")
-                .1;
-            expected_addr(ip_addr)
+        let (registry, nodes) = registry_with_boundary_nodes(4);
+        let addrs_of = |ids: Vec<NodeId>| {
+            let mut addrs: Vec<String> = ids.iter().map(|id| addr_of(&nodes, id)).collect();
+            addrs.sort();
+            addrs
         };
 
-        let mut expected_system: Vec<String> = registry
-            .get_system_api_boundary_node_ids(VERSION)
-            .unwrap()
-            .iter()
-            .map(addr_of)
-            .collect();
-        let mut expected_app: Vec<String> = registry
-            .get_app_api_boundary_node_ids(VERSION)
-            .unwrap()
-            .iter()
-            .map(addr_of)
-            .collect();
-        expected_system.sort();
-        expected_app.sort();
-
+        let expected_system = addrs_of(registry.get_system_api_boundary_node_ids(VERSION).unwrap());
+        let expected_app = addrs_of(registry.get_app_api_boundary_node_ids(VERSION).unwrap());
         assert!(!expected_system.is_empty());
         assert!(!expected_app.is_empty());
-        assert!(expected_system.iter().all(|a| !expected_app.contains(a)));
+        assert_ne!(expected_system, expected_app);
 
         for subnet_type in SubnetType::iter() {
             let expected = match subnet_type {
@@ -292,9 +298,12 @@ mod tests {
                 | SubnetType::CloudEngine => &expected_app,
             };
 
-            let mut actual =
-                socks_proxy_addrs_at(&*registry, VERSION, subnet_type, &no_op_logger()).addrs;
-            actual.sort();
+            let actual = sorted_addrs(socks_proxy_addrs_at(
+                &*registry,
+                VERSION,
+                subnet_type,
+                &no_op_logger(),
+            ));
 
             assert_eq!(
                 &actual, expected,
@@ -307,7 +316,7 @@ mod tests {
     /// poisoning the whole list.
     #[test]
     fn skips_boundary_nodes_without_http_endpoint() {
-        let (probe, nodes) = registry_with_boundary_nodes(4, |_| true);
+        let (probe, nodes) = registry_with_boundary_nodes(4);
         let app_ids = probe.get_app_api_boundary_node_ids(VERSION).unwrap();
         assert!(
             app_ids.len() > 1,
@@ -315,28 +324,20 @@ mod tests {
         );
         let skipped = app_ids[0];
 
-        let (registry, _) = registry_with_boundary_nodes(4, |i| node_test_id(i) != skipped);
+        let (registry, _) = registry_with_one_unresolvable_boundary_node(4, skipped);
         let mut expected: Vec<String> = app_ids
             .iter()
             .filter(|node_id| **node_id != skipped)
-            .map(|node_id| {
-                let (_, ip_addr) = nodes
-                    .iter()
-                    .find(|(id, _)| id == node_id)
-                    .expect("unknown boundary node id");
-                expected_addr(ip_addr)
-            })
+            .map(|node_id| addr_of(&nodes, node_id))
             .collect();
         expected.sort();
 
-        let mut addrs = socks_proxy_addrs_at(
+        let addrs = sorted_addrs(socks_proxy_addrs_at(
             &*registry,
             VERSION,
             SubnetType::Application,
             &no_op_logger(),
-        )
-        .addrs;
-        addrs.sort();
+        ));
 
         assert_eq!(addrs, expected);
     }
@@ -345,18 +346,25 @@ mod tests {
     fn returns_no_proxies_when_the_registry_is_unreadable() {
         let registry = FailingRegistryClient::new(VERSION);
 
-        let addrs =
-            socks_proxy_addrs_at(&registry, VERSION, SubnetType::Application, &no_op_logger())
-                .addrs;
+        let resolved =
+            socks_proxy_addrs_at(&registry, VERSION, SubnetType::Application, &no_op_logger());
 
-        assert_eq!(addrs, Vec::<String>::new());
+        assert!(resolved.addrs.is_empty());
+        assert_eq!(
+            resolved.errors,
+            vec![errors::BOUNDARY_NODE_IDS_LOOKUP_FAILED]
+        );
     }
 
     /// The memo must serve repeated calls at the same registry version without
     /// touching the registry again.
     #[test]
     fn memoizes_within_a_registry_version() {
-        let (registry, _) = registry_with_boundary_nodes(4, |_| true);
+        let (registry, _) = registry_with_boundary_nodes(4);
+        let expected_len = registry
+            .get_app_api_boundary_node_ids(VERSION)
+            .unwrap()
+            .len();
         let counting = Arc::new(CountingRegistryClient::new(registry));
         let cache = SocksProxyCache::new(
             Arc::clone(&counting) as Arc<_>,
@@ -365,11 +373,12 @@ mod tests {
         );
 
         let first = cache.addrs();
-        let lookups_after_first = counting.lookups();
-        assert!(
-            lookups_after_first > 0,
-            "the first resolution must read the registry"
+        assert_eq!(
+            first.len(),
+            expected_len,
+            "the first resolution must return every eligible boundary node"
         );
+        let lookups_after_first = counting.lookups();
 
         let second = cache.addrs();
 
@@ -385,7 +394,7 @@ mod tests {
     /// it would show one failure and then silence.
     #[test]
     fn reports_failures_on_every_call_even_when_memoized() {
-        let (registry, _) = registry_with_boundary_nodes(4, |_| false);
+        let (registry, _) = registry_with_unresolvable_boundary_nodes(4);
         let counting = Arc::new(CountingRegistryClient::new(registry));
         let observed = Arc::new(AtomicUsize::new(0));
         let cache = SocksProxyCache::new(
@@ -422,33 +431,7 @@ mod tests {
     #[test]
     fn recomputes_when_the_registry_version_advances() {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        let add_boundary_node = |i: u64, version: RegistryVersion| {
-            let node_id = node_test_id(i);
-            data_provider
-                .add(
-                    &make_api_boundary_node_record_key(node_id),
-                    version,
-                    Some(ApiBoundaryNodeRecord::default()),
-                )
-                .unwrap();
-            data_provider
-                .add(
-                    &make_node_record_key(node_id),
-                    version,
-                    Some(NodeRecord {
-                        http: Some(ConnectionEndpoint {
-                            ip_addr: format!("2001:db8::{i}"),
-                            port: 8080,
-                        }),
-                        ..Default::default()
-                    }),
-                )
-                .unwrap();
-        };
-
-        for i in 1..=4 {
-            add_boundary_node(i, RegistryVersion::from(2));
-        }
+        add_boundary_nodes(&data_provider, 1..=4, RegistryVersion::from(2), |_| true);
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
         registry.update_to_latest_version();
 
@@ -459,11 +442,9 @@ mod tests {
         );
         let before = cache.addrs();
 
-        // Add more boundary nodes at a later version. `get_app_api_boundary_node_ids`
-        // splits the sorted ids in half, so a larger set yields a different app half.
-        for i in 5..=8 {
-            add_boundary_node(i, RegistryVersion::from(3));
-        }
+        // `get_app_api_boundary_node_ids` splits the sorted ids in half, so a
+        // larger set yields a different app half.
+        add_boundary_nodes(&data_provider, 5..=8, RegistryVersion::from(3), |_| true);
         registry.update_to_latest_version();
         let after = cache.addrs();
 
