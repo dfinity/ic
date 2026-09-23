@@ -1573,7 +1573,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 }
                 let mut stalled_ids = w.counter_vec(
                     "cketh_minter_receipt_fetch_stalled_ids_total",
-                    "Ids the providers answered with no mined transaction. Resets on upgrade.",
+                    "Ids with no receipt though their nonce is finalized. Resets on upgrade.",
                 )?;
                 for (pipeline, counters) in receipt_fetch {
                     stalled_ids = stalled_ids

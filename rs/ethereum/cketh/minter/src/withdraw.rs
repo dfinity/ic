@@ -589,9 +589,10 @@ fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
     if outcome.is_abandoned() {
         return (BTreeMap::new(), outcome);
     }
-    // An id whose transactions all answered "not mined" is a withdrawal that stalls, not a bug, and
-    // trapping here would take the whole minter down with it. An id a provider failed to answer is
-    // not stalled, only unanswered, and is already counted as a failure.
+    // A selected id's nonce is below the finalized transaction count, so one of its transactions
+    // must have a receipt: none having one means the chain, the providers or our own bookkeeping is
+    // wrong. Counted and left pending rather than trapped, which would take the whole minter down.
+    // An id a provider failed to answer is not one of these, and is already counted as a failure.
     for id in expected_finalized_ids
         .iter()
         .filter(|id| !receipts.contains_key(id) && !unanswered.contains(id))
