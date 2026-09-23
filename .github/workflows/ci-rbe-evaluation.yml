@@ -265,7 +265,8 @@ jobs:
         env:
           ICOS_TMPDIR: ${{ steps.scratch.outputs.tmpdir }}
         run: |
-          sudo du -xh --max-depth=4 /cache | sort -h | tail -n 20
+          sudo du -xh --max-depth=2 /cache | sort -h
+          du -h --max-depth=1 /var/cache/bazel-repository-cache
           df -h /cache / /tmp "$HOME" ${ICOS_TMPDIR:+"$ICOS_TMPDIR"}
 
       - name: Infer Bazel Args
@@ -604,6 +605,7 @@ jobs:
         env:
           ICOS_TMPDIR: ${{ steps.scratch.outputs.tmpdir }}
         run: |
-          sudo du -xh --max-depth=4 /cache | sort -h | tail -n 20
+          sudo du -xh --max-depth=2 /cache | sort -h
+          du -h --max-depth=1 /var/cache/bazel-repository-cache
           df -h /cache / /tmp "$HOME" ${ICOS_TMPDIR:+"$ICOS_TMPDIR"}
           if [ -n "${ICOS_TMPDIR:-}" ]; then du -sh "$ICOS_TMPDIR"; fi
