@@ -27,8 +27,7 @@
 
 use crate::crypt::{
     KeyslotToken, LuksHeaderLocation, SINGLE_KEYSLOT_INDEX, SevMetadata, activate_crypt_device,
-    destroy_keyslots_except_first, format_luks2_device, open_luks2_device,
-    read_single_keyslot_token, write_keyslot_token,
+    format_luks2_device, open_luks2_device, read_single_keyslot_token, write_keyslot_token,
 };
 use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result, bail};
@@ -224,21 +223,17 @@ fn rekey_crypt_device(
     )
     .context("Failed to derive the new SEV key for the device")?;
 
-    // Unlock with the old key (searching all keyslots) and set the first keyslot to the
-    // new key. Fails if the old key does not unlock any keyslot.
+    // Replace the key of the first keyslot in place. Fails if the old key does not
+    // unlock the keyslot.
     crypt_device
         .keyslot_handle()
         .change_by_passphrase(
-            // TODO: after all nodes have a single keyslot at SINGLE_KEYSLOT_INDEX, change this to
-            //  Some(SINGLE_KEYSLOT_INDEX)
-            None,
+            Some(SINGLE_KEYSLOT_INDEX),
             Some(SINGLE_KEYSLOT_INDEX),
             old_key,
             new_key.as_bytes(),
         )
         .context("Failed to replace the old key with the new SEV-derived key")?;
-    // Remove the keyslots that legacy headers may still carry.
-    destroy_keyslots_except_first(crypt_device)?;
     write_keyslot_token(crypt_device, sev_metadata)
         .context("Failed to write SEV keyslot metadata")?;
 
