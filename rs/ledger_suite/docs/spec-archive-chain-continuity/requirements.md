@@ -241,9 +241,11 @@ lost track of what it sent cannot corrupt the archive by sending them again.
    SHALL refuse an append whose first stored block does not carry that hash as its
    parent, so that the only block it will ever store without checking a parent hash
    is the genesis block.
-9. THE Archive SHALL NOT refuse an append on account of a block it was never going to
-   store, because a block beyond its own configured limit falls outside 1.7 and
-   refusing for it would deny 4.1 the prefix it requires to be stored.
+9. THE Archive SHALL NOT refuse an Indexed_Append on account of a block it was never
+   going to store, because a block beyond its own configured limit falls outside 1.7 and
+   refusing for it would deny 4.1 the prefix it requires to be stored — an
+   Index_Less_Append being the exception, since 5.5 has it refuse the whole batch for
+   exactly that block.
 10. WHEN THE Archive would store a block at global index zero, THE Archive SHALL refuse
    the append unless that block carries no parent hash, because 1.5 says only where a
    parentless block may go and not that index zero must hold one — so without this an
@@ -678,19 +680,21 @@ unaddressable canister does not become a series of them.
    entitled to do, and the second cannot fail in a way that matters: its only outcomes
    are that the ledger is still a controller and may retry, or that it is not, which is
    the state the handover was for.
-12. WHEN a retry of the second step is refused because THE Ledger is no longer a
+12. WHEN a retry of either step is refused because THE Ledger is no longer a
    controller, THE Ledger SHALL treat that archive's handover as complete and remove it
    from the count in 11.10, because the archive is then governable by the configured
-   controllers and nothing further is within the ledger's reach.
+   controllers and nothing further is within the ledger's reach — and a retry after a
+   lost second step begins with the first, which is where that refusal arrives.
 13. THE Ledger SHALL keep a record of every archive still owed a handover rather than
    only the most recent, because 11.9 lets archiving continue past a failed handover, so
    an archive can fill and a later one be adopted while the first is still owed one —
    and a single slot would drop the earlier archive, leaving it ledger-controlled with
    nothing recording it.
 14. THE Ledger SHALL have committed the record in 11.13 before making either handover
-   call for that archive, because a trap in the call's callback rolls back everything the
-   same message wrote, and one arriving after the archive's controllers had already
-   changed would leave it partly handed over with no entry left to retry or to clear.
+   call for that archive, because the call's own await is what commits the message that
+   wrote the entry, so a trap between the write and that await — encoding the call is
+   enough — discards the entry while nothing was sent, and doing the write in a round of
+   its own removes that window at the cost of one round.
 
 ### Requirement 12: An Archiving Round Makes One Append
 

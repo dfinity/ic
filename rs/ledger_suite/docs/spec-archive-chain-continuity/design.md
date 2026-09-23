@@ -912,12 +912,15 @@ second step is confirmed or refused as unauthorized (`Req 11.12`) — the two wa
 ledger can know it is done.
 
 **Adoption ends the round; the handover starts on the next** (`Req 11.14`). This is the
-same durability point as `Created(id)`: an entry pushed in one message and followed by
-`update_settings` in that same message is rolled back by a trap in the callback — and a
-trap arriving *after* the controllers changed would leave an archive partly handed over
-with no entry left to retry or clear. So adoption (`nodes.push`, the `pending_handovers`
-entry, `Creating` back to `Idle`) is the last thing its round does, and the handover is
-a later round's work, as `Req 11.10` already assumes.
+same durability point as `Created(id)`, and it is worth being precise about which trap
+it guards against, because the obvious one is not it. A trap in `update_settings`'
+*callback* cannot roll back the entry: the message that pushed it ended — and committed —
+at the call's own await. The window is the stretch *between* the push and that await,
+where encoding the call is enough to trap under this design's own allocation stance; a
+trap there discards the entry while nothing was sent, which is merely a lost round, but
+if the push shares a message with earlier work that did commit elsewhere it is a lost
+record. Ending the round at adoption (`nodes.push`, the `pending_handovers` entry,
+`Creating` back to `Idle`) removes the question, at the cost of one round per 3 GiB.
 
 **A collection rather than one slot, because `Req 11.9` lets archiving continue**
 (`Req 11.13`). A single `Option` looks sufficient and is not: a failed handover does not
@@ -931,8 +934,9 @@ permanent, and a `Vec` costs nothing. One retry per round, so the work stays bou
 **Neither form needs to record which of the two steps is pending**, which is worth
 saying because a reader expecting a two-step journal will look for one. A retry always
 re-runs step one and then step two: step one is idempotent, and if step two has already
-committed then step one is itself unauthorized, which `Req 11.12` clears on. So both
-resumption points converge on the same rule, and each entry is just a canister id.
+committed then step one is itself the call that comes back unauthorized — which is why
+`Req 11.12` covers a refusal of *either* step, not only the second. So both resumption
+points converge on the same rule, and each entry is just a canister id.
 
 **Two of the three orphan windows stop being write-offs, and only `Idle` may be
 restored.** `create_and_initialize_node_canister` runs `create_canister` →
