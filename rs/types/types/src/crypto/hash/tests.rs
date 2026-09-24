@@ -1048,7 +1048,7 @@ mod crypto_hash_stability {
                         /*configs=*/ Vec::default(),
                         /*current_transcripts=*/ BTreeMap::default(),
                         /*next_transcripts=*/ BTreeMap::default(),
-                        /*registry_version=*/RegistryVersion::from(1),
+                        /*registry_version=*/ RegistryVersion::from(1),
                         /*interval_length=*/ Height::new(59),
                         /*next_interval_length=*/ Height::new(59),
                         /*height=*/ Height::new(0),
