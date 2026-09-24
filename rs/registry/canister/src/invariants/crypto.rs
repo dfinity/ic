@@ -503,7 +503,7 @@ fn check_high_threshold_public_key_and_cup_contents(
             continue;
         }
 
-        // Also, check that that the cup contents has a type set
+        // Also, check that the cup contents has a type set
         if cup_contents.cup_type.is_none() {
             bad_subnets.insert(subnet_id);
             println!(
