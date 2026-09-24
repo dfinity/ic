@@ -264,10 +264,11 @@ history I compute is correct.
    Req 4 has it stop short — at its own configured limit per 4.1, or at a growth it asked
    for and was refused per 4.8 — which is the one case where a correctly placed and
    unrefused append stores only a prefix.
-2. WHEN an Indexed_Append's Declared_Index is above the Archive_Position, THE
-   Archive SHALL refuse the append as a gap and SHALL store none of its blocks,
-   because the blocks between the two positions would otherwise be held by no
-   archive.
+2. WHEN an Indexed_Append carrying at least one block has a Declared_Index above the
+   Archive_Position, THE Archive SHALL refuse the append as a gap and SHALL store none
+   of its blocks, because the blocks between the two positions would otherwise be held
+   by no archive — an append carrying none being the question of 3.5, which is answered
+   with the range whatever index it names.
 3. WHEN an Indexed_Append's Declared_Index falls at or within the Archive_Range, the
    append extends beyond the Archive_Position, and no ground in Req 1, 2.9 or 6.4
    refuses it, THE Archive SHALL store only those blocks at or above the
@@ -279,10 +280,11 @@ history I compute is correct.
 5. THE Archive SHALL satisfy 2.4 however far the Declared_Index falls below the
    Archive_Position, including when the archive holds more blocks than the append
    carries.
-6. WHEN an Indexed_Append's Declared_Index is below the receiving archive's
-   `block_index_offset`, THE Archive SHALL store none of its blocks and SHALL
-   report its Archive_Range, because those blocks belong to an earlier archive and
-   storing them would place them at indices they do not belong at.
+6. WHEN an Indexed_Append carrying at least one block has a Declared_Index below the
+   receiving archive's `block_index_offset`, THE Archive SHALL store none of its blocks
+   and SHALL report its Archive_Range, because those blocks belong to an earlier archive
+   and storing them would place them at indices they do not belong at — an append
+   carrying none again being 3.5's question, not this refusal.
 7. THE Archive SHALL NOT store a block at an index it already holds a block for.
 8. WHEN blocks are retrieved by index from an archive after any sequence of
    appends permitted by 2.1 through 2.7 and 2.9, THE Archive SHALL return, for each

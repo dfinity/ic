@@ -846,8 +846,13 @@ are derived by skipping those (`Req 7.6`) and taking `next_index - 1` for the in
 end, and the per-node `offset` is the recorded start `Req 8.9` compares against — which
 the ledger otherwise never records (Constraints). It is `#[serde(default)]` and filled on
 the first upgrade from the legacy inclusive pairs, `(start, end)` becoming
-`(start, end + 1)`, one per existing node; `nodes_block_ranges` is then kept only as
-long as anything still reads it.
+`(start, end + 1)` — **and padded**, because a valid legacy state can have one more node
+than pair: the current creation path pushes the node before the `remaining_capacity`
+call (`archive.rs:507-514`) while a pair appears only after the first successful append
+(`archive.rs:285-310`), so an upgrade can land between the two. Any trailing node without
+a pair gets an empty record at the preceding record's `next_index` (zero if it is the
+first node), which is exactly the state a freshly created archive is in.
+`nodes_block_ranges` is then kept only as long as anything still reads it.
 
 A published range is inclusive of both ends, so an empty archive has no pair of indices
 that could describe it — the ledger's published view and its internal record are the
@@ -1383,7 +1388,7 @@ test is baseline-independent.
 | 30 | integration | drive a round that must roll over; assert exactly one archive is created, and that a round which both fills the tail and has blocks left over does not create two | `Req 12.2` |
 | 31 | integration | assert the capability probe stores nothing and consumes no capacity against a live archive, that a second round against an archive that already answered issues no further probe, and that a round which does probe sends at most one empty append | `Req 10.3`, `10.4`, `Req 12.1` |
 | 31b | unit, `ledger_canister_core` | send the capability probe to a freshly created archive and take its reply with `next_index == block_index_offset`; assert its `NodeRange` reads empty, `archives()` omits it, and nothing underflows — the `chunk_len - 1` arithmetic the probe would have hit | `Req 7.6`, `Req 3.5` |
-| 31c | upgrade | decode a pre-change `Archive` with three inclusive legacy ranges; assert `node_ranges` is filled one per node as `(start, end + 1)`, `archives()` is unchanged, and — with one node's range then set empty — every other node still pairs with its own canister id, which the zipped representation could not guarantee | `Req 7.2`, `Req 7.6`, `Req 8.9` |
+| 31c | upgrade | decode a pre-change `Archive` with three inclusive legacy ranges; assert `node_ranges` is filled one per node as `(start, end + 1)`, `archives()` is unchanged, and — with one node's range then set empty — every other node still pairs with its own canister id, which the zipped representation could not guarantee. Repeat with a fourth node that has no legacy pair — created, never appended to — and assert it is padded with an empty record at the third's `next_index` and omitted from `archives()` | `Req 7.2`, `Req 7.6`, `Req 8.9` |
 | 27 | matrix | both token variants for every archive-level row: 1-9, 9b, 9c, 10, 11, 13, 22, 22c, 22d, 22e, 26 and 26b — (12) is ICP-only by nature, and 22b, 25 and 28-31 are integration rows | yes |
 
 **Seams the design owes.** `Req 9` is observable only through the attempt spacing, so
