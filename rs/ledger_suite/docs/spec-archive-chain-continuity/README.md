@@ -68,9 +68,10 @@ to its own storage by a fixed offset chosen when it was created, the shift is
 permanent and silent. `icrc3_get_blocks` returns a block that is internally valid
 and belongs at a different index.
 
-Two clients read those blocks and are harmed differently. Rosetta verifies that
-returned indices match the ones it requested and that each block's parent hash
-matches the previous block, so it stops synchronising and goes stale. The index
+Two clients read those blocks and are harmed differently. Rosetta checks that each block's
+parent hash matches the block before it — the check that catches a misplaced archive
+block, since archives return blocks without indices and Rosetta numbers them from the
+ledger's callback — so it stops synchronising and goes stale. The index
 canister performs no such check, so it attributes transactions to whichever
 accounts a wrongly-placed block names, and serves plausible but incorrect account
 histories. Neither can repair the archive.
@@ -506,10 +507,13 @@ PR 1's `append_blocks`.
 ICP, because nothing here repairs an already-diverged suite and the answer reorders
 everything after it.
 
-First, a Rosetta sync from genesis. Rosetta verifies both that returned indices match
-those requested and that parent hashes chain
-(`rosetta-api/icrc1/src/ledger_blocks_synchronization/blocks_synchronizer.rs`), so a
-clean sync shows every block *the ledger publishes* is where it says it is.
+First, a Rosetta sync from genesis. Rosetta checks that parent hashes chain across
+every block it fetches (`rosetta-api/icrc1/src/ledger_blocks_synchronization/blocks_synchronizer.rs`),
+and that is the check that matters for archive content: archives return blocks without
+indices and Rosetta numbers them from the ledger's callback start (`:645-647`), so its
+separate index check (`indices_are_valid`, `:432`) verifies the ledger's routing, not an
+archive's internal placement. A clean sync therefore shows every block *the ledger
+publishes* chains correctly — one check on archive content, not two.
 
 Second — and a sync cannot stand in for it — each archive's own extent against the
 ledger's published range for it. Rosetta reads archives only through the
