@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "493ea082f308eb9086e097440a010fafee57816febcf7470b8842fa2e6fe1ce0",
+  "checksum": "ff31d5bd7c80468b907e64f4d808fa328e79e0b8188ebb67463fa2d6415a8044",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18527,6 +18527,10 @@
           {
             "id": "tar 0.4.46",
             "target": "tar"
+          },
+          {
+            "id": "target-lexicon 0.13.5",
+            "target": "target_lexicon"
           },
           {
             "id": "tarpc 0.37.0",
@@ -70631,6 +70635,7 @@
     "sysinfo 0.37.2",
     "tabled 0.20.0",
     "tar 0.4.46",
+    "target-lexicon 0.13.5",
     "tarpc 0.37.0",
     "tempfile 3.23.0",
     "test-strategy 0.4.5",
