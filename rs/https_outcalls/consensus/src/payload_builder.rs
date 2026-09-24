@@ -36,7 +36,7 @@ use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, FlexibleHttpGlobalError, FlexibleHttpNodeDetail,
     FlexibleHttpNodeError, FlexibleHttpRequestErr, FlexibleHttpRequestResult,
-    HttpRequestResourceReport,
+    HttpRequestResourceReport, decoder_config,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -1316,7 +1316,10 @@ impl
         CanisterHttpSpent,
         CanisterHttpBatchStats,
     ) {
-        let mut stats = CanisterHttpBatchStats::default();
+        let mut stats = CanisterHttpBatchStats {
+            payload_bytes: payload.len(),
+            ..Default::default()
+        };
 
         let messages = bytes_to_payload(payload)
             .expect("Failed to parse a payload that was already validated");
@@ -1541,7 +1544,7 @@ fn flexible_ok_responses_into_consensus_response(
         .into_iter()
         .filter_map(|entry| match entry.response.content {
             CanisterHttpResponseContent::Success(data) => {
-                Some(Decode!(&data, CanisterHttpResponsePayload).ok())
+                Some(Decode!([decoder_config()]; &data, CanisterHttpResponsePayload).ok())
             }
             CanisterHttpResponseContent::Reject(_) => {
                 // Unreachable: payload building/validation ensure

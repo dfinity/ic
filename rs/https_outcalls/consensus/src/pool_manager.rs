@@ -94,6 +94,11 @@ impl CanisterHttpPoolManagerImpl {
 
     /// Purge shares of responses for requests that have already been processed,
     /// i.e. whose contexts are no longer part of the replicated state.
+    ///
+    /// Response *content* is purged earlier than that, as soon as its request leaves
+    /// the active contexts: an answered outcall's response can never be put into a
+    /// block again, nor be of use to a peer, while its shares are kept for as long as
+    /// the delivered context is around, to be published as asynchronous receipts.
     fn purge_shares_of_processed_requests(
         &self,
         state: &ReplicatedState,
@@ -106,6 +111,10 @@ impl CanisterHttpPoolManagerImpl {
             .start_timer();
 
         let known_callback_ids = Self::known_callback_ids(state);
+        let active_contexts = &state
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
         let next_callback_id = state
             .metadata
             .subnet_call_context_manager
@@ -149,7 +158,10 @@ impl CanisterHttpPoolManagerImpl {
                 canister_http_pool
                     .get_response_content_items()
                     .filter_map(|content| {
-                        if known_callback_ids.contains(&content.1.id) {
+                        // Note that this keys on the active contexts, not on
+                        // `known_callback_ids`: the response of an answered outcall is
+                        // dropped while its share lives on as a receipt.
+                        if active_contexts.contains_key(&content.1.id) {
                             None
                         } else {
                             Some(CanisterHttpChangeAction::RemoveContent(content.0.clone()))
@@ -328,6 +340,17 @@ impl CanisterHttpPoolManagerImpl {
         }
     }
 
+    /// Whether the response of a share is of use to our peers: only if they cannot
+    /// produce it themselves, and only until the outcall has been answered.
+    fn response_visibility(replication: &Replication, is_delivered: bool) -> ResponseVisibility {
+        match (replication, is_delivered) {
+            (Replication::NonReplicated(_) | Replication::Flexible { .. }, false) => {
+                ResponseVisibility::Publish
+            }
+            (Replication::FullyReplicated, _) | (_, true) => ResponseVisibility::Withhold,
+        }
+    }
+
     /// Create any shares that should be made from responses provided by the
     /// HttpAdapterShim.
     fn create_shares_from_responses(&self, state: &ReplicatedState) -> CanisterHttpChangeSet {
@@ -350,17 +373,18 @@ impl CanisterHttpPoolManagerImpl {
                     self.metrics
                         .observe_pool_manager_event("adapter_response_received");
                     // Drop the response if its context is no longer present in the replicated state.
-                    // We continue gossiping a share even if a response to the context has already
-                    // been delivered, in order to report the amount of cycles spent.
-                    let context = match active_contexts.get(&response.id) {
-                        Some(context) => context,
+                    // We continue gossiping a share (though not the response itself) even if a
+                    // response to the context has already been delivered, in order to report the
+                    // amount of cycles spent.
+                    let (context, is_delivered) = match active_contexts.get(&response.id) {
+                        Some(context) => (context, false),
                         None => match delivered_contexts.get(&response.id) {
                             Some(context) => {
                                 // Consensus already answered this request; we only sign a
                                 // share to report the cycles we spent on it.
                                 self.metrics
                                     .observe_pool_manager_event("response_for_delivered_context");
-                                context
+                                (context, true)
                             }
                             None => {
                                 warn!(
@@ -427,16 +451,11 @@ impl CanisterHttpPoolManagerImpl {
                     self.requested_id_cache.borrow_mut().remove(&response.id);
                     self.metrics.shares_signed.inc();
 
-                    change_set.push(match &context.replication {
-                        Replication::NonReplicated(_) | Replication::Flexible { .. } => {
-                            CanisterHttpChangeAction::AddToValidatedAndGossipResponse(
-                                share, response,
-                            )
-                        }
-                        Replication::FullyReplicated => {
-                            CanisterHttpChangeAction::AddToValidated(share, response)
-                        }
-                    });
+                    change_set.push(CanisterHttpChangeAction::AddToValidated(
+                        share,
+                        response,
+                        Self::response_visibility(&context.replication, is_delivered),
+                    ));
                 }
             }
         }
@@ -489,13 +508,21 @@ impl CanisterHttpPoolManagerImpl {
                     ));
                 }
 
-                let Some(context) = active_contexts
-                    .get(&share.content.id())
-                    .or_else(|| delivered_contexts.get(&share.content.id()))
-                else {
-                    self.metrics
-                        .observe_pool_manager_event("share_dropped_unknown_context");
-                    return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                // Whether the request has already been responded to decides whether the
+                // share may come without a response (see below), so remember which of the
+                // two collections the context was found in.
+                let (context, is_delivered) = match active_contexts.get(&share.content.id()) {
+                    Some(context) => (context, false),
+                    None => match delivered_contexts.get(&share.content.id()) {
+                        Some(context) => (context, true),
+                        None => {
+                            self.metrics
+                                .observe_pool_manager_event("share_dropped_unknown_context");
+                            return Some(CanisterHttpChangeAction::RemoveUnvalidated(
+                                share.clone(),
+                            ));
+                        }
+                    },
                 };
 
                 // Invalidate shares whose claimed spent cycles exceed what a
@@ -532,44 +559,55 @@ impl CanisterHttpPoolManagerImpl {
                         }
                     }
                     Replication::NonReplicated(_) | Replication::Flexible { .. } => {
-                        let Some(response) = &artifact.response else {
-                            return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
-                                "Artifact should contain response".to_string(),
-                            ));
-                        };
+                        match &artifact.response {
+                            Some(response) => {
+                                if response.id != share.content.id() {
+                                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                                        share.clone(),
+                                        format!(
+                                            "Response is for request ID {} rather than the share's {}",
+                                            response.id,
+                                            share.content.id(),
+                                        ),
+                                    ));
+                                }
 
-                        if response.id != share.content.id() {
-                            return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
-                                format!(
-                                    "Response is for request ID {} rather than the share's {}",
-                                    response.id,
-                                    share.content.id(),
-                                ),
-                            ));
-                        }
+                                if share.content.content_hash()
+                                    != &ic_types::crypto::crypto_hash(response)
+                                {
+                                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                                        share.clone(),
+                                        "Content hash does not match the response".to_string(),
+                                    ));
+                                }
 
-                        if share.content.content_hash() != &ic_types::crypto::crypto_hash(response)
-                        {
-                            return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
-                                "Content hash does not match the response".to_string(),
-                            ));
-                        }
+                                if share.content.content_size()
+                                    != response.content.count_bytes() as u32
+                                {
+                                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                                        share.clone(),
+                                        "Content size does not match the response".to_string(),
+                                    ));
+                                }
 
-                        if share.content.content_size() != response.content.count_bytes() as u32 {
-                            return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
-                                "Content size does not match the response".to_string(),
-                            ));
-                        }
-
-                        if share.content.is_reject() != response.content.is_reject() {
-                            return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
-                                "is_reject does not match the response content".to_string(),
-                            ));
+                                if share.content.is_reject() != response.content.is_reject() {
+                                    return Some(CanisterHttpChangeAction::HandleInvalid(
+                                        share.clone(),
+                                        "is_reject does not match the response content".to_string(),
+                                    ));
+                                }
+                            }
+                            // The request has already been answered, so the response is of no
+                            // use to anyone and is not gossiped along with the share.
+                            None if is_delivered => {}
+                            // The peer signed this share when it already saw the request as
+                            // answered, while our own latest state still shows it as awaiting a
+                            // response. Defer until our own state catches up.
+                            None => {
+                                self.metrics
+                                    .observe_pool_manager_event("share_deferred_pending_delivery");
+                                return None;
+                            }
                         }
                     }
                 }
@@ -596,7 +634,12 @@ impl CanisterHttpPoolManagerImpl {
                     // Update the set of existing signed requests.
                     existing_signed_requests.insert(key_from_share(share));
                     self.metrics.shares_validated.inc();
-                    Some(CanisterHttpChangeAction::MoveToValidated(share.clone()))
+                    // The response of an already answered request is dropped rather than
+                    // passed on to peers that pull the artifact.
+                    Some(CanisterHttpChangeAction::MoveToValidated(
+                        share.clone(),
+                        Self::response_visibility(&context.replication, is_delivered),
+                    ))
                 }
             })
             .collect()
@@ -964,6 +1007,7 @@ pub mod test {
                 canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
                     share.clone(),
                     empty_canister_http_response(7),
+                    ResponseVisibility::Withhold,
                 )]);
 
                 // add an unvalidated copy of the share, that has an outdated version instead
@@ -1184,7 +1228,9 @@ pub mod test {
 
                     let content = empty_canister_http_response(7);
                     canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
-                        share, content,
+                        share,
+                        content,
+                        ResponseVisibility::Withhold,
                     )]);
                 }
 
@@ -1320,28 +1366,7 @@ pub mod test {
                     log.clone(),
                 );
 
-                // TEST 1: Non-replicated request artifact is missing the response.
-                // It should be marked as invalid.
-                {
-                    let mut canister_http_pool =
-                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                    let artifact_without_response = CanisterHttpResponseArtifact {
-                        share: share.clone(),
-                        response: None, // Missing response
-                    };
-                    canister_http_pool.insert(UnvalidatedArtifact {
-                        message: artifact_without_response,
-                        peer_id: delegated_node_id,
-                        timestamp: UNIX_EPOCH,
-                    });
-
-                    let changes = pool_manager
-                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
-
-                    assert_matches!(&changes[0], CanisterHttpChangeAction::HandleInvalid(_, reason) if reason == "Artifact should contain response");
-                }
-
-                // TEST 2: Non-replicated request artifact has a mismatched content hash.
+                // TEST 1: Non-replicated request artifact has a mismatched content hash.
                 // It should be marked as invalid.
                 {
                     let mut canister_http_pool =
@@ -1370,7 +1395,7 @@ pub mod test {
                     );
                 }
 
-                // TEST 3: Non-replicated request artifact has a mismatched content size.
+                // TEST 2: Non-replicated request artifact has a mismatched content size.
                 // It should be marked as invalid.
                 {
                     let response = empty_canister_http_response(0);
@@ -1400,7 +1425,7 @@ pub mod test {
                     );
                 }
 
-                // TEST 4: Non-replicated request artifact has a mismatched is_reject flag.
+                // TEST 3: Non-replicated request artifact has a mismatched is_reject flag.
                 // It should be marked as invalid.
                 {
                     let response = empty_canister_http_response(0);
@@ -1795,7 +1820,10 @@ pub mod test {
                     let changes = pool_manager
                         .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
-                    assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::MoveToValidated(_, ResponseVisibility::Publish)
+                    );
                 }
             })
         });
@@ -1902,7 +1930,10 @@ pub mod test {
 
                 // 5. ASSERT: The artifact should be successfully validated and moved to the validated pool.
                 assert_eq!(changes.len(), 1);
-                assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
+                assert_matches!(
+                    &changes[0],
+                    CanisterHttpChangeAction::MoveToValidated(_, ResponseVisibility::Publish)
+                );
             })
         });
     }
@@ -2320,7 +2351,10 @@ pub mod test {
                 let changes =
                     pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
-                assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
+                assert_matches!(
+                    &changes[0],
+                    CanisterHttpChangeAction::MoveToValidated(_, ResponseVisibility::Publish)
+                );
             })
         });
     }
@@ -2390,7 +2424,9 @@ pub mod test {
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
                 canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
-                    share, content,
+                    share,
+                    content,
+                    ResponseVisibility::Withhold,
                 )]);
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
                     state_manager as Arc<_>,
@@ -2494,7 +2530,7 @@ pub mod test {
                 let change_set = pool_manager.generate_change_set(&canister_http_pool);
                 assert_eq!(change_set.len(), 2);
                 for change in &change_set {
-                    assert_matches!(change, CanisterHttpChangeAction::AddToValidated(_, _));
+                    assert_matches!(change, CanisterHttpChangeAction::AddToValidated(_, _, _));
                 }
             });
         });
@@ -2588,7 +2624,7 @@ pub mod test {
                 assert_eq!(change_set.len(), 1);
                 assert_matches!(
                     &change_set[0],
-                    CanisterHttpChangeAction::AddToValidated(share, response) => {
+                    CanisterHttpChangeAction::AddToValidated(share, response, ResponseVisibility::Withhold) => {
                         assert_eq!(share.content.id(), active_callback_id);
                         assert_eq!(response.id, active_callback_id);
                     }
@@ -2682,8 +2718,11 @@ pub mod test {
                 // 4. Assert that the correct change action for gossiping the response was produced.
                 assert_eq!(change_set.len(), 1);
 
-                if let CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, response) =
-                    &change_set[0]
+                if let CanisterHttpChangeAction::AddToValidated(
+                    share,
+                    response,
+                    ResponseVisibility::Publish,
+                ) = &change_set[0]
                 {
                     let expected_response = empty_canister_http_response(callback_id.get());
                     assert_eq!(*response, expected_response);
@@ -2695,10 +2734,7 @@ pub mod test {
                     );
                     assert_eq!(share.signature.signer, replica_config.node_id);
                 } else {
-                    panic!(
-                        "Expected CanisterHttpChangeAction::AddToValidatedAndGossipResponse, but got {:?}",
-                        change_set[0]
-                    );
+                    panic!("Expected a published response, but got {:?}", change_set[0]);
                 }
             });
         });
@@ -2795,7 +2831,9 @@ pub mod test {
                 };
 
                 canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
-                    share, content,
+                    share,
+                    content,
+                    ResponseVisibility::Withhold,
                 )]);
 
                 // Now that there are shares in the pool, we should be able to
@@ -3076,7 +3114,9 @@ pub mod test {
                     log.clone(),
                 );
 
-                // TEST 1: Flexible artifact is missing the response -- should be invalid.
+                // TEST 1: Flexible artifact is missing the response, while the request is
+                // still awaiting one -- should be left unvalidated, to be reconsidered once
+                // our state shows the request as responded to.
                 {
                     let mut canister_http_pool =
                         CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
@@ -3092,11 +3132,7 @@ pub mod test {
                     let changes = pool_manager
                         .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
-                    assert_matches!(
-                        &changes[0],
-                        CanisterHttpChangeAction::HandleInvalid(_, reason)
-                        if reason == "Artifact should contain response"
-                    );
+                    assert!(changes.is_empty(), "{changes:?}");
                 }
 
                 // TEST 2: Flexible artifact has a mismatched content hash -- should be invalid.
@@ -3388,7 +3424,10 @@ pub mod test {
                     let changes = pool_manager
                         .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
-                    assert_matches!(&changes[0], CanisterHttpChangeAction::MoveToValidated(_));
+                    assert_matches!(
+                        &changes[0],
+                        CanisterHttpChangeAction::MoveToValidated(_, ResponseVisibility::Publish)
+                    );
                 }
             })
         });
@@ -3472,7 +3511,7 @@ pub mod test {
                 assert_eq!(change_set.len(), 1);
                 assert_matches!(
                     &change_set[0],
-                    CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, response) => {
+                    CanisterHttpChangeAction::AddToValidated(share, response, ResponseVisibility::Publish) => {
                         let expected_response = empty_response;
                         assert_eq!(*response, expected_response);
                         assert_eq!(share.content.id(), callback_id);
@@ -3696,7 +3735,7 @@ pub mod test {
                 assert_eq!(changes.len(), 1);
                 assert_matches!(
                     &changes[0],
-                    CanisterHttpChangeAction::MoveToValidated(_),
+                    CanisterHttpChangeAction::MoveToValidated(_, ResponseVisibility::Withhold),
                     "free-subnet share was wrongly rejected: {:?}",
                     changes[0]
                 );
@@ -3834,96 +3873,240 @@ pub mod test {
     // ===================================================================
 
     /// A share for an outcall that has already been responded to is still validated:
-    /// it may yet be picked up as an asynchronous receipt.
+    /// it may yet be picked up as an asynchronous receipt. Whether or not a response is
+    /// attached at all makes no difference.
     #[test]
     fn test_share_for_delivered_context_is_validated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    registry,
-                    ..
-                } = DependenciesBuilder::new(pool_config.clone(), 5).build();
+        let signer = node_test_id(0);
+        for (replication, attach_response) in [
+            // A fully replicated response is never attached to a share.
+            (Replication::FullyReplicated, false),
+            (Replication::NonReplicated(signer), false),
+            (Replication::NonReplicated(signer), true),
+            (
+                Replication::Flexible {
+                    committee: BTreeSet::from([signer]),
+                    min_responses: 1,
+                    max_responses: 1,
+                },
+                false,
+            ),
+            (
+                Replication::Flexible {
+                    committee: BTreeSet::from([signer]),
+                    min_responses: 1,
+                    max_responses: 1,
+                },
+                true,
+            ),
+        ] {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                with_test_replica_logger(|log| {
+                    let Dependencies {
+                        pool,
+                        replica_config,
+                        crypto,
+                        state_manager,
+                        registry,
+                        ..
+                    } = DependenciesBuilder::new(pool_config.clone(), 5).build();
+                    assert_eq!(replica_config.node_id, signer);
 
-                let callback_id = CallbackId::from(0);
-                state_manager
-                    .get_mut()
-                    .expect_get_latest_state()
-                    .return_const(Labeled::new(
-                        Height::from(1),
-                        Arc::new(state_with_delivered_http_calls(BTreeMap::from([(
-                            callback_id,
-                            test_request_context(
-                                Replication::FullyReplicated,
-                                PricingVersion::PayAsYouGo,
-                                None,
-                            ),
-                        )]))),
-                    ));
+                    let callback_id = CallbackId::from(0);
+                    state_manager
+                        .get_mut()
+                        .expect_get_latest_state()
+                        .return_const(Labeled::new(
+                            Height::from(1),
+                            Arc::new(state_with_delivered_http_calls(BTreeMap::from([(
+                                callback_id,
+                                test_request_context(
+                                    replication.clone(),
+                                    PricingVersion::PayAsYouGo,
+                                    None,
+                                ),
+                            )]))),
+                        ));
 
-                let mut canister_http_pool =
-                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                let receipt_share = CanisterHttpResponseReceipt {
-                    metadata: CanisterHttpResponseMetadata {
-                        id: callback_id,
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                        content_size: 0,
-                        is_reject: false,
-                        replica_version: test_replica_version(),
-                    },
-                    payment_receipt: CanisterHttpPaymentReceipt::default(),
-                };
-                let signature = crypto
-                    .sign(
-                        &receipt_share,
-                        replica_config.node_id,
-                        RegistryVersion::from(1),
-                    )
-                    .unwrap();
-                canister_http_pool.insert(UnvalidatedArtifact {
-                    message: CanisterHttpResponseArtifact {
-                        share: Signed {
-                            content: receipt_share,
-                            signature,
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                    let response = empty_canister_http_response(callback_id.get());
+                    let receipt_share = CanisterHttpResponseReceipt {
+                        metadata: CanisterHttpResponseMetadata {
+                            id: callback_id,
+                            content_hash: crypto_hash(&response),
+                            content_size: response.content.count_bytes() as u32,
+                            is_reject: false,
+                            replica_version: test_replica_version(),
                         },
-                        response: None,
-                    },
-                    peer_id: replica_config.node_id,
-                    timestamp: UNIX_EPOCH,
-                });
+                        payment_receipt: CanisterHttpPaymentReceipt::default(),
+                    };
+                    let signature = crypto
+                        .sign(&receipt_share, signer, RegistryVersion::from(1))
+                        .unwrap();
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: CanisterHttpResponseArtifact {
+                            share: Signed {
+                                content: receipt_share,
+                                signature,
+                            },
+                            response: attach_response.then_some(response),
+                        },
+                        peer_id: signer,
+                        timestamp: UNIX_EPOCH,
+                    });
 
-                let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager as Arc<_>,
-                    Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::new()))),
-                    crypto,
-                    pool.get_cache(),
-                    replica_config,
-                    SubnetType::Application,
-                    Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
-                    log,
-                );
+                    let pool_manager = CanisterHttpPoolManagerImpl::new(
+                        state_manager as Arc<_>,
+                        Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::new()))),
+                        crypto,
+                        pool.get_cache(),
+                        replica_config,
+                        SubnetType::Application,
+                        Arc::clone(&registry) as Arc<_>,
+                        MetricsRegistry::new(),
+                        log,
+                    );
 
-                let changes =
-                    pool_manager.validate_shares(&pool_manager.latest_state(), &canister_http_pool);
+                    let changes = pool_manager
+                        .validate_shares(&pool_manager.latest_state(), &canister_http_pool);
 
-                assert_matches!(
-                    changes.as_slice(),
-                    [CanisterHttpChangeAction::MoveToValidated(share)]
-                        if share.content.id() == callback_id
-                );
-            })
-        });
+                    assert_matches!(
+                        changes.as_slice(),
+                        [CanisterHttpChangeAction::MoveToValidated(share, visibility)]
+                            if share.content.id() == callback_id
+                                && *visibility == ResponseVisibility::Withhold,
+                        "{replication:?}, response attached: {attach_response}"
+                    );
+                })
+            });
+        }
     }
 
-    /// Artifacts of an outcall that has already been responded to are kept for as
-    /// long as its delivered context is around, and purged once it is gone.
+    /// A share that comes without a response while our own latest state still shows
+    /// the outcall as awaiting one is deferred.
+    #[test]
+    fn test_share_without_response_is_deferred_until_its_context_is_delivered() {
+        let signer = node_test_id(0);
+        for replication in [
+            Replication::NonReplicated(signer),
+            Replication::Flexible {
+                committee: BTreeSet::from([signer]),
+                min_responses: 1,
+                max_responses: 1,
+            },
+        ] {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                with_test_replica_logger(|log| {
+                    let Dependencies {
+                        pool,
+                        replica_config,
+                        crypto,
+                        state_manager,
+                        registry,
+                        ..
+                    } = DependenciesBuilder::new(pool_config.clone(), 5).build();
+                    assert_eq!(replica_config.node_id, signer);
+
+                    let callback_id = CallbackId::from(0);
+                    let context =
+                        test_request_context(replication.clone(), PricingVersion::PayAsYouGo, None);
+                    // The same outcall, before and after its response was delivered.
+                    let awaiting_response = state_with_pending_http_calls(BTreeMap::from([(
+                        callback_id,
+                        context.clone(),
+                    )]));
+                    let responded_to =
+                        state_with_delivered_http_calls(BTreeMap::from([(callback_id, context)]));
+
+                    let mut canister_http_pool =
+                        CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+                    let receipt_share = CanisterHttpResponseReceipt {
+                        metadata: CanisterHttpResponseMetadata {
+                            id: callback_id,
+                            content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                            content_size: 0,
+                            is_reject: false,
+                            replica_version: test_replica_version(),
+                        },
+                        payment_receipt: CanisterHttpPaymentReceipt::default(),
+                    };
+                    let signature = crypto
+                        .sign(&receipt_share, signer, RegistryVersion::from(1))
+                        .unwrap();
+                    canister_http_pool.insert(UnvalidatedArtifact {
+                        message: CanisterHttpResponseArtifact {
+                            share: Signed {
+                                content: receipt_share,
+                                signature,
+                            },
+                            response: None,
+                        },
+                        peer_id: signer,
+                        timestamp: UNIX_EPOCH,
+                    });
+
+                    let metrics_registry = MetricsRegistry::new();
+                    let pool_manager = CanisterHttpPoolManagerImpl::new(
+                        state_manager as Arc<_>,
+                        Arc::new(Mutex::new(Box::new(MockNonBlockingChannel::new()))),
+                        crypto,
+                        pool.get_cache(),
+                        replica_config,
+                        SubnetType::Application,
+                        Arc::clone(&registry) as Arc<_>,
+                        metrics_registry.clone(),
+                        log,
+                    );
+
+                    // While the outcall is still awaiting a response, the share is held
+                    // back, but kept: no change action is produced for it.
+                    let changes =
+                        pool_manager.validate_shares(&awaiting_response, &canister_http_pool);
+                    assert!(changes.is_empty(), "{replication:?}: {changes:?}");
+                    // Held back again on the next round, and observed again: the event
+                    // counts deferrals, not distinct shares.
+                    let changes =
+                        pool_manager.validate_shares(&awaiting_response, &canister_http_pool);
+                    assert!(changes.is_empty(), "{replication:?}: {changes:?}");
+                    assert_eq!(
+                        metric_vec(&[(&[("type", "share_deferred_pending_delivery")], 2)]),
+                        fetch_int_counter_vec(
+                            &metrics_registry,
+                            "canister_http_pool_manager_events"
+                        ),
+                        "{replication:?}"
+                    );
+
+                    // Once our state has caught up, the same share is validated.
+                    let changes = pool_manager.validate_shares(&responded_to, &canister_http_pool);
+                    assert_matches!(
+                        changes.as_slice(),
+                        [CanisterHttpChangeAction::MoveToValidated(share, visibility)]
+                            if share.content.id() == callback_id
+                                && *visibility == ResponseVisibility::Withhold,
+                        "{replication:?}"
+                    );
+                })
+            });
+        }
+    }
+
+    /// The share of an outcall that has already been responded to is kept for as long
+    /// as its delivered context is around, and purged once it is gone. Its response is
+    /// dropped right away: it can never be put into a block again. While the outcall is
+    /// still awaiting a response, both are kept.
     #[test]
     fn test_shares_of_delivered_context_are_purged_only_once_it_is_gone() {
-        for delivered in [true, false] {
+        /// The state of the outcall whose share and response are in the pool.
+        #[derive(Debug)]
+        enum Outcall {
+            AwaitingResponse,
+            Responded,
+            Gone,
+        }
+
+        for outcall in [Outcall::AwaitingResponse, Outcall::Responded, Outcall::Gone] {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
                 with_test_replica_logger(|log| {
                     let Dependencies {
@@ -3941,23 +4124,24 @@ pub mod test {
                         PricingVersion::PayAsYouGo,
                         None,
                     );
-                    let contexts = if delivered {
-                        BTreeMap::from([(callback_id, context.clone())])
-                    } else {
-                        BTreeMap::new()
+                    let delivered = match outcall {
+                        Outcall::Responded => BTreeMap::from([(callback_id, context.clone())]),
+                        Outcall::AwaitingResponse | Outcall::Gone => BTreeMap::new(),
                     };
-                    let mut state = state_with_delivered_http_calls(contexts);
-                    // Whether or not the context is still around, the callback id must
-                    // have been handed out already.
+                    let mut state = state_with_delivered_http_calls(delivered);
+                    // Whatever state the outcall is in, the callback id must have been
+                    // handed out already.
                     state
                         .metadata
                         .subnet_call_context_manager
-                        .push_context(SubnetCallContext::CanisterHttpRequest(context));
-                    state
-                        .metadata
-                        .subnet_call_context_manager
-                        .canister_http_request_contexts
-                        .clear();
+                        .push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
+                    let contexts = &mut state.metadata.subnet_call_context_manager;
+                    contexts.canister_http_request_contexts.clear();
+                    if matches!(outcall, Outcall::AwaitingResponse) {
+                        contexts
+                            .canister_http_request_contexts
+                            .insert(callback_id, context);
+                    }
                     state_manager
                         .get_mut()
                         .expect_get_latest_state()
@@ -3989,6 +4173,7 @@ pub mod test {
                             signature,
                         },
                         response,
+                        ResponseVisibility::Withhold,
                     )]);
 
                     let pool_manager = CanisterHttpPoolManagerImpl::new(
@@ -4008,16 +4193,27 @@ pub mod test {
                         &canister_http_pool,
                     );
 
-                    if delivered {
-                        assert!(changes.is_empty(), "{changes:?}");
-                    } else {
-                        assert_matches!(
+                    match outcall {
+                        // Both are still of use.
+                        Outcall::AwaitingResponse => {
+                            assert!(changes.is_empty(), "{outcall:?}: {changes:?}")
+                        }
+                        // The response can no longer be put into a block, while the share
+                        // is still to be published as an asynchronous receipt.
+                        Outcall::Responded => assert_matches!(
+                            changes.as_slice(),
+                            [CanisterHttpChangeAction::RemoveContent(_)],
+                            "{outcall:?}: {changes:?}"
+                        ),
+                        // Neither is of any use any more.
+                        Outcall::Gone => assert_matches!(
                             changes.as_slice(),
                             [
                                 CanisterHttpChangeAction::RemoveValidated(_),
                                 CanisterHttpChangeAction::RemoveContent(_),
-                            ]
-                        );
+                            ],
+                            "{outcall:?}: {changes:?}"
+                        ),
                     }
                 })
             });
@@ -4026,8 +4222,8 @@ pub mod test {
 
     /// A share is signed even for an outcall that has already been responded to: the
     /// work was done and paid for, so the receipt has to be published for the spend
-    /// to be settled asynchronously. It is gossiped exactly as it would have been
-    /// before the response was delivered.
+    /// to be settled asynchronously. The response itself is neither retained nor
+    /// gossiped, whatever the replication: it can never make it into a block any more.
     #[test]
     fn test_share_is_created_for_a_delivered_context() {
         for replication in [
@@ -4103,24 +4299,15 @@ pub mod test {
                     let change_set =
                         pool_manager.create_shares_from_responses(&pool_manager.latest_state());
 
-                    match replication {
-                        // A peer recomputes the response itself, so only the receipt
-                        // is gossiped.
-                        Replication::FullyReplicated => assert_matches!(
-                            change_set.as_slice(),
-                            [CanisterHttpChangeAction::AddToValidated(share, _)]
-                                if share.content.id() == callback_id
-                        ),
-                        // A peer cannot recompute it, and needs it to validate the
-                        // receipt against.
-                        _ => assert_matches!(
-                            change_set.as_slice(),
-                            [CanisterHttpChangeAction::AddToValidatedAndGossipResponse(
-                                share,
-                                _
-                            )] if share.content.id() == callback_id
-                        ),
-                    }
+                    assert_matches!(
+                        change_set.as_slice(),
+                        [CanisterHttpChangeAction::AddToValidated(
+                            share,
+                            _,
+                            ResponseVisibility::Withhold,
+                        )] if share.content.id() == callback_id,
+                        "{replication:?}"
+                    );
                     // The request is no longer in flight.
                     assert!(
                         !pool_manager

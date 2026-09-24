@@ -304,7 +304,7 @@ impl std::fmt::Display for TopologySnapshot {
                 "\tNode id={}, ipv6={:<width$}, domain_name={}, index={}",
                 n.node_id,
                 n.get_ip_addr(),
-                n.get_domain().map_or("n/a".to_string(), |domain| domain),
+                n.get_domain().unwrap_or_else(|| "n/a".to_string()),
                 idx,
                 width = max_length_ipv6,
             )
@@ -2820,6 +2820,12 @@ pub async fn install_nns_canisters(
             .unwrap_or_default()
         {
             builder.enable_blank_replica_version_id_for_cloud_engines();
+        }
+        if registry_canister_init_payload
+            .is_subnet_splitting_enabled
+            .unwrap_or_default()
+        {
+            builder.enable_subnet_splitting();
         }
 
         builder

@@ -331,6 +331,8 @@ impl CanisterMetrics {
         self.interrupted_during_execution
     }
 
+    /// The total cycles consumed by the canister, as a gauge: raised by every
+    /// prepayment and lowered again by its refund.
     pub fn consumed_cycles(&self) -> NominalCycles {
         self.consumed_cycles
     }
@@ -341,19 +343,41 @@ impl CanisterMetrics {
     /// (e.g. for memory usage). The gauge above, in contrast, is raised by the
     /// prepayment and lowered again by the refund.
     ///
-    /// Exactly the scalar equivalent of
-    /// [`Self::consumed_cycles_by_use_cases_monotonic`], summed over the use cases
-    /// that [`Self::consumed_cycles`] covers, i.e. everything except HTTPS outcalls,
-    /// which are only tracked at the subnet level (and, for the canister, in the
-    /// by-use-case map).
+    /// The scalar counterpart of [`Self::consumed_cycles_by_use_cases_monotonic`],
+    /// covering everything except HTTPS outcalls. The two need not add up: this
+    /// metric and the by-use-case ones were introduced at different times.
+    ///
+    /// See `SystemState::outstanding_prepayments` for the invariant that ties the
+    /// two together.
     pub fn consumed_cycles_monotonic(&self) -> NominalCycles {
         self.consumed_cycles_monotonic
     }
 
+    /// The cycles consumed by the canister per use case, as gauges: each is raised by
+    /// every prepayment for that use case and lowered again by its refund.
+    ///
+    /// They only reach back to April 2023, so unlike the scalar
+    /// [`Self::consumed_cycles`] -- which has been tracked since the beginning -- they
+    /// are not the canister's full history.
+    ///
+    /// Has no `HTTPOutcalls` entry: HTTPS outcalls are only tracked as a gauge at the
+    /// subnet level.
     pub fn consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_cases
     }
 
+    /// The monotonic counterparts of [`Self::consumed_cycles_by_use_cases`]: each is
+    /// only ever increased, by the actually consumed amount (prepayment minus refund)
+    /// once the refund is known; or right away, for a direct charge made without a
+    /// prepayment (e.g. for memory usage).
+    ///
+    /// Unlike the gauges, these have an `HTTPOutcalls` entry (see
+    /// `SystemState::observe_consumed_cycles_for_https_outcall`): HTTPS outcalls are
+    /// only tracked as a gauge at the subnet level, but as a monotonic amount here
+    /// too.
+    ///
+    /// See `SystemState::outstanding_prepayments` for the invariant that ties these
+    /// to the gauges.
     pub fn consumed_cycles_by_use_cases_monotonic(
         &self,
     ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
@@ -383,6 +407,52 @@ impl CanisterMetrics {
 
     pub fn load_metrics_mut(&mut self) -> &mut LoadMetrics {
         &mut self.load_metrics
+    }
+}
+
+/// A canister's prepayments whose refunds are still outstanding, broken down by
+/// use case.
+///
+/// Only [`CyclesUseCase::Instructions`] and
+/// [`CyclesUseCase::RequestAndResponseTransmission`] can have any: they are the only
+/// two [`CyclesUseCaseRefundableKind`]s, every other use case is charged outright.
+///
+/// See [`SystemState::outstanding_prepayments`].
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
+pub struct OutstandingPrepayments {
+    /// Outstanding for [`CyclesUseCase::Instructions`].
+    pub instructions: NominalCycles,
+    /// Outstanding for [`CyclesUseCase::RequestAndResponseTransmission`].
+    pub transmission: NominalCycles,
+}
+
+impl OutstandingPrepayments {
+    /// The total across all use cases, i.e. the amount by which
+    /// [`CanisterMetrics::consumed_cycles`] exceeds
+    /// [`CanisterMetrics::consumed_cycles_monotonic`].
+    pub fn total(&self) -> NominalCycles {
+        self.instructions + self.transmission
+    }
+
+    /// The total amount of outstanding prepayments for `use_case`. Zero for
+    /// a use case that is never prepaid, and thus never refunded.
+    pub fn for_use_case(&self, use_case: CyclesUseCase) -> NominalCycles {
+        match use_case {
+            CyclesUseCase::Instructions => self.instructions,
+            CyclesUseCase::RequestAndResponseTransmission => self.transmission,
+            CyclesUseCase::Memory
+            | CyclesUseCase::ComputeAllocation
+            | CyclesUseCase::Uninstall
+            | CyclesUseCase::IngressInduction
+            | CyclesUseCase::CanisterCreation
+            | CyclesUseCase::BurnedCycles
+            | CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::SchnorrOutcalls
+            | CyclesUseCase::VetKd
+            | CyclesUseCase::HTTPOutcalls
+            | CyclesUseCase::DeletedCanisters
+            | CyclesUseCase::DroppedMessages => NominalCycles::zero(),
+        }
     }
 }
 
@@ -2259,6 +2329,186 @@ impl SystemState {
         &mut self.canister_metrics
     }
 
+    /// The prepayments that have already been added to
+    /// [`CanisterMetrics::consumed_cycles`] and to
+    /// [`CanisterMetrics::consumed_cycles_by_use_cases`] but whose refund has not
+    /// been observed yet; i.e. the amounts that will be reported as the prepayment of
+    /// a future `ConsumingCycles::Refund` observation.
+    ///
+    /// Only `Instructions` and `RequestAndResponseTransmission` charges are ever
+    /// refunded (they are the only two `CyclesUseCaseRefundableKind`s) and an
+    /// outstanding prepayment of either is always recorded in the replicated state:
+    ///
+    ///  * in the `Callback` of a call whose response has not been executed yet
+    ///    (`prepayment_for_response_execution` and
+    ///    `prepayment_for_call_transmission`); or
+    ///  * in the `prepaid_execution_cycles` of an aborted execution or an aborted
+    ///    `install_code`.
+    ///
+    /// Together with how the metrics are updated, this yields the invariants
+    ///
+    /// ```text
+    /// consumed_cycles - outstanding_prepayments().total() == consumed_cycles_monotonic
+    /// ```
+    ///
+    /// and, for every use case `u` of `consumed_cycles_by_use_cases`,
+    ///
+    /// ```text
+    /// consumed_cycles_by_use_cases[u] - outstanding_prepayments().for_use_case(u)
+    ///     == consumed_cycles_by_use_cases_monotonic[u]
+    /// ```
+    ///
+    /// which hold whenever no execution is in progress or paused, once the monotonic
+    /// amounts have been backfilled. They are not a precondition of
+    /// [`Self::migrate_consumed_cycles_to_monotonic`] but what that method
+    /// establishes: a canister decoded from a checkpoint predating the monotonic
+    /// amounts starts out with zeroes in them, so the left-hand sides are exactly the
+    /// values the backfill has to write.
+    ///
+    /// Note that the by-use-case invariant covers only the use cases of the gauge
+    /// map, and reads an absent monotonic entry as zero. The `HTTPOutcalls` entry of
+    /// the monotonic map is thus outside it: it has no gauge counterpart at the
+    /// canister level (see
+    /// [`CanisterMetrics::consumed_cycles_by_use_cases_monotonic`]).
+    ///
+    /// Returns `None` if the outstanding prepayments cannot be derived from the
+    /// replicated state, i.e. if the canister has a paused execution whose
+    /// prepayment is not part of it.
+    pub fn outstanding_prepayments(&self) -> Option<OutstandingPrepayments> {
+        /// Adds the prepayments made when the request behind `callback` was sent (see
+        /// `SandboxSafeSystemState::push_output_request`), to be refunded when its
+        /// response is executed.
+        fn add_callback_prepayments(outstanding: &mut OutstandingPrepayments, callback: &Callback) {
+            outstanding.instructions += callback.prepayment_for_response_execution.nominal();
+            // `prepayment_for_call_transmission` is zero for callbacks created before
+            // April 2026; the refund path falls back to
+            // `prepayment_for_response_transmission` for those, so mirror it here.
+            outstanding.transmission += if callback.prepayment_for_call_transmission.is_zero() {
+                callback.prepayment_for_response_transmission.nominal()
+            } else {
+                callback.prepayment_for_call_transmission.nominal()
+            };
+        }
+
+        let mut outstanding = OutstandingPrepayments::default();
+
+        match self.task_queue.paused_or_aborted_task() {
+            // A paused execution is ephemeral, so its prepayment is only held in
+            // memory, not in the replicated state.
+            Some(ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_)) => {
+                return None;
+            }
+            Some(ExecutionTask::AbortedExecution {
+                input,
+                prepaid_execution_cycles,
+            }) => {
+                // Zero for an aborted response execution, which prepays nothing of
+                // its own: it is paid for by the callback that the task carries.
+                outstanding.instructions += prepaid_execution_cycles.nominal();
+                // That callback was unregistered from the `CallContextManager` when
+                // the response was popped, so it is not also counted below; and
+                // nothing was refunded yet, because aborting discards the changes
+                // that the initial steps of the response execution made.
+                if let CanisterMessageOrTask::Message(CanisterMessage::Response {
+                    callback, ..
+                }) = input
+                {
+                    add_callback_prepayments(&mut outstanding, callback);
+                }
+            }
+            Some(ExecutionTask::AbortedInstallCode {
+                prepaid_execution_cycles,
+                ..
+            }) => outstanding.instructions += prepaid_execution_cycles.nominal(),
+            // Not a paused or aborted task, so it cannot be in this slot. Bail out
+            // rather than silently returning a bogus amount; the caller reports the
+            // `None` as a critical error.
+            Some(
+                ExecutionTask::Heartbeat
+                | ExecutionTask::GlobalTimer
+                | ExecutionTask::OnLowWasmMemory,
+            ) => return None,
+            None => {}
+        }
+
+        if let Some(call_context_manager) = self.call_context_manager() {
+            for callback in call_context_manager.callbacks().values() {
+                add_callback_prepayments(&mut outstanding, callback);
+            }
+        }
+
+        Some(outstanding)
+    }
+
+    /// Backfills [`CanisterMetrics::consumed_cycles_monotonic`] and
+    /// [`CanisterMetrics::consumed_cycles_by_use_cases_monotonic`] from the
+    /// [`CanisterMetrics::consumed_cycles`] and
+    /// [`CanisterMetrics::consumed_cycles_by_use_cases`] gauges, which predate them
+    /// and thus reach further back: to the beginning for the scalar gauge, to April
+    /// 2023 for the by-use-case ones.
+    ///
+    /// This derivation is exact, thanks to the invariants documented on
+    /// [`Self::outstanding_prepayments`]: a gauge differs from its monotonic
+    /// counterpart by exactly the prepayments whose refund is still outstanding, all
+    /// of which are recorded in the replicated state. And because the invariants hold
+    /// whenever no execution is paused, deriving the monotonic amounts this way is
+    /// idempotent, so it is safe to redo it in every checkpoint round and after a
+    /// downgrade has dropped them.
+    ///
+    /// The `HTTPOutcalls` entry of the monotonic map is left untouched: HTTPS outcalls
+    /// have no canister-level gauge to derive it from (see
+    /// [`CanisterMetrics::consumed_cycles_by_use_cases_monotonic`]), so it keeps
+    /// covering only what it has recorded since it was introduced.
+    ///
+    /// A callback created before `prepayment_for_call_transmission` was stored in it
+    /// (#9859, April 2026) is no exception, even though the fallback that
+    /// [`Self::outstanding_prepayments`] and the refund path apply to such a callback
+    /// cannot account for its call fee: that fee is part of the gauges, so the first
+    /// backfill credits it, and executing the response of a callback so credited keeps
+    /// the monotonic amounts in step with the gauges, requiring no further backfill
+    /// (see `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`).
+    ///
+    /// Does nothing if the canister has a paused execution whose prepayment is not
+    /// part of the replicated state (see [`Self::outstanding_prepayments`]); the
+    /// caller is not supposed to call this while an execution is paused.
+    pub fn migrate_consumed_cycles_to_monotonic(&mut self) {
+        let Some(outstanding) = self.outstanding_prepayments() else {
+            return;
+        };
+        // Destructured so that the gauge map can be iterated while the monotonic map
+        // is updated.
+        let CanisterMetrics {
+            consumed_cycles,
+            consumed_cycles_monotonic,
+            consumed_cycles_by_use_cases,
+            consumed_cycles_by_use_cases_monotonic,
+            ..
+        } = &mut self.canister_metrics;
+
+        // `max` rather than a plain assignment, here and below, as defense in depth:
+        // a monotonic amount must never go down.
+        *consumed_cycles_monotonic =
+            (*consumed_cycles_monotonic).max(*consumed_cycles - outstanding.total());
+
+        // Driven by the gauge map, which leaves the monotonic map's `HTTPOutcalls`
+        // entry alone: it has no gauge counterpart at the canister level. The skip
+        // below guards that entry explicitly, because it is the one monotonic entry
+        // that carries data of its own -- `observe_consumed_cycles_for_https_outcall`
+        // writes it directly, with no gauge behind it. A stray `HTTPOutcalls` gauge
+        // entry (which `observe_consumed_cycles_with_use_case` only rules out in debug
+        // builds) would otherwise be taken as the amount to backfill from, and the
+        // `max` could raise a live-tracked amount above what was really consumed.
+        for (use_case, gauge) in consumed_cycles_by_use_cases.iter() {
+            if *use_case == CyclesUseCase::HTTPOutcalls {
+                continue;
+            }
+            let monotonic = consumed_cycles_by_use_cases_monotonic
+                .entry(*use_case)
+                .or_insert_with(NominalCycles::zero);
+            *monotonic = (*monotonic).max(*gauge - outstanding.for_use_case(*use_case));
+        }
+    }
+
     /// Clears all canister changes and their memory usage,
     /// but keeps the total number of changes recorded.
     pub fn clear_canister_history(&mut self) {
@@ -2590,6 +2840,27 @@ pub mod testing {
             deadline: CoarseTime,
         ) -> (CallbackId, Arc<Callback>);
 
+        /// Testing only: Zeroes the `prepayment_for_call_transmission` of the given
+        /// callback, e.g. to simulate a callback created before April 2026.
+        fn reset_prepayment_for_call_transmission(&mut self, callback_id: CallbackId);
+
+        /// Testing only: Resets `CanisterMetrics::consumed_cycles_monotonic` and
+        /// `CanisterMetrics::consumed_cycles_by_use_cases_monotonic`, e.g. to simulate
+        /// a canister loaded from a checkpoint predating those fields.
+        fn reset_consumed_cycles_monotonic(&mut self);
+
+        /// Testing only: Resets the `CanisterMetrics::consumed_cycles` and
+        /// `CanisterMetrics::consumed_cycles_by_use_cases` gauges, e.g. to break the
+        /// invariants on `SystemState::outstanding_prepayments`.
+        fn reset_consumed_cycles(&mut self);
+
+        /// Testing only: Zeroes one use case's entry in the
+        /// `CanisterMetrics::consumed_cycles_by_use_cases` gauge map, e.g. to break
+        /// the by-use-case invariant on `SystemState::outstanding_prepayments` while
+        /// leaving the scalar gauge, and thus the scalar invariant, intact. Panics if
+        /// there is no such entry.
+        fn reset_consumed_cycles_of_use_case(&mut self, use_case: CyclesUseCase);
+
         /// Testing only: sets the canister status.
         fn set_status(&mut self, status: CanisterStatus);
 
@@ -2624,6 +2895,34 @@ pub mod testing {
 
         fn pop_input(&mut self) -> Option<CanisterMessage> {
             self.pop_input()
+        }
+
+        fn reset_prepayment_for_call_transmission(&mut self, callback_id: CallbackId) {
+            call_context_manager_mut(&mut self.status)
+                .unwrap()
+                .reset_prepayment_for_call_transmission(callback_id);
+        }
+
+        fn reset_consumed_cycles_monotonic(&mut self) {
+            self.canister_metrics.consumed_cycles_monotonic = NominalCycles::zero();
+            // Cleared rather than zeroed entry by entry: a checkpoint predating the
+            // field has no entries at all.
+            self.canister_metrics
+                .consumed_cycles_by_use_cases_monotonic
+                .clear();
+        }
+
+        fn reset_consumed_cycles(&mut self) {
+            self.canister_metrics.consumed_cycles = NominalCycles::zero();
+            self.canister_metrics.consumed_cycles_by_use_cases.clear();
+        }
+
+        fn reset_consumed_cycles_of_use_case(&mut self, use_case: CyclesUseCase) {
+            *self
+                .canister_metrics
+                .consumed_cycles_by_use_cases
+                .get_mut(&use_case)
+                .unwrap() = NominalCycles::zero();
         }
 
         fn set_status(&mut self, status: CanisterStatus) {

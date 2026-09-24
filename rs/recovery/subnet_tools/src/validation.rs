@@ -13,19 +13,19 @@ use url::Url;
 
 use std::{fmt::Display, path::Path};
 
-/// Validates the following artifacts:
+/// Validates the following artifacts of a subnet that was halted at a CUP:
 /// 1. NNS signed State Tree;
-/// 2. Source subnet's original, pre-split, CUP;
-/// 3. Source subnet's original, pre-split, State Manifest.
+/// 2. the CUP the subnet halted at;
+/// 3. the manifest of the state the subnet halted at.
 pub fn validate_artifacts(
     state_tree_path: impl AsRef<Path>,
     nns_public_key_path: Option<&Path>,
     cup_path: impl AsRef<Path>,
     state_manifest_path: impl AsRef<Path>,
-    source_subnet_id: SubnetId,
+    subnet_id: SubnetId,
     logger: &Logger,
 ) -> RecoveryResult<()> {
-    let validated_source_subnet_public_key = validation_helper(
+    let validated_subnet_public_key = validation_helper(
         "State Tree signed by the NNS",
         "extracted authentic subnet key from the NNS state tree",
         logger,
@@ -33,27 +33,27 @@ pub fn validate_artifacts(
             validate_state_tree_and_extract_subnet_public_key(
                 state_tree_path.as_ref(),
                 nns_public_key_path,
-                source_subnet_id,
+                subnet_id,
                 logger,
             )
         },
     )?;
 
     let state_hash = validation_helper(
-        "Source Subnet's original CUP",
-        "source subnet CUP signature is valid",
+        "the CUP the subnet halted at",
+        "the CUP signature is valid",
         logger,
         || {
-            validate_original_source_cup_and_extract_state_hash(
+            validate_cup_and_extract_state_hash(
                 cup_path.as_ref(),
-                &validated_source_subnet_public_key,
+                &validated_subnet_public_key,
                 logger,
             )
         },
     )?;
 
     validation_helper(
-        "Source Subnet's original state manifest",
+        "the manifest of the state the subnet halted at",
         "recomputed manifest root hash matches the one in the CUP",
         logger,
         || validate_manifest(state_manifest_path.as_ref(), &state_hash, logger),
@@ -62,7 +62,7 @@ pub fn validate_artifacts(
     Ok(())
 }
 
-fn validate_original_source_cup_and_extract_state_hash(
+fn validate_cup_and_extract_state_hash(
     cup_path: &Path,
     subnet_public_key: &ThresholdSigPublicKey,
     logger: &Logger,
@@ -115,7 +115,7 @@ fn validate_original_source_cup_and_extract_state_hash(
 fn validate_state_tree_and_extract_subnet_public_key(
     state_tree_path: &Path,
     nns_public_key_path: Option<&Path>,
-    source_subnet_id: SubnetId,
+    subnet_id: SubnetId,
     logger: &Logger,
 ) -> RecoveryResult<ThresholdSigPublicKey> {
     let agent_helper = AgentHelper::new(
@@ -124,7 +124,7 @@ fn validate_state_tree_and_extract_subnet_public_key(
         logger.clone(),
     )?;
 
-    let state_tree = StateTree::read_from_file(state_tree_path, source_subnet_id)?;
+    let state_tree = StateTree::read_from_file(state_tree_path, subnet_id)?;
 
     agent_helper.validate_state_tree(&state_tree)?;
 

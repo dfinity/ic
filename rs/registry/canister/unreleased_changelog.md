@@ -21,10 +21,17 @@ on the process that this file is part of, see
   `HostosVersion` accept, so until now, it was possible to elect a version that consumers could not read
   back out of the Registry.
 
+* `secp256r1` as a variant of `EcdsaCurve`, so a chain key config may now name a NIST P-256
+  ECDSA key. It is reachable through `create_subnet` and `update_subnet`, and a subnet accepting
+  it still needs the key itself to be generated and enabled by separate proposals.
+
 * `merge_subnets` endpoint, callable through a `MergeSubnets` proposal. It merges a subnet into
   another subnet: in the routing table, reassigns all canister ranges hosted by the source subnet
   to the destination subnet. Only the routing table is updated: neither subnet record is modified
   and the source subnet is not deleted.
+
+* Newly created `CatchUpPackageContents` records with CUP type `CupType::Genesis` will not contain a `height`
+  field anymore. You can (and should) assume that the height for `Genesis` CUPs is always 0.
 
 ## Changed
 
