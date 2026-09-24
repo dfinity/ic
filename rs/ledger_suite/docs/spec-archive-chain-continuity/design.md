@@ -829,11 +829,25 @@ is derived from the batch — `push((0, chunk_len - 1))` for the first node,
 `last_height + chunk_len` for the rest (`archive.rs:285-301`) — which was safe only
 while no append was ever empty. A successful indexed probe to a fresh archive has
 `chunk_len = 0`, so that arithmetic underflows or publishes a range for a block that does
-not exist. The rule is therefore stated rather than inherited: a range entry is inserted
-or widened **only from the reply's `block_index_offset` and `next_index`, and only when
-`next_index > block_index_offset`** — a reply with the two equal describes an archive
-holding nothing and leaves the entry absent. The batch length plays no part, and the
-`chunk_len` arithmetic goes with the loops it belonged to.
+not exist. The rule is therefore stated rather than inherited: a node's range is set **only from
+the reply's `block_index_offset` and `next_index`**, and a reply with the two equal
+describes an archive holding nothing. The batch length plays no part, and the `chunk_len`
+arithmetic goes with the loops it belonged to.
+
+**And "absent" cannot mean a missing element, because of how the ranges are stored.**
+`Archive::index()` zips `nodes_block_ranges` with `nodes` (`archive.rs:191-196`), so the
+two vectors are aligned only by the implicit rule that at most the *last* node may lack
+an entry. That holds today by accident of the loops, and an empty archive that is not
+the last node — or any future path that creates one — would pair a later node's range
+with the empty node's canister id and corrupt both `archives()` and block routing. So the
+state gains `node_ranges`, one `NodeRange { offset, next_index }` per node, aligned with
+`nodes` by construction: an empty archive is `next_index == offset`, published ranges
+are derived by skipping those (`Req 7.6`) and taking `next_index - 1` for the inclusive
+end, and the per-node `offset` is the recorded start `Req 8.9` compares against — which
+the ledger otherwise never records (Constraints). It is `#[serde(default)]` and filled on
+the first upgrade from the legacy inclusive pairs, `(start, end)` becoming
+`(start, end + 1)`, one per existing node; `nodes_block_ranges` is then kept only as
+long as anything still reads it.
 
 A published range is inclusive of both ends, so an empty archive has no pair of indices
 that could describe it — the ledger's published view and its internal record are the
@@ -856,8 +870,11 @@ Creation state is the exception, and is persisted:
     creating: Creating,
     #[serde(default)]                                      // empty is Default
     pending_handovers: Vec<CanisterId>,
+    #[serde(default)]                                      // filled from the legacy pairs on first upgrade
+    node_ranges: Vec<NodeRange>,                           // one per node, aligned with `nodes`
 
     enum Creating { Idle, Started, Created(CanisterId) }   // Default = Idle
+    struct NodeRange { offset: u64, next_index: u64 }      // empty archive: next_index == offset
 
 `Started` before `create_canister`, `Created(id)` as soon as it returns — **and the
 round ends there**, see below — `Idle` when `nodes.push` succeeds. Both non-`Idle` states are exposed (`Req 11.2`), with the id
@@ -1027,6 +1044,16 @@ An empty archive reporting `at_capacity` therefore halts, and the reply already 
 what is needed to tell the two apart: the archive holds no blocks exactly when
 `next_index` equals `block_index_offset`.
 
+**The reply is not the only path to a roll-over, and the other one must halt too.** On a
+cold start the current code asks the tail for `remaining_capacity` and rolls over when
+it is below the first block's size (`archive.rs:547-558`) — before any append is sent,
+so before any reply could carry `at_capacity`. An empty tail whose first block exceeds
+`node_max_memory_size_bytes` would therefore create a same-sized archive on that path
+and never reach the halt. So the check is made where the information already is: a block
+larger on its own than the configured archive size halts *before any call*, and a
+capacity pre-check that finds an *empty* tail too small halts rather than creates. Both
+are the same condition seen from different places, and `Req 4.10` names both.
+
 For a suite that predates this work there is no previously *created* node to have
 reported anything — but there is a tail, and `Req 10.3`'s probe reports its range
 before the first roll-over, which is where `Req 7.1` gets its value. Worth a comment
@@ -1180,9 +1207,20 @@ listed in `pending_handovers` — every retry unauthorized, the metric never cle
 So it goes in two steps (`Req 11.11`). First add the configured controllers while
 keeping the ledger: idempotent, and verifiable at any time by reading the archive's
 controller list, which the ledger is still a controller and so still entitled to do.
-Then remove the ledger — and that step cannot fail in a way that matters, because its
-only two outcomes are "still a controller, retry" and "not a controller", which is
-precisely the state the handover exists to reach. `Req 11.12` therefore treats an
+Then replace the list with exactly the configured controllers, which removes the ledger
+— and that step cannot fail in a way that matters, because its only two outcomes are
+"still a controller, retry" and "not a controller", which is precisely the state the
+handover exists to reach.
+
+**The first step has to respect the platform's ceiling of ten controllers**
+(`MAX_CONTROLLERS`, `management_canister_types/src/lib.rs:51`). `ArchiveOptions` builds
+the target list from `controller_id` plus an unbounded `more_controller_ids`
+(`archive.rs:369-372`), so a suite configured with ten controllers is valid today — and
+adding all ten while keeping the ledger makes eleven, which the management canister
+rejects every time. The first step therefore adds as many of the configured controllers
+as fit beside the ledger — nine, in that case — and the second step, which sets the
+final list, supplies the rest. The archive is governable by its intended controllers
+after step one either way, which is all that step was for. `Req 11.12` therefore treats an
 unauthorized retry as completion. The archive is governable by its intended
 controllers after step one, so nothing is at risk while step two settles.
 
@@ -1310,6 +1348,7 @@ test is baseline-independent.
 | 17f | upgrade | adopt an archive whose handover has not completed, then upgrade the ledger; assert the pending handover survives and is still retried afterwards | `Req 11.10` |
 | 17i | integration | fail one archive's handover, keep archiving until it fills and a second archive is adopted, and assert the first is still retried and still counted — the archive a single slot would have dropped | `Req 11.13` |
 | 17g | integration | complete step one of the handover, then lose step two's outcome; assert a retry refused as unauthorized clears the state and the metric rather than retrying forever | `Req 11.11`, `11.12` |
+| 17m | integration | configure exactly ten controllers — the platform maximum — and drive the handover; assert step one is accepted (nine plus the ledger), step two sets all ten, and the handover completes rather than being rejected on every retry | `Req 11.11` |
 | 17h | unit, `ic-icrc1-archive` | decode a pre-change `ArchiveConfig` from CBOR bytes captured before this change and assert it decodes with the new field absent — a struct-level test, since the field is init-only and has no public readback — so PR 1 is not the release that breaks every archive's first upgrade | the `#[serde(default)]` above |
 | 18b | integration | after the tail returns no range, assert a later round issues the probe once the backoff permits — no blocks moved, one empty append — rather than skipping every round and never resuming | `Req 10.1`, `10.2` |
 | 18 | integration | install an old archive wasm as the tail; assert nothing is archived and the metric rises, then upgrade the archive and assert archiving resumes without a ledger upgrade. Repeat against a ledger whose archives do not implement the protocol and assert it archives normally | `Req 10.1`, `10.2`, `10.5` |
@@ -1326,7 +1365,7 @@ test is baseline-independent.
 | 15h | integration | answer with an empty probe and separately with a first-block-too-large `StoredPartial`, both reporting a range beyond the archived prefix; assert the prefix does not advance on either, although both would pass a gate written on outcome arms alone | `Req 8.8`, `Req 3.9` |
 | 15j | integration | with an archive holding 1000 blocks, re-send only the first 100 and take the wholly-held reply; assert the Archived_Prefix advances to 100 and **not** to the reported 1000, and that the removal count matches — the blocks the comparison at index 99 said nothing about | `Req 8.8`, `Req 2.5` |
 | 7e | archive | configure `max_memory_size_bytes` below a single block's size and append it with an index; assert nothing is stored, `at_capacity` is true, and `next_index` equals `block_index_offset` — the reply the ledger must halt on | `Req 4.10` |
-| 15e | integration | drive the oversized-block case end to end; assert the ledger halts with its own metric and creates **no** archive, and that an ordinary full tail still rolls over — the two cases that look identical in the flag alone | `Req 4.10`, `Req 4.5` |
+| 15e | integration | drive the oversized-block case end to end, on both paths: through an indexed append's `at_capacity` reply, and on a cold start where the `remaining_capacity` pre-check meets an empty tail; assert the ledger halts with its own metric and creates **no** archive on either, and that an ordinary full tail still rolls over — the cases that look identical in the flag alone | `Req 4.10`, `Req 4.5` |
 | 15f | integration | report, from a non-tail archive, a position below the aggregate Archived_Prefix but matching its own published range; assert no halt. Then report one short of its own range and assert the halt — the false positive that the aggregate comparison produced for every legacy archive | `Req 8.3` |
 | 15l | unit, `ledger_canister_core` | have the tail report an offset one above its published start, and separately have a suite's first archive report a non-zero offset; assert both halt on the distinct metric and the record is unchanged — the start `Req 7.4` never checks | `Req 8.9` |
 | 15m | integration | install the tail with no Expected_Parent, as an old ledger would, then send the first batch from the new ledger; assert `verified` is false, the unverifiable counter rises, and the Archived_Prefix does **not** advance — a stored block that was checked against nothing is not evidence | `Req 3.10`, `Req 8.8`, `Req 1.6` |
@@ -1343,7 +1382,8 @@ test is baseline-independent.
 | 29 | integration | after each round, assert every index the ledger served before it is still retrievable, and that the ledger stopped serving only indices some archive reports covering — the headline safety property, which rows 14 and 15 approach only from their failure sides | `Req 8.1`, `Req 8.4` |
 | 30 | integration | drive a round that must roll over; assert exactly one archive is created, and that a round which both fills the tail and has blocks left over does not create two | `Req 12.2` |
 | 31 | integration | assert the capability probe stores nothing and consumes no capacity against a live archive, that a second round against an archive that already answered issues no further probe, and that a round which does probe sends at most one empty append | `Req 10.3`, `10.4`, `Req 12.1` |
-| 31b | unit, `ledger_canister_core` | send the capability probe to a freshly created archive and take its reply with `next_index == block_index_offset`; assert no range entry is inserted, `archives()` omits it, and nothing underflows — the `chunk_len - 1` arithmetic the probe would have hit | `Req 7.6`, `Req 3.5` |
+| 31b | unit, `ledger_canister_core` | send the capability probe to a freshly created archive and take its reply with `next_index == block_index_offset`; assert its `NodeRange` reads empty, `archives()` omits it, and nothing underflows — the `chunk_len - 1` arithmetic the probe would have hit | `Req 7.6`, `Req 3.5` |
+| 31c | upgrade | decode a pre-change `Archive` with three inclusive legacy ranges; assert `node_ranges` is filled one per node as `(start, end + 1)`, `archives()` is unchanged, and — with one node's range then set empty — every other node still pairs with its own canister id, which the zipped representation could not guarantee | `Req 7.2`, `Req 7.6`, `Req 8.9` |
 | 27 | matrix | both token variants for every archive-level row: 1-9, 9b, 9c, 10, 11, 13, 22, 22c, 22d, 22e, 26 and 26b — (12) is ICP-only by nature, and 22b, 25 and 28-31 are integration rows | yes |
 
 **Seams the design owes.** `Req 9` is observable only through the attempt spacing, so
@@ -1402,7 +1442,10 @@ clean sync *is* the verification.
 **PR 1 — archive.** `append_blocks`'s new argument and result, placement, the clamp,
 the chain check on the first stored block, capacity reporting, the counters, and the
 `.did`. The ledger is unchanged, so it sends no index and reads no result — which is
-why `Req 5` is in this PR and not a later one.
+why `Req 5` is in this PR and not a later one. It also **deletes** the test in row 10 and
+lands row 11's in its place: row 10 installs the archive wasm from source and decodes the
+indexed reply as `Option<u64>`, which stops being true the moment this PR returns `opt
+append_result`, so it cannot survive the change it guards the run-up to.
 *Acceptance:* `Req 1`, `Req 2`, `Req 3`, `Req 4` (4.1-4.4, 4.7-4.9), `Req 5`,
 `Req 6`.
 

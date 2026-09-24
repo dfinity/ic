@@ -379,11 +379,13 @@ makes progress under storage pressure instead of repeating work it cannot finish
 9. WHEN THE Archive stored every block it was offered, or stored none because they
    were all already held, THE Archive SHALL report `at_capacity` as false, because a
    ledger reading it as true would create an archive it does not need.
-10. WHEN an archive that holds no blocks reports `at_capacity` as true, THE Ledger SHALL
-   make no further archiving attempt and SHALL expose a distinct non-zero metric rather
-   than creating another archive per 4.5, because a block that does not fit an empty
-   archive will not fit a new one carrying the same configured limit either, and rolling
-   over would create one archive per round for as long as transactions kept arriving.
+10. WHEN the next block THE Ledger would archive is on its own larger than the archive
+   size it configures, or an archive that holds no blocks reports `at_capacity` as true,
+   THE Ledger SHALL make no further archiving attempt and SHALL expose a distinct non-zero
+   metric rather than creating another archive — whether per 4.5 or on a capacity check
+   made before any append — because a block that does not fit an empty archive will not
+   fit a new one carrying the same configured limit either, and rolling over would create
+   one archive per round for as long as transactions kept arriving.
 
 ### Requirement 5: An Index-Less Append Behaves As It Does Today
 
@@ -655,11 +657,13 @@ unaddressable canister does not become a series of them.
    metric counting the archives still owed one, because until then those archives cannot
    be upgraded by their intended controllers.
 11. THE Ledger SHALL hand over control in two steps — first adding the configured
-   controllers while remaining one itself, then removing itself — so that the first
-   step is verifiable by reading the archive's controller list, which it is still
-   entitled to do, and the second cannot fail in a way that matters: its only outcomes
-   are that the ledger is still a controller and may retry, or that it is not, which is
-   the state the handover was for.
+   controllers while remaining one itself, or as many of them as the platform's limit on
+   controllers leaves room for beside it, then replacing the list with exactly the
+   configured controllers, which removes itself — so that the first step is verifiable by
+   reading the archive's controller list, which it is still entitled to do, and the
+   second cannot fail in a way that matters: its only outcomes are that the ledger is
+   still a controller and may retry, or that it is not, which is the state the handover
+   was for.
 12. WHEN a retry of either step is refused because THE Ledger is no longer a
    controller, THE Ledger SHALL treat that archive's handover as complete and remove it
    from the count in 11.10, because the archive is then governable by the configured

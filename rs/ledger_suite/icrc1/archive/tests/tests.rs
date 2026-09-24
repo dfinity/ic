@@ -188,6 +188,11 @@ fn test_empty_append_blocks_is_accepted_and_stores_nothing() {
 /// An archive that declares `append_blocks : (vec blob) -> ()` must ignore an
 /// extra trailing `opt nat64`, so that a newer ledger can start sending the
 /// start index before every archive has been upgraded to read it.
+///
+/// Retired by PR 1 of the archive chain-continuity design: this test installs the
+/// archive wasm from source and decodes the indexed reply as `Option<u64>`, which
+/// stops holding once `append_blocks` returns `opt append_result`. PR 1 deletes it
+/// and lands its successor (test-plan row 11) in the same change.
 #[test]
 fn test_append_blocks_ignores_an_extra_optional_start_index() {
     let setup = Setup::default();
