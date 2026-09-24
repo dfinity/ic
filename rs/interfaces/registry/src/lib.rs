@@ -97,6 +97,20 @@ pub trait RegistryClient: Send + Sync {
     /// Returns the time at which the given version became available locally or
     /// None if the version is not available locally,
     fn get_version_timestamp(&self, registry_version: RegistryVersion) -> Option<Time>;
+
+    /// Returns the time at which the registry canister applied the given
+    /// version, or `None` if this node does not know it — either because the
+    /// version is not available locally, or because it was applied before the
+    /// registry canister recorded timestamps.
+    ///
+    /// Unlike [`Self::get_version_timestamp`], this never falls back to a local
+    /// observation, so every node that answers `Some` answers the same value.
+    /// That is what makes it usable as an input to consensus; callers that only
+    /// need a rough local notion of age should use `get_version_timestamp`.
+    fn get_version_canister_timestamp(&self, registry_version: RegistryVersion) -> Option<Time> {
+        let _ = registry_version;
+        None
+    }
 }
 
 /// A versioned (Key, Value) pair returned from the registry.
