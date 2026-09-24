@@ -41,7 +41,10 @@ Creation state is the exception, and is persisted:
     enum Creating { Idle, Started, Created(CanisterId) }   // Default = Idle
 
 `Started` before `create_canister`, `Created(id)` as soon as it returns — **and the
-round ends there**, see below — `Idle` when `nodes.push` succeeds. Both non-`Idle` states are exposed (`C1.2`), with the id
+round ends there**, see below — `Idle` when `nodes.push` succeeds. `Started` needs no
+round of its own: the await that issues `create_canister` is where its message ends and
+commits, so a trap in the *callback* cannot roll it back, and a trap *before* the await
+means no call was made and no canister exists — returning to `Idle` is then correct. Both non-`Idle` states are exposed (`C1.2`), with the id
 when there is one (`C1.7`), but **they do not have the same effect and must not
 be collapsed into one halt**:
 
@@ -93,7 +96,9 @@ adopted and overwrites the slot. The first archive is then ledger-controlled for
 with nothing recording it, and the metric clears when the *second* completes — a silent
 loss of exactly the governability the handover exists to establish. It takes a whole
 archive to fill against a persistently failing handover, so it is remote; it is also invisible and
-permanent, and a `Vec` costs nothing. One retry per round, so the work stays bounded.
+permanent, and a `Vec` costs nothing. One retry per round, so the work stays bounded — and the entry retried
+rotates: after each attempt, success or failure, the next round takes the next entry,
+so a handover that keeps failing cannot starve the ones adopted after it.
 
 **Neither form needs to record which of the two steps is pending**, which is worth
 saying because a reader expecting a two-step journal will look for one. A retry always
@@ -178,10 +183,18 @@ the target list from `controller_id` plus an unbounded `more_controller_ids`
 adding all ten while keeping the ledger makes eleven, which the management canister
 rejects every time. The first step therefore adds as many of the configured controllers
 as fit beside the ledger — nine, in that case — and the second step, which sets the
-final list, supplies the rest. The archive is governable by its intended controllers
-after step one either way, which is all that step was for. `C1.12` therefore treats an
-unauthorized retry as completion. The archive is governable by its intended
-controllers after step one, so nothing is at risk while step two settles.
+final list, supplies the rest. `C1.12` therefore treats an unauthorized retry as
+completion. The archive is governable by its intended controllers after step one either
+way, so nothing is at risk while step two settles — which is all that step was for.
+
+**Eleven or more is a misconfiguration, and this design assumes it cannot reach it.**
+With more than ten distinct controllers configured, the second step is rejected on every
+retry and `C1.10` never clears — an archive left ledger-controlled behind a permanent
+alarm. The handover therefore takes as a precondition that the distinct set of
+`controller_id` and `more_controller_ids` has at most ten members. Enforcing that belongs
+where the configuration is made — the ledger's `init` and `post_upgrade` rejecting a
+larger set — and is a separate, minimal change tracked on its own rather than part of
+this work (README, non-goals).
 
 **And this is what makes both steps bounded** (the table above). Step one is resolvable
 by asking: the ledger is still a controller and reads the list back. Step two is
@@ -264,7 +277,7 @@ attempted are in the README's **Testing** section; they span the parts.*
 | 17j | integration | trap the round immediately after `create_canister` returns, before anything is encoded; assert that on the next round `Creating` reads `Created(id)` with the real id, not `Started`, and that the creation is finished from there without a second canister | `C1.6`, `C1.8` |
 | 17k | integration | trap the callback of the first handover call after the controllers have changed; assert the archive is still listed in `pending_handovers` on the next round and the handover is retried and completes — the entry that a same-message push would have rolled back | `C1.14`, `C1.13` |
 | 17f | upgrade | adopt an archive whose handover has not completed, then upgrade the ledger; assert the pending handover survives and is still retried afterwards | `C1.10` |
-| 17i | integration | fail one archive's handover, keep archiving until it fills and a second archive is adopted, and assert the first is still retried and still counted — the archive a single slot would have dropped | `C1.13` |
+| 17i | integration | fail one archive's handover, keep archiving until it fills and a second archive is adopted, and assert the first is still retried and still counted — the archive a single slot would have dropped. Then keep the first failing and assert the second's handover completes on a later round — rotation, so a persistent failure starves nothing behind it | `C1.13`, `C1.10` |
 | 17g | integration | complete step one of the handover, then lose step two's outcome; assert a retry refused as unauthorized clears the state and the metric rather than retrying forever | `C1.11`, `C1.12` |
 | 17m | integration | configure exactly ten controllers — the platform maximum — and drive the handover; assert step one is accepted (nine plus the ledger), step two sets all ten, and the handover completes rather than being rejected on every retry | `C1.11` |
 | 21 | measurement | ledger memory across an archive-creation round, as `routine_archiving_does_not_grow_the_ledger` does for a routine one; assert growth below a bound | D2's allocation work |

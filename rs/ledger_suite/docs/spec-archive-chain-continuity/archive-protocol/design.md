@@ -167,8 +167,11 @@ Order of work, per D4 and D5:
    what fits the archive's own configured limit — and then chain-check **only those**:
    `blocks[k]` against the tip, or against the Expected_Parent when the archive holds
    nothing and was given one (`A1.1`, `A1.3`, `A1.4`, `A1.5`, `A1.8`), then each
-   subsequent stored block against its predecessor (`A1.7`). A block landing at
-   global index zero must additionally carry *no* parent (`A1.10`) — the converse of
+   subsequent stored block against its predecessor (`A1.7`). A first stored block that carries *no* parent hash is
+   refused unless it lands at global index zero (`A1.5`) — the genesis block belongs at
+   zero or nowhere, and an empty archive with a non-zero offset and no Expected_Parent
+   has no other way to tell. Conversely, a block landing at global index zero must carry
+   *no* parent (`A1.10`) — the converse of
    `A1.5`, and not implied by it: `A1.5` says where a parentless block may go,
    while without `A1.10` an append declared at zero into an empty archive given no
    Expected_Parent would put a parented block at the genesis position and never be able

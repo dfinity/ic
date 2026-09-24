@@ -205,6 +205,12 @@ comes first.
   Declared_Index would store them as new before replying with nothing. The ledger
   cannot tell in advance; `design.md` states the release-order rule that prevents it
   and bounds the exposure to a single append.
+- **Validating the archive controller configuration.** The platform allows a canister
+  ten controllers; `ArchiveOptions` puts no bound on how many a ledger names for its
+  archives. Part C's handover takes at most ten distinct controllers as a precondition
+  and cannot complete otherwise, so the ledger's `init` and `post_upgrade` should reject
+  a larger set. That is a minimal, self-contained change and is tracked as its own
+  ticket and PR rather than folded into this one.
 - **Making the archive's canister logs readable.** Some obligations here are
   satisfiable only through a metric because a canister's log is not readable by
   default. Changing that is a governance proposal, not a code change, and is out
