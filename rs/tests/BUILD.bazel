@@ -3,6 +3,7 @@ load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "cacerts", "flatten", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("//bazel:download.bzl", "download_file")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -10,6 +11,31 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 exports_files([
     "counter.wat",
 ])
+
+# Universal VM and Prometheus VM disk images for the Local system-test backend
+# (rs/tests/driver/src/driver/local_backend.rs). They are the very artifacts the
+# Farm backend fetches itself, so the hashes must match
+# `DEFAULT_UNIVERSAL_VM_IMG_SHA256` (rs/tests/driver/src/driver/resource.rs) and
+# `DEFAULT_PROMETHEUS_VM_IMG_SHA256` (rs/tests/driver/src/driver/prometheus_vm.rs):
+# bump both places together. The images are downloaded at build time instead of
+# being `http_file` repositories, see //bazel:download.bzl. Keep the `.img.zst`
+# file names: the suffix is what makes `extract_image` in local_backend.rs unzstd
+# them.
+UNIVERSAL_VM_IMG_SHA256 = "ba8b49004163fa15f13c8ebac1e7cb99499043cda9f0a5dee00eca1b95187aee"
+
+download_file(
+    name = "universal_vm_img",
+    sha256 = UNIVERSAL_VM_IMG_SHA256,
+    url = "https://download.dfinity.systems/farm/universal-vm/%s/x86_64-linux/universal-vm.img.zst" % UNIVERSAL_VM_IMG_SHA256,
+)
+
+PROMETHEUS_VM_IMG_SHA256 = "6dc09a214f1975ce55a42a560b67b44ac58a61b52e3c3e9cf03dc2d7fbdd5f02"
+
+download_file(
+    name = "prometheus_vm_img",
+    sha256 = PROMETHEUS_VM_IMG_SHA256,
+    url = "https://download.dfinity.systems/farm/prometheus-vm/%s/x86_64-linux/prometheus-vm.img.zst" % PROMETHEUS_VM_IMG_SHA256,
+)
 
 # Packages we install into the image; see base image definition and its
 # 'manifest = ...' field for more information

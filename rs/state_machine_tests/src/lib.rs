@@ -32,7 +32,7 @@ use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
-    canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
+    canister_http::{CanisterHttpChangeAction, CanisterHttpPool, ResponseVisibility},
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
@@ -863,7 +863,7 @@ impl PocketXNetImpl {
                                 slice,
                                 self.certified_stream_store.as_ref(),
                                 registry_version,
-                                log.clone(),
+                                &log,
                             )
                             .unwrap();
                         } else {
@@ -874,7 +874,7 @@ impl PocketXNetImpl {
                                 slice,
                                 self.certified_stream_store.as_ref(),
                                 registry_version,
-                                log.clone(),
+                                &log,
                             )
                             .unwrap();
                         }
@@ -1791,8 +1791,10 @@ impl StateMachineBuilder {
         // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
         let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
-        let certified_slice_pool =
-            Arc::new(Mutex::new(CertifiedSlicePool::new(&sm.metrics_registry)));
+        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            &sm.metrics_registry,
+            sm.replica_logger.clone(),
+        )));
         let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
         let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new_from_components(
@@ -2864,7 +2866,11 @@ impl StateMachine {
                 signature,
             };
             self.canister_http_pool.write().unwrap().apply(vec![
-                CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
+                CanisterHttpChangeAction::AddToValidated(
+                    share.clone(),
+                    response.clone(),
+                    ResponseVisibility::Withhold,
+                ),
             ]);
         }
     }
@@ -3224,7 +3230,7 @@ impl StateMachine {
         let batch = Batch {
             batch_number,
             batch_summary,
-            blockmaker_metrics,
+            blockmaker_metrics: Some(blockmaker_metrics),
             content,
             randomness: Randomness::from(seed),
             registry_version: self.registry_client.get_latest_version(),

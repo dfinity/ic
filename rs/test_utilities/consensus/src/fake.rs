@@ -9,9 +9,10 @@ use ic_types::{
     CryptoHashOfPartialState, Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     batch::{BatchPayload, ValidationContext},
     consensus::{
-        Block, BlockPayload, DataPayload, FinalizationContent, FinalizationShare,
-        NotarizationContent, NotarizationShare, Payload, RandomBeacon, RandomBeaconContent,
-        RandomBeaconShare, RandomTapeContent, RandomTapeShare, Rank, SummaryPayload,
+        Block, BlockPayload, CatchUpContent, CatchUpPackage, DataPayload, FinalizationContent,
+        FinalizationShare, NotarizationContent, NotarizationShare, Payload, RandomBeacon,
+        RandomBeaconContent, RandomBeaconShare, RandomTapeContent, RandomTapeShare, Rank,
+        SummaryPayload,
         certification::{Certification, CertificationContent},
         dkg::{DkgDataPayload, DkgSummary, SubnetSplittingStatus},
         hashed,
@@ -187,6 +188,33 @@ impl<T> FakeContent<T> for Signed<T, ThresholdSignature<T>> {
         }
     }
 }
+
+/// Creates a [`CatchUpPackage`] with a fake signature for the given content.
+///
+/// Unlike [`CatchUpPackage::fake`], the signer is the DKG id of the current high-threshold
+/// transcript in the DKG summary of the content, as it is for real CUPs. This is required for the
+/// CUP to pass the signer check of CUP verification.
+pub fn fake_catch_up_package(content: CatchUpContent) -> CatchUpPackage {
+    let signer = content
+        .block
+        .as_ref()
+        .payload
+        .as_ref()
+        .as_summary()
+        .dkg
+        .current_transcript(&NiDkgTag::HighThreshold)
+        .expect("the DKG summary has no current high-threshold transcript")
+        .dkg_id
+        .clone();
+    CatchUpPackage {
+        content,
+        signature: ThresholdSignature {
+            signer,
+            signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+        },
+    }
+}
+
 pub trait FakeContentUpdate {
     fn update_content(&mut self);
 }

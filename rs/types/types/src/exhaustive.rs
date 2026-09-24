@@ -368,7 +368,9 @@ impl ExhaustiveSet for ReplicaVersion {
 
 impl ExhaustiveSet for EcdsaCurve {
     fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
-        EcdsaCurve::iter().collect()
+        // A replica on the old version cannot decode a CUP naming Secp256r1.
+        // Restore `EcdsaCurve::iter()` once an r1 key exists in the registry.
+        vec![EcdsaCurve::Secp256k1]
     }
 }
 

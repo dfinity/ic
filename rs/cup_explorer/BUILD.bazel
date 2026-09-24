@@ -11,10 +11,10 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/canister_client",
+        "//rs/consensus/cup_utils",
         "//rs/crypto/for_verification_only",
         "//rs/crypto/node_key_generation",
         "//rs/crypto/utils/threshold_sig_der",
-        "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/protobuf",
         "//rs/registry/helpers",
@@ -39,10 +39,10 @@ rust_binary(
         # Keep sorted.
         ":cup_explorer",
         "//rs/canister_client",
+        "//rs/consensus/cup_utils",
         "//rs/crypto/for_verification_only",
         "//rs/crypto/node_key_generation",
         "//rs/crypto/utils/threshold_sig_der",
-        "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/protobuf",
         "//rs/registry/helpers",

@@ -39,21 +39,27 @@ use http_body_util::{BodyExt, Full, Limited};
 use hyper::{Method, Request, StatusCode, body::Bytes};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
+use ic_consensus_cup_utils::verify_catch_up_package_proto;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_limits::MAX_MESSAGE_SIZE_BYTES;
 use ic_logger::{ReplicaLogger, info, warn};
-use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
+use ic_protobuf::{
+    registry::{node::v1::NodeRecord, subnet::v1::catch_up_package_contents::CupType},
+    types::v1 as pb,
+};
+use ic_registry_client_helpers::subnet::{SubnetRegistry, SubnetTransportRegistry};
 use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
     consensus::{
-        HasHeight, HasVersion,
+        HasHeight, HasVersion, SubnetSplittingArgs,
         catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
     },
-    crypto::*,
+    registry::RegistryClientError,
 };
 use prost::Message;
+use rand::seq::SliceRandom;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc, time::Duration};
 use tokio::time::timeout;
 
@@ -167,9 +173,6 @@ impl CatchUpPackageProvider {
         registry_version: RegistryVersion,
         current_cup: Option<&pb::CatchUpPackage>,
     ) -> Vec<(NodeId, NodeRecord)> {
-        use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
-        use rand::seq::SliceRandom;
-
         let mut nodes: Vec<(NodeId, NodeRecord)> = self
             .registry
             .get_registry_client()
@@ -238,7 +241,17 @@ impl CatchUpPackageProvider {
             {
                 Ok(Some((proto, cup))) => {
                     // Note: None is < Some(_)
-                    if Some(CatchUpPackageParam::from(&cup)) > param {
+                    if Some(CatchUpPackageParam::from(&cup)) > param
+                        // Ignore CUPs with a registry version ahead of our latest registry version:
+                        // the only scenario this could happen without crypto verification failing
+                        // with `VersionNotAvailable` is if the registry client polled between
+                        // reading the latest registry version and crypto verifying the CUP. If this
+                        // happens, we prefer to ignore the CUP since the peer selection was made
+                        // according to a different registry version (this matters for subnet
+                        // splitting). The next iteration of the loop will select the peers
+                        // according to the updated latest registry version and will succeed.
+                        && cup.content.registry_version() <= registry_version
+                    {
                         return Some(proto);
                     }
                 }
@@ -285,17 +298,10 @@ impl CatchUpPackageProvider {
         else {
             return Ok(None);
         };
-        let cup = CatchUpPackage::try_from(&protobuf)
-            .map_err(|e| format!("Failed to read CUP from peer at url {uri}: {e:?}"))?;
-
-        self.crypto
-            .verify_combined_threshold_sig_by_public_key(
-                &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
-                &CatchUpContentProtobufBytes::from(&protobuf),
-                subnet_id,
-                cup.content.registry_version(),
-            )
-            .map_err(|e| format!("Failed to verify CUP signature at: {uri:?} with: {e:?}"))?;
+        // Verify the CUP over the original protobuf bytes, as the peer may run a different replica
+        // version whose encoding of the CUP content differs from ours.
+        let cup = verify_catch_up_package_proto(self.crypto.as_ref(), subnet_id, &protobuf)
+            .map_err(|e| format!("Failed to verify CUP from peer at url {uri}: {e}"))?;
 
         Ok(Some((protobuf, cup)))
     }
@@ -390,6 +396,110 @@ impl CatchUpPackageProvider {
         }
     }
 
+    /// Replaces `subnet_id` with this node's post-split subnet if the registry records a subnet
+    /// split that is still ahead of the local CUP, such that the rest of the CUP fetch (peer
+    /// selection, signature verification, recovery CUP) targets the new subnet.
+    ///
+    /// It is important to perform a scan of all registry versions of interest because if only the
+    /// source subnet needs to be recovered and a recovery CUP is inserted after the subnet split,
+    /// the destination replicas should be independent of this decision and their orchestrators
+    /// should still detect the split and restart the replicas, driving the destination subnet
+    /// forward.
+    ///
+    /// Does nothing without a local CUP since that would mean we were previously unassigned and
+    /// have no state to preserve anyways.
+    /// Does nothing if the CUP is not deserializable since that would mean we just recently
+    /// upgraded, and there is no way Consensus was able to drive a subnet split since then.
+    fn maybe_mutate_subnet_id_due_to_split(
+        &self,
+        subnet_id: &mut SubnetId,
+        local_cup: Option<&pb::CatchUpPackage>,
+        latest_registry_version: RegistryVersion,
+    ) -> OrchestratorResult<()> {
+        let Some(local_cup) = local_cup else {
+            return Ok(());
+        };
+        let Ok(local_cup) = CatchUpPackage::try_from(local_cup) else {
+            return Ok(());
+        };
+
+        let local_cup_registry_version = local_cup.content.registry_version();
+        let mut lookup_version = latest_registry_version;
+        loop {
+            let versioned_record = self
+                .registry
+                .get_registry_client()
+                .get_cup_contents(*subnet_id, lookup_version)
+                .map_err(OrchestratorError::RegistryClientError)?;
+
+            // The record was last written at or before the local CUP's registry version: any
+            // recorded split here or below is a past one.
+            if versioned_record.version <= local_cup_registry_version {
+                return Ok(());
+            }
+            // Continue the scan from the record's last write to avoid scanning every single
+            // registry version
+            lookup_version = versioned_record.version - RegistryVersion::from(1);
+
+            let Some(contents) = versioned_record.value else {
+                continue;
+            };
+
+            let Some(CupType::SubnetSplitting(subnet_splitting_args)) = contents.cup_type else {
+                continue;
+            };
+            let SubnetSplittingArgs {
+                destination_subnet_id,
+            } = SubnetSplittingArgs::try_from(subnet_splitting_args).map_err(|err| {
+                OrchestratorError::RegistryClientError(RegistryClientError::DecodeError {
+                    error: format!("Failed to decode the subnet splitting args: {err}"),
+                })
+            })?;
+
+            let Some(new_subnet_id) = self
+                .registry
+                .get_subnet_id_from_node_id(self.node_id, versioned_record.version)?
+            else {
+                // Our membership at the splitting record's version is our post-split subnet. Being
+                // unassigned here is unexpected. Though, this could genuinely happen if we are
+                // lagging behind by a lot and were removed from the subnet *prior* to the split.
+                // There could still be a previous split of the same subnet: let us continue to scan
+                // for this potential split such that we learn our unassignment through that other
+                // subnet (maybe they still need us for some work, and we're not totally unassigned
+                // yet).
+                warn!(
+                    self.logger,
+                    "Unexpectedly unassigned from subnet {} on scheduled split at registry version {}",
+                    subnet_id,
+                    versioned_record.version,
+                );
+                continue;
+            };
+
+            if new_subnet_id != *subnet_id && new_subnet_id != destination_subnet_id {
+                // Any other assignment than source or destination is unexpected. This is very
+                // similar to the previous condition about being unassigned. This could happen if we
+                // were moved to a different subnet prior to the split, independently of the latter.
+                // But there could still be a previous split of the same subnet: let us continue to
+                // scan for this potential split to move to one of this split's subnets and not
+                // remove the state by mistake.
+                warn!(
+                    self.logger,
+                    "Unexpectedly assigned to subnet {} on scheduled split of subnet {} at registry version {}",
+                    new_subnet_id,
+                    subnet_id,
+                    versioned_record.version,
+                );
+                continue;
+            }
+
+            *subnet_id = new_subnet_id;
+            return Ok(());
+        }
+
+        // Unreachable: the loop always exits with a `return` statement
+    }
+
     /// Persist the given CUP to disk.
     ///
     /// This is necessary, as it allows the orchestrator to find a CUP
@@ -448,9 +558,9 @@ impl CatchUpPackageProvider {
     pub(crate) async fn get_latest_cup(
         &mut self,
         local_cup: Option<pb::CatchUpPackage>,
-        subnet_id: SubnetId,
+        mut subnet_id: SubnetId,
+        latest_registry_version: RegistryVersion,
     ) -> OrchestratorResult<CatchUpPackage> {
-        let registry_version = self.registry.get_latest_version();
         let local_cup_height = local_cup
             .as_ref()
             .map(|cup| {
@@ -463,13 +573,19 @@ impl CatchUpPackageProvider {
             })
             .transpose()?;
 
+        self.maybe_mutate_subnet_id_due_to_split(
+            &mut subnet_id,
+            local_cup.as_ref(),
+            latest_registry_version,
+        )?;
+
         let subnet_cup = self
-            .get_peer_cup(subnet_id, registry_version, local_cup.as_ref())
+            .get_peer_cup(subnet_id, latest_registry_version, local_cup.as_ref())
             .await;
 
         let registry_cup = self
             .registry
-            .get_registry_cup(registry_version, subnet_id)
+            .get_registry_cup(latest_registry_version, subnet_id)
             .map(pb::CatchUpPackage::from)
             .ok();
 
@@ -482,7 +598,7 @@ impl CatchUpPackageProvider {
             .max_by_key(get_cup_proto_height)
             .ok_or(OrchestratorError::MakeRegistryCupError(
                 subnet_id,
-                registry_version,
+                latest_registry_version,
             ))?;
         let latest_cup = CatchUpPackage::try_from(&latest_cup_proto).map_err(|err| {
             OrchestratorError::deserialize_cup_error(get_cup_proto_height(&latest_cup_proto), err)
@@ -536,23 +652,38 @@ pub(crate) mod tests {
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
     use ic_logger::no_op_logger;
-    use ic_protobuf::registry::node::v1::ConnectionEndpoint;
+    use ic_protobuf::registry::{
+        node::v1::ConnectionEndpoint,
+        subnet::v1::{CatchUpPackageContents, RecoveryArgs, SubnetSplittingArgs},
+    };
     use ic_registry_client_fake::FakeRegistryClient;
-    use ic_registry_keys::make_node_record_key;
+    use ic_registry_keys::{make_catch_up_package_contents_key, make_node_record_key};
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities_consensus::fake::{Fake, FakeContent};
-    use ic_test_utilities_registry::{SubnetRecordBuilder, add_single_subnet_record};
-    use ic_test_utilities_types::ids::{SUBNET_0, node_test_id};
+    use ic_test_utilities_consensus::fake::{Fake, FakeContent, fake_catch_up_package};
+    use ic_test_utilities_registry::{
+        SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
+    };
+    use ic_test_utilities_types::ids::{
+        SUBNET_0, SUBNET_1, SUBNET_2, node_test_id, test_replica_version,
+    };
     use ic_types::{
-        ReplicaVersion,
+        PrincipalId, ReplicaVersion,
         batch::ValidationContext,
         consensus::{
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
-            RandomBeacon, RandomBeaconContent, Rank, SummaryPayload, dkg::DkgSummary,
+            RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
+            dkg::{DkgSummary, PostSplitArgs, SubnetSplittingStatus},
         },
+        crypto::{
+            threshold_sig::ni_dkg::{NiDkgReceivers, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
+            *,
+        },
+        signature::ThresholdSignature,
+        subnet_id_into_protobuf,
         time::UNIX_EPOCH,
     };
     use rcgen::{CertificateParams, KeyPair};
+    use rstest::rstest;
     use rustls::{
         ClientConfig, DigitallySignedStruct, ServerConfig, SignatureScheme,
         client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
@@ -567,6 +698,18 @@ pub(crate) mod tests {
     use tokio::net::TcpListener;
     use tokio_rustls::TlsAcceptor;
 
+    impl CatchUpPackageProvider {
+        pub(crate) fn with_crypto(
+            mut self,
+            crypto: Arc<
+                dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync,
+            >,
+        ) -> Self {
+            self.crypto = crypto;
+            self
+        }
+    }
+
     #[derive(Clone, Debug)]
     enum TestService {
         /// Service that responds with headers, and then either sends a full CUP or stalls forever.
@@ -577,8 +720,8 @@ pub(crate) mod tests {
         NoContent,
         /// Service that responds with an error
         BadRequest,
-        /// Service that serves the given serialized CUP
-        SendCup(Arc<Vec<u8>>),
+        /// Service that serves the given CUP
+        SendCup(Arc<Mutex<pb::CatchUpPackage>>),
     }
 
     async fn test_service(
@@ -594,11 +737,13 @@ pub(crate) mod tests {
     }
 
     async fn cup_service(
-        cup: Arc<Vec<u8>>,
+        cup: Arc<Mutex<pb::CatchUpPackage>>,
     ) -> Result<Response<BoxBody<Bytes, Infallible>>, hyper::Error> {
+        let bytes = Bytes::from(cup.lock().unwrap().encode_to_vec());
+
         Ok(Response::builder()
             .status(StatusCode::OK)
-            .body(Full::new(Bytes::from(cup.to_vec())).boxed())
+            .body(Full::new(bytes).boxed())
             .unwrap())
     }
 
@@ -697,7 +842,7 @@ pub(crate) mod tests {
             parent: CryptoHashOf::from(CryptoHash(vec![])),
         });
 
-        let cup = CatchUpPackage::fake(CatchUpContent::new(
+        let cup = fake_catch_up_package(CatchUpContent::new(
             HashedBlock::new(crypto_hash, block),
             HashedRandomBeacon::new(crypto_hash, random_beacon),
             CryptoHashOf::from(CryptoHash(vec![])),
@@ -716,8 +861,10 @@ pub(crate) mod tests {
         let cup_proto =
             cup_with_distinct_registry_versions(summary_registry_version, context_registry_version);
 
-        let server_addr =
-            start_server(TestService::SendCup(Arc::new(cup_proto.encode_to_vec()))).await;
+        let server_addr = start_server(TestService::SendCup(Arc::new(Mutex::new(
+            cup_proto.clone(),
+        ))))
+        .await;
         let node_id = node_test_id(1);
         let node_record = NodeRecord {
             http: Some(ConnectionEndpoint {
@@ -749,6 +896,56 @@ pub(crate) mod tests {
         assert_eq!(
             CatchUpPackageParam::from(&cup),
             CatchUpPackageParam::from(&CatchUpPackage::try_from(&cup_proto).unwrap()),
+        );
+    }
+
+    /// The signer of a CUP is not covered by its signature, so a peer CUP whose signer does not
+    /// match the high-threshold DKG id of its DKG summary must be rejected before the signature is
+    /// even verified.
+    #[tokio::test]
+    async fn test_peer_cup_with_inappropriate_signer_is_rejected() {
+        let mut cup_proto =
+            cup_with_distinct_registry_versions(RegistryVersion::from(3), RegistryVersion::from(7));
+        let mut signer = cup_proto.signer.take().expect("the CUP has a signer");
+        signer.dkg_tag = pb::NiDkgTag::LowThreshold as i32;
+        cup_proto.signer = Some(signer);
+
+        let server_addr = start_server(TestService::SendCup(Arc::new(Mutex::new(
+            cup_proto.clone(),
+        ))))
+        .await;
+        let node_id = node_test_id(1);
+        let node_record = NodeRecord {
+            http: Some(ConnectionEndpoint {
+                ip_addr: server_addr.ip().to_string(),
+                port: server_addr.port() as u32,
+            }),
+            ..Default::default()
+        };
+
+        let crypto = Arc::new(RegistryVersionRecordingCrypto::default());
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let mut cup_provider = make_cup_provider_with_crypto(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            setup_registry(),
+            crypto.clone(),
+        );
+
+        let err = cup_provider
+            .fetch_and_verify_catch_up_package(&node_id, &node_record, None, SUBNET_0)
+            .await
+            .expect_err("a CUP with an inappropriate signer must be rejected");
+
+        assert!(
+            err.contains("is not the high-threshold DKG id"),
+            "unexpected error: {err}"
+        );
+        assert_eq!(
+            *crypto.verified_at.lock().unwrap(),
+            None,
+            "the signature must not be verified if the signer is wrong"
         );
     }
 
@@ -804,6 +1001,28 @@ pub(crate) mod tests {
         local_addr
     }
 
+    /// Starts a TLS server serving the given CUP on any request. The returned handle allows tests
+    /// to swap the served CUP afterwards.
+    pub(crate) async fn start_cup_server(
+        cup: pb::CatchUpPackage,
+    ) -> (SocketAddr, Arc<Mutex<pb::CatchUpPackage>>) {
+        let served_cup = Arc::new(Mutex::new(cup));
+        let addr = start_server(TestService::SendCup(Arc::clone(&served_cup))).await;
+
+        (addr, served_cup)
+    }
+
+    /// A node record pointing at the given address, e.g. one returned by [`start_cup_server`].
+    pub(crate) fn node_record_serving(addr: SocketAddr) -> NodeRecord {
+        NodeRecord {
+            http: Some(ConnectionEndpoint {
+                ip_addr: addr.ip().to_string(),
+                port: addr.port() as u32,
+            }),
+            ..Default::default()
+        }
+    }
+
     fn setup_registry() -> Arc<RegistryHelper> {
         setup_registry_with_membership(RegistryVersion::from(1), vec![])
     }
@@ -837,6 +1056,272 @@ pub(crate) mod tests {
 
         Arc::new(RegistryHelper::new(
             node_test_id(1),
+            registry_client as Arc<_>,
+            no_op_logger(),
+        ))
+    }
+
+    /// The registry version at which the subnet split is set in the registry, and thus also the
+    /// registry version of the post-split CUPs.
+    pub(crate) const SPLIT_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(10);
+    pub(crate) const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
+    pub(crate) const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
+
+    /// A threshold signature verifier which accepts a CUP if and only if it is verified against
+    /// the subnet that signed it.
+    pub(crate) struct SubnetAwareThresholdSigVerifier;
+
+    impl<T: Signable> ThresholdSigVerifierByPublicKey<T> for SubnetAwareThresholdSigVerifier {
+        fn verify_combined_threshold_sig_by_public_key(
+            &self,
+            signature: &CombinedThresholdSigOf<T>,
+            _message: &T,
+            subnet_id: SubnetId,
+            _registry_version: RegistryVersion,
+        ) -> CryptoResult<()> {
+            let sig_bytes = signature.get_ref().0.clone();
+            if PrincipalId::try_from(&sig_bytes[..]) == Ok(subnet_id.get()) {
+                return Ok(());
+            }
+
+            Err(CryptoError::SignatureVerification {
+                algorithm: AlgorithmId::ThresBls12_381,
+                public_key_bytes: vec![],
+                sig_bytes,
+                internal_error: format!("the CUP was not signed by subnet {subnet_id}"),
+            })
+        }
+    }
+
+    /// Creates a deserializable [`CatchUpPackage`] whose DKG summary carries the given committee,
+    /// registry version and subnet splitting status.
+    ///
+    /// Unlike [`fake_cup`], the result survives a protobuf round-trip, including the integrity
+    /// check of [`CatchUpContent`].
+    pub(crate) fn make_splitting_cup_for_test(
+        committee: Vec<NodeId>,
+        height: Height,
+        registry_version: RegistryVersion,
+        subnet_splitting_status: SubnetSplittingStatus,
+        signer_subnet_id: SubnetId,
+    ) -> CatchUpPackage {
+        let mut cup_signature = ThresholdSignature::fake();
+        // `SubnetAwareThresholdSigVerifier` reads the subnet ID off the signature.
+        cup_signature.signature =
+            CombinedThresholdSigOf::new(CombinedThresholdSig(signer_subnet_id.get().to_vec()));
+        cup_signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+        match subnet_splitting_status {
+            SubnetSplittingStatus::NotScheduled | SubnetSplittingStatus::Scheduled(_) => {
+                cup_signature.signer.dealer_subnet = signer_subnet_id;
+            }
+            SubnetSplittingStatus::PostSplit(_) => {
+                // Post-split CUPs use transcripts from the registry
+                cup_signature.signer.target_subnet =
+                    NiDkgTargetSubnet::Remote(NiDkgTargetId::new([0_u8; 32]));
+            }
+        }
+
+        let fake_summary = DkgSummary::fake();
+        let mut current_transcripts = fake_summary.current_transcripts().clone();
+        let committee = NiDkgReceivers::new(committee.into_iter().collect()).unwrap();
+        for transcript in current_transcripts.values_mut() {
+            transcript.committee = committee.clone();
+            // Stamp the given registry version on the transcripts as well, such that
+            // `get_oldest_registry_version_in_use` agrees with the summary's registry version.
+            transcript.registry_version = registry_version;
+        }
+        // The high-threshold transcript must match the signer, otherwise validation fails
+        current_transcripts
+            .get_mut(&NiDkgTag::HighThreshold)
+            .unwrap()
+            .dkg_id = cup_signature.signer.clone();
+
+        let dkg = DkgSummary::new(
+            /*configs=*/ vec![],
+            current_transcripts,
+            /*next_transcripts=*/ Default::default(),
+            registry_version,
+            fake_summary.interval_length,
+            fake_summary.next_interval_length,
+            height,
+            /*remote_dkg_attempts=*/ Default::default(),
+            subnet_splitting_status,
+        );
+
+        let block = Block::new(
+            CryptoHashOf::from(CryptoHash(Vec::new())),
+            Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(SummaryPayload { dkg, idkg: None }),
+            ),
+            height,
+            Rank(0),
+            ValidationContext {
+                registry_version,
+                certified_height: Height::from(0),
+                time: UNIX_EPOCH,
+            },
+            test_replica_version(),
+        );
+
+        let cup_content = CatchUpContent::new(
+            HashedBlock::new(ic_types::crypto::crypto_hash, block),
+            HashedRandomBeacon::new(
+                ic_types::crypto::crypto_hash,
+                RandomBeacon::fake(RandomBeaconContent::new(
+                    height,
+                    CryptoHashOf::from(CryptoHash(Vec::new())),
+                    test_replica_version(),
+                )),
+            ),
+            CryptoHashOf::from(CryptoHash(Vec::new())),
+            None,
+        );
+
+        Signed {
+            content: cup_content,
+            signature: cup_signature,
+        }
+    }
+
+    /// Creates a post-split CUP at [`SPLIT_REGISTRY_VERSION`] announcing `new_subnet_id` as the
+    /// subnet it belongs to, and signed by it.
+    pub(crate) fn make_post_split_cup(
+        committee: Vec<NodeId>,
+        height: Height,
+        new_subnet_id: SubnetId,
+    ) -> CatchUpPackage {
+        make_splitting_cup_for_test(
+            committee,
+            height,
+            SPLIT_REGISTRY_VERSION,
+            SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id }),
+            /*signer_subnet_id=*/ new_subnet_id,
+        )
+    }
+
+    /// Creates a pre-split CUP of the source subnet, i.e. a regular `NotScheduled` CUP signed by
+    /// [`SOURCE_SUBNET_ID`] with a registry version below [`SPLIT_REGISTRY_VERSION`].
+    pub(crate) fn make_pre_split_source_cup(
+        committee: Vec<NodeId>,
+        height: Height,
+    ) -> CatchUpPackage {
+        make_splitting_cup_for_test(
+            committee,
+            height,
+            SPLIT_REGISTRY_VERSION - RegistryVersion::from(1),
+            SubnetSplittingStatus::NotScheduled,
+            /*signer_subnet_id=*/ SOURCE_SUBNET_ID,
+        )
+    }
+
+    /// Marks the source subnet's CUP contents record with [`CupType::SubnetSplitting`] into
+    /// `destination_subnet_id` at the given registry version. This is how the orchestrator detects
+    /// a pending split.
+    pub(crate) fn add_subnet_splitting_record(
+        data_provider: &ProtoRegistryDataProvider,
+        registry_version: RegistryVersion,
+        destination_subnet_id: SubnetId,
+    ) {
+        data_provider
+            .add(
+                &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
+                registry_version,
+                Some(CatchUpPackageContents {
+                    cup_type: Some(CupType::SubnetSplitting(SubnetSplittingArgs {
+                        destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
+                    })),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+    }
+
+    /// Sets up a registry describing a split of `SOURCE_SUBNET_ID` into `SOURCE_SUBNET_ID` and
+    /// `DESTINATION_SUBNET_ID` at [`SPLIT_REGISTRY_VERSION`].
+    ///
+    /// Before the split, all given nodes are members of `SOURCE_SUBNET_ID`. From the split registry
+    /// version onwards, `source_nodes` remain in `SOURCE_SUBNET_ID` while `destination_nodes` are
+    /// members of `DESTINATION_SUBNET_ID`, and the source subnet's CUP contents record is marked
+    /// with [`CupType::SubnetSplitting`] (see [`add_subnet_splitting_record`]).
+    fn setup_split_registry(
+        node_id: NodeId,
+        source_nodes: &[NodeId],
+        destination_nodes: &[NodeId],
+    ) -> Arc<RegistryHelper> {
+        setup_split_registry_customized(
+            node_id,
+            source_nodes,
+            destination_nodes,
+            |_| NodeRecord::default(),
+            |_| {},
+        )
+    }
+
+    /// Like [`setup_split_registry`], but each node's record is built using `node_record`, and
+    /// `add_extra_records` is applied to the data provider before finalizing the registry.
+    fn setup_split_registry_customized(
+        node_id: NodeId,
+        source_nodes: &[NodeId],
+        destination_nodes: &[NodeId],
+        mut node_record: impl FnMut(NodeId) -> NodeRecord,
+        add_extra_records: impl FnOnce(&Arc<ProtoRegistryDataProvider>),
+    ) -> Arc<RegistryHelper> {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        add_subnet_list_record(
+            &data_provider,
+            1,
+            vec![SOURCE_SUBNET_ID, DESTINATION_SUBNET_ID],
+        );
+        add_subnet_splitting_record(
+            &data_provider,
+            SPLIT_REGISTRY_VERSION,
+            DESTINATION_SUBNET_ID,
+        );
+
+        let all_nodes = [source_nodes, destination_nodes].concat();
+        add_single_subnet_record(
+            &data_provider,
+            1,
+            SOURCE_SUBNET_ID,
+            SubnetRecordBuilder::new()
+                .with_committee(&all_nodes)
+                .build(),
+        );
+        add_single_subnet_record(
+            &data_provider,
+            SPLIT_REGISTRY_VERSION.get(),
+            SOURCE_SUBNET_ID,
+            SubnetRecordBuilder::new()
+                .with_committee(source_nodes)
+                .build(),
+        );
+        add_single_subnet_record(
+            &data_provider,
+            SPLIT_REGISTRY_VERSION.get(),
+            DESTINATION_SUBNET_ID,
+            SubnetRecordBuilder::new()
+                .with_committee(destination_nodes)
+                .build(),
+        );
+
+        for node in all_nodes {
+            data_provider
+                .add(
+                    &make_node_record_key(node),
+                    RegistryVersion::from(1),
+                    Some(node_record(node)),
+                )
+                .unwrap();
+        }
+
+        add_extra_records(&data_provider);
+
+        let registry_client = Arc::new(FakeRegistryClient::new(data_provider));
+        registry_client.update_to_latest_version();
+
+        Arc::new(RegistryHelper::new(
+            node_id,
             registry_client as Arc<_>,
             no_op_logger(),
         ))
@@ -1188,5 +1673,576 @@ pub(crate) mod tests {
         let selected_without_cup = cup_provider.select_peers(SUBNET_0, registry_version, None);
         assert_eq!(nodes.len(), selected_without_cup.len());
         assert!(!selected_without_cup.iter().any(|(id, _)| id == &node_id));
+    }
+
+    #[rstest]
+    #[case::stays_in_source(SOURCE_SUBNET_ID)]
+    #[case::moves_to_destination(DESTINATION_SUBNET_ID)]
+    fn test_subnet_id_is_replaced_when_split_is_pending(#[case] new_subnet_id: SubnetId) {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let source_nodes = vec![node_test_id(1)];
+        let destination_nodes = vec![node_test_id(2)];
+        let node_id = if new_subnet_id == SOURCE_SUBNET_ID {
+            source_nodes[0]
+        } else {
+            destination_nodes[0]
+        };
+        let registry = setup_split_registry(node_id, &source_nodes, &destination_nodes);
+        let latest_registry_version = registry.get_latest_version();
+
+        let cup_provider = make_cup_provider_with_registry(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+        );
+
+        // The local CUP predates the split, so the split is still pending for us.
+        let local_cup = pb::CatchUpPackage::from(make_pre_split_source_cup(
+            [source_nodes, destination_nodes].concat(),
+            Height::from(100),
+        ));
+
+        let mut subnet_id = SOURCE_SUBNET_ID;
+        cup_provider
+            .maybe_mutate_subnet_id_due_to_split(
+                &mut subnet_id,
+                Some(&local_cup),
+                latest_registry_version,
+            )
+            .unwrap();
+
+        // The next CUP should be fetched from (and verified against) our post-split subnet.
+        assert_eq!(subnet_id, new_subnet_id);
+    }
+
+    #[rstest]
+    #[case::stays_and_fetches_from_source(SOURCE_SUBNET_ID)]
+    #[case::moves_and_fetches_from_destination(DESTINATION_SUBNET_ID)]
+    #[tokio::test]
+    async fn test_get_latest_cup_fetches_post_split_cup_from_own_subnet(
+        #[case] new_subnet_id: SubnetId,
+    ) {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let source_nodes = vec![node_test_id(1)];
+        let destination_nodes = vec![node_test_id(2)];
+        let node_id = if new_subnet_id == SOURCE_SUBNET_ID {
+            source_nodes[0]
+        } else {
+            destination_nodes[0]
+        };
+        let height = Height::from(200);
+
+        let (source_server_addr, _source_served_cup) = start_cup_server(pb::CatchUpPackage::from(
+            make_post_split_cup(source_nodes.clone(), height, SOURCE_SUBNET_ID),
+        ))
+        .await;
+        let (dest_server_addr, _dest_served_cup) = start_cup_server(pb::CatchUpPackage::from(
+            make_post_split_cup(destination_nodes.clone(), height, DESTINATION_SUBNET_ID),
+        ))
+        .await;
+        let registry = setup_split_registry_customized(
+            node_id,
+            &source_nodes,
+            &destination_nodes,
+            |node_id| {
+                if node_id == source_nodes[0] {
+                    node_record_serving(source_server_addr)
+                } else {
+                    node_record_serving(dest_server_addr)
+                }
+            },
+            |_| {},
+        );
+        let latest_registry_version = registry.get_latest_version();
+
+        let mut cup_provider = make_cup_provider_with_crypto(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+            Arc::new(SubnetAwareThresholdSigVerifier),
+        );
+
+        // The local CUP is still a pre-split CUP of the source subnet, so we still consider
+        // ourselves under the old subnet ID. The pending split recorded in the registry must
+        // reroute the fetch to our own post-split subnet, i.e. we must end up with the post-split
+        // CUP served by our own half's peers.
+        let local_cup = pb::CatchUpPackage::from(make_pre_split_source_cup(
+            [source_nodes, destination_nodes].concat(),
+            Height::from(100),
+        ));
+
+        let fetched = cup_provider
+            .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID, latest_registry_version)
+            .await
+            .expect("Should fetch the post-split CUP of our own subnet");
+
+        assert_eq!(fetched.height(), height);
+        assert_eq!(
+            fetched.subnet_splitting_status(),
+            SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })
+        );
+    }
+
+    #[rstest]
+    // The registry is at the local CUP's version: the scan range is empty.
+    #[case::registry_at_cup_version(0)]
+    // The registry moved past the local CUP: the scan inspects the splitting record and must
+    // terminate on it being at or below the local CUP's version.
+    #[case::registry_ahead_of_cup(2)]
+    fn test_subnet_id_unchanged_when_split_already_adopted(#[case] latest_version_bump: u64) {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(1);
+        // We stay in the source subnet.
+        let registry = setup_split_registry_customized(
+            node_id,
+            &[node_id],
+            &[node_test_id(2)],
+            |_| NodeRecord::default(),
+            |data_provider| {
+                if latest_version_bump > 0 {
+                    // Any record bumps the latest registry version.
+                    data_provider
+                        .add(
+                            &make_node_record_key(node_test_id(99)),
+                            SPLIT_REGISTRY_VERSION + RegistryVersion::from(latest_version_bump),
+                            Some(NodeRecord::default()),
+                        )
+                        .unwrap();
+                }
+            },
+        );
+        let latest_registry_version = registry.get_latest_version();
+
+        let cup_provider = make_cup_provider_with_registry(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+        );
+
+        // The local CUP is already at the split's registry version, i.e. the splitting record in
+        // the registry describes a past split, not a pending one, and the subnet ID must be left
+        // alone.
+        let local_cup = pb::CatchUpPackage::from(make_post_split_cup(
+            vec![node_id],
+            Height::from(200),
+            SOURCE_SUBNET_ID,
+        ));
+
+        let mut subnet_id = SOURCE_SUBNET_ID;
+        cup_provider
+            .maybe_mutate_subnet_id_due_to_split(
+                &mut subnet_id,
+                Some(&local_cup),
+                latest_registry_version,
+            )
+            .unwrap();
+
+        assert_eq!(subnet_id, SOURCE_SUBNET_ID);
+    }
+
+    // This tests the source subnet being recovered after a split was scheduled. The destination
+    // orchestrators should still detect the pending split and restart the replicas, driving the
+    // destination subnet forward.
+    #[test]
+    fn test_pending_split_detected_below_overwriting_record() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let source_nodes = vec![node_test_id(1)];
+        let destination_nodes = vec![node_test_id(2)];
+        // We move to the destination subnet.
+        let node_id = destination_nodes[0];
+        let registry = setup_split_registry_customized(
+            node_id,
+            &source_nodes,
+            &destination_nodes,
+            |_| NodeRecord::default(),
+            |data_provider| {
+                // A later recovery of the source subnet overwrites the splitting record. The scan
+                // must walk below the recovery record and still find the pending split.
+                data_provider
+                    .add(
+                        &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
+                        SPLIT_REGISTRY_VERSION + RegistryVersion::from(1),
+                        Some(CatchUpPackageContents {
+                            cup_type: Some(CupType::Recovery(RecoveryArgs::default())),
+                            ..Default::default()
+                        }),
+                    )
+                    .unwrap();
+            },
+        );
+        let latest_registry_version = registry.get_latest_version();
+
+        let cup_provider = make_cup_provider_with_registry(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+        );
+
+        let local_cup = pb::CatchUpPackage::from(make_pre_split_source_cup(
+            [source_nodes, destination_nodes].concat(),
+            Height::from(100),
+        ));
+
+        let mut subnet_id = SOURCE_SUBNET_ID;
+        cup_provider
+            .maybe_mutate_subnet_id_due_to_split(
+                &mut subnet_id,
+                Some(&local_cup),
+                latest_registry_version,
+            )
+            .unwrap();
+
+        assert_eq!(subnet_id, DESTINATION_SUBNET_ID);
+    }
+
+    #[tokio::test]
+    async fn test_get_latest_cup_rejects_cup_of_other_subnet() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let source_nodes = vec![node_test_id(1)];
+        let destination_nodes = vec![node_test_id(2)];
+        // We move to the destination subnet.
+        let node_id = destination_nodes[0];
+        let local_cup_height = Height::from(100);
+        let post_split_cup_height = Height::from(200);
+
+        // Every peer serves the pre-split CUP at first.
+        let local_cup = pb::CatchUpPackage::from(make_pre_split_source_cup(
+            [source_nodes.clone(), destination_nodes.clone()].concat(),
+            local_cup_height,
+        ));
+        let (server_addr, served_cup) = start_cup_server(local_cup.clone()).await;
+        let registry = setup_split_registry_customized(
+            node_id,
+            &source_nodes,
+            &destination_nodes,
+            |_| node_record_serving(server_addr),
+            |_| {},
+        );
+        let latest_registry_version = registry.get_latest_version();
+
+        let mut cup_provider = make_cup_provider_with_crypto(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+            Arc::new(SubnetAwareThresholdSigVerifier),
+        );
+
+        let fetched = cup_provider
+            .get_latest_cup(
+                Some(local_cup.clone()),
+                SOURCE_SUBNET_ID,
+                latest_registry_version,
+            )
+            .await
+            .expect("Should fall back to the local CUP");
+        assert_eq!(fetched.height(), local_cup_height);
+
+        // The following should never happen because `maybe_mutate_subnet_id_due_to_split` should
+        // reroute the fetch to the destination subnet. But we still test the case where the logic
+        // there has a bug and we would contact a source subnet peer. This could also happen if the
+        // destination node is malicious and serves us a source CUP. In that case, the CUP must be
+        // rejected because the threshold signature verification should fail.
+        *served_cup.lock().unwrap() = pb::CatchUpPackage::from(make_post_split_cup(
+            source_nodes,
+            post_split_cup_height,
+            SOURCE_SUBNET_ID,
+        ));
+        let fetched = cup_provider
+            .get_latest_cup(
+                Some(local_cup.clone()),
+                SOURCE_SUBNET_ID,
+                latest_registry_version,
+            )
+            .await
+            .expect("Should fall back to the local CUP");
+        assert_eq!(fetched.height(), local_cup_height);
+
+        // Once the peer serves our own subnet's post-split CUP, it is adopted.
+        *served_cup.lock().unwrap() = pb::CatchUpPackage::from(make_post_split_cup(
+            destination_nodes,
+            post_split_cup_height,
+            DESTINATION_SUBNET_ID,
+        ));
+
+        let fetched = cup_provider
+            .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID, latest_registry_version)
+            .await
+            .expect("Should fetch the post-split CUP of our own subnet");
+        assert_eq!(fetched.height(), post_split_cup_height);
+        assert_eq!(
+            fetched.subnet_splitting_status(),
+            SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                new_subnet_id: DESTINATION_SUBNET_ID
+            })
+        );
+    }
+
+    /// Reproduces a race condition where the registry client polls between the orchestrator loop
+    /// reading the latest registry version and crypto verifying the CUP.
+    /// In case of a split, peer selection is made according to the latest local registry version.
+    /// If the latter predates the split, we would select old source nodes (i.e. the entire subnet).
+    /// Now imagine we part of the destination subnet, we select a source node, and that node
+    /// already serves the post-split *source* CUP. The signature verification should fail with
+    /// crypto raising a `VersionNotAvailable` since the CUP's registry version will contain the
+    /// split's registry version.
+    /// BUT if the registry client has polled that version in the meantime, the signature
+    /// verification would still succeed, we will then detect that we are not part of the subnet
+    /// anymore and remove our state.
+    /// This test ensures we ignore the peer's CUP in that scenario.
+    #[tokio::test]
+    async fn test_get_latest_cup_ignores_peer_cup_ahead_of_latest_registry_version() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let source_nodes = vec![node_test_id(1)];
+        let destination_nodes = vec![node_test_id(2)];
+        // We move to the destination subnet.
+        let node_id = destination_nodes[0];
+        let local_cup_height = Height::from(100);
+        let post_split_cup_height = Height::from(200);
+
+        // Every peer serves the source subnet's post-split CUP.
+        let (server_addr, served_cup) =
+            start_cup_server(pb::CatchUpPackage::from(make_post_split_cup(
+                source_nodes.clone(),
+                post_split_cup_height,
+                SOURCE_SUBNET_ID,
+            )))
+            .await;
+        // The registry client already knows the split, i.e. the signature verification succeeds.
+        let registry = setup_split_registry_customized(
+            node_id,
+            &source_nodes,
+            &destination_nodes,
+            |_| node_record_serving(server_addr),
+            |_| {},
+        );
+        assert_eq!(registry.get_latest_version(), SPLIT_REGISTRY_VERSION);
+        // The orchestrator loop's latest registry version was observed before the split
+        let stale_registry_version = SPLIT_REGISTRY_VERSION - RegistryVersion::from(1);
+
+        let mut cup_provider = make_cup_provider_with_crypto(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+            Arc::new(SubnetAwareThresholdSigVerifier),
+        );
+
+        let local_cup = pb::CatchUpPackage::from(make_pre_split_source_cup(
+            [source_nodes.clone(), destination_nodes.clone()].concat(),
+            local_cup_height,
+        ));
+
+        let fetched = cup_provider
+            .get_latest_cup(
+                Some(local_cup.clone()),
+                SOURCE_SUBNET_ID,
+                stale_registry_version,
+            )
+            .await
+            .expect("Should fall back to the local CUP");
+        assert_eq!(fetched.height(), local_cup_height);
+        assert_eq!(
+            fetched.subnet_splitting_status(),
+            SubnetSplittingStatus::NotScheduled
+        );
+
+        // Once the registry caught up, the pending split is detected and the fetch is rerouted to
+        // our own subnet, whose post-split CUP is adopted.
+        *served_cup.lock().unwrap() = pb::CatchUpPackage::from(make_post_split_cup(
+            destination_nodes,
+            post_split_cup_height,
+            DESTINATION_SUBNET_ID,
+        ));
+        let fetched = cup_provider
+            .get_latest_cup(Some(local_cup), SOURCE_SUBNET_ID, SPLIT_REGISTRY_VERSION)
+            .await
+            .expect("Should fetch the post-split CUP of our own subnet");
+        assert_eq!(fetched.height(), post_split_cup_height);
+        assert_eq!(
+            fetched.subnet_splitting_status(),
+            SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                new_subnet_id: DESTINATION_SUBNET_ID
+            })
+        );
+    }
+
+    #[rstest]
+    // Without a local CUP we were previously unassigned and have no state to preserve.
+    #[case::no_local_cup(None)]
+    // An undeserializable local CUP means we just upgraded, and there is no way Consensus was able
+    // to drive a subnet split since then.
+    #[case::undeserializable_local_cup(Some(pb::CatchUpPackage::default()))]
+    fn test_subnet_id_unchanged_without_usable_local_cup(
+        #[case] local_cup: Option<pb::CatchUpPackage>,
+    ) {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(2);
+        let registry = setup_split_registry(node_id, &[node_test_id(1)], &[node_id]);
+        let latest_registry_version = registry.get_latest_version();
+
+        let cup_provider = make_cup_provider_with_registry(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+        );
+
+        if let Some(cup) = &local_cup {
+            assert!(CatchUpPackage::try_from(cup).is_err());
+        }
+
+        let mut subnet_id = SOURCE_SUBNET_ID;
+        cup_provider
+            .maybe_mutate_subnet_id_due_to_split(
+                &mut subnet_id,
+                local_cup.as_ref(),
+                latest_registry_version,
+            )
+            .unwrap();
+
+        assert_eq!(subnet_id, SOURCE_SUBNET_ID);
+    }
+
+    #[test]
+    fn test_pending_split_check_fails_if_registry_version_unavailable() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let node_id = node_test_id(2);
+        let registry = setup_split_registry(node_id, &[node_test_id(1)], &[node_id]);
+        let latest_registry_version = registry.get_latest_version();
+
+        let cup_provider = make_cup_provider_with_registry(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+        );
+
+        let local_cup = pb::CatchUpPackage::from(make_pre_split_source_cup(
+            vec![node_test_id(1), node_id],
+            Height::from(100),
+        ));
+
+        // Registry lookups above the locally available version fail, and the error must be
+        // propagated instead of being treated as "no pending split".
+        let mut subnet_id = SOURCE_SUBNET_ID;
+        let result = cup_provider.maybe_mutate_subnet_id_due_to_split(
+            &mut subnet_id,
+            Some(&local_cup),
+            latest_registry_version + RegistryVersion::from(1),
+        );
+
+        assert_matches!(result, Err(OrchestratorError::RegistryClientError(_)));
+        assert_eq!(subnet_id, SOURCE_SUBNET_ID);
+    }
+
+    #[tokio::test]
+    async fn test_get_latest_cup_keeps_local_cup_when_unassigned_at_split_version() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let source_nodes = vec![node_test_id(1)];
+        let destination_nodes = vec![node_test_id(2)];
+        // We are member of neither subnet at the split registry version: we must have been removed
+        // from the source subnet prior to the split, independently of it.
+        let node_id = node_test_id(3);
+        let registry = setup_split_registry(node_id, &source_nodes, &destination_nodes);
+        let latest_registry_version = registry.get_latest_version();
+
+        let cup_provider = make_cup_provider_with_registry(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+        );
+
+        let local_cup = pb::CatchUpPackage::from(make_pre_split_source_cup(
+            [source_nodes, destination_nodes].concat(),
+            Height::from(100),
+        ));
+
+        // A split is pending, but it is not ours to follow: the subnet ID must be left unchanged,
+        // leaving the situation to the regular leaving flow.
+        let mut subnet_id = SOURCE_SUBNET_ID;
+        cup_provider
+            .maybe_mutate_subnet_id_due_to_split(
+                &mut subnet_id,
+                Some(&local_cup),
+                latest_registry_version,
+            )
+            .unwrap();
+
+        assert_eq!(subnet_id, SOURCE_SUBNET_ID);
+    }
+
+    #[rstest]
+    #[case::unassigned_between_splits(true)]
+    #[case::assigned_between_splits(false)]
+    fn test_pending_split_detected_below_a_later_split(#[case] unassigned_between_splits: bool) {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let source_nodes = vec![node_test_id(1)];
+        let destination_nodes = vec![node_test_id(2), node_test_id(3)];
+        // We move to the destination subnet.
+        let node_id = destination_nodes[0];
+        let third_subnet_id = SUBNET_0;
+        assert_ne!(third_subnet_id, SOURCE_SUBNET_ID);
+        assert_ne!(third_subnet_id, DESTINATION_SUBNET_ID);
+        // Chained splits: after our split, the source subnet is split *again*, into a third
+        // subnet. The scan first hits the later split's record, at whose version we are a member
+        // of neither the source nor that split's destination subnet (we are unassigned or we are
+        // already in ours). It must keep scanning and still pick up our own split below.
+        let registry = setup_split_registry_customized(
+            node_id,
+            &source_nodes,
+            &destination_nodes,
+            |_| NodeRecord::default(),
+            |data_provider| {
+                if unassigned_between_splits {
+                    add_single_subnet_record(
+                        data_provider,
+                        SPLIT_REGISTRY_VERSION.get() + 2,
+                        DESTINATION_SUBNET_ID,
+                        SubnetRecordBuilder::new()
+                            // Remove us from the committee -> we are unassigned at the later
+                            // split's version.
+                            .with_committee(&[node_test_id(3)])
+                            .build(),
+                    );
+                }
+
+                add_subnet_splitting_record(
+                    data_provider,
+                    SPLIT_REGISTRY_VERSION + RegistryVersion::from(4),
+                    third_subnet_id,
+                );
+            },
+        );
+        let latest_registry_version = registry.get_latest_version();
+
+        let cup_provider = make_cup_provider_with_registry(
+            tmp_dir.path().to_path_buf(),
+            node_id,
+            Duration::from_secs(5),
+            registry.clone(),
+        );
+
+        let local_cup = pb::CatchUpPackage::from(make_pre_split_source_cup(
+            [source_nodes, destination_nodes].concat(),
+            Height::from(100),
+        ));
+
+        let mut subnet_id = SOURCE_SUBNET_ID;
+        cup_provider
+            .maybe_mutate_subnet_id_due_to_split(
+                &mut subnet_id,
+                Some(&local_cup),
+                latest_registry_version,
+            )
+            .unwrap();
+
+        // The later split is not ours to follow, but our own split below is.
+        assert_eq!(subnet_id, DESTINATION_SUBNET_ID);
     }
 }
