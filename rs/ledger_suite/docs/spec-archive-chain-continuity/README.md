@@ -500,12 +500,24 @@ next batch without a probe, and an old archive stores it blindly. If an archive 
 has to be reverted, revert the ledger first, or revert to a build that still carries
 PR 1's `append_blocks`.
 
-**Step 0 — Rosetta verification.** Not a PR. A sync from genesis on ckBTC, ckDOGE and
+**Step 0 — verification of the live suites.** Not a PR. Two checks on ckBTC, ckDOGE and
 ICP, because nothing here repairs an already-diverged suite and the answer reorders
-everything after it. Rosetta verifies both that returned indices match those requested
-and that parent hashes chain
+everything after it.
+
+First, a Rosetta sync from genesis. Rosetta verifies both that returned indices match
+those requested and that parent hashes chain
 (`rosetta-api/icrc1/src/ledger_blocks_synchronization/blocks_synchronizer.rs`), so a
-clean sync *is* the verification.
+clean sync shows every block *the ledger publishes* is where it says it is.
+
+Second — and a sync cannot stand in for it — each archive's own extent against the
+ledger's published range for it. Rosetta reads archives only through the
+`archived_blocks` callbacks the ledger hands it (`blocks_synchronizer.rs:591-629`), so it
+never sees an archive *suffix* beyond `nodes_block_ranges`. A legacy lost reconciliation
+leaves exactly that: the duplicate re-send sits in the archive above the published end,
+unread by anyone, and it is what an indexed append would collide with the moment
+archiving resumes. So for every archive, its `log_length` (which `icrc3_get_blocks`
+already returns) must equal one past the published end; a longer archive is the latent
+divergence, and D10 is the repair. Only the two checks together gate Step 5.
 
 **PR 1 — archive.** `append_blocks`'s new argument and result, placement, the clamp,
 the chain check on the first stored block, capacity reporting, the counters, and the
