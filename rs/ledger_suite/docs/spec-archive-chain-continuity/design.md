@@ -849,9 +849,13 @@ the first upgrade from the legacy inclusive pairs, `(start, end)` becoming
 `(start, end + 1)` — **and padded**, because a valid legacy state can have one more node
 than pair: the current creation path pushes the node before the `remaining_capacity`
 call (`archive.rs:507-514`) while a pair appears only after the first successful append
-(`archive.rs:285-310`), so an upgrade can land between the two. Any trailing node without
-a pair gets an empty record at the preceding record's `next_index` (zero if it is the
-first node), which is exactly the state a freshly created archive is in.
+(`archive.rs:285-310`), so an upgrade can land between the two. **Every** trailing node
+without a pair — there can be several, since an oversized first block makes
+`take_prefix` return nothing and the next attempt then finds that empty node too small
+and creates another (`archive.rs:255-258`, `:507-514`, `:547-565`) — gets an empty record
+at the preceding record's `next_index` (zero if it is the first node), which is exactly
+the state a freshly created archive is in, so `node_ranges` always has one record per
+node.
 `nodes_block_ranges` is then kept only as long as anything still reads it.
 
 A published range is inclusive of both ends, so an empty archive has no pair of indices
@@ -1030,6 +1034,18 @@ The roll-over test (`remaining_capacity < needed`, `archive.rs:552`) is restated
 terms of the last append's `at_capacity`, held in the skipped field above (`Req 4.5`,
 `4.6`), with the `remaining_capacity` pre-call kept for a cold start or a freshly
 spawned node — which is what makes that field safe to lose on an upgrade.
+
+**And it is gated on the prefix having caught up** (`Req 4.5`). `at_capacity` alone is
+not licence to create the next archive: the first append into a tail inherited from an
+old ledger — empty, given no Expected_Parent — can store a prefix, fill, and report both
+`at_capacity = true` and `verified = false` (`Req 1.6`, `3.10`). The ledger may not
+advance its Archived_Prefix on that (`Req 8.8`), and an archive created at the reported
+position would then sit above blocks the ledger still serves, so every later offer of
+them would come back `BelowRange` and halt. So a roll-over waits until the Archived_Prefix
+equals the tail's reported position. Getting there needs no special path: the next round
+offers from the prefix as always, the full tail already holds those blocks, `Req 2.9`
+compares the last of them, `verified` comes back true, and the prefix advances — after
+which `at_capacity` is acted on.
 This is what makes `Req 12` cheaper than today rather than dearer: a 1000-block ICP
 round is one pre-call plus two appends today, and one append per round with no
 pre-call afterwards.
@@ -1384,11 +1400,12 @@ test is baseline-independent.
 | 26 | archive | constrain growth so an append stops short for a reason other than the archive's own limit, using a route that **returns** control — the wasm's declared stable maximum, or a subnet memory cap — and assert `at_capacity` is reported false and the blocks that fit are readable | `Req 4.4` |
 | 26b | archive | induce a reservation refusal with a low `reserved_cycles_limit`; assert the call is rejected, that nothing was stored, and that the ledger takes the graceful path — the negative case that fixes what `Req 4.7` gives up | `Req 4.7` |
 | 28 | integration | fill the tail so an append comes back `at_capacity = true`; assert the *next* round creates an archive rather than re-offering to the same one, and that a short stop with `at_capacity = false` instead retries the same archive. This is why the flag exists and nothing else tests it | `Req 4.5`, `4.6` |
+| 28b | integration | install the tail with no Expected_Parent, as an old ledger would, and make the new ledger's first append into it capacity-shortened; assert the reply carries `at_capacity = true` and `verified = false`, that **no** archive is created on the next round, that the re-send is compared and advances the prefix to the reported position, and only then that the next archive is created — the sequence that otherwise ends in a permanent `BelowRange` halt | `Req 4.5`, `Req 8.8`, `Req 2.9`, `Req 1.6` |
 | 29 | integration | after each round, assert every index the ledger served before it is still retrievable, and that the ledger stopped serving only indices some archive reports covering — the headline safety property, which rows 14 and 15 approach only from their failure sides | `Req 8.1`, `Req 8.4` |
 | 30 | integration | drive a round that must roll over; assert exactly one archive is created, and that a round which both fills the tail and has blocks left over does not create two | `Req 12.2` |
 | 31 | integration | assert the capability probe stores nothing and consumes no capacity against a live archive, that a second round against an archive that already answered issues no further probe, and that a round which does probe sends at most one empty append | `Req 10.3`, `10.4`, `Req 12.1` |
 | 31b | unit, `ledger_canister_core` | send the capability probe to a freshly created archive and take its reply with `next_index == block_index_offset`; assert its `NodeRange` reads empty, `archives()` omits it, and nothing underflows — the `chunk_len - 1` arithmetic the probe would have hit | `Req 7.6`, `Req 3.5` |
-| 31c | upgrade | decode a pre-change `Archive` with three inclusive legacy ranges; assert `node_ranges` is filled one per node as `(start, end + 1)`, `archives()` is unchanged, and — with one node's range then set empty — every other node still pairs with its own canister id, which the zipped representation could not guarantee. Repeat with a fourth node that has no legacy pair — created, never appended to — and assert it is padded with an empty record at the third's `next_index` and omitted from `archives()` | `Req 7.2`, `Req 7.6`, `Req 8.9` |
+| 31c | upgrade | decode a pre-change `Archive` with three inclusive legacy ranges; assert `node_ranges` is filled one per node as `(start, end + 1)`, `archives()` is unchanged, and — with one node's range then set empty — every other node still pairs with its own canister id, which the zipped representation could not guarantee. Repeat with a fourth and a fifth node that have no legacy pair — created, never appended to, as an oversized first block produces — and assert each is padded with an empty record at the third's `next_index` and omitted from `archives()`, so that `node_ranges` has exactly one record per node | `Req 7.2`, `Req 7.6`, `Req 8.9` |
 | 27 | matrix | both token variants for every archive-level row: 1-9, 9b, 9c, 10, 11, 13, 22, 22c, 22d, 22e, 26 and 26b — (12) is ICP-only by nature, and 22b, 25 and 28-31 are integration rows | yes |
 
 **Seams the design owes.** `Req 9` is observable only through the attempt spacing, so

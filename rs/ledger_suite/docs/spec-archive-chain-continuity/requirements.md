@@ -366,8 +366,13 @@ makes progress under storage pressure instead of repeating work it cannot finish
    creating another archive when creating one needs the same resource that was just
    refused.
 5. IF THE Archive reports `at_capacity` as true, THEN THE Ledger SHALL create a new
-   archive on a later Archiving_Round for the remaining blocks, rather than offering
-   them to the same archive again.
+   archive on a later Archiving_Round for the blocks above that archive's reported
+   Archive_Position — but only once its own Archived_Prefix has reached that position,
+   re-offering blocks to the full archive until it has — because a first append stored
+   without a check (per 1.6) leaves a prefix the ledger may not yet give up (per 8.8),
+   and an archive created above it would put every later offer of those blocks below
+   its own range, whereas a re-send is one the full archive compares per 2.9 and so
+   verifies.
 6. IF THE Archive reports `at_capacity` as false and stopped short, THEN THE Ledger
    SHALL offer the remaining blocks to the same archive on a later attempt.
 7. THE Archive SHALL NOT be held to 4.2, 4.4 or 4.8 for a storage refusal that
