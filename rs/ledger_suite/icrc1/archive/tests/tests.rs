@@ -582,8 +582,23 @@ fn test_icrc3_supported_block_types() {
 /// canister, so that a candid upgrade which changed it would fail visibly.
 #[test]
 fn test_old_ledger_decodes_new_archive_reply_as_unit() {
-    /// A stand-in with the shape the design gives `append_result`; only the
-    /// encoding side matters here, and only for the `None` case.
+    /// A stand-in with the full shape the design gives `append_outcome` and
+    /// `append_result`. The inner types are present in Candid's type table even
+    /// when the value is `None`, so the surrogate has to model the whole reply —
+    /// the variant with its record payloads included — for the assertion below to
+    /// cover the real wire shape rather than a simpler one.
+    #[allow(dead_code)]
+    #[derive(candid::CandidType)]
+    enum AppendOutcome {
+        Stored,
+        StoredPartial,
+        BelowRange,
+        Gap,
+        ChainMismatch { at_index: u64 },
+        Undecodable { at_index: u64 },
+    }
+
+    #[allow(dead_code)]
     #[derive(candid::CandidType)]
     struct AppendResult {
         block_index_offset: u64,
@@ -591,6 +606,7 @@ fn test_old_ledger_decodes_new_archive_reply_as_unit() {
         blocks_stored: u64,
         verified: bool,
         at_capacity: bool,
+        outcome: AppendOutcome,
     }
 
     let reply = Encode!(&None::<AppendResult>).unwrap();

@@ -425,7 +425,8 @@ canister, which the canister log, being controller-gated, is not. A richer statu
 would be the next step if the labels ever prove too thin — and that, like the recovery
 policy itself, waits until production shows a need.
 
-**Where the halt lives, and what clears it** (`L4.11`). Seven of the eight are
+**Where the halt lives, and what clears it** (`L4.11`). Eight of the nine non-clearing
+halts — every `Halt` variant below — are
 learned from one archive reply and are invisible to the next round unless something
 records them — the ranges are unchanged after a `ChainMismatch`, so `blocks_to_archive`
 could not re-derive the refusal and would send again. So the round that learns one sets
@@ -443,9 +444,10 @@ omission: every one of these seven is re-derivable from the next reply — the a
 refuse again, report the same position again — so forgetting it on upgrade costs one
 attempt that re-establishes it, and that one attempt is precisely the "resume now" lever
 D2 gives an operator. Nothing else clears it: no timer, no successful unrelated call, no
-metric read. The eighth, `C1.1`, is the exception in both directions — it is
-`Creating::Started`, it is persisted, and an upgrade does *not* clear it (`C1.4`) —
-because an orphaned canister cannot be re-derived from anything. That is D2's line
+metric read. The ninth, `C1.1`, is not a `Halt` variant at all: it is the separate
+persisted state `Creating::Started`, and the exception in both directions — persisted,
+and not cleared by an upgrade (`C1.4`) — because an orphaned canister cannot be
+re-derived from anything. That is D2's line
 drawn through the halts: persist what only the past knows, skip what the next reply
 will say again.
 
