@@ -405,6 +405,26 @@ that has *stopped* look the same from block accumulation alone. And `L5.1` is th
 only one whose state may be derived from a cache, since it is the only one expected to
 change without a *ledger* upgrade.
 
+**What the operator sees, concretely.** "A distinct non-zero metric" in the criteria
+means one labelled gauge, not a family of ad-hoc names:
+
+    ledger_archiving_halted{reason="refused_chain"}            1
+    ledger_archiving_halted{reason="foreign_module", canister_id="<id>"}  1
+
+One value per `Halt` variant, `1` while that halt holds and `0` (or absent) otherwise;
+the reason is a label so that a single alert rule — *any* `ledger_archiving_halted` above
+zero — covers every case, while a dashboard still tells them apart. Where a halt concerns
+a canister the ledger can name (`C1.7`, `C1.15`), the id is a second label, since a
+principal is not a number and a label is the only way `/metrics` carries one. Halts are
+*states*, so they are gauges; the things that *happen* — a failed round
+(`ledger_archiving_failures`), an unknown outcome (`L7`), a below-range report — stay
+counters. The same encoder the ledger already uses supports labelled gauges
+(`ic_metrics_encoder::MetricsEncoder::gauge_vec`), so this needs no new endpoint: the
+halt reason and the id that goes with it are readable by anyone who can scrape the
+canister, which the canister log, being controller-gated, is not. A richer status query
+would be the next step if the labels ever prove too thin — and that, like the recovery
+policy itself, waits until production shows a need.
+
 **Where the halt lives, and what clears it** (`L4.11`). Seven of the eight are
 learned from one archive reply and are invisible to the next round unless something
 records them — the ranges are unchanged after a `ChainMismatch`, so `blocks_to_archive`
