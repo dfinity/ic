@@ -8084,6 +8084,7 @@ dependencies = [
  "ic-logger",
  "ic-protobuf",
  "ic-registry-client-helpers",
+ "ic-registry-keys",
  "ic-types",
  "ic-types-test-utils",
  "phantom_newtype",

@@ -9,7 +9,8 @@ use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nns_test_utils::registry::new_current_node_crypto_keys_mutations;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord,
+    CatchUpPackageContents, GenesisArgs, InitialNiDkgTranscriptRecord, SubnetListRecord,
+    catch_up_package_contents::CupType,
 };
 use ic_registry_keys::make_catch_up_package_contents_key;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key};
@@ -337,7 +338,7 @@ fn high_threshold_public_key_invariant_valid_snapshot() {
         setup.receiver_subnet,
     );
 
-    assert!(check_high_threshold_public_key_matches_the_one_in_cup(&snapshot).is_ok());
+    assert!(check_high_threshold_public_key_and_cup_contents(&snapshot).is_ok());
 }
 
 #[test]
@@ -350,7 +351,7 @@ fn high_threshold_public_key_invariant_public_key_mismatch() {
         setup.receiver_subnet,
     );
 
-    assert!(check_high_threshold_public_key_matches_the_one_in_cup(&snapshot).is_err());
+    assert!(check_high_threshold_public_key_and_cup_contents(&snapshot).is_err());
 }
 
 #[test]
@@ -362,7 +363,7 @@ fn high_threshold_public_key_invariant_missing_public_key() {
         setup.receiver_subnet,
     );
 
-    assert!(check_high_threshold_public_key_matches_the_one_in_cup(&snapshot).is_err());
+    assert!(check_high_threshold_public_key_and_cup_contents(&snapshot).is_err());
 }
 
 #[test]
@@ -374,7 +375,7 @@ fn high_threshold_public_key_invariant_missing_cup() {
         setup.receiver_subnet,
     );
 
-    assert!(check_high_threshold_public_key_matches_the_one_in_cup(&snapshot).is_err());
+    assert!(check_high_threshold_public_key_and_cup_contents(&snapshot).is_err());
 }
 
 #[test]
@@ -390,7 +391,7 @@ fn high_threshold_public_key_invariant_public_key_and_cup_both_missing() {
     let mut snapshot = RegistrySnapshot::new();
     snapshot.insert(subnet_mutation.key, subnet_mutation.value);
 
-    assert!(check_high_threshold_public_key_matches_the_one_in_cup(&snapshot).is_err());
+    assert!(check_high_threshold_public_key_and_cup_contents(&snapshot).is_err());
 }
 
 #[test]
@@ -407,7 +408,7 @@ fn high_threshold_public_key_invariant_unable_to_parse_key() {
     let pubkey_mutation = insert(pubkey_key.into_bytes(), pubkey_value);
     snapshot.insert(pubkey_mutation.key, pubkey_mutation.value);
 
-    assert!(check_high_threshold_public_key_matches_the_one_in_cup(&snapshot).is_err());
+    assert!(check_high_threshold_public_key_and_cup_contents(&snapshot).is_err());
 }
 
 #[test]
@@ -423,7 +424,7 @@ fn high_threshold_public_key_invariant_unable_to_parse_cup() {
     let cup_mutation = insert(cup_contents_key, bad_cup_contents_bytes.encode_to_vec());
     snapshot.insert(cup_mutation.key, cup_mutation.value);
 
-    assert!(check_high_threshold_public_key_matches_the_one_in_cup(&snapshot).is_err());
+    assert!(check_high_threshold_public_key_and_cup_contents(&snapshot).is_err());
 }
 
 #[test]
@@ -446,7 +447,20 @@ fn high_threshold_public_key_invariant_unable_to_parse_initial_ni_dkg_transcript
     let cup_mutation = insert(cup_contents_key, setup.cup_contents.encode_to_vec());
     snapshot.insert(cup_mutation.key, cup_mutation.value);
 
-    assert!(check_high_threshold_public_key_matches_the_one_in_cup(&snapshot).is_err());
+    assert!(check_high_threshold_public_key_and_cup_contents(&snapshot).is_err());
+}
+
+#[test]
+fn high_threshold_public_key_invariant_missing_cup_type() {
+    let mut setup = HighThresholdPublicKeySetup::new();
+    setup.cup_contents.cup_type = None;
+    let snapshot = registry_snapshot_from_threshold_sig_pk_and_cup(
+        Some(setup.threshold_sig_pk),
+        Some(setup.cup_contents),
+        setup.receiver_subnet,
+    );
+
+    assert!(check_high_threshold_public_key_and_cup_contents(&snapshot).is_err());
 }
 
 struct HighThresholdPublicKeySetup {
@@ -555,6 +569,7 @@ fn subnet_threshold_sig_pubkey_and_cup_from_transcript(
         initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
             transcript,
         )),
+        cup_type: Some(CupType::Genesis(GenesisArgs {})),
         ..Default::default()
     };
     (threshold_sig_pk, cup_contents)

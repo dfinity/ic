@@ -260,7 +260,9 @@ fn cmd_get_recovery_cup(
     player: &crate::player::Player,
     cmd: &crate::cmd::GetRecoveryCupCmd,
 ) -> Result<(), String> {
-    use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, RecoveryArgs, catch_up_package_contents::CupType,
+    };
     use ic_types::{consensus::HasHeight, crypto::threshold_sig::ni_dkg::NiDkgTag};
 
     let context_time = ic_types::time::current_time();
@@ -290,11 +292,15 @@ fn cmd_get_recovery_cup(
         initial_ni_dkg_transcript_high_threshold,
         height: cmd.height,
         time: time.as_nanos_since_unix_epoch(),
-        state_hash,
+        state_hash: state_hash.clone(),
         registry_store_uri: None,
         ecdsa_initializations: vec![],
         chain_key_initializations: vec![],
-        cup_type: None,
+        cup_type: Some(CupType::Recovery(RecoveryArgs {
+            height: cmd.height,
+            time: time.as_nanos_since_unix_epoch(),
+            state_hash,
+        })),
     };
 
     let cup = ic_consensus_cup_utils::make_registry_cup_from_cup_contents(
