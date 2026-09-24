@@ -343,7 +343,7 @@ impl ConnectionManager {
                             self.peer_map.write().unwrap().remove(&peer_id);
                             self.metrics.peers_removed_total.inc();
 
-                            // A connection that dies right after being established are not retried
+                            // A connection that dies right after being established is not retried
                             // immediately, otherwise we end up in a tight reconnect loop.
                             let reconnect_delay = if lifetime < MIN_HEALTHY_CONNECTION_LIFETIME {
                                 self.metrics.short_lived_connections_total.inc();
