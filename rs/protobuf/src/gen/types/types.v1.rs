@@ -1317,7 +1317,7 @@ pub struct DkgMessageId {
     pub height: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct UpgradePermitAuthMessageId {
+pub struct UpgradeAuthorizationShareId {
     #[prost(bytes = "vec", tag = "1")]
     pub hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "2")]
@@ -1862,17 +1862,12 @@ impl ChainKeyErrorCode {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct UpgradePayload {
-    #[prost(message, repeated, tag = "1")]
-    pub actions: ::prost::alloc::vec::Vec<UpgradeAction>,
+pub struct UpgradePermitAction {
+    #[prost(oneof = "upgrade_permit_action::Action", tags = "1, 2, 3")]
+    pub action: ::core::option::Option<upgrade_permit_action::Action>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct UpgradeAction {
-    #[prost(oneof = "upgrade_action::Action", tags = "1, 2, 3")]
-    pub action: ::core::option::Option<upgrade_action::Action>,
-}
-/// Nested message and enum types in `UpgradeAction`.
-pub mod upgrade_action {
+/// Nested message and enum types in `UpgradePermitAction`.
+pub mod upgrade_permit_action {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Action {
         #[prost(message, tag = "1")]
@@ -1908,7 +1903,7 @@ pub struct ReturnUpgradePermit {
     pub node: ::core::option::Option<NodeId>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct UpgradePermitAuthorizationShare {
+pub struct UpgradeAuthorizationShare {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<UpgradePermitRequest>,
     #[prost(message, optional, tag = "2")]

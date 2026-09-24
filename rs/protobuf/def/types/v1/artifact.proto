@@ -12,7 +12,7 @@ message DkgMessageId {
   uint64 height = 2;
 }
 
-message UpgradePermitAuthMessageId {
+message UpgradeAuthorizationShareId {
   bytes hash = 1;
   uint64 height = 2;
 }

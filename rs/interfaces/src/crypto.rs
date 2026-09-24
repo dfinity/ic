@@ -26,7 +26,7 @@ pub use vetkd::*;
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_types::consensus::{
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradePermitAuthorizationRequest,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradePermitRequest,
     certification::CertificationContent,
     dkg as consensus_dkg,
     idkg::{IDkgComplaintContent, IDkgOpeningContent},
@@ -73,15 +73,15 @@ pub trait Crypto:
     // IDkgOpeningContent
     + BasicSigner<IDkgOpeningContent>
     + BasicSigVerifier<IDkgOpeningContent>
-    // UpgradePermitAuthorizationRequest
-    + BasicSigner<UpgradePermitAuthorizationRequest>
-    + BasicSigVerifier<UpgradePermitAuthorizationRequest>
     + IDkgProtocol
     + ThresholdEcdsaSigner
     + ThresholdEcdsaSigVerifier
     + ThresholdSchnorrSigner
     + ThresholdSchnorrSigVerifier
     + VetKdProtocol
+    // UpgradePermitRequest
+    + BasicSigner<UpgradePermitRequest>
+    + BasicSigVerifier<UpgradePermitRequest>
     // CanisterHttpResponse
     + BasicSigner<CanisterHttpResponseReceipt>
     + BasicSigVerifier<CanisterHttpResponseReceipt>
@@ -144,8 +144,6 @@ impl<T> Crypto for T where
         + BasicSigVerifier<IDkgComplaintContent>
         + BasicSigner<IDkgOpeningContent>
         + BasicSigVerifier<IDkgOpeningContent>
-        + BasicSigner<UpgradePermitAuthorizationRequest>
-        + BasicSigVerifier<UpgradePermitAuthorizationRequest>
         + BasicSigner<CanisterHttpResponseReceipt>
         + BasicSigVerifier<CanisterHttpResponseReceipt>
         + BasicSigner<QueryResponseHash>
@@ -155,6 +153,8 @@ impl<T> Crypto for T where
         + ThresholdSchnorrSigner
         + ThresholdSchnorrSigVerifier
         + VetKdProtocol
+        + BasicSigner<UpgradePermitRequest>
+        + BasicSigVerifier<UpgradePermitRequest>
         + BasicSigVerifierByPublicKey<MessageId>
         + BasicSigVerifierByPublicKey<WebAuthnEnvelope>
         + ThresholdSigner<CatchUpContent>
