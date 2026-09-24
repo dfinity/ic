@@ -30,7 +30,7 @@ use ic_interfaces::crypto::{
 use ic_types::canister_http::CanisterHttpResponseReceipt;
 use ic_types::consensus::{
     BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent, UpgradePermitRequest,
     certification::CertificationContent,
     dkg as consensus_dkg,
     idkg::{IDkgComplaintContent, IDkgOpeningContent},
@@ -310,6 +310,10 @@ mockall::mock! {
             &self, message: &CanisterHttpResponseReceipt,
         ) -> CryptoResult<BasicSigOf<CanisterHttpResponseReceipt>>;
 
+        pub fn sign_basic_upgrade_permit_request(
+            &self, message: &UpgradePermitRequest,
+        ) -> CryptoResult<BasicSigOf<UpgradePermitRequest>>;
+
         pub fn sign_basic_query(
             &self, message: &QueryResponseHash,
         ) -> CryptoResult<BasicSigOf<QueryResponseHash>>;
@@ -486,6 +490,37 @@ mockall::mock! {
                 NodeId,
                 BasicSigOf<CanisterHttpResponseReceipt>,
                 CanisterHttpResponseReceipt,
+                RegistryVersion,
+            )>,
+        ) -> CryptoResult<()>;
+
+        // UpgradePermitRequest
+        pub fn verify_basic_sig_upgrade_permit_request(
+            &self,
+            signature: &BasicSigOf<UpgradePermitRequest>,
+            message: &UpgradePermitRequest, signer: NodeId,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn combine_basic_sig_upgrade_permit_request(
+            &self,
+            signatures: BTreeMap<NodeId, BasicSigOf<UpgradePermitRequest>>,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<BasicSignatureBatch<UpgradePermitRequest>>;
+
+        pub fn verify_basic_sig_batch_upgrade_permit_request(
+            &self,
+            signature_batch: &BasicSignatureBatch<UpgradePermitRequest>,
+            message: &UpgradePermitRequest,
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()>;
+
+        pub fn verify_basic_sig_batch_multi_msg_upgrade_permit_request(
+            &self,
+            inputs: Vec<(
+                NodeId,
+                BasicSigOf<UpgradePermitRequest>,
+                UpgradePermitRequest,
                 RegistryVersion,
             )>,
         ) -> CryptoResult<()>;
@@ -786,6 +821,7 @@ impl_basic_signer!(IDkgDealing, sign_basic_idkg_dealing);
 impl_basic_signer!(IDkgComplaintContent, sign_basic_idkg_complaint);
 impl_basic_signer!(IDkgOpeningContent, sign_basic_idkg_opening);
 impl_basic_signer!(CanisterHttpResponseReceipt, sign_basic_http);
+impl_basic_signer!(UpgradePermitRequest, sign_basic_upgrade_permit_request);
 impl_basic_signer!(QueryResponseHash, sign_basic_query);
 
 impl_basic_sig_verifier!(
@@ -836,6 +872,13 @@ impl_basic_sig_verifier!(
     combine_basic_sig_http,
     verify_basic_sig_batch_http,
     verify_basic_sig_batch_multi_msg_http
+);
+impl_basic_sig_verifier!(
+    UpgradePermitRequest,
+    verify_basic_sig_upgrade_permit_request,
+    combine_basic_sig_upgrade_permit_request,
+    verify_basic_sig_batch_upgrade_permit_request,
+    verify_basic_sig_batch_multi_msg_upgrade_permit_request
 );
 
 impl_threshold_signer!(CertificationContent, sign_threshold_certification);

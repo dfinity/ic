@@ -32,6 +32,9 @@ pub mod hashed;
 pub mod idkg;
 mod payload;
 pub mod thunk;
+pub mod upgrade;
+
+pub use upgrade::{UpgradeAuthorizationShare, UpgradePermitRequest};
 
 pub use catchup::*;
 use hashed::Hashed;
