@@ -33,6 +33,13 @@ on the process that this file is part of, see
 * Newly created `CatchUpPackageContents` records with CUP type `CupType::Genesis` will not contain a `height`
   field anymore. You can (and should) assume that the height for `Genesis` CUPs is always 0.
 
+* Invariant requiring that every subnet's `CatchUpPackageContents` record has a `cup_type` set.
+
+* One-time post-upgrade migration backfilling `cup_type` on every `CatchUpPackageContents` record
+  that has none. A record whose legacy `height`, `time` and `state_hash` fields are all unset is
+  stamped as `CupType::Genesis`. Any other record is stamped as `CupType::Recovery`, which keeps those
+  legacy values.
+
 ## Changed
 
 * `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
