@@ -13,7 +13,7 @@ use ic_config::{
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_cup_utils::make_registry_cup;
-use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilder;
+use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilderImpl;
 use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool, crypto::SignVerify};
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
@@ -2216,7 +2216,7 @@ impl StateMachine {
         ));
 
         let chain_key_payload_builder = Arc::new(MockBatchPayloadBuilder::new().expect_noop());
-        let upgrade_payload_builder = Arc::new(UpgradePayloadBuilder);
+        let upgrade_payload_builder = Arc::new(UpgradePayloadBuilderImpl);
 
         let cancellation_token = tokio_util::sync::CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();

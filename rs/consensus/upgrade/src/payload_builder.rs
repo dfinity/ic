@@ -5,9 +5,9 @@ use ic_interfaces::validation::{ValidationError, ValidationResult};
 use ic_types::batch::{UpgradePayload, ValidationContext};
 use ic_types::{Height, NumBytes};
 
-pub struct UpgradePayloadBuilder;
+pub struct UpgradePayloadBuilderImpl;
 
-impl BatchPayloadBuilder for UpgradePayloadBuilder {
+impl BatchPayloadBuilder for UpgradePayloadBuilderImpl {
     fn build_payload(
         &self,
         _height: Height,
@@ -56,7 +56,7 @@ mod tests {
     fn test_build_payload_is_empty() {
         let context = validation_context();
         assert!(
-            UpgradePayloadBuilder
+            UpgradePayloadBuilderImpl
                 .build_payload(Height::from(1), NumBytes::new(u64::MAX), &[], &context)
                 .is_empty()
         );
@@ -70,7 +70,7 @@ mod tests {
             validation_context: &context,
         };
         assert!(matches!(
-            UpgradePayloadBuilder.validate_payload(
+            UpgradePayloadBuilderImpl.validate_payload(
                 Height::from(1),
                 &proposal_context,
                 &[0xFF, 0xFF],
@@ -92,7 +92,7 @@ mod tests {
             validation_context: &context,
         };
         assert!(
-            UpgradePayloadBuilder
+            UpgradePayloadBuilderImpl
                 .validate_payload(Height::from(1), &proposal_context, &[], &[])
                 .is_ok()
         );

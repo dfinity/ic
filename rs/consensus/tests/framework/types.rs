@@ -6,7 +6,7 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
 use ic_consensus_idkg::IDkgImpl;
-use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilder;
+use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilderImpl;
 use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{

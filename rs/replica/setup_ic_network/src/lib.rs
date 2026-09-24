@@ -16,7 +16,7 @@ use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_consensus_dkg::DkgBouncer;
 use ic_consensus_idkg::{IDkgBouncer, IDkgStatsImpl};
 use ic_consensus_manager::{AbortableBroadcastChannel, AbortableBroadcastChannelBuilder};
-use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilder;
+use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilderImpl;
 use ic_consensus_utils::{
     MAX_CONSENSUS_THREADS, build_thread_pool, crypto::ConsensusCrypto, pool_reader::PoolReader,
 };
@@ -545,7 +545,7 @@ fn start_consensus(
         log.clone(),
     ));
 
-    let upgrade_payload_builder = Arc::new(UpgradePayloadBuilder);
+    let upgrade_payload_builder = Arc::new(UpgradePayloadBuilderImpl);
     // ------------------------------------------------------------------------
 
     let replica_config = ReplicaConfig {

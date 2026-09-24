@@ -78,12 +78,15 @@ mod crypto_hash_stability {
         CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, ConsensusMessage, DataPayload,
         EquivocationProof, Finalization, FinalizationContent, FinalizationShare, HashedBlock,
         HashedRandomBeacon, Notarization, NotarizationContent, NotarizationShare, Payload,
-        RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank, UpgradeAuthorizationShare,
-        UpgradePermitRequest,
+        RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank, SummaryPayload,
+        UpgradeAuthorizationShare, UpgradePermitRequest,
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
-        dkg::{DealingContent, DkgDataPayload, Message as DkgMessage},
+        dkg::{
+            DealingContent, DkgDataPayload, DkgSummary, Message as DkgMessage,
+            SubnetSplittingStatus,
+        },
         hashed::Hashed,
         idkg::{
             EcdsaSigShare, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent, RequestId,
@@ -590,7 +593,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "c20a87578beb94df369dabfefc30c0d47d170c75d68236aae3b16335c0f21c4a",
+            "29390083388965b468a0b4dcf653be560bf4ef0a58150acbf826dcac46890d13",
             "Hash of CatchUpContent changed"
         );
     }
@@ -608,7 +611,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "db509a477f3ed01ec251325527e946b2e674f249d013bafc0d061620000a6e0d",
+            "8c535dda6ce448077a4983e2153ffd299c3a0caa1652379989c89c4964720aa2",
             "Hash of CatchUpShareContent changed"
         );
     }
@@ -656,7 +659,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "33c4f3fb79a8520a4c1d6d814aa5bae53e5aa58ad517dfddec45be7dfd930053",
+            "90321b317ee0849ebbfd07e3ca0a3bc1595600debf4e84f8a427414b487dd883",
             "Hash of CatchUpPackage changed"
         );
     }
@@ -686,7 +689,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "47648b17b0b80122fa1adc34a6d6e82ae8fb5af4a92b2495c41c91052ace1a10",
+            "fd257cf9d018ff22f539008e785ed2a40e055eea5d78b4fa32ffbce14405aee8",
             "Hash of CatchUpPackageShare changed"
         );
     }
@@ -1040,9 +1043,18 @@ mod crypto_hash_stability {
             test_crypto_hash_of(0x42),
             Payload::new(
                 crypto_hash,
-                BlockPayload::Data(DataPayload {
-                    batch: BatchPayload::default(),
-                    dkg: DkgDataPayload::new_empty(Height::from(0)),
+                BlockPayload::Summary(SummaryPayload {
+                    dkg: DkgSummary::new(
+                        /*configs=*/ Vec::default(),
+                        /*current_transcripts=*/ BTreeMap::default(),
+                        /*next_transcripts=*/ BTreeMap::default(),
+                        /*registry_version=*/RegistryVersion::from(1),
+                        /*interval_length=*/ Height::new(59),
+                        /*next_interval_length=*/ Height::new(59),
+                        /*height=*/ Height::new(0),
+                        /*remote_dkg_attempts=*/ BTreeMap::default(),
+                        /*subnet_splitting_status=*/ SubnetSplittingStatus::default(),
+                    ),
                     idkg: None,
                 }),
             ),
@@ -1072,7 +1084,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "9bb9a7c7dacd7513fc58d13b238740e2f8e282c3d6cb66bd3aef520904583ae9",
+            "7d7d85b7e8a25a005c6cfe9dd5ca8d2c9eb94193adf20cd46fe028f5696a0fde",
             "Hash of BlockProposal changed"
         );
     }
