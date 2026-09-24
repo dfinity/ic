@@ -197,8 +197,8 @@ vector at ten before canister state ever collapses duplicates (`bounded_vec.rs:1
 a list with a repeated principal fails on its length even when its distinct count is
 fine. Enforcing that belongs
 where the configuration is made — the ledger's `init` and `post_upgrade` rejecting a
-larger set — and is a separate, minimal change tracked on its own rather than part of
-this work (README, non-goals).
+larger set — and is a separate, minimal change, DEFI-3015, rather than part of this work
+(README, non-goals).
 
 **And this is what makes both steps bounded** (the table above). Step one is resolvable
 by asking: the ledger is still a controller and reads the list back. Step two is
