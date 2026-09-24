@@ -83,7 +83,8 @@ for the other.
 2. IF THE Archive reports `at_capacity` as false and stopped short, THEN THE Ledger
    SHALL offer the remaining blocks to the same archive on a later attempt.
 3. WHEN the next block THE Ledger would archive is on its own larger than the archive
-   size it configures, or an archive that holds no blocks reports `at_capacity` as true,
+   size it configures or than one inter-canister message per L6.3, or an archive that
+   holds no blocks reports `at_capacity` as true,
    THE Ledger SHALL make no further archiving attempt and SHALL expose a distinct non-zero
    metric rather than creating another archive — whether per L2.1 or on a capacity check
    made before any append — because a block that does not fit an empty archive will not

@@ -160,7 +160,12 @@ failure the ledger *observes* is retried on a later round while it is still a co
 controllers changed — leaves the entry in `pending_handovers`, and the retry comes back
 unauthorized, which is proof the earlier call landed: `C1.11` treats that refusal as
 completion. Both readings of an unauthorized retry lead to the same end state, so nothing
-is read into a reject code that the state does not already imply. An earlier draft split
+is read into a reject code that the state does not already imply. This rests on a fact
+of construction worth stating: `create_canister` is called with
+`CreateCanisterArgs::default()` (`spawn.rs:41-43`), so the new canister's *only*
+controller is the ledger until the handover lands, and no other principal can change its
+settings in the meantime — an unauthorized retry can therefore mean nothing but that the
+ledger's own call succeeded. An earlier draft split
 this into two calls so the first could be verified by reading the controller list; the
 single call needs no verification step, because the only way it can be unauthorized is by
 having succeeded.

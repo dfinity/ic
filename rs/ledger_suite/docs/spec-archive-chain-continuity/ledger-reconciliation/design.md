@@ -494,7 +494,12 @@ so before any reply could carry `at_capacity`. An empty tail whose first block e
 and never reach the halt. So the check is made where the information already is: a block
 larger on its own than the configured archive size halts *before any call*, and a
 capacity pre-check that finds an *empty* tail too small halts rather than creates. Both
-are the same condition seen from different places, and `L2.3` names both.
+are the same condition seen from different places, and `L2.3` names both — and a third
+with them: a block too large for one *message*. `L6.3`'s byte cap trims the selection to
+what fits, and a first block that does not fit at all trims it to nothing; today's code
+then returns an empty chunk and the round ends having asked nothing, so no reply can ever
+report progress and the same impossible append would be tried on every transaction. That
+too halts, before any call, with the same metric.
 
 For a suite that predates this work there is no previously *created* node to have
 reported anything — but there is a tail, and `L5.3`'s probe reports its range
@@ -664,7 +669,7 @@ attempted are in the README's **Testing** section; they span the parts.*
 | 15h | integration | answer with an empty probe and separately with a first-block-too-large `StoredPartial`, both reporting a range beyond the archived prefix; assert the prefix does not advance on either, although both would pass a gate written on outcome arms alone | `L3.8`, `A3.9` |
 | 15j | integration | with an archive holding 1000 blocks, re-send only the first 100 and take the wholly-held reply; assert the Archived_Prefix advances to 100 and **not** to the reported 1000, and that the removal count matches — the blocks the comparison at index 99 said nothing about | `L3.8`, `A2.5` |
 | 7e | archive | configure `max_memory_size_bytes` below a single block's size and append it with an index; assert nothing is stored, `at_capacity` is true, and `next_index` equals `block_index_offset` — the reply the ledger must halt on | `L2.3` |
-| 15e | integration | drive the oversized-block case end to end, on both paths: through an indexed append's `at_capacity` reply, and on a cold start where the `remaining_capacity` pre-check meets an empty tail; assert the ledger halts with its own metric and creates **no** archive on either, and that an ordinary full tail still rolls over — the cases that look identical in the flag alone | `L2.3`, `L2.1` |
+| 15e | integration | drive the oversized-block case end to end, on all three paths: through an indexed append's `at_capacity` reply, on a cold start where the `remaining_capacity` pre-check meets an empty tail, and with a block larger than one message so the byte cap selects nothing; assert the ledger halts with its own metric and creates **no** archive on either, and that an ordinary full tail still rolls over — the cases that look identical in the flag alone | `L2.3`, `L2.1` |
 | 15f | integration | report, from a non-tail archive, a position below the aggregate Archived_Prefix but matching its own published range; assert no halt. Then report one short of its own range and assert the halt — the false positive that the aggregate comparison produced for every legacy archive | `L3.3` |
 | 15l | unit, `ledger_canister_core` | have the tail report an offset one above its published start, and separately have a suite's first archive report a non-zero offset; assert both halt on the distinct metric and the record is unchanged — the start `L1.4` never checks | `L3.9` |
 | 15i | unit, `ledger_canister_core` | for an archive published as `[0, 99]`, assert a reported position of `100` does not halt and `99` does — the boundary where the inclusive published range meets the exclusive position, and the one value an off-by-one would miss | `L3.3`, `L1.6` |
