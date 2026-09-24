@@ -227,9 +227,9 @@ RUN adduser --system --disabled-password --home /var/lib/metrics-proxy --group -
     usermod -a -G node_exporter metrics-proxy
 
 # The user to run the SOCKS proxy
-RUN addgroup socks && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin socks && \
-    adduser socks socks && chmod +s /usr/sbin/danted
+RUN adduser --system --disabled-password --shell /usr/sbin/nologin --group socks && \
+    chown root:socks /usr/sbin/danted && \
+    chmod 0750 /usr/sbin/danted
 
 # ------ INSTALL SCRIPTS -----------------------------------------
 
