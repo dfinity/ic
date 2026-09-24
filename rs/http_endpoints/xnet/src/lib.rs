@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use axum::body::Body;
+use axum::body::{Body, HttpBody};
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::routing::{MethodRouter, any};
@@ -460,10 +460,19 @@ fn route_request(
 ) -> Response<Body> {
     let since = Instant::now();
     let (resource, response) = route_request_impl(url, method, body, peer_node_id, ctx);
+
     ctx.metrics
         .request_duration
         .with_label_values(&[resource, response.status().as_str()])
         .observe(since.elapsed().as_secs_f64());
+    if response.status() == StatusCode::OK
+        && let Some(size) = response.body().size_hint().exact()
+    {
+        ctx.metrics
+            .response_size
+            .with_label_values(&[resource])
+            .observe(size as f64);
+    }
 
     response
 }
@@ -565,7 +574,7 @@ fn handle_streams(ctx: &Context<impl CertifiedStreamStore>) -> Response<Body> {
         .iter()
         .map(|subnet| subnet.to_string())
         .collect();
-    observe_response_size(|| json_response(&subnets), RESOURCE_STREAMS, &ctx.metrics)
+    json_response(&subnets)
 }
 
 /// Handles an advert from `source_subnet`: a certified stream header telling us
@@ -575,9 +584,9 @@ fn handle_streams(ctx: &Context<impl CertifiedStreamStore>) -> Response<Body> {
 ///  * HTTP 200 carrying our own certified header if the advert brought nothing
 ///    new, so the sender knows not to advertise it again;
 ///  * HTTP 204 if the advert contained something not yet covered by our latest
-///    certified state, whether already known to us or not;
-///  * HTTP 429 if the caller is over its rate limit;
+///    certified state, whether already known to the advert handler or not;
 ///  * HTTP 405 if the HTTP method was not `POST`;
+///  * HTTP 429 if the caller is over its rate limit;
 ///  * HTTP 403 if the caller is not a node of `source_subnet`;
 ///  * HTTP 413 if the advert body was too large; or
 ///  * HTTP 400 if the advert could not be decoded or did not verify.
@@ -590,10 +599,16 @@ fn handle_advert(
 ) -> Response<Body> {
     let observe = |status: &str| ctx.metrics.adverts.with_label_values(&[status]).inc();
 
-    // Helper closure, for unified instrumentation. Its `Err` is a fully formed
-    // response, not worth boxing to placate `result_large_err`.
+    // Helper closure, to allow for simpler, reliable instrumentation.
     #[allow(clippy::result_large_err)]
     let validate_advert = || {
+        if method != Method::POST {
+            return Err(method_not_allowed(
+                format!("Adverts must be POSTed, got {method}"),
+                "POST",
+            ));
+        }
+
         // `peer_node_id` is only `None` in tests. In production, the TLS handshake
         // always verifies that the caller is a registered node.
         if let Some(node_id) = peer_node_id {
@@ -612,13 +627,6 @@ fn handle_advert(
                 warn!(ctx.log, "{}", msg);
                 return Err(forbidden(msg));
             }
-        }
-
-        if method != Method::POST {
-            return Err(method_not_allowed(
-                format!("Adverts must be POSTed, got {method}"),
-                "POST",
-            ));
         }
 
         // Anything beyond `ADVERT_MAX_BODY_BYTES`, or a body we failed to read. An
@@ -652,13 +660,13 @@ fn handle_advert(
     match &ctx.advert_handler.handle_advert(subnet_id, advert) {
         Ok(outcome @ XNetAdvertOutcome::NothingNew) => {
             observe(outcome.as_str());
-            // Prove to the sender that it is behind, by replying with our own header.
+            // Prove to the sender that we have already consumed the advertised content by
+            // replying with our own header.
             match ctx.advert_handler.certified_header(subnet_id) {
-                Some(header) => observe_response_size(
-                    || proto_response::<_, pb::CertifiedStreamSlice>(header),
-                    RESOURCE_ADVERT,
-                    &ctx.metrics,
-                ),
+                Some(header) => proto_response::<_, pb::CertifiedStreamSlice>(header),
+
+                // Unreachable, but no need to panic: the advert handler can only classify an
+                // advert as `NothingNew` if it has a certified header to compare it with.
                 None => no_content(),
             }
         }
@@ -731,11 +739,7 @@ fn handle_stream(
             ctx.metrics
                 .slice_payload_size
                 .observe(stream.payload.len() as f64);
-            observe_response_size(
-                || proto_response::<_, pb::CertifiedStreamSlice>(stream),
-                RESOURCE_STREAM,
-                &ctx.metrics,
-            )
+            proto_response::<_, pb::CertifiedStreamSlice>(stream)
         }
         Err(EncodeStreamError::NoStreamForSubnet(_)) => no_content(),
         Err(e @ EncodeStreamError::InvalidSliceBegin { .. }) => {
@@ -769,51 +773,31 @@ fn check_subnet_membership(
     }
 }
 
-/// Calls through to one of the `*_response` functions and observes the size of
-/// the produced response.
-fn observe_response_size<F>(f: F, resource: &str, metrics: &XNetEndpointMetrics) -> Response<Body>
-where
-    F: FnOnce() -> (Response<Body>, usize),
-{
-    let (response, size) = f();
-    metrics
-        .response_size
-        .with_label_values(&[resource])
-        .observe(size as f64);
-    response
-}
-
 /// Serializes the response as JSON.
-pub(crate) fn json_response<R: Serialize>(r: &R) -> (Response<Body>, usize) {
+pub(crate) fn json_response<R: Serialize>(r: &R) -> Response<Body> {
     let buf = serde_json::to_vec(r).expect("Could not serialize response");
-    let size_bytes = buf.len();
 
-    let response = Response::builder()
+    Response::builder()
         .header("Content-Type", "application/json")
         .body(buf.into())
-        .unwrap();
-
-    (response, size_bytes)
+        .unwrap()
 }
 
 /// Serializes the response as Protobuf.
-pub(crate) fn proto_response<R, M>(r: R) -> (Response<Body>, usize)
+pub(crate) fn proto_response<R, M>(r: R) -> Response<Body>
 where
     M: ProtoProxy<R>,
 {
     let buf = M::proxy_encode(r);
-    let size_bytes = buf.len();
 
     // Headers borrowed from Spring Framework -- https://bit.ly/32EDqoo -- and Google's Protobuf
     // reference -- https://bit.ly/35Q4yml. Might come in handy for e.g. a browser extension.
-    let response = Response::builder()
+    Response::builder()
         .header("Content-Type", "application/x-protobuf")
         .header("X-Protobuf-Schema", "certified_stream_slice.proto")
         .header("X-Protobuf-Message", "xnet.v1.CertifiedStreamSlice")
         .body(buf.into())
-        .unwrap();
-
-    (response, size_bytes)
+        .unwrap()
 }
 
 /// Produces a 204 No Content response.
@@ -903,6 +887,9 @@ impl AdvertRateLimiter {
         let mut buckets = self.buckets.lock().unwrap();
 
         if buckets.len() > ADVERT_RATE_LIMIT_MAX_BUCKETS {
+            // This runs on the critical path and is `O(n)`, but we expect to virtually
+            // never have `ADVERT_RATE_LIMIT_MAX_BUCKETS` nodes advertising to us within
+            // less than `ADVERT_RATE_LIMIT_BURST / ADVERT_RATE_LIMIT_PER_SECOND` seconds.
             buckets.retain(|_, bucket| {
                 bucket.refill(now);
                 bucket.tokens < ADVERT_RATE_LIMIT_BURST

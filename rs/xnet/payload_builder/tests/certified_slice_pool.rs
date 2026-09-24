@@ -2348,8 +2348,8 @@ fn pool_classify_advert_collecting_reject_signal(
 /// are delta encoded as variable length integers, and the signals we hold span
 /// at most `MAX_STREAM_MESSAGES` indices, as the peer cannot send beyond that
 /// without the `begin` that garbage collects them. Spreading them out further
-/// does grow the advert — to ~90 KB at the extreme — but that requires a peer
-/// that has sent more than `MAX_STREAM_MESSAGES` past its own `begin`.
+/// does grow the advert — to ~90 KB at the extreme — but that would require us
+/// to have inducted more than `MAX_STREAM_MESSAGES` at once (which we don't).
 #[test]
 fn worst_case_advert_size() {
     with_test_replica_logger(|log| {

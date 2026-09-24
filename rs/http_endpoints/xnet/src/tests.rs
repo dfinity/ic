@@ -170,7 +170,9 @@ pub(crate) struct FakeAdvertHandler {
             + Send
             + Sync,
     >,
+
     adverts: Mutex<Vec<(SubnetId, CertifiedStreamSlice)>>,
+
     /// Canned reply to a `NothingNew` outcome.
     certified_header: Option<CertifiedStreamSlice>,
 }
@@ -750,7 +752,12 @@ async fn handle_advert_actionable() {
 
 #[tokio::test]
 async fn handle_advert_nothing_new() {
-    let expected_reply = header_only_slice();
+    // A minimally different slice from the advertised one, to ensure this is what
+    // actually gets returned, not the reflected back advert.
+    let expected_reply = CertifiedStreamSlice {
+        merkle_proof: vec![1, 2, 3],
+        ..header_only_slice()
+    };
     let fixture = EndpointTestFixture {
         advert_handler: FakeAdvertHandler::with_certified_header(
             |_, _| Ok(XNetAdvertOutcome::NothingNew),
@@ -813,8 +820,9 @@ async fn handle_advert_from_non_member() {
     );
 }
 
-/// An advert the handler cannot decode is not a verification failure: it is
-/// only counted as a `decode_error` status.
+/// A well-formed `CertifiedStreamSlice` whose payload / witness the handler
+/// cannot decode is not a verification failure: it is only counted as a
+/// `decode_error` status.
 #[tokio::test]
 async fn handle_advert_handler_decode_error() {
     let fixture = EndpointTestFixture::with_advert_outcome(|| {
@@ -858,6 +866,8 @@ async fn handle_advert_invalid_signature() {
     );
 }
 
+/// A body that is not a valid `CertifiedStreamSlice` proto is rejected before
+/// reaching the handler.
 #[tokio::test]
 async fn handle_advert_undecodable() {
     let fixture = EndpointTestFixture::with_replicated_state();
