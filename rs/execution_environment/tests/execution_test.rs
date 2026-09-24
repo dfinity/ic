@@ -572,9 +572,9 @@ fn compressed_canisters_support() {
 
     let test_canister_wasm = wat::parse_str(TEST_CANISTER).expect("invalid WAT");
     let compressed_wasm = {
-        let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
         std::io::copy(&mut &test_canister_wasm[..], &mut encoder).unwrap();
-        encoder.finish().into_result().unwrap()
+        encoder.finish().unwrap()
     };
     let compressed_hash = ic_crypto_sha2::Sha256::hash(&compressed_wasm);
 

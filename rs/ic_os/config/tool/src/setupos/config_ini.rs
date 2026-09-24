@@ -5,7 +5,7 @@ use config_types::ConfigMap;
 
 use anyhow::{Context, Result};
 use anyhow::{anyhow, bail};
-use ini::Ini;
+use utils::ini::Ini;
 
 pub struct ConfigIniSettings {
     pub ipv6_prefix: String,
@@ -128,13 +128,12 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
 }
 
 fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
-    let parsed_ini = Ini::load_from_file(config_file_path).context("Failed to parse INI file")?;
+    let parsed_ini = Ini::load(config_file_path).context("Failed to parse INI file")?;
 
     // Flatten all sections into a single HashMap
     let config_map: ConfigMap = parsed_ini
-        .into_iter()
-        .flat_map(|(_, properties)| properties.into_iter())
-        .map(|(key, value)| (key.to_lowercase(), value))
+        .all_properties()
+        .map(|(key, value)| (key.to_lowercase(), value.to_string()))
         .collect();
 
     Ok(config_map)

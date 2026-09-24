@@ -30,6 +30,5 @@ serde_json = { workspace = true }
 serde_with = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
-tower-http = { workspace = true }
 tracing = { workspace = true }
 icp-ledger = { path = "../../../ledger_suite/icp" }

@@ -13,7 +13,6 @@ ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
 ic-types-cycles = { path = "../../types/cycles" }
 prometheus = { workspace = true }
-slog = { workspace = true }
 
 [dev-dependencies]
 ic-types-test-utils = { path = "../../types/types_test_utils" }

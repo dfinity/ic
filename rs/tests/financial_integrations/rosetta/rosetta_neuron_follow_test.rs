@@ -1,5 +1,4 @@
 use anyhow::Result;
-use assert_json_diff::assert_json_eq;
 use ic_rosetta_api::{
     request::{Request, request_result::RequestResult},
     request_types::{AddHotKey, Follow, PublicKeyOrPrincipal},
@@ -346,8 +345,8 @@ async fn test_follow_with_hotkey_raw(
     });
     let res_preprocess = raw_construction(ros, "preprocess", req_preprocess).await;
     let options = res_preprocess.get("options");
-    assert_json_eq!(
-        json!({
+    assert_eq!(
+        &json!({
             "request_types": [
                 {
                     "FOLLOW": {

@@ -454,9 +454,23 @@ mod tests {
     #[test]
     fn test_check_address() {
         use crate::address::ParseAddressError::BadWitnessLength;
-        use bitcoin::Address;
-        use bitcoin::util::address::Payload;
+        use bitcoin::address::AddressData;
+        use bitcoin::{Address, Network as BtcNetwork};
         use std::str::FromStr;
+
+        fn witness_program_of(address: &str) -> Vec<u8> {
+            match Address::from_str(address)
+                .unwrap()
+                .require_network(BtcNetwork::Bitcoin)
+                .unwrap()
+                .to_address_data()
+            {
+                AddressData::Segwit { witness_program } => {
+                    witness_program.program().as_bytes().to_vec()
+                }
+                _ => panic!("expected a segwit address"),
+            }
+        }
 
         assert_eq!(
             Ok(BitcoinAddress::P2wpkhV0([
@@ -488,10 +502,7 @@ mod tests {
             "bc1q088j3hnr0htc8fjwhk337aply0w3fwj33a56fqkdqfpq8dupgx6q4l0e39",
         ];
         for p2wsh_address in valid_p2wsh_addresses {
-            let expected_p2wsh_pkhash = match Address::from_str(p2wsh_address).unwrap().payload {
-                Payload::WitnessProgram { program, .. } => program,
-                _ => panic!("expected P2WSH address"),
-            };
+            let expected_p2wsh_pkhash = witness_program_of(p2wsh_address);
             assert_eq!(
                 Ok(BitcoinAddress::P2wshV0(
                     expected_p2wsh_pkhash.try_into().unwrap()
@@ -512,12 +523,8 @@ mod tests {
         ];
 
         for taproot_address in taproot_addresses {
-            let expected_taproot_pkhash = match Address::from_str(taproot_address).unwrap().payload
-            {
-                Payload::WitnessProgram { program, .. } => program,
-                _ => panic!("expected taproot address"),
-            };
-            let expected_taproot_pkhash = expected_taproot_pkhash.try_into().unwrap();
+            let expected_taproot_pkhash: [u8; 32] =
+                witness_program_of(taproot_address).try_into().unwrap();
             assert_eq!(
                 Ok(BitcoinAddress::P2trV1(expected_taproot_pkhash)),
                 BitcoinAddress::parse(taproot_address, Network::Mainnet)

@@ -32,6 +32,8 @@ use ic_types::{
 };
 use std::{
     collections::BTreeMap,
+    ffi::{CString, OsString},
+    os::unix::ffi::OsStrExt,
     path::PathBuf,
     sync::{Arc, RwLock},
     time::{Duration, Instant},
@@ -1015,15 +1017,33 @@ fn remove_node_state(
 }
 
 /// Re-execute the current process, exactly as it was originally called.
+///
+/// On success this function never returns, as the current process image is
+/// replaced. It only returns if `execvp` fails.
 fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
-    let args: Vec<String> = std::env::args().collect();
+    let args: Vec<OsString> = std::env::args_os().collect();
     info!(
         logger,
         "Restarting the current process with the same arguments it was originally executed with: {:?}",
         &args[..]
     );
-    let error = exec::Command::new(&args[0]).args(&args[1..]).exec();
-    OrchestratorError::ExecError(PathBuf::new(), error)
+    let program = PathBuf::from(&args[0]);
+    let argv: Vec<CString> = match args
+        .iter()
+        .map(|arg| CString::new(arg.as_bytes()))
+        .collect::<Result<_, _>>()
+    {
+        Ok(argv) => argv,
+        Err(err) => return OrchestratorError::ExecError(program, err.into()),
+    };
+    // `execvp` looks the program up in `PATH` like the shell does, which
+    // matches how the process was originally started. It only returns on
+    // failure.
+    let err = match nix::unistd::execvp(&argv[0], &argv) {
+        Ok(never) => match never {},
+        Err(errno) => errno,
+    };
+    OrchestratorError::ExecError(program, err.into())
 }
 
 /// Return the threshold master public key of the given CUP, if it exists.

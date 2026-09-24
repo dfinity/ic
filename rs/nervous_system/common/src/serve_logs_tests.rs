@@ -62,7 +62,7 @@ fn test_serve_logs_no_frills() {
 
     // Step 3.2: Inspect (JSON) payload.
     let body = String::from_utf8(body.into_vec()).unwrap();
-    let body = json5::from_str::<LogsResponseBody>(&body).unwrap();
+    let body = serde_json::from_str::<LogsResponseBody>(&body).unwrap();
     assert_eq!(body.entries.len(), 4, "{body:#?}");
 
     let e0 = &body.entries[0];
@@ -152,7 +152,7 @@ fn test_serve_logs_only_errors() {
 
     // Step 3.2: Inspect (JSON) payload.
     let body = String::from_utf8(body.into_vec()).unwrap();
-    let body = json5::from_str::<LogsResponseBody>(&body).unwrap();
+    let body = serde_json::from_str::<LogsResponseBody>(&body).unwrap();
     assert_eq!(body.entries.len(), 2, "{body:#?}");
 
     let e0 = &body.entries[0];
@@ -220,7 +220,7 @@ fn test_serve_logs_time_bound() {
 
     // Step 3.2: Inspect (JSON) payload.
     let body = String::from_utf8(body.into_vec()).unwrap();
-    let body = json5::from_str::<LogsResponseBody>(&body).unwrap();
+    let body = serde_json::from_str::<LogsResponseBody>(&body).unwrap();
     assert_eq!(body.entries.len(), 2, "{body:#?}");
 
     let e0 = &body.entries[0];
@@ -287,7 +287,7 @@ fn test_serve_logs_malformed_request() {
     struct ResponseBody {
         error_description: String,
     }
-    let ResponseBody { error_description } = json5::from_str::<ResponseBody>(&body).unwrap();
+    let ResponseBody { error_description } = serde_json::from_str::<ResponseBody>(&body).unwrap();
 
     // Step 3.2.1: Stuff that should be in error_description.
     assert!(
@@ -310,7 +310,7 @@ fn test_serve_logs_malformed_request() {
     );
 
     // Step 3.2.3: No extraneous keys.
-    let body = json5::from_str::<serde_json::Value>(&body).unwrap();
+    let body = serde_json::from_str::<serde_json::Value>(&body).unwrap();
     assert_eq!(
         body,
         json!({

@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use bitcoin::util::psbt::serialize::Deserialize;
+use bitcoin::hashes::Hash as _;
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
 use candid::{Decode, Encode, Nat, Principal};
 use canlog::LogEntry;
@@ -158,21 +158,19 @@ fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Tra
         tx.input.iter().map(|txin| txin.previous_output).collect()
     }
 
-    fn output_script_pubkey(
-        tx: &bitcoin::Transaction,
-    ) -> BTreeSet<&bitcoin::blockdata::script::Script> {
+    fn output_script_pubkey(tx: &bitcoin::Transaction) -> BTreeSet<&bitcoin::Script> {
         tx.output
             .iter()
-            .map(|output| &output.script_pubkey)
+            .map(|output| output.script_pubkey.as_script())
             .collect()
     }
 
-    assert_ne!(old.txid(), new.txid());
+    assert_ne!(old.compute_txid(), new.compute_txid());
     assert_eq!(input_utxos(old), input_utxos(new));
     assert_eq!(output_script_pubkey(old), output_script_pubkey(new));
 
-    let new_out_value = new.output.iter().map(|out| out.value).sum::<u64>();
-    let prev_out_value = old.output.iter().map(|out| out.value).sum::<u64>();
+    let new_out_value = new.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
+    let prev_out_value = old.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
     let relay_cost = BitcoinFeeEstimator::MIN_RELAY_FEE_RATE_INCREASE.fee_ceil(new.vsize() as u64);
 
     assert!(
@@ -751,7 +749,10 @@ fn test_minter() {
             subaccount: None,
         },
     );
-    let address_1 = Address::from_str(&btc_address_1).expect("invalid Bitcoin address");
+    let address_1 = Address::from_str(&btc_address_1)
+        .expect("invalid Bitcoin address")
+        .require_network(BtcNetwork::Regtest)
+        .expect("address is not a regtest address");
     let btc_address_2 = get_btc_address(
         &env,
         SENDER_ID,
@@ -761,7 +762,10 @@ fn test_minter() {
             subaccount: Some([1; 32]),
         },
     );
-    let address_2 = Address::from_str(&btc_address_2).expect("invalid Bitcoin address");
+    let address_2 = Address::from_str(&btc_address_2)
+        .expect("invalid Bitcoin address")
+        .require_network(BtcNetwork::Regtest)
+        .expect("address is not a regtest address");
     assert_ne!(address_1, address_2);
 }
 
@@ -1545,13 +1549,13 @@ impl CkBtcSetup {
 
         self.env
             .advance_time(MIN_CONFIRMATIONS * Duration::from_secs(600) + Duration::from_secs(1));
-        let txid_bytes: [u8; 32] = tx.txid().to_vec().try_into().unwrap();
+        let txid_bytes: [u8; 32] = tx.compute_txid().to_byte_array();
         for (i, utxo) in tx.output.iter().enumerate() {
             let address =
                 BtcAddress::from_script(&utxo.script_pubkey, BtcNetwork::Bitcoin).unwrap();
             self.push_utxos(
                 vec![Utxo {
-                    value: utxo.value,
+                    value: utxo.value.to_sat(),
                     height: 0,
                     outpoint: OutPoint {
                         txid: txid_bytes.into(),
@@ -1575,10 +1579,10 @@ impl CkBtcSetup {
         .unwrap()
         .iter()
         .map(|tx_bytes| {
-            let tx = bitcoin::Transaction::deserialize(tx_bytes)
+            let tx: bitcoin::Transaction = bitcoin::consensus::deserialize(tx_bytes)
                 .expect("failed to parse a bitcoin transaction");
 
-            (vec_to_txid(tx.txid().to_vec()), tx)
+            (vec_to_txid(tx.compute_txid().to_byte_array().to_vec()), tx)
         })
         .collect()
     }
@@ -1777,7 +1781,7 @@ fn test_transaction_finalization() {
 
     assert_eq!(2, tx.output.len());
     assert_eq!(
-        tx.output[0].value,
+        tx.output[0].value.to_sat(),
         withdrawal_amount - fee_estimate.minter_fee - fee_estimate.bitcoin_fee
     );
 
@@ -2326,14 +2330,14 @@ fn test_utxo_consolidation_multiple() {
             .iter()
             .map(|tx_in| {
                 let utxo = utxos.iter().find(|utxo| {
-                    utxo.outpoint.txid.as_ref() == tx_in.previous_output.txid.as_ref()
+                    utxo.outpoint.txid.as_ref() == tx_in.previous_output.txid.as_byte_array()
                         && utxo.outpoint.vout == tx_in.previous_output.vout
                 });
                 assert!(utxo.is_some(), "input {:?} is not a known utxo", tx_in);
                 utxo.unwrap().value
             })
             .sum::<u64>();
-        let total_output = tx.output.iter().map(|out| out.value).sum::<u64>();
+        let total_output = tx.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
         let burn_amount = ckbtc.get_ledger_burn_amount(burn_index);
         assert!(burn_amount > 0);
         assert_eq!(total_input, burn_amount + total_output);
@@ -2842,7 +2846,7 @@ fn test_retrieve_btc_with_approval() {
 
         assert_eq!(2, tx.output.len());
         assert_eq!(
-            tx.output[0].value,
+            tx.output[0].value.to_sat(),
             withdrawal_amount - fee_estimate.minter_fee - fee_estimate.bitcoin_fee
         );
 
@@ -2973,7 +2977,7 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
 
     assert_eq!(2, tx.output.len());
     assert_eq!(
-        tx.output[0].value,
+        tx.output[0].value.to_sat(),
         withdrawal_amount - fee_estimate.minter_fee - fee_estimate.bitcoin_fee
     );
 

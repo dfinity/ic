@@ -115,7 +115,6 @@ rust_test(
         "//rs/types/types_test_utils",
         "@crate_index//:assert_matches",
         "@crate_index//:mockall",
-        "@crate_index//:num_cpus",
         "@crate_index//:proptest",
         "@crate_index//:rsa",
         "@crate_index//:slog-async",

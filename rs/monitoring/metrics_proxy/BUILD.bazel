@@ -6,14 +6,13 @@ DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:axum",
     "@crate_index//:axum-otel-metrics",
-    "@crate_index//:duration-string",
     "@crate_index//:futures-util",
     "@crate_index//:http",
     "@crate_index//:http-body-util",
+    "@crate_index//:humantime-serde",
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:itertools",
-    "@crate_index//:log",
     "@crate_index//:opentelemetry",
     "@crate_index//:pin-project-lite",
     "@crate_index//:prometheus",
@@ -29,6 +28,7 @@ DEPENDENCIES = [
     "@crate_index//:tokio-rustls",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
+    "@crate_index//:tracing",
     "@crate_index//:url",
 ]
 
@@ -50,15 +50,14 @@ rust_binary(
         ":metrics_proxy",
         "@crate_index//:axum-otel-metrics",
         "@crate_index//:clap",
-        "@crate_index//:exitcode",
-        "@crate_index//:log",
         "@crate_index//:opentelemetry",
         "@crate_index//:opentelemetry-prometheus",
         "@crate_index//:opentelemetry_sdk",
         "@crate_index//:prometheus",
         "@crate_index//:rustls",
-        "@crate_index//:simple_logger",
         "@crate_index//:tokio",
+        "@crate_index//:tracing",
+        "@crate_index//:tracing-subscriber",
     ],
 )
 

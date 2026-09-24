@@ -29,20 +29,14 @@ ic-cdk-management-canister = { workspace = true }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-dummy-getrandom-for-wasm = { path = "../../../../packages/ic-dummy-getrandom-for-wasm" }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
-ic-icrc1 = { path = "../../../ledger_suite/icrc1" }
-ic-ledger-core = { path = "../../../ledger_suite/common/ledger_core" }
-ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-metrics-encoder = { workspace = true }
 ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 ic-stable-structures = { workspace = true }
 ic-utils-ensure = { path = "../../../utils/ensure" }
-ic0 = { workspace = true }
 icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
-lazy_static = { workspace = true }
 minicbor = { workspace = true }
-minicbor-derive = { workspace = true }
 num-traits = { workspace = true }
 ripemd = "0.1.1"
 scopeguard = { workspace = true }
@@ -52,9 +46,8 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-bitcoin = { version = "0.28.2" }
+bitcoin = { workspace = true }
 candid_parser = { workspace = true }
-canister-test = { path = "../../../rust_canisters/canister_test" }
 flate2 = { workspace = true }
 ic-agent = { workspace = true }
 ic-bitcoin-canister-mock = { path = "../../mock" }
@@ -65,7 +58,6 @@ ic-metrics-assert = { path = "../../../../packages/ic-metrics-assert" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-types-cycles = { path = "../../../types/cycles" }
-ic-types = { path = "../../../types/types" }
 maplit = { workspace = true }
 mockall = { workspace = true }
 pocket-ic = { path = "../../../../packages/pocket-ic" }

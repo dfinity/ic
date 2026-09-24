@@ -1197,21 +1197,20 @@ fn test_schnorr() {
                             None => bip340_public_key,
                             Some(SchnorrAux::Bip341(bip341_aux)) => {
                                 use bitcoin::hashes::Hash;
-                                use bitcoin::schnorr::TapTweak;
-                                let xonly = bitcoin::util::key::XOnlyPublicKey::from_slice(
+                                use bitcoin::key::TapTweak;
+                                let xonly = bitcoin::key::XOnlyPublicKey::from_slice(
                                     bip340_public_key.as_slice(),
                                 )
                                 .unwrap();
-                                let merkle_root =
-                                    bitcoin::util::taproot::TapBranchHash::from_slice(
-                                        &bip341_aux.merkle_root_hash,
-                                    )
-                                    .unwrap();
+                                let merkle_root = bitcoin::taproot::TapNodeHash::from_slice(
+                                    &bip341_aux.merkle_root_hash,
+                                )
+                                .unwrap();
                                 let secp256k1_engine = bitcoin::secp256k1::Secp256k1::new();
                                 xonly
                                     .tap_tweak(&secp256k1_engine, Some(merkle_root))
                                     .0
-                                    .to_inner()
+                                    .to_x_only_public_key()
                                     .serialize()
                                     .to_vec()
                             }

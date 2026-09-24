@@ -16,7 +16,6 @@ package(default_visibility = ["//visibility:public"])
         crate_name = "ic_icrc1_ledger",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:async-trait",
             "@crate_index//:test-strategy",
         ],
         rustc_env = {
@@ -135,7 +134,6 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:candid",
             "@crate_index//:ciborium",
             "@crate_index//:ic-cdk",
-            "@crate_index//:ic-cdk-timers",
             "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
@@ -312,7 +310,6 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ic-cbor",
             "@crate_index//:ic-certification",
             "@crate_index//:leb128",
-            "@crate_index//:num-bigint",
             "@crate_index//:num-traits",
             "@crate_index//:proptest",
             "@crate_index//:rand",
@@ -401,7 +398,6 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:candid",
             "@crate_index//:ciborium",
             "@crate_index//:ic-cdk",
-            "@crate_index//:ic-cdk-timers",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",

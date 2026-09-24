@@ -10,6 +10,48 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(target_os = "linux")]
 use thiserror::Error;
 
+/// Converts the return value of a libc call that signals failure by returning
+/// `-1` into an `io::Result`, capturing `errno` on failure.
+///
+/// This mirrors the `cvt` helper used throughout `libstd`.
+#[cfg(target_family = "unix")]
+pub fn cvt<T: IsMinusOne>(ret: T) -> io::Result<T> {
+    if ret.is_minus_one() {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(ret)
+    }
+}
+
+/// Like [`cvt`], but retries the call as long as it fails with `EINTR`.
+#[cfg(target_family = "unix")]
+pub fn cvt_r<T: IsMinusOne, F: FnMut() -> T>(mut f: F) -> io::Result<T> {
+    loop {
+        match cvt(f()) {
+            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+            other => return other,
+        }
+    }
+}
+
+/// Integer types returned by libc calls that use `-1` to signal failure.
+#[cfg(target_family = "unix")]
+pub trait IsMinusOne {
+    fn is_minus_one(&self) -> bool;
+}
+
+#[cfg(target_family = "unix")]
+macro_rules! impl_is_minus_one {
+    ($($t:ident)*) => ($(impl IsMinusOne for $t {
+        fn is_minus_one(&self) -> bool {
+            *self == -1
+        }
+    })*)
+}
+
+#[cfg(target_family = "unix")]
+impl_is_minus_one! { i8 i16 i32 i64 isize }
+
 /// Represents an action that should be run when this objects runs out of scope,
 /// unless it's explicitly deactivated.
 ///
@@ -163,7 +205,6 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
         return copy_file_sparse_portable(from, to);
     }
 
-    use cvt::*;
     use fs::OpenOptions;
     use io::{ErrorKind, Read};
     use libc::{ftruncate64, lseek64};
@@ -781,6 +822,56 @@ mod tests {
     use std::fs;
     use std::io::{ErrorKind, Write};
     use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[cfg(target_family = "unix")]
+    mod cvt {
+        use super::super::{cvt, cvt_r};
+        use nix::errno::Errno;
+        use std::io::ErrorKind;
+
+        #[test]
+        fn cvt_passes_through_non_negative_values() {
+            assert_eq!(cvt(0_i32).unwrap(), 0);
+            assert_eq!(cvt(42_i64).unwrap(), 42);
+            assert_eq!(cvt(7_isize).unwrap(), 7);
+            // Only `-1` signals an error.
+            assert_eq!(cvt(-2_i32).unwrap(), -2);
+        }
+
+        #[test]
+        fn cvt_captures_errno_on_minus_one() {
+            Errno::EBADF.set();
+            let err = cvt(-1_i32).unwrap_err();
+            assert_eq!(err.raw_os_error(), Some(libc::EBADF));
+        }
+
+        #[test]
+        fn cvt_r_retries_on_eintr_only() {
+            let mut calls = 0;
+            let result = cvt_r(|| {
+                calls += 1;
+                if calls < 3 {
+                    Errno::EINTR.set();
+                    -1_i32
+                } else {
+                    5
+                }
+            });
+            assert_eq!(result.unwrap(), 5);
+            assert_eq!(calls, 3);
+
+            let mut calls = 0;
+            let err = cvt_r(|| {
+                calls += 1;
+                Errno::EBADF.set();
+                -1_i32
+            })
+            .unwrap_err();
+            assert_ne!(err.kind(), ErrorKind::Interrupted);
+            assert_eq!(err.raw_os_error(), Some(libc::EBADF));
+            assert_eq!(calls, 1);
+        }
+    }
 
     #[test]
     fn test_write_success() {

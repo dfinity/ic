@@ -10,7 +10,6 @@ documentation.workspace = true
 candid = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
-ic-canister-client = { path = "../../../../canister_client" }
 ic-icrc1-test-utils = { path = "../../../../ledger_suite/icrc1/test_utils" }
 ic-nns-common = { path = "../../../../nns/common" }
 ic-nns-governance-api = { path = "../../../../nns/governance/api" }

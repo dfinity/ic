@@ -126,19 +126,11 @@ crate.spec(
     version = "^1.0.93",
 )
 crate.spec(
-    package = "arrayvec",
-    version = "^0.7.4",
-)
-crate.spec(
     features = [
         "serde_json",
     ],
     package = "askama",
     version = "0.15",
-)
-crate.spec(
-    package = "assert-json-diff",
-    version = "^2.0.1",
 )
 crate.spec(
     package = "assert_cmd",
@@ -147,10 +139,6 @@ crate.spec(
 crate.spec(
     package = "assert_matches",
     version = "^1.5.0",
-)
-crate.spec(
-    package = "async-recursion",
-    version = "^1.0.5",
 )
 crate.spec(
     package = "async-stream",
@@ -194,10 +182,6 @@ crate.spec(
     version = "^1.6.0",
 )
 crate.spec(
-    package = "base32",
-    version = "^0.4.0",
-)
-crate.spec(
     package = "base64",
     version = "^0.22",
 )
@@ -236,11 +220,6 @@ crate.spec(
     version = "^0.32.7-doge.0",
 )
 crate.spec(
-    package = "bitcoin",
-    package_alias = "bitcoin-0-28",
-    version = "^0.28.2",
-)
-crate.spec(
     package = "bs58",
     version = "^0.5.0",
 )
@@ -268,14 +247,6 @@ crate.spec(
     rev = BUILD_INFO_REV,
 )
 crate.spec(
-    package = "by_address",
-    version = "^1.1.0",
-)
-crate.spec(
-    package = "byte-unit",
-    version = "^4.0.14",
-)
-crate.spec(
     package = "byteorder",
     version = "^1.3.4",
 )
@@ -293,7 +264,7 @@ crate.spec(
 )
 crate.spec(
     package = "cargo_metadata",
-    version = "^0.14.2",
+    version = "0.23",
 )
 crate.spec(
     package = "candid_parser",
@@ -366,10 +337,6 @@ crate.spec(
     version = "^0.11",
 )
 crate.spec(
-    package = "convert_case",
-    version = "^0.6.0",
-)
-crate.spec(
     package = "crc32fast",
     version = "^1.2.0",
 )
@@ -407,10 +374,6 @@ crate.spec(
     version = "^4.1.3",
 )
 crate.spec(
-    package = "cvt",
-    version = "^0.1.1",
-)
-crate.spec(
     package = "darling",
     version = "^0.20.11",
 )
@@ -439,17 +402,6 @@ crate.spec(
 crate.spec(
     package = "directories-next",
     version = "^2.0.0",
-)
-crate.spec(
-    features = [
-        "serde",
-    ],
-    package = "duration-string",
-    version = "^0.3.0",
-)
-crate.spec(
-    package = "dyn-clone",
-    version = "^1.0.14",
 )
 crate.spec(
     features = [
@@ -482,10 +434,6 @@ crate.spec(
     version = "^0.3.11",
 )
 crate.spec(
-    package = "exitcode",
-    version = "^1.1.2",
-)
-crate.spec(
     features = ["print"],
     package = "escargot",
     version = "^0.5.7",
@@ -502,14 +450,6 @@ crate.spec(
 crate.spec(
     package = "evm_rpc_types",
     version = "^3.1.0",
-)
-crate.spec(
-    package = "exec",
-    version = "^0.3.1",
-)
-crate.spec(
-    package = "eyre",
-    version = "^0.6.8",
 )
 crate.spec(
     default_features = False,
@@ -542,10 +482,6 @@ crate.spec(
 crate.spec(
     package = "futures-util",
     version = "^0.3.31",
-)
-crate.spec(
-    package = "getifs",
-    version = "^0.4.0",
 )
 crate.spec(
     features = [
@@ -620,16 +556,12 @@ crate.spec(
     version = "4.1",
 )
 crate.spec(
-    package = "goldenfile",
-    version = "^1.8",
-)
-crate.spec(
     package = "group",
     version = "^0.13",
 )
 crate.spec(
     package = "hashlink",
-    version = "^0.8.0",
+    version = "^0.10.0",
 )
 crate.spec(
     features = [
@@ -640,7 +572,7 @@ crate.spec(
 )
 crate.spec(
     package = "hex-literal",
-    version = "^0.4.1",
+    version = "1.1",
 )
 crate.spec(
     package = "hickory-resolver",
@@ -795,10 +727,6 @@ crate.spec(
     tag = "v0.6.12",
 )
 crate.spec(
-    package = "ic-http-certification",
-    version = "3.0.3",
-)
-crate.spec(
     package = "ic-identity-hsm",
     version = "^0.49.1",
 )
@@ -814,10 +742,6 @@ crate.spec(
     default_features = False,
     package = "ic_principal",
     version = "^0.1.5",
-)
-crate.spec(
-    package = "ic-response-verification",
-    version = "3.1.0",
 )
 crate.spec(
     package = "ic-sha3",
@@ -923,10 +847,6 @@ crate.spec(
     version = "^2.10.1",
 )
 crate.spec(
-    package = "isocountry",
-    version = "^0.3.2",
-)
-crate.spec(
     package = "itertools",
     version = "^0.12.0",
 )
@@ -976,19 +896,11 @@ crate.spec(
     version = "^0.2.158",
 )
 crate.spec(
-    package = "log",
-    version = "^0.4",
-)
-crate.spec(
     features = [
         "mutex",
     ],
     package = "libcryptsetup-rs",
     version = "0.15",
-)
-crate.spec(
-    package = "libflate",
-    version = "^2.3.1",
 )
 crate.spec(
     default_features = False,
@@ -1019,10 +931,6 @@ crate.spec(
     rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f",
 )
 crate.spec(
-    package = "local-ip-address",
-    version = "^0.6.13",
-)
-crate.spec(
     package = "loopdev-3",
     version = "0.5",
 )
@@ -1030,13 +938,6 @@ crate.spec(
     default_features = False,
     package = "lru",
     version = "^0.12",
-)
-crate.spec(
-    features = [
-        "static",  # By using the `static` feature the lzma-sys crate uses its embedded liblzma C library
-    ],
-    package = "lzma-sys",
-    version = "^0.1.20",
 )
 crate.spec(
     package = "macaddr",
@@ -1055,20 +956,12 @@ crate.spec(
     version = "^0.29",
 )
 crate.spec(
-    package = "memchr",
-    version = "2.7",
-)
-crate.spec(
     features = [
         "alloc",
         "derive",
     ],
     package = "minicbor",
     version = "^0.22.0",
-)
-crate.spec(
-    package = "minicbor-derive",
-    version = "^0.14.0",
 )
 crate.spec(
     package = "mockall",
@@ -1128,10 +1021,6 @@ crate.spec(
     ],
     package = "num-traits",
     version = "^0.2.12",
-)
-crate.spec(
-    package = "num_cpus",
-    version = "^1.16.0",
 )
 crate.spec(
     package = "object",
@@ -1204,10 +1093,6 @@ crate.spec(
     version = "^1.0.15",
 )
 crate.spec(
-    package = "pcre2",
-    version = "^0.2.6",
-)
-crate.spec(
     default_features = False,
     features = ["std"],
     package = "pem",
@@ -1252,13 +1137,6 @@ crate.spec(
 crate.spec(
     package = "pretty_assertions",
     version = "^1.4.0",
-)
-crate.spec(
-    features = [
-        "serde",
-    ],
-    package = "priority-queue",
-    version = "^2.7.0",
 )
 crate.spec(
     package = "proc-macro2",
@@ -1361,10 +1239,6 @@ crate.spec(
 crate.spec(
     package = "rand_distr",
     version = "^0.4",
-)
-crate.spec(
-    package = "rand_pcg",
-    version = "^0.3.1",
 )
 crate.spec(
     package = "ratelimit",
@@ -1487,10 +1361,6 @@ crate.spec(
     version = "^1.1.0",
 )
 crate.spec(
-    package = "rust-ini",
-    version = "^0.21.1",
-)
-crate.spec(
     default_features = False,
     features = [
         "aws_lc_rs",
@@ -1537,10 +1407,6 @@ crate.spec(
     default_features = False,
     package = "scrypt",
     version = "^0.11.0",
-)
-crate.spec(
-    package = "securefmt",
-    version = "^0.1.5",
 )
 crate.spec(
     features = [
@@ -1616,10 +1482,6 @@ crate.spec(
     version = "^0.10.8",
 )
 crate.spec(
-    package = "shell-escape",
-    version = "^0.1.5",
-)
-crate.spec(
     features = [
         "iterator",
     ],
@@ -1646,10 +1508,6 @@ crate.spec(
     ],
     package = "slog",
     version = "^2.7.0",
-)
-crate.spec(
-    package = "simple_logger",
-    version = "^4.3.0",
 )
 crate.spec(
     features = [
@@ -1731,10 +1589,6 @@ crate.spec(
 crate.spec(
     package = "syscalls",
     version = "^0.6.18",
-)
-crate.spec(
-    package = "sysinfo",
-    version = "0.37",
 )
 crate.spec(
     package = "sys-mount",
@@ -1819,10 +1673,6 @@ crate.spec(
     version = "^0.26.0",
 )
 crate.spec(
-    package = "tokio-stream",
-    version = "^0.1.17",
-)
-crate.spec(
     features = [
         "bincode",
         "json",
@@ -1864,10 +1714,6 @@ crate.spec(
     version = "^0.14.5",
 )
 crate.spec(
-    package = "tonic-build",
-    version = "^0.14.5",
-)
-crate.spec(
     package = "tonic-prost",
     version = "^0.14.5",
 )
@@ -1898,10 +1744,6 @@ crate.spec(
 crate.spec(
     package = "tower_governor",
     version = "^0.8.0",
-)
-crate.spec(
-    package = "tower-request-id",
-    version = "^0.3.0",
 )
 crate.spec(
     package = "tower-test",
@@ -2040,10 +1882,6 @@ crate.spec(
     version = "1.0.6",
 )
 crate.spec(
-    package = "which",
-    version = "^4.2.2",
-)
-crate.spec(
     features = ["parallel"],
     package = "wirm",
     version = "4.0.4",
@@ -2071,21 +1909,6 @@ crate.spec(
 crate.spec(
     package = "x509-parser",
     version = "^0.18.1",
-)
-crate.spec(
-    features = [
-        # By using the `static` feature the x2 crate configures the lzma-sys crate to use its embedded liblzma C library
-        # instead of requiring liblzma to be installed in the environment.
-        # See: https://github.com/alexcrichton/xz2-rs/blob/main/Cargo.toml#L33
-        # See: https://github.com/alexcrichton/xz2-rs/blob/main/lzma-sys/build.rs
-        "static",
-    ],
-    package = "xz2",
-    version = "^0.1.7",
-)
-crate.spec(
-    package = "yansi",
-    version = "^0.5.0",
 )
 crate.spec(
     features = [
@@ -2222,17 +2045,6 @@ crate.annotation(
     # to the built static archive
     patch_args = ["-p1"],
     patches = ["@@//bazel:lmdb_rkv_sys.patch"],
-)
-crate.annotation(
-    build_script_env = {"PCRE2_SYS_STATIC": "1"},
-    crate = "pcre2-sys",
-    # Patch for determinism issues: the build script enumerates the bundled
-    # PCRE2 C sources with an unsorted `read_dir`, so the archive member order
-    # depends on the build machine's filesystem and leaks into binaries that
-    # link it (the STT_FILE symbol order), making the GuestOS image
-    # non-reproducible across machines. The patch sorts the sources.
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:pcre2-sys.patch"],
 )
 crate.annotation(
     # Disabling the libudev probe makes the vendored libusb fall back to its

@@ -1,4 +1,3 @@
-use duration_string::DurationString;
 use regex;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use serde;
@@ -121,7 +120,10 @@ pub enum LabelFilterAction {
     /// Drop the metric.
     Drop,
     /// Cache the metric for an amount of time.
-    ReduceTimeResolution { resolution: DurationString },
+    ReduceTimeResolution {
+        #[serde(with = "humantime_serde")]
+        resolution: Duration,
+    },
     /// Add an amount of random noise to a metric,
     /// in absolute terms.  Should never be used with
     /// counters!
@@ -216,17 +218,16 @@ impl std::fmt::Display for InvalidURLError {
     }
 }
 
-fn default_header_read_timeout() -> DurationString {
-    DurationString::new(Duration::new(5, 0))
+fn default_header_read_timeout() -> Duration {
+    Duration::from_secs(5)
 }
 
-fn default_request_response_timeout() -> DurationString {
-    let df: Duration = default_timeout().into();
-    DurationString::new(df + Duration::new(5, 0))
+fn default_request_response_timeout() -> Duration {
+    default_timeout() + Duration::from_secs(5)
 }
 
-fn default_cache_duration() -> DurationString {
-    DurationString::new(Duration::new(0, 0))
+fn default_cache_duration() -> Duration {
+    Duration::ZERO
 }
 
 #[derive(Debug, Deserialize)]
@@ -237,10 +238,10 @@ struct ListenOn {
     url: Url,
     certificate_file: Option<std::path::PathBuf>,
     key_file: Option<std::path::PathBuf>,
-    #[serde(default = "default_header_read_timeout")]
-    header_read_timeout: DurationString,
-    #[serde(default = "default_request_response_timeout")]
-    request_response_timeout: DurationString,
+    #[serde(default = "default_header_read_timeout", with = "humantime_serde")]
+    header_read_timeout: Duration,
+    #[serde(default = "default_request_response_timeout", with = "humantime_serde")]
+    request_response_timeout: Duration,
 }
 
 enum ListenOnParseError {
@@ -351,14 +352,14 @@ impl TryFrom<ListenOn> for ListenerSpec {
             protocol: proto,
             sockaddr,
             handler: other.url.path().to_owned(),
-            header_read_timeout: other.header_read_timeout.into(),
-            request_response_timeout: other.request_response_timeout.into(),
+            header_read_timeout: other.header_read_timeout,
+            request_response_timeout: other.request_response_timeout,
         })
     }
 }
 
-fn default_timeout() -> DurationString {
-    DurationString::new(Duration::new(30, 0))
+fn default_timeout() -> Duration {
+    Duration::from_secs(30)
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -368,8 +369,8 @@ pub struct ConnectTo {
     pub url: Url,
     #[serde(default = "bool::default")]
     pub tolerate_bad_tls: bool,
-    #[serde(default = "default_timeout")]
-    pub timeout: DurationString,
+    #[serde(default = "default_timeout", with = "humantime_serde")]
+    pub timeout: Duration,
 }
 
 enum ConnectToParseError {
@@ -422,8 +423,8 @@ struct ProxyEntry {
     listen_on: ListenerSpec,
     connect_to: ConnectTo,
     label_filters: Vec<LabelFilter>,
-    #[serde(default = "default_cache_duration")]
-    cache_duration: DurationString,
+    #[serde(default = "default_cache_duration", with = "humantime_serde")]
+    cache_duration: Duration,
 }
 
 #[derive(Debug, Deserialize)]
@@ -565,7 +566,7 @@ impl TryFrom<PathBuf> for Config {
 pub struct HttpProxyTarget {
     pub connect_to: ConnectTo,
     pub label_filters: Vec<LabelFilter>,
-    pub cache_duration: DurationString,
+    pub cache_duration: Duration,
 }
 
 #[derive(Debug, Clone)]
@@ -624,5 +625,93 @@ impl From<Config> for Vec<HttpProxy> {
             }
         }
         servers.values().cloned().collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(yaml: &str) -> Config {
+        serde_yaml::from_str(yaml).expect("configuration should parse")
+    }
+
+    #[test]
+    fn durations_are_parsed_from_human_readable_strings() {
+        let cfg = parse(
+            r#"
+proxies:
+  - listen_on:
+      url: http://127.0.0.1:18080/metrics
+      header_read_timeout: 100ms
+      request_response_timeout: 1m
+    connect_to:
+      url: http://localhost:9100/metrics
+      timeout: 2s
+    label_filters:
+      - regex: node_cpu_.*
+        actions:
+          - reduce_time_resolution:
+              resolution: 30s
+          - keep
+    cache_duration: 8s
+"#,
+        );
+        let proxy = &cfg.proxies[0];
+        assert_eq!(
+            proxy.listen_on.header_read_timeout,
+            Duration::from_millis(100)
+        );
+        assert_eq!(
+            proxy.listen_on.request_response_timeout,
+            Duration::from_secs(60)
+        );
+        assert_eq!(proxy.connect_to.timeout, Duration::from_secs(2));
+        assert_eq!(proxy.cache_duration, Duration::from_secs(8));
+        match &proxy.label_filters[0].actions[0] {
+            LabelFilterAction::ReduceTimeResolution { resolution } => {
+                assert_eq!(*resolution, Duration::from_secs(30));
+            }
+            other => panic!("unexpected action {other:?}"),
+        }
+    }
+
+    #[test]
+    fn durations_have_documented_defaults() {
+        let cfg = parse(
+            r#"
+proxies:
+  - listen_on:
+      url: http://127.0.0.1:18080/metrics
+    connect_to:
+      url: http://localhost:9100/metrics
+    label_filters: []
+"#,
+        );
+        let proxy = &cfg.proxies[0];
+        assert_eq!(proxy.listen_on.header_read_timeout, Duration::from_secs(5));
+        // Default connect timeout (30s) plus 5s.
+        assert_eq!(
+            proxy.listen_on.request_response_timeout,
+            Duration::from_secs(35)
+        );
+        assert_eq!(proxy.connect_to.timeout, Duration::from_secs(30));
+        assert_eq!(proxy.cache_duration, Duration::ZERO);
+    }
+
+    #[test]
+    fn durations_without_a_unit_are_rejected() {
+        let result: Result<Config, _> = serde_yaml::from_str(
+            r#"
+proxies:
+  - listen_on:
+      url: http://127.0.0.1:18080/metrics
+    connect_to:
+      url: http://localhost:9100/metrics
+    label_filters: []
+    cache_duration: 8
+"#,
+        );
+        assert!(result.is_err());
     }
 }

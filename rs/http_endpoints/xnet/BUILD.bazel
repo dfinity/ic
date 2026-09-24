@@ -26,7 +26,6 @@ rust_library(
         "@crate_index//:prometheus",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
-        "@crate_index//:slog",
         "@crate_index//:tokio",
         "@crate_index//:tokio-rustls",
         "@crate_index//:tower",
@@ -51,7 +50,6 @@ rust_test(
         "//rs/test_utilities/types",
         "@crate_index//:bytes",
         "@crate_index//:maplit",
-        "@crate_index//:prost",
         "@crate_index//:reqwest",
     ],
 )

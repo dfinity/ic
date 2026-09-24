@@ -40,12 +40,11 @@ rust_library(
         "@crate_index//:askama",
         "@crate_index//:base64",
         "@crate_index//:fs_extra",
-        "@crate_index//:getifs",
         "@crate_index//:ipnet",
         "@crate_index//:macaddr",
+        "@crate_index//:nix",
         "@crate_index//:regex",
         "@crate_index//:reqwest",
-        "@crate_index//:rust_ini",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:serde_with",
@@ -81,12 +80,11 @@ rust_library(
         "@crate_index//:askama",
         "@crate_index//:base64",
         "@crate_index//:fs_extra",
-        "@crate_index//:getifs",
         "@crate_index//:ipnet",
         "@crate_index//:macaddr",
+        "@crate_index//:nix",
         "@crate_index//:regex",
         "@crate_index//:reqwest",
-        "@crate_index//:rust_ini",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:serde_with",
@@ -114,7 +112,6 @@ rust_test(
     },
     deps = [
         # Keep sorted.
-        "@crate_index//:once_cell",
         "@crate_index//:tempfile",
     ],
 )
@@ -132,7 +129,6 @@ rust_test(
     },
     deps = [
         # Keep sorted.
-        "@crate_index//:once_cell",
         "@crate_index//:tempfile",
     ],
 )
@@ -141,9 +137,6 @@ rust_binary(
     name = "config_tool",
     srcs = BIN_SOURCES,
     crate_name = "config_tool",
-    proc_macro_deps = [
-        "@crate_index//:securefmt",
-    ],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -161,12 +154,11 @@ rust_binary(
         "@crate_index//:base64",
         "@crate_index//:clap",
         "@crate_index//:fs_extra",
-        "@crate_index//:getifs",
         "@crate_index//:ipnet",
         "@crate_index//:macaddr",
+        "@crate_index//:nix",
         "@crate_index//:regex",
         "@crate_index//:reqwest",
-        "@crate_index//:rust_ini",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:serde_with",
@@ -182,9 +174,6 @@ rust_binary(
     srcs = BIN_SOURCES,
     crate_features = ["dev"],
     crate_name = "config_tool",
-    proc_macro_deps = [
-        "@crate_index//:securefmt",
-    ],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -202,12 +191,11 @@ rust_binary(
         "@crate_index//:base64",
         "@crate_index//:clap",
         "@crate_index//:fs_extra",
-        "@crate_index//:getifs",
         "@crate_index//:ipnet",
         "@crate_index//:macaddr",
+        "@crate_index//:nix",
         "@crate_index//:regex",
         "@crate_index//:reqwest",
-        "@crate_index//:rust_ini",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:serde_with",
@@ -224,7 +212,6 @@ rust_test(
     crate_features = ["dev"],
     deps = [
         # Keep sorted.
-        "@crate_index//:once_cell",
         "@crate_index//:tempfile",
     ],
 )

@@ -201,10 +201,8 @@ impl LoginInfo {
 }
 
 pub fn parse_login_info_from_ini(data: &str) -> Result<LoginInfo> {
-    let ini = ini::Ini::load_from_str(data)?;
-    let host_section = ini
-        .section(Some("host"))
-        .context("No [host] section in INI")?;
+    let ini = utils::ini::Ini::parse(data)?;
+    let host_section = ini.section("host").context("No [host] section in INI")?;
     let host = host_section
         .get("ipmi_addr")
         .context("No ipmi_addr in [host] section")?;
