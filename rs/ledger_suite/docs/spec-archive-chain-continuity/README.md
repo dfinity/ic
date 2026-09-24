@@ -528,9 +528,13 @@ archive's internal placement. A clean sync therefore shows every block *the ledg
 publishes* chains correctly — one check on archive content, not two.
 
 Second — and a sync cannot stand in for it — each archive's own extent against the
-ledger's published range for it. Rosetta reads archives only through the
-`archived_blocks` callbacks the ledger hands it (`blocks_synchronizer.rs:591-629`), so it
-never sees an archive *suffix* beyond `nodes_block_ranges`. A legacy lost reconciliation
+ledger's published range for it. Rosetta reads archives only where the ledger points it:
+ICRC Rosetta through the `archived_blocks` callbacks the ledger hands it
+(`icrc1/.../blocks_synchronizer.rs:591-629`), ICP Rosetta through the ledger's archive
+index refreshed by `get_archive_index_pb` and then `get_blocks_pb` on the archive it
+selects (`icp/ledger_canister_blocks_synchronizer/src/canister_access.rs:166, 274`).
+Different interfaces, same blind spot: neither ever sees an archive *suffix* beyond the
+range the ledger publishes. A legacy lost reconciliation
 leaves exactly that: the duplicate re-send sits in the archive above the published end,
 unread by anyone, and it is what an indexed append would collide with the moment
 archiving resumes. So for every archive, the number of blocks it holds must equal the length of the range
