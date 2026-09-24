@@ -541,12 +541,23 @@ Different interfaces, same blind spot: neither ever sees an archive *suffix* bey
 range the ledger publishes. A legacy lost reconciliation
 leaves exactly that: the duplicate re-send sits in the archive above the published end,
 unread by anyone, and it is what an indexed append would collide with the moment
-archiving resumes. So for every archive, the number of blocks it holds must equal the length of the range
-the ledger publishes for it — the archive's count is *local*, so `offset + count` is what
-has to equal one past the published end. On an ICRC archive the count is the
-`log_length` that `icrc3_get_blocks` returns (`icrc1/archive/src/main.rs:385-387`); on an
-ICP archive it is `archive_node_blocks` (`icp/archive/src/main.rs:414`), that archive
-having no `icrc3_get_blocks`. An archive holding more than its published range is the
+archiving resumes. So the blocks an archive actually holds must match
+what the ledger says it holds — and the two flavours need different arithmetic, because
+only one of them publishes per-archive ranges.
+
+On an **ICRC** suite the ledger publishes a range per archive (`icrc3_get_archives`) and
+the archive reports its own count as the `log_length` of `icrc3_get_blocks`
+(`icrc1/archive/src/main.rs:385-387`); that count is *local*, so it must equal the
+published range's length. On **ICP** there is nothing to compare against directly:
+`archives()` returns canister ids without ranges, and the archive has no
+`icrc3_get_blocks`. Its count and offset are the `archive_node_blocks` and
+`archive_node_block_height_offset` gauges on its `/metrics`
+(`icp/archive/src/main.rs:405-416`) — metrics rather than query methods, so scraped over
+HTTP rather than called. The check there is that those pairs tile: each archive's offset
+plus its count is the next archive's offset, and the last sum equals the ledger's
+`first_block_index`.
+
+An archive holding more than its published range is the
 latent divergence — and note that D10 does *not* repair it. D10 rewrites a constant
 offset error; a duplicate suffix is repeated content after a correct prefix, which no
 offset rewrite removes, and an indexed append would still collide with it. Removing it
