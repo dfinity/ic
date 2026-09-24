@@ -848,7 +848,7 @@ mod test {
             ..CatchUpPackageContents::default()
         };
 
-        let genesis_subnet_id = subnet_test_id(1003);
+        let non_legacy_genesis_subnet_id = subnet_test_id(1003);
         let non_legacy_genesis_record = CatchUpPackageContents {
             cup_type: Some(CupType::Genesis(GenesisArgs {})),
             height: 0,
@@ -857,7 +857,7 @@ mod test {
             ..CatchUpPackageContents::default()
         };
 
-        let recovery_subnet_id = subnet_test_id(1004);
+        let non_legacy_recovery_subnet_id = subnet_test_id(1004);
         let non_legacy_recovery_record = CatchUpPackageContents {
             cup_type: Some(CupType::Recovery(RecoveryArgs {
                 height: 42,
@@ -880,11 +880,11 @@ mod test {
                 legacy_recovery_record.encode_to_vec(),
             ),
             insert(
-                make_catch_up_package_contents_key(genesis_subnet_id),
+                make_catch_up_package_contents_key(non_legacy_genesis_subnet_id),
                 non_legacy_genesis_record.encode_to_vec(),
             ),
             insert(
-                make_catch_up_package_contents_key(recovery_subnet_id),
+                make_catch_up_package_contents_key(non_legacy_recovery_subnet_id),
                 non_legacy_recovery_record.encode_to_vec(),
             ),
         ]);
@@ -935,8 +935,14 @@ mod test {
         );
 
         // Step 3.4: Records that already carry a `cup_type` are untouched.
-        assert_eq!(get_record(genesis_subnet_id), non_legacy_genesis_record);
-        assert_eq!(get_record(recovery_subnet_id), non_legacy_recovery_record);
+        assert_eq!(
+            get_record(non_legacy_genesis_subnet_id),
+            non_legacy_genesis_record
+        );
+        assert_eq!(
+            get_record(non_legacy_recovery_subnet_id),
+            non_legacy_recovery_record
+        );
 
         // Step 3.5: Idempotency: a second run produces no further mutations.
         assert_eq!(
