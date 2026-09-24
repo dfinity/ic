@@ -84,15 +84,15 @@ where encoding the call is enough to trap under this design's own allocation sta
 trap there discards the entry while nothing was sent, which is merely a lost round, but
 if the push shares a message with earlier work that did commit elsewhere it is a lost
 record. Ending the round at adoption (`nodes.push`, the `pending_handovers` entry,
-`Creating` back to `Idle`) removes the question, at the cost of one round per 3 GiB.
+`Creating` back to `Idle`) removes the question, at the cost of one round per archive fill.
 
 **A collection rather than one slot, because `C1.9` lets archiving continue**
 (`C1.13`). A single `Option` looks sufficient and is not: a failed handover does not
 stop archiving, so that archive keeps filling, and when it fills the next archive is
 adopted and overwrites the slot. The first archive is then ledger-controlled forever
 with nothing recording it, and the metric clears when the *second* completes — a silent
-loss of exactly the governability the handover exists to establish. It takes a 3 GiB
-fill against a persistently failing handover, so it is remote; it is also invisible and
+loss of exactly the governability the handover exists to establish. It takes a whole
+archive to fill against a persistently failing handover, so it is remote; it is also invisible and
 permanent, and a `Vec` costs nothing. One retry per round, so the work stays bounded.
 
 **Neither form needs to record which of the two steps is pending**, which is worth
@@ -122,7 +122,7 @@ thing the current code does in that callback is encode the multi-megabyte
 the path `C1.8` already describes for a round that died after the identity was
 recorded. Making that the only path rather than the recovery path means there is one
 code path, the heavy encode runs at the start of a round with the id already durable,
-and creation costs one extra round — which is once per 3 GiB, so nothing. The
+and creation costs one extra round — which is once per archive fill, so nothing. The
 `spawn.rs` allocation work below still applies to that later round.
 
 So `C1.3` is the pre-creation case and `C1.5` the post-creation one, and the

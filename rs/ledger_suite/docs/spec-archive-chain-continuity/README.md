@@ -353,16 +353,17 @@ this design:
 | allocation | already committed | consequence |
 |---|---|---|
 | `create_canister` reply | canister exists, cycles gone | orphan; `C1` detects it and halts |
-| `install_code` reply, or a graceful `Err` from it | + wasm **possibly** installed — a reject may precede or follow the install | same — and note this arrives as an ordinary `Err`, not only as a trap, so a retry must first ask `canister_status` for `module_hash` rather than assume either way |
-| `update_settings` reply, or a graceful `Err` from it | + controllers **possibly** changed | same — reconcile by reading the controller list before retrying |
+| `install_code` reply, or a graceful `Err` from it | + wasm **possibly** installed — a reject may precede or follow the install | **not** an orphan: `Created(id)` was committed before the call, so the round that finds it asks `canister_status` for `module_hash` and finishes the creation (`C1.6`, `C1.8`) |
+| `update_settings` reply, or a graceful `Err` from it | + controllers **possibly** changed | **not** an orphan and not a halt: the archive is already adopted, the handover is tracked in `pending_handovers` and retried after reading the controller list (`C1.9`, `C1.10`) |
 | `remaining_capacity` reply, existing node | the transaction | round skipped, spaced by `L4` |
 | `remaining_capacity` reply, new node | + node recorded | round skipped; next round finds it |
 | `append_blocks` reply | the archive holds the blocks | `A2.4` makes the re-send a no-op |
 
-All three orphan windows sit between `create_canister` committing and `nodes.push`
-committing, so one non-zero check covers all of them — which is why resumable
-creation is not needed. In the first two the orphan's only controller is the ledger,
-which does not know its id, so its cycles are written off.
+Only the first row is an orphan, and only because no id was ever learned: that is the
+`Started` state `C1.1` halts on. The other two windows used to be write-offs and are not
+any more — the creation journal records the id before anything else is done with it, so
+a canister the ledger can name is one it can still finish or hand over. Part C is where
+that is specified.
 
 **The suite is upgraded in the order index, ledger, archives.** A new ledger
 therefore talks to old archives during a rollout window unless the releases are
@@ -421,7 +422,8 @@ the argument DEFI-1565 was making.
 
 "ICRC is single-chunk" is therefore true only of the two ck suites. The chunking
 window is open on ICP *and* on every SNS. Node roll-over makes a round multi-message
-on all of them regardless, independently of chunk size, roughly once per 3 GiB.
+on all of them regardless, independently of chunk size, roughly once per configured
+archive fill — 3 GiB on the ck suites, 1 GiB on SNS and ICP.
 
 ## Design decision held here
 
@@ -515,9 +517,13 @@ ledger's published range for it. Rosetta reads archives only through the
 never sees an archive *suffix* beyond `nodes_block_ranges`. A legacy lost reconciliation
 leaves exactly that: the duplicate re-send sits in the archive above the published end,
 unread by anyone, and it is what an indexed append would collide with the moment
-archiving resumes. So for every archive, its `log_length` (which `icrc3_get_blocks`
-already returns) must equal one past the published end; a longer archive is the latent
-divergence, and D10 is the repair. Only the two checks together gate Step 5.
+archiving resumes. So for every archive, the number of blocks it holds must equal the length of the range
+the ledger publishes for it — the archive's count is *local*, so `offset + count` is what
+has to equal one past the published end. On an ICRC archive the count is the
+`log_length` that `icrc3_get_blocks` returns (`icrc1/archive/src/main.rs:385-387`); on an
+ICP archive it is `archive_node_blocks` (`icp/archive/src/main.rs:414`), that archive
+having no `icrc3_get_blocks`. An archive holding more than its published range is the
+latent divergence, and D10 is the repair. Only the two checks together gate Step 5.
 
 **PR 1 — archive.** `append_blocks`'s new argument and result, placement, the clamp,
 the chain check on the first stored block, capacity reporting, the counters, and the
@@ -652,7 +658,8 @@ the ledger would silently skip blocks — trading a loud stall for quiet data lo
 which speaks the protocol by construction — no waiting and no incremental path.
 Rejected because the costs are not one-off: spawning charges canister creation and
 needs cycles provisioned, every extra archive is another canister to top up and upgrade
-forever, and it abandons up to 3 GiB of already-paid-for space.
+forever, and it abandons up to a whole archive's configured capacity of already-paid-for
+space.
 
 **Making response handling infallible.** The irreducible reply buffer (Constraints)
 means this cannot be completed at the ledger level; it would need a CDK change. With
