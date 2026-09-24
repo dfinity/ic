@@ -318,9 +318,10 @@ state gains `node_ranges`, one `NodeRange { offset, next_index }` per node, alig
 `nodes` by construction: an empty archive is `next_index == offset`, published ranges
 are derived by skipping those (`L1.6`) and taking `next_index - 1` for the inclusive
 end, and the per-node `offset` is the recorded start `L3.9` compares against — which
-the ledger otherwise never records (README, Constraints). It is `#[serde(default)]` and filled on
-the first upgrade from the legacy inclusive pairs, `(start, end)` becoming
-`(start, end + 1)` — **and padded**, because a valid legacy state can have one more node
+the ledger otherwise never records (README, Constraints). It is `#[serde(default)]` so that pre-change state *decodes* — but a derived default can
+only supply an empty vector, not read `nodes_block_ranges`, so the conversion is an
+explicit step in `post_upgrade`, run once when `node_ranges` is empty and `nodes` is not:
+each legacy inclusive pair `(start, end)` becomes `(start, end + 1)` — **and padded**, because a valid legacy state can have one more node
 than pair: the current creation path pushes the node before the `remaining_capacity`
 call (`archive.rs:507-514`) while a pair appears only after the first successful append
 (`archive.rs:285-310`), so an upgrade can land between the two. **Every** trailing node
@@ -330,7 +331,10 @@ and creates another (`archive.rs:255-258`, `:507-514`, `:547-565`) — gets an e
 at the preceding record's `next_index` (zero if it is the first node), which is exactly
 the state a freshly created archive is in, so `node_ranges` always has one record per
 node.
-`nodes_block_ranges` is then kept only as long as anything still reads it.
+`nodes_block_ranges` keeps being *written* for one release after this lands, so that a
+rollback to the previous ledger still finds its ranges, and is dropped in the release
+after; until then `archives()` is served from `node_ranges` and the legacy field is
+write-only.
 
 A published range is inclusive of both ends, so an empty archive has no pair of indices
 that could describe it — the ledger's published view and its internal record are the
@@ -348,7 +352,9 @@ losing it is not a hazard: a cold start falls back to the pre-call, which is the
 value computed the expensive way.
 
 The one persisted field on this side is the per-node range record that
-`send_blocks_to_archive` above reconciles into, aligned with `nodes` by construction:
+`send_blocks_to_archive` above reconciles into, aligned with `nodes` by construction and
+populated from the legacy pairs by an explicit `post_upgrade` step, not by the default
+(see that section for the conversion and its padding):
 
     #[serde(default)]                                      // filled from the legacy pairs on first upgrade
     node_ranges: Vec<NodeRange>,                           // one per node, aligned with `nodes`
@@ -632,4 +638,4 @@ attempted are in the README's **Testing** section; they span the parts.*
 | 30 | integration | drive a round that must roll over; assert exactly one archive is created, and that a round which both fills the tail and has blocks left over does not create two | `L6.2` |
 | 31 | integration | assert the capability probe stores nothing and consumes no capacity against a live archive, that a second round against an archive that already answered issues no further probe, and that a round which does probe sends at most one empty append | `L5.3`, `L5.4`, `L6.1` |
 | 31b | unit, `ledger_canister_core` | send the capability probe to a freshly created archive and take its reply with `next_index == block_index_offset`; assert its `NodeRange` reads empty, `archives()` omits it, and nothing underflows — the `chunk_len - 1` arithmetic the probe would have hit | `L1.6`, `A3.5` |
-| 31c | upgrade | decode a pre-change `Archive` with three inclusive legacy ranges; assert `node_ranges` is filled one per node as `(start, end + 1)`, `archives()` is unchanged, and — with one node's range then set empty — every other node still pairs with its own canister id, which the zipped representation could not guarantee. Repeat with a fourth and a fifth node that have no legacy pair — created, never appended to, as an oversized first block produces — and assert each is padded with an empty record at the third's `next_index` and omitted from `archives()`, so that `node_ranges` has exactly one record per node | `L1.2`, `L1.6`, `L3.9` |
+| 31c | upgrade | decode a pre-change `Archive` with three inclusive legacy ranges and run `post_upgrade`; assert `node_ranges` is filled one per node as `(start, end + 1)`, `archives()` is unchanged, and — with one node's range then set empty — every other node still pairs with its own canister id, which the zipped representation could not guarantee. Repeat with a fourth and a fifth node that have no legacy pair — created, never appended to, as an oversized first block produces — and assert each is padded with an empty record at the third's `next_index` and omitted from `archives()`, so that `node_ranges` has exactly one record per node | `L1.2`, `L1.6`, `L3.9` |

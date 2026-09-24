@@ -58,10 +58,12 @@ lost track of what it sent cannot corrupt the archive by sending them again.
    Expected_Parent, THE Archive SHALL count that append distinctly, because it is
    the one append whose content the archive cannot verify by any means and the count
    reads zero once every ledger supplies the hash (per A1.8).
-7. THE Archive SHALL check every block it stores against the block before it, not
-   only the first, because otherwise A2.8 holds only as far as the sending ledger's
-   own storage is intact and the archive would be trusting exactly what it cannot
-   verify.
+7. THE Archive SHALL check every block it stores against the block before it — the
+   append's own preceding block, or for the first block it stores the tip per A1.1 or
+   the Expected_Parent per A1.8 — the only stored blocks with no predecessor to check
+   being the genesis block of A1.5 and the first block of the unverifiable append of
+   A1.4, because otherwise A2.8 holds only as far as the sending ledger's own storage is
+   intact and the archive would be trusting exactly what it cannot verify.
 8. WHEN an archive that holds no blocks was given an Expected_Parent, THE Archive
    SHALL refuse an append whose first stored block does not carry that hash as its
    parent, so that the only block it will ever store without checking a parent hash

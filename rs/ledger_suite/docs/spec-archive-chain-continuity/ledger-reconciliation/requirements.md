@@ -177,9 +177,11 @@ per interval rather than work per transaction.
 6. WHEN an Archiving_Round fails, THE Ledger SHALL NOT prevent a later
    Archiving_Round from being attempted.
 7. WHEN an archive refuses an append on any ground in A1, or per A2.2, A2.9 or A6.4,
-   THE Ledger SHALL make no further archiving attempt and SHALL expose a distinct
+   THE ICRC Ledger SHALL make no further archiving attempt and SHALL expose a distinct
    non-zero metric, rather than spacing further attempts per L4.1, because no retry can
-   resolve a mismatch of chain or position or a block the archive cannot parse.
+   resolve a mismatch of chain or position or a block the archive cannot parse — while
+   THE ICP Ledger, whose archive reports no outcome and can only reject, treats every
+   reject as a failure under L4.1 and L4.5, the exposure the README's non-goal accepts.
 8. WHEN an archive reports per A2.6 that the blocks offered fall below its own range,
    THE Ledger SHALL make no further archiving attempt and SHALL expose a distinct
    non-zero metric, separate from L4.7's, because once A2.9 compares the held prefix of a
@@ -281,7 +283,9 @@ also block the calls needed to get it going again.
 7. WHEN THE Ledger makes any other call whose unknown outcome it can resolve by
    asking again, THE Ledger SHALL likewise stop waiting after at most
    ARCHIVE_CALL_TIMEOUT, so that L7.5 is the exception rather than the rule.
-8. WHILE an archive is not answering an in-flight call, THE ICRC Ledger SHALL still
-   become stoppable within ARCHIVE_CALL_TIMEOUT, because an outstanding callback
-   otherwise prevents the ledger being stopped and therefore being upgraded — and an
-   upgrade is the operator's lever for every other halt in this document.
+8. WHILE an archive is not answering a call THE ICRC Ledger made to it, THE ICRC Ledger
+   SHALL still become stoppable within ARCHIVE_CALL_TIMEOUT, because an outstanding
+   callback otherwise prevents the ledger being stopped and therefore being upgraded —
+   and an upgrade is the operator's lever for every other halt in this document — the
+   one call this does not cover being `create_canister` to the management canister,
+   which L7.5 keeps unbounded and C1 halts on instead.
