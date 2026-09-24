@@ -119,4 +119,46 @@ mod tests {
         };
         assert_eq!(node_operator_record, expected);
     }
+
+    #[test]
+    #[should_panic(expected = "Key already present")]
+    fn test_should_panic_if_node_operator_record_exists() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // create a new NO record
+        let node_operator_id = PrincipalId::new_user_test_id(100);
+
+        // Make a proposal to upgrade all unassigned nodes to a new version
+        let mut payload = AddNodeOperatorPayload {
+            node_operator_principal_id: Some(node_operator_id),
+            node_provider_principal_id: Some(PrincipalId::new_user_test_id(1000)),
+            node_allowance: 1,
+            dc_id: "DC1".to_string(),
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
+            ipv6: Some("bar".to_string()),
+            max_rewardable_nodes: Some(btreemap! { "type1.2".to_string() => 1 }),
+        };
+
+        // Test that a record can be created from this payload.
+        registry.do_add_node_operator(payload.clone());
+        let node_operator_record = get_node_operator_record(&registry, node_operator_id)
+            .expect("Couldn't find NO record.");
+
+        let expected = NodeOperatorRecord {
+            node_operator_principal_id: PrincipalId::new_user_test_id(100).to_vec(),
+            node_allowance: 1, // Should be > 0 to add a new node
+            node_provider_principal_id: PrincipalId::new_user_test_id(1000).to_vec(),
+            dc_id: "dc1".to_string(),
+            rewardable_nodes: btreemap! { "type1.1".to_string() => 1 },
+            ipv6: Some("bar".to_string()),
+            max_rewardable_nodes: btreemap! { "type1.2".to_string() => 1 },
+        };
+        assert_eq!(node_operator_record, expected);
+
+        // Change the payload, but keep the same node operator id.
+        payload.node_allowance = 2;
+
+        // Test that an existing record cannot be edited using this function.
+        registry.do_add_node_operator(payload);
+    }
 }
