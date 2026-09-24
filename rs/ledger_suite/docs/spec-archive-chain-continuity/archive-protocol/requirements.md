@@ -160,14 +160,9 @@ wrong about it.
    every block it was offered and did not already hold, whether or not it already held
    some of them, all of them, or none, and whether or not it was offered any, because
    the ledger's response to all of these is identical — reconcile against the reported
-   Archive_Position — and A3.9's count with the number of blocks offered already
-   separates the cases that differ.
-9. THE Archive SHALL report how many of the blocks it was offered it stored, because
-   A3.7, A3.8 and L2.3 all turn on that number and no outcome of A2 settles it on its
-   own — an append carrying nothing per A3.5, one whose first block did not fit per L2.3,
-   and a re-send wholly held per A2.4 all store none, for three different reasons that
-   call for three different ledger responses.
-10. THE Archive SHALL report whether the append's blocks were checked against a block it
+   Archive_Position — and the outcome that does differ, a stop short per A3.7, has its
+   own.
+9. THE Archive SHALL report whether the append's blocks were checked against a block it
    already held or against its Expected_Parent — false for the unverifiable append of
    A1.6 and for any append that stored and compared nothing — because L3.8 must not
    advance on the one store that checked nothing, and only the archive knows whether it

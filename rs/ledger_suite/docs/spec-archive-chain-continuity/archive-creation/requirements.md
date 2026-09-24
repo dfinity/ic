@@ -64,36 +64,28 @@ unaddressable canister does not become a series of them.
 9. THE Ledger SHALL adopt a created archive before handing its control to the
    configured controllers, and SHALL treat a failure of that handover as neither
    blocking adoption nor blocking archiving, because an adopted archive is already
-   usable and the handover's last step removes the ledger's own authority over it
-   (per C1.11), so making archiving wait on it would risk more than it protects.
+   usable and the handover removes the ledger's own authority over it, so making
+   archiving wait on it would risk more than it protects.
 10. WHILE any created archive has been adopted but its control not yet handed over, THE
    Ledger SHALL retry each such handover on later rounds and SHALL expose a distinct
    metric counting the archives still owed one, because until then those archives cannot
    be upgraded by their intended controllers.
-11. THE Ledger SHALL hand over control in two steps — first adding the configured
-   controllers while remaining one itself, or as many of them as the platform's limit on
-   controllers leaves room for beside it, then replacing the list with exactly the
-   configured controllers, which removes itself — so that the first step is verifiable by
-   reading the archive's controller list, which it is still entitled to do, and the
-   second cannot fail in a way that matters: its only outcomes are that the ledger is
-   still a controller and may retry, or that it is not, which is the state the handover
-   was for.
-12. WHEN a retry of either step is refused because THE Ledger is no longer a
+11. WHEN a retry of the handover is refused because THE Ledger is no longer a
    controller, THE Ledger SHALL treat that archive's handover as complete and remove it
-   from the count in C1.10, because the archive is then governable by the configured
-   controllers and nothing further is within the ledger's reach — and a retry after a
-   lost second step begins with the first, which is where that refusal arrives.
-13. THE Ledger SHALL keep a record of every archive still owed a handover rather than
+   from the count in C1.10, because the only way the ledger can have lost that authority
+   is by the earlier call having succeeded, after which the archive is governable by the
+   configured controllers and nothing further is within the ledger's reach.
+12. THE Ledger SHALL keep a record of every archive still owed a handover rather than
    only the most recent, because C1.9 lets archiving continue past a failed handover, so
    an archive can fill and a later one be adopted while the first is still owed one —
    and a single slot would drop the earlier archive, leaving it ledger-controlled with
    nothing recording it.
-14. THE Ledger SHALL have committed the record in C1.13 before making either handover
-   call for that archive, because the call's own await is what commits the message that
+13. THE Ledger SHALL have committed the record in C1.12 before making the handover call
+   for that archive, because the call's own await is what commits the message that
    wrote the entry, so a trap between the write and that await — encoding the call is
    enough — discards the entry while nothing was sent, and doing the write in a round of
    its own removes that window at the cost of one round.
-15. WHEN a canister THE Ledger created carries a module it did not install — one whose
+14. WHEN a canister THE Ledger created carries a module it did not install — one whose
    hash matches neither an absent install nor the archive THE Ledger embeds — THE Ledger
    SHALL make no further archiving attempt and SHALL expose a distinct non-zero metric
    together with the recorded identity, rather than reinstalling, adopting or deleting

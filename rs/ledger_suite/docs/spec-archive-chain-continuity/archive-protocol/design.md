@@ -78,8 +78,7 @@ only realisable if there is something to return. `A2.9`'s refusal shares it.
     type append_result = record {
       block_index_offset : nat64;
       next_index         : nat64;
-      blocks_stored      : nat64;   // A3.9 — separates the zero-stored cases
-      verified           : bool;    // A3.10 — what L3.8's gate reads
+      verified           : bool;    // A3.9 — what L3.8's gate reads
       at_capacity        : bool;
       outcome            : append_outcome;
     };
@@ -97,8 +96,8 @@ continuation (`A2.1`), a straddling append where the leading blocks were already
 held and only the suffix was stored (`A2.3`), and the empty probe, where there were
 none (`A3.5`). They share an arm because the ledger's response to all three is
 identical: reconcile against `next_index`. How much the archive already held is
-visible in `blocks_stored` for anyone who wants it, and is not something the ledger acts
-on — which is the division `A3.6` asks for, the outcome naming the *action* rather
+not something the ledger acts on — it is visible from `next_index` for anyone who wants
+it — which is the division `A3.6` asks for, the outcome naming the *action* rather
 than the effort.
 
 **A wholly held re-send is `Stored` too** (`A2.4`), for the same reason: the archive
@@ -161,7 +160,7 @@ Order of work, per D4 and D5:
    divergence at or below that index propagates forward to it and cannot heal — if the
    last covered block matches, every block below it does. Doing this for a *straddling*
    append and not only a wholly held one is what makes a re-send into a full archive
-   verify something (`A3.10`), which is the case that otherwise strands the ledger —
+   verify something (`A3.9`), which is the case that otherwise strands the ledger —
    see `BelowRange` in the ledger design's `send_blocks_to_archive` section.
 6. Determine which blocks will actually be stored — the suffix from `k`, trimmed to
    what fits the archive's own configured limit — and then chain-check **only those**:
@@ -351,7 +350,7 @@ attempted are in the README's **Testing** section; they span the parts.*
 | 2 | archive | append a batch whose first block does not continue the tip; assert refusal and unchanged extent | `A1.1`, `A1.2` |
 | 3 | archive | install with `block_index_offset = N+1000`, append at `N`; assert nothing stored and `block_index_offset = N+1000` reported. Then append `N+1000..N+1999` so the node is non-empty, re-send at `N`, and assert the reply still reports offset `N+1000` but `next_index = N+2000` — the two fields are indistinguishable on an empty node and must not be conflated | `A2.6`, `A3.1`, `A3.3` |
 | 4 | archive | append `N..N+499`, then `N..N+999`; assert the extent becomes 1000 not 1500, every index resolves, and the chain check did not refuse on the covered prefix. Then re-send `N..N+999` from a chain forked at `N+200` and assert `ChainMismatch` — the covered prefix is compared, not skipped | `A2.3`, `A1.3`, `A2.9` |
-| 4b | archive | fill an archive so its last stored block is `T`; send `T-9..T+9` at `T-9` and assert nothing is stored, `at_capacity` is true, and `verified` is **true** with the comparison at `T` — the straddling-into-full case that used to verify nothing | `A2.9`, `A3.10`, `A4.1` |
+| 4b | archive | fill an archive so its last stored block is `T`; send `T-9..T+9` at `T-9` and assert nothing is stored, `at_capacity` is true, and `verified` is **true** with the comparison at `T` — the straddling-into-full case that used to verify nothing | `A2.9`, `A3.9`, `A4.1` |
 | 5 | archive | append 1000 blocks, then re-append the first 600; assert success, nothing stored, extent unchanged — the case a plausible implementation panics on | `A2.5` |
 | 6 | archive | append at an index above the position; assert a gap and nothing stored | `A2.2` |
 | 7 | archive | size `max_memory_size_bytes` so a batch only partly fits; append it **with an index** and assert a short `next_index`, `at_capacity = true`, and that the blocks that fit are readable | `A4.1`, `A4.2`, `A4.3` |
@@ -374,8 +373,7 @@ attempted are in the README's **Testing** section; they span the parts.*
 | 22d | archive | append a batch containing bytes that do not decode as a block; assert `Undecodable` is returned with its index, nothing is stored, and its counter rises separately from the mismatch counters | `A6.4` |
 | 22e | archive | assert every outcome of A2 carries the same `block_index_offset` and `next_index` fields, and that `at_capacity` is false on a full store and on a wholly-covered re-send | `A3.1`, `A3.3`, `A3.6`, `A4.7` |
 | 22f | archive | assert a clean continuation, a straddling append and an indexed empty probe all report the same outcome, that a capacity-shortened append reports a different one, and that a wholly held re-send reports its own — the post-condition `Stored` names, and the one exception to it | `A3.8`, `A3.7` |
-| 22g | archive | assert `blocks_stored` is the number actually written across every outcome: the full batch, the suffix of a straddling append, zero for an indexed empty probe, and zero for an append whose first block does not fit | `A3.9`, `L2.3` |
-| 15m | integration | install the tail with no Expected_Parent, as an old ledger would, then send the first batch from the new ledger; assert `verified` is false, the unverifiable counter rises, and the Archived_Prefix does **not** advance — a stored block that was checked against nothing is not evidence | `A3.10`, `L3.8`, `A1.6` |
+| 15m | integration | install the tail with no Expected_Parent, as an old ledger would, then send the first batch from the new ledger; assert `verified` is false, the unverifiable counter rises, and the Archived_Prefix does **not** advance — a stored block that was checked against nothing is not evidence | `A3.9`, `L3.8`, `A1.6` |
 | 7f | archive | append starting exactly at the Archive_Position but overflowing the configured limit; assert a prefix is stored and the stop reported rather than the whole batch — the A4 exception to an otherwise unconditional A2.1 | `A2.1`, `A4.1` |
 | 26 | archive | constrain growth so an append stops short for a reason other than the archive's own limit, using a route that **returns** control — the wasm's declared stable maximum, or a subnet memory cap — and assert `at_capacity` is reported false and the blocks that fit are readable | `A4.4` |
 | 26b | archive | induce a reservation refusal with a low `reserved_cycles_limit`; assert the call is rejected, that nothing was stored, and that the ledger takes the graceful path — the negative case that fixes what `A4.5` gives up | `A4.5` |

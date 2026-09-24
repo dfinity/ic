@@ -130,7 +130,7 @@ a hole.
    never issued was built from a chain the ledger is no longer on, which neither L3.2
    nor L3.3 detects.
 8. THE Ledger SHALL extend the Archived_Prefix only as far as one past the
-   highest-indexed block of an append the receiving archive reports per A3.10 as checked
+   highest-indexed block of an append the receiving archive reports per A3.9 as checked
    — stored after a parent check against a block it held or its Expected_Parent, or
    compared per A2.9 — and never as far as the Archive_Position that append reported,
    because an append that verified nothing — an empty one per A3.5, a gap per A2.2, one
@@ -199,8 +199,8 @@ per interval rather than work per transaction.
    because
    the call itself returned successfully and without this the refused growth would be
    provoked again by every later transaction rather than waited out by L2.2's retry.
-11. WHILE a halt per L2.3, L3.2, L3.3, L3.7, L3.9, L4.7, L4.8 or C1.15 holds, THE Ledger SHALL
-   attempt no Archiving_Round until it is next upgraded, and SHALL re-establish the halt
+11. WHILE a halt per L2.3, L3.2, L3.3, L3.7, L3.9, L4.7, L4.8 or C1.14 holds, THE Ledger
+   SHALL attempt no Archiving_Round until it is next upgraded, and SHALL re-establish the halt
    from the first reply after that upgrade if the cause persists, because each of these
    is learned from one reply and re-derivable from the next, so forgetting it on upgrade
    costs one attempt — exactly the lever L4.9 grants an operator — whereas C1.1's cause
@@ -280,12 +280,14 @@ also block the calls needed to get it going again.
 6. THE ICP Ledger SHALL wait unboundedly for an append, because its archives do
    not satisfy A2 and a retry against them would store the blocks a second
    time (per L5.5).
-7. WHEN THE Ledger makes any other call whose unknown outcome it can resolve by
-   asking again, THE Ledger SHALL likewise stop waiting after at most
-   ARCHIVE_CALL_TIMEOUT, so that L7.5 is the exception rather than the rule.
+7. WHEN THE Ledger makes any other call to an archive whose unknown outcome it can
+   resolve by asking again, THE Ledger SHALL likewise stop waiting after at most
+   ARCHIVE_CALL_TIMEOUT, while its calls to the management canister stay unbounded,
+   because those happen once per archive fill and are answered within a round, so
+   bounding them buys nothing that L7.1's reservation argument measures.
 8. WHILE an archive is not answering a call THE ICRC Ledger made to it, THE ICRC Ledger
    SHALL still become stoppable within ARCHIVE_CALL_TIMEOUT, because an outstanding
    callback otherwise prevents the ledger being stopped and therefore being upgraded —
    and an upgrade is the operator's lever for every other halt in this document — the
-   one call this does not cover being `create_canister` to the management canister,
-   which L7.5 keeps unbounded and C1 halts on instead.
+   calls this does not cover being those to the management canister, which L7.7 keeps
+   unbounded and C1 reconciles or halts on instead.

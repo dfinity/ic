@@ -221,12 +221,12 @@ nothing was verified; `StoredPartial` covers an append whose very first block di
 fit (`L2.3`), where nothing was stored. Both would pass an arm-based gate and
 neither verified anything.
 
-So the gate is the reply's `verified` flag (`A3.10`, `L3.8`): true when a stored
+So the gate is the reply's `verified` flag (`A3.9`, `L3.8`): true when a stored
 block was chained against the archive's tip or its Expected_Parent, or when a wholly
 held re-send had its last block compared per `A2.9`; false otherwise.
 
 **It has to be a field, and this is the one piece of evidence the ledger genuinely
-cannot reconstruct.** `blocks_stored > 0` is *almost* right, and was the previous
+cannot reconstruct.** "At least one block stored" is *almost* right, and was an earlier
 draft's gate, but `A1.4` allows exactly one store that checks nothing: the first
 append into an empty archive that was given no Expected_Parent (the unverifiable append
 `A1.6` counts). That archive may be the tail a new ledger inherits from the old one —
@@ -236,12 +236,10 @@ to check against; so it says so, and the ledger reads it rather than guessing.
 
 **Why a flag rather than an `AlreadyHeld` arm, when the arm was rejected as
 redundant.** The arm was redundant because everything it encoded — did the archive
-already hold these blocks — the ledger could reconstruct from `blocks_stored` and the
-batch it had just sent in the same message. The flag is not redundant, because whether
+already hold these blocks — the ledger could reconstruct from the reported position and
+the batch it had just sent in the same message. The flag is not redundant, because whether
 a *parent check happened* depends on state only the archive has. Same test applied both
-times: the ledger derives what it can, and the reply carries what it cannot. That is
-also why `blocks_stored` stays — it separates the zero-stored cases for `A3.7`, `A3.8`
-and `L2.3`, which `verified` does not.
+times: the ledger derives what it can, and the reply carries what it cannot.
 
 **The gate has a ceiling as well as a trigger, and `next_index` is not it.** Having
 verified *a* block does not license advancing to wherever the archive happens to reach.
@@ -383,14 +381,14 @@ handovers, belong to the creation protocol and are specified in
 Ten conditions stop archiving, with three different recovery stories, and they are
 easy to conflate because they present identically — archiving stops and blocks
 accumulate. An operator's first question is which one it is, so the metrics must be
-distinct (they are, by `L2.3`, `L3.2`, `L3.3`, `L3.7`, `L3.9`, `L4.7`, `L4.8`, `L5.1`, `C1.2` and `C1.15`) and the answer to
+distinct (they are, by `L2.3`, `L3.2`, `L3.3`, `L3.7`, `L3.9`, `L4.7`, `L4.8`, `L5.1`, `C1.2` and `C1.14`) and the answer to
 "what now" must be written down:
 
 | condition | criterion | clears |
 |---|---|---|
 | the tail reports a start above the archived prefix's end | `L3.2` | not on its own. No endpoint sets the archived prefix, so it needs an upgrade carrying a migration. Unreachable except from a wrong record |
 | an archive reports the blocks offered fall below its range | `L4.8` | operator only — once `A2.9` compares straddling appends, only a wrong record reaches this: a restore, or a suite that had already diverged. Step 0 to check it, D10 to repair it |
-| a created canister carries a module the ledger did not install | `C1.15` | operator only — reinstall, adopt or delete is theirs to choose; a state never seen in production, deliberately left without an automatic answer |
+| a created canister carries a module the ledger did not install | `C1.14` | operator only — reinstall, adopt or delete is theirs to choose; a state never seen in production, deliberately left without an automatic answer |
 | an archive reports a position below the archived prefix | `L3.3` | never — blocks the ledger already stopped serving are held nowhere. Recovery is whatever backup exists, not this system |
 | an archive reports a position above the ledger's own chain tip | `L3.7` | operator only. The ledger is on a chain the archive was not built from, which is the snapshot-restore non-goal; the coherent fix is restoring the whole suite to a common point, not resuming |
 | an empty archive reports `at_capacity` | `L2.3` | operator only, and cheaply: raise `node_max_memory_size_bytes` above the block that did not fit. Halting is what stops it creating a canister per transaction meanwhile |
@@ -414,7 +412,7 @@ means one labelled gauge, not a family of ad-hoc names:
 One value per `Halt` variant, `1` while that halt holds and `0` (or absent) otherwise;
 the reason is a label so that a single alert rule — *any* `ledger_archiving_halted` above
 zero — covers every case, while a dashboard still tells them apart. Where a halt concerns
-a canister the ledger can name (`C1.7`, `C1.15`), the id is a second label, since a
+a canister the ledger can name (`C1.7`, `C1.14`), the id is a second label, since a
 principal is not a number and a label is the only way `/metrics` carries one. Halts are
 *states*, so they are gauges; the things that *happen* — a failed round
 (`ledger_archiving_failures`), an unknown outcome (`L7`), a below-range report — stay
@@ -436,7 +434,7 @@ could not re-derive the refusal and would send again. So the round that learns o
 
     enum Halt { OversizedBlock, StartAhead, PositionShort, PositionAhead,
                 StartMoved, Refused(RefusedGround), BelowRange, ForeignModule(CanisterId) }
-    // L2.3, L3.2, L3.3, L3.7, L3.9, L4.7, L4.8, C1.15 respectively
+    // L2.3, L3.2, L3.3, L3.7, L3.9, L4.7, L4.8, C1.14 respectively
 
 which `blocks_to_archive` reads before the guard, and which is the source for each halt's
 metric. It is **skipped, not persisted**, and that is a decision rather than an
@@ -461,7 +459,7 @@ spawned node — which is what makes that field safe to lose on an upgrade.
 **And it is gated on the prefix having caught up** (`L2.1`). `at_capacity` alone is
 not licence to create the next archive: the first append into a tail inherited from an
 old ledger — empty, given no Expected_Parent — can store a prefix, fill, and report both
-`at_capacity = true` and `verified = false` (`A1.6`, `A3.10`). The ledger may not
+`at_capacity = true` and `verified = false` (`A1.6`, `A3.9`). The ledger may not
 advance its Archived_Prefix on that (`L3.8`), and an archive created at the reported
 position would then sit above blocks the ledger still serves, so every later offer of
 them would come back `BelowRange` and halt. So a roll-over waits until the Archived_Prefix
@@ -600,7 +598,7 @@ above are therefore wrong as listed:
 |---|---|
 | backing off (`L4.1`) | **yes** — a wait; time clears it |
 | `Started`, no identity (`C1.1`) | **yes** — only an operator clears it |
-| coverage halts (`L3.2`, `L3.3`, `L3.7`, `L3.9`), the below-range halt (`L4.8`) and the foreign-module halt (`C1.15`) | **yes** — only an operator clears them |
+| coverage halts (`L3.2`, `L3.3`, `L3.7`, `L3.9`), the below-range halt (`L4.8`) and the foreign-module halt (`C1.14`) | **yes** — only an operator clears them |
 | `L2.3` | **yes** — only an operator clears it |
 | `Created(id)` (`C1.8`) | **no** — the round must finish the creation |
 | capability halt (`L5.1`) | **no** — the round must issue the probe |
@@ -619,31 +617,26 @@ ledger to *do* something cannot be expressed as a skip.**
 
 One call site today, `Call::unbounded_wait` (`runtime.rs:68`), used for every
 archiving call including the management-canister ones from `spawn.rs:25, 40`. It gains
-a bounded variant so the choice is per call site (`L7.1`, `L7.5`):
+a bounded variant so the choice is per call site (`L7.1`, `L7.5`, `L7.7`):
 
 | call | wait | why |
 |---|---|---|
 | `append_blocks` | bounded, ICRC only | idempotent under `A2.4`; ICP exempt per `L7.6` |
-| `remaining_capacity` | bounded | read-only, so an unknown outcome is resolved by asking again |
-| `update_settings`, adding the controllers | bounded | the ledger is still a controller, so `canister_status` resolves it (`L7.7`) |
-| `update_settings`, removing the ledger | bounded | not queryable, but resolvable by *retrying* once the handover is staged — see below |
-| `install_code` | bounded | resolvable, see below |
-| `create_canister` | **unbounded** | the only genuinely unresolvable one: an unknown outcome leaves a canister nothing can address |
+| `remaining_capacity` | bounded | read-only, so an unknown outcome is resolved by asking again (`L7.7`) |
+| `create_canister` | **unbounded** | genuinely unresolvable: an unknown outcome leaves a canister nothing can address (`L7.5`) |
+| `install_code` | unbounded | resolvable by `canister_status`, but once per archive fill and answered within a round, so bounding buys nothing (`L7.7`) |
+| `update_settings` | unbounded | resolvable by retrying — an unauthorized retry proves the earlier call landed — and equally rare (`L7.7`) |
 
-`create_canister` is therefore `L7.5`'s **only** member, which it was not when this
-table was first written.
-
-The reasoning behind the three management-canister rows — why the handover is staged,
-why both of its steps are bounded, and why `install_code` is resolvable — is the
+The two bounded rows are the calls made on every round, where the reservation argument
+of D9 and the stoppability of `L7.8` actually apply. The three management-canister calls
+are unbounded because bounding them would buy nothing measurable, not because they
+could not be; the reasoning, and how each unknown outcome is reconciled instead, is the
 creation protocol's and lives in
-[`../archive-creation/design.md`](../archive-creation/design.md); the table is the
-exhaustive reading of it.
+[`../archive-creation/design.md`](../archive-creation/design.md).
 
-An unknown outcome is handled as a failure, which is safe only because the retry is
-idempotent (`L7.3`, `L7.4`), and is counted distinctly so D9's timeout can be
-revisited. Every row but the last is `L7.7`'s "resolvable by asking again" — reading "again"
-as the retry it is, not narrowly as a query — and the last is `L7.5`'s only
-exception. The table is the exhaustive reading of both.
+An unknown outcome on a bounded call is handled as a failure, which is safe only because
+the retry is idempotent (`L7.3`, `L7.4`), and is counted distinctly so D9's timeout can
+be revisited.
 
 ## Test plan
 
@@ -675,7 +668,7 @@ attempted are in the README's **Testing** section; they span the parts.*
 | 15f | integration | report, from a non-tail archive, a position below the aggregate Archived_Prefix but matching its own published range; assert no halt. Then report one short of its own range and assert the halt — the false positive that the aggregate comparison produced for every legacy archive | `L3.3` |
 | 15l | unit, `ledger_canister_core` | have the tail report an offset one above its published start, and separately have a suite's first archive report a non-zero offset; assert both halt on the distinct metric and the record is unchanged — the start `L1.4` never checks | `L3.9` |
 | 15i | unit, `ledger_canister_core` | for an archive published as `[0, 99]`, assert a reported position of `100` does not halt and `99` does — the boundary where the inclusive published range meets the exclusive position, and the one value an off-by-one would miss | `L3.3`, `L1.6` |
-| 15g | integration | answer with `BelowRange`, and separately with `Gap`, from appends that carried blocks; assert the Archived_Prefix does not advance on either, then assert it does advance on a wholly-held re-send, and *not* on an empty probe reporting the same range — carrying blocks is not verifying one, and the two zero-stored cases part on `verified` | `L3.8`, `A3.10` |
+| 15g | integration | answer with `BelowRange`, and separately with `Gap`, from appends that carried blocks; assert the Archived_Prefix does not advance on either, then assert it does advance on a wholly-held re-send, and *not* on an empty probe reporting the same range — carrying blocks is not verifying one, and the two zero-stored cases part on `verified` | `L3.8`, `A3.9` |
 | 23c | integration | force a mid-round roll-over while PR 3's loops are still in place and assert the created node's first append is **accepted**; then, with the ledger patched under test to capture the round's first block's parent instead, assert the same append is refused as a mismatch — the two behaviours that distinguish a per-creation hash from a per-round one, without reading the field back | `L1.7`, `A1.8`, the per-creation hash above |
 | 23 | unit, `ledger_canister_core` | create an archive after a round in which the previous one reported `next_index = N`; assert the new `block_index_offset` is exactly `N`, not `N+1` — `next_index` is *already* one past the last held index, and the off-by-one here is the whole of `L1.1`. Assert `archives()` tiles with no gap or overlap. Then present a node whose reported range starts elsewhere and assert no blocks are stored in it and the metric rises | `L1.1`, `L1.2`, `L1.3`, `L1.4` |
 | 24 | integration | on a ledger whose archives report no extent, assert an archive is still created and blocks are still discarded — the exemptions, which a literal reading of L1 and L3 would forbid | `L1.5`, `L3.6` |

@@ -14,7 +14,7 @@ in dfinity/oisy-trade#256:
 |---|---|---|---|
 | **A** — the archive append protocol: placement by declared index, chain continuity, capacity reporting, the index-less compatibility path, counters | [`archive-protocol/requirements.md`](archive-protocol/requirements.md) | [`archive-protocol/design.md`](archive-protocol/design.md) | PR 1 (`ic-icrc1-archive`) |
 | **L** — ledger reconciliation and retries: range tiling, the archived prefix, backoff and halts, the capability probe, round shape, bounded waits | [`ledger-reconciliation/requirements.md`](ledger-reconciliation/requirements.md) | [`ledger-reconciliation/design.md`](ledger-reconciliation/design.md) | PR 3, PR 4 |
-| **C** — archive creation and handover: the creation journal, adoption, the staged controller handover | [`archive-creation/requirements.md`](archive-creation/requirements.md) | [`archive-creation/design.md`](archive-creation/design.md) | PR 4 |
+| **C** — archive creation and handover: the creation journal, adoption, the controller handover | [`archive-creation/requirements.md`](archive-creation/requirements.md) | [`archive-creation/design.md`](archive-creation/design.md) | PR 4 |
 
 This file holds what all three share: the problem, the glossary, the non-goals, the
 constraints of the surrounding system, the delivery sequence, and the alternatives
@@ -367,7 +367,7 @@ this design:
 |---|---|---|
 | `create_canister` reply | canister exists, cycles gone | orphan; `C1` detects it and halts |
 | `install_code` reply, or a graceful `Err` from it | + wasm **possibly** installed — a reject may precede or follow the install | **not** an orphan: `Created(id)` was committed before the call, so the round that finds it asks `canister_status` for `module_hash` and finishes the creation (`C1.6`, `C1.8`) |
-| `update_settings` reply, or a graceful `Err` from it | + controllers **possibly** changed | **not** an orphan and not a halt: the archive is already adopted, the handover is tracked in `pending_handovers` and retried after reading the controller list (`C1.9`, `C1.10`) |
+| `update_settings` reply, or a graceful `Err` from it | + controllers **possibly** changed | **not** an orphan and not a halt: the archive is already adopted, the handover is tracked in `pending_handovers` and retried (`C1.9`, `C1.10`) |
 | `remaining_capacity` reply, existing node | the transaction | round skipped, spaced by `L4` |
 | `remaining_capacity` reply, new node | + node recorded | round skipped; next round finds it |
 | `append_blocks` reply | the archive holds the blocks | `A2.4` makes the re-send a no-op |

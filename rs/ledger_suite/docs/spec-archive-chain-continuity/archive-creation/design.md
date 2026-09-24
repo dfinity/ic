@@ -74,11 +74,11 @@ novel.
 `C1.9` moved the handover *after* adoption: `Creating` returns to `Idle` when
 `nodes.push` succeeds, so without it nothing records which adopted archive still owes
 a handover, and `C1.10`'s retry and metric would have nothing to work from — least
-of all across an upgrade. An archive is added when it is adopted, and removed when its
-second step is confirmed or refused as unauthorized (`C1.12`) — the two ways the
+of all across an upgrade. An archive is added when it is adopted, and removed when the
+handover is confirmed or its retry refused as unauthorized (`C1.11`) — the two ways the
 ledger can know it is done.
 
-**Adoption ends the round; the handover starts on the next** (`C1.14`). This is the
+**Adoption ends the round; the handover starts on the next** (`C1.13`). This is the
 same durability point as `Created(id)`, and it is worth being precise about which trap
 it guards against, because the obvious one is not it. A trap in `update_settings`'
 *callback* cannot roll back the entry: the message that pushed it ended — and committed —
@@ -90,7 +90,7 @@ record. Ending the round at adoption (`nodes.push`, the `pending_handovers` entr
 `Creating` back to `Idle`) removes the question, at the cost of one round per archive fill.
 
 **A collection rather than one slot, because `C1.9` lets archiving continue**
-(`C1.13`). A single `Option` looks sufficient and is not: a failed handover does not
+(`C1.12`). A single `Option` looks sufficient and is not: a failed handover does not
 stop archiving, so that archive keeps filling, and when it fills the next archive is
 adopted and overwrites the slot. The first archive is then ledger-controlled forever
 with nothing recording it, and the metric clears when the *second* completes — a silent
@@ -100,12 +100,9 @@ permanent, and a `Vec` costs nothing. One retry per round, so the work stays bou
 rotates: after each attempt, success or failure, the next round takes the next entry,
 so a handover that keeps failing cannot starve the ones adopted after it.
 
-**Neither form needs to record which of the two steps is pending**, which is worth
-saying because a reader expecting a two-step journal will look for one. A retry always
-re-runs step one and then step two: step one is idempotent, and if step two has already
-committed then step one is itself the call that comes back unauthorized — which is why
-`C1.12` covers a refusal of *either* step, not only the second. So both resumption
-points converge on the same rule, and each entry is just a canister id.
+**Each entry is just a canister id.** A retry re-issues the same call; if the earlier one
+had already committed, the retry comes back unauthorized, which `C1.11` clears on. Nothing
+about progress needs recording.
 
 **Two of the three orphan windows stop being write-offs, and only `Idle` may be
 restored.** `create_and_initialize_node_canister` runs `create_canister` →
@@ -133,10 +130,9 @@ and creation costs one extra round — which is once per archive fill, so nothin
 So `C1.3` is the pre-creation case and `C1.5` the post-creation one, and the
 implementation is that distinction: return to `Idle` only where `create_canister`
 itself returned `Err`. Doing it anywhere later would hand those two windows back to
-`L4`'s backoff and defeat `C1.1`'s halt entirely. Making `update_settings` a
-bounded call (below, and the table in the ledger design) makes this sharper rather than looser — an unknown outcome there
-arrives as an `Err` on a call that may well have succeeded, and must halt for the same
-reason.
+`L4`'s backoff and defeat `C1.1`'s halt entirely. An unknown outcome of
+`update_settings` — a lost reply on a call that may well have succeeded — is resolved by
+the retry rule below, not by a timeout.
 
 ### `ledger_canister_core::runtime` — the creation and handover calls
 
@@ -144,89 +140,57 @@ The bounded/unbounded table itself is in
 [`../ledger-reconciliation/design.md`](../ledger-reconciliation/design.md); this is why
 its three management-canister rows read as they do.
 
-**The handover's last step is not queryable, and "setting the same controllers twice
-is a no-op" was wrong.** The call as written today replaces the ledger with the
-configured controllers in one shot (`archive.rs:366-372`, `:489-497`), and the
-management canister validates the caller before applying settings
-(`canister_manager.rs:690`). So once it has succeeded the ledger is no longer a
-controller: it can neither retry nor call `canister_status` to find out. An unknown
-outcome would be indistinguishable from a real failure, and `C1.8`'s adoption path
-would stall on it.
+**All three are unbounded, and that is the simpler choice rather than a concession.**
+Bounding a call buys two things: no response-memory reservation while it is in flight
+(D9), and a ledger that can be stopped within `ARCHIVE_CALL_TIMEOUT` (`L7.8`). Both
+matter for the calls a ledger makes on every round; neither is measurable for calls made
+once per archive fill that the management canister answers within a round. An earlier
+draft bounded `install_code` and the handover on the grounds that their unknown outcomes
+are resolvable — which is true — and spent a page establishing it. Being *able* to bound
+them is not a reason to. They stay on `Call::unbounded_wait`, as today, and `L7.7` says
+so.
 
-Unresolvable by *querying*, that is — which is not the same as unresolvable, and
-conflating the two is what kept this row unbounded for two revisions. `L7.5`
-forbids bounding a call whose unknown outcome the ledger has no means of resolving; it
-does not require the means to be a query. Staging supplies a different means, below,
-after which the row becomes bounded and `L7.7` in fact *requires* it to be —
-leaving it unbounded would keep exactly the upgrade-blocking callback `L7.8` exists
-to avoid, for no safety gained.
+**A handover is one call, retried until it is known to have landed.** `update_settings`
+replaces the ledger with the configured controllers (`archive.rs:366-372`, `:489-497`),
+and the management canister validates the caller before applying settings
+(`canister_manager.rs:690`) — so once it has succeeded the ledger is no longer a
+controller and can neither retry nor query. That is not the problem it looks like. A
+failure the ledger *observes* is retried on a later round while it is still a controller
+(`C1.10`). A success whose reply the ledger *lost* — a reply-buffer trap after the
+controllers changed — leaves the entry in `pending_handovers`, and the retry comes back
+unauthorized, which is proof the earlier call landed: `C1.11` treats that refusal as
+completion. Both readings of an unauthorized retry lead to the same end state, so nothing
+is read into a reject code that the state does not already imply. An earlier draft split
+this into two calls so the first could be verified by reading the controller list; the
+single call needs no verification step, because the only way it can be unauthorized is by
+having succeeded.
 
-**Unbounded would not have been sufficient either, which is why the handover is
-staged.** An
-unbounded call guarantees a *response*, not that the ledger *processes* it: the
-callback can still trap on the irreducible reply buffer, and if it does after the
-settings committed, the ledger is no longer a controller while the archive is still
-listed in `pending_handovers` — every retry unauthorized, the metric never clearing.
+**The configured set must have at most ten distinct controllers, and the list sent is
+de-duplicated.** The platform allows ten (`MAX_CONTROLLERS`,
+`management_canister_types/src/lib.rs:51`) and its Candid type bounds the *encoded*
+vector before canister state collapses duplicates (`bounded_vec.rs:111`), while
+`ArchiveOptions` builds the list from `controller_id` plus an unbounded
+`more_controller_ids` (`archive.rs:369-372`). A larger set is a misconfiguration under
+which the handover is rejected on every retry and `C1.10` never clears. Enforcing the
+bound belongs where the configuration is made — the ledger's `init` and `post_upgrade` —
+and is DEFI-3015, not part of this work (README, non-goals).
 
-So it goes in two steps (`C1.11`). First add the configured controllers while
-keeping the ledger: idempotent, and verifiable at any time by reading the archive's
-controller list, which the ledger is still a controller and so still entitled to do.
-Then replace the list with exactly the configured controllers, which removes the ledger
-— and that step cannot fail in a way that matters, because its only two outcomes are
-"still a controller, retry" and "not a controller", which is precisely the state the
-handover exists to reach.
+Ordering is the other half — **adopt the archive before handing over control**
+(`C1.9`) — so that an observed handover failure does not block archiving while it is
+retried. Adoption ends the creation's critical path, and the handover becomes a separate
+step the ledger retries on later rounds while it is still a controller (`C1.10`). A lost
+handover then leaves a fully adopted, working archive that is merely still
+ledger-controlled — recoverable, and visible on a metric — rather than an ambiguous state
+that blocks archiving.
 
-**The first step has to respect the platform's ceiling of ten controllers**
-(`MAX_CONTROLLERS`, `management_canister_types/src/lib.rs:51`). `ArchiveOptions` builds
-the target list from `controller_id` plus an unbounded `more_controller_ids`
-(`archive.rs:369-372`), so a suite configured with ten controllers is valid today — and
-adding all ten while keeping the ledger makes eleven, which the management canister
-rejects every time. The first step therefore adds as many of the configured controllers
-as fit beside the ledger — nine, in that case — and the second step, which sets the
-final list, supplies the rest. `C1.12` therefore treats an unauthorized retry as
-completion. The archive is governable by its intended controllers after step one either
-way, so nothing is at risk while step two settles — which is all that step was for.
-
-**Eleven or more is a misconfiguration, and this design assumes it cannot reach it.**
-With more than ten distinct controllers configured, the second step is rejected on every
-retry and `C1.10` never clears — an archive left ledger-controlled behind a permanent
-alarm. The handover therefore takes as a precondition that the distinct set of
-`controller_id` and `more_controller_ids` has at most ten members — and it sends that
-*de-duplicated* set, because the management canister's Candid type bounds the *encoded*
-vector at ten before canister state ever collapses duplicates (`bounded_vec.rs:111`), so
-a list with a repeated principal fails on its length even when its distinct count is
-fine. Enforcing that belongs
-where the configuration is made — the ledger's `init` and `post_upgrade` rejecting a
-larger set — and is a separate, minimal change, DEFI-3015, rather than part of this work
-(README, non-goals).
-
-**And this is what makes both steps bounded** (the table above). Step one is resolvable
-by asking: the ledger is still a controller and reads the list back. Step two is
-resolvable by *doing*: retry it, and either the ledger was still a controller and the
-retry lands, or it was not and the retry is refused as unauthorized — which `C1.12`
-treats as completion. Neither step needs to wait indefinitely for an answer it can
-obtain another way, so `L7.7` governs both.
-
-The ambiguity is therefore *dissolved* rather than interpreted. `C1.12` does read
-an unauthorized rejection as completion, which this design otherwise avoids — but it
-is not the load-bearing part: both readings of that rejection lead to the same end
-state, so the criterion only spares the ledger a retry it would lose anyway.
-
-Ordering is the other half of the fix, and it addresses a different problem —
-**adopt the archive before handing over control** (`C1.9`) — so that an observed
-handover failure does not block archiving while it is retried. Adoption ends the creation's critical path, and the handover
-becomes a separate step the ledger retries on later rounds while it is still a
-controller (`C1.10`). A lost handover then leaves a fully adopted, working archive
-that is merely still ledger-controlled — recoverable, and visible on a metric — rather
-than an ambiguous state that blocks archiving.
-
-**`install_code` is resolvable, which the earlier reasoning missed.** "`install` mode
-fails if already installed, so it cannot be retried" is true of a *blind* retry and
-false of a reconciled one. At that point the ledger is still the new canister's only
-controller — `update_settings` has not run — so it can call `canister_status` and read
-`module_hash`: absent means the install did not happen and may be retried, present and
-matching means it did. `canister_status` is itself read-only and so resolvable by
-asking again, which terminates the regress.
+**`install_code`'s unknown outcome is reconciled by asking, not by timing out.** A blind
+retry of `install` mode fails if a module is already installed; a reconciled one does
+not. At that point the ledger is still the new canister's only controller — the handover
+has not run — so it calls `canister_status` and reads `module_hash`: absent means the
+install did not happen and may be retried, present and matching means it did.
+`canister_status` is read-only and so resolvable by asking again, which terminates the
+regress. This is what `C1.8` runs after a callback trap, and it is why the call being
+unbounded costs nothing: the outcome is learned from the canister, not from the reply.
 
 **There is a third reading, and it halts.** Present but *not* matching means the canister
 carries a module this ledger did not install — reachable if the install committed, its
@@ -234,20 +198,16 @@ outcome was lost, and the ledger was upgraded to a build embedding a different a
 wasm before the next round reconciled, since `Created(id)` records only the id. The
 ledger could reinstall (it is the sole controller of an empty, unadopted canister), adopt
 what is there, or record the intended hash to recognise the case; it does none of them
-(`C1.15`). It stops archiving, exposes the id and a distinct metric, and leaves the
+(`C1.14`). It stops archiving, exposes the id and a distinct metric, and leaves the
 decision to an operator — because the state has never been seen in production, every
 automatic answer adds mechanism for a case that may never occur, and a halt with a
 readable reason is the cheapest thing that is also safe. If production ever produces it,
 that is the moment to choose.
 
-Leaving it unbounded would contradict `L7.7`, since the outcome *is* resolvable,
-and would keep a callback that can block stopping the ledger in the one path where
-that is least welcome.
-
-This shrinks the halt population rather than the safety. `C1.8` lets the ledger
-finish a creation whose identity it recorded, so the only case that still needs an
-operator is a lost `create_canister` reply — a canister that exists and cannot be
-named, which is what `C1.4` is now scoped to.
+This shrinks the halt population rather than the safety. `C1.8` lets the ledger finish a
+creation whose identity it recorded, so what still needs an operator is a lost
+`create_canister` reply — a canister that exists and cannot be named, which is what
+`C1.4` is scoped to — and the foreign module of `C1.14`.
 
 ### `ledger_canister_core::spawn`
 
@@ -287,14 +247,13 @@ attempted are in the README's **Testing** section; they span the parts.*
 | # | level | case | pins |
 |---|---|---|---|
 | 17 | integration | reuse the creation-trap harness so the `create_canister` reply is lost; assert `Creating` is `Started`, that it is exposed, and that it does not self-clear — no identity was recorded, so there is nothing to finish | `C1.1`, `C1.2`, `C1.4` |
-| 17b | integration | lose the `install_code` outcome *after* the identity was recorded; assert the ledger resolves it by asking the created canister, finishes the creation without an operator, and adopts that same canister rather than creating a second. Then repeat with the created canister carrying a module of a different hash — a ledger upgraded mid-creation — and assert the ledger halts on its own metric with the id exposed, neither reinstalling nor adopting | `C1.6`, `C1.8`, `C1.15` |
+| 17b | integration | lose the `install_code` outcome *after* the identity was recorded; assert the ledger resolves it by asking the created canister, finishes the creation without an operator, and adopts that same canister rather than creating a second. Then repeat with the created canister carrying a module of a different hash — a ledger upgraded mid-creation — and assert the ledger halts on its own metric with the id exposed, neither reinstalling nor adopting | `C1.6`, `C1.8`, `C1.14` |
 | 17d | integration | lose the `update_settings` outcome; assert the archive is already adopted and serving, that archiving continues, that the handover metric is non-zero, and that a later round retries the handover and clears it | `C1.9`, `C1.10` |
 | 17e | upgrade | decode a pre-change `Archive` state; assert it decodes and that both new fields read their defaults — `Idle` and an empty `pending_handovers` — so the journal's own release cannot be the upgrade that fails | the two `#[serde(default)]`s above |
 | 17j | integration | let the `create_canister` callback end right after recording `Created(id)`, then trap at the start of the next round before any installation work; assert `Creating` still reads `Created(id)` with the real id — not `Started` — and that the creation is finished from there without a second canister. A trap *inside* the recording callback would prove nothing, rolling the write back to `Started` as the durability paragraph explains | `C1.6`, `C1.8` |
-| 17k | integration | trap the callback of the first handover call after the controllers have changed; assert the archive is still listed in `pending_handovers` on the next round and the handover is retried and completes — the entry that a same-message push would have rolled back | `C1.14`, `C1.13` |
+| 17k | integration | trap the callback of the handover call after the controllers have changed; assert the archive is still listed in `pending_handovers` on the next round and the handover is retried and completes — the entry that a same-message push would have rolled back | `C1.13`, `C1.12` |
 | 17f | upgrade | adopt an archive whose handover has not completed, then upgrade the ledger; assert the pending handover survives and is still retried afterwards | `C1.10` |
-| 17i | integration | fail one archive's handover, keep archiving until it fills and a second archive is adopted, and assert the first is still retried and still counted — the archive a single slot would have dropped. Then keep the first failing and assert the second's handover completes on a later round — rotation, so a persistent failure starves nothing behind it | `C1.13`, `C1.10` |
-| 17g | integration | complete step one of the handover, then lose step two's outcome; assert a retry refused as unauthorized clears the state and the metric rather than retrying forever | `C1.11`, `C1.12` |
-| 17m | integration | configure exactly ten controllers — the platform maximum — and drive the handover; assert step one is accepted (nine plus the ledger), step two sets all ten, and the handover completes rather than being rejected on every retry | `C1.11` |
+| 17i | integration | fail one archive's handover, keep archiving until it fills and a second archive is adopted, and assert the first is still retried and still counted — the archive a single slot would have dropped. Then keep the first failing and assert the second's handover completes on a later round — rotation, so a persistent failure starves nothing behind it | `C1.12`, `C1.10` |
+| 17m | integration | configure exactly ten controllers — the platform maximum — and drive the handover; assert the single `update_settings` is accepted and the handover completes rather than being rejected, and that a configured list with a repeated principal is sent de-duplicated | `C1.10`, DEFI-3015's precondition |
 | 21 | measurement | ledger memory across an archive-creation round, as `routine_archiving_does_not_grow_the_ledger` does for a routine one; assert growth below a bound | D2's allocation work |
 | 25 | integration | fail `install_code` gracefully after `create_canister` succeeded; assert archiving halts, that the metric exposes the created canister's id and the id survives a ledger upgrade, and that a failure of `create_canister` itself does not halt | `C1.1`, `C1.3`, `C1.5`, `C1.6`, `C1.7` |
