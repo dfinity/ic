@@ -81,6 +81,9 @@ const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(1);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(5);
+/// Connections that close sooner than this after being established are treated like failed
+/// connection attempts, i.e. they are retried only after `CONNECT_RETRY_BACKOFF`.
+const MIN_HEALTHY_CONNECTION_LIFETIME: Duration = IDLE_TIMEOUT;
 
 // There should be least two probes before timing out a connection.
 const_assert!(KEEP_ALIVE_INTERVAL.as_nanos() < IDLE_TIMEOUT.as_nanos());
@@ -88,6 +91,8 @@ const_assert!(KEEP_ALIVE_INTERVAL.as_nanos() < IDLE_TIMEOUT.as_nanos());
 const_assert!(IDLE_TIMEOUT.as_nanos() <= CONNECT_TIMEOUT.as_nanos());
 // The waiting time before re-trying to connect should be no less than the IDLE_TIMEOUT.
 const_assert!(IDLE_TIMEOUT.as_nanos() <= CONNECT_RETRY_BACKOFF.as_nanos());
+// Connections closed because of the idle timeout should be retried immediately.
+const_assert!(MIN_HEALTHY_CONNECTION_LIFETIME.as_nanos() <= IDLE_TIMEOUT.as_nanos());
 
 /// Connection manager is responsible for making sure that
 /// there always exists a healthy connection to each peer
@@ -119,8 +124,9 @@ struct ConnectionManager {
     /// Task joinset on which incoming connection requests are spawned. This is not a JoinMap
     /// because the peerId is not available until the TLS handshake succeeded.
     inbound_connecting: JoinSet<Result<ConnectionWithPeerId, ConnectionEstablishError>>,
-    /// JoinMap that stores active connection handlers keyed by peer id.
-    active_connections: JoinMap<NodeId, ()>,
+    /// JoinMap that stores active connection handlers keyed by peer id. Each handler returns
+    /// how long its connection lived.
+    active_connections: JoinMap<NodeId, Duration>,
 
     /// Endpoint config
     endpoint: Endpoint,
@@ -333,10 +339,20 @@ impl ConnectionManager {
                 },
                 Some(active_result) = self.active_connections.join_next() => {
                     match active_result {
-                        Ok(((), peer_id)) => {
+                        Ok((lifetime, peer_id)) => {
                             self.peer_map.write().unwrap().remove(&peer_id);
                             self.metrics.peers_removed_total.inc();
-                            self.connect_queue.insert(peer_id, Duration::ZERO);
+
+                            // A connection that dies right after being established are not retried
+                            // immediately, otherwise we end up in a tight reconnect loop.
+                            let reconnect_delay = if lifetime < MIN_HEALTHY_CONNECTION_LIFETIME {
+                                self.metrics.short_lived_connections_total.inc();
+                                info!(self.log, "Connection to {:?} closed after only {:?}.", peer_id, lifetime);
+                                CONNECT_RETRY_BACKOFF
+                            } else {
+                                Duration::ZERO
+                            };
+                            self.connect_queue.insert(peer_id, reconnect_delay);
                             self.metrics.peer_map_size.dec();
                             self.metrics.closed_request_handlers_total.inc();
                         }
@@ -521,15 +537,20 @@ impl ConnectionManager {
             self.log,
             "Spawning request handler for peer : {:?}", peer_id
         );
+        let stream_acceptor = start_stream_acceptor(
+            self.log.clone(),
+            peer_id,
+            connection_handle,
+            self.metrics.clone(),
+            self.router.clone(),
+        );
+        let established_at = tokio::time::Instant::now();
         self.active_connections.spawn_on(
             peer_id,
-            start_stream_acceptor(
-                self.log.clone(),
-                peer_id,
-                connection_handle,
-                self.metrics.clone(),
-                self.router.clone(),
-            ),
+            async move {
+                stream_acceptor.await;
+                established_at.elapsed()
+            },
             &self.rt,
         );
     }
