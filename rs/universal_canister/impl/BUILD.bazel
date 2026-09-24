@@ -43,6 +43,9 @@ genrule(
         pigz = "$(location @pigz)",
     ),
     message = "Compiling universal canister with Wasmtime",
+    # The serialized module is compiled for the host CPU's features (e.g. i8mm on
+    # arm64), so it must not be shared across machines via the remote cache.
+    tags = ["no-remote-cache"],
     tools = [
         "//rs/embedders:instrument-wasm",
         "@pigz",
