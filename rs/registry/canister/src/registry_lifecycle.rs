@@ -826,7 +826,7 @@ mod test {
         use ic_registry_keys::make_catch_up_package_contents_key;
 
         // Step 1: Prepare the world: a registry with four CUP contents records — two written
-        // before `cup_type` existed (one genesis, one recovrey), and two written after (one
+        // before `cup_type` existed (one genesis, one recovery), and two written after (one
         // genesis, one recovery).
         let mut registry = invariant_compliant_registry(0);
 
