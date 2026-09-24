@@ -603,7 +603,6 @@ fn test_old_ledger_decodes_new_archive_reply_as_unit() {
     struct AppendResult {
         block_index_offset: u64,
         next_index: u64,
-        blocks_stored: u64,
         verified: bool,
         at_capacity: bool,
         outcome: AppendOutcome,
