@@ -1838,6 +1838,12 @@ fn check_custom_sections_and_code_size(
             }
         };
         match payload {
+            // Reject component model feature.
+            wasmparser::Payload::Version { encoding, .. }
+                if encoding != wasmparser::Encoding::Module =>
+            {
+                return Ok(code_section_size);
+            }
             wasmparser::Payload::CustomSection(_) => {
                 custom_sections += 1;
                 if custom_sections > MAX_RAW_CUSTOM_SECTIONS {
