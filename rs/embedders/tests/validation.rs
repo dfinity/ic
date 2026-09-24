@@ -7,8 +7,8 @@ use ic_embedders::{
     wasm_utils::{
         Complexity, WasmImportsDetails, WasmValidationDetails, validate_and_instrument_for_testing,
         validation::{
-            MAX_WASM_FUNCTION_NAME_LENGTH, MAX_WASM_FUNCTION_NUM_LOCALS, RESERVED_SYMBOLS,
-            extract_custom_section_name,
+            MAX_RAW_CUSTOM_SECTIONS, MAX_WASM_FUNCTION_NAME_LENGTH, MAX_WASM_FUNCTION_NUM_LOCALS,
+            RESERVED_SYMBOLS, extract_custom_section_name,
         },
     },
 };
@@ -936,6 +936,41 @@ fn can_reject_module_with_too_many_custom_sections() {
             allowed: 1
         })
     );
+}
+
+/// Wasm magic + version, followed by `count` custom sections encoded as
+/// `00 01 00` (section id 0, size 1, empty name, empty payload).
+fn wasm_with_empty_custom_sections(count: usize) -> BinaryEncodedWasm {
+    let mut bytes = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+    for _ in 0..count {
+        bytes.extend_from_slice(&[0x00, 0x01, 0x00]);
+    }
+    BinaryEncodedWasm::new(bytes)
+}
+
+// Empty-name sections are not `icp:` metadata, so `max_custom_sections` does
+// not apply to them. The streaming pre-check still rejects a module once the
+// raw custom-section count exceeds `MAX_RAW_CUSTOM_SECTIONS`, before Wasmtime
+// or Wirm materialize the sections.
+#[test]
+fn can_reject_module_with_too_many_raw_custom_sections() {
+    let defined = MAX_RAW_CUSTOM_SECTIONS + 1;
+    let wasm = wasm_with_empty_custom_sections(defined);
+
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::TooManyCustomSections {
+            defined,
+            allowed: MAX_RAW_CUSTOM_SECTIONS,
+        })
+    );
+}
+
+#[test]
+fn can_validate_module_with_max_raw_custom_sections() {
+    let wasm = wasm_with_empty_custom_sections(MAX_RAW_CUSTOM_SECTIONS);
+    let validation_details = validate_wasm_binary(&wasm, &EmbeddersConfig::default()).unwrap();
+    assert_eq!(validation_details.wasm_metadata, WasmMetadata::default());
 }
 
 #[test]
