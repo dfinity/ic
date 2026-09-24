@@ -78,7 +78,8 @@ mod crypto_hash_stability {
         CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, ConsensusMessage, DataPayload,
         EquivocationProof, Finalization, FinalizationContent, FinalizationShare, HashedBlock,
         HashedRandomBeacon, Notarization, NotarizationContent, NotarizationShare, Payload,
-        RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank,
+        RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank, UpgradeAuthorizationShare,
+        UpgradePermitRequest,
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
@@ -92,6 +93,7 @@ mod crypto_hash_stability {
     use crate::consensus::{RandomBeaconShare, RandomTape, RandomTapeShare};
     use crate::crypto::AlgorithmId;
     use crate::crypto::CryptoHashableTestDummy;
+    use crate::crypto::SignedBytesWithoutDomainSeparator;
     use crate::crypto::canister_threshold_sig::{
         ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
         idkg::{
@@ -449,6 +451,43 @@ mod crypto_hash_stability {
             hex::encode(hash.get_ref().0.as_slice()),
             "05ed4e7823575286d45e2f39d4b5f0bb8bb2dab4388765e0750067eb2999c09e",
             "Hash of DkgMessage changed"
+        );
+    }
+
+    /// Test stability of the signed bytes of UpgradePermitRequest
+    #[test]
+    fn upgrade_permit_request_signed_bytes_stability() {
+        let data = UpgradePermitRequest {
+            requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
+            request_height: Height::from(42),
+        };
+        let mut bytes = vec![];
+        data.write_signed_bytes_without_domain_separator(&mut bytes);
+        assert_eq!(
+            hex::encode(bytes),
+            "a269726571756573746f724a2a00000000000000fd016e726571756573745f686569676874182a",
+            "Signed bytes of UpgradePermitRequest changed"
+        );
+    }
+
+    /// Test stability of UpgradeAuthorizationShare hash output
+    #[test]
+    fn upgrade_authorization_share_stability() {
+        let data: UpgradeAuthorizationShare = Signed {
+            content: UpgradePermitRequest {
+                requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
+                request_height: Height::from(42),
+            },
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![0x42; 64])),
+                signer: NodeId::from(PrincipalId::new_node_test_id(42)),
+            },
+        };
+        let hash = crypto_hash(&data);
+        assert_eq!(
+            hex::encode(hash.get_ref().0.as_slice()),
+            "1e780154b2467bdf06efa99128aa50b5ad8db4a494a300cbe9d35b9747e85c98",
+            "Hash of UpgradeAuthorizationShare changed"
         );
     }
 
