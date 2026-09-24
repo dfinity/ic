@@ -4,10 +4,10 @@ package(default_visibility = ["//visibility:public"])
 
 rust_canister(
     name = "cloud_engine_mock_canister",
+    testonly = True,
     srcs = ["src/main.rs"],
     crate_name = "cloud_engine_mock_canister",
     service_file = "cloud_engine_mock.did",
-    testonly = True,
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
