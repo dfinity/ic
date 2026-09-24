@@ -256,7 +256,12 @@ first append whose index is right whatever the blocks actually are. That is the 
 `A1.4` documents, and it is the seat of the original corruption: a node created
 for one index, then handed blocks from a different chain state. Supplying the parent
 at creation gives the archive a tip before it has one, and makes the invariant
-plain — **the only block ever stored without a parent-hash check is genesis**.
+plain — **once every ledger supplies the hash, the only block ever stored without a
+parent-hash check is genesis**. Until then there is one other, and it is deliberate: the
+first index-less append into an empty archive given no Expected_Parent is accepted
+whatever its first block's parent (`A1.4`), because there is nothing to compare it
+against and refusing would halt every old ledger at every roll-over; `A1.6` counts it so
+the window is visible while it lasts.
 
 **What it does and does not catch.** It catches the case where creation and first
 append see *different* ledger states: the roll-over corruption, and a ledger restored

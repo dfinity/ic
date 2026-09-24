@@ -408,12 +408,16 @@ active there today. PR 1's cost — archiving *can* halt until PR 3, retrying ev
 transaction — therefore reaches all of them, each upgrading on its own schedule, so
 the window is as long as the slowest SNS takes.
 
-**"Can", because the trigger is a trap and only a trap.** A *graceful* `Err` from a
-chunk still records what landed — `remove_archived_blocks(num_sent_blocks)` runs on
-the error branch too (`ledger.rs:485-488`) — so no re-send follows and nothing
-refuses. The halt needs a round that dies *after* a successful append, which means a
-trap in the continuation, and the test plan's own note records that DEFI-2967 could
-not induce that deliberately. So the exposure is real but not routine; what makes it
+**"Can", because the trigger is a lost reply, not an ordinary failure.** A *graceful*
+`Err` that the archive itself returned records what landed — `remove_archived_blocks(num_sent_blocks)`
+runs on the error branch too (`ledger.rs:485-488`) — so no re-send follows and nothing
+refuses. What does trigger it is any way the archive can have committed a chunk without
+the ledger learning so: a trap in the continuation, or a reply that arrives but fails to
+decode — `Runtime::call` maps a decoding failure to the same `Err`, and `num_sent_blocks`
+counts a chunk only after `Ok` (`archive.rs:280-281`), so the error branch then removes
+the *earlier* chunks and re-sends the one the archive already holds. Both are rare — the
+test plan's own note records that DEFI-2967 could not induce the trap deliberately — and
+both are exactly what `A2.4`'s idempotent re-send is for. So the exposure is real but not routine; what makes it
 worth acting on is the number of suites it reaches, not its likelihood on any one.
 
 **Chunking today.** The chunk size is

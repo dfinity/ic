@@ -66,8 +66,9 @@ lost track of what it sent cannot corrupt the archive by sending them again.
    intact and the archive would be trusting exactly what it cannot verify.
 8. WHEN an archive that holds no blocks was given an Expected_Parent, THE Archive
    SHALL refuse an append whose first stored block does not carry that hash as its
-   parent, so that the only block it will ever store without checking a parent hash
-   is the genesis block.
+   parent, so that — once every ledger supplies the hash — the only block it will ever
+   store without checking a parent hash is the genesis block, the one other being the
+   index-less first append A1.4 admits meanwhile.
 9. THE Archive SHALL NOT refuse an Indexed_Append on account of a block it was never
    going to store, because a block beyond its own configured limit falls outside A1.7 and
    refusing for it would deny A4.1 the prefix it requires to be stored — an
