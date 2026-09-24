@@ -99,11 +99,6 @@ if [ -n "${BAZEL_NAMESPACE_DEADLINE:-}" ]; then
     # bazel from here, before that. At the deadline, timeout sends SIGINT to its process group:
     # bazelisk and the bazel client, not the daemonized bazel server. The client then cancels the
     # command in an orderly way, closing the BEP file and the profile.
-    # * No --foreground: bazelisk ignores the signals sent to it and relies on the bazel client
-    #   getting them too.
-    # * No --kill-after: the image's uutils timeout would only SIGKILL bazelisk, orphaning the
-    #   client, which keeps the step's output pipes open. The calling step's timeout-minutes is
-    #   the backstop instead.
     timeout_cmd=(timeout --signal=INT "$remaining")
 fi
 
