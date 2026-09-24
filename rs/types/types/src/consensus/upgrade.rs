@@ -6,7 +6,7 @@
 //!    its block when it wants to reboot. Validators check outstanding requests
 //!    against the allowed max parallel reboots.
 //!
-//! 2. **Authorize**: After the request block is finalized, nodes gossip an
+//! 2. **Authorize**: After the request block is executed, nodes gossip an
 //!    [`UpgradePermitAuthorizationShare`]. When a block maker collects enough
 //!    shares, it includes `UpgradePermitAction::AuthorizePermit` in its block.
 //!
