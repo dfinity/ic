@@ -200,11 +200,11 @@ per interval rather than work per transaction.
    the call itself returned successfully and without this the refused growth would be
    provoked again by every later transaction rather than waited out by L2.2's retry.
 11. WHILE a halt per L2.3, L3.2, L3.3, L3.7, L3.9, L4.7, L4.8 or C1.14 holds, THE Ledger
-   SHALL attempt no Archiving_Round until it is next upgraded, and SHALL re-establish the
-   halt from the first reply after that upgrade if the cause persists, because each of these
-   is learned from one reply and re-derivable from the next, so forgetting it on upgrade
-   costs one attempt — exactly the lever L4.9 grants an operator — whereas C1.1's cause
-   cannot be re-derived and so survives an upgrade per C1.4.
+   SHALL attempt no Archiving_Round until it is next upgraded, and SHALL re-establish
+   the halt from the first reply after that upgrade if the cause persists, because each
+   of these is learned from one reply and re-derivable from the next, so forgetting it
+   on upgrade costs one attempt — exactly the lever L4.9 grants an operator — whereas
+   C1.1's cause cannot be re-derived and so survives an upgrade per C1.4.
 
 ### Requirement L5: A Ledger Will Not Archive Against An Archive That Cannot Report Its Range
 
