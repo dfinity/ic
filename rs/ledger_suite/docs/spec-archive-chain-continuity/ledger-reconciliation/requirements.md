@@ -199,7 +199,7 @@ per interval rather than work per transaction.
    because
    the call itself returned successfully and without this the refused growth would be
    provoked again by every later transaction rather than waited out by L2.2's retry.
-11. WHILE a halt per L2.3, L3.2, L3.3, L3.7, L3.9, L4.7 or L4.8 holds, THE Ledger SHALL
+11. WHILE a halt per L2.3, L3.2, L3.3, L3.7, L3.9, L4.7, L4.8 or C1.15 holds, THE Ledger SHALL
    attempt no Archiving_Round until it is next upgraded, and SHALL re-establish the halt
    from the first reply after that upgrade if the cause persists, because each of these
    is learned from one reply and re-derivable from the next, so forgetting it on upgrade

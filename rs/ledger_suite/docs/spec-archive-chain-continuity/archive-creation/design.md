@@ -228,6 +228,18 @@ controller — `update_settings` has not run — so it can call `canister_status
 matching means it did. `canister_status` is itself read-only and so resolvable by
 asking again, which terminates the regress.
 
+**There is a third reading, and it halts.** Present but *not* matching means the canister
+carries a module this ledger did not install — reachable if the install committed, its
+outcome was lost, and the ledger was upgraded to a build embedding a different archive
+wasm before the next round reconciled, since `Created(id)` records only the id. The
+ledger could reinstall (it is the sole controller of an empty, unadopted canister), adopt
+what is there, or record the intended hash to recognise the case; it does none of them
+(`C1.15`). It stops archiving, exposes the id and a distinct metric, and leaves the
+decision to an operator — because the state has never been seen in production, every
+automatic answer adds mechanism for a case that may never occur, and a halt with a
+readable reason is the cheapest thing that is also safe. If production ever produces it,
+that is the moment to choose.
+
 Leaving it unbounded would contradict `L7.7`, since the outcome *is* resolvable,
 and would keep a callback that can block stopping the ledger in the one path where
 that is least welcome.
@@ -275,7 +287,7 @@ attempted are in the README's **Testing** section; they span the parts.*
 | # | level | case | pins |
 |---|---|---|---|
 | 17 | integration | reuse the creation-trap harness so the `create_canister` reply is lost; assert `Creating` is `Started`, that it is exposed, and that it does not self-clear — no identity was recorded, so there is nothing to finish | `C1.1`, `C1.2`, `C1.4` |
-| 17b | integration | lose the `install_code` outcome *after* the identity was recorded; assert the ledger resolves it by asking the created canister, finishes the creation without an operator, and adopts that same canister rather than creating a second | `C1.6`, `C1.8` |
+| 17b | integration | lose the `install_code` outcome *after* the identity was recorded; assert the ledger resolves it by asking the created canister, finishes the creation without an operator, and adopts that same canister rather than creating a second. Then repeat with the created canister carrying a module of a different hash — a ledger upgraded mid-creation — and assert the ledger halts on its own metric with the id exposed, neither reinstalling nor adopting | `C1.6`, `C1.8`, `C1.15` |
 | 17d | integration | lose the `update_settings` outcome; assert the archive is already adopted and serving, that archiving continues, that the handover metric is non-zero, and that a later round retries the handover and clears it | `C1.9`, `C1.10` |
 | 17e | upgrade | decode a pre-change `Archive` state; assert it decodes and that both new fields read their defaults — `Idle` and an empty `pending_handovers` — so the journal's own release cannot be the upgrade that fails | the two `#[serde(default)]`s above |
 | 17j | integration | let the `create_canister` callback end right after recording `Created(id)`, then trap at the start of the next round before any installation work; assert `Creating` still reads `Created(id)` with the real id — not `Started` — and that the creation is finished from there without a second canister. A trap *inside* the recording callback would prove nothing, rolling the write back to `Started` as the durability paragraph explains | `C1.6`, `C1.8` |

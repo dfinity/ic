@@ -187,7 +187,12 @@ comes first.
   of a chain tip that has moved backwards — and L3.8 and A1 require that it is
   not extended into the archives; none of them makes the restore safe. The only
   coherent rollback is the whole suite to a common point, accepting the loss after
-  it.
+  it. Halting the *ledger* as well — refusing transactions once its archives are found
+  ahead of it — would be the stronger response, and is deliberately postponed: no
+  deployment is in or near this state, and the halt on archiving with its own metric is
+  enough to find out if one ever is. The same policy governs every edge case of this
+  kind — a misattributed legacy range, a created canister carrying a foreign module: stop
+  archiving, say why on `/metrics`, and decide the rest if and when production shows it.
 - **Verifying the first append to a freshly created archive from a ledger that
   sends no index.** Such an append is unverifiable in principle: the archive has no
   last block to chain against and the call carries nothing saying where its blocks

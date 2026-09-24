@@ -380,16 +380,17 @@ handovers, belong to the creation protocol and are specified in
 
 ### Halt conditions, and how each one clears
 
-Nine conditions stop archiving, with three different recovery stories, and they are
+Ten conditions stop archiving, with three different recovery stories, and they are
 easy to conflate because they present identically — archiving stops and blocks
 accumulate. An operator's first question is which one it is, so the metrics must be
-distinct (they are, by `L2.3`, `L3.2`, `L3.3`, `L3.7`, `L3.9`, `L4.7`, `L4.8`, `L5.1` and `C1.2`) and the answer to
+distinct (they are, by `L2.3`, `L3.2`, `L3.3`, `L3.7`, `L3.9`, `L4.7`, `L4.8`, `L5.1`, `C1.2` and `C1.15`) and the answer to
 "what now" must be written down:
 
 | condition | criterion | clears |
 |---|---|---|
 | the tail reports a start above the archived prefix's end | `L3.2` | not on its own. No endpoint sets the archived prefix, so it needs an upgrade carrying a migration. Unreachable except from a wrong record |
 | an archive reports the blocks offered fall below its range | `L4.8` | operator only — once `A2.9` compares straddling appends, only a wrong record reaches this: a restore, or a suite that had already diverged. Step 0 to check it, D10 to repair it |
+| a created canister carries a module the ledger did not install | `C1.15` | operator only — reinstall, adopt or delete is theirs to choose; a state never seen in production, deliberately left without an automatic answer |
 | an archive reports a position below the archived prefix | `L3.3` | never — blocks the ledger already stopped serving are held nowhere. Recovery is whatever backup exists, not this system |
 | an archive reports a position above the ledger's own chain tip | `L3.7` | operator only. The ledger is on a chain the archive was not built from, which is the snapshot-restore non-goal; the coherent fix is restoring the whole suite to a common point, not resuming |
 | an empty archive reports `at_capacity` | `L2.3` | operator only, and cheaply: raise `node_max_memory_size_bytes` above the block that did not fit. Halting is what stops it creating a canister per transaction meanwhile |
@@ -398,7 +399,7 @@ distinct (they are, by `L2.3`, `L3.2`, `L3.3`, `L3.7`, `L3.9`, `L4.7`, `L4.8`, `
 | any archive reports an offset other than its recorded start | `L3.9` | operator only — an offset is immutable, so the record or the canister identity is wrong, and either needs a person |
 | an archive creation was begun and never accounted for | `C1.1` | operator only, explicitly not itself (`C1.4`), because a canister may exist that nothing will address |
 
-Two things follow for the implementation. The eight non-clearing halts must be
+Two things follow for the implementation. The nine non-clearing halts must be
 distinguishable from the backoff of `L4.1` — a ledger that is *waiting* and one
 that has *stopped* look the same from block accumulation alone. And `L5.1` is the
 only one whose state may be derived from a cache, since it is the only one expected to
@@ -413,8 +414,8 @@ could not re-derive the refusal and would send again. So the round that learns o
     halted: Option<Halt>,
 
     enum Halt { OversizedBlock, StartAhead, PositionShort, PositionAhead,
-                StartMoved, Refused(RefusedGround), BelowRange }
-    // L2.3, L3.2, L3.3, L3.7, L3.9, L4.7, L4.8 respectively
+                StartMoved, Refused(RefusedGround), BelowRange, ForeignModule(CanisterId) }
+    // L2.3, L3.2, L3.3, L3.7, L3.9, L4.7, L4.8, C1.15 respectively
 
 which `blocks_to_archive` reads before the guard, and which is the source for each halt's
 metric. It is **skipped, not persisted**, and that is a decision rather than an
@@ -577,7 +578,7 @@ above are therefore wrong as listed:
 |---|---|
 | backing off (`L4.1`) | **yes** — a wait; time clears it |
 | `Started`, no identity (`C1.1`) | **yes** — only an operator clears it |
-| coverage halts (`L3.2`, `L3.3`, `L3.7`, `L3.9`) and the below-range halt (`L4.8`) | **yes** — only an operator clears them |
+| coverage halts (`L3.2`, `L3.3`, `L3.7`, `L3.9`), the below-range halt (`L4.8`) and the foreign-module halt (`C1.15`) | **yes** — only an operator clears them |
 | `L2.3` | **yes** — only an operator clears it |
 | `Created(id)` (`C1.8`) | **no** — the round must finish the creation |
 | capability halt (`L5.1`) | **no** — the round must issue the probe |

@@ -93,3 +93,10 @@ unaddressable canister does not become a series of them.
    wrote the entry, so a trap between the write and that await — encoding the call is
    enough — discards the entry while nothing was sent, and doing the write in a round of
    its own removes that window at the cost of one round.
+15. WHEN a canister THE Ledger created carries a module it did not install — one whose
+   hash matches neither an absent install nor the archive THE Ledger embeds — THE Ledger
+   SHALL make no further archiving attempt and SHALL expose a distinct non-zero metric
+   together with the recorded identity, rather than reinstalling, adopting or deleting
+   it, because that state is reachable only through a ledger upgrade between a lost
+   install and its reconciliation, has never been seen in production, and is left to an
+   operator until it is.
