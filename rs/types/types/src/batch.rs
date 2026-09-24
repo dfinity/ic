@@ -265,7 +265,7 @@ impl BlockmakerMetrics {
     }
 }
 
-/// Given an iterator of [`Message`]s, this function will deserialize the messages
+/// Given an iterator of [`Message`]s, this function will serialize the messages
 /// into a byte vector.
 ///
 /// The function is given a `max_size` limit, and guarantees that the buffer will be

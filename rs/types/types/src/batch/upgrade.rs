@@ -2,10 +2,10 @@ use ic_base_types::NumBytes;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use pb::upgrade_permit_action::Action;
-use prost::Message as _;
 use std::collections::BTreeMap;
 
-use crate::consensus::UpgradePermitAuthorizationRequest;
+use super::{iterator_to_bytes, slice_to_messages};
+use crate::consensus::UpgradePermitRequest;
 use crate::consensus::upgrade::UpgradePermitAction;
 use crate::crypto::Signed;
 use crate::signature::{BasicSignature, BasicSignatureBatch};
@@ -23,30 +23,19 @@ impl UpgradePayload {
     /// payload fits into the `byte_limit`. Smaller actions after a dropped
     /// action can still be included.
     pub fn serialize_with_limit(&self, byte_limit: NumBytes) -> Vec<u8> {
-        let mut proto = pb::UpgradePayload::default();
-        let mut remaining = byte_limit.get() as usize;
-        for action in &self.actions {
-            let entry = pb::UpgradePermitAction::from(action);
-            // One repeated field entry: the key, the varint length, and the
-            // message bytes.
-            let len = entry.encoded_len();
-            let entry_len = 1 + prost::length_delimiter_len(len) + len;
-            if entry_len > remaining {
-                continue;
-            }
-            remaining -= entry_len;
-            proto.actions.push(entry);
-        }
-        proto.encode_to_vec()
+        iterator_to_bytes(
+            self.actions.iter().map(pb::UpgradePermitAction::from),
+            byte_limit,
+        )
     }
 
     /// Deserializes an [`UpgradePayload`]. An empty byte slice yields an empty
     /// payload.
     pub fn deserialize(data: &[u8]) -> Result<Self, ProxyDecodeError> {
-        let proto = pb::UpgradePayload::decode(data).map_err(ProxyDecodeError::DecodeError)?;
+        let messages: Vec<pb::UpgradePermitAction> =
+            slice_to_messages(data).map_err(ProxyDecodeError::DecodeError)?;
         Ok(Self {
-            actions: proto
-                .actions
+            actions: messages
                 .into_iter()
                 .map(UpgradePermitAction::try_from)
                 .collect::<Result<_, _>>()?,
@@ -59,14 +48,12 @@ impl From<&UpgradePermitAction> for pb::UpgradePermitAction {
         let proto_action = match action {
             UpgradePermitAction::RequestPermit(request) => {
                 Action::RequestPermit(pb::RequestUpgradePermit {
-                    request: Some(pb::UpgradePermitAuthorizationRequest::from(request)),
+                    request: Some(pb::UpgradePermitRequest::from(request)),
                 })
             }
             UpgradePermitAction::AuthorizePermit(authorization) => {
                 Action::AuthorizePermit(pb::AuthorizeUpgradePermit {
-                    request: Some(pb::UpgradePermitAuthorizationRequest::from(
-                        &authorization.content,
-                    )),
+                    request: Some(pb::UpgradePermitRequest::from(&authorization.content)),
                     signatures: authorization
                         .signature
                         .signatures_map
@@ -121,10 +108,10 @@ impl TryFrom<pb::UpgradePermitAction> for UpgradePermitAction {
 /// [`BasicSignatureBatch`], rejecting duplicate signers.
 fn signature_batch(
     signatures: Vec<pb::BasicSignature>,
-) -> Result<BasicSignatureBatch<UpgradePermitAuthorizationRequest>, ProxyDecodeError> {
+) -> Result<BasicSignatureBatch<UpgradePermitRequest>, ProxyDecodeError> {
     let mut signatures_map = BTreeMap::new();
     for signature in signatures {
-        let signature: BasicSignature<UpgradePermitAuthorizationRequest> = signature.try_into()?;
+        let signature: BasicSignature<UpgradePermitRequest> = signature.try_into()?;
         if let Some(previous) = signatures_map.insert(signature.signer, signature.signature) {
             // Unwrap is fine, entry has just been inserted
             let new = signatures_map.get(&signature.signer).unwrap();
@@ -159,12 +146,10 @@ mod tests {
     #[test]
     fn test_round_trip_request() {
         round_trip(UpgradePayload {
-            actions: vec![UpgradePermitAction::RequestPermit(
-                UpgradePermitAuthorizationRequest {
-                    requestor: node(3),
-                    request_height: Height::new(42),
-                },
-            )],
+            actions: vec![UpgradePermitAction::RequestPermit(UpgradePermitRequest {
+                requestor: node(3),
+                request_height: Height::new(42),
+            })],
         });
     }
 
@@ -172,7 +157,7 @@ mod tests {
     fn test_round_trip_authorize() {
         round_trip(UpgradePayload {
             actions: vec![UpgradePermitAction::AuthorizePermit(Signed {
-                content: UpgradePermitAuthorizationRequest {
+                content: UpgradePermitRequest {
                     requestor: node(5),
                     request_height: Height::new(3),
                 },
@@ -211,7 +196,7 @@ mod tests {
         let payload = UpgradePayload {
             actions: vec![
                 UpgradePermitAction::AuthorizePermit(Signed {
-                    content: UpgradePermitAuthorizationRequest {
+                    content: UpgradePermitRequest {
                         requestor: node(1),
                         request_height: Height::new(4),
                     },
@@ -242,12 +227,12 @@ mod tests {
     fn test_round_trip_multiple_actions() {
         round_trip(UpgradePayload {
             actions: vec![
-                UpgradePermitAction::RequestPermit(UpgradePermitAuthorizationRequest {
+                UpgradePermitAction::RequestPermit(UpgradePermitRequest {
                     requestor: node(1),
                     request_height: Height::new(10),
                 }),
                 UpgradePermitAction::AuthorizePermit(Signed {
-                    content: UpgradePermitAuthorizationRequest {
+                    content: UpgradePermitRequest {
                         requestor: node(2),
                         request_height: Height::new(4),
                     },

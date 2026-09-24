@@ -78,8 +78,8 @@ mod crypto_hash_stability {
         CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, ConsensusMessage, DataPayload,
         EquivocationProof, Finalization, FinalizationContent, FinalizationShare, HashedBlock,
         HashedRandomBeacon, Notarization, NotarizationContent, NotarizationShare, Payload,
-        RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank,
-        UpgradePermitAuthorizationRequest, UpgradePermitAuthorizationShare,
+        RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank, UpgradeAuthorizationShare,
+        UpgradePermitRequest,
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
@@ -454,10 +454,10 @@ mod crypto_hash_stability {
         );
     }
 
-    /// Test stability of the signed bytes of UpgradePermitAuthorizationRequest
+    /// Test stability of the signed bytes of UpgradePermitRequest
     #[test]
-    fn upgrade_permit_authorization_request_signed_bytes_stability() {
-        let data = UpgradePermitAuthorizationRequest {
+    fn upgrade_permit_request_signed_bytes_stability() {
+        let data = UpgradePermitRequest {
             requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
             request_height: Height::from(42),
         };
@@ -466,15 +466,15 @@ mod crypto_hash_stability {
         assert_eq!(
             hex::encode(bytes),
             "a269726571756573746f724a2a00000000000000fd016e726571756573745f686569676874182a",
-            "Signed bytes of UpgradePermitAuthorizationRequest changed"
+            "Signed bytes of UpgradePermitRequest changed"
         );
     }
 
-    /// Test stability of UpgradePermitAuthorizationShare hash output
+    /// Test stability of UpgradeAuthorizationShare hash output
     #[test]
-    fn upgrade_permit_authorization_share_stability() {
-        let data: UpgradePermitAuthorizationShare = Signed {
-            content: UpgradePermitAuthorizationRequest {
+    fn upgrade_authorization_share_stability() {
+        let data: UpgradeAuthorizationShare = Signed {
+            content: UpgradePermitRequest {
                 requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
                 request_height: Height::from(42),
             },
@@ -486,8 +486,8 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "c8468fda9b05e8d21600642039b055bc97fc86226395b84f36ac351c00451bec",
-            "Hash of UpgradePermitAuthorizationShare changed"
+            "1e780154b2467bdf06efa99128aa50b5ad8db4a494a300cbe9d35b9747e85c98",
+            "Hash of UpgradeAuthorizationShare changed"
         );
     }
 

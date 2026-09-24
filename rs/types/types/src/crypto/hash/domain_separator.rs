@@ -16,8 +16,8 @@ pub enum DomainSeparator {
     BlockMetadata,
     BlockMetadataProposal,
     EquivocationProof,
-    UpgradePermitAuthorizationRequest,
-    UpgradePermitAuthorizationShare,
+    UpgradePermitRequest,
+    UpgradeAuthorizationShare,
     InmemoryPayload,
     RandomBeaconContent,
     RandomBeacon,
@@ -82,12 +82,8 @@ impl DomainSeparator {
             DomainSeparator::BlockMetadata => "block_metadata_domain",
             DomainSeparator::BlockMetadataProposal => "block_metadata_proposal_domain",
             DomainSeparator::EquivocationProof => "equivocation_proof_domain",
-            DomainSeparator::UpgradePermitAuthorizationRequest => {
-                "upgrade_permit_authorization_request_domain"
-            }
-            DomainSeparator::UpgradePermitAuthorizationShare => {
-                "upgrade_permit_authorization_share_domain"
-            }
+            DomainSeparator::UpgradePermitRequest => "upgrade_permit_request_domain",
+            DomainSeparator::UpgradeAuthorizationShare => "upgrade_authorization_share_domain",
             DomainSeparator::InmemoryPayload => "inmemory_payload_domain",
             DomainSeparator::RandomBeaconContent => "random_beacon_content_domain",
             DomainSeparator::RandomBeacon => "random_beacon_domain",
@@ -202,13 +198,10 @@ fn domain_separators_are_stable() {
         ("BlockMetadata", "block_metadata_domain"),
         ("BlockMetadataProposal", "block_metadata_proposal_domain"),
         ("EquivocationProof", "equivocation_proof_domain"),
+        ("UpgradePermitRequest", "upgrade_permit_request_domain"),
         (
-            "UpgradePermitAuthorizationRequest",
-            "upgrade_permit_authorization_request_domain",
-        ),
-        (
-            "UpgradePermitAuthorizationShare",
-            "upgrade_permit_authorization_share_domain",
+            "UpgradeAuthorizationShare",
+            "upgrade_authorization_share_domain",
         ),
         ("InmemoryPayload", "inmemory_payload_domain"),
         ("RandomBeaconContent", "random_beacon_content_domain"),

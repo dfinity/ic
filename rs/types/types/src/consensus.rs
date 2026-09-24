@@ -34,7 +34,7 @@ mod payload;
 pub mod thunk;
 pub mod upgrade;
 
-pub use upgrade::{UpgradePermitAuthorizationRequest, UpgradePermitAuthorizationShare};
+pub use upgrade::{UpgradeAuthorizationShare, UpgradePermitRequest};
 
 pub use catchup::*;
 use hashed::Hashed;
