@@ -547,7 +547,14 @@ has to equal one past the published end. On an ICRC archive the count is the
 `log_length` that `icrc3_get_blocks` returns (`icrc1/archive/src/main.rs:385-387`); on an
 ICP archive it is `archive_node_blocks` (`icp/archive/src/main.rs:414`), that archive
 having no `icrc3_get_blocks`. An archive holding more than its published range is the
-latent divergence, and D10 is the repair. Only the two checks together gate Step 5.
+latent divergence — and note that D10 does *not* repair it. D10 rewrites a constant
+offset error; a duplicate suffix is repeated content after a correct prefix, which no
+offset rewrite removes, and an indexed append would still collide with it. Removing it
+means truncating the archive's log or replacing the archive, both of which are
+operator-computed interventions that this specification deliberately leaves unspecified
+until a suite is actually found in that state. So if this check finds such a suffix,
+Step 5 stays blocked until an operator has dealt with it, and only the two checks passing
+together gate Step 5.
 
 **PR 1 — archive.** `append_blocks`'s new argument and result, placement, the clamp,
 the chain check on the first stored block, capacity reporting, the counters, and the
