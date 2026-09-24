@@ -189,8 +189,8 @@ at `archive.rs:280`). That succeeds for the same reason as above: `done()` loops
 is `types.is_empty()` (`de.rs:118-120`) — the declared-type list, not the byte
 position — so the one surplus `opt` is consumed before the trailing-bytes check runs. No
 raw-reply entry point is needed, and the shape `Req 5.1` calls "empty" is exactly this
-`None`. It is asserted as a pure Candid unit test (row 10b) rather than trusted, since
-everything about releasing the archive first depends on it.
+`None`. It is asserted as a pure Candid unit test — row 10b, already written — rather than
+trusted, since everything about releasing the archive first depends on it.
 
 **Every SNS ledger suite runs this archive, with archiving on.** `ic-icrc1-archive`
 is not ckBTC and ckDOGE's alone: `sns/init/src/lib.rs:604-616` installs it for every
@@ -1285,7 +1285,7 @@ test is baseline-independent.
 | 9b | archive | install with no Expected_Parent, append into it, and assert it is stored and the unverifiable-first-append counter rises | `Req 1.4`, `Req 1.6` |
 | 9c | archive | install with an Expected_Parent, then append a first batch whose first block carries a different parent; assert refusal and that nothing is stored. Then append one that matches and assert it is stored and the counter in 1.6 does *not* rise | `Req 1.8`, `Req 1.6` |
 | 10 | archive | **written, and retired by PR 1**: `test_append_blocks_ignores_an_extra_optional_start_index` — the current one-argument archive stores the blocks, ignores the extra argument, and its empty reply reads as absent; a wrong-typed payload is rejected as a negative control. Its `Decode!(.., Option<u64>)` stops describing the archive the moment the new implementation returns `opt append_result` (`Req 3.1`), so row 11 replaces it rather than extending it. The ICP twin in row 12 stays valid indefinitely, which is why only that one is a release gate | the rollout premise, pre-PR-1 only |
-| 10b | unit, candid | encode a reply of `(None::<append_result>,)` and decode it as `()` the way the old ledger's `candid_tuple::<()>()` does; assert success — the surplus absent `opt` is consumed as `Reserved` by `done()`, and this is the premise that lets the archive ship before the ledger | `Req 5.1`; a **release gate** |
+| 10b | unit, candid | **written**: `test_old_ledger_decodes_new_archive_reply_as_unit` (`icrc1/archive/tests/tests.rs`) — encodes `(None::<append_result>,)` and decodes it as `()` the way the old ledger's `candid_tuple::<()>()` does; asserts success, and that undeclared trailing bytes still fail, so the surplus absent `opt` really is being consumed as `Reserved` by `done()`. This is the premise that lets the archive ship before the ledger | `Req 5.1`; a **release gate** |
 | 11 | archive | against the new implementation: one argument only; assert blocks stored, empty reply, and that a chain mismatch traps rather than returning a refusal | `Req 5.1`, `5.2`, `5.3`, `5.4` |
 | 12 | archive | **written**: `should_ignore_an_extra_optional_start_index` (`icp/archive/tests/tests.rs`) — the ICP archive's hand-rolled decode tolerates the extra argument, capacity drops by the block size, and the empty reply reads as absent | D3's tolerance; a **release gate** |
 | 13 | archive | on indexed appends, assert each counter in `Req 6.1` moves for its own cause and is readable afterwards; then drive the same refusals index-less and assert the call fails and no counter moved — the trap that keeps them uncountable | `Req 6.1`, `6.2`, `6.3`, `6.4`, `Req 5.2` |

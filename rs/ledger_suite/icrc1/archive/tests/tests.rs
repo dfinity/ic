@@ -247,10 +247,12 @@ fn test_append_blocks_ignores_an_extra_optional_start_index() {
         "the block should have been stored even though the extra argument was ignored"
     );
 
-    // The other direction, which is what an archive-only release depends on: a
-    // caller that expects `opt append_result` must read this archive's empty
-    // reply as `null` rather than as a decode failure. Asserted here so that a
-    // candid upgrade which changed it would fail visibly.
+    // The mixed-fleet direction: a caller that expects `opt append_result`
+    // must read this old archive's empty reply as `null` rather than as a
+    // decode failure. The direction an archive-only release depends on — an
+    // old ledger reading the new archive's `None` as `()` — is a pure Candid
+    // property and is asserted separately in
+    // `test_old_ledger_decodes_new_archive_reply_as_unit`.
     assert_eq!(
         Decode!(&reply.bytes(), Option<u64>)
             .expect("an empty reply must decode as a missing trailing optional"),
@@ -563,4 +565,42 @@ fn test_icrc3_supported_block_types() {
     let setup = Setup::default();
 
     check_icrc3_supported_block_types(&setup.state_machine, setup.archive_id, true);
+}
+
+/// The premise of releasing the archive before the ledger: the new archive is a
+/// typed entry point returning `opt append_result`, so an index-less call gets
+/// `None` — which on the wire is one *present* value, an absent `opt`, not an
+/// empty tuple. The old ledger decodes the reply as `()` via
+/// `candid_tuple::<()>()`, and Candid's `done()` consumes surplus declared
+/// values as `Reserved` before checking for trailing bytes, so that succeeds.
+/// This test pins that behaviour at the Candid level, independently of either
+/// canister, so that a candid upgrade which changed it would fail visibly.
+#[test]
+fn test_old_ledger_decodes_new_archive_reply_as_unit() {
+    /// A stand-in with the shape the design gives `append_result`; only the
+    /// encoding side matters here, and only for the `None` case.
+    #[derive(candid::CandidType)]
+    struct AppendResult {
+        block_index_offset: u64,
+        next_index: u64,
+        blocks_stored: u64,
+        verified: bool,
+        at_capacity: bool,
+    }
+
+    let reply = Encode!(&None::<AppendResult>).unwrap();
+
+    // What the old ledger does with it.
+    candid::decode_args::<()>(&reply)
+        .expect("an old ledger decoding `()` must accept a reply carrying one absent optional");
+
+    // Negative control: the same decoder does reject a reply with trailing
+    // bytes that are not declared values, so the assertion above is not
+    // passing because `decode_args::<()>` accepts anything.
+    let mut garbage = reply.clone();
+    garbage.extend_from_slice(&[0xff, 0xff]);
+    assert!(
+        candid::decode_args::<()>(&garbage).is_err(),
+        "undeclared trailing bytes must still be a decode failure"
+    );
 }
