@@ -345,6 +345,17 @@ after the upgrade, before any block moves. The length check and the start check 
 guard in two places: the first for the state that has no consistent reading at all, the
 second for the one that has a wrong one.
 
+**Neither repairs what such a suite already publishes, and neither is meant to.** In the
+misattributed state `archives()` has been pairing the filled node's range with the empty
+node since before any of this work — the halt stops the ledger *adding* to that, it does
+not undo it. That is an already-diverged suite, which the README's first non-goal puts
+out of scope, and it is what Step 0 exists to find before archiving is re-enabled: its
+extent check compares each archive's own block count with the range published for it,
+and an empty node published as holding a range fails it on sight. Repair is D10's
+deliberate, operator-computed path. Making the upgrade itself refuse the state would be
+the stronger answer, at the cost of a ledger that cannot be upgraded until an operator
+has intervened; this design does not take it.
+
 A published range is inclusive of both ends, so an empty archive has no pair of indices
 that could describe it — the ledger's published view and its internal record are the
 same data, which is why `L3.5` has to be about the *source* of that data rather than
