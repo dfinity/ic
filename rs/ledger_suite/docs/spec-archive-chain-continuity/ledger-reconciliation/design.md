@@ -308,33 +308,28 @@ the reply's `block_index_offset` and `next_index`**, and a reply with the two eq
 describes an archive holding nothing. The batch length plays no part, and the `chunk_len`
 arithmetic goes with the loops it belonged to.
 
-**And "absent" cannot mean a missing element, because of how the ranges are stored.**
+**"Absent" means what it means today: no entry yet for the trailing node.**
 `Archive::index()` zips `nodes_block_ranges` with `nodes` (`archive.rs:191-196`), so the
-two vectors are aligned only by the implicit rule that at most the *last* node may lack
-an entry. That holds today by accident of the loops, and an empty archive that is not
-the last node — or any future path that creates one — would pair a later node's range
-with the empty node's canister id and corrupt both `archives()` and block routing. So the
-state gains `node_ranges`, one `NodeRange { offset, next_index }` per node, aligned with
-`nodes` by construction: an empty archive is `next_index == offset`, published ranges
-are derived by skipping those (`L1.6`) and taking `next_index - 1` for the inclusive
-end, and the per-node `offset` is the recorded start `L3.9` compares against — which
-the ledger otherwise never records (README, Constraints). It is `#[serde(default)]` so that pre-change state *decodes* — but a derived default can
-only supply an empty vector, not read `nodes_block_ranges`, so the conversion is an
-explicit step in `post_upgrade`, run once when `node_ranges` is empty and `nodes` is not:
-each legacy inclusive pair `(start, end)` becomes `(start, end + 1)` — **and padded**, because a valid legacy state can have one more node
-than pair: the current creation path pushes the node before the `remaining_capacity`
-call (`archive.rs:507-514`) while a pair appears only after the first successful append
-(`archive.rs:285-310`), so an upgrade can land between the two. **Every** trailing node
-without a pair — there can be several, since an oversized first block makes
-`take_prefix` return nothing and the next attempt then finds that empty node too small
-and creates another (`archive.rs:255-258`, `:507-514`, `:547-565`) — gets an empty record
-at the preceding record's `next_index` (zero if it is the first node), which is exactly
-the state a freshly created archive is in, so `node_ranges` always has one record per
-node.
-`nodes_block_ranges` keeps being *written* for one release after this lands, so that a
-rollback to the previous ledger still finds its ranges, and is dropped in the release
-after; until then `archives()` is served from `node_ranges` and the legacy field is
-write-only.
+two are aligned only if at most the *last* node lacks an entry — and that invariant is
+not an accident to be engineered around but a consequence of this design's own rules. A
+node in the middle could be empty only if the ledger rolled over *from* an empty tail,
+and both roll-over paths halt on an empty tail instead: `at_capacity` from an empty
+archive is `L2.3`, and so is a cold-start pre-check that finds an empty tail too small.
+So the representation stays as it is; the entry for a node is inserted when its first
+reply shows `next_index > block_index_offset`, as `(offset, next_index - 1)`, and the
+recorded start `L3.9` compares against is that entry's start — or, for the entry-less
+tail, one past the previous entry's end (zero for a first node), which is also the offset
+`L1.1` derived for it.
+
+The one legacy state that breaks the invariant is detected rather than migrated. Today's
+code can leave *several* trailing nodes without an entry: an oversized first block makes
+`take_prefix` return nothing, the next attempt finds that empty node too small and
+creates another (`archive.rs:255-258`, `:507-514`, `:547-565`). Filling the last of them
+would put its entry at the wrong position. So `post_upgrade` checks `nodes.len()` against
+`nodes_block_ranges.len()`, and more than one node without an entry halts as `L3.9`'s
+start check — the recorded start of the second such node is undefined, which is a
+difference — with the metric that goes with it. That state needs an operator regardless:
+it has never occurred on a mainnet suite, and the empty canisters in it are junk.
 
 A published range is inclusive of both ends, so an empty archive has no pair of indices
 that could describe it — the ledger's published view and its internal record are the
@@ -351,17 +346,11 @@ about which field it is read from.
 losing it is not a hazard: a cold start falls back to the pre-call, which is the same
 value computed the expensive way.
 
-The one persisted field on this side is the per-node range record that
-`send_blocks_to_archive` above reconciles into, aligned with `nodes` by construction and
-populated from the legacy pairs by an explicit `post_upgrade` step, not by the default
-(see that section for the conversion and its padding):
-
-    #[serde(default)]                                      // filled from the legacy pairs on first upgrade
-    node_ranges: Vec<NodeRange>,                           // one per node, aligned with `nodes`
-    struct NodeRange { offset: u64, next_index: u64 }      // empty archive: next_index == offset
-
-The other persisted fields — the creation journal and the pending handovers — belong to
-the creation protocol and are specified in
+No persisted field is added on this side. `nodes_block_ranges` stays as it is, with its
+entries derived from archive replies rather than batch lengths and its one invariant —
+at most the trailing node lacks an entry — stated and guarded in `send_blocks_to_archive`
+above. The persisted fields that *are* added, the creation journal and the pending
+handovers, belong to the creation protocol and are specified in
 [`../archive-creation/design.md`](../archive-creation/design.md).
 
 ### Halt conditions, and how each one clears
@@ -637,5 +626,5 @@ attempted are in the README's **Testing** section; they span the parts.*
 | 29 | integration | after each round, assert every index the ledger served before it is still retrievable, and that the ledger stopped serving only indices some archive reports covering — the headline safety property, which rows 14 and 15 approach only from their failure sides | `L3.1`, `L3.4` |
 | 30 | integration | drive a round that must roll over; assert exactly one archive is created, and that a round which both fills the tail and has blocks left over does not create two | `L6.2` |
 | 31 | integration | assert the capability probe stores nothing and consumes no capacity against a live archive, that a second round against an archive that already answered issues no further probe, and that a round which does probe sends at most one empty append | `L5.3`, `L5.4`, `L6.1` |
-| 31b | unit, `ledger_canister_core` | send the capability probe to a freshly created archive and take its reply with `next_index == block_index_offset`; assert its `NodeRange` reads empty, `archives()` omits it, and nothing underflows — the `chunk_len - 1` arithmetic the probe would have hit | `L1.6`, `A3.5` |
-| 31c | upgrade | decode a pre-change `Archive` with three inclusive legacy ranges and run `post_upgrade`; assert `node_ranges` is filled one per node as `(start, end + 1)`, `archives()` is unchanged, and — with one node's range then set empty — every other node still pairs with its own canister id, which the zipped representation could not guarantee. Repeat with a fourth and a fifth node that have no legacy pair — created, never appended to, as an oversized first block produces — and assert each is padded with an empty record at the third's `next_index` and omitted from `archives()`, so that `node_ranges` has exactly one record per node | `L1.2`, `L1.6`, `L3.9` |
+| 31b | unit, `ledger_canister_core` | send the capability probe to a freshly created archive and take its reply with `next_index == block_index_offset`; assert no entry is inserted for it, `archives()` omits it, and nothing underflows — the `chunk_len - 1` arithmetic the probe would have hit | `L1.6`, `A3.5` |
+| 31c | upgrade | decode a pre-change `Archive` whose last node has no entry yet and run `post_upgrade`; assert nothing halts and the node's first stored reply inserts its entry at the right position. Then decode one with *two* trailing nodes lacking entries — the oversized-block loop's leftovers — and assert `post_upgrade` halts on `L3.9`'s metric rather than letting the next store misalign every later range | `L3.9`, `L1.2`, `L1.6` |

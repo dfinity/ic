@@ -47,9 +47,12 @@ range; inverting the order would turn a gap into a wrapped `k` and an append at 
 wrong offset, which is silent rather than loud. `skip` rather than `blocks[k..]`
 makes the clamp structural.
 
-### D5 — An indexed append never refuses by trapping
+### D5 — An indexed append never refuses *on protocol grounds* by trapping
 
-Serves `A6.1`, `A6.2`. Forced by the README's constraint that a trap discards its
+Serves `A6.1`, `A6.2`. This is about the refusals the archive *decides* — chain,
+placement, decoding, its own capacity limit — not about the storage refusals that
+terminate its execution before it can decide anything, which `A4.5` excludes and the
+README's constraints describe. Forced by the constraint that a trap discards its
 counter: the chain mismatch is the condition an operator most needs to see, being an
 invariant violation rather than an expected outcome, so it is exactly the wrong thing
 to make invisible. The cost is that atomicity becomes ordering-plus-test rather than
