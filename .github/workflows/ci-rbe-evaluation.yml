@@ -171,8 +171,9 @@ jobs:
         # forwarded like the credentials above; the "Prepare the Bazel repository cache"
         # step checks it and the other repository-cache steps are skipped when it is unset.
         NSC_CACHE_PATH: ${{ env.NSC_CACHE_PATH }}
-    # At least the steps' timeout-minutes (35 + 20 + 100 + 130) plus setup: a job timeout
-    # cancels the job, which skips the uploads of the bazel-namespace action.
+    # A job timeout cancels the job, skipping the uploads of the bazel-namespace action, so this
+    # exceeds the steps' timeout-minutes (35 + 20 + 100 + 130 = 285) plus all other steps (setup,
+    # uploads and reports take under a minute together).
     timeout-minutes: 300
     steps:
       - uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0
