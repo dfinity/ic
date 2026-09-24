@@ -6,6 +6,15 @@ pub struct ChangelogEntry {
     /// The default, an empty list, is *invalid* here.
     #[prost(message, repeated, tag = "1")]
     pub key_mutations: ::prost::alloc::vec::Vec<KeyMutation>,
+    /// The time at which the registry canister applied this mutation, in
+    /// nanoseconds since UNIX EPOCH.
+    ///
+    /// This is replicated NNS state (it is part of the certified changelog), so
+    /// every node observes the same value for a given registry version. Entries
+    /// written before this field was introduced decode as 0, which callers must
+    /// treat as "created long ago".
+    #[prost(uint64, tag = "2")]
+    pub timestamp_nanoseconds: u64,
 }
 /// A mutation of a single key.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]

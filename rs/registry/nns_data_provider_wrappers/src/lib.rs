@@ -1,4 +1,4 @@
-use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord};
+use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord, RegistryUpdates};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
     RegistryVersion, crypto::threshold_sig::ThresholdSigPublicKey,
@@ -76,11 +76,13 @@ impl CertifiedNnsDataProvider {
     }
 }
 
-impl RegistryDataProvider for CertifiedNnsDataProvider {
-    fn get_updates_since(
+impl CertifiedNnsDataProvider {
+    /// Fetches the certified delta since `version`, together with the times at
+    /// which the registry canister applied the covered versions.
+    fn fetch_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
+    ) -> Result<RegistryUpdates, RegistryDataProviderError> {
         let rt_handle = self.rt_handle.clone();
         let registry_canister = self.registry_canister.clone();
         let nns_public_key = self.nns_public_key.clone();
@@ -96,5 +98,21 @@ impl RegistryDataProvider for CertifiedNnsDataProvider {
                     })
             })
         })
+    }
+}
+
+impl RegistryDataProvider for CertifiedNnsDataProvider {
+    fn get_updates_since(
+        &self,
+        version: RegistryVersion,
+    ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
+        Ok(self.fetch_updates_since(version)?.records)
+    }
+
+    fn get_updates_since_with_timestamps(
+        &self,
+        version: RegistryVersion,
+    ) -> Result<RegistryUpdates, RegistryDataProviderError> {
+        self.fetch_updates_since(version)
     }
 }

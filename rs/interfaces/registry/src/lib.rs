@@ -4,7 +4,7 @@ use ic_types::{
 };
 pub use prost::Message as RegistryValue;
 use serde::{Deserialize, Serialize};
-use std::{cmp::Eq, fmt::Debug, hash::Hash, time::Duration};
+use std::{cmp::Eq, collections::BTreeMap, fmt::Debug, hash::Hash, time::Duration};
 
 /// The registry at version `0` is the empty registry.
 pub const ZERO_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(0);
@@ -160,4 +160,37 @@ pub trait RegistryDataProvider: Send + Sync {
         &self,
         version: RegistryVersion,
     ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError>;
+
+    /// Same as [`Self::get_updates_since`], but additionally returns the times
+    /// at which the registry canister applied the covered versions.
+    ///
+    /// Data providers that cannot supply those times use the default
+    /// implementation, which reports none of them. Callers must then fall back
+    /// to whatever local notion of time they had before.
+    fn get_updates_since_with_timestamps(
+        &self,
+        version: RegistryVersion,
+    ) -> Result<RegistryUpdates, RegistryDataProviderError> {
+        Ok(RegistryUpdates {
+            records: self.get_updates_since(version)?,
+            version_timestamps: BTreeMap::new(),
+        })
+    }
+}
+
+/// Registry updates, together with the times at which the registry canister
+/// applied the covered versions.
+#[derive(Clone, Default, Eq, PartialEq, Debug)]
+pub struct RegistryUpdates {
+    /// The delta, as returned by [`RegistryDataProvider::get_updates_since`].
+    pub records: Vec<RegistryRecord>,
+
+    /// The time at which the registry canister applied each covered version,
+    /// in nanoseconds since UNIX EPOCH.
+    ///
+    /// This is replicated NNS state covered by the certified changelog, so all
+    /// nodes observe the same value for a given version. Versions written
+    /// before the registry canister recorded timestamps, and versions obtained
+    /// from a data provider that does not supply them, are absent.
+    pub version_timestamps: BTreeMap<RegistryVersion, u64>,
 }
