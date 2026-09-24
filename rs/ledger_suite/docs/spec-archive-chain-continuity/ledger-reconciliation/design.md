@@ -331,6 +331,20 @@ start check — the recorded start of the second such node is undefined, which i
 difference — with the metric that goes with it. That state needs an operator regardless:
 it has never occurred on a mainnet suite, and the empty canisters in it are junk.
 
+**A length check alone does not say *which* node lacks the entry, and it does not need
+to.** Today's code pushes a node's first range at the *end* of the vector, so a suite
+whose first node was created empty — under a smaller `node_max_memory_size_bytes`, say,
+raised before the second node was created and filled — has two nodes and one range, and
+that range belongs to the second node while the zip pairs it with the first. The
+`post_upgrade` check passes it, as it should: it is one missing entry. What catches it is
+the first probe of the tail under `L5.3`: the tail reports its own `block_index_offset`,
+and `L3.9` compares that against the recorded start for an entry-less tail — one past the
+previous entry's end. A range that actually belongs to the tail can never satisfy that
+(its end is at or above its start), so the misattributed state halts on the first round
+after the upgrade, before any block moves. The length check and the start check are one
+guard in two places: the first for the state that has no consistent reading at all, the
+second for the one that has a wrong one.
+
 A published range is inclusive of both ends, so an empty archive has no pair of indices
 that could describe it — the ledger's published view and its internal record are the
 same data, which is why `L3.5` has to be about the *source* of that data rather than
@@ -497,7 +511,16 @@ reconciliation.
 Cap the selection at `min(num_blocks_to_archive, one message)` in bytes, in
 `Blockchain::get_blocks_for_archiving` (`blockchain.rs:125`) called from
 `blocks_to_archive` (`ledger.rs:460`) — both terms local, per the README's constraint that
-selection precedes any await (`L6.3`). `take_prefix(remaining_capacity)` still
+selection precedes any await (`L6.3`). **"In bytes" means the encoded call, not the sum of
+payloads.** `EncodedBlock::size_bytes()` is the raw blob, and the current `take_prefix`
+sums exactly those, but what crosses the wire is the Candid encoding of
+`(vec blob, opt nat64)`: a header and type table, a LEB128 length for the vector and one
+for every blob, and the optional. That framing is small but it is not zero, and a
+selection sized to the payload limit alone can exceed the message limit by it. The cap
+therefore either measures the encoded argument as it will be sent or subtracts a bound
+that provably covers the framing — a fixed header allowance plus ten bytes per block, the
+LEB128 maximum for a `u64` length — and a boundary test fills a batch to within that
+margin and asserts the encoded size stays under the limit. `take_prefix(remaining_capacity)` still
 trims on the cold-start path. Expose the effective per-round count (`L6.4`).
 
 A failed round counts the failure in `ledger_archiving_failures`, the metric the
@@ -609,6 +632,7 @@ attempted are in the README's **Testing** section; they span the parts.*
 | 18 | integration | install an old archive wasm as the tail; assert nothing is archived and the metric rises, then upgrade the archive and assert archiving resumes without a ledger upgrade. Repeat against a ledger whose archives do not implement the protocol and assert it archives normally | `L5.1`, `L5.2`, `L5.5` |
 | 19 | integration | make the tail archive not answer; assert the round ends within `ARCHIVE_CALL_TIMEOUT` and is retried, and that a subsequent round does not store any block twice. Then, with a call still in flight to that archive, assert the ledger can be stopped and upgraded — the property an unbounded call removes | `L7.1`, `L7.2`, `L7.4`, `L7.8` |
 | 20 | integration | count `append_blocks` per round against a configuration that is multi-chunk today; assert one, and that the effective per-round metric matches | `L6.1`, `L6.3`, `L6.4` |
+| 20b | unit, `ledger_canister_core` | select a batch whose raw payload sum sits just under the message limit; assert the selection is trimmed so that the *Candid-encoded* `append_blocks` argument stays under it, and that a selection sized on raw bytes alone would have exceeded it — the framing the cap has to count | `L6.3` |
 | 22b | integration | drive the ledger into a refusal per A1.1, A2.2, A2.9 and A6.4 in turn; assert it stops attempting rather than backing off, and exposes the distinct metric | `L4.7` |
 | 15h | integration | answer with an empty probe and separately with a first-block-too-large `StoredPartial`, both reporting a range beyond the archived prefix; assert the prefix does not advance on either, although both would pass a gate written on outcome arms alone | `L3.8`, `A3.9` |
 | 15j | integration | with an archive holding 1000 blocks, re-send only the first 100 and take the wholly-held reply; assert the Archived_Prefix advances to 100 and **not** to the reported 1000, and that the removal count matches — the blocks the comparison at index 99 said nothing about | `L3.8`, `A2.5` |
