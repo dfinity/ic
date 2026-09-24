@@ -191,7 +191,11 @@ way, so nothing is at risk while step two settles — which is all that step was
 With more than ten distinct controllers configured, the second step is rejected on every
 retry and `C1.10` never clears — an archive left ledger-controlled behind a permanent
 alarm. The handover therefore takes as a precondition that the distinct set of
-`controller_id` and `more_controller_ids` has at most ten members. Enforcing that belongs
+`controller_id` and `more_controller_ids` has at most ten members — and it sends that
+*de-duplicated* set, because the management canister's Candid type bounds the *encoded*
+vector at ten before canister state ever collapses duplicates (`bounded_vec.rs:111`), so
+a list with a repeated principal fails on its length even when its distinct count is
+fine. Enforcing that belongs
 where the configuration is made — the ledger's `init` and `post_upgrade` rejecting a
 larger set — and is a separate, minimal change tracked on its own rather than part of
 this work (README, non-goals).
@@ -274,7 +278,7 @@ attempted are in the README's **Testing** section; they span the parts.*
 | 17b | integration | lose the `install_code` outcome *after* the identity was recorded; assert the ledger resolves it by asking the created canister, finishes the creation without an operator, and adopts that same canister rather than creating a second | `C1.6`, `C1.8` |
 | 17d | integration | lose the `update_settings` outcome; assert the archive is already adopted and serving, that archiving continues, that the handover metric is non-zero, and that a later round retries the handover and clears it | `C1.9`, `C1.10` |
 | 17e | upgrade | decode a pre-change `Archive` state; assert it decodes and that both new fields read their defaults — `Idle` and an empty `pending_handovers` — so the journal's own release cannot be the upgrade that fails | the two `#[serde(default)]`s above |
-| 17j | integration | trap the round immediately after `create_canister` returns, before anything is encoded; assert that on the next round `Creating` reads `Created(id)` with the real id, not `Started`, and that the creation is finished from there without a second canister | `C1.6`, `C1.8` |
+| 17j | integration | let the `create_canister` callback end right after recording `Created(id)`, then trap at the start of the next round before any installation work; assert `Creating` still reads `Created(id)` with the real id — not `Started` — and that the creation is finished from there without a second canister. A trap *inside* the recording callback would prove nothing, rolling the write back to `Started` as the durability paragraph explains | `C1.6`, `C1.8` |
 | 17k | integration | trap the callback of the first handover call after the controllers have changed; assert the archive is still listed in `pending_handovers` on the next round and the handover is retried and completes — the entry that a same-message push would have rolled back | `C1.14`, `C1.13` |
 | 17f | upgrade | adopt an archive whose handover has not completed, then upgrade the ledger; assert the pending handover survives and is still retried afterwards | `C1.10` |
 | 17i | integration | fail one archive's handover, keep archiving until it fills and a second archive is adopted, and assert the first is still retried and still counted — the archive a single slot would have dropped. Then keep the first failing and assert the second's handover completes on a later round — rotation, so a persistent failure starves nothing behind it | `C1.13`, `C1.10` |

@@ -209,7 +209,8 @@ comes first.
   ten controllers; `ArchiveOptions` puts no bound on how many a ledger names for its
   archives. Part C's handover takes at most ten distinct controllers as a precondition
   and cannot complete otherwise, so the ledger's `init` and `post_upgrade` should reject
-  a larger set. That is a minimal, self-contained change and is tracked as its own
+  a larger set, counted after de-duplication — and the handover sends the de-duplicated
+  list, since the platform bounds the encoded vector before it collapses duplicates. That is a minimal, self-contained change and is tracked as its own
   ticket and PR rather than folded into this one.
 - **Making the archive's canister logs readable.** Some obligations here are
   satisfiable only through a metric because a canister's log is not readable by
