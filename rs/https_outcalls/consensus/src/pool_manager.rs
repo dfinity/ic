@@ -629,17 +629,18 @@ pub mod test {
     use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_consensus_utils::crypto::SignVerify;
     use ic_error_types::RejectCode;
+    use ic_https_outcalls_socks_proxy::socks_proxy_addr;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
-    use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
     use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
-    use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
+    use ic_test_utilities_registry::{
+        add_api_boundary_node_records, add_api_boundary_node_records_impl,
+    };
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::CountBytes;
     use ic_types::ReplicaVersion;
@@ -3653,48 +3654,6 @@ pub mod test {
         });
     }
 
-    /// Registers `count` API boundary nodes, each with a distinct IPv6 endpoint
-    /// unless `with_http` denies them one, and returns their ids paired with
-    /// the SOCKS proxy address that endpoint resolves to.
-    fn add_boundary_nodes(
-        deps: &Dependencies,
-        count: u64,
-        registry_version: RegistryVersion,
-        with_http: bool,
-    ) -> Vec<(NodeId, String)> {
-        // Numbered past the subnet's own nodes, whose records must stay untouched.
-        let ids = 101..=100 + count;
-        let nodes: Vec<(NodeId, String)> = ids
-            .clone()
-            .map(|i| (node_test_id(i), format!("socks5h://[2001:db8::{i}]:1080")))
-            .collect();
-
-        for (i, (node_id, _)) in ids.zip(&nodes) {
-            deps.registry_data_provider
-                .add(
-                    &make_api_boundary_node_record_key(*node_id),
-                    registry_version,
-                    Some(ApiBoundaryNodeRecord::default()),
-                )
-                .unwrap();
-            deps.registry_data_provider
-                .add(
-                    &make_node_record_key(*node_id),
-                    registry_version,
-                    Some(NodeRecord {
-                        http: with_http.then(|| ConnectionEndpoint {
-                            ip_addr: format!("2001:db8::{i}"),
-                            port: 8080,
-                        }),
-                        ..Default::default()
-                    }),
-                )
-                .unwrap();
-        }
-        deps.registry.update_to_latest_version();
-        nodes
-    }
-
     /// Drives one round of `make_new_requests` and returns the SOCKS proxy
     /// addresses the pool manager handed to the adapter.
     fn socks_proxy_addrs_sent_by_pool_manager(
@@ -3775,20 +3734,22 @@ pub mod test {
 
                     // `get_{system,app}_api_boundary_node_ids` splits the sorted
                     // ids in half, so several nodes are needed for a non-empty,
-                    // distinguishable split.
+                    // distinguishable split. They are numbered past the subnet's
+                    // own nodes, whose records must stay untouched.
                     let registry_version = RegistryVersion::from(2);
-                    let nodes = add_boundary_nodes(&deps, 4, registry_version, true);
+                    let nodes =
+                        add_api_boundary_node_records(&deps.registry_data_provider, 101..=104, 2);
+                    deps.registry.update_to_latest_version();
 
                     let addrs_of = |ids: Vec<NodeId>| {
                         let mut addrs: Vec<String> = ids
                             .iter()
                             .map(|node_id| {
-                                nodes
+                                let (_, ip_addr) = nodes
                                     .iter()
                                     .find(|(id, _)| id == node_id)
-                                    .expect("unknown boundary node id")
-                                    .1
-                                    .clone()
+                                    .expect("unknown boundary node id");
+                                socks_proxy_addr(ip_addr)
                             })
                             .collect();
                         addrs.sort();
@@ -3835,7 +3796,13 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let deps = DependenciesBuilder::new(pool_config.clone(), 4).build();
-                add_boundary_nodes(&deps, 4, RegistryVersion::from(2), false);
+                add_api_boundary_node_records_impl(
+                    &deps.registry_data_provider,
+                    101..=104,
+                    2,
+                    |_| false,
+                );
+                deps.registry.update_to_latest_version();
 
                 let metrics_registry = MetricsRegistry::new();
                 let addrs = socks_proxy_addrs_sent_by_pool_manager(

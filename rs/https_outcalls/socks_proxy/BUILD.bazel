@@ -23,11 +23,9 @@ rust_test(
     crate = ":socks_proxy",
     deps = [
         # Keep sorted.
-        "//rs/protobuf",
         "//rs/registry/fake",
-        "//rs/registry/keys",
         "//rs/registry/proto_data_provider",
-        "//rs/test_utilities/types",
+        "//rs/test_utilities/registry",
         "@crate_index//:strum",
     ],
 )

@@ -23,20 +23,21 @@ pub mod errors {
 /// Records a resolution failure, by the label the caller reports it under.
 pub type ErrorObserver = Arc<dyn Fn(&str) + Send + Sync>;
 
-#[derive(Clone)]
-pub struct ResolvedSocksProxies {
-    pub addrs: Arc<Vec<String>>,
-    pub errors: Vec<&'static str>,
+struct ResolvedSocksProxies {
+    addrs: Arc<Vec<String>>,
+    errors: Vec<&'static str>,
 }
 
-fn socks_proxy_addr(ip_addr: &str) -> String {
+/// The address of the SOCKS5 proxy that an API boundary node at `ip_addr`
+/// exposes.
+pub fn socks_proxy_addr(ip_addr: &str) -> String {
     format!("socks5h://[{ip_addr}]:{SOCKS_PROXY_PORT}")
 }
 
 /// `System` subnets are proxied through the *system* API boundary nodes, every
 /// other subnet type through the *app* ones. Nodes that do not resolve are
 /// skipped rather than failing the lot.
-pub fn socks_proxy_addrs_at(
+fn socks_proxy_addrs_at(
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
     subnet_type: SubnetType,
@@ -101,17 +102,12 @@ fn socks_proxy_addr_of(
         .map(|http_info| socks_proxy_addr(&http_info.ip_addr))
 }
 
-/// The resolved addresses, memoized per registry version. A registry client
-/// serves reads at a version it has already published from an immutable local
-/// snapshot, so both the addresses and any failure to resolve them are a pure
-/// function of that version: nothing to invalidate, and no transient failure
-/// that a retry within the version could clear. Failures are reported on every
-/// call, memoized or not, so a persistent one keeps being visible.
+/// The resolved addresses, memoized per registry version.
 pub struct SocksProxyCache {
     registry_client: Arc<dyn RegistryClient>,
     subnet_type: SubnetType,
     log: ReplicaLogger,
-    memo: RwLock<Option<(RegistryVersion, ResolvedSocksProxies)>>,
+    memo: RwLock<Option<(RegistryVersion, Arc<ResolvedSocksProxies>)>>,
     observe_error: Option<ErrorObserver>,
 }
 
@@ -144,19 +140,19 @@ impl SocksProxyCache {
             let memo = self.memo.read().unwrap();
             match memo.as_ref() {
                 Some((memoized_version, resolved)) if *memoized_version == registry_version => {
-                    resolved.clone()
+                    Arc::clone(resolved)
                 }
                 _ => {
                     drop(memo);
-                    let resolved = socks_proxy_addrs_at(
+                    let resolved = Arc::new(socks_proxy_addrs_at(
                         &*self.registry_client,
                         registry_version,
                         self.subnet_type,
                         &self.log,
-                    );
+                    ));
                     // Losing a race only costs a recomputation: an entry is
                     // served only while its version is still the latest.
-                    *self.memo.write().unwrap() = Some((registry_version, resolved.clone()));
+                    *self.memo.write().unwrap() = Some((registry_version, Arc::clone(&resolved)));
                     resolved
                 }
             }
@@ -167,7 +163,7 @@ impl SocksProxyCache {
                 observe_error(error);
             }
         }
-        resolved.addrs
+        Arc::clone(&resolved.addrs)
     }
 }
 
@@ -175,64 +171,25 @@ impl SocksProxyCache {
 mod tests {
     use super::*;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
-    use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
     use ic_registry_client_fake::FakeRegistryClient;
-    use ic_registry_keys::{make_api_boundary_node_record_key, make_node_record_key};
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities_types::ids::node_test_id;
+    use ic_test_utilities_registry::{
+        add_api_boundary_node_records, add_api_boundary_node_records_impl,
+    };
     use ic_types::Time;
     use ic_types::registry::RegistryClientError;
-    use std::ops::RangeInclusive;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use strum::IntoEnumIterator;
 
     const VERSION: RegistryVersion = RegistryVersion::new(2);
-
-    /// Registers one API boundary node per id in `ids`, each with a distinct
-    /// IPv6 endpoint unless `with_http` denies it one, and returns the ids
-    /// paired with that endpoint's address.
-    fn add_boundary_nodes(
-        data_provider: &ProtoRegistryDataProvider,
-        ids: RangeInclusive<u64>,
-        version: RegistryVersion,
-        with_http: impl Fn(NodeId) -> bool,
-    ) -> Vec<(NodeId, String)> {
-        let nodes: Vec<(NodeId, String)> = ids
-            .map(|i| (node_test_id(i), format!("2001:db8::{i}")))
-            .collect();
-
-        for (node_id, ip_addr) in &nodes {
-            data_provider
-                .add(
-                    &make_api_boundary_node_record_key(*node_id),
-                    version,
-                    Some(ApiBoundaryNodeRecord::default()),
-                )
-                .unwrap();
-            data_provider
-                .add(
-                    &make_node_record_key(*node_id),
-                    version,
-                    Some(NodeRecord {
-                        http: with_http(*node_id).then(|| ConnectionEndpoint {
-                            ip_addr: ip_addr.clone(),
-                            port: 8080,
-                        }),
-                        ..Default::default()
-                    }),
-                )
-                .unwrap();
-        }
-        nodes
-    }
 
     fn registry_with_boundary_nodes_impl(
         count: u64,
         with_http: impl Fn(NodeId) -> bool,
     ) -> (Arc<FakeRegistryClient>, Vec<(NodeId, String)>) {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        let nodes = add_boundary_nodes(&data_provider, 1..=count, VERSION, with_http);
+        let nodes =
+            add_api_boundary_node_records_impl(&data_provider, 1..=count, VERSION.get(), with_http);
         let registry = Arc::new(FakeRegistryClient::new(data_provider));
         registry.update_to_latest_version();
         (registry, nodes)
@@ -431,7 +388,7 @@ mod tests {
     #[test]
     fn recomputes_when_the_registry_version_advances() {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        add_boundary_nodes(&data_provider, 1..=4, RegistryVersion::from(2), |_| true);
+        add_api_boundary_node_records(&data_provider, 1..=4, 2);
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
         registry.update_to_latest_version();
 
@@ -442,9 +399,7 @@ mod tests {
         );
         let before = cache.addrs();
 
-        // `get_app_api_boundary_node_ids` splits the sorted ids in half, so a
-        // larger set yields a different app half.
-        add_boundary_nodes(&data_provider, 5..=8, RegistryVersion::from(3), |_| true);
+        add_api_boundary_node_records(&data_provider, 5..=8, 3);
         registry.update_to_latest_version();
         let after = cache.addrs();
 
