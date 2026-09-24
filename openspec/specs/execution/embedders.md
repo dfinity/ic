@@ -37,6 +37,11 @@ All canister Wasm modules must pass validation before they can be compiled and e
 - **THEN** it is detected as a Wasm64 module
 - **AND** the appropriate memory size limits and system API variants are applied
 
+#### Scenario: Custom section count limit
+- **WHEN** the raw Wasm module is streamed once, before Wasmtime or Wirm parse it, to count custom sections and the code section size
+- **THEN** validation fails with `WasmValidationError::TooManyCustomSections` if the module contains more than 1024 custom sections in total, including sections that are not `icp:public`/`icp:private` metadata
+- **AND** the code section size recorded during this same pass is still checked against the 12 MiB limit
+
 ---
 
 ### Requirement: Wasm Instrumentation
