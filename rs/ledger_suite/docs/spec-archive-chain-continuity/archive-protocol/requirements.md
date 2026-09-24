@@ -1,5 +1,5 @@
 ---
-id: DEFI-2967-followup/archive-protocol
+id: DEFI-3016
 title: Archive Append Protocol
 tags: [ledger, archive, icrc, icp]
 ---

@@ -1,5 +1,5 @@
 ---
-id: DEFI-2967-followup
+id: DEFI-2967
 title: Archive chain continuity and bounded archiving retries
 tags: [ledger, archive, icrc, icp]
 ---
@@ -140,7 +140,7 @@ comes first.
   canister from the ICRC archive and is not changed here, so the ICP ledger gains
   the ledger-side obligations but not the addressed-append ones. This leaves the ICP
   suite exposed to the divergence described above until that port lands, which is
-  accepted deliberately and tracked separately. L1.5, L3.6, L5.5 and
+  accepted deliberately and tracked as DEFI-3021. L1.5, L3.6, L5.5 and
   L7.6 pin the behaviour that makes the exemption safe rather than silent — each
   says what the ICP ledger does *instead*, so none of it is left to inference.
 - **Building the change that stops an archiving failure contradicting a transaction's
@@ -519,7 +519,7 @@ next batch without a probe, and an old archive stores it blindly. If an archive 
 has to be reverted, revert the ledger first, or revert to a build that still carries
 PR 1's `append_blocks`.
 
-**Step 0 — verification of the live suites.** Not a PR. Two checks on ckBTC, ckDOGE and
+**Step 0 — verification of the live suites** (DEFI-3019)**.** Not a PR. Two checks on ckBTC, ckDOGE and
 ICP, because nothing here repairs an already-diverged suite and the answer reorders
 everything after it.
 
@@ -556,7 +556,7 @@ until a suite is actually found in that state. So if this check finds such a suf
 Step 5 stays blocked until an operator has dealt with it, and only the two checks passing
 together gate Step 5.
 
-**PR 1 — archive.** `append_blocks`'s new argument and result, placement, the clamp,
+**PR 1 — archive** (DEFI-3016)**.** `append_blocks`'s new argument and result, placement, the clamp,
 the chain check on the first stored block, capacity reporting, the counters, and the
 `.did`. The ledger is unchanged, so it sends no index and reads no result — which is
 why `A5` is in this PR and not a later one. It also **deletes** the test in row 10 and
@@ -607,14 +607,14 @@ the window while it lasts.
 because spawning makes an archiving trap silent, so landing it first would leave the
 corruption path open while removing the symptom that reveals it.
 
-**PR 3 — ledger, bookkeeping.** Reconciliation from the reported extent, the coverage
+**PR 3 — ledger, bookkeeping** (DEFI-3017)**.** Reconciliation from the reported extent, the coverage
 and backwards checks, offset derivation, the capability probe and the seam.
 *Acceptance:* `L2`, `L1`, `L3`, `L4` (L4.7, L4.8),
 `L5`. On the ICP ledger the
 acceptance is `L1.5`, `L3.6` and `L5.5` — the exemptions — rather than the
 criteria they except, since its archives report nothing to reconcile against.
 
-**PR 4 — ledger, round shape and retries.** Byte-based selection, one append per
+**PR 4 — ledger, round shape and retries** (DEFI-3017, DEFI-3018)**.** Byte-based selection, one append per
 round, the backoff, the creation journal, the bounded calls, the allocation work and
 the comment.
 *Acceptance:* `L4` (L4.1-L4.6, L4.9-L4.11), `C1`, `L6`, `L7`. `L4.5`'s
@@ -626,7 +626,7 @@ the ledger a `ChainMismatch` or `Gap` to read, and a release that can receive an
 unresolvable refusal without knowing to stop would retry it on every transaction. The
 rest of `L4` — the backoff itself — is independent and can follow.
 
-**Step 5 — lower `trigger_threshold`**, by NNS proposal. Not a PR, and it must not
+**Step 5 — lower `trigger_threshold`** (DEFI-3020), by NNS proposal. Not a PR, and it must not
 precede PR 3.
 
 PR 1 and PR 2 are not enough, which an earlier version of this section got wrong. PR 1

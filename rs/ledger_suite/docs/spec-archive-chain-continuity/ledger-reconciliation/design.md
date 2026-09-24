@@ -1,5 +1,5 @@
 ---
-id: DEFI-2967-followup/ledger-reconciliation
+id: DEFI-3017
 title: Ledger Reconciliation And Retries
 tags: [ledger, archive, icrc, icp]
 ---
