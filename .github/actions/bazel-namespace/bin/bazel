@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+#
+# The bazel of .github/actions/bazel-namespace (see ../action.yaml), which puts this directory
+# first on PATH. So every `bazel` of the action's commands, also when a script like
+# ci/scripts/targets.py starts it, runs:
+#
+#   [timeout ...] <real bazel> --noworkspace_rc \
+#       --bazelrc=bazel/conf/.bazelrc.build \
+#       --bazelrc=/tmp/bazel-rbe.bazelrc \
+#       --bazelrc=.github/actions/bazel-namespace/rbe.bazelrc \
+#       COMMAND [--build_event_binary_file=... --profile=...] ARGS...
+#
+# * The real bazel is the next one on PATH: bazelisk at /usr/bin/bazel in the ic-build image.
+# * The workspace .bazelrc isn't read: it points at DFINITY's internal cache, which isn't
+#   reachable from Namespace. /tmp/bazel-rbe.bazelrc (the Namespace endpoints and credentials) is
+#   written by `nsc bazel setup` in an earlier step of the job. ../rbe.bazelrc holds the RBE options.
+# * The startup options are the same for every command and only select rc files, which the bazel
+#   client handles itself, so all bazel commands of a job share one bazel server.
+# * build, test, run and coverage commands run by the action get their own BEP file and profile
+#   in $BAZEL_NAMESPACE_OUT, which the action uploads.
+# * When the action's timeout-minutes is set, bazel runs under `timeout` until
+#   $BAZEL_NAMESPACE_DEADLINE (seconds since the epoch), see below.
+#
+# Only writes to stderr: callers like targets.py read the results of `bazel query` from stdout.
+
+set -euo pipefail
+
+die() {
+    echo "bazel-namespace: $*" >&2
+    exit 2
+}
+
+bin_dir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+action_dir="$(dirname "$bin_dir")"
+repo_root="$(realpath "$action_dir/../../..")"
+rbe_bazelrc=/tmp/bazel-rbe.bazelrc
+
+# Take this directory off PATH, to find the real bazel, and so that bazel (and whatever
+# `bazel run` starts) sees the PATH it would see without this wrapper. The loop only uses
+# builtins because PATH is only assigned after it.
+IFS=: read -r -a path_dirs <<<"$PATH"
+new_path=""
+for dir in "${path_dirs[@]}"; do
+    if [ "$(cd -- "${dir:-.}" 2>/dev/null && pwd -P)" != "$bin_dir" ]; then
+        new_path="${new_path:+$new_path:}$dir"
+    fi
+done
+PATH="$new_path"
+real_bazel="$(command -v bazel)" || die "no bazel on PATH besides this wrapper"
+if [ "$real_bazel" -ef "${BASH_SOURCE[0]}" ]; then
+    die "$real_bazel is this wrapper"
+fi
+
+if [ ! -f "$rbe_bazelrc" ]; then
+    die "$rbe_bazelrc doesn't exist: first run 'nsc bazel setup --command=common --enable_remote_asset_api --bazelrc=$rbe_bazelrc'"
+fi
+
+case "${1:-}" in
+    -*) die "startup options are not supported (got '$1'): this wrapper sets them" ;;
+esac
+
+args=(
+    --noworkspace_rc
+    --bazelrc="$repo_root/bazel/conf/.bazelrc.build"
+    --bazelrc="$rbe_bazelrc"
+    --bazelrc="$action_dir/rbe.bazelrc"
+)
+bazel_command="${1:-}"
+if [ $# -gt 0 ]; then
+    shift
+    args+=("$bazel_command")
+    case "$bazel_command" in
+        build | test | run | coverage)
+            if [ -n "${BAZEL_NAMESPACE_OUT:-}" ]; then
+                id="$bazel_command-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+                args+=(
+                    --build_event_binary_file="$BAZEL_NAMESPACE_OUT/bazel-bep-$id.pb"
+                    # Bazel compresses the profile because of the .gz suffix.
+                    --profile="$BAZEL_NAMESPACE_OUT/profile-$id.json.gz"
+                    # Associate each action in the profile with a target label, which helps
+                    # tools like https://github.com/EngFlow/bazel_invocation_analyzer.
+                    --experimental_profile_include_target_label
+                )
+            fi
+            ;;
+    esac
+    args+=("$@")
+fi
+
+timeout_cmd=()
+if [ -n "${BAZEL_NAMESPACE_DEADLINE:-}" ]; then
+    remaining=$((BAZEL_NAMESPACE_DEADLINE - $(date +%s)))
+    if [ "$remaining" -le 0 ]; then
+        echo "bazel-namespace: not starting 'bazel $bazel_command': the timeout-minutes of the action ran out" >&2
+        exit 124
+    fi
+    # At a step's timeout-minutes the runner signals `docker exec` on the host, which likely never
+    # reaches bazel in a container job, and it also kills the action's upload steps. So interrupt
+    # bazel from here, before that. At the deadline, timeout sends SIGINT to its process group:
+    # bazelisk and the bazel client, not the daemonized bazel server. The client then cancels the
+    # command in an orderly way, closing the BEP file and the profile.
+    timeout_cmd=(timeout --signal=INT "$remaining")
+fi
+
+echo "bazel-namespace: running $(printf '%q ' "${timeout_cmd[@]}" "$real_bazel" "${args[@]}")" >&2
+exec "${timeout_cmd[@]}" "$real_bazel" "${args[@]}"

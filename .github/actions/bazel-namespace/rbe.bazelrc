@@ -1,0 +1,56 @@
+# The options for running bazel on the Remote Build Execution (RBE) cluster @ Namespace.
+#
+# bin/bazel passes this file to every bazel command of the bazel-namespace action, after
+# bazel/conf/.bazelrc.build and after /tmp/bazel-rbe.bazelrc, the endpoints and credentials that
+# `nsc bazel setup --command=common` writes.
+#
+# The lines are scoped to `build` and `test`, never `common`. Bazel applies `build` lines to the
+# commands that inherit build's options (test, run and coverage, and info, cquery and aquery, which
+# accept them) and `test` lines to test and coverage. None of them apply to `bazel query`, which
+# rejects e.g. --jobs and --spawn_strategy.
+#
+# Precedence: Bazel applies all `common` lines first, then `build` lines, then `test` lines, each
+# from all rc files in order. So these lines override the `common` lines of /tmp/bazel-rbe.bazelrc
+# (e.g. its --spawn_strategy=remote and --jobs), and the command line overrides them all.
+#
+# To reproduce a CI invocation elsewhere, e.g. on a Namespace devbox:
+#   nsc bazel setup --command=common --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc
+#   bazel --noworkspace_rc --bazelrc=bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-rbe.bazelrc \
+#       --bazelrc=.github/actions/bazel-namespace/rbe.bazelrc test //some:test
+
+# Run actions remotely, falling back to the sandbox or to local execution for actions that can't
+# run remotely, like the ic-os image builds that bazel/conf/.bazelrc.build forces to run locally
+# with --strategy_regexp.
+build --spawn_strategy=remote,sandboxed,local
+build --strategy=Genrule=remote,sandboxed,local
+
+# The isolation and the container image of the RBE workers.
+# Bazel adds these default exec properties, in order, to its action execution salt: if they differ
+# between two commands on the same server, all actions are invalidated. Defining them once, here,
+# gives build, test, run and coverage the same ones.
+# The image must equal the container.image of the bazel-test-all-rbe job in
+# .github/workflows/ci-rbe-evaluation.yml, so actions run in the same environment locally (like the
+# ic-os image builds) and remotely. The update-image-references job of
+# .github/workflows/container-autobuild.yml rewrites both.
+build --remote_default_exec_properties=namespace_action_isolation=sandboxed
+build --remote_default_exec_properties=container-image=docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c
+
+# Namespace currently deploys 30 RBE workers that each can run 16 actions concurrently:
+build --jobs=480
+
+# Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action outputs live
+# only in the remote CAS. When the CAS evicts a still-needed blob mid-build, actions fail with
+# "Lost inputs no longer available remotely" or "Exec failed due to IOException: Missing digest"
+# (under BwoB Bazel has no local copy to re-upload). Periodically re-issue FindMissingBlobs for
+# referenced blobs so the CAS extends their TTL and stops evicting live inputs.
+build --experimental_remote_cache_lease_extension
+build --experimental_remote_cache_eviction_retries=10
+
+build --remote_download_minimal
+
+# Force the test logs of every test to be downloaded from the remote CAS. Under BwoB
+# (--remote_download_minimal) test outputs stay remote, and --test_output=errors can't even echo
+# the failing logs because multi-MB (system-)test logs exceed --experimental_ui_max_stdouterr_bytes
+# (default 1 MiB), leaving only unreachable CAS paths in the console. Downloading them lets the
+# bazel-namespace action stage and upload the logs of the tests that failed, were flaky or timed out.
+test --remote_download_regex=.*/testlogs/.*
