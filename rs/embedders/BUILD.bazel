@@ -65,6 +65,7 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:slog",
+        "@crate_index//:target-lexicon",
         "@crate_index//:tempfile",
         "@crate_index//:wasm-encoder",
         "@crate_index//:wasmparser",
@@ -139,6 +140,26 @@ rust_test(
     ],
 )
 
+rust_test(
+    name = "precompiled_universal_canister_test",
+    srcs = ["tests/precompiled_universal_canister.rs"],
+    crate_root = "tests/precompiled_universal_canister.rs",
+    data = ["//rs/universal_canister/impl:universal_canister.module"],
+    env = {
+        "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
+    },
+    # The module is compiled for each architecture and OS, so check it on all.
+    tags = ["test_all_platforms"],
+    deps = [
+        # Keep sorted.
+        ":embedders",
+        "//rs/config",
+        "//rs/universal_canister/lib",
+        "@crate_index//:bincode",
+        "@crate_index//:wasmtime",
+    ],
+)
+
 # Run some tests using wasm spec files.
 # To add a test suite, see the `http_archive` pulling in the testsuite
 # and add a new target.
@@ -152,6 +173,7 @@ rust_ic_test_suite_with_extra_srcs(
         exclude = [
             "tests/wasmtime_simple.rs",
             "tests/instrumentation.rs",
+            "tests/precompiled_universal_canister.rs",
             "tests/system_api.rs",
             "tests/sandbox_safe_system_state.rs",
         ],
