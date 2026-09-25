@@ -589,3 +589,18 @@ DKG payloads in proposed blocks must be validated against the expected DKG summa
 - **WHEN** a DKG payload references transcript configurations
 - **AND** the transcript tags do not match the expected tags from the registry
 - **THEN** the payload is rejected as invalid
+
+## Crate: ic-consensus-upgrade
+
+The upgrade permit protocol for Phase-2 rolling GuestOS reboots. As of this writing it is a placeholder: the wire format and Rust types for upgrade permits (`UpgradePermitAction`, `UpgradePermitAuthorizationRequest`, `UpgradePermitAuthorizationShare`) live in `ic-types`/`ic-protobuf`, but `UpgradePayloadBuilderImpl` -- the `BatchPayloadBuilder` implementation in this crate -- does not yet build or validate any real upgrade-permit payload.
+
+### Requirement: Upgrade Payload Builder Stub
+
+#### Scenario: Building a payload is a no-op
+- **WHEN** `UpgradePayloadBuilderImpl::build_payload` is called
+- **THEN** it returns an empty byte vector regardless of height, size limit, or past payloads
+
+#### Scenario: Only the empty payload validates
+- **WHEN** `UpgradePayloadBuilderImpl::validate_payload` is called with an empty payload
+- **THEN** validation succeeds
+- **AND** a non-empty payload is rejected with `InvalidPayloadReason::InvalidUpgradePayload(InvalidUpgradePayloadReason::NonEmpty)`
