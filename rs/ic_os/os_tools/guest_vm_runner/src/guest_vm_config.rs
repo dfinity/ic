@@ -13,8 +13,9 @@ use tracing::info;
 const DEFAULT_GUEST_VM_DOMAIN_NAME: &str = "guestos";
 const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
 
-const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
-const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
+const SERIAL_LOG_DIR: &str = "/var/log/libvirt/qemu";
+const DEFAULT_SERIAL_LOG_NAME: &str = "guestos-serial";
+const UPGRADE_SERIAL_LOG_NAME: &str = "upgrade-guestos-serial";
 
 #[cfg(not(feature = "dev"))]
 const DEFAULT_VM_MEMORY_GIB: u32 = 480;
@@ -263,16 +264,14 @@ pub fn vm_domain_uuid(guest_vm_type: GuestVMType, slot: VmSlot) -> String {
 }
 
 pub fn serial_log_path(guest_vm_type: GuestVMType, slot: VmSlot) -> PathBuf {
-    match guest_vm_type {
-        GuestVMType::Default => PathBuf::from(format!(
-            "{DEFAULT_SERIAL_LOG_PATH}{suffix}",
-            suffix = slot.to_suffix()
-        )),
-        GuestVMType::Upgrade => PathBuf::from(format!(
-            "{UPGRADE_SERIAL_LOG_PATH}{suffix}",
-            suffix = slot.to_suffix()
-        )),
-    }
+    let name = match guest_vm_type {
+        GuestVMType::Default => DEFAULT_SERIAL_LOG_NAME,
+        GuestVMType::Upgrade => UPGRADE_SERIAL_LOG_NAME,
+    };
+    PathBuf::from(format!(
+        "{SERIAL_LOG_DIR}/{name}{suffix}.log",
+        suffix = slot.to_suffix()
+    ))
 }
 
 #[cfg(all(test, not(feature = "skip_default_tests")))]
@@ -536,6 +535,96 @@ mod tests {
         assert!(
             media_path.metadata().unwrap().size() > 0,
             "Config media file is empty"
+        );
+    }
+
+    // The names export-guestos-serial-logs.sh forwards.
+    #[test]
+    fn test_serial_log_path() {
+        assert_eq!(
+            serial_log_path(GuestVMType::Default, VmSlot::Plain),
+            Path::new("/var/log/libvirt/qemu/guestos-serial.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Default, VmSlot::new(1)),
+            Path::new("/var/log/libvirt/qemu/guestos-serial1.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Default, VmSlot::new(60)),
+            Path::new("/var/log/libvirt/qemu/guestos-serial60.log")
+        );
+
+        assert_eq!(
+            serial_log_path(GuestVMType::Upgrade, VmSlot::Plain),
+            Path::new("/var/log/libvirt/qemu/upgrade-guestos-serial.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Upgrade, VmSlot::new(1)),
+            Path::new("/var/log/libvirt/qemu/upgrade-guestos-serial1.log")
+        );
+        assert_eq!(
+            serial_log_path(GuestVMType::Upgrade, VmSlot::new(60)),
+            Path::new("/var/log/libvirt/qemu/upgrade-guestos-serial60.log")
+        );
+    }
+
+    // The domains monitor-guestos.sh polls.
+    #[test]
+    fn test_vm_domain_name() {
+        assert_eq!(
+            vm_domain_name(GuestVMType::Default, VmSlot::Plain),
+            "guestos"
+        );
+        assert_eq!(
+            vm_domain_name(GuestVMType::Default, VmSlot::new(1)),
+            "guestos1"
+        );
+        assert_eq!(
+            vm_domain_name(GuestVMType::Default, VmSlot::new(60)),
+            "guestos60"
+        );
+
+        assert_eq!(
+            vm_domain_name(GuestVMType::Upgrade, VmSlot::Plain),
+            "upgrade-guestos"
+        );
+        assert_eq!(
+            vm_domain_name(GuestVMType::Upgrade, VmSlot::new(1)),
+            "upgrade-guestos1"
+        );
+        assert_eq!(
+            vm_domain_name(GuestVMType::Upgrade, VmSlot::new(60)),
+            "upgrade-guestos60"
+        );
+    }
+
+    // Each VM needs its own uuid, or libvirt redefines the same domain.
+    #[test]
+    fn test_vm_domain_uuid() {
+        assert_eq!(
+            vm_domain_uuid(GuestVMType::Default, VmSlot::Plain),
+            "fd897da5-8017-41c8-8575-a706dba30700"
+        );
+        assert_eq!(
+            vm_domain_uuid(GuestVMType::Default, VmSlot::new(1)),
+            "fd897da5-8017-41c8-8575-a706dba30701"
+        );
+        assert_eq!(
+            vm_domain_uuid(GuestVMType::Default, VmSlot::new(60)),
+            "fd897da5-8017-41c8-8575-a706dba3073c"
+        );
+
+        assert_eq!(
+            vm_domain_uuid(GuestVMType::Upgrade, VmSlot::Plain),
+            "1ea49839-7f46-4560-a4c7-fce677bbfb00"
+        );
+        assert_eq!(
+            vm_domain_uuid(GuestVMType::Upgrade, VmSlot::new(1)),
+            "1ea49839-7f46-4560-a4c7-fce677bbfb01"
+        );
+        assert_eq!(
+            vm_domain_uuid(GuestVMType::Upgrade, VmSlot::new(60)),
+            "1ea49839-7f46-4560-a4c7-fce677bbfb3c"
         );
     }
 
