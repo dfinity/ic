@@ -442,7 +442,7 @@ pub(crate) mod test {
             const CHAIN_KEY_PAYLOAD_SIZE: NumBytes = NumBytes::new(512 * KB);
             const QUERY_STATS_PAYLOAD_SIZE: NumBytes = NumBytes::new(MB);
             const INGRESS_PAYLOAD_SIZE: NumBytes = NumBytes::new(2 * MB);
-            const UPGRADE_PAYLOAD_SIZE: NumBytes = NumBytes::new(0);
+            const UPGRADE_PAYLOAD_SIZE: NumBytes = NumBytes::new(32 * KB);
 
             // The expected budgets follow the height-1 build order. Each
             // section gets what remains after the earlier ones produced their
@@ -458,9 +458,7 @@ pub(crate) mod test {
             let payload_builder = set_up_payload_builder(
                 registry,
                 MocksSettings {
-                    chain_key_payload_to_return: vec![0; CHAIN_KEY_PAYLOAD_SIZE.get() as usize],
-                    upgrade_payload_to_return: vec![],
-                    expected_chain_key_payload_size_limit: chain_key_budget,
+                    upgrade_payload_to_return: vec![0; UPGRADE_PAYLOAD_SIZE.get() as usize],
                     expected_upgrade_payload_size_limit: upgrade_budget,
                     ingress_payload_size_to_return: INGRESS_PAYLOAD_SIZE,
                     expected_ingress_payload_size_limit: ingress_budget,
@@ -475,6 +473,8 @@ pub(crate) mod test {
                     expected_http_outcalls_size_limit: http_budget,
                     query_stats_payload_to_return: vec![0; QUERY_STATS_PAYLOAD_SIZE.get() as usize],
                     expected_query_stats_size_limit: query_stats_budget,
+                    chain_key_payload_to_return: vec![0; CHAIN_KEY_PAYLOAD_SIZE.get() as usize],
+                    expected_chain_key_payload_size_limit: chain_key_budget,
                 },
             );
 
