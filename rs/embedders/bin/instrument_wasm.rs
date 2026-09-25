@@ -45,6 +45,12 @@ pub struct Options {
     /// Artifact to produce.
     #[arg(value_enum, short, long, default_value = Artifact::InstrumentedWasm)]
     artifact: Artifact,
+
+    /// Compile without the optional CPU features of the host (e.g. AVX2 on
+    /// x86_64 or i8mm on aarch64), so that the output only depends on the
+    /// host's architecture and OS and loads on every host with the same ones.
+    #[arg(long)]
+    no_host_cpu_features: bool,
 }
 
 #[cfg(debug_assertions)]
@@ -64,13 +70,22 @@ fn get_logger() -> slog::Logger {
     )
 }
 
-fn process_wasm(filename: &Path, mut output_stream: Box<dyn std::io::Write>, artifact: Artifact) {
+fn process_wasm(
+    filename: &Path,
+    mut output_stream: Box<dyn std::io::Write>,
+    artifact: Artifact,
+    no_host_cpu_features: bool,
+) {
     let contents = std::fs::read(filename)
         .unwrap_or_else(|e| panic!("Failed to read input file {filename:?}: {e}"));
     let config = EmbeddersConfig::default();
     let decoded = decode_wasm(config.wasm_max_size, Arc::new(contents))
         .expect("failed to decode canister module");
-    let embedder = WasmtimeEmbedder::new(config, get_logger().into());
+    let embedder = if no_host_cpu_features {
+        WasmtimeEmbedder::new_without_host_cpu_features(config, get_logger().into())
+    } else {
+        WasmtimeEmbedder::new(config, get_logger().into())
+    };
     let result = match artifact {
         Artifact::InstrumentedWasm => {
             let (_validation, output) = validate_and_instrument_for_testing(&embedder, &decoded)
@@ -105,5 +120,10 @@ fn main() {
         Box::new(std::io::stdout())
     };
 
-    process_wasm(&options.input_file, output, options.artifact)
+    process_wasm(
+        &options.input_file,
+        output,
+        options.artifact,
+        options.no_host_cpu_features,
+    )
 }

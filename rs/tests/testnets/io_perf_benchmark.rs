@@ -12,7 +12,7 @@
 // You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/container/container-run.sh
-//   $ NUM_PERF_HOSTS=1 bazel run //rs/tests/testnets:io_perf_benchmark --test_tmpdir=./test_tmpdir -- --keepalive
+//   $ NUM_PERF_HOSTS=1 bazel run //rs/tests/testnets:io_perf_benchmark_farm --test_tmpdir=./test_tmpdir -- --keepalive
 //
 // Note: The `./test_tmpdir` directory is included in `.gitignore`.
 //
@@ -25,9 +25,9 @@
 //
 // To get access to P8s and Grafana look for the following lines in the output:
 //
-//     "prometheus": "Prometheus Web UI at http://prometheus.io_perf_benchmark--1692597750709.testnet.farm.dfinity.systems",
-//     "grafana": "Grafana at http://grafana.io_perf_benchmark--1692597750709.testnet.farm.dfinity.systems",
-//     "progress_clock": "IC Progress Clock at http://grafana.io_perf_benchmark--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s\u0026from=now-5m\u0026to=now",
+//     "prometheus": "Prometheus Web UI at http://prometheus.io_perf_benchmark_farm--1692597750709.testnet.farm.dfinity.systems",
+//     "grafana": "Grafana at http://grafana.io_perf_benchmark_farm--1692597750709.testnet.farm.dfinity.systems",
+//     "progress_clock": "IC Progress Clock at http://grafana.io_perf_benchmark_farm--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s\u0026from=now-5m\u0026to=now",
 //
 // Happy testing!
 

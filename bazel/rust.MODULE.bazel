@@ -289,7 +289,7 @@ crate.spec(
 )
 crate.spec(
     package = "candid",
-    version = "^0.10.35",
+    version = "^0.10.36",
 )
 crate.spec(
     package = "cargo_metadata",
@@ -1747,6 +1747,10 @@ crate.spec(
 crate.spec(
     package = "tar",
     version = "^0.4.38",
+)
+crate.spec(
+    package = "target-lexicon",
+    version = "^0.13.5",
 )
 crate.spec(
     features = [

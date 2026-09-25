@@ -399,7 +399,7 @@ impl Recovery {
     ) -> RecoveryResult<Vec<PathBuf>> {
         let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
 
-        let checkpoint_name = match checkpoint_height_to_download {
+        let (checkpoint_name, checkpoint_height) = match checkpoint_height_to_download {
             CheckpointHeight::Specified(height) => {
                 let name = format!("{height:016x}");
                 if !execution_mode.path_exists(&ic_checkpoints_path.join(&name))? {
@@ -411,10 +411,10 @@ impl Recovery {
                     )));
                 }
 
-                name
+                (name, Height::from(height))
             }
             CheckpointHeight::Latest => {
-                let Some((name, _height)) = execution_mode
+                let Some((name, height)) = execution_mode
                     .get_maybe_latest_checkpoint_name_and_height(&ic_checkpoints_path)?
                 else {
                     // No checkpoints, return an empty list of includes. This is not an error, as the
@@ -429,9 +429,14 @@ impl Recovery {
                     return Ok(vec![]);
                 };
 
-                name
+                (name, height)
             }
         };
+
+        info!(
+            logger,
+            "Will download checkpoint {checkpoint_name} at height {checkpoint_height}"
+        );
 
         Ok(
             Self::get_state_includes_with_given_checkpoint(&checkpoint_name)

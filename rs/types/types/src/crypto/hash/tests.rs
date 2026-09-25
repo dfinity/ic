@@ -78,11 +78,15 @@ mod crypto_hash_stability {
         CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, ConsensusMessage, DataPayload,
         EquivocationProof, Finalization, FinalizationContent, FinalizationShare, HashedBlock,
         HashedRandomBeacon, Notarization, NotarizationContent, NotarizationShare, Payload,
-        RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank,
+        RandomBeacon, RandomBeaconContent, RandomTapeContent, Rank, SummaryPayload,
+        UpgradeAuthorizationShare, UpgradePermitRequest,
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
-        dkg::{DealingContent, DkgDataPayload, Message as DkgMessage},
+        dkg::{
+            DealingContent, DkgDataPayload, DkgSummary, Message as DkgMessage,
+            SubnetSplittingStatus,
+        },
         hashed::Hashed,
         idkg::{
             EcdsaSigShare, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent, RequestId,
@@ -92,6 +96,7 @@ mod crypto_hash_stability {
     use crate::consensus::{RandomBeaconShare, RandomTape, RandomTapeShare};
     use crate::crypto::AlgorithmId;
     use crate::crypto::CryptoHashableTestDummy;
+    use crate::crypto::SignedBytesWithoutDomainSeparator;
     use crate::crypto::canister_threshold_sig::{
         ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
         idkg::{
@@ -452,6 +457,43 @@ mod crypto_hash_stability {
         );
     }
 
+    /// Test stability of the signed bytes of UpgradePermitRequest
+    #[test]
+    fn upgrade_permit_request_signed_bytes_stability() {
+        let data = UpgradePermitRequest {
+            requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
+            request_height: Height::from(42),
+        };
+        let mut bytes = vec![];
+        data.write_signed_bytes_without_domain_separator(&mut bytes);
+        assert_eq!(
+            hex::encode(bytes),
+            "a269726571756573746f724a2a00000000000000fd016e726571756573745f686569676874182a",
+            "Signed bytes of UpgradePermitRequest changed"
+        );
+    }
+
+    /// Test stability of UpgradeAuthorizationShare hash output
+    #[test]
+    fn upgrade_authorization_share_stability() {
+        let data: UpgradeAuthorizationShare = Signed {
+            content: UpgradePermitRequest {
+                requestor: NodeId::from(PrincipalId::new_node_test_id(42)),
+                request_height: Height::from(42),
+            },
+            signature: BasicSignature {
+                signature: BasicSigOf::new(BasicSig(vec![0x42; 64])),
+                signer: NodeId::from(PrincipalId::new_node_test_id(42)),
+            },
+        };
+        let hash = crypto_hash(&data);
+        assert_eq!(
+            hex::encode(hash.get_ref().0.as_slice()),
+            "1e780154b2467bdf06efa99128aa50b5ad8db4a494a300cbe9d35b9747e85c98",
+            "Hash of UpgradeAuthorizationShare changed"
+        );
+    }
+
     /// Test stability of CertificationContent hash output
     #[test]
     fn certification_content_stability() {
@@ -542,7 +584,7 @@ mod crypto_hash_stability {
     /// Test stability of CatchUpContent hash output
     #[test]
     fn catch_up_content_stability() {
-        let block = test_block();
+        let block = test_summary_block();
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
@@ -551,7 +593,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "764535296841f3db421a928cfadff3460be406d0182da64034eee623a9a97e99",
+            "29390083388965b468a0b4dcf653be560bf4ef0a58150acbf826dcac46890d13",
             "Hash of CatchUpContent changed"
         );
     }
@@ -559,7 +601,7 @@ mod crypto_hash_stability {
     /// Test stability of CatchUpShareContent hash output
     #[test]
     fn catch_up_share_content_stability() {
-        let block = test_block();
+        let block = test_summary_block();
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
@@ -569,7 +611,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "7f183aaeb495159567a340b5bf61233cf3226141268febaee47de3e4c69cbc4b",
+            "8c535dda6ce448077a4983e2153ffd299c3a0caa1652379989c89c4964720aa2",
             "Hash of CatchUpShareContent changed"
         );
     }
@@ -601,7 +643,7 @@ mod crypto_hash_stability {
     /// Test stability of CatchUpPackage hash output
     #[test]
     fn catch_up_package_stability() {
-        let block = test_block();
+        let block = test_summary_block();
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
@@ -617,7 +659,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "31f744bc26627fadbf1d73c66cb54603319a87966a488b6f41c4f0cfc1a30c89",
+            "90321b317ee0849ebbfd07e3ca0a3bc1595600debf4e84f8a427414b487dd883",
             "Hash of CatchUpPackage changed"
         );
     }
@@ -625,7 +667,7 @@ mod crypto_hash_stability {
     /// Test stability of CatchUpPackageShare hash output
     #[test]
     fn catch_up_package_share_stability() {
-        let block = test_block();
+        let block = test_summary_block();
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
@@ -647,7 +689,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "bff423705e4cb96b7a391c4cccba8ed1ce441dabf2693ed5b9545a2b57d946bd",
+            "fd257cf9d018ff22f539008e785ed2a40e055eea5d78b4fa32ffbce14405aee8",
             "Hash of CatchUpPackageShare changed"
         );
     }
@@ -990,20 +1032,29 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "b040378bc7d9d2b7c2e9067215eae6380a65316922369a1bc6d8376f31fe5d0a",
+            "5b8ca671118db0ed4f57939788881d95810b36f8d13a9954ecf2c57067e2b8d9",
             "Hash of Block changed"
         );
     }
 
     /// Helper to create a test block for use in other tests
-    fn test_block() -> Block {
+    fn test_summary_block() -> Block {
         Block::new(
             test_crypto_hash_of(0x42),
             Payload::new(
                 crypto_hash,
-                BlockPayload::Data(DataPayload {
-                    batch: BatchPayload::default(),
-                    dkg: DkgDataPayload::new_empty(Height::from(0)),
+                BlockPayload::Summary(SummaryPayload {
+                    dkg: DkgSummary::new(
+                        /*configs=*/ Vec::default(),
+                        /*current_transcripts=*/ BTreeMap::default(),
+                        /*next_transcripts=*/ BTreeMap::default(),
+                        /*registry_version=*/ RegistryVersion::from(1),
+                        /*interval_length=*/ Height::new(59),
+                        /*next_interval_length=*/ Height::new(59),
+                        /*height=*/ Height::new(0),
+                        /*remote_dkg_attempts=*/ BTreeMap::default(),
+                        /*subnet_splitting_status=*/ SubnetSplittingStatus::default(),
+                    ),
                     idkg: None,
                 }),
             ),
@@ -1021,7 +1072,7 @@ mod crypto_hash_stability {
     /// Test stability of BlockProposal hash output
     #[test]
     fn block_proposal_stability() {
-        let block = test_block();
+        let block = test_summary_block();
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let data: BlockProposal = Signed {
             content: hashed_block,
@@ -1033,7 +1084,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "d591d695f67c644ddcc5315d96c25f00dede77c725859408ab7f113a18a0bf9a",
+            "7d7d85b7e8a25a005c6cfe9dd5ca8d2c9eb94193adf20cd46fe028f5696a0fde",
             "Hash of BlockProposal changed"
         );
     }
@@ -1070,7 +1121,7 @@ mod crypto_hash_stability {
         let hash = crypto_hash(&data);
         assert_eq!(
             hex::encode(hash.get_ref().0.as_slice()),
-            "c94d927dd7300814fef610a7560ba5a7775a859bb3511796cf23cfb59c038a4f",
+            "f289b64bb469c9aab1710c44b0b2fc778de9e5a552858eb10a566b8bc803d930",
             "Hash of BlockPayload changed"
         );
     }
