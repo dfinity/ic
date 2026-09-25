@@ -110,6 +110,12 @@ const WHALE_CANISTER_CYCLES: u128 = 100_000_000_000_000_000;
 /// Cycles to fund the proxy application canister with. 300T cycles.
 const PROXY_CANISTER_CYCLES: u128 = 300_000_000_000_000;
 
+/// The reserved id the `whale` canister claims: control-panel's engine canister,
+/// and the only principal allowed to drive the engine controller here. Hardcoded
+/// because the reservation order below fixes it, and because the controller is
+/// installed with the NNS, before the reservations are created.
+const ENGINE_CANISTER_ID: &str = "5s2ji-faaaa-aaaaa-qaaaq-cai";
+
 /// Unclaimed ids reserved after the three above, so that a consumer can pin a new
 /// canister id without changing this testnet and redeploying it first. Raising this
 /// is safe — the new ids come after the existing ones; lowering it retires ids from
@@ -456,10 +462,29 @@ pub fn setup(env: TestEnv) {
 
     ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");
-    install_nns_with_customizations_and_check_progress(
-        env.topology_snapshot(),
-        nns_dapp_customizations(),
+    // The engine controller is installed with the NNS, and its defaults are
+    // mainnet's: only the mainnet backend principal may call it, and new engine
+    // subnets would be bootstrapped from a mainnet subnet that does not exist
+    // here. Both are set explicitly so engines can actually be created on this
+    // testnet — the caller is the engine canister that claims the `whale`
+    // reservation below, and the DKG source is this testnet's own NNS subnet.
+    //
+    // The init args are filled in via `Default::default()` and field assignment
+    // rather than by naming `EngineControllerInitArgs`, which would pull
+    // ic-nns-test-utils into this crate's Cargo.toml *and* BUILD.bazel for the
+    // sake of one struct literal.
+    let mut customizations = nns_dapp_customizations();
+    let engine_controller = customizations
+        .engine_controller_init_args
+        .insert(Default::default());
+    engine_controller.authorized_caller = Some(
+        Principal::from_text(ENGINE_CANISTER_ID)
+            .expect("hardcoded ENGINE_CANISTER_ID must be a valid principal"),
     );
+    engine_controller.initial_dkg_subnet_id = Some(Principal::from(
+        env.topology_snapshot().root_subnet_id().get(),
+    ));
+    install_nns_with_customizations_and_check_progress(env.topology_snapshot(), customizations);
     // Given IC_GW_IPV4 the ic-gateway gets a static, publicly routed IPv4
     // address out of the dm1-dmz network, which Farm publishes as the testnet's
     // A record. Without it the testnet still runs on DMZ hosts but is reachable
