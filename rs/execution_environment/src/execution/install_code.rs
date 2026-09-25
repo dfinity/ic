@@ -10,8 +10,7 @@ use ic_embedders::{
     wasmtime_embedder::system_api::ExecutionParameters,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, MessageMemoryUsage, SubnetAvailableMemoryError,
-    WasmExecutionOutput,
+    HypervisorError, HypervisorResult, MessageMemoryUsage, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
 use ic_management_canister_types_private::{
@@ -481,38 +480,14 @@ impl InstallCodeHelper {
             self.allocated_guaranteed_response_message_bytes,
             self.allocated_wasm_custom_sections_bytes,
         ) {
-            match err {
-                SubnetAvailableMemoryError::InsufficientMemory {
-                    execution_requested,
-                    guaranteed_response_message_requested: _,
-                    wasm_custom_sections_requested,
-                    available_execution,
-                    available_guaranteed_response_messages: _,
-                    available_wasm_custom_sections,
-                } => {
-                    let err = if wasm_custom_sections_requested.get() as i128
-                        > available_wasm_custom_sections as i128
-                    {
-                        CanisterManagerError::SubnetWasmCustomSectionCapacityOverSubscribed {
-                            requested: wasm_custom_sections_requested,
-                            available: NumBytes::new(available_wasm_custom_sections.max(0) as u64),
-                        }
-                    } else {
-                        CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                            requested: execution_requested,
-                            available: NumBytes::new(available_execution.max(0) as u64),
-                        }
-                    };
-                    return finish_err(
-                        clean_canister,
-                        self.instructions_left(),
-                        original,
-                        round,
-                        err,
-                        self.clone_log_memory_store(),
-                    );
-                }
-            }
+            return finish_err(
+                clean_canister,
+                self.instructions_left(),
+                original,
+                round,
+                err.into(),
+                self.clone_log_memory_store(),
+            );
         }
 
         // After this point `install_code` is guaranteed to succeed.

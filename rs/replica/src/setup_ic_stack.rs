@@ -236,15 +236,6 @@ pub fn construct_ic_stack(
             config.malicious_behavior.malicious_flags.clone(),
         )
     };
-    let xnet_endpoint = XNetEndpoint::new(
-        rt_handle_xnet.clone(),
-        Arc::clone(&certified_stream_store),
-        Arc::clone(&crypto) as Arc<_>,
-        registry.clone(),
-        config.message_routing,
-        metrics_registry,
-        log.clone(),
-    );
     // Use XNet runtime to spawn XNet client threads.
     let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new(
         Arc::clone(&state_manager) as Arc<_>,
@@ -257,6 +248,16 @@ pub fn construct_ic_stack(
         metrics_registry,
         log.clone(),
     ));
+    let xnet_endpoint = XNetEndpoint::new(
+        rt_handle_xnet.clone(),
+        Arc::clone(&certified_stream_store),
+        Arc::clone(&xnet_payload_builder) as Arc<_>,
+        Arc::clone(&crypto) as Arc<_>,
+        registry.clone(),
+        config.message_routing,
+        metrics_registry,
+        log.clone(),
+    );
     // ---------- PAYLOAD BUILDERS WITHOUT ARTIFACT POOL FOLLOW -----------
     let query_stats_payload_builder = execution_services
         .query_stats_payload_builder

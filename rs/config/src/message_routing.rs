@@ -12,6 +12,13 @@ pub const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
 /// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
 pub const MAX_STREAM_MESSAGES: usize = 10_000;
 
+/// Maximum size of a XNet advert, i.e. of a header-only `CertifiedStreamSlice`:
+/// a stream header (with up to `MAX_STREAM_MESSAGES` reject signals), a
+/// header-only witness and a certification.
+///
+/// Enforced by the receiver, so the sender must not exceed it.
+pub const ADVERT_MAX_BODY_BYTES: usize = 32 * 1024;
+
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
 /// Message Routing replica config.
