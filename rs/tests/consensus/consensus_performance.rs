@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ bazel test //rs/tests/consensus:consensus_performance_colocate --test_arg=--keepalive --test_tmpdir=./performance --test_env FETCH_TEST_DIR=1 --test_env DOWNLOAD_P8S_DATA=1
+//   $ bazel test //rs/tests/consensus:consensus_performance_farm_colocate --test_arg=--keepalive --test_tmpdir=./performance --test_env FETCH_TEST_DIR=1 --test_env DOWNLOAD_P8S_DATA=1
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -30,11 +30,11 @@
 // To get access to P8s and Grafana look for the following log lines:
 //
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:168:0]
-//     Prometheus Web UI at http://prometheus.performance--1681227226065.testnet.farm.dfinity.systems
+//     Prometheus Web UI at http://prometheus.performance_farm--1681227226065.testnet.farm.dfinity.systems
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:170:0]
-//     IC Progress Clock at http://grafana.performance--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
+//     IC Progress Clock at http://grafana.performance_farm--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:169:0]
-//     Grafana at http://grafana.performance--1681227226065.testnet.farm.dfinity.systems
+//     Grafana at http://grafana.performance_farm--1681227226065.testnet.farm.dfinity.systems
 //
 // To inspect the metrics after the test has finished, exit the dev container
 // and run a local p8s and Grafana on the downloaded p8s data directory using:

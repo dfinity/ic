@@ -8,7 +8,7 @@
         "editor.defaultFormatter": "StackBuild.bazel-stack-vscode",
         "editor.formatOnSave": true
     },
-    "bazel.buildifierExecutable": "@buildifier",
+    "bazel.buildifier.executable": "@buildifier_prebuilt//:buildifier",
     "cSpell.words": [
         "blockmaker",
         "blockmakers",
