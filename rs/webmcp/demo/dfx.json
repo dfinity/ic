@@ -1,0 +1,50 @@
+{
+  "canisters": {
+    "backend": {
+      "type": "rust",
+      "candid": "backend.did",
+      "package": "demo-backend",
+      "webmcp": {
+        "enabled": true,
+        "name": "WebMCP Demo Shop",
+        "description": "A demo e-commerce canister exposing products and cart management to AI agents",
+        "expose_methods": [
+          "list_products",
+          "get_product",
+          "get_cart",
+          "add_to_cart",
+          "remove_from_cart",
+          "checkout"
+        ],
+        "require_auth": ["add_to_cart", "remove_from_cart", "checkout"],
+        "certified_queries": ["list_products", "get_product", "get_cart"],
+        "descriptions": {
+          "list_products": "List all available products with names, descriptions, and prices",
+          "get_product": "Get details for a specific product by its numeric ID",
+          "get_cart": "Get the current contents and total of the shopping cart",
+          "add_to_cart": "Add a product to the shopping cart with optional quantity",
+          "remove_from_cart": "Remove a product from the cart by product ID",
+          "checkout": "Complete the purchase and pay for all items in the cart"
+        },
+        "param_descriptions": {
+          "add_to_cart.product_id": "The numeric ID of the product to add",
+          "add_to_cart.quantity": "How many units to add (minimum 1)",
+          "get_product.arg0": "The numeric product ID to look up",
+          "remove_from_cart.arg0": "The numeric product ID to remove"
+        }
+      }
+    },
+    "frontend": {
+      "type": "assets",
+      "source": ["assets"],
+      "dependencies": ["backend"]
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:4943",
+      "type": "ephemeral"
+    }
+  },
+  "version": 1
+}
