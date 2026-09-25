@@ -205,11 +205,12 @@ pub async fn evaluate_merge_readiness(
         ),
         term(
             Condition::RefundPool,
-            // A cooling down subnet routes no refunds either (see `route_refunds`
-            // in `rs/messaging/src/routing/stream_builder.rs`), so a refund that
-            // is in the pool stays pending until the subnet is merged, and is
-            // then lost: the merged state takes the refunds of the destination
-            // subnet, not those of the subnet that is merged away.
+            // A cooling down subnet still routes its refunds (see `route_refunds`
+            // in `rs/messaging/src/routing/stream_builder.rs`), so the refund pool
+            // drains by itself, unless a stream is full. Waiting for it to be
+            // empty keeps a refund from being lost in the merge: the merged state
+            // takes the refunds of the destination subnet, not those of the
+            // subnet that is merged away.
             format!(
                 "the refund pool holds no pending anonymous refund ({pending_refunds} refunds, \
                  worth {pending_refunds_cycles} cycles)"
