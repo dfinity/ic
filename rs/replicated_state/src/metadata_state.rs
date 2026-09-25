@@ -24,8 +24,9 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::consensus::upgrade::UpgradePermitAction;
 use ic_types::{
-    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
+    CountBytes, CryptoHashOfPartialState, Height, NodeId, NumBytes, PrincipalId, SubnetId,
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
@@ -43,6 +44,7 @@ use ic_types_cycles::{CanisterCyclesCostSchedule, CyclesUseCase, NominalCycles};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use ic_wasm_types::WasmHash;
+use num_traits::SaturatingSub;
 use serde::{Deserialize, Serialize};
 use std::ops::Bound::{Included, Unbounded};
 use std::{
@@ -194,6 +196,10 @@ pub struct SystemMetadata {
     /// Transient: reset to `None` on checkpoint load.
     #[validate_eq(Ignore)]
     pub subnet_ids_at_last_reject_generation: Option<Vec<SubnetId>>,
+
+    /// Phase-2 upgrade state accumulator: tracks outstanding reboot requests
+    /// and authorized nodes for the rolling GuestOS reboot.
+    pub upgrade_state: UpgradeState,
 }
 
 /// Full description of the IC network topology.
@@ -788,6 +794,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
             subnet_ids_at_last_reject_generation: None,
+            upgrade_state: Default::default(),
         }
     }
 
@@ -1137,6 +1144,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
             subnet_ids_at_last_reject_generation: _,
+            upgrade_state: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -1242,6 +1250,7 @@ impl SystemMetadata {
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
             subnet_ids_at_last_reject_generation: _,
+            upgrade_state: _,
         } = self;
 
         assert_eq!(None, split_from);
@@ -1354,6 +1363,7 @@ impl SystemMetadata {
             // Transient field; reset so that `generate_reject_responses_for_deleted_subnets()`
             // runs unconditionally on the first post-split round.
             subnet_ids_at_last_reject_generation: None,
+            upgrade_state: Default::default(),
         })
     }
 
@@ -2444,6 +2454,58 @@ impl UnflushedCheckpointOps {
     }
 }
 
+/// If a permit request is not authorized within this many blocks, it expires
+/// and the slot is freed for the next block maker to issue a new request.
+pub const UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS: Height = Height::new(20);
+
+/// The Phase 2 state during fast GuestOS upgrades, stored in `SystemMetadata`.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct UpgradeState {
+    /// Nodes that have requested a reboot permit but not yet been authorized,
+    /// mapped to the height at which they requested.
+    pub upgrade_requests: BTreeMap<NodeId, Height>,
+    /// Nodes that have been authorized to reboot.
+    pub authorized_nodes: BTreeSet<NodeId>,
+}
+
+impl UpgradeState {
+    /// Apply a block's upgrade actions at `height`, pruning expired
+    /// requests and permits of departed members.
+    pub fn apply(
+        &mut self,
+        actions: &[UpgradePermitAction],
+        height: Height,
+        subnet_members: &BTreeSet<NodeId>,
+    ) {
+        for action in actions {
+            match action {
+                UpgradePermitAction::RequestPermit(request) => {
+                    self.upgrade_requests
+                        .insert(request.requestor, request.request_height);
+                }
+                UpgradePermitAction::AuthorizePermit(authorization) => {
+                    let node = authorization.content.requestor;
+                    self.upgrade_requests.remove(&node);
+                    self.authorized_nodes.insert(node);
+                }
+                UpgradePermitAction::ReturnPermit { node } => {
+                    self.authorized_nodes.remove(node);
+                }
+            }
+        }
+
+        // Expire stale requests and prune departed members.
+        let prune_below_height = height.saturating_sub(&UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS);
+        self.upgrade_requests.retain(|node, req_height| {
+            *req_height >= prune_below_height && subnet_members.contains(node)
+        });
+
+        // Prune departed members.
+        self.authorized_nodes
+            .retain(|node| subnet_members.contains(node));
+    }
+}
+
 pub mod testing {
     use super::*;
 
@@ -2586,6 +2648,7 @@ pub mod testing {
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
             subnet_ids_at_last_reject_generation: None,
+            upgrade_state: Default::default(),
         };
     }
 }

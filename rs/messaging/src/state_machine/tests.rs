@@ -20,9 +20,11 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec, nonzero_values};
 use ic_test_utilities_state::new_canister_state;
 use ic_test_utilities_types::batch::BatchBuilder;
-use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
+use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2, node_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, SignedIngressBuilder};
-use ic_types::batch::{BatchMessages, BlockmakerMetrics, ChainKeyData};
+use ic_types::batch::{BatchMessages, BlockmakerMetrics, ChainKeyData, UpgradePayload};
+use ic_types::consensus::UpgradePermitRequest;
+use ic_types::consensus::upgrade::UpgradePermitAction;
 use ic_types::messages::{
     CallbackId, CanisterMessage, NO_DEADLINE, Payload, Response, SignedIngress, StreamMessage,
 };
@@ -251,6 +253,32 @@ fn test_delivered_batch_interface() {
     for i in 0..2 {
         param_batch_test(Height::from(27), i);
     }
+}
+
+#[test]
+fn test_upgrade_actions_applied_to_state() {
+    let requestor = node_test_id(1);
+    let provided_batch = BatchBuilder::new()
+        .messages(BatchMessages {
+            upgrade: UpgradePayload {
+                actions: vec![UpgradePermitAction::RequestPermit(UpgradePermitRequest {
+                    requestor,
+                    request_height: Height::from(1),
+                })],
+            },
+            ..BatchMessages::default()
+        })
+        .batch_number(Height::from(1))
+        .build();
+
+    let state = test_delivered_batch(provided_batch);
+
+    let upgrade_state = &state.metadata.upgrade_state;
+    assert_eq!(
+        upgrade_state.upgrade_requests.get(&requestor),
+        Some(&Height::from(1))
+    );
+    assert!(upgrade_state.authorized_nodes.is_empty());
 }
 
 #[test]
