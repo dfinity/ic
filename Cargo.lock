@@ -4361,6 +4361,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
+name = "duration-string"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edbd404ab304f4426de3e981a875a77129597ce04202c9b8b4502c6f1c246809"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6016,16 +6025,6 @@ name = "humantime"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "135b12329e5e3ce057a9f972339ea52bc954fe1e9358ef27f95e89716fbc5424"
-
-[[package]]
-name = "humantime-serde"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57a3db5ea5923d99402c94e9feb261dc5ee9b4efa158b0315f788cf549cc200c"
-dependencies = [
- "humantime",
- "serde",
-]
 
 [[package]]
 name = "hybrid-array"
@@ -14539,10 +14538,10 @@ dependencies = [
  "deterministic_ips",
  "dfn_candid",
  "dfn_protobuf",
+ "duration-string",
  "futures",
  "hex",
  "http 1.4.0",
- "humantime-serde",
  "ic-agent",
  "ic-base-types",
  "ic-canister-client",
@@ -17688,10 +17687,10 @@ dependencies = [
  "axum",
  "axum-otel-metrics",
  "clap",
+ "duration-string",
  "futures-util",
  "http 1.4.0",
  "http-body-util",
- "humantime-serde",
  "hyper",
  "hyper-util",
  "itertools 0.12.1",

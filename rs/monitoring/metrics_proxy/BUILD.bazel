@@ -6,10 +6,10 @@ DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:axum",
     "@crate_index//:axum-otel-metrics",
+    "@crate_index//:duration-string",
     "@crate_index//:futures-util",
     "@crate_index//:http",
     "@crate_index//:http-body-util",
-    "@crate_index//:humantime-serde",
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:itertools",

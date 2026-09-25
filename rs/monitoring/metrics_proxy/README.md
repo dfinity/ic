@@ -167,11 +167,10 @@ Currently, there are three action classes:
 All durations in the configuration file (`cache_duration`, `timeout`,
 `header_read_timeout`, `request_response_timeout` and the `resolution` of
 `reduce_time_resolution`) are strings consisting of an integer followed by a
-unit, as understood by the [`humantime`](https://docs.rs/humantime) crate:
-`ns`, `us`, `ms`, `s`, `m`, `h`, `d`, `w` and `y` (plus their long forms such
-as `seconds` or `minutes`).  Multiple parts may be combined, e.g. `1m 30s`.
-Examples: `100ms`, `5s`, `30s`, `1m`.  A bare number without a unit is
-rejected.
+unit, as understood by the
+[`duration-string`](https://docs.rs/duration-string) crate: `ns`, `us`, `ms`,
+`s`, `m`, `h`, `d`, `w` or `y`.  Examples: `100ms`, `5s`, `30s`, `1m`.  A bare
+number without a unit is rejected.
 
 ### `metrics`
 

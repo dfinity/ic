@@ -3780,6 +3780,7 @@ dependencies = [
  "devicemapper",
  "dialoguer",
  "directories-next",
+ "duration-string",
  "ed25519-dalek",
  "educe 0.5.11",
  "enum-ordinalize-derive",
@@ -3809,7 +3810,6 @@ dependencies = [
  "http-body",
  "http-body-util",
  "humantime",
- "humantime-serde",
  "hyper",
  "hyper-rustls",
  "hyper-socks2",
@@ -4164,6 +4164,15 @@ name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
+
+[[package]]
+name = "duration-string"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edbd404ab304f4426de3e981a875a77129597ce04202c9b8b4502c6f1c246809"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "dyn-clone"
@@ -5534,16 +5543,6 @@ name = "humantime"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "15cdd26707701c53297e2fa6afb323d55fbc1d0810c3aec078ae3ef0424c3c15"
-
-[[package]]
-name = "humantime-serde"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57a3db5ea5923d99402c94e9feb261dc5ee9b4efa158b0315f788cf549cc200c"
-dependencies = [
- "humantime",
- "serde",
-]
 
 [[package]]
 name = "hybrid-array"

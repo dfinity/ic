@@ -15,6 +15,7 @@ use crate::driver::{
     test_setup::{GroupSetup, SystemTestBackend},
 };
 use anyhow::{Context, Result};
+use duration_string::DurationString;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
 use ic_protobuf::registry::{dc::v1::DataCenterRecord, node::v1::NodeRewardType};
@@ -28,7 +29,7 @@ use ic_types::{Height, NodeId, PrincipalId};
 use ic_types_cycles::CanisterCyclesCostSchedule;
 use phantom_newtype::AmountOf;
 use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, KeyPair, KeyUsagePurpose};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use slog::info;
 use std::collections::BTreeMap;
 use std::collections::hash_map::DefaultHasher;
@@ -713,6 +714,14 @@ impl InternetComputer {
     }
 }
 
+/// Deserializes an optional [`Duration`] from a duration string such as `200ms`
+/// or `5s` (see the `duration-string` crate for the grammar).
+fn deserialize_optional_duration<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Duration>, D::Error> {
+    Option::<DurationString>::deserialize(deserializer).map(|d| d.map(Duration::from))
+}
+
 /// A builder for the initial configuration of a subnetwork.
 #[derive(Clone, PartialEq, Debug, Deserialize)]
 pub struct Subnet {
@@ -725,9 +734,9 @@ pub struct Subnet {
     pub max_ingress_messages_per_block: Option<u64>,
     pub max_ingress_bytes_per_block: Option<u64>,
     pub max_block_payload_size: Option<u64>,
-    #[serde(with = "humantime_serde")]
+    #[serde(deserialize_with = "deserialize_optional_duration")]
     pub unit_delay: Option<Duration>,
-    #[serde(with = "humantime_serde")]
+    #[serde(deserialize_with = "deserialize_optional_duration")]
     pub initial_notary_delay: Option<Duration>,
     pub dkg_interval_length: Option<Height>,
     pub dkg_dealings_per_block: Option<usize>,

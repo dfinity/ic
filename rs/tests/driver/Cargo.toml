@@ -23,10 +23,10 @@ cycles-minting-canister = { path = "../../nns/cmc" }
 deterministic_ips = { path = "../../ic_os/networking/deterministic_ips" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+duration-string = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
-humantime-serde = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }

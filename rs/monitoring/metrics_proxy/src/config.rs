@@ -1,3 +1,4 @@
+use duration_string::DurationString;
 use regex;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use serde;
@@ -12,6 +13,13 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::PathBuf;
 use std::time::Duration;
 use url::Url;
+
+/// Deserializes a [`Duration`] from a duration string such as `100ms`, `5s` or
+/// `1m`: an integer followed by one of the units `ns`, `us`, `ms`, `s`, `m`,
+/// `h`, `d`, `w` or `y` (see the `duration-string` crate).
+fn deserialize_duration<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Duration, D::Error> {
+    DurationString::deserialize(deserializer).map(Duration::from)
+}
 
 #[derive(Debug, PartialEq, Eq, Default)]
 pub enum Protocol {
@@ -121,7 +129,7 @@ pub enum LabelFilterAction {
     Drop,
     /// Cache the metric for an amount of time.
     ReduceTimeResolution {
-        #[serde(with = "humantime_serde")]
+        #[serde(deserialize_with = "deserialize_duration")]
         resolution: Duration,
     },
     /// Add an amount of random noise to a metric,
@@ -238,9 +246,15 @@ struct ListenOn {
     url: Url,
     certificate_file: Option<std::path::PathBuf>,
     key_file: Option<std::path::PathBuf>,
-    #[serde(default = "default_header_read_timeout", with = "humantime_serde")]
+    #[serde(
+        default = "default_header_read_timeout",
+        deserialize_with = "deserialize_duration"
+    )]
     header_read_timeout: Duration,
-    #[serde(default = "default_request_response_timeout", with = "humantime_serde")]
+    #[serde(
+        default = "default_request_response_timeout",
+        deserialize_with = "deserialize_duration"
+    )]
     request_response_timeout: Duration,
 }
 
@@ -369,7 +383,7 @@ pub struct ConnectTo {
     pub url: Url,
     #[serde(default = "bool::default")]
     pub tolerate_bad_tls: bool,
-    #[serde(default = "default_timeout", with = "humantime_serde")]
+    #[serde(default = "default_timeout", deserialize_with = "deserialize_duration")]
     pub timeout: Duration,
 }
 
@@ -423,7 +437,10 @@ struct ProxyEntry {
     listen_on: ListenerSpec,
     connect_to: ConnectTo,
     label_filters: Vec<LabelFilter>,
-    #[serde(default = "default_cache_duration", with = "humantime_serde")]
+    #[serde(
+        default = "default_cache_duration",
+        deserialize_with = "deserialize_duration"
+    )]
     cache_duration: Duration,
 }
 
