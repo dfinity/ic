@@ -36,14 +36,15 @@ pub const VETKD_FEE: Cycles = Cycles::new(10 * B as u128);
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100 * B as u128);
 const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 
-/// Returns the extra instruction overhead charged in-band by the deterministic
-/// memory tracker for `n_wasm_pages` Wasm pages first written in replicated
-/// mode (DirtyPageTracking::Track). Each such page triggers both
-/// `mark_wasm_page_accessed` and `mark_wasm_page_dirty`, i.e. it is charged
-/// twice per OS page. The result is a page count, to be multiplied by
-/// `page_overhead`. The OS page size varies by platform (4 KiB on Linux, 16 KiB
-/// on arm64-darwin).
-fn deterministic_tracker_write_overhead(n_wasm_pages: u64) -> u64 {
+/// Returns the number of *OS pages* the deterministic memory tracker charges
+/// for in-band when `n_wasm_pages` Wasm pages are first written in replicated
+/// mode (`DirtyPageTracking::Track`). Multiply by `page_overhead` to get
+/// instructions.
+///
+/// Each such page triggers both `mark_wasm_page_accessed` and
+/// `mark_wasm_page_dirty`, i.e. every OS page it covers is charged twice. The
+/// OS page size varies by platform (4 KiB on Linux, 16 KiB on arm64-darwin).
+fn dmt_write_charged_os_pages(n_wasm_pages: u64) -> u64 {
     use ic_sys::PAGE_SIZE;
     const WASM_PAGE_SIZE: u64 = 65536;
     n_wasm_pages * 2 * (WASM_PAGE_SIZE / PAGE_SIZE as u64)
@@ -1119,10 +1120,9 @@ fn test_subnet_size_execute_message_cost() {
     let config = get_cycles_account_manager_config(subnet_type);
     let reference_subnet_size = DEFAULT_REFERENCE_SUBNET_SIZE;
     // The `inc` method writes to the heap (first access), so the deterministic
-    // memory tracker charges an extra 32 instructions in-band (accessed + dirty
-    // for 1 Wasm page) when enabled.
+    // memory tracker charges in-band for one Wasm page, accessed and dirty.
     let reference_instructions_cost = inc_instruction_cost(HypervisorConfig::default())
-        + page_overhead * deterministic_tracker_write_overhead(1);
+        + page_overhead * dmt_write_charged_os_pages(1);
     let reference_cost = calculate_execution_cost(
         &config,
         NumInstructions::from(reference_instructions_cost),
@@ -1132,7 +1132,7 @@ fn test_subnet_size_execute_message_cost() {
     // Check default cost.
     assert_eq!(
         reference_instructions_cost,
-        1019 + page_overhead * deterministic_tracker_write_overhead(1)
+        1019 + page_overhead * dmt_write_charged_os_pages(1)
     );
     let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     assert_eq!(

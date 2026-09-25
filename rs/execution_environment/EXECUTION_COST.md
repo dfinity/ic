@@ -26,21 +26,6 @@ by `DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION` and other compilation limits.
 
 TODO(EXC-2040): There is no script to derive the cost based on benchmark results.
 
-Heap Memory Overhead
---------------------
-
-Each Wasm heap memory page has an associated overhead defined
-by `DEFAULT_PAGE_OVERHEAD` and other costs.
-
-1. ✅ Runs daily on CI.
-2. ✅ Results are available in [Grafana](https://grafana.mainnet.dfinity.network/d/benchmarks-embedders-heap/benchmarks3a-embedders-heap).
-3. ✅ Raw benchmark:
-    * `bazel run //rs/embedders:heap_bench`
-4. ✅ Baseline comparison:
-    * `INCLUDE=heap ./rs/execution_environment/benches/run-all-benchmarks.sh`
-
-TODO(EXC-2040): There is no script to derive the cost based on benchmark results.
-
 Management Canister Calls
 -------------------------
 
@@ -60,18 +45,24 @@ Scripts: `rs/execution_environment/benches/management_canister/*`
 
 1. Run `run_snapshot_benchmarks_forever.sh` to generate the `MANAGEMENT_CANISTER.md` file.
 
-Stable Memory Overhead
-----------------------
+Memory Overhead
+---------------
 
-Each Wasm stable memory page has an associated overhead defined
-by `DEFAULT_PAGE_OVERHEAD` and other costs.
+Heap and stable memory pages share the same overhead, defined by
+`DEFAULT_PAGE_OVERHEAD` and other costs. It is charged per OS page by the
+deterministic memory tracker, once when a page is first accessed and once more
+when it is first dirtied. The two memories are benchmarked separately.
 
 1. ✅ Runs daily on CI.
-2. ✅ Results are available in [Grafana](https://grafana.mainnet.dfinity.network/d/benchmarks-embedders-stable-memory/benchmarks3a-embedders-stable-memory).
-3. ✅ Raw benchmark:
-    * `bazel run //rs/embedders:stable_memory_bench`
+2. ✅ Results are available in Grafana for:
+     * [heap](https://grafana.mainnet.dfinity.network/d/benchmarks-embedders-heap/benchmarks3a-embedders-heap)
+     * [stable memory](https://grafana.mainnet.dfinity.network/d/benchmarks-embedders-stable-memory/benchmarks3a-embedders-stable-memory)
+3. ✅ Raw benchmarks:
+    * Heap: `bazel run //rs/embedders:heap_bench`
+    * Stable memory: `bazel run //rs/embedders:stable_memory_bench`
 4. ✅ Baseline comparison:
-    * `INCLUDE=stable ./rs/execution_environment/benches/run-all-benchmarks.sh`
+    * Heap: `INCLUDE=heap ./rs/execution_environment/benches/run-all-benchmarks.sh`
+    * Stable memory: `INCLUDE=stable ./rs/execution_environment/benches/run-all-benchmarks.sh`
 
 TODO(EXC-2040): There is no script to derive the cost based on benchmark results.
 
