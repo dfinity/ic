@@ -322,6 +322,10 @@ pub(crate) struct CanisterManagerResponse {
     /// Unflushed checkpoint operations that must be handled
     /// before the next checkpoint.
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
+    /// Instructions used by the current request that should only be charged
+    /// upon success. These cover work that is not done while executing the
+    /// request itself, but only later, at checkpoint time.
+    pub instructions_to_charge_on_success: NumInstructions,
     /// (Reject) responses from call contexts that were marked as "deleted" while processing the current request.
     /// Note. A call context is marked as "deleted" when a canister is uninstalled.
     pub deleted_call_context_responses: Vec<Response>,

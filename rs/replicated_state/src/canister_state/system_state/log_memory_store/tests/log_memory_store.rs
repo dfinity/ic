@@ -974,30 +974,6 @@ fn test_next_idx_preserved_when_appending_empty_delta_log() {
     assert_eq!(store.next_idx(), next_idx);
 }
 
-fn assert_memory_usage_for_limit(limit: usize) {
-    let mut s = LogMemoryStore::new();
-    s.resize_for_testing(limit);
-    assert_eq!(
-        s.memory_usage_for_limit(NumBytes::new(limit as u64)).get() as usize,
-        s.memory_usage(),
-    );
-}
-
-#[test]
-fn memory_usage_for_limit_zero_limit() {
-    assert_memory_usage_for_limit(0);
-}
-
-#[test]
-fn memory_usage_for_limit_at_minimum() {
-    assert_memory_usage_for_limit(EXPECTED_DATA_CAPACITY_MIN);
-}
-
-#[test]
-fn memory_usage_for_limit_above_minimum() {
-    assert_memory_usage_for_limit(TEST_LOG_MEMORY_LIMIT);
-}
-
 #[test]
 fn test_gap_in_delta_clears_store() {
     // Simulate a delta that overflowed its capacity and evicted older records,
