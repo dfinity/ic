@@ -73,7 +73,7 @@ def sourcegraph_url(label: str) -> str:
     dir = parts[0].replace("//", "")
     url = f"https://sourcegraph.com/search?q=repo:^github\\.com/{ORG}/{REPO}$+file:{dir}/BUILD.bazel"
     if len(parts) == 2:
-        test = parts[1].removesuffix("_head_nns").removesuffix("_colocate")
+        test = parts[1].removesuffix("_farm").removesuffix("_local").removesuffix("_head_nns").removesuffix("_colocate")
         url += f"+{test}"
     return url
 
