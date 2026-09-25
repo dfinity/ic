@@ -715,7 +715,9 @@ fn test_changing_subnet_membership() {
         sim.run().unwrap();
     })
 }
-/// Test that we reconnect after TLS handshake failures.
+/// Test that we back off while TLS handshakes fail and reconnect once they succeed. The failing
+/// connections are established from the dialer's point of view, since the server only rejects
+/// the dialer's certificate after the dialer's side of the handshake has completed.
 #[test]
 fn test_transient_failing_tls() {
     with_test_replica_logger(|log| {
@@ -733,6 +735,10 @@ fn test_transient_failing_tls() {
 
         let conn_checker = ConnectivityChecker::new(&[NODE_1, NODE_2]);
 
+        // Node 1 accepts everyone. Its TLS config is only used to count the connection attempts.
+        let tls_1 = Arc::new(PeerRestrictedTlsConfig::new(NODE_1, &registry_handle));
+        tls_1.set_allowed_peers(vec![NODE_1, NODE_2]);
+        // Node 2 rejects node 1.
         let tls_2 = Arc::new(PeerRestrictedTlsConfig::new(NODE_2, &registry_handle));
         tls_2.set_allowed_peers(vec![NODE_2]);
 
@@ -744,7 +750,7 @@ fn test_transient_failing_tls() {
             registry_handle.clone(),
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
-            None,
+            Some(tls_1.clone()),
             None,
             None,
             conn_checker.check_fut(),
@@ -776,14 +782,26 @@ fn test_transient_failing_tls() {
         registry_handle.registry_client.update_to_latest_version();
 
         // Make sure we can't connect by trying to connect for a 7s.
+        const REJECTION_PERIOD: Duration = Duration::from_secs(7);
         wait_for_timeout(
             &mut sim,
             || conn_checker.fully_connected(),
-            Duration::from_secs(7),
+            REJECTION_PERIOD,
         )
         .expect("Nodes should not connect");
 
-        // Node 2 is server here. Allow node 1 to connect again.
+        // Without a backoff, node 1 would redial as fast as the handshakes complete. With a
+        // backoff of 5s, we expect roughly one attempt every 5s, plus some slack.
+        let attempts = tls_1.client_config_calls();
+        info!(log, "Node 1 made {attempts} connection attempts");
+        assert!(
+            attempts <= 3,
+            "Node 1 made {attempts} connection attempts in {REJECTION_PERIOD:?}, \
+            it should back off when node 2 rejects its connections"
+        );
+
+        // Node 2 is server here. Allow node 1 to connect again. The backoff must not prevent
+        // the nodes from connecting.
         tls_2.set_allowed_peers(vec![NODE_2, NODE_1]);
         // This triggers a tls reconfiguration because it is a topology change.
         registry_handle.set_oldest_consensus_registry_version(RegistryVersion::from(2));

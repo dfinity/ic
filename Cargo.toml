@@ -935,6 +935,7 @@ subtle = "2.6.1"
 syn = { version = "2.0.110", features = ["fold", "full"] }
 sys-mount = "3.0"
 tar = "0.4.39"
+target-lexicon = "0.13.5"
 tempfile = "3.20"
 test-strategy = "0.4.0"
 textplots = "^0.8"

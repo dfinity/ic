@@ -1603,6 +1603,10 @@ crate.spec(
     version = "^0.4.38",
 )
 crate.spec(
+    package = "target-lexicon",
+    version = "^0.13.5",
+)
+crate.spec(
     features = [
         "full",
     ],

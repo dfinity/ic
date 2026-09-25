@@ -3990,6 +3990,7 @@ dependencies = [
  "syscalls",
  "tabled",
  "tar",
+ "target-lexicon",
  "tarpc",
  "tempfile",
  "test-strategy",

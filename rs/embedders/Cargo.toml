@@ -44,6 +44,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 slog-term = { workspace = true }
+target-lexicon = { workspace = true }
 tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
@@ -63,6 +64,7 @@ ic-test-utilities-execution-environment = { path = "../test_utilities/execution_
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-universal-canister = { path = "../universal_canister/lib" }
 insta = "1.8.0"
 lazy_static = { workspace = true }
 maplit = { workspace = true }

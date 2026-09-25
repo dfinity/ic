@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ bazel test //rs/tests/consensus/tecdsa:tecdsa_performance_test_colocate --test_arg=--keepalive --test_tmpdir=./performance  --test_env FETCH_TEST_DIR=1 --test_env DOWNLOAD_P8S_DATA=1 --test_env NODES_COUNT=40
+//   $ bazel test //rs/tests/consensus/tecdsa:tecdsa_performance_test_farm_colocate --test_arg=--keepalive --test_tmpdir=./performance  --test_env FETCH_TEST_DIR=1 --test_env DOWNLOAD_P8S_DATA=1 --test_env NODES_COUNT=40
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -31,9 +31,9 @@
 //
 // To get live access to P8s and Grafana while the test is running look for the following log lines:
 //
-// [...] TEST_LOG: [...] {"event_name":"prometheus_vm_created_event","body":"Prometheus Web UI at http://prometheus.tecdsa-performance-test-colocate--1758706685338.testnet.farm.dfinity.systems"}
-// [...] TEST_LOG: [...] {"event_name":"grafana_instance_created_event","body":"Grafana at http://grafana.tecdsa-performance-test-colocate--1758706685338.testnet.farm.dfinity.systems"}
-// [...] TEST_LOG: [...] {"event_name":"ic_progress_clock_created_event","body":"IC Progress Clock at http://grafana.tecdsa-performance-test-colocate--1758706685338.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now"}
+// [...] TEST_LOG: [...] {"event_name":"prometheus_vm_created_event","body":"Prometheus Web UI at http://prometheus.tecdsa-performance-test-farm-colocate--1758706685338.testnet.farm.dfinity.systems"}
+// [...] TEST_LOG: [...] {"event_name":"grafana_instance_created_event","body":"Grafana at http://grafana.tecdsa-performance-test-farm-colocate--1758706685338.testnet.farm.dfinity.systems"}
+// [...] TEST_LOG: [...] {"event_name":"ic_progress_clock_created_event","body":"IC Progress Clock at http://grafana.tecdsa-performance-test-farm-colocate--1758706685338.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now"}
 //
 // To inspect the metrics after the test has finished, exit the dev container
 // and run a local p8s and Grafana on the downloaded p8s data directory using:
