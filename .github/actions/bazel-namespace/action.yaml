@@ -13,14 +13,14 @@ description: |
   run and coverage command its own Build Event Protocol (BEP) file and execution profile.
 
   Afterwards, also when `run` failed or ran out of timeout-minutes, but not when the job was
-  cancelled, the logs of the tests that FAILED, were FLAKY or hit a TIMEOUT are staged and these
+  cancelled, the logs of the tests that FAILED, were FLAKY or hit a TIMEOUT are staged and two
   artifacts are uploaded:
-    <artifact-name>-profiles: the profiles, to Namespace Artifact Storage;
-    <artifact-name>-logs:     the console output of `run` and the staged test logs, idem;
-    <artifact-name>-bep:      the profiles and, if GPG_PASSPHRASE is set, the BEP files encrypted
-                              with it, to GitHub, where github-stats (dfinity-ops/k8s) ingests them
-                              into the database of ci/githubstats.
-  Retrieve the Namespace ones with namespace-actions/download-artifact or `nsc artifact`.
+    <artifact-name>-logs: the console output of `run` and the staged test logs, to Namespace
+                          Artifact Storage. Retrieve it with namespace-actions/download-artifact
+                          or `nsc artifact`;
+    <artifact-name>-bep:  the profiles and, if GPG_PASSPHRASE is set, the BEP files encrypted with
+                          it, to GitHub, where github-stats (dfinity-ops/k8s) ingests them into
+                          the database of ci/githubstats.
 
   Before using this action the job must:
     * run namespacelabs/nscloud-setup and
@@ -170,20 +170,8 @@ runs:
           fi
         done
 
-    - name: Upload the profiles to Namespace Artifact Storage
-      # Analyze them with e.g. `bazel analyze-profile` or
-      # https://github.com/EngFlow/bazel_invocation_analyzer. A failed upload must not fail the
-      # calling step, which would skip the workflow steps after it.
-      if: ${{ !cancelled() }}
-      continue-on-error: true
-      uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
-      with:
-        name: ${{ inputs.artifact-name }}-profiles
-        path: ${{ steps.out.outputs.dir }}/profile-*.json
-        if-no-files-found: ignore
-        retention-days: 14
-
     - name: Upload the console output and the staged test logs to Namespace Artifact Storage
+      # A failed upload must not fail the calling step, which would skip the later workflow steps.
       if: ${{ !cancelled() }}
       continue-on-error: true
       uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1

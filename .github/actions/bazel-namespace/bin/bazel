@@ -75,7 +75,7 @@ if [ $# -gt 0 ]; then
                 id="$bazel_command-$(date -u +%Y%m%dT%H%M%SZ)-$$"
                 args+=(
                     --build_event_binary_file="$BAZEL_NAMESPACE_OUT/bazel-bep-$id.pb"
-                    # Not .json.gz: github-stats reads profile-<id>.json as plain JSON and pairs it
+                    # github-stats reads profile-<id>.json as plain JSON and pairs it
                     # with bazel-bep-<id>.pb.gpg, the BEP file encrypted by the action.
                     --profile="$BAZEL_NAMESPACE_OUT/profile-$id.json"
                     # Associate each action in the profile with a target label, which helps
