@@ -83,7 +83,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 /// Connections that close sooner than this after being established are treated like failed
 /// connection attempts, i.e. they are retried only after `CONNECT_RETRY_BACKOFF`.
-const MIN_HEALTHY_CONNECTION_LIFETIME: Duration = IDLE_TIMEOUT;
+const MIN_HEALTHY_CONNECTION_LIFETIME: Duration = Duration::from_secs(1);
 
 // There should be least two probes before timing out a connection.
 const_assert!(KEEP_ALIVE_INTERVAL.as_nanos() < IDLE_TIMEOUT.as_nanos());
