@@ -647,7 +647,7 @@ impl IcConfig {
         }
 
         let replica_version_record = ReplicaVersionRecord {
-            replica_version_id: Some(self.initial_replica_version_id.to_string()),
+            replica_version_id: self.initial_replica_version_id.to_string(),
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
             guest_launch_measurements: self.guest_launch_measurements,
@@ -656,7 +656,7 @@ impl IcConfig {
         write_registry_entry(
             &data_provider,
             self.target_dir.as_path(),
-            make_replica_version_key(self.initial_replica_version_id.clone()).as_ref(),
+            make_replica_version_key(&replica_version_record.replica_version_id).as_ref(),
             version,
             replica_version_record,
         );
