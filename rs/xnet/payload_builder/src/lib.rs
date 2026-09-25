@@ -10,7 +10,7 @@ mod tests;
 #[cfg(test)]
 mod xnet_client_tests;
 
-pub use proximity::{GenRangeFn, ProximityMap, UnhealthyNodes};
+pub use crate::proximity::{GenRangeFn, ProximityMap, UnhealthyNodes};
 
 use crate::certified_slice_pool::{
     CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes,
@@ -41,8 +41,8 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
-use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetListRegistry};
+use ic_registry_client_helpers::node::{NodeRecord, NodeRegistry};
+use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, replicated_state::ReplicatedStateMessageRouting};
 use ic_types::batch::{ValidationContext, XNetPayload};
@@ -194,12 +194,16 @@ pub const METRIC_SLICE_MESSAGES: &str = "xnet_builder_slice_messages";
 pub const METRIC_SLICE_PAYLOAD_SIZE: &str = "xnet_builder_slice_payload_size_bytes";
 pub const METRIC_VALIDATE_PAYLOAD_DURATION: &str = "xnet_builder_validate_payload_duration_seconds";
 pub const METRIC_OUTSTANDING_XNET_QUERIES: &str = "xnet_builder_outstanding_queries";
+pub const METRIC_ADVERTS_SENT: &str = "xnet_builder_adverts_sent_total";
+pub const METRIC_SEND_ADVERT_DURATION: &str = "xnet_builder_advert_send_duration_seconds";
+pub const METRIC_OUTSTANDING_ADVERTS: &str = "xnet_builder_outstanding_adverts";
 
 pub const CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED: &str = "xnet_slice_count_bytes_failed";
 pub const CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES: &str = "xnet_slice_count_bytes_invalid";
 
 pub const LABEL_STATUS: &str = "status";
 pub const LABEL_PROXIMITY: &str = "proximity";
+pub const LABEL_REMOTE: &str = "remote";
 
 pub const STATUS_SUCCESS: &str = "success";
 pub const STATUS_DECODE_ERROR: &str = "ProxyDecodeError";
@@ -1247,6 +1251,47 @@ impl XNetEndpointResolver {
 
         let version = self.registry.get_latest_version();
         let (node, node_record) = self.proximity_map.pick_node(subnet_id, version)?;
+
+        self.endpoint_locator(
+            node,
+            node_record,
+            version,
+            &format!(
+                "stream/{}?msg_begin={}&witness_begin={}&byte_limit={}",
+                self.subnet_id, msg_begin, witness_begin, byte_limit
+            ),
+        )
+    }
+
+    /// Returns the `/api/v1/advert` `XNetEndpoint` URL of the given node, for
+    /// posting our own certified header to it. Which node to advertise to is the
+    /// caller's choice, unlike with `xnet_endpoint_url()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if retrieving the node registry entry fails; or if the
+    /// node address is invalid.
+    pub fn xnet_advert_url(&self, node: NodeId) -> Result<EndpointLocator, Error> {
+        let version = self.registry.get_latest_version();
+        let node_record = get_node_record(self.registry.as_ref(), node, version)?;
+
+        self.endpoint_locator(
+            node,
+            node_record,
+            version,
+            &format!("advert/{}", self.subnet_id),
+        )
+    }
+
+    /// Resolves `node` to the `XNetEndpoint` URL of `path`, e.g.
+    /// `stream/{SubnetId}?msg_begin=...`, at the given registry version.
+    fn endpoint_locator(
+        &self,
+        node: NodeId,
+        node_record: NodeRecord,
+        version: RegistryVersion,
+        path: &str,
+    ) -> Result<EndpointLocator, Error> {
         let proximity = if node_record.node_operator_id == self.node_operator_id {
             PeerLocation::Local
         } else {
@@ -1270,10 +1315,7 @@ impl XNetEndpointResolver {
             address: socket_addr,
         };
 
-        let url = format!(
-            "http://{}/api/v1/stream/{}?msg_begin={}&witness_begin={}&byte_limit={}",
-            authority, self.subnet_id, msg_begin, witness_begin, byte_limit
-        );
+        let url = format!("http://{authority}/api/v1/{path}");
 
         url.parse::<Uri>()
             .map_err(|e| {
@@ -1515,6 +1557,18 @@ fn get_node_operator_id(
         .map(|r| r.node_operator_id)
 }
 
+/// Retrieves the given node's `NodeRecord` at the given registry version.
+fn get_node_record(
+    registry: &dyn RegistryClient,
+    node: NodeId,
+    version: RegistryVersion,
+) -> Result<NodeRecord, Error> {
+    registry
+        .get_node_record(node, version)
+        .map_err(|e| Error::RegistryGetNodeInfoFailed(node, e))?
+        .ok_or(Error::MissingXNetEndpoint(node))
+}
+
 /// Maps `StateManagerErrors` to their `XNetPayloadError` namesakes.
 fn from_state_manager_error(e: StateManagerError) -> XNetPayloadValidationError {
     match e {
@@ -1631,6 +1685,172 @@ pub fn refill_stream_slice_indices(
     }
 
     result.into_iter()
+}
+
+/// Advertises our streams to the subnets they are addressed to.
+///
+/// The counterpart of `PoolRefillTask`, on the sending side: what it holds is
+/// what posting an advert needs, and the trigger, the conditions and the choice
+/// of targets are yet to come.
+pub struct AdvertTask {
+    endpoint_resolver: XNetEndpointResolver,
+
+    /// Async client for posting adverts to `XNetEndpoints`.
+    xnet_client: Arc<dyn XNetClient>,
+
+    /// Handles the headers that peers reply with, as it handles the adverts they
+    /// post to us.
+    advert_handler: Arc<dyn XNetAdvertHandler>,
+
+    metrics: AdvertTaskMetrics,
+
+    log: ReplicaLogger,
+}
+
+impl AdvertTask {
+    pub fn new(
+        endpoint_resolver: XNetEndpointResolver,
+        xnet_client: Arc<dyn XNetClient>,
+        advert_handler: Arc<dyn XNetAdvertHandler>,
+        metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            xnet_client,
+            endpoint_resolver,
+            advert_handler,
+            metrics: AdvertTaskMetrics::new(metrics_registry),
+            log,
+        }
+    }
+
+    /// Advertises our stream to `subnet_id` to the given node of it: posts our own
+    /// certified header and feeds a header returned in the reply back through the
+    /// receive path, a reply being an advert in the opposite direction, telling us
+    /// that the peer has fully consumed our stream.
+    ///
+    /// Does nothing if we have no stream to `subnet_id`.
+    pub async fn advertise_to(&self, subnet_id: SubnetId, node: NodeId) {
+        let since = Instant::now();
+        let Some(advert) = self.advert_handler.certified_header(subnet_id) else {
+            return;
+        };
+
+        let status = match self.post_advert(subnet_id, node, advert).await {
+            // Advert delivered and accepted.
+            Ok(None) => STATUS_SUCCESS.to_string(),
+
+            // Peer has already processed our stream and responded with its header. This is
+            // the outcome of us having processed that header.
+            Ok(Some(outcome)) => outcome.as_str().to_string(),
+
+            // Always log: a bad reply implicates the node, which only the log names.
+            Err(err @ AdvertError::HandleReply(_)) => {
+                warn!(
+                    self.log,
+                    "Failed to handle advert response for {subnet_id} from node {node}: {err}"
+                );
+                err.to_label_value()
+            }
+
+            // Advert could not be delivered.
+            Err(err) => {
+                if pass_log_sampling() {
+                    info!(
+                        self.log,
+                        "Failed to advertise to {subnet_id} at node {node}: {err}"
+                    );
+                }
+                err.to_label_value()
+            }
+        };
+
+        self.metrics
+            .adverts_sent
+            .with_label_values(&[&subnet_id.to_string(), &status])
+            .inc();
+        self.metrics
+            .send_advert_duration
+            .with_label_values(&[&status])
+            .observe(since.elapsed().as_secs_f64());
+    }
+
+    /// Posts `advert` to `node` of `subnet_id` and feeds a header returned in the
+    /// reply, if any, back to the advert handler.
+    async fn post_advert(
+        &self,
+        subnet_id: SubnetId,
+        node: NodeId,
+        advert: CertifiedStreamSlice,
+    ) -> Result<Option<XNetAdvertOutcome>, AdvertError> {
+        let endpoint = self.endpoint_resolver.xnet_advert_url(node)?;
+
+        self.metrics.outstanding_adverts.inc();
+        let result = self.xnet_client.post_advert(&endpoint, advert).await;
+        self.metrics.outstanding_adverts.dec();
+
+        if let Some(reply) = result? {
+            // The peer's certified state already has the content we advertised and it
+            // replied with a header that proves this.
+            Ok(Some(self.advert_handler.handle_advert(subnet_id, reply)?))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+struct AdvertTaskMetrics {
+    /// Adverts sent, by destination subnet and outcome.
+    adverts_sent: IntCounterVec,
+
+    /// Advert send duration, by outcome.
+    send_advert_duration: HistogramVec,
+
+    /// Outstanding advert posts.
+    outstanding_adverts: IntGauge,
+}
+
+impl AdvertTaskMetrics {
+    fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            adverts_sent: metrics_registry.int_counter_vec(
+                METRIC_ADVERTS_SENT,
+                "Adverts sent, by destination subnet and outcome.",
+                &[LABEL_REMOTE, LABEL_STATUS],
+            ),
+            send_advert_duration: metrics_registry.histogram_vec(
+                METRIC_SEND_ADVERT_DURATION,
+                "Advert send duration, by outcome.",
+                // 0.1ms - 5s
+                decimal_buckets(-4, 0),
+                &[LABEL_STATUS],
+            ),
+            outstanding_adverts: metrics_registry
+                .int_gauge(METRIC_OUTSTANDING_ADVERTS, "Outstanding advert posts."),
+        }
+    }
+}
+
+/// The reason an advert could not be posted; or its reply not handled.
+#[derive(Debug, Error)]
+enum AdvertError {
+    #[error("Failed to resolve the advert endpoint: {0}")]
+    Resolve(#[from] Error),
+    #[error("Failed to post the advert: {0}")]
+    Post(#[from] XNetClientError),
+    #[error("Failed to handle advert reply: {0}")]
+    HandleReply(#[from] XNetAdvertError),
+}
+
+impl AdvertError {
+    /// Maps the error to a `status` label value.
+    fn to_label_value(&self) -> String {
+        match self {
+            AdvertError::Resolve(err) => err.to_label_value().to_string(),
+            AdvertError::Post(err) => err.to_label_value(),
+            AdvertError::HandleReply(err) => err.as_str().to_string(),
+        }
+    }
 }
 
 /// An async task that refills the slice pool.
@@ -1792,7 +2012,7 @@ impl PoolRefillTask {
                         metrics.observe_query_slice_duration(&e.to_label_value(), proximity, since);
                         metrics.observe_pull_attempt(&e.to_label_value());
                         if let XNetClientError::NoContent = e {
-                        } else if Self::pass_log_sampling() {
+                        } else if pass_log_sampling() {
                             info!(
                                 log,
                                 "Failed to query stream slice for subnet {} from node {}: {}",
@@ -1806,15 +2026,15 @@ impl PoolRefillTask {
             });
         }
     }
+}
 
-    fn pass_log_sampling() -> bool {
-        /// The fraction of INFO logs related to stream pulls that XNet payload
-        /// builder displays.  The logs become very polluted if we don't
-        /// sample them.
-        const LOG_PASS_THROUGH_RATE: f64 = 0.05;
+fn pass_log_sampling() -> bool {
+    /// The fraction of INFO logs related to stream pulls and adverts that XNet
+    /// payload builder displays.  The logs become very polluted if we don't
+    /// sample them.
+    const LOG_PASS_THROUGH_RATE: f64 = 0.05;
 
-        thread_rng().gen_bool(LOG_PASS_THROUGH_RATE)
-    }
+    thread_rng().gen_bool(LOG_PASS_THROUGH_RATE)
 }
 
 /// A handle for a `PoolRefillTask`to be used for triggering pool refills and
