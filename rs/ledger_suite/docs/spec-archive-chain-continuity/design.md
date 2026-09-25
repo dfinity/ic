@@ -316,7 +316,9 @@ Cap the selection at `min(num_blocks_to_archive, one message)` in bytes in
 `Blockchain::get_blocks_for_archiving` (Req 12.3). "In bytes" means the Candid-encoded
 `(vec blob, opt nat64)`, not the sum of payloads: either measure the encoded argument or
 subtract a bound covering the framing (a fixed header plus ten bytes per block). Expose
-the effective per-round count (Req 12.4).
+the effective per-round count (Req 12.4). On multi-chunk suites this makes
+`num_blocks_to_archive` a per-round cap: the trigger is re-checked each round, so
+retention settles between `trigger_threshold` minus one message and `trigger_threshold`.
 
 A short stop with `at_capacity` false counts as a failed round for spacing and the
 failure metric while the reported progress is kept (Req 10.4); a stop at the archive's
