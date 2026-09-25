@@ -78,20 +78,15 @@ impl CloudEngineManager {
         let replica_url = Url::parse(&format!("http://127.0.0.1:{}", replica_listen_addr.port()))
             .inspect_err(|err| warn!(logger, "Cannot address the local replica: {err}"))
             .ok()?;
-        let operator_agent = agent::node_signed(
-            registry.get_registry_client(),
-            crypto,
-            replica_url,
-            registry.get_latest_version(),
-            &logger,
-        )
-        .inspect_err(|err| {
-            warn!(
-                logger,
-                "Cannot build the agent to the engine operator: {err}"
-            )
-        })
-        .ok()?;
+        let operator_agent =
+            agent::node_signed(registry.get_registry_client(), crypto, replica_url, &logger)
+                .inspect_err(|err| {
+                    warn!(
+                        logger,
+                        "Cannot build the agent to the engine operator: {err}"
+                    )
+                })
+                .ok()?;
 
         let discovery = Discovery::new(
             Arc::clone(&registry),

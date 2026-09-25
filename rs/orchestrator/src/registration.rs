@@ -691,12 +691,9 @@ impl NodeRegistration {
     }
 
     fn get_nns_pub_key_der_from_registry(&self) -> Option<Vec<u8>> {
-        nns_root_key_der_from_registry(
-            self.registry_client.as_ref(),
-            self.registry_client.get_latest_version(),
-        )
-        .inspect_err(|err| warn!(self.log, "Failed to get the NNS public key: {}", err))
-        .ok()
+        nns_root_key_der_from_registry(self.registry_client.as_ref())
+            .inspect_err(|err| warn!(self.log, "Failed to get the NNS public key: {}", err))
+            .ok()
     }
 
     async fn check_node_registered(&self) -> Result<(), CheckKeysWithRegistryError> {

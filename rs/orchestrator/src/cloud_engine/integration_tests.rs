@@ -484,22 +484,6 @@ async fn an_incomplete_configuration_leaves_ic_gateway_down() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn an_unauthorized_operator_is_not_ready() {
-    let Some(mut fixture) = setup().await else {
-        return;
-    };
-    fixture.configure_engine().await;
-    fixture.set_unauthorized(true).await;
-
-    fixture.manager.check().await;
-
-    // Expected right after an operator install: nothing to apply, not an error.
-    assert_eq!(fixture.fetches(OUTCOME_NOT_READY), 1);
-    assert_eq!(fixture.fetches(OUTCOME_ERROR), 0);
-    assert_eq!(fixture.published_config(), None);
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn the_management_canister_names_the_operator() {
     let Some(mut fixture) = setup().await else {
         return;
@@ -533,6 +517,24 @@ async fn a_subnet_without_an_operator_is_a_failure() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn an_operator_that_does_not_recognize_this_node_is_not_ready() {
+    let Some(mut fixture) = setup().await else {
+        return;
+    };
+    fixture.configure_engine().await;
+    fixture.set_unauthorized(true).await;
+
+    let err = fixture
+        .manager
+        .fetch(ENGINE_SUBNET, VERSION)
+        .await
+        .expect_err("an operator that rejects this node cannot be read");
+
+    // Not a failure: the operator is ours, it has just not seen this node yet.
+    assert_matches!(err, CloudEngineError::NotReady);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn an_operator_that_stays_unauthorized_is_resolved_again() {
     let Some(mut fixture) = setup().await else {
         return;
@@ -540,7 +542,16 @@ async fn an_operator_that_stays_unauthorized_is_resolved_again() {
     fixture.configure_engine().await;
     fixture.set_unauthorized(true).await;
 
-    for _ in 0..MAX_CONSECUTIVE_NOT_READY {
+    fixture.manager.check().await;
+
+    // Expected right after an operator install: nothing to apply, not an
+    // error, and the operator is kept.
+    assert_eq!(fixture.fetches(OUTCOME_NOT_READY), 1);
+    assert_eq!(fixture.fetches(OUTCOME_ERROR), 0);
+    assert_eq!(fixture.published_config(), None);
+    assert!(fixture.manager.discovery.remembered().is_some());
+
+    for _ in 1..MAX_CONSECUTIVE_NOT_READY {
         fixture.manager.check().await;
     }
 

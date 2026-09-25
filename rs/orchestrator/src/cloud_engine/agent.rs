@@ -24,7 +24,7 @@ pub(super) fn anonymous_via_api_boundary_node(
 ) -> CloudEngineResult<Agent> {
     let url = random_api_boundary_node_url(registry, version, logger)?;
 
-    build(registry, url, AnonymousIdentity, version, logger)
+    build(registry, url, AnonymousIdentity, logger)
 }
 
 /// An agent aimed at the local replica and signing as this node. It is used to
@@ -33,12 +33,11 @@ pub(super) fn node_signed(
     registry: &dyn RegistryClient,
     crypto: Arc<dyn NodeRegistrationCrypto>,
     replica_url: Url,
-    version: RegistryVersion,
     logger: &ReplicaLogger,
 ) -> CloudEngineResult<Agent> {
     let identity = NodeSender::for_this_node(crypto).map_err(CloudEngineError::failed)?;
 
-    build(registry, replica_url, identity, version, logger)
+    build(registry, replica_url, identity, logger)
 }
 
 fn random_api_boundary_node_url(
@@ -73,7 +72,6 @@ fn build<I: Identity + 'static>(
     registry: &dyn RegistryClient,
     url: Url,
     identity: I,
-    version: RegistryVersion,
     logger: &ReplicaLogger,
 ) -> CloudEngineResult<Agent> {
     let agent = Agent::builder()
@@ -83,7 +81,7 @@ fn build<I: Identity + 'static>(
         .build()
         .map_err(|err| CloudEngineError::failed(format!("could not build an agent: {err}")))?;
 
-    match nns_root_key_der_from_registry(registry, version) {
+    match nns_root_key_der_from_registry(registry) {
         Ok(root_key) => {
             agent.set_root_key(root_key);
         }
