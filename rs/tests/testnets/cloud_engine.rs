@@ -40,7 +40,7 @@
 // You can setup this testnet by executing the following commands (preferably from a devenv in dm1-idx1):
 //
 //   $ ./ci/tools/docker-run
-//   $ bazel run //rs/tests/testnets:cloud_engine --test_tmpdir=./cloud_engine \
+//   $ bazel run //rs/tests/testnets:cloud_engine_farm --test_tmpdir=./cloud_engine \
 //       --test_env=ALLOCATE_TESTNET_TO_LOCAL_DC=0 \
 //       --test_env=IC_GW_IPV4=<free-address-of-the-dm1-dmz-network> \
 //       --test_env=DEMO_DOMAIN=<subdomain> -- --keepalive
@@ -61,9 +61,9 @@
 //
 // To get access to P8s and Grafana look for the following lines in the output:
 //
-//     prometheus: Prometheus Web UI at http://prometheus.cloud_engine--1692597750709.testnet.farm.dfinity.systems,
-//     grafana: Grafana at http://grafana.cloud_engine--1692597750709.testnet.farm.dfinity.systems,
-//     progress_clock: IC Progress Clock at http://grafana.cloud_engine--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
+//     prometheus: Prometheus Web UI at http://prometheus.cloud_engine_farm--1692597750709.testnet.farm.dfinity.systems,
+//     grafana: Grafana at http://grafana.cloud_engine_farm--1692597750709.testnet.farm.dfinity.systems,
+//     progress_clock: IC Progress Clock at http://grafana.cloud_engine_farm--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
 //
 // Happy testing!
 

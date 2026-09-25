@@ -712,14 +712,26 @@ class ReproducibilityVerifier:
 
         out_dir = tmpdir / "disk-images" / self.git_hash
 
-        yield Dirs(
-            tmpdir,
-            out_dir,
-            out_dir / "cdn-img",
-            out_dir / "dev-img",
-            out_dir / "proposal-img",
-        )
-        if not keep_temp:
+        try:
+            yield Dirs(
+                tmpdir,
+                out_dir,
+                out_dir / "cdn-img",
+                out_dir / "dev-img",
+                out_dir / "proposal-img",
+            )
+        except BaseException:
+            # The remaining downloads are pointless after a failure or an interrupt, so
+            # tell them to stop instead of waiting for them below.
+            global interrupted
+            interrupted = True
+            logger.warning("Stopping the remaining downloads and waiting for in-flight work to finish.")
+            raise
+        finally:
+            # The downloads and the local build write into tmpdir from executor threads, so
+            # wait for them before removing it. This also runs when a verification step
+            # raised, so a failed run does not leave the images behind (unless --debug asked).
+            self.download_executor.shutdown(wait=True, cancel_futures=True)
             cleanup()
 
     # --------------------------------------------------------------------------
@@ -935,38 +947,52 @@ class ReproducibilityVerifier:
     ) -> None:
         compile_future.result()
         logger.info("Verifying locally built artifacts against remote CDN artifacts.")
+        # Mismatches between the local and remote artifacts are collected instead of
+        # raised immediately, so one does not hide the result for the others. Inconsistent
+        # CDN sources (compare_cdn_hash, get_cdn_measurements) still fail fast.
+        mismatches: list[str] = []
         if guest_os_downloads:
             [f.result() for f in concurrent.futures.as_completed(guest_os_downloads)]
             local_path = storage.dev_out / "guestos" / "update" / "update-img.tar.zst"
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("guest-os", storage)
-            compare_hashes(local_hash, cdn_hash, "GuestOS")
+            if not compare_hashes(local_hash, cdn_hash, "GuestOS"):
+                mismatches.append("GuestOS update image")
 
             local_path = storage.dev_out / "guestos" / "update" / "launch-measurements.json"
             local_measurements = local_path.read_text(encoding="utf-8")
             cdn_measurements = self.get_cdn_measurements(storage)
-            compare_measurements(local_measurements, cdn_measurements)
+            if not compare_measurements(local_measurements, cdn_measurements):
+                mismatches.append("GuestOS launch measurements")
 
         if host_os_downloads:
             [f.result() for f in concurrent.futures.as_completed(host_os_downloads)]
             local_path = storage.dev_out / "hostos" / "update" / "update-img.tar.zst"
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("host-os", storage)
-            compare_hashes(local_hash, cdn_hash, "HostOS")
+            if not compare_hashes(local_hash, cdn_hash, "HostOS"):
+                mismatches.append("HostOS update image")
 
         if setup_os_downloads:
             [f.result() for f in concurrent.futures.as_completed(setup_os_downloads)]
             local_path = storage.dev_out / "setupos" / "disk-img.tar.zst"
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("setup-os", storage)
-            compare_hashes(local_hash, cdn_hash, "SetupOS")
+            if not compare_hashes(local_hash, cdn_hash, "SetupOS"):
+                mismatches.append("SetupOS disk image")
 
         if recovery_downloads:
             [f.result() for f in concurrent.futures.as_completed(recovery_downloads)]
             local_path = storage.dev_out / "guestos" / "update-img-recovery" / "update-img.tar.zst"
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("recovery-guestos", storage)
-            compare_hashes(local_hash, cdn_hash, "Recovery-GuestOS")
+            if not compare_hashes(local_hash, cdn_hash, "Recovery-GuestOS"):
+                mismatches.append("Recovery-GuestOS update image")
+
+        if mismatches:
+            raise VerificationError(
+                "The locally built artifacts do not match the remote CDN artifacts for: " + ", ".join(mismatches)
+            )
 
     # --------------------------------------------------------------------------
     # MAIN RUN

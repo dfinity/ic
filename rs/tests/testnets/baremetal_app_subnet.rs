@@ -13,7 +13,7 @@
 // Setup example (pass `--test_env` so the driver sees it):
 //
 //   $ ./ci/container/container-run.sh
-//   $ bazel run //rs/tests/testnets:baremetal_app_subnet \
+//   $ bazel run //rs/tests/testnets:baremetal_app_subnet_farm \
 //       --test_tmpdir=./test_tmpdir \
 //       --test_env BARE_METAL_HOST_SECRETS="$(realpath /path/to/host.ini)" \
 //       --test_env TRUSTED_EXECUTION_ENVIRONMENT=true \

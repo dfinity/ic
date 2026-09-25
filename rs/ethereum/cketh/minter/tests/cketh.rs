@@ -1367,11 +1367,42 @@ fn should_export_the_sweeper_funding_metrics() {
 }
 
 #[test]
+fn should_export_the_sweep_pipeline_metrics() {
+    let cketh = CkEthSetup::default();
+    cketh.advance_time(Duration::from_secs(90));
+    cketh.env.tick();
+    cketh
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_armed_deposits 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_longest_armed_age_seconds 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_queued_deposits 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeps_finalized_total\{status="success"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeps_finalized_total\{status="failure"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_unfinalized_sweep_age_seconds 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_balance_scan_candidates_total 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="ok"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="eth_call_error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="decode_error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds 90 \d+");
+}
+
+#[test]
 fn should_export_the_stored_attestation_and_authorization_metrics() {
     CkEthSetup::default()
         .check_minter_metrics()
         .assert_contains_metric_matching(r"cketh_minter_stored_attestations 0 \d+")
-        .assert_contains_metric_matching(r"cketh_minter_stored_authorizations 0 \d+");
+        .assert_contains_metric_matching(r"cketh_minter_stored_authorizations 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_delegated_deposit_addresses 0 \d+");
 }
 
 /// Tests with the EVM RPC canister

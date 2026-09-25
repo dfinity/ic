@@ -1,20 +1,28 @@
 use super::test_fixtures::*;
 use super::*;
-use crate::certified_slice_pool::CertifiedSliceError;
+use crate::certified_slice_pool::{CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError};
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces::messaging::{InvalidXNetPayload, XNetPayloadValidationFailure};
+use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_replicated_state::Stream;
 use ic_test_utilities::state_manager::FakeStateManager;
+use ic_test_utilities_consensus::fake::Fake;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count,
     fetch_int_counter_vec, metric_vec,
 };
 use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5};
+use ic_types::CryptoHashOfPartialState;
+use ic_types::consensus::certification::{Certification, CertificationContent};
+use ic_types::crypto::{CryptoHash, Signed};
+use ic_types::signature::ThresholdSignature;
 use ic_types::state_manager::StateManagerError;
+use ic_types::xnet::RejectReason;
 use maplit::btreemap;
 use mockall::predicate::eq;
 use std::sync::{Arc, Mutex};
@@ -410,6 +418,7 @@ async fn validate_broken_count_bytes_fn() {
 
         assert_eq!(
             metric_vec(&[
+                (&[("error", &CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER)], 0),
                 (&[("error", &CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES)], 0),
                 (&[("error", &CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED)], 1),
             ]),
@@ -549,6 +558,17 @@ impl XNetSlicePool for TestSlicePool {
     fn garbage_collect(&self, _: BTreeMap<SubnetId, ExpectedIndices>) {}
 
     fn garbage_collect_slice(&self, _: SubnetId, _: ExpectedIndices) {}
+
+    fn classify_advert(
+        &self,
+        _: SubnetId,
+        _: &StreamHeader,
+        _: &dyn Fn(StreamIndex, StreamIndex) -> bool,
+    ) -> XNetAdvertOutcome {
+        XNetAdvertOutcome::Actionable
+    }
+
+    fn record_peer_header(&self, _: SubnetId, _: &StreamHeader) {}
 }
 
 /// `get_xnet_payload` must not include a slice from a deleted subnet even if
@@ -848,5 +868,363 @@ async fn build_payload_includes_cloud_engine_subnet() {
         // Both SUBNET_1 (CloudEngine) and SUBNET_2 (Application) are included.
         assert!(stream_positions.contains_key(&SUBNET_1));
         assert!(stream_positions.contains_key(&SUBNET_2));
+    });
+}
+
+/// Our outgoing stream to `REMOTE_SUBNET` across the advert tests: we have
+/// inducted its messages up to `OWN_SIGNALS_END`; it has signalled ours up to
+/// `OWN_MESSAGES_BEGIN`, where the messages we still hold for it begin.
+///
+/// An advert is thus new to us iff it ends past `OWN_SIGNALS_END`, signals past
+/// `OWN_MESSAGES_BEGIN`, or begins past a reject signal of ours.
+const OWN_SIGNALS_END: u64 = 3;
+const OWN_MESSAGES_BEGIN: u64 = 5;
+const OWN_MESSAGES_END: u64 = 10;
+
+fn own_stream_for_advert_tests() -> Stream {
+    generate_stream(&StreamConfig {
+        message_begin: OWN_MESSAGES_BEGIN,
+        message_end: OWN_MESSAGES_END,
+        signal_end: OWN_SIGNALS_END,
+    })
+}
+
+/// Builds an `XNetPayloadBuilderImpl` around `certified_stream_store`, with a
+/// registry that only knows `REMOTE_SUBNET` and a pool that actually records
+/// peer headers; plus said pool.
+fn advert_handler_and_pool(
+    certified_stream_store: MockCertifiedStreamStore,
+    log: ReplicaLogger,
+) -> (XNetPayloadBuilderImpl, Arc<Mutex<CertifiedSlicePool>>) {
+    advert_handler_and_pool_for(own_stream_for_advert_tests(), certified_stream_store, log)
+}
+
+/// Like `advert_handler_and_pool()`, but with the given outgoing stream to
+/// `REMOTE_SUBNET`.
+fn advert_handler_and_pool_for(
+    own_stream: Stream,
+    certified_stream_store: MockCertifiedStreamStore,
+    log: ReplicaLogger,
+) -> (XNetPayloadBuilderImpl, Arc<Mutex<CertifiedSlicePool>>) {
+    let state_manager = Arc::new(FakeStateManager::new());
+    put_replicated_state_for_testing(
+        state_manager.as_ref(),
+        btreemap! { REMOTE_SUBNET => own_stream },
+    );
+    // `FakeStateManager` only reports a height as certified once a certification
+    // for it has been delivered, and advert classification reads certified state.
+    state_manager.deliver_state_certification(Certification {
+        height: CERTIFIED_HEIGHT,
+        height_witness: None,
+        signed: Signed {
+            content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
+            signature: ThresholdSignature::fake(),
+        },
+    });
+    let (registry, _) = get_registry_and_urls_for_test(1, btreemap![]);
+
+    let metrics_registry = MetricsRegistry::new();
+    let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+        &metrics_registry,
+        log.clone(),
+    )));
+    let (refill_trigger, _refill_receiver) = tokio::sync::mpsc::channel(1);
+    let payload_builder = XNetPayloadBuilderImpl::new_from_components(
+        state_manager as Arc<_>,
+        Arc::new(certified_stream_store) as Arc<_>,
+        registry as Arc<_>,
+        Arc::new(None),
+        None,
+        Box::new(XNetSlicePoolImpl::new(Arc::clone(&pool))),
+        RefillTaskHandle(Mutex::new(refill_trigger)),
+        Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+        log,
+    );
+
+    (payload_builder, pool)
+}
+
+/// A mock store expecting exactly `verifications` verifying decodes of an advert
+/// carrying `advertised`'s header. Only adverts classified as `NothingNew` or
+/// `Actionable` are verified, so the count is what each test is really asserting;
+/// the classifying decode is real, off the advert's own bytes.
+fn advert_store(advertised: &Stream, verifications: usize) -> MockCertifiedStreamStore {
+    let decoded = advertised.slice(advertised.messages_begin(), Some(0));
+    let mut store = MockCertifiedStreamStore::new();
+    store
+        .expect_decode_certified_stream_slice()
+        .times(verifications)
+        .returning(move |_, _, _| Ok(decoded.clone()));
+    store
+}
+
+/// The peer header on record for `REMOTE_SUBNET`, if any.
+fn recorded_peer_header(pool: &Mutex<CertifiedSlicePool>) -> Option<Arc<StreamHeader>> {
+    pool.lock().unwrap().peer_header(REMOTE_SUBNET).cloned()
+}
+
+/// An advert offering messages we have not inducted is actionable, and its
+/// header is recorded.
+#[tokio::test]
+async fn handle_advert_actionable() {
+    with_test_replica_logger(|log| {
+        let advertised = generate_stream(&StreamConfig {
+            message_begin: OWN_SIGNALS_END,
+            message_end: OWN_SIGNALS_END + 4,
+            signal_end: OWN_MESSAGES_BEGIN,
+        });
+        let header = advertised.header();
+        let (payload_builder, pool) = advert_handler_and_pool(advert_store(&advertised, 1), log);
+
+        assert_matches!(
+            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            Ok(XNetAdvertOutcome::Actionable)
+        );
+        assert_eq!(Some(Arc::new(header)), recorded_peer_header(&pool));
+
+        // Redundant copies of the same advert are classified as duplicates
+        // and not verified again.
+        for _ in 0..2 {
+            assert_matches!(
+                payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+                Ok(XNetAdvertOutcome::Duplicate)
+            );
+        }
+    });
+}
+
+/// An advert offering only messages already accounted for by the cached stream
+/// position, i.e. included into blocks, is dropped without being verified.
+#[tokio::test]
+async fn handle_advert_in_payload() {
+    with_test_replica_logger(|log| {
+        let advertised = generate_stream(&StreamConfig {
+            message_begin: OWN_SIGNALS_END,
+            message_end: OWN_SIGNALS_END + 4,
+            signal_end: OWN_MESSAGES_BEGIN,
+        });
+        let (payload_builder, pool) = advert_handler_and_pool(advert_store(&advertised, 0), log);
+
+        // A past payload already covers all of it.
+        pool.lock().unwrap().garbage_collect(btreemap! {
+            REMOTE_SUBNET => ExpectedIndices {
+                message_index: (OWN_SIGNALS_END + 4).into(),
+                signal_index: OWN_MESSAGES_BEGIN.into(),
+                ..Default::default()
+            }
+        });
+
+        assert_matches!(
+            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            Ok(XNetAdvertOutcome::InPayload)
+        );
+        // The advertised header was not (verified and) recorded.
+        assert_eq!(None, recorded_peer_header(&pool));
+    });
+}
+
+/// An advert bringing signals we have not acted on is actionable even with no
+/// messages we have not inducted: only those signals let us garbage collect the
+/// messages we hold for `REMOTE_SUBNET`.
+#[tokio::test]
+async fn handle_advert_new_signals() {
+    with_test_replica_logger(|log| {
+        // Nothing we have not inducted, but signals past those we have acted on.
+        let advertised = generate_stream(&StreamConfig {
+            message_begin: 0,
+            message_end: OWN_SIGNALS_END,
+            signal_end: OWN_MESSAGES_BEGIN + 2,
+        });
+        let header = advertised.header();
+        let (payload_builder, pool) = advert_handler_and_pool(advert_store(&advertised, 1), log);
+
+        // A header on record covering everything except the new signals.
+        let recorded = generate_stream(&StreamConfig {
+            message_begin: 0,
+            message_end: OWN_SIGNALS_END,
+            signal_end: OWN_MESSAGES_BEGIN,
+        });
+        pool.lock()
+            .unwrap()
+            .record_peer_header(REMOTE_SUBNET, &recorded.header());
+
+        assert_matches!(
+            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            Ok(XNetAdvertOutcome::Actionable)
+        );
+        assert_eq!(Some(Arc::new(header)), recorded_peer_header(&pool));
+    });
+}
+
+/// An advert whose content we have already recorded is classified as a
+/// duplicate without being verified.
+#[tokio::test]
+async fn handle_advert_duplicate_content() {
+    with_test_replica_logger(|log| {
+        let advertised = generate_stream(&StreamConfig {
+            message_begin: OWN_SIGNALS_END,
+            message_end: OWN_SIGNALS_END + 4,
+            signal_end: OWN_MESSAGES_BEGIN,
+        });
+        let header = advertised.header();
+        let (payload_builder, pool) = advert_handler_and_pool(advert_store(&advertised, 0), log);
+
+        pool.lock()
+            .unwrap()
+            .record_peer_header(REMOTE_SUBNET, &header);
+
+        assert_matches!(
+            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            Ok(XNetAdvertOutcome::Duplicate)
+        );
+    });
+}
+
+/// An advert offering nothing we do not already have is answered with our own
+/// certified header, so its sender can observe our stream's `begin`.
+#[tokio::test]
+async fn handle_advert_nothing_new() {
+    with_test_replica_logger(|log| {
+        let advertised = generate_stream(&StreamConfig {
+            message_begin: 0,
+            message_end: OWN_SIGNALS_END,
+            signal_end: OWN_MESSAGES_BEGIN,
+        });
+        // The header-only reply, as encoded from our own stream.
+        let own_header = make_certified_stream_slice(
+            LOCAL_SUBNET,
+            StreamConfig {
+                message_begin: OWN_MESSAGES_BEGIN,
+                message_end: OWN_MESSAGES_BEGIN,
+                signal_end: OWN_SIGNALS_END,
+            },
+        );
+
+        // Two copies, as from two nodes of the source subnet at the same certified
+        // height: each is answered, or only one of the peer's nodes would learn our
+        // header per height.
+        let mut store = advert_store(&advertised, 2);
+        let expected_reply = own_header.clone();
+        store
+            .expect_encode_certified_stream_slice()
+            .times(2)
+            .returning(move |_, _, _, msg_limit, _| {
+                assert_eq!(msg_limit, Some(0));
+                Ok(own_header.clone())
+            });
+        let (payload_builder, pool) = advert_handler_and_pool(store, log);
+
+        for _ in 0..2 {
+            assert_matches!(
+                payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+                Ok(XNetAdvertOutcome::NothingNew)
+            );
+            // Advertised header was recorded regardless.
+            assert_eq!(
+                Some(Arc::new(advertised.header())),
+                recorded_peer_header(&pool)
+            );
+            assert_eq!(
+                Some(expected_reply.clone()),
+                payload_builder.certified_header(REMOTE_SUBNET)
+            );
+        }
+    });
+}
+
+/// An advert whose `begin` is past a reject signal of ours brings something even
+/// when all of its messages and signals are accounted for: inducting it lets us
+/// garbage collect that signal.
+#[tokio::test]
+async fn handle_advert_collecting_reject_signal() {
+    with_test_replica_logger(|log| {
+        // As `own_stream_for_advert_tests()`, except that we rejected the last message
+        // we inducted, leaving a reject signal at `REJECT_SIGNAL`.
+        const REJECT_SIGNAL: u64 = OWN_SIGNALS_END - 1;
+        let mut own_stream = generate_stream(&StreamConfig {
+            message_begin: OWN_MESSAGES_BEGIN,
+            message_end: OWN_MESSAGES_END,
+            signal_end: REJECT_SIGNAL,
+        });
+        own_stream.push_reject_signal(RejectReason::CanisterMigrating);
+
+        // A stream whose messages and signals we've inducted; only its `begin` differs.
+        let advertised = |begin| {
+            generate_stream(&StreamConfig {
+                message_begin: begin,
+                message_end: OWN_SIGNALS_END,
+                signal_end: OWN_MESSAGES_BEGIN,
+            })
+        };
+
+        // A `begin` at the reject signal leaves it uncollected.
+        let (payload_builder, _pool) = advert_handler_and_pool_for(
+            own_stream.clone(),
+            advert_store(&advertised(REJECT_SIGNAL), 1),
+            log.clone(),
+        );
+        assert_matches!(
+            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised(REJECT_SIGNAL))),
+            Ok(XNetAdvertOutcome::NothingNew)
+        );
+
+        // One past it collects it, so there is something to fetch after all.
+        let (payload_builder, _pool) = advert_handler_and_pool_for(
+            own_stream,
+            advert_store(&advertised(REJECT_SIGNAL + 1), 1),
+            log,
+        );
+        assert_matches!(
+            payload_builder
+                .handle_advert(REMOTE_SUBNET, make_advert(&advertised(REJECT_SIGNAL + 1))),
+            Ok(XNetAdvertOutcome::Actionable)
+        );
+    });
+}
+
+/// An advert whose payload is not a canonical stream slice is rejected out of
+/// hand, before any verification.
+#[tokio::test]
+async fn handle_advert_decode_error() {
+    with_test_replica_logger(|log| {
+        // No expectations: verifying an advert we cannot even decode would panic.
+        let store = MockCertifiedStreamStore::new();
+        let (payload_builder, pool) = advert_handler_and_pool(store, log);
+
+        let advert = CertifiedStreamSlice {
+            payload: b"garbage".to_vec(),
+            ..make_advert(&own_stream_for_advert_tests())
+        };
+
+        assert_matches!(
+            payload_builder.handle_advert(REMOTE_SUBNET, advert),
+            Err(XNetAdvertError::DecodeError(_))
+        );
+        assert_eq!(None, recorded_peer_header(&pool));
+    });
+}
+
+/// An advert offering new content whose certification does not verify is
+/// rejected and not recorded.
+#[tokio::test]
+async fn handle_advert_invalid_signature() {
+    with_test_replica_logger(|log| {
+        let advertised = generate_stream(&StreamConfig {
+            message_begin: OWN_SIGNALS_END,
+            message_end: OWN_SIGNALS_END + 4,
+            signal_end: OWN_MESSAGES_BEGIN,
+        });
+        let mut store = MockCertifiedStreamStore::new();
+        store
+            .expect_decode_certified_stream_slice()
+            .times(1)
+            .return_once(|_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
+        let (payload_builder, pool) = advert_handler_and_pool(store, log);
+
+        assert_matches!(
+            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            Err(XNetAdvertError::InvalidSignature)
+        );
+        assert_eq!(None, recorded_peer_header(&pool));
     });
 }
