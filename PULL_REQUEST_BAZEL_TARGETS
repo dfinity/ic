@@ -50,16 +50,16 @@ ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_long_test_farm
 
 # Run most nested tests for any ic-os/ or rs/ic_os/ changes:
 *ic[-_]os/* //rs/tests/nested:guestos_upgrade_smoke_test_farm
-            //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_test_farm
+            //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_farm
             //rs/tests/nested:hostos_upgrade_smoke_test_farm
-            //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_test_farm
-            //rs/tests/nested:registration_test_farm
+            //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_farm
+            //rs/tests/nested:registration_farm
 
 # Full rejoin test for state sync changes:
 *state_sync* //rs/tests/message_routing:rejoin_test_farm
 
 # XNet compatibility test for changes to certifications
-*canonical_state/* //rs/tests/message_routing/xnet:xnet_compatibility_test_farm
+*canonical_state/* //rs/tests/message_routing/xnet:xnet_compatibility_farm
 
 rs/nns/cmc/*.rs //rs/tests/nns:nns_cycles_minting_test_farm
 

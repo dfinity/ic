@@ -42,7 +42,7 @@ genrule(
 )
 
 system_test_nns(
-    name = "registration_test",
+    name = "registration",
     cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM + 1 * 8,  # 1 System node + 1 API boundary node + 1 ic-gateway VM (6 vCPUs each) + 1 nested HostOS node (8 vCPUs).
     enable_uvm = True,
     env = MAINNET_ENV,
@@ -113,7 +113,7 @@ system_test_nns(
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
 system_test_nns(
-    name = "guestos_upgrade_from_latest_release_to_current_test",
+    name = "guestos_upgrade_from_latest_release_to_current",
     # TODO: drop `backend = "farm"` once the NTP-check gate (see
     # ic-os/components/setupos/check-ntp.sh) has shipped in a release. Unlike
     # `registration`, this test installs from a prebuilt *mainnet* SetupOS image,
@@ -186,7 +186,7 @@ system_test_nns(
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit
 system_test_nns(
-    name = "hostos_upgrade_from_latest_release_to_current_test",
+    name = "hostos_upgrade_from_latest_release_to_current",
     # TODO: drop `backend = "farm"` once the NTP-check gate (see
     # ic-os/components/setupos/check-ntp.sh) has shipped in a release. Unlike
     # `registration`, this test installs from a prebuilt *mainnet* SetupOS image,

@@ -97,7 +97,7 @@ system_test(
 )
 
 system_test_nns(
-    name = "xnet_compatibility_test",
+    name = "xnet_compatibility",
     cpus = MIN_LOCAL_CPUS + 3 * 16,  # 3 subnets (1 System + 2 Application) * 1 node * 16 vCPUs (resource override).
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     env = MAINNET_ENV,
