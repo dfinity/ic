@@ -364,6 +364,7 @@ jobs:
         uses: ./.github/actions/bazel-namespace
         with:
           timeout-minutes: 90
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           run: |
             read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
             bazel build "${inferred_args[@]}" --target_pattern_file="$HOME/bazel-targets/build-targets"
@@ -377,6 +378,7 @@ jobs:
         uses: ./.github/actions/bazel-namespace
         with:
           timeout-minutes: 120
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           run: |
             read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
             test_targets="$HOME/bazel-targets/test-targets"

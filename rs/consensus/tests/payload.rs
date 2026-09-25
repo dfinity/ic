@@ -66,6 +66,9 @@ fn consensus_produces_expected_batches() {
         let chain_key_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
         let chain_key_payload_builder = Arc::new(chain_key_payload_builder);
 
+        let upgrade_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let upgrade_payload_builder = Arc::new(upgrade_payload_builder);
+
         let mut state_manager = MockStateManager::new();
         state_manager.expect_remove_states_below().return_const(());
         state_manager
@@ -183,6 +186,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&canister_http_payload_builder) as Arc<_>,
             query_stats_payload_builder,
             chain_key_payload_builder,
+            upgrade_payload_builder,
             Arc::clone(&dkg_pool) as Arc<_>,
             Arc::clone(&idkg_pool) as Arc<_>,
             dkg_key_manager.clone(),
