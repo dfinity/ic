@@ -302,7 +302,7 @@ async fn call_counter_canisters_until_stopped(
                         agent.query(&canister_id.get().0, "read".to_string()).call(),
                         agent
                             .update(&canister_id.get().0, "read".to_string())
-                            .call(),
+                            .call_and_wait(),
                     )
                     .await
                     {
@@ -607,7 +607,7 @@ async fn install_counting_canisters(env: &TestEnv) -> Vec<CanisterId> {
                 agent
                     .get()
                     .update(&canister_id.get().0, "write".to_string())
-                    .call()
+                    .call_and_wait()
                     .await
                     .context("Failed to make the update call")
             }
