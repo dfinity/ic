@@ -1566,6 +1566,14 @@ pub struct ProposalData {
     /// This proposal's topic.
     #[prost(enumeration = "Topic", optional, tag = "25")]
     pub topic: ::core::option::Option<i32>,
+    /// The raw reply bytes returned by the target canister when this
+    /// proposal's action was an ExecuteGenericNervousSystemFunction call that
+    /// completed successfully at the IC call level. SNS does not know this
+    /// reply's Candid schema, so it is stored as-is (opaque), truncated to at
+    /// most MAX_SCALAR_FIELD_LEN_BYTES to bound stable memory usage against a
+    /// misbehaving target canister.
+    #[prost(bytes = "vec", optional, tag = "26")]
+    pub execution_reply: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23, 24")]
