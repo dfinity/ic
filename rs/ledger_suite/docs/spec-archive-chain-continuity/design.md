@@ -54,8 +54,7 @@ does not.
   and is pinned by a unit test rather than trusted.
 - **Every SNS ledger suite runs `ic-icrc1-archive` with archiving on**, at a 128 kB
   chunk, so rounds are multi-chunk there and (by builder default, unconfirmed on
-  mainnet) on ICP; only the chain fusion suites are single-chunk. Node roll-over makes a
-  round multi-message everywhere, which is why the parent hash is per creation point.
+  mainnet) on ICP; only the chain fusion suites are single-chunk.
 
 ## Design Decisions
 
@@ -189,7 +188,9 @@ Order of work:
    index and return `ChainMismatch` on a difference (Req 2.5). One comparison suffices:
    a divergence at or below that index propagates forward and cannot heal.
 6. Determine the blocks that will actually be stored: the suffix from `k`, trimmed to
-   what fits the configured limit. Chain-check **only those** (Req 1.6): `blocks[k]`
+   what fits the configured limit and that limit only, since a growth the platform
+   refuses in step 7 merely stops an already validated suffix and never causes a
+   refusal. Chain-check **only those** (Req 1.6): `blocks[k]`
    against the tip or the Expected_Parent (Req 1.1, 1.2, 1.7), each later block against
    its predecessor (Req 1.3), the genesis rules (Req 1.4), and decodability (Req 6.3).
 7. Append the suffix. Indexed: stop short where it must and set `at_capacity` (Req 4).
@@ -303,12 +304,12 @@ tail too small, and a first block that exceeds one message so the byte cap selec
 nothing. Creating a node sets `block_index_offset` from the previous node's reported
 `next_index` (Req 7.1, not `+ 1`) and supplies the Expected_Parent (Req 7.2).
 
-The Expected_Parent is one hash per creation point, not per round: a mid-round roll-over
-sends the deque front, not `blocks[0]`. `BlockType::block_hash` works on the encoded
-block, so `archive_blocks<LA>` precomputes the round's hashes where the block type is
-known and threads them down; only position 0 needs the decoded `parent_hash()`. For a
-legacy suite the first probe's reply is where Req 7.1 gets its value; legacy non-tail
-nodes are never re-queried.
+The Expected_Parent is the decoded `parent_hash()` of the round's first block: under
+D11 a creation round sends no blocks and the next append starts at the selection front,
+so no other position is ever a node's first. It is read in `archive_blocks<LA>`, where
+the block type is known, and threaded down beside the blocks. For a legacy suite the
+first probe's reply is where Req 7.1 gets its value; legacy non-tail nodes are never
+re-queried.
 
 ### `ledger_canister_core::ledger` and `::blockchain` — round selection
 
@@ -416,10 +417,10 @@ controllable, Req 4.2's `false` rests on review of the branch that sets the flag
 | 28 | integration | refusal per 1.1, 2.2, 2.5, 6.3 in turn: halt with distinct metric, no append while halted; upgrade with archive unchanged: one append, halt re-established; fix and upgrade: resumes | 10.5, 10.8 |
 | 29 | integration | old archive wasm as tail: nothing archived, metric rises, probe re-issued once the backoff permits; upgrade the archive: resumes without a ledger upgrade; probe stores nothing, is not repeated once answered, at most one per round; ICP ledger archives normally and counts | 11.1–11.4, 12.1 |
 | 30 | integration | tail does not answer: round ends within `ARCHIVE_CALL_TIMEOUT`, retried, nothing stored twice; ledger stoppable and upgradable with a call in flight | 13.1, 13.2, 13.5 |
-| 31 | integration | multi-chunk configuration: one `append_blocks` per round, effective count metric matches; a round that fills the tail and has blocks left creates one archive, not two | 12.1, 12.2, 12.4 |
+| 31 | integration | multi-chunk configuration: one `append_blocks` per round, effective count metric matches; a round that fills the tail with blocks left over creates no archive, the next eligible round begins exactly one creation, and no round creates two | 12.1, 12.2, 12.4, 8.1 |
 | 32 | integration | every index served before a round is retrievable after it; the ledger stopped serving only indices an archive reports covering | 9.1, 9.2 |
 | 33 | integration | ICP ledger creates archives and discards blocks with no reported extent | 7.5, 9.8 |
-| 34 | integration | non-genesis archive: first append accepted; ledger patched to omit the hash: unverifiable counter rises; patched to a wrong hash: refused. Mid-round roll-over: created node's first append accepted (per-creation hash) | 7.2, 1.2, 1.8 |
+| 34 | integration | non-genesis archive: first append accepted; ledger patched to omit the hash: unverifiable counter rises; patched to a wrong hash: refused | 7.2, 1.2, 1.8 |
 | 35 | integration | `create_canister` reply lost: `Started`, exposed, not self-clearing, survives upgrade; `create_canister` itself fails: no halt | 14.1, 14.2 |
 | 36 | integration | `install_code` outcome lost after the id was recorded, or a trap at the start of the round after `Created(id)`: resolved via `canister_status`, creation finished, same canister adopted; created canister carries a different module: halt with id exposed | 14.3–14.5 |
 | 37 | integration | `update_settings` outcome lost or callback trapped after controllers changed: archive adopted and serving, archiving continues, entry retried and cleared on the unauthorized reject | 14.6–14.8 |
@@ -471,15 +472,16 @@ as an ordinary one.
 
 - **PR 2 — the ledger's archiving-reply change** (separate specification). Delivers the
   reply half of Req 10.3.
-- **PR 3 — reconciliation and halts** (DEFI-3017). Reconciliation from the reported
-  extent, the range checks, offset derivation, the Expected_Parent, the capability probe
-  and seam, and the `halted` field with its pre-guard skip and labelled gauge, holding
-  the variants its own checks raise (`StartAhead`, `PositionShort`, `PositionAhead`,
-  `StartMoved`). *Acceptance:* Req 7, Req 9, Req 11.
-- **PR 4 — retries, round shape and creation** (DEFI-3017, DEFI-3018). The backoff, the
-  remaining `Halt` variants, one append per round, byte-based selection, bounded calls,
-  the creation journal, adoption and handover. *Acceptance:* Req 8, Req 10, Req 12,
-  Req 13, Req 14.
+- **PR 3 — one append per round, reconciliation and halts** (DEFI-3017). Both loops
+  removed and byte-based selection, so the Expected_Parent needs no per-position
+  scaffolding and reconciliation and removal share a message; reconciliation from the
+  reported extent, the range checks, offset derivation, the Expected_Parent, the
+  capability probe and seam, and the `halted` field with its pre-guard skip and labelled
+  gauge, holding the variants its own checks raise (`StartAhead`, `PositionShort`,
+  `PositionAhead`, `StartMoved`). *Acceptance:* Req 7, Req 9, Req 11, Req 12.
+- **PR 4 — retries and creation** (DEFI-3017, DEFI-3018). The backoff, the remaining
+  `Halt` variants, bounded calls, the creation journal, adoption and handover.
+  *Acceptance:* Req 8, Req 10, Req 13, Req 14.
 
 Safety is reached at this release; expect the backlog to drain at one message per
 transaction.

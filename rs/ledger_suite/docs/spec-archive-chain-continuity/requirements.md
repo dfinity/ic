@@ -140,7 +140,7 @@ it sent cannot corrupt the archive by sending it again.
    number of blocks it holds unchanged.
 6. THE Archive SHALL apply 1.1–1.4 to the blocks it would actually store, after
    placement per Req 2 and the capacity stop per Req 4, and SHALL NOT refuse an
-   Indexed_Append on account of a block it was never going to store.
+   Indexed_Append on account of a block beyond its configured limit.
 7. WHILE THE Archive holds no blocks and was given no Expected_Parent, THE Archive SHALL
    NOT refuse an append on the grounds of 1.1 or 1.2, because it has nothing to compare
    against and refusing would halt every un-upgraded ledger at each archive roll-over.
@@ -234,7 +234,8 @@ be released on its own.
 #### Acceptance Criteria
 
 1. WHEN THE Archive receives an Index_Less_Append it can store, THE Archive SHALL store
-   its blocks and SHALL return an empty reply.
+   its blocks and SHALL return no result, an absent optional that the caller reads as an
+   empty reply.
 2. WHEN THE Archive refuses an Index_Less_Append on any ground, THE Archive SHALL fail
    the call rather than return a description of the refusal, because such a caller cannot
    read one and would otherwise stop serving the blocks itself.
@@ -318,8 +319,8 @@ issued to remain retrievable, so that a history I have read never develops a hol
 
 1. THE Ledger SHALL NOT stop serving a block index unless an archive has reported an
    Archive_Range covering it, and SHALL NOT rely on its own record of what it sent.
-2. WHEN an Archiving_Round does not complete, THE Ledger SHALL continue to serve every
-   index it served before that round.
+2. WHEN an Archiving_Round ends without a reply THE Ledger acts on, THE Ledger SHALL
+   continue to serve every index it served before that round.
 3. THE Ledger SHALL extend the Archived_Prefix only as far as one past the
    highest-indexed block of an append the archive reports per 3.4 as checked, never as
    far as the reported Archive_Position, because a hash chain propagates a divergence
