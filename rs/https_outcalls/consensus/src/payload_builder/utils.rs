@@ -1063,6 +1063,7 @@ mod tests {
         time::UNIX_EPOCH,
     };
     use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+    use std::sync::Arc;
 
     fn receipt(spent: u128) -> CanisterHttpPaymentReceipt {
         CanisterHttpPaymentReceipt {
@@ -1077,7 +1078,7 @@ mod tests {
         per_replica_allowance: Cycles,
     ) -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: Request {
+            request: Arc::new(Request {
                 receiver: CanisterId::from_u64(1),
                 sender: CanisterId::from_u64(1),
                 sender_reply_callback: CallbackId::from(1),
@@ -1086,10 +1087,10 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
-            },
+            }),
             url: String::new(),
             max_response_bytes: None,
-            headers: vec![],
+            headers: Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,
