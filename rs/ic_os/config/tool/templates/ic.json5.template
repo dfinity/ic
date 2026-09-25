@@ -286,7 +286,7 @@ table ip6 filter {\n\
     ip6 saddr { {{ peer_guest_vm_address }} } ct state { new } tcp dport { 19522 } accept\n\
 {%- endif %}
     # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS\n\
-    ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept\n\
+    ip6 saddr { {{ hostos_address }} } ct state { new } tcp dport { 42372 } accept\n\
     # Custom templated rules\n\
     <<IPv6_TCP_RULES>>\n\
     <<IPv6_UDP_RULES>>\n\
@@ -440,7 +440,7 @@ table ip6 filter {\n\
     ip6 saddr { {{ peer_guest_vm_address }} } ct state { new } tcp dport { 19522 } accept\n\
 {%- endif %}
     # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS\n\
-    ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept\n\
+    ip6 saddr { {{ hostos_address }} } ct state { new } tcp dport { 42372 } accept\n\
     ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 80 accept\n\
     # Custom templated rules\n\
     <<IPv6_TCP_RULES>>\n\

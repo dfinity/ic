@@ -4,6 +4,7 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 exports_files([
     "templates/ic.json5.template",
+    "templates/metrics-proxy.yaml.template",
 ])
 
 BIN_SOURCES = [
@@ -18,7 +19,10 @@ LIB_SOURCES = glob(
 rust_library(
     name = "config_lib",
     srcs = LIB_SOURCES,
-    compile_data = ["templates/ic.json5.template"],
+    compile_data = [
+        "templates/ic.json5.template",
+        "templates/metrics-proxy.yaml.template",
+    ],
     crate_name = "config_tool",
     target_compatible_with = [
         "@platforms//os:linux",
@@ -59,7 +63,10 @@ rust_library(
 rust_library(
     name = "config_lib_dev",
     srcs = LIB_SOURCES,
-    compile_data = ["templates/ic.json5.template"],
+    compile_data = [
+        "templates/ic.json5.template",
+        "templates/metrics-proxy.yaml.template",
+    ],
     crate_features = ["dev"],
     crate_name = "config_tool",
     target_compatible_with = [
