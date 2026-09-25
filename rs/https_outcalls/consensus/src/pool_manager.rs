@@ -682,7 +682,7 @@ pub mod test {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
     use ic_test_utilities_registry::{
-        add_api_boundary_node_records, add_api_boundary_node_records_impl,
+        add_api_boundary_node_records, add_unresolvable_api_boundary_node_records,
     };
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::CountBytes;
@@ -3783,13 +3783,7 @@ pub mod test {
                     let addrs_of = |ids: Vec<NodeId>| {
                         let mut addrs: Vec<String> = ids
                             .iter()
-                            .map(|node_id| {
-                                let (_, ip_addr) = nodes
-                                    .iter()
-                                    .find(|(id, _)| id == node_id)
-                                    .expect("unknown boundary node id");
-                                socks_proxy_addr(ip_addr)
-                            })
+                            .map(|node_id| socks_proxy_addr(&nodes[node_id]))
                             .collect();
                         addrs.sort();
                         addrs
@@ -3835,11 +3829,10 @@ pub mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
                 let deps = DependenciesBuilder::new(pool_config.clone(), 4).build();
-                add_api_boundary_node_records_impl(
+                add_unresolvable_api_boundary_node_records(
                     &deps.registry_data_provider,
                     101..=104,
                     2,
-                    |_| false,
                 );
                 deps.registry.update_to_latest_version();
 

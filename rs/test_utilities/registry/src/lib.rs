@@ -34,6 +34,7 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
 };
 use ic_types_cycles::CanisterCyclesCostSchedule;
+use std::collections::BTreeMap;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
@@ -107,14 +108,24 @@ pub fn add_replica_version_record(
 }
 
 /// Registers one API boundary node per id in `ids`, each with a node record
-/// whose HTTP endpoint carries a distinct IPv6 address. Returns the ids paired
-/// with that address.
+/// whose HTTP endpoint carries a distinct IPv6 address. Returns each id with
+/// that address.
 pub fn add_api_boundary_node_records(
     registry_data_provider: &Arc<ProtoRegistryDataProvider>,
     ids: RangeInclusive<u64>,
     version: u64,
-) -> Vec<(NodeId, String)> {
+) -> BTreeMap<NodeId, String> {
     add_api_boundary_node_records_impl(registry_data_provider, ids, version, |_| true)
+}
+
+/// As [`add_api_boundary_node_records`], except that the nodes are registered
+/// without an endpoint, and so cannot be resolved.
+pub fn add_unresolvable_api_boundary_node_records(
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    ids: RangeInclusive<u64>,
+    version: u64,
+) -> BTreeMap<NodeId, String> {
+    add_api_boundary_node_records_impl(registry_data_provider, ids, version, |_| false)
 }
 
 /// As [`add_api_boundary_node_records`], except that a node `with_http` denies
@@ -124,9 +135,9 @@ pub fn add_api_boundary_node_records_impl(
     ids: RangeInclusive<u64>,
     version: u64,
     with_http: impl Fn(NodeId) -> bool,
-) -> Vec<(NodeId, String)> {
+) -> BTreeMap<NodeId, String> {
     let registry_version = RegistryVersion::from(version);
-    let nodes: Vec<(NodeId, String)> = ids
+    let nodes: BTreeMap<NodeId, String> = ids
         .map(|i| (node_test_id(i), format!("2001:db8::{i}")))
         .collect();
 

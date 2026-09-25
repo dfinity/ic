@@ -178,6 +178,7 @@ mod tests {
     };
     use ic_types::Time;
     use ic_types::registry::RegistryClientError;
+    use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use strum::IntoEnumIterator;
 
@@ -186,7 +187,7 @@ mod tests {
     fn registry_with_boundary_nodes_impl(
         count: u64,
         with_http: impl Fn(NodeId) -> bool,
-    ) -> (Arc<FakeRegistryClient>, Vec<(NodeId, String)>) {
+    ) -> (Arc<FakeRegistryClient>, BTreeMap<NodeId, String>) {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let nodes =
             add_api_boundary_node_records_impl(&data_provider, 1..=count, VERSION.get(), with_http);
@@ -197,30 +198,21 @@ mod tests {
 
     fn registry_with_boundary_nodes(
         count: u64,
-    ) -> (Arc<FakeRegistryClient>, Vec<(NodeId, String)>) {
+    ) -> (Arc<FakeRegistryClient>, BTreeMap<NodeId, String>) {
         registry_with_boundary_nodes_impl(count, |_| true)
     }
 
     fn registry_with_unresolvable_boundary_nodes(
         count: u64,
-    ) -> (Arc<FakeRegistryClient>, Vec<(NodeId, String)>) {
+    ) -> (Arc<FakeRegistryClient>, BTreeMap<NodeId, String>) {
         registry_with_boundary_nodes_impl(count, |_| false)
     }
 
     fn registry_with_one_unresolvable_boundary_node(
         count: u64,
         unresolvable: NodeId,
-    ) -> (Arc<FakeRegistryClient>, Vec<(NodeId, String)>) {
+    ) -> (Arc<FakeRegistryClient>, BTreeMap<NodeId, String>) {
         registry_with_boundary_nodes_impl(count, move |node_id| node_id != unresolvable)
-    }
-
-    /// The address that the boundary node `node_id` of `nodes` resolves to.
-    fn addr_of(nodes: &[(NodeId, String)], node_id: &NodeId) -> String {
-        let (_, ip_addr) = nodes
-            .iter()
-            .find(|(id, _)| id == node_id)
-            .expect("unknown boundary node id");
-        socks_proxy_addr(ip_addr)
     }
 
     fn sorted_addrs(resolved: ResolvedSocksProxies) -> Vec<String> {
@@ -236,7 +228,8 @@ mod tests {
     fn selects_boundary_nodes_by_subnet_type() {
         let (registry, nodes) = registry_with_boundary_nodes(4);
         let addrs_of = |ids: Vec<NodeId>| {
-            let mut addrs: Vec<String> = ids.iter().map(|id| addr_of(&nodes, id)).collect();
+            let mut addrs: Vec<String> =
+                ids.iter().map(|id| socks_proxy_addr(&nodes[id])).collect();
             addrs.sort();
             addrs
         };
@@ -285,7 +278,7 @@ mod tests {
         let mut expected: Vec<String> = app_ids
             .iter()
             .filter(|node_id| **node_id != skipped)
-            .map(|node_id| addr_of(&nodes, node_id))
+            .map(|node_id| socks_proxy_addr(&nodes[node_id]))
             .collect();
         expected.sort();
 
