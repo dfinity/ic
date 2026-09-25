@@ -50,10 +50,10 @@ ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_long_test_farm
 
 # Run most nested tests for any ic-os/ or rs/ic_os/ changes:
 *ic[-_]os/* //rs/tests/nested:guestos_upgrade_smoke_test_farm
-            //rs/tests/nested:guestos_upgrade_from_latest_release_to_current
+            //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_test_farm
             //rs/tests/nested:hostos_upgrade_smoke_test_farm
-            //rs/tests/nested:hostos_upgrade_from_latest_release_to_current
-            //rs/tests/nested:registration
+            //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_test_farm
+            //rs/tests/nested:registration_test_farm
 
 # Full rejoin test for state sync changes:
 *state_sync* //rs/tests/message_routing:rejoin_test_farm
@@ -92,7 +92,7 @@ rs/bitcoin/ckbtc/*   //rs/tests/ckbtc:ckdoge_minter_basics_test_farm
 
 rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test_farm
 
-rs/migration_canister/* //rs/tests/execution:canister_migration_test_farm_head_nns
+rs/migration_canister/* //rs/tests/execution:canister_migration_test_head_nns_farm
 
 rs/nns/governance/* //rs/nns/governance:governance_integration_test
                     //rs/nns/governance:merge_neurons_test
