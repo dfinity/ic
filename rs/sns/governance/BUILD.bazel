@@ -79,6 +79,7 @@ DEPENDENCIES = [
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
+    "@crate_index//:num-bigint",
     "@crate_index//:num-traits",
     "@crate_index//:prost",
     "@crate_index//:rand",
