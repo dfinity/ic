@@ -642,7 +642,7 @@ impl ThresholdArguments {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignWithThresholdContext {
-    pub request: Request,
+    pub request: Arc<Request>,
     pub args: ThresholdArguments,
     pub derivation_path: Arc<Vec<Vec<u8>>>,
     pub batch_time: Time,
