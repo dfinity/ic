@@ -3291,7 +3291,7 @@ fn execute_canister_http_request() {
         assert_eq!(http_request_context.url, url);
         assert_eq!(
             http_request_context.transform,
-            Some(std::sync::Arc::new(Transform {
+            Some(Arc::new(Transform {
                 method_name: transform_method_name,
                 context: transform_context,
             }))

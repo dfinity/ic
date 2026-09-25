@@ -134,6 +134,7 @@ mod tests {
     };
     use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
     use std::collections::BTreeSet;
+    use std::sync::Arc;
     use std::time::Duration;
 
     fn flexible() -> Replication {
@@ -152,7 +153,7 @@ mod tests {
     /// sender (canister id) and replication kind are read by `DarkLaunchTracker`.
     fn context(replication: Replication) -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: std::sync::Arc::new(Request {
+            request: Arc::new(Request {
                 receiver: CanisterId::from_u64(7),
                 sender: CanisterId::from_u64(7),
                 sender_reply_callback: CallbackId::from(1),
@@ -164,7 +165,7 @@ mod tests {
             }),
             url: String::new(),
             max_response_bytes: None,
-            headers: std::sync::Arc::new(vec![]),
+            headers: Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,

@@ -642,9 +642,6 @@ impl ThresholdArguments {
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignWithThresholdContext {
-    /// Behind an [`Arc`] for the same reason as the other potentially large fields
-    /// of this context: it is never mutated, while the context is cloned for every
-    /// version of the replicated state that is kept in memory.
     pub request: Arc<Request>,
     pub args: ThresholdArguments,
     pub derivation_path: Arc<Vec<Vec<u8>>>,

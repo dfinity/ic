@@ -510,10 +510,10 @@ fn request_context(
     subnet_size: NumberOfNodes,
 ) -> CanisterHttpRequestContext {
     CanisterHttpRequestContext {
-        request: std::sync::Arc::new(RequestBuilder::default().build()),
+        request: RequestBuilder::default().build_arc(),
         url: "https://example.com".to_string(),
         max_response_bytes: None,
-        headers: std::sync::Arc::new(vec![]),
+        headers: Arc::new(vec![]),
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: None,

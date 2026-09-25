@@ -130,7 +130,7 @@ pub(super) fn fake_signature_request_context(
     nonce: Option<[u8; 32]>,
 ) -> SignWithThresholdContext {
     SignWithThresholdContext {
-        request: std::sync::Arc::new(RequestBuilder::new().build()),
+        request: RequestBuilder::new().build_arc(),
         args: fake_signature_request_args(
             key_id,
             Height::from(100),

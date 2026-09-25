@@ -108,10 +108,10 @@ mod tests {
 
     fn request_context() -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: std::sync::Arc::new(RequestBuilder::new().build()),
+            request: RequestBuilder::new().build_arc(),
             url: String::new(),
             max_response_bytes: None,
-            headers: std::sync::Arc::new(vec![]),
+            headers: Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,

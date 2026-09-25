@@ -815,12 +815,10 @@ mod tests {
         CanisterHttpRequest {
             id: CallbackId::from(request_id),
             context: CanisterHttpRequestContext {
-                request: Arc::new(
-                    RequestBuilder::default()
-                        .receiver(CanisterId::from(1))
-                        .sender(CanisterId::from(1))
-                        .build(),
-                ),
+                request: RequestBuilder::default()
+                    .receiver(CanisterId::from(1))
+                    .sender(CanisterId::from(1))
+                    .build_arc(),
                 url: "http://notused.com".to_string(),
                 max_response_bytes: None,
                 headers: Arc::new(Vec::new()),

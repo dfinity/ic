@@ -431,6 +431,7 @@ mod tests {
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{NodeId, NumberOfNodes, RegistryVersion};
     use std::collections::BTreeSet;
+    use std::sync::Arc;
     use std::time::Duration;
 
     const INITIAL_BALANCE: Cycles = Cycles::new(1_000_000_000_000);
@@ -548,10 +549,10 @@ mod tests {
         cost_schedule: CanisterCyclesCostSchedule,
     ) {
         let context = CanisterHttpRequestContext {
-            request: std::sync::Arc::new(RequestBuilder::default().sender(sender).build()),
+            request: RequestBuilder::default().sender(sender).build_arc(),
             url: "https://example.com".to_string(),
             max_response_bytes: None,
-            headers: std::sync::Arc::new(Vec::new()),
+            headers: Arc::new(Vec::new()),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,

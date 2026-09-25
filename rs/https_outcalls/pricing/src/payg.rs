@@ -178,6 +178,7 @@ mod tests {
         time::UNIX_EPOCH,
     };
     use std::collections::BTreeSet;
+    use std::sync::Arc;
     use std::time::Duration;
 
     fn context(
@@ -185,7 +186,7 @@ mod tests {
         per_replica_allowance: u128,
     ) -> CanisterHttpRequestContext {
         CanisterHttpRequestContext {
-            request: std::sync::Arc::new(Request {
+            request: Arc::new(Request {
                 receiver: CanisterId::from_u64(1),
                 sender: CanisterId::from_u64(1),
                 sender_reply_callback: CallbackId::from(1),
@@ -197,7 +198,7 @@ mod tests {
             }),
             url: String::new(),
             max_response_bytes: None,
-            headers: std::sync::Arc::new(vec![]),
+            headers: Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,

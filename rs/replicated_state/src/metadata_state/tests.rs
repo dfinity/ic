@@ -1123,12 +1123,10 @@ fn subnet_call_contexts_deserialization() {
 
     // Define HTTP request.
     let canister_http_request = CanisterHttpRequestContext {
-        request: Arc::new(
-            RequestBuilder::default()
-                .sender(canister_test_id(1))
-                .receiver(canister_test_id(2))
-                .build(),
-        ),
+        request: RequestBuilder::default()
+            .sender(canister_test_id(1))
+            .receiver(canister_test_id(2))
+            .build_arc(),
         url: url.clone(),
         max_response_bytes: None,
         headers: Arc::new(Vec::new()),
@@ -1249,13 +1247,11 @@ fn canister_http_request_context(
     time: Time,
 ) -> CanisterHttpRequestContext {
     CanisterHttpRequestContext {
-        request: Arc::new(
-            RequestBuilder::default()
-                .sender(canister_test_id(1))
-                .receiver(IC_00)
-                .method_payload(vec![1, 2, 3])
-                .build(),
-        ),
+        request: RequestBuilder::default()
+            .sender(canister_test_id(1))
+            .receiver(IC_00)
+            .method_payload(vec![1, 2, 3])
+            .build_arc(),
         url: "https://example.com".into(),
         max_response_bytes: None,
         headers: Arc::new(vec![]),
@@ -1549,7 +1545,7 @@ fn sign_with_threshold_context_roundtrip() {
             contexts.insert(
                 CallbackId::new(id),
                 SignWithThresholdContext {
-                    request: Arc::new(RequestBuilder::new().build()),
+                    request: RequestBuilder::new().build_arc(),
                     args,
                     derivation_path: Arc::new(vec![]),
                     batch_time: UNIX_EPOCH,

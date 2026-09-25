@@ -145,37 +145,14 @@ impl From<TransformContext> for Transform {
     }
 }
 
-/// The potentially large parts of a request -- the originating `Request` (whose
-/// `method_payload` holds the encoded outcall arguments), the headers, the body and
-/// the transform -- are held behind [`Arc`]s: the context is cloned for every
-/// version of the replicated state that is kept in memory, so sharing them keeps a
-/// request's payload from being duplicated per version. They are not mutated once
-/// the context is in the state; the one exception is the request's `payment`, which
-/// is deducted while the context is still uniquely owned (see
-/// `try_add_http_context_to_replicated_state`).
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CanisterHttpRequestContext {
-    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     pub request: Arc<Request>,
     pub url: String,
     pub max_response_bytes: Option<NumBytes>,
-    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
-    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     pub headers: Arc<Vec<CanisterHttpHeader>>,
-    #[serde(
-        serialize_with = "ic_utils::serde_arc::serialize_option_arc_bytes",
-        deserialize_with = "ic_utils::serde_arc::deserialize_option_arc_bytes",
-        skip_serializing_if = "Option::is_none",
-        default
-    )]
     pub body: Option<Arc<Vec<u8>>>,
     pub http_method: CanisterHttpMethod,
-    #[serde(
-        serialize_with = "ic_utils::serde_arc::serialize_option_arc",
-        deserialize_with = "ic_utils::serde_arc::deserialize_option_arc",
-        default
-    )]
     pub transform: Option<Arc<Transform>>,
     pub time: Time,
     /// The replication strategy for this request.
