@@ -584,7 +584,7 @@ mod crypto_hash_stability {
     /// Test stability of CatchUpContent hash output
     #[test]
     fn catch_up_content_stability() {
-        let block = test_block();
+        let block = test_summary_block();
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
@@ -601,7 +601,7 @@ mod crypto_hash_stability {
     /// Test stability of CatchUpShareContent hash output
     #[test]
     fn catch_up_share_content_stability() {
-        let block = test_block();
+        let block = test_summary_block();
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
@@ -643,7 +643,7 @@ mod crypto_hash_stability {
     /// Test stability of CatchUpPackage hash output
     #[test]
     fn catch_up_package_stability() {
-        let block = test_block();
+        let block = test_summary_block();
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
@@ -667,7 +667,7 @@ mod crypto_hash_stability {
     /// Test stability of CatchUpPackageShare hash output
     #[test]
     fn catch_up_package_share_stability() {
-        let block = test_block();
+        let block = test_summary_block();
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let beacon = test_random_beacon();
         let hashed_beacon: HashedRandomBeacon = Hashed::new(crypto_hash, beacon);
@@ -1038,7 +1038,7 @@ mod crypto_hash_stability {
     }
 
     /// Helper to create a test block for use in other tests
-    fn test_block() -> Block {
+    fn test_summary_block() -> Block {
         Block::new(
             test_crypto_hash_of(0x42),
             Payload::new(
@@ -1072,7 +1072,7 @@ mod crypto_hash_stability {
     /// Test stability of BlockProposal hash output
     #[test]
     fn block_proposal_stability() {
-        let block = test_block();
+        let block = test_summary_block();
         let hashed_block: HashedBlock = Hashed::new(crypto_hash, block);
         let data: BlockProposal = Signed {
             content: hashed_block,

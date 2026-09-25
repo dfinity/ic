@@ -55,13 +55,13 @@ impl PayloadBuilderImpl {
         logger: ReplicaLogger,
     ) -> Self {
         let section_builder = vec![
-            BatchPayloadSectionBuilder::Upgrade(upgrade_payload_builder),
             BatchPayloadSectionBuilder::Ingress(ingress_selector),
             BatchPayloadSectionBuilder::SelfValidating(self_validating_payload_builder),
             BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
             BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
             BatchPayloadSectionBuilder::QueryStats(query_stats_payload_builder),
             BatchPayloadSectionBuilder::ChainKey(chain_key_payload_builder),
+            BatchPayloadSectionBuilder::Upgrade(upgrade_payload_builder),
         ];
 
         Self {
@@ -442,45 +442,39 @@ pub(crate) mod test {
             const CHAIN_KEY_PAYLOAD_SIZE: NumBytes = NumBytes::new(512 * KB);
             const QUERY_STATS_PAYLOAD_SIZE: NumBytes = NumBytes::new(MB);
             const INGRESS_PAYLOAD_SIZE: NumBytes = NumBytes::new(2 * MB);
+            const UPGRADE_PAYLOAD_SIZE: NumBytes = NumBytes::new(0);
+
+            // The expected budgets follow the height-1 build order. Each
+            // section gets what remains after the earlier ones produced their
+            // payloads.
+            let upgrade_budget = MAX_BLOCK_SIZE;
+            let ingress_budget = upgrade_budget - UPGRADE_PAYLOAD_SIZE;
+            let bitcoin_budget = ingress_budget - INGRESS_PAYLOAD_SIZE;
+            let xnet_budget = bitcoin_budget - BITCOIN_PAYLOAD_SIZE;
+            let http_budget = xnet_budget - XNET_PAYLOAD_SIZE;
+            let query_stats_budget = http_budget - CANISTER_HTTP_PAYLOAD_SIZE;
+            let chain_key_budget = query_stats_budget - QUERY_STATS_PAYLOAD_SIZE;
 
             let payload_builder = set_up_payload_builder(
                 registry,
                 MocksSettings {
                     chain_key_payload_to_return: vec![0; CHAIN_KEY_PAYLOAD_SIZE.get() as usize],
                     upgrade_payload_to_return: vec![],
-                    expected_chain_key_payload_size_limit: MAX_BLOCK_SIZE,
-                    expected_upgrade_payload_size_limit: MAX_BLOCK_SIZE - CHAIN_KEY_PAYLOAD_SIZE,
+                    expected_chain_key_payload_size_limit: chain_key_budget,
+                    expected_upgrade_payload_size_limit: upgrade_budget,
                     ingress_payload_size_to_return: INGRESS_PAYLOAD_SIZE,
-                    expected_ingress_payload_size_limit: MAX_BLOCK_SIZE - CHAIN_KEY_PAYLOAD_SIZE,
+                    expected_ingress_payload_size_limit: ingress_budget,
                     bitcoin_payload_size_to_return: BITCOIN_PAYLOAD_SIZE,
-                    expected_bitcoin_payload_size_limit: MAX_BLOCK_SIZE
-                        - CHAIN_KEY_PAYLOAD_SIZE
-                        - INGRESS_PAYLOAD_SIZE,
+                    expected_bitcoin_payload_size_limit: bitcoin_budget,
                     xnet_payload_size_to_return: XNET_PAYLOAD_SIZE,
-                    expected_xnet_payload_size_limit: NumBytes::new(
-                        95 * (MAX_BLOCK_SIZE
-                            - CHAIN_KEY_PAYLOAD_SIZE
-                            - INGRESS_PAYLOAD_SIZE
-                            - BITCOIN_PAYLOAD_SIZE)
-                            .get()
-                            / 100,
-                    ),
+                    expected_xnet_payload_size_limit: NumBytes::new(95 * xnet_budget.get() / 100),
                     http_outcalls_payload_to_return: vec![
                         0;
                         CANISTER_HTTP_PAYLOAD_SIZE.get() as usize
                     ],
-                    expected_http_outcalls_size_limit: MAX_BLOCK_SIZE
-                        - CHAIN_KEY_PAYLOAD_SIZE
-                        - INGRESS_PAYLOAD_SIZE
-                        - BITCOIN_PAYLOAD_SIZE
-                        - XNET_PAYLOAD_SIZE,
+                    expected_http_outcalls_size_limit: http_budget,
                     query_stats_payload_to_return: vec![0; QUERY_STATS_PAYLOAD_SIZE.get() as usize],
-                    expected_query_stats_size_limit: MAX_BLOCK_SIZE
-                        - CHAIN_KEY_PAYLOAD_SIZE
-                        - INGRESS_PAYLOAD_SIZE
-                        - BITCOIN_PAYLOAD_SIZE
-                        - XNET_PAYLOAD_SIZE
-                        - CANISTER_HTTP_PAYLOAD_SIZE,
+                    expected_query_stats_size_limit: query_stats_budget,
                 },
             );
 

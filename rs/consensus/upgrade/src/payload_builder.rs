@@ -2,7 +2,7 @@ use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload, ProposalCon
 use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationError};
 use ic_interfaces::upgrade::InvalidUpgradePayloadReason;
 use ic_interfaces::validation::{ValidationError, ValidationResult};
-use ic_types::batch::{UpgradePayload, ValidationContext};
+use ic_types::batch::ValidationContext;
 use ic_types::{Height, NumBytes};
 
 pub struct UpgradePayloadBuilderImpl;
@@ -27,13 +27,13 @@ impl BatchPayloadBuilder for UpgradePayloadBuilderImpl {
         _past_payloads: &[PastPayload],
     ) -> ValidationResult<PayloadValidationError> {
         // TODO: implement proper validation
-        UpgradePayload::deserialize(payload)
-            .map(|_| ())
-            .map_err(|e| {
-                ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidUpgradePayload(
-                    InvalidUpgradePayloadReason::DecodeFailed(format!("{e:?}")),
-                ))
-            })
+        if payload.is_empty() {
+            Ok(())
+        } else {
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidUpgradePayload(InvalidUpgradePayloadReason::NonEmpty),
+            ))
+        }
     }
 }
 
@@ -63,7 +63,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_payload_rejects_undecodable_bytes() {
+    fn test_validate_payload_rejects_non_empty_payload() {
         let context = validation_context();
         let proposal_context = ProposalContext {
             proposer: node_test_id(1),
@@ -77,9 +77,7 @@ mod tests {
                 &[]
             ),
             Err(ValidationError::InvalidArtifact(
-                InvalidPayloadReason::InvalidUpgradePayload(
-                    InvalidUpgradePayloadReason::DecodeFailed(_)
-                )
+                InvalidPayloadReason::InvalidUpgradePayload(InvalidUpgradePayloadReason::NonEmpty)
             ))
         ));
     }
