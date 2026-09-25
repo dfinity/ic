@@ -523,8 +523,8 @@ pub(crate) enum CanisterManagerError {
     },
 }
 
-impl CanisterManagerError {
-    pub(crate) fn from_subnet_available_memory_error(err: SubnetAvailableMemoryError) -> Self {
+impl From<SubnetAvailableMemoryError> for CanisterManagerError {
+    fn from(err: SubnetAvailableMemoryError) -> Self {
         let SubnetAvailableMemoryError::InsufficientMemory {
             execution_requested,
             guaranteed_response_message_requested,

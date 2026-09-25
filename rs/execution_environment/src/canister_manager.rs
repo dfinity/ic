@@ -1869,14 +1869,11 @@ impl CanisterManager {
             NumBytes::from(0),
             deallocated_wasm_custom_sections_bytes,
         );
-        round_limits
-            .subnet_available_memory
-            .try_decrement(
-                allocated_bytes,
-                NumBytes::from(0),
-                allocated_wasm_custom_sections_bytes,
-            )
-            .map_err(CanisterManagerError::from_subnet_available_memory_error)?;
+        round_limits.subnet_available_memory.try_decrement(
+            allocated_bytes,
+            NumBytes::from(0),
+            allocated_wasm_custom_sections_bytes,
+        )?;
 
         // Consume cycles for instructions w.r.t. the old memory usage,
         // i.e., the memory usage for which the instructions were executed,

@@ -485,7 +485,7 @@ impl InstallCodeHelper {
                 self.instructions_left(),
                 original,
                 round,
-                CanisterManagerError::from_subnet_available_memory_error(err),
+                err.into(),
                 self.clone_log_memory_store(),
             );
         }
