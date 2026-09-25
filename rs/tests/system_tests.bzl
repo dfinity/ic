@@ -376,8 +376,10 @@ def system_test(
         visibility = visibility,
     )
 
+    farm_test_name = test_name + "_farm"
+
     sh_test(
-        name = test_name,
+        name = farm_test_name,
         srcs = ["//rs/tests:run_systest.sh"],
         data = data,
         env = env | farm_only_env | {
@@ -394,7 +396,7 @@ def system_test(
     # create a colocated version of the test (marked as manual _unless_ the test is tagged with "colocate")
     sh_test(
         srcs = ["//rs/tests:run_systest.sh"],
-        name = test_name + "_colocate",
+        name = farm_test_name + "_colocate",
         data = data + [
             "//rs/tests:colocate_uvm_config_image",
             "//rs/tests/idx:colocate_test_bin",

@@ -16,7 +16,7 @@ use futures::{
     future::{join_all, select_all, try_join_all},
 };
 use ic_agent::{
-    Agent, AgentError, Identity, Signature,
+    Agent, AgentError, Identity, RequestId, Signature,
     agent::{
         CallResponse, EnvelopeContent, RejectCode, RejectResponse,
         http_transport::reqwest_transport::reqwest,
@@ -592,6 +592,30 @@ impl<'a> UniversalCanister<'a> {
             .with_arg(payload.into())
             .call_and_wait()
             .await
+    }
+
+    /// Submits `payload` as an ingress message to the canister's `update`
+    /// method without waiting for the call to complete, and returns the ID of
+    /// the submitted message, so that its status can be polled later. `None` if
+    /// the call happened to complete before the submission returned, in which
+    /// case there is nothing left to poll for.
+    ///
+    /// Useful for update calls that are not expected to complete for a long
+    /// time, or at all.
+    pub async fn submit_update<P: Into<Vec<u8>>>(
+        &self,
+        payload: P,
+    ) -> Result<Option<RequestId>, AgentError> {
+        let response = self
+            .agent
+            .update(&self.canister_id, "update")
+            .with_arg(payload.into())
+            .call()
+            .await?;
+        Ok(match response {
+            CallResponse::Response(_) => None,
+            CallResponse::Poll(request_id) => Some(request_id),
+        })
     }
 }
 
