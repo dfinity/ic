@@ -158,6 +158,12 @@ const DKG_INTERVAL_LENGTH: u64 = 499;
 const CONDITIONS_TIMEOUT: Duration = Duration::from_secs(120);
 const CONDITIONS_BACKOFF: Duration = Duration::from_secs(5);
 
+/// How long the test waits for `U1`'s `install_code` requests to be inducted,
+/// and how long it waits in between two checks. Induction takes a few rounds,
+/// so this is much shorter than a driver retry.
+const INDUCTION_TIMEOUT: Duration = Duration::from_secs(60);
+const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
+
 /// Timeouts of the test itself: the whole scenario takes a couple of minutes,
 /// the rest is headroom for the waits of the steps above. The overall timeout
 /// additionally covers the setup (booting the IC and installing the NNS).
@@ -529,9 +535,10 @@ async fn evaluate_merge_readiness(
         min_registry_version = Some(min_registry_version.map_or(version, |v: f64| v.min(version)));
         if other.subnet_id != subnet_id {
             incoming_stream_messages +=
-                sum_of_medians(&metrics, METRIC_STREAM_MESSAGES, |labels| {
+                median_across_replicas(&metrics, METRIC_STREAM_MESSAGES, |labels| {
                     labels.contains(&remote_label)
-                });
+                })
+                .unwrap_or(0.0);
         }
     }
     let min_registry_version = min_registry_version.unwrap_or(0.0);
@@ -743,8 +750,8 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
             subnet.subnet_id
         ),
         logger,
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
+        INDUCTION_TIMEOUT,
+        INDUCTION_BACKOFF,
         || async {
             let metrics = fetch_metrics(
                 subnet,
@@ -853,8 +860,9 @@ fn median(values: &[f64]) -> Option<f64> {
     Some((values[middle.floor() as usize] + values[middle.ceil() as usize]) / 2.0)
 }
 
-/// `sum(quantile by (<labels>) (0.5, <metric>{<filter>}))`: the median across
-/// the replicas reporting each matching series, summed over those series.
+/// `sum(quantile without(ic_node, instance) (0.5, <metric>{<labels_match>}))`:
+/// the median across the replicas reporting each matching series, summed over
+/// those series.
 fn sum_of_medians(
     metrics: &BTreeMap<String, Vec<f64>>,
     metric: &str,
@@ -866,8 +874,12 @@ fn sum_of_medians(
         .sum()
 }
 
-/// `quantile(0.5, <metric>{<filter>})`: the median across all replicas
+/// `quantile(0.5, <metric>{<labels_match>})`: the median across all replicas
 /// reporting any matching series. `None` if there is no such series.
+///
+/// This pools the values of all matching series (e.g. across all `remote` or
+/// `state` label values), so it is only meaningful for unlabeled metrics or if
+/// `labels_match` selects a single label combination.
 fn median_across_replicas(
     metrics: &BTreeMap<String, Vec<f64>>,
     metric: &str,
