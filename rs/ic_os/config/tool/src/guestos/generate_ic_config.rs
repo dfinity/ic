@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail, ensure};
 use askama::Template;
-use config_types::{GuestOSConfig, Ipv6Config};
+use config_types::{DeploymentEnvironment, GuestOSConfig, Ipv6Config};
 use ipnet::Ipv6Net;
 use serde_json;
 use std::fs::write;
@@ -31,6 +31,10 @@ pub struct IcConfigTemplate {
     pub malicious_behavior: String,
     /// Already JSON-encoded: either `null` or a quoted string.
     pub extra_api_boundary_node_trust_anchors_pem: String,
+    /// Already JSON-encoded: either `null` or a quoted string. A bare
+    /// principal is not a JSON5 value, and an unparseable `ic.json5` takes
+    /// the replica down with it.
+    pub engine_management_canister_id: String,
     /// IPv6 address of the peer Guest VM (the Upgrade VM inside the Default VM
     /// and vice versa).
     pub peer_guest_vm_address: Option<Ipv6Addr>,
@@ -203,6 +207,23 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         None => "null".to_string(),
     };
 
+    let engine_management_canister_id = serde_json::to_string(&match guestos_config
+        .guestos_settings
+        .engine_management_canister_id
+        .as_deref()
+    {
+        Some(id) => Some(id),
+        // Mainnet's engine management canister is well-known, so mainnet
+        // nodes do not have to configure it explicitly.
+        None if guestos_config.icos_settings.deployment_environment
+            == DeploymentEnvironment::Mainnet =>
+        {
+            Some(ic_config::cloud_engine::MAINNET_ENGINE_MANAGEMENT_CANISTER_ID)
+        }
+        None => None,
+    })
+    .context("Failed to encode the engine management canister id")?;
+
     Ok(IcConfigTemplate {
         // TODO https://dfinity.atlassian.net/browse/NODE-1909
         ipv6_prefix,
@@ -217,6 +238,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         node_reward_type,
         malicious_behavior: with_default(malicious_behavior, "null"),
         extra_api_boundary_node_trust_anchors_pem,
+        engine_management_canister_id,
         peer_guest_vm_address: guestos_config.upgrade_config.peer_guest_vm_address,
     })
 }
@@ -407,6 +429,62 @@ mod tests {
         assert!(output_content.contains(
             "ip6 saddr { 2001:db8::6802:94ff:feef:2978 } ct state { new } tcp dport { 19522 } accept"
         ));
+    }
+
+    #[test]
+    fn test_template_substitution_with_engine_management_canister_id() {
+        let mut guestos_config = create_test_guestos_config();
+        guestos_config
+            .guestos_settings
+            .engine_management_canister_id = Some("q6cfj-fyaaa-aaaar-qb77q-cai".to_string());
+        let template = get_config_vars(&guestos_config).unwrap();
+        let output_content = render_ic_config(template).unwrap();
+
+        // A bare principal is not a JSON5 value, so an unquoted one here makes
+        // the whole file unparseable and the replica refuses to start.
+        assert!(
+            output_content
+                .contains(r#"engine_management_canister_id: "q6cfj-fyaaa-aaaar-qb77q-cai""#),
+            "{output_content}"
+        );
+
+        let parsed_config: ConfigOptional = ConfigSource::Literal(output_content)
+            .load()
+            .expect("Failed to parse generated config");
+        assert_eq!(
+            parsed_config
+                .cloud_engine
+                .as_ref()
+                .unwrap()
+                .engine_management_canister_id
+                .unwrap()
+                .to_string(),
+            "q6cfj-fyaaa-aaaar-qb77q-cai"
+        );
+    }
+
+    #[test]
+    fn test_template_substitution_with_mainnet_engine_management_canister_id() {
+        let mut guestos_config = create_test_guestos_config();
+        guestos_config.icos_settings.deployment_environment = DeploymentEnvironment::Mainnet;
+        let template = get_config_vars(&guestos_config).unwrap();
+        let output_content = render_ic_config(template).unwrap();
+
+        // Mainnet takes the id from the well-known constant instead of the
+        // config, and that one has to end up quoted just the same.
+        let parsed_config: ConfigOptional = ConfigSource::Literal(output_content)
+            .load()
+            .expect("Failed to parse generated config");
+        assert_eq!(
+            parsed_config
+                .cloud_engine
+                .as_ref()
+                .unwrap()
+                .engine_management_canister_id
+                .unwrap()
+                .to_string(),
+            ic_config::cloud_engine::MAINNET_ENGINE_MANAGEMENT_CANISTER_ID
+        );
     }
 
     fn create_test_guestos_config() -> GuestOSConfig {

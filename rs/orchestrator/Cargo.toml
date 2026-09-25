@@ -99,6 +99,7 @@ ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 libc = { workspace = true }
+pocket-ic = { path = "../../packages/pocket-ic" }
 rcgen = { workspace = true }
 rstest = { workspace = true }
 rustls = { workspace = true }

@@ -1,0 +1,17 @@
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_canister(
+    name = "cloud_engine_mock_canister",
+    srcs = ["src/main.rs"],
+    crate_name = "cloud_engine_mock_canister",
+    service_file = "cloud_engine_mock.did",
+    testonly = True,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+    ],
+)
