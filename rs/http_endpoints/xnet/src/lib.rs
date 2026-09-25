@@ -48,7 +48,8 @@ pub struct XNetEndpointMetrics {
     /// Adverts received, by status.
     pub adverts: IntCounterVec,
     /// Adverts whose certification failed to verify, by remote subnet. A node that
-    /// persistently sends such adverts is misbehaving.
+    /// persistently sends such adverts is misbehaving (brief stretches following
+    /// the change of a subnet's public key are expected).
     pub advert_verification_failures: IntCounterVec,
 }
 
@@ -611,22 +612,24 @@ fn handle_advert(
 
         // `peer_node_id` is only `None` in tests. In production, the TLS handshake
         // always verifies that the caller is a registered node.
-        if let Some(node_id) = peer_node_id {
-            if !ctx.advert_rate_limiter.try_acquire(node_id) {
-                return Err(too_many_requests(format!(
-                    "Node {node_id} is over its advert rate limit"
-                )));
-            }
+        let Some(node_id) = peer_node_id else {
+            return Err(forbidden("Unreachable: no peer NodeId"));
+        };
 
-            // Only a node of `source_subnet` may advertise on its behalf. This also covers
-            // `source_subnet` being unknown to the registry.
-            if let Err(reason) =
-                check_subnet_membership(node_id, subnet_id, ctx.registry_client.as_ref())
-            {
-                let msg = format!("Node {node_id} may not advertise for {subnet_id}: {reason}");
-                warn!(ctx.log, "{}", msg);
-                return Err(forbidden(msg));
-            }
+        if !ctx.advert_rate_limiter.try_acquire(node_id) {
+            return Err(too_many_requests(format!(
+                "Node {node_id} is over its advert rate limit"
+            )));
+        }
+
+        // Only a node of `source_subnet` may advertise on its behalf. This also covers
+        // `source_subnet` being unknown to the registry.
+        if let Err(reason) =
+            check_subnet_membership(node_id, subnet_id, ctx.registry_client.as_ref())
+        {
+            let msg = format!("Node {node_id} may not advertise for {subnet_id}: {reason}");
+            warn!(ctx.log, "{}", msg);
+            return Err(forbidden(msg));
         }
 
         // Anything beyond `ADVERT_MAX_BODY_BYTES`, or a body we failed to read. An
