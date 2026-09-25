@@ -178,7 +178,7 @@ vector before canister state collapses duplicates (`bounded_vec.rs:111`), while
 `more_controller_ids` (`archive.rs:369-372`). A larger set is a misconfiguration under
 which the handover is rejected on every retry and `C1.10` never clears. Enforcing the
 bound belongs where the configuration is made — the ledger's `init` and `post_upgrade` —
-and is DEFI-3015, not part of this work (README, non-goals).
+and is a separate, minimal change rather than part of this work (README, non-goals).
 
 Ordering is the other half — **adopt the archive before handing over control**
 (`C1.9`) — so that an observed handover failure does not block archiving while it is
@@ -235,10 +235,22 @@ turns a graceful `Err` into a trap. Replace it with an enum carrying `Copy` payl
 rendered to text only where logged. `Rt::print` takes `impl AsRef<str>`, so
 non-interpolating messages become `&'static str` for free.
 
+**The rendering is not free either, which "only where logged" can be read as implying.**
+`log!` formats before it appends (`ic_canister_log/src/lib.rs:53`), so every line
+allocates a `String` sized to the message, and an argument's own `Display` may allocate
+again — `CanisterId`'s goes through `to_text()`. The ring buffer itself is safe: it is
+allocated once at init and evicts before pushing (`:114-119`), so it never grows. Moving
+text out of the error value therefore moves the allocation to the log site rather than
+removing it, which is a reason to keep logged messages short, not a reason to keep them
+in the error.
+
 **Keep** the canister id in the `create_canister` callback log — canister logs survive
 traps, verified by `test_appending_logs_in_trapped_update_call`
 (`rs/execution_environment/tests/canister_logging.rs`), so it is the only record of an
-orphan's identity — but drop the `{result:?}` debug format.
+orphan's identity — but drop the `{result:?}` debug format. Treat it as best-effort: a
+log that survives a trap is not the same as one that is certain to be written, and under
+the memory pressure that produces an orphan the `format!` is itself a plausible trap
+site.
 
 Expect little from this beyond keeping graceful failures graceful: these are tens to
 hundreds of bytes, and a small allocation only fails once the irreducible reply buffer
@@ -259,6 +271,6 @@ attempted are in the README's **Testing** section; they span the parts.*
 | 17k | integration | trap the callback of the handover call after the controllers have changed; assert the archive is still listed in `pending_handovers` on the next round and the handover is retried and completes — the entry that a same-message push would have rolled back | `C1.13`, `C1.12` |
 | 17f | upgrade | adopt an archive whose handover has not completed, then upgrade the ledger; assert the pending handover survives and is still retried afterwards | `C1.10` |
 | 17i | integration | fail one archive's handover, keep archiving until it fills and a second archive is adopted, and assert the first is still retried and still counted — the archive a single slot would have dropped. Then keep the first failing and assert the second's handover completes on a later round — rotation, so a persistent failure starves nothing behind it | `C1.12`, `C1.10` |
-| 17m | integration | configure exactly ten controllers — the platform maximum — and drive the handover; assert the single `update_settings` is accepted and the handover completes rather than being rejected, and that a configured list with a repeated principal is sent de-duplicated | `C1.10`, DEFI-3015's precondition |
+| 17m | integration | configure exactly ten controllers — the platform maximum — and drive the handover; assert the single `update_settings` is accepted and the handover completes rather than being rejected, and that a configured list with a repeated principal is sent de-duplicated | `C1.10`, the controller-count precondition |
 | 21 | measurement | ledger memory across an archive-creation round, as `routine_archiving_does_not_grow_the_ledger` does for a routine one; assert growth below a bound | D2's allocation work |
 | 25 | integration | fail `install_code` gracefully after `create_canister` succeeded; assert archiving halts, that the metric exposes the created canister's id and the id survives a ledger upgrade, and that a failure of `create_canister` itself does not halt | `C1.1`, `C1.3`, `C1.5`, `C1.6`, `C1.7` |

@@ -344,7 +344,35 @@ chain grounds, the gap, `A2.6` and `A6.4` are conditions an operator should act 
 ledger's record is wrong (`L4.8`). An empty append is counted by none of them (`A6.5`), and all of them commit,
 because D5 removed the traps.
 
+### Release risk: the archive starts decoding blocks
+
+`A1.7` needs every stored block's `parent_hash`, so this part parses block bytes that
+were written by many ledger versions across years of SNS history. A block that fails to
+decode is refused, and for an index-less append — the only shape this release sees — a
+refusal *traps* (`A5.2`), so a single decode regression halts archiving on that suite
+and stays halted. This is the largest new risk in the archive release and it is not in
+the protocol at all.
+
+Two things follow. **Pre-flight it**: decode every block in a real mainnet archive log
+offline, for each token variant, before the release ships — the wasms and the block
+bytes are both available, so this costs nothing but time and it is the only way to find
+a historical encoding the current decoder rejects. And **budget the instructions**:
+per-block decode plus hash on a 1 MiB append is not costed anywhere in this document,
+and if it approaches the **per-message instruction** limit the append traps, which is
+the same halt by another route. That is a different ceiling from the payload limit
+`L6.3` caps: sizing a round to fit one message says nothing about the instructions
+needed to decode and hash it.
+
 ## Test plan
+
+**At risk.** Row 26 needs a growth refusal that is neither the archive's own limit
+nor a reservation refusal, since the latter traps. The wasm's declared stable maximum
+is the most controllable route; a subnet memory cap works if the harness exposes one.
+Note that `reserved_cycles_limit` is **not** usable for row 26 — it produces the
+trapping case, which is row 26b's subject. If no returning route is controllable,
+`A4.4` moves to Not attempted and the distinction rests on review of the branch
+that sets the flag.
+
 
 *The baseline note, the seams the design owes, what is at risk and what is not
 attempted are in the README's **Testing** section; they span the parts.*

@@ -206,8 +206,8 @@ comes first.
   has learned that its Tail_Archive reports its range (L5.4), it sends blocks
   without asking again, and an archive rolled back to a build that ignores the
   Declared_Index would store them as new before replying with nothing. The ledger
-  cannot tell in advance; the Delivery section states the release-order rule that prevents it
-  and bounds the exposure to a single append.
+  cannot tell in advance; the Delivery section states the release-order rule that
+  prevents it, and D8 in the ledger design bounds the exposure to a single append.
 - **Validating the archive controller configuration.** The platform allows a canister
   ten controllers; `ArchiveOptions` puts no bound on how many a ledger names for its
   archives. Part C's handover takes at most ten distinct controllers as a precondition
@@ -215,10 +215,14 @@ comes first.
   a larger set, counted after de-duplication — and the handover sends the de-duplicated
   list, since the platform bounds the encoded vector before it collapses duplicates. That is a minimal, self-contained, separately-tracked change with its own PR rather
   than folded into this one.
-- **Making the archive's canister logs readable.** Some obligations here are
-  satisfiable only through a metric because a canister's log is not readable by
-  default. Changing that is a governance proposal, not a code change, and is out
-  of scope.
+- **Making the archive's canister logs readable.** The two canisters differ here, and
+  only one of them has the problem. The ICRC ledger serves its log buffer publicly over
+  `/logs` and already writes archiving failures there, so a reject's message is readable
+  by anyone. The archive exposes no such endpoint, and its canister log is
+  controller-gated by default — which is why every obligation on the archive in A6 is
+  satisfiable through a committed metric rather than through its log. Giving the archive
+  a `/logs` of its own is a small interface addition, tracked separately; changing the
+  default visibility of a canister log is a governance proposal. Neither is in scope.
 
 ## Design overview
 
@@ -366,7 +370,8 @@ at `archive.rs:280`). That succeeds for the same reason as above: `done()` loops
 is `types.is_empty()` (`de.rs:118-120`) — the declared-type list, not the byte
 position — so the one surplus `opt` is consumed before the trailing-bytes check runs. No
 raw-reply entry point is needed, and the shape `A5.1` calls "empty" is exactly this
-`None`. It is asserted as a pure Candid unit test — row 10b, already written — rather than
+`None`. It is asserted as a pure Candid unit test — row 10b of the archive design, already
+written — rather than
 trusted, since everything about releasing the archive first depends on it.
 
 **Every SNS ledger suite runs this archive, with archiving on.** `ic-icrc1-archive`
@@ -443,19 +448,10 @@ the failure counter and last-attempt timestamp must be exposed as metrics; `L6.1
 needs a per-round append count; `L7` needs an unknown-outcome counter. All three
 are metrics rather than test-only hooks, so they are also what an operator reads.
 
-**At risk.** Row 26 needs a growth refusal that is neither the archive's own limit
-nor a reservation refusal, since the latter traps. The wasm's declared stable maximum
-is the most controllable route; a subnet memory cap works if the harness exposes one.
-Note that `reserved_cycles_limit` is **not** usable for row 26 — it produces the
-trapping case, which is row 26b's subject. If no returning route is controllable,
-`A4.4` moves to Not attempted and the distinction rests on review of the branch
-that sets the flag.
-
 **Not attempted.** Inducing a trap in the append continuation end-to-end: routine
 rounds grow ledger memory by zero bytes. A multi-chunk configuration with large batches would make the
 per-batch encode big enough for the reserved-cycles trick to bite, so it is probably
-reachable, but it depends on allocator behaviour and would be flaky. Test 14 covers
-the same arithmetic deterministically. The comment correction and the
+reachable, but it depends on allocator behaviour and would be flaky. Row 14 in the ledger design covers the same arithmetic deterministically. The comment correction and the
 allocation-pressure half of the error work cannot be provoked reliably for the same
 reason.
 
@@ -473,150 +469,101 @@ reason.
 
 ## Delivery
 
-The suite upgrade order (Constraints) means a new ledger meets old archives unless the
-releases are split. Do not reorder the suite; split instead, so each release is safe in
-the normal index-ledger-archives sequence.
+The suite upgrades in the order index, ledger, archives. A new ledger therefore meets
+old archives unless the work is split, and an archive that does not understand a
+declared index would treat one as an ordinary append. So this ships as **two releases in
+a fixed order — the archive first, the ledger second** — with a verification before them
+and a governance proposal after.
 
-**Never roll an archive back to its pre-append protocol changes while its ledger assumes
-it already has that implemented.** D8 in `ledger-reconciliation/design.md`
+**Never roll the archive back beneath the append protocol while a ledger is sending
+indexes.** D8 in [`ledger-reconciliation/design.md`](ledger-reconciliation/design.md)
 explains why the ledger cannot defend against it: its cached capability answer sends the
-next batch without a probe, and an old archive stores it blindly. If an archive release
-has to be reverted, revert the ledger first, or revert to a build that still carries
-`append_blocks`.
+next batch without a probe, and an old archive stores it blindly. If the archive release
+has to be reverted, revert the ledger first, or revert to a build that still carries the
+new `append_blocks`.
 
-**Step 0 — verification of the live suites** Not a PR. Checks on deployed chain fusion
-and ICP ledger suites, because nothing here repairs an already-diverged suite and the
-answer reorders everything after it.
+### Before: verify the live suites
 
-First, a Rosetta sync from genesis. Rosetta checks that parent hashes chain across
-every block it fetches (`rosetta-api/icrc1/src/ledger_blocks_synchronization/blocks_synchronizer.rs`),
-and that is the check that matters for archive content: archives return blocks without
-indices and Rosetta numbers them from the ledger's callback start (`:645-647`), so its
-separate index check (`indices_are_valid`, `:432`) verifies the ledger's routing, not an
-archive's internal placement. A clean sync therefore shows every block *the ledger
-publishes* chains correctly — one check on archive content, not two.
+Nothing here repairs a suite that has already diverged, so whether one has reorders
+everything after it. Two checks on the deployed chain fusion and ICP ledger suites, and
+only both passing gate re-enablement:
 
-Second — and a sync cannot stand in for it — each archive's own extent against the
-ledger's published range for it. Rosetta reads archives only where the ledger points it:
-ICRC Rosetta through the `archived_blocks` callbacks the ledger hands it
-(`icrc1/.../blocks_synchronizer.rs:591-629`), ICP Rosetta through the ledger's archive
-index refreshed by `get_archive_index_pb` and then `get_blocks_pb` on the archive it
-selects (`icp/ledger_canister_blocks_synchronizer/src/canister_access.rs:166, 274`).
-Different interfaces, same blind spot: neither ever sees an archive *suffix* beyond the
-range the ledger publishes. A legacy lost reconciliation
-leaves exactly that: the duplicate re-send sits in the archive above the published end,
-unread by anyone, and it is what an indexed append would collide with the moment
-archiving resumes. So the blocks an archive actually holds must match
-what the ledger says it holds — and the two flavours need different arithmetic, because
-only one of them publishes per-archive ranges.
+1. **A Rosetta sync from genesis**, which verifies that each block's parent hash matches
+   the one before it. That is the check that catches a misplaced archive block; Rosetta's
+   separate index check verifies the ledger's routing rather than an archive's internal
+   placement, because archives return blocks without indices and Rosetta numbers them
+   from the ledger's callback.
+2. **Each archive's own extent against what the ledger publishes for it.** Rosetta reads
+   archives only where the ledger points it, so neither flavour ever sees an archive
+   *suffix* beyond the published range — and that is exactly where a legacy lost
+   reconciliation leaves a duplicate re-send, unread by anyone, waiting to collide with
+   the first indexed append. On an ICRC suite the archive's `log_length` must equal the
+   length of its published range; on ICP, where `archives()` carries no ranges, the
+   archives' offset-and-count pairs must tile up to the ledger's `first_block_index`.
 
-On an **ICRC** suite the ledger publishes a range per archive (`icrc3_get_archives`) and
-the archive reports its own count as the `log_length` of `icrc3_get_blocks`
-(`icrc1/archive/src/main.rs:385-387`); that count is *local*, so it must equal the
-published range's length. On **ICP** there is nothing to compare against directly:
-`archives()` returns canister ids without ranges, and the archive has no
-`icrc3_get_blocks`. Its count and offset are the `archive_node_blocks` and
-`archive_node_block_height_offset` gauges on its `/metrics`
-(`icp/archive/src/main.rs:405-416`) — metrics rather than query methods, so scraped over
-HTTP rather than called. The check there is that those pairs tile: each archive's offset
-plus its count is the next archive's offset, and the last sum equals the ledger's
-`first_block_index`.
+An archive holding more than it should is that latent divergence, and D10 does **not**
+repair it: D10 rewrites a constant offset error, while a duplicate suffix is repeated
+content after a correct prefix. Removing one means truncating the log or replacing the
+archive — operator-computed interventions this specification leaves unspecified until a
+suite is found in that state.
 
-An archive holding more than its published range is the
-latent divergence — and note that D10 does *not* repair it. D10 rewrites a constant
-offset error; a duplicate suffix is repeated content after a correct prefix, which no
-offset rewrite removes, and an indexed append would still collide with it. Removing it
-means truncating the archive's log or replacing the archive, both of which are
-operator-computed interventions that this specification deliberately leaves unspecified
-until a suite is actually found in that state. So if this check finds such a suffix,
-Step 5 stays blocked until an operator has dealt with it, and only the two checks passing
-together gate Step 5.
+Both checks passed on every DeFi-owned suite on 2026-09-24. They speak only to that
+date, so they need repeating if the archive release lands much later.
 
-**Archive append protocol A** `append_blocks`'s new argument and result, placement, the clamp,
-the chain check on the first stored block, capacity reporting, the counters, and the
-`.did`. The ledger is unchanged, so it sends no index and reads no result — which is
-why `A5` is in this deliverable and not a later one. It also **deletes** the test in row 10 and
-lands row 11's in its place: row 10 installs the archive wasm from source and decodes the
-indexed reply as `Option<u64>`, which stops being true the moment this deliverable returns
-`opt append_result`, so it cannot survive the change it guards the run-up to.
-*Acceptance:* `A1`, `A2`, `A3`, `A4` (A4.1-A4.4, A4.5-A4.7), `A5`, `A6`.
+### Archive release — part A
 
-*Who this lands on.* Every ICRC suite, not only the chain fusion ones, on each suite's own
-upgrade schedule — see the SNS Constraint above for the window that opens. That is
-the strongest argument for keeping **A** and **L** parts close together, and for not treating
-**A** as a change that can sit in `master` for a while.
+`append_blocks`'s new argument and result, placement, the clamp, the chain check on
+every stored block, the expected parent at `init`, capacity reporting, the counters, and
+the `.did`. The ledger is unchanged, so it still sends no index and reads no result —
+which is why `A5`, the index-less compatibility path, is in *this* release and not the
+next. It also **deletes** the test in row 10 of the archive design and lands row 11's in
+its place: row 10 installs the archive wasm from source and decodes the indexed reply
+as `Option<u64>`, which stops holding the moment this release returns
+`opt append_result`.
 
-*What this release costs.* Three things, and the last is a limit rather than a
-price.
+*Who it lands on.* Every ICRC suite, not only the chain fusion ones — every SNS runs
+this archive with archiving on — each upgrading on its own schedule. That is the
+argument for keeping the two releases close together, and for not letting the archive
+release sit in `master`.
 
-**The archive starts decoding blocks, which it has never done.** `A1.7` needs
-every stored block's `parent_hash`, so **A** parses block bytes that were written by
-many ledger versions across years of SNS history. A block that fails to decode is
-refused, and for an index-less append — the only shape **A** sees — a refusal *traps*
-(`A5.2`), so a single decode regression halts archiving on that suite and stays
-halted. This is the largest new risk in **A** and it is not in the protocol at all.
+*What it costs, until the ledger release lands.* An old ledger cannot tell a refusal's
+cause, so a round that dies after a successful append re-sends blocks the archive
+already holds; the archive now refuses them, and the old ledger has no way past it.
+Archiving halts on that suite until the ledger release, retrying every transaction
+because the backoff is not in yet. Blocks accumulate locally, so it is survivable, and a
+stall beats silent corruption — but keep the window short.
 
-Two things follow. **Pre-flight it**: decode every block in a real mainnet archive
-log offline, for each token variant, before **A** ships — the wasms and the block
-bytes are both available, so this costs nothing but time and it is the only way to
-find a historical encoding the current decoder rejects. And **budget the
-instructions**: per-block decode plus hash on a 1 MiB append is not costed anywhere
-in this document, and if it approaches the **per-message instruction** limit the
-append traps, which is the same halt by another route. Note that is a different
-ceiling from the payload limit `L6.3` caps: sizing a round to fit one message
-says nothing about the instructions needed to decode and hash it.
+*What it does not close.* The fresh-archive window. A node created for one index and
+then handed blocks from a different chain state is the original corruption, and only the
+ledger release gives the archive what it needs to refuse that, by sending an index and
+an expected parent. `A1.6` counts the window while it lasts. The corresponding non-goal
+says why refusing such an append instead is not available.
 
-An old ledger cannot tell a refusal's cause, so a round that dies after a successful
-append leaves the next round re-sending blocks the archive holds; the archive
-refuses, and the old ledger has no way past it. Archiving halts until **L**, retrying
-every transaction because the backoff is not in yet. Blocks accumulate locally, so it
-is survivable, and a stall beats silent corruption — but keep the window short.
+### Ledger release — parts L and C
 
-And it does not close the window on a **freshly created** archive — the limit of the
-three, and the subject of the corresponding non-goal, which says why refusing instead
-is not available. So the archive-only release closes the re-send case and leaves the
-roll-over case open until **L** makes the ledger send an index, with `A1.6` counting
-the window while it lasts.
+Three pieces, in one upgrade:
 
-**Ledger's archiving reply path.** Reviewed separately; not part of this spec. Ordered after **A**
-because spawning makes an archiving trap silent, so landing it first would leave the
-corruption path open while removing the symptom that reveals it.
+- **The ledger's archiving reply path** — reviewed separately and not part of this
+  specification, but ordered here: it must follow the archive release, because spawning
+  makes an archiving trap silent and landing it first would remove the symptom while the
+  corruption path was still open. It also delivers the reply half of `L4.5`, the one
+  criterion this specification states but does not implement.
+- **Part L** — reconciliation from the reported extent, the coverage and backwards
+  checks, offset derivation, the expected parent, the capability probe and the seam;
+  then the backoff, one append per round, byte-based selection and the bounded calls.
+- **Part C** — the creation journal, adoption and the controller handover. Independent
+  of the archive work and orderable freely, but it belongs in this release so that
+  `L4.11`'s halt list is complete when part L lands.
 
-****L** — ledger, bookkeeping** Reconciliation from the reported extent, the coverage
-and backwards checks, offset derivation, the capability probe and the seam.
-*Acceptance:* `L2`, `L1`, `L3`, `L4` (L4.7, L4.8),
-`L5`. On the ICP ledger the
-acceptance is `L1.5`, `L3.6` and `L5.5` — the exemptions — rather than the
-criteria they except, since its archives report nothing to reconcile against.
+**Safety is reached here, not at the archive release.** Expect the backlog to drain at
+one message per transaction rather than `num_blocks_to_archive` per transaction, since
+`L6.1` makes a round a single append.
 
-**C — ledger, round shape and retries** Byte-based selection, one append per
-round, the backoff, the creation journal, the bounded calls, the allocation work and
-the comment.
-*Acceptance:* `L4` (L4.1-L4.6, L4.9-L4.11), `C1`, `L6`, `L7`. `L4.5`'s
-reply clause is the exception: the ledger's archiving reply path change delivers that half, and **C** delivers the rest of
-the criterion — the failure count and the blocks staying served.
+### After: re-enable archiving
 
-`L4.7` and `L4.8` are deliberately in **L** rather than here: **L** is what gives
-the ledger a `ChainMismatch` or `Gap` to read, and a release that can receive an
-unresolvable refusal without knowing to stop would retry it on every transaction. The
-rest of `L4` — the backoff itself — is independent and can follow.
-
-**A** and the ledger's archiving reply path change are not enough. **A** closes the
-re-send case, but the **fresh-archive window stays open** until the ledger sends an
-index and an Expected_Parent — see the
-`init` subsection: a node created for one index and then handed blocks from a
-different chain state is exactly the original corruption, and only **L** gives the
-archive what it needs to refuse it. So safety is reached after **L**, which adds
-recovery, turning a stall that waits for an operator into one that heals itself.
-
-Expect the backlog to drain at **one message per transaction**, not at
-`num_blocks_to_archive` per transaction — `L6.1` makes a round one append, so that
-setting no longer governs the rate.
-
-The union of **A** and **L** covers `A1` through `L7` with one exception, and it
-is the one the ledger's reply path change is ordered for: `L4.5`'s requirement that a failed round leaves the
-triggering transaction's reply alone. That is the reply-path change, in scope as a
-criterion and out of scope as code, per the corresponding non-goal.
+Lower `trigger_threshold` on the chain fusion ledger suites, by NNS proposal. It must
+not precede the ledger release, and it is blocked if the verification found a duplicate
+suffix that an operator has not yet removed. Nothing forces a date.
 
 ## Discussed Alternatives
 
