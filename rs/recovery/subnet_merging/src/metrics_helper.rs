@@ -21,9 +21,10 @@ pub type Metrics = BTreeMap<String, Vec<f64>>;
 ///
 /// Best effort, exactly like Prometheus: a node that cannot be scraped
 /// contributes no value, and a series that no node reports is absent (which
-/// every helper below reads as zero). A condition that has to hold on every
-/// node of every subnet therefore has to be written so that missing data keeps
-/// it unsatisfied -- see `readiness::evaluate_merge_readiness`.
+/// `sum_of_medians` reads as zero, and `median_across_replicas` as `None`). A
+/// condition that has to hold on every node of every subnet therefore has to
+/// be written so that missing data keeps it unsatisfied -- see
+/// `readiness::evaluate_merge_readiness`, which reads missing data as zero.
 pub async fn fetch_metrics(logger: &Logger, node_ips: &[IpAddr], metrics: &[&str]) -> Metrics {
     let responses = join_all(node_ips.iter().map(|ip| fetch_node_metrics(logger, ip))).await;
 
