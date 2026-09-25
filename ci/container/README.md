@@ -77,6 +77,14 @@ What the container sees:
 - On a devenv, `~/.gitconfig` and the shell history files are mounted as well and `CARGO_TARGET_DIR` is set to `~/.cache/cargo`.
 - Extra `podman run`/`docker run` arguments come from `~/.container-run.conf` (see below).
 
+### Image pinning
+
+`container-run.sh` never pulls an image by registry tag: the tags on `ghcr.io/dfinity/ic-dev` and `ghcr.io/dfinity/ic-build` are mutable and can be re-pointed without review. Instead it pulls `ghcr.io/dfinity/<image>@sha256:...` using the digest committed in [ic-dev.digest](ic-dev.digest) / [ic-build.digest](ic-build.digest), which the container runtime verifies against the downloaded content, and starts exactly that reference with `--pull=never`. Like [TAG](TAG), the `.digest` files are written only by the `container-autobuild.yml` workflow. Never edit them by hand: a malformed pin makes the script refuse to run, and a digest the registry does not serve cannot be pulled, so the script refuses as well.
+
+`TAG` is the hash of `Dockerfile`, `init.sh` and `files/*`. If your working tree hashes to something else (you edited one of those files, or the autobuild's bot commit has not landed on your branch yet) no reviewed digest exists for it and the script refuses to run. To build the image locally from your checkout instead (slow, and it needs network), set `CONTAINER_RUN_ALLOW_UNPINNED=1`; an existing local `<image>:<tag>` is then reused. Once the bot commit lands, `git pull` and re-run to get the registry image. The autobuild cannot publish for pull requests from forks, so contributors working on a fork need `CONTAINER_RUN_ALLOW_UNPINNED=1` after touching those files.
+
+By default the script never runs an image that is not verified against the pin: no local build, and no reuse of a cached image when the pinned pull fails (e.g. offline). `CONTAINER_RUN_ALLOW_UNPINNED=1` opts out of that for one run and is announced with a warning; leave it unset when verifying release artifacts.
+
 ### How to use custom config
 
 User can create config `$HOME/.container-run.conf`, with `podman run` arguments, that provide way of adding custom bind-mounts etc. Config file requires array variable `PODMAN_RUN_USR_ARGS` with arguments accepted by `podman run` (see `podman run --help`). The same arguments are passed to `docker run` when `CONTAINER_RUNTIME=docker`, so keep them runtime-neutral, or guard them inside the file on the script's `$RUNTIME` variable (`podman` or `docker`; the file is sourced by `container-run.sh` with `set -u` in effect, and `CONTAINER_RUNTIME` itself may be unset), e.g. `if [ "$RUNTIME" = docker ]; then PODMAN_RUN_USR_ARGS+=(...); fi`. See example config from `.container-run.conf` below:
