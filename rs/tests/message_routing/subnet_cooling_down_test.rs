@@ -414,9 +414,8 @@ async fn check_conditions_violated(
                 &subnet_node_ips(topology),
                 m_subnet.subnet_id,
                 registry_version,
-                logger,
             )
-            .await;
+            .await?;
             let satisfied: Vec<&str> = VIOLATED_CONDITIONS
                 .iter()
                 .map(|condition| term(&terms, *condition))
@@ -437,8 +436,8 @@ async fn check_conditions_violated(
     .await
     .unwrap_or_else(|e| {
         panic!(
-            "subnet M satisfied conditions for merging it away that this scenario is meant to \
-             violate: {e}"
+            "subnet M did not violate all the conditions for merging it away that this scenario \
+             is meant to violate, or they could not be evaluated: {e}"
         )
     });
 
@@ -602,14 +601,13 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
         INDUCTION_BACKOFF,
         || async {
             let metrics = fetch_metrics(
-                logger,
                 &node_ips,
                 &[
                     METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
                     METRIC_SUBNET_CALL_CONTEXTS,
                 ],
             )
-            .await;
+            .await?;
             let enqueued = sum_of_medians(&metrics, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, |_| true);
             let executing = sum_of_medians(&metrics, METRIC_SUBNET_CALL_CONTEXTS, |labels| {
                 labels.contains(LABEL_INSTALL_CODE)

@@ -10,5 +10,4 @@ documentation.workspace = true
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }
 reqwest = { workspace = true }
-slog = { workspace = true }
 tokio = { workspace = true }

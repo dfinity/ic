@@ -5,7 +5,6 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:futures",
     "@crate_index//:reqwest",
-    "@crate_index//:slog",
     "@crate_index//:tokio",
 ]
 

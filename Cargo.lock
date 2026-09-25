@@ -14905,7 +14905,6 @@ dependencies = [
  "futures",
  "ic-base-types",
  "reqwest",
- "slog",
  "tokio",
 ]
 

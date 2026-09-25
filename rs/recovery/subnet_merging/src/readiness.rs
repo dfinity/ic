@@ -6,12 +6,11 @@
 //! in flight to or from it, and it holds no state that only it could act upon.
 //! The terms below spell that out, one per `Condition`.
 
-use crate::metrics_helper::{self, Metrics};
+use crate::metrics_helper::{self, Metrics, ScrapeError};
 
 use ic_base_types::SubnetId;
-use slog::{Logger, warn};
 
-use std::{collections::BTreeMap, net::IpAddr};
+use std::{collections::BTreeMap, fmt, net::IpAddr};
 
 /// The nodes of every subnet the conditions below range over.
 pub type SubnetNodeIps = BTreeMap<SubnetId, Vec<IpAddr>>;
@@ -58,21 +57,50 @@ pub struct Term {
     pub satisfied: bool,
 }
 
+/// Why the readiness condition could not be evaluated.
+#[derive(Debug)]
+pub enum ReadinessError {
+    /// `subnets` lists no node for the subnet.
+    NoNodes(SubnetId),
+    /// A node of the subnet could not be scraped.
+    Scrape(SubnetId, ScrapeError),
+}
+
+impl fmt::Display for ReadinessError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoNodes(subnet_id) => write!(f, "subnet {subnet_id} has no node to scrape"),
+            Self::Scrape(subnet_id, err) => write!(f, "subnet {subnet_id}: {err}"),
+        }
+    }
+}
+
+impl std::error::Error for ReadinessError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::NoNodes(_) => None,
+            Self::Scrape(_, err) => Some(err),
+        }
+    }
+}
+
 /// Evaluates the terms of the "merge readiness" condition for the subnet that
 /// is cooling down and the registry version `V` at which it was labeled as
 /// such. Returns one term per condition.
 ///
 /// Every term is evaluated on the median across the replicas reporting the
-/// respective series, and missing data reads as zero. The first term is the one
-/// that keeps an unreachable subnet from reading as ready: a subnet whose
-/// metrics cannot be scraped reports no registry version, i.e. zero, which is
-/// below `V`.
+/// respective series, except for the registry version, which is the minimum
+/// across replicas: the term has to hold on every single replica, and a median
+/// would already hold (or interpolate to `V`) while some replicas lag behind.
+/// Fails if any node of any subnet (the cooling down one included) cannot be
+/// scraped, rather than evaluating the terms on partial data: most terms
+/// compare against zero, which missing data would satisfy. A series that a
+/// reachable node does not report reads as zero.
 pub async fn evaluate_merge_readiness(
     subnets: &SubnetNodeIps,
     source_subnet_id: SubnetId,
     registry_version: u64,
-    logger: &Logger,
-) -> Vec<Term> {
+) -> Result<Vec<Term>, ReadinessError> {
     let own_metrics = subnet_metrics(
         subnets,
         source_subnet_id,
@@ -86,12 +114,12 @@ pub async fn evaluate_merge_readiness(
             METRIC_PENDING_REFUNDS,
             METRIC_PENDING_REFUNDS_CYCLES,
         ],
-        logger,
     )
-    .await;
+    .await?;
 
     // Terms 1 and 2 range over all subnets: the registry version of every
-    // subnet and the streams of all remote subnets towards this one.
+    // replica of every subnet and the streams of all remote subnets towards
+    // this one.
     let remote_label = format!("remote=\"{source_subnet_id}\"");
     let mut min_registry_version = None;
     let mut incoming_stream_messages = 0.0;
@@ -103,12 +131,11 @@ pub async fn evaluate_merge_readiness(
                 subnets,
                 subnet_id,
                 &[METRIC_REGISTRY_VERSION, METRIC_STREAM_MESSAGES],
-                logger,
             )
-            .await
+            .await?
         };
         let version =
-            metrics_helper::median_across_replicas(&metrics, METRIC_REGISTRY_VERSION, |_| true)
+            metrics_helper::min_across_replicas(&metrics, METRIC_REGISTRY_VERSION, |_| true)
                 .unwrap_or(0.0);
         min_registry_version = Some(min_registry_version.map_or(version, |v: f64| v.min(version)));
         if subnet_id != source_subnet_id {
@@ -152,12 +179,12 @@ pub async fn evaluate_merge_readiness(
         description,
         satisfied,
     };
-    vec![
+    Ok(vec![
         term(
             Condition::RegistryVersion,
             format!(
-                "every subnet has reached registry version {registry_version} (the lowest one is \
-                 at {min_registry_version})"
+                "every replica of every subnet has reached registry version {registry_version} \
+                 (the lowest one is at {min_registry_version})"
             ),
             min_registry_version >= registry_version as f64,
         ),
@@ -217,7 +244,7 @@ pub async fn evaluate_merge_readiness(
             ),
             pending_refunds == 0.0,
         ),
-    ]
+    ])
 }
 
 /// Fetches the given metrics from all nodes of `subnet_id`.
@@ -225,15 +252,13 @@ async fn subnet_metrics(
     subnets: &SubnetNodeIps,
     subnet_id: SubnetId,
     metrics: &[&str],
-    logger: &Logger,
-) -> Metrics {
+) -> Result<Metrics, ReadinessError> {
     let node_ips = match subnets.get(&subnet_id) {
         Some(node_ips) if !node_ips.is_empty() => node_ips.as_slice(),
-        _ => {
-            warn!(logger, "Subnet {subnet_id} has no node to scrape");
-            &[]
-        }
+        _ => return Err(ReadinessError::NoNodes(subnet_id)),
     };
 
-    metrics_helper::fetch_metrics(logger, node_ips, metrics).await
+    metrics_helper::fetch_metrics(node_ips, metrics)
+        .await
+        .map_err(|err| ReadinessError::Scrape(subnet_id, err))
 }
