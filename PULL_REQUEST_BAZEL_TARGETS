@@ -42,64 +42,64 @@
 # the check-pull-request-bazel-targets job on CI.
 
 mainnet-icos-revisions.json
-  //rs/tests/consensus/backup:backup_manager_downgrade_test_colocate
-  //rs/tests/consensus/backup:backup_manager_upgrade_test_colocate
-  //rs/tests/consensus/upgrade:upgrade_downgrade_app_subnet_test_colocate
+  //rs/tests/consensus/backup:backup_manager_downgrade_test_farm_colocate
+  //rs/tests/consensus/backup:backup_manager_upgrade_test_farm_colocate
+  //rs/tests/consensus/upgrade:upgrade_downgrade_app_subnet_test_farm_colocate
 
-ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_long_test
+ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_long_test_farm
 
 # Run most nested tests for any ic-os/ or rs/ic_os/ changes:
-*ic[-_]os/* //rs/tests/nested:guestos_upgrade_smoke_test
+*ic[-_]os/* //rs/tests/nested:guestos_upgrade_smoke_test_farm
             //rs/tests/nested:guestos_upgrade_from_latest_release_to_current
-            //rs/tests/nested:hostos_upgrade_smoke_test
+            //rs/tests/nested:hostos_upgrade_smoke_test_farm
             //rs/tests/nested:hostos_upgrade_from_latest_release_to_current
             //rs/tests/nested:registration
 
 # Full rejoin test for state sync changes:
-*state_sync* //rs/tests/message_routing:rejoin_test
+*state_sync* //rs/tests/message_routing:rejoin_test_farm
 
 # XNet compatibility test for changes to certifications
-*canonical_state/* //rs/tests/message_routing/xnet:xnet_compatibility
+*canonical_state/* //rs/tests/message_routing/xnet:xnet_compatibility_test_farm
 
-rs/nns/cmc/*.rs //rs/tests/nns:nns_cycles_minting_test
+rs/nns/cmc/*.rs //rs/tests/nns:nns_cycles_minting_test_farm
 
-*nns_delegation* //rs/tests/networking:nns_delegation_branch_nns_version_test
-                 //rs/tests/networking:nns_delegation_mainnet_nns_version_test
+*nns_delegation* //rs/tests/networking:nns_delegation_branch_nns_version_test_farm
+                 //rs/tests/networking:nns_delegation_mainnet_nns_version_test_farm
 
 rs/backup/*.rs //rs/tests/consensus/backup/...
 
 rs/orchestrator/*.rs //rs/tests/consensus/orchestrator/...
                      //rs/tests/consensus/upgrade/...
 
-*guestos-recovery-engine* //rs/tests/consensus:guestos_recovery_engine_smoke_test
+*guestos-recovery-engine* //rs/tests/consensus:guestos_recovery_engine_smoke_test_farm
                           //rs/tests/nested/nns_recovery/...
 
 *guestos-recovery-upgrader* //rs/tests/nested/nns_recovery/...
 
 rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
-                     //rs/tests/consensus:subnet_splitting_test_colocate
+                     //rs/tests/consensus:subnet_splitting_test_farm_colocate
                      //rs/tests/nested/nns_recovery/...
 
-rs/recovery/subnet_splitting/*.rs //rs/tests/consensus:subnet_splitting_test_colocate
+rs/recovery/subnet_splitting/*.rs //rs/tests/consensus:subnet_splitting_test_farm_colocate
 
-rs/bitcoin/* //rs/tests/cross_chain:btc_adapter_basics_test
-             //rs/tests/cross_chain:doge_adapter_basics_test
-             //rs/tests/cross_chain:btc_get_balance_test_colocate
+rs/bitcoin/* //rs/tests/cross_chain:btc_adapter_basics_test_farm
+             //rs/tests/cross_chain:doge_adapter_basics_test_farm
+             //rs/tests/cross_chain:btc_get_balance_test_farm_colocate
 
-rs/dogecoin/ckdoge/* //rs/tests/ckbtc:ckdoge_minter_basics_test
+rs/dogecoin/ckdoge/* //rs/tests/ckbtc:ckdoge_minter_basics_test_farm
 
-rs/bitcoin/ckbtc/*   //rs/tests/ckbtc:ckdoge_minter_basics_test
+rs/bitcoin/ckbtc/*   //rs/tests/ckbtc:ckdoge_minter_basics_test_farm
 
-rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test
+rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test_farm
 
-rs/migration_canister/* //rs/tests/execution:canister_migration_test_head_nns
+rs/migration_canister/* //rs/tests/execution:canister_migration_test_farm_head_nns
 
-rs/nns/governance/* //rs/nns/governance:governance_integration_test
-                    //rs/nns/governance:merge_neurons_test
+rs/nns/governance/* //rs/nns/governance:governance_integration_test_farm
+                    //rs/nns/governance:merge_neurons_test_farm
 
-rs/sns/* //rs/sns/integration_tests:neuron_test
+rs/sns/* //rs/sns/integration_test_farms:neuron_test_farm
 
-rs/ledger_suite/icp/index/* //rs/ledger_suite/icp/index:retrieve_blocks_from_ledger_interval_test
+rs/ledger_suite/icp/index/* //rs/ledger_suite/icp/index:retrieve_blocks_from_ledger_interval_test_farm
 
 rs/rosetta-api/icrc1/* //rs/rosetta-api/icrc1:ic-icrc-rosetta-unit-tests
 rs/rosetta-api/icp/*   //rs/rosetta-api/icp:icp_rosetta_system_tests
