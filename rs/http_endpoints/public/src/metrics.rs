@@ -2,6 +2,7 @@ use ic_metrics::{
     MetricsRegistry,
     buckets::{add_bucket, decimal_buckets, linear_buckets},
 };
+use ic_nns_delegation_manager::DelegationVerificationError;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
 pub const LABEL_DETAIL: &str = "detail";
@@ -77,6 +78,9 @@ pub struct HttpHandlerMetrics {
 
     // read_state metrics
     pub read_state_path_type_total: IntCounterVec,
+
+    // NNS delegation verification metrics
+    pub delegation_verification_failures_total: IntCounterVec,
 }
 
 // There is a mismatch between the labels and the public spec.
@@ -220,12 +224,32 @@ impl HttpHandlerMetrics {
                 "Count of read_state paths requested, by endpoint type and path type.",
                 &["endpoint", "path_type"],
             ),
+            delegation_verification_failures_total: metrics_registry.int_counter_vec(
+                "replica_http_delegation_verification_failures_total",
+                "Count of NNS delegation verifications against the certified state which \
+                prevented serving a response, by endpoint and reason.",
+                &["endpoint", "reason"],
+            ),
         }
     }
 
     pub fn observe_read_state_path(&self, endpoint_type: &str, path_type: &str) {
         self.read_state_path_type_total
             .with_label_values(&[endpoint_type, path_type])
+            .inc()
+    }
+
+    pub fn observe_delegation_verification_failure(
+        &self,
+        endpoint_type: &str,
+        error: &DelegationVerificationError,
+    ) {
+        let error_label = match error {
+            DelegationVerificationError::Inconsistent => "inconsistent",
+            DelegationVerificationError::Validation(_) => "validation",
+        };
+        self.delegation_verification_failures_total
+            .with_label_values(&[endpoint_type, error_label])
             .inc()
     }
 }
