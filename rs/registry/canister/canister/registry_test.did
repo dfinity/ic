@@ -194,7 +194,7 @@ type VetKdKeyId = record { curve: VetKdCurve; name: text };
 
 type VetKdCurve = variant { bls12_381_g2 };
 
-type EcdsaCurve = variant { secp256k1 };
+type EcdsaCurve = variant { secp256k1; secp256r1 };
 
 type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
 

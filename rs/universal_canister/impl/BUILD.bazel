@@ -33,9 +33,14 @@ genrule(
     testonly = False,
     srcs = [":universal_canister"],
     outs = ["universal_canister.module"],
+    # Wasmtime would otherwise compile for the optional CPU features (e.g. i8mm
+    # on arm64) of whichever machine runs this action, which aren't part of the
+    # action key, and the module would then fail to load on machines without
+    # them. Without them the module only depends on the architecture and OS,
+    # which are part of the key via the instrument-wasm binary.
     cmd_bash = " && ".join([
         "{pigz} --decompress --no-name {input_wasm} --stdout > $@.unzip",
-        "{instrument_wasm} $@.unzip -a serialized-module > $@",
+        "{instrument_wasm} $@.unzip -a serialized-module --no-host-cpu-features > $@",
     ])
         .format(
         input_wasm = "$(location :universal_canister)",
