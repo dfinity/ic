@@ -235,10 +235,15 @@ impl Registry {
 
 /// Defence-in-depth check that the engine controller canister never reaches
 /// `do_update_subnet` with anything other than the small set of fields it is
-/// allowed to manage (currently `subnet_admins`, `is_halted` and
-/// `cooling_down`). The engine controller proxy already enforces this, but
-/// mirroring the check here keeps the registry's invariants self-contained and
-/// prevents future drift if the proxy's surface ever changes.
+/// allowed to manage, currently:
+///
+/// - `subnet_admins`
+/// - `is_halted`
+/// - `cooling_down`
+///
+/// The engine controller proxy already enforces this, but mirroring the check
+/// here keeps the registry's invariants self-contained and prevents future
+/// drift if the proxy's surface ever changes.
 ///
 /// Uses exhaustive destructuring so adding a new field to `UpdateSubnetPayload`
 /// will fail to compile here until it is explicitly classified as

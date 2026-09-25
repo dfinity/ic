@@ -184,12 +184,16 @@ async fn delete_engine(args: DeleteEngineArgs) -> Result<(), String> {
 }
 
 /// Validates that the only fields set on the proxied `UpdateSubnetPayload`
-/// are the ones the engine controller is allowed to manage: `subnet_admins`,
-/// `is_halted` (subnet halting / unhalting) and `cooling_down` (letting the
-/// subnet quiesce before it is halted). Every other `Option<_>` field must be
-/// `None`, and the single non-optional knob (`set_gossip_config_to_default`)
-/// must hold its default value (`false`). The required `subnet_id` is exempt
-/// because it merely identifies the target.
+/// are the ones the engine controller is allowed to manage:
+///
+/// - `subnet_admins`
+/// - `is_halted` (subnet halting / unhalting)
+/// - `cooling_down` (letting the subnet quiesce before it is halted)
+///
+/// Every other `Option<_>` field must be `None`, and the single non-optional
+/// knob (`set_gossip_config_to_default`) must hold its default value
+/// (`false`). The required `subnet_id` is exempt because it merely identifies
+/// the target.
 ///
 /// This keeps the surface of `update_subnet` deliberately tiny: only the
 /// fields the engine controller is intended to manage flow through. Adding a
@@ -294,10 +298,15 @@ fn ensure_only_allowed_fields_set(payload: &UpdateSubnetPayload) -> Result<(), S
     }
 }
 
-/// Proxies to the registry's `update_subnet` endpoint. Only `subnet_admins`,
-/// `is_halted` and `cooling_down` may be updated through this path; every
-/// other field must be left at its default value (`None` / `false`) or the
-/// call is rejected.
+/// Proxies to the registry's `update_subnet` endpoint. Only the following
+/// fields may be updated through this path:
+///
+/// - `subnet_admins`
+/// - `is_halted`
+/// - `cooling_down`
+///
+/// Every other field must be left at its default value (`None` / `false`) or
+/// the call is rejected.
 #[update]
 async fn update_subnet(payload: UpdateSubnetPayload) -> Result<(), String> {
     ensure_authorized()?;
