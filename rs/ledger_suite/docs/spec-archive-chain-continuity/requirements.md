@@ -373,7 +373,8 @@ interval rather than work per transaction.
    Ledger SHALL make no further archiving attempt and SHALL expose a distinct non-zero
    metric separate from 10.5's, because only a wrong ledger record reaches this.
 7. WHEN THE Ledger is upgraded, THE Ledger SHALL permit the next Archiving_Round
-   immediately, because an upgrade is how an operator resumes after a halt.
+   immediately rather than observing the spacing of 10.1, except while the state of
+   14.1 holds, because an upgrade is how an operator resumes after a halt.
 8. WHILE a halt per 8.3, 9.4–9.7, 10.5, 10.6 or 14.5 holds, THE Ledger SHALL attempt no
    Archiving_Round until its next upgrade, and SHALL re-establish the halt from the
    first reply after that upgrade if the cause persists.
