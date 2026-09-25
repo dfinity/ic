@@ -1,0 +1,187 @@
+name: 'Bazel on Namespace RBE'
+description: |
+  Runs bazel commands on the Remote Build Execution (RBE) cluster @ Namespace.
+
+  `run` is evaluated by bash with this action's bin/ first on PATH, so every `bazel` it starts,
+  also indirectly like the queries of ci/scripts/targets.py, runs bin/bazel. That wrapper runs the
+  real bazel with the startup options
+    --noworkspace_rc
+    --bazelrc=bazel/conf/.bazelrc.build
+    --bazelrc=/tmp/bazel-rbe.bazelrc
+    --bazelrc=.github/actions/bazel-namespace/rbe.bazelrc
+  (rbe.bazelrc holds the RBE options, including the worker image) and gives every build, test,
+  run and coverage command its own Build Event Protocol (BEP) file and execution profile.
+
+  Afterwards, also when `run` failed or ran out of timeout-minutes, but not when the job was
+  cancelled, the logs of the tests that FAILED, were FLAKY or hit a TIMEOUT are staged and two
+  artifacts are uploaded to Namespace Artifact Storage:
+    <artifact-name>-bep:  the BEP files and profiles;
+    <artifact-name>-logs: the console output of `run` and the staged test logs.
+  Retrieve them with namespace-actions/download-artifact or `nsc artifact`.
+
+  Before using this action the job must:
+    * run namespacelabs/nscloud-setup and
+      `nsc bazel setup --command=common --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc`
+      (job-wide settings like `common --repository_cache=...` can be appended to that file);
+    * check out the repository;
+    * in a container job: mount /var/run/nsc/ and forward NSC_TOKEN_FILE and
+      NAMESPACE_ACTIONS_{RESULTS_URL,RESULTS_SERVICE,DIRECT_ZIP_UPLOAD} via container.env for the
+      uploads, see https://namespace.so/docs/reference/github-actions/upload-artifact.
+  Give the calling step an `id:` (for stable artifact names) and set both the timeout-minutes
+  input and, as a backstop, a higher timeout-minutes on the calling step (see the input).
+
+inputs:
+  run:
+    required: true
+    description: |
+      The commands to run, evaluated by bash with `set -euo pipefail`. Don't pass bazel startup
+      options: the wrapper sets them, so that all bazel commands of the job share one server.
+  timeout-minutes:
+    required: false
+    default: ''
+    description: |
+      Minutes, counted from the start of `run`, after which bin/bazel interrupts bazel (SIGINT
+      from inside the job container) and refuses to start new bazel commands. bazel then stops
+      in an orderly way, closing its BEP file and profile, `run` fails and the staging and uploads
+      of this action still run. Composite steps can't have their own timeout-minutes, and when the
+      calling step's timeout-minutes fires, GitHub also kills the remaining steps of this action,
+      uploads included. So keep the calling step's timeout-minutes as a backstop: 10 minutes
+      higher when bazel builds or tests, 5 when it only queries.
+  artifact-name:
+    required: false
+    # Evaluated in the context of the calling step, where github.action is the step's id
+    # (__self_<n> without an id, which shifts when local-action steps are added before it).
+    default: ${{ github.job }}-${{ github.action }}-${{ github.run_attempt }}
+    description: |
+      Prefix of the names of the uploaded artifacts, which must be unique in the workflow run.
+      Pass one explicitly in matrix jobs.
+
+runs:
+  using: composite
+  steps:
+    - name: Create the output directory
+      id: out
+      shell: bash
+      run: |
+        dir="$(mktemp -d "${TMPDIR:-/tmp}/bazel-namespace.XXXXXXXXXX")"
+        echo "dir=$dir" >>"$GITHUB_OUTPUT"
+
+    - name: Run the bazel commands
+      shell: bash
+      env:
+        # Read by bin/bazel.
+        BAZEL_NAMESPACE_OUT: ${{ steps.out.outputs.dir }}
+        TIMEOUT_MINUTES: ${{ inputs.timeout-minutes }}
+      run: |
+        set -euo pipefail
+
+        # Local actions live in the workspace (github.action_path expands to the host path in
+        # container jobs). PATH is exported, so processes started by `run` find the wrapper too.
+        bin="$GITHUB_WORKSPACE/.github/actions/bazel-namespace/bin"
+        PATH="$bin:$PATH"
+        # A bin/bazel that isn't executable (git mode 100644) would silently be skipped.
+        if [ "$(command -v bazel)" != "$bin/bazel" ]; then
+          echo "::error::$bin/bazel is not the first bazel on PATH. Is it executable?"
+          exit 1
+        fi
+
+        if [ -n "$TIMEOUT_MINUTES" ]; then
+          # Read by bin/bazel.
+          export BAZEL_NAMESPACE_DEADLINE=$(($(date +%s) + TIMEOUT_MINUTES * 60))
+        fi
+
+        # Save the output of `run` for the staging step. `run` goes in a subshell with its own
+        # `set -e` (a `||` here would disable it), so its `exit` doesn't skip the lines below.
+        # tee -i: an interrupt must not break bazel's stdout (bazel then exits with 36, not 8).
+        set +e
+        (
+          set -euo pipefail
+          ${{ inputs.run }}
+        ) 2>&1 | tee -i "$BAZEL_NAMESPACE_OUT/console.log"
+        status="${PIPESTATUS[0]}"
+        set -e
+
+        # By clock, not by exit code: timeout's exit code differs between implementations.
+        if [ "$status" != 0 ] && [ -n "${BAZEL_NAMESPACE_DEADLINE:-}" ] && [ "$(date +%s)" -ge "$BAZEL_NAMESPACE_DEADLINE" ]; then
+          echo "::error title=Bazel timed out::bazel was stopped after timeout-minutes: $TIMEOUT_MINUTES (exit code $status)."
+        fi
+        exit "$status"
+
+    - name: Stage the logs of failed, flaky and timed out tests
+      if: ${{ !cancelled() }}
+      continue-on-error: true
+      shell: bash
+      env:
+        BAZEL_NAMESPACE_OUT: ${{ steps.out.outputs.dir }}
+      run: |
+        # Not -e: one test's logs that can't be copied mustn't stop the others.
+        set +e -uo pipefail
+
+        # Bazel's end-of-run test summary prints one line per test target, like
+        #   //rs/foo:bar_test    FAILED in 3 out of 3 in 12.3s
+        #   //rs/foo:baz_test    FLAKY, failed in 1 out of 2 in 4.5s
+        #   //rs/foo:qux_test    TIMEOUT in 300.0s
+        # The failed attempts of a flaky test live under test_attempts/ in its testlogs
+        # directory, which is copied wholesale.
+        mapfile -t labels < <(grep -oE '^//[^ ]+ +(FAILED|FLAKY|TIMEOUT)' "$BAZEL_NAMESPACE_OUT/console.log" 2>/dev/null | awk '{print $1}' | sort -u)
+        if [ "${#labels[@]}" -eq 0 ]; then
+          echo "No failed, flaky or timed out tests; nothing to stage."
+          exit 0
+        fi
+
+        # The testlogs tree of the tests (bazel-out/k8-opt/testlogs). Prefer the convenience symlink.
+        # Else ask bazel through the wrapper, i.e. with the same bazelrc files and server. Bounded,
+        # and into a file rather than $(...): after a timeout the server may still be finishing the
+        # interrupted command, and a lingering client mustn't hold this step.
+        testlogs="$(readlink -f "$GITHUB_WORKSPACE/bazel-testlogs")"
+        if [ ! -d "$testlogs" ]; then
+          timeout 120 "$GITHUB_WORKSPACE/.github/actions/bazel-namespace/bin/bazel" info bazel-testlogs \
+            >"$BAZEL_NAMESPACE_OUT/testlogs-path" 2>/dev/null
+          testlogs="$(cat "$BAZEL_NAMESPACE_OUT/testlogs-path")"
+        fi
+        if [ ! -d "$testlogs" ]; then
+          echo "::warning::Could not resolve the bazel-testlogs directory; the test logs are not staged."
+          exit 0
+        fi
+
+        dest="$BAZEL_NAMESPACE_OUT/test-logs"
+        echo "Staging the logs of ${#labels[@]} test(s) from $testlogs:"
+        for label in "${labels[@]}"; do
+          echo "  $label"
+          rel="${label#//}" # //rs/tests/nns:foo_test -> rs/tests/nns:foo_test
+          rel="${rel/:/\/}" # rs/tests/nns:foo_test   -> rs/tests/nns/foo_test
+          if [ -d "$testlogs/$rel" ]; then
+            # -L dereferences symlinks so that the actual log content is copied.
+            mkdir -p "$dest/$rel" && cp -RL "$testlogs/$rel/." "$dest/$rel/" \
+              || echo "    WARNING: could not copy all of $testlogs/$rel"
+          else
+            echo "    WARNING: test log directory not found: $testlogs/$rel"
+          fi
+        done
+
+    - name: Upload the BEP files and profiles to Namespace Artifact Storage
+      # Analyze the profiles with e.g. `bazel analyze-profile` or
+      # https://github.com/EngFlow/bazel_invocation_analyzer. A failed upload must not fail the
+      # calling step, which would skip the workflow steps after it.
+      if: ${{ !cancelled() }}
+      continue-on-error: true
+      uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
+      with:
+        name: ${{ inputs.artifact-name }}-bep
+        path: |
+          ${{ steps.out.outputs.dir }}/bazel-bep-*.pb
+          ${{ steps.out.outputs.dir }}/profile-*.json.gz
+        if-no-files-found: ignore
+        retention-days: 14
+
+    - name: Upload the console output and the staged test logs to Namespace Artifact Storage
+      if: ${{ !cancelled() }}
+      continue-on-error: true
+      uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
+      with:
+        name: ${{ inputs.artifact-name }}-logs
+        path: |
+          ${{ steps.out.outputs.dir }}/console.log
+          ${{ steps.out.outputs.dir }}/test-logs/**
+        if-no-files-found: ignore
+        retention-days: 14

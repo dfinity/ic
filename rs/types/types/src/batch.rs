@@ -6,6 +6,7 @@ mod chain_key;
 mod execution_environment;
 mod ingress;
 mod self_validating;
+mod upgrade;
 mod xnet;
 
 pub use self::{
@@ -24,6 +25,7 @@ pub use self::{
     },
     ingress::{IngressPayload, IngressPayloadError},
     self_validating::{MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload},
+    upgrade::UpgradePayload,
     xnet::XNetPayload,
 };
 use crate::{
@@ -281,7 +283,7 @@ impl BlockmakerMetrics {
     }
 }
 
-/// Given an iterator of [`Message`]s, this function will deserialize the messages
+/// Given an iterator of [`Message`]s, this function will serialize the messages
 /// into a byte vector.
 ///
 /// The function is given a `max_size` limit, and guarantees that the buffer will be

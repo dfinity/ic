@@ -141,6 +141,8 @@ jobs:
     # The ic-os image builds put their scratch there, see the "Prepare the scratch directory" step below.
     runs-on: namespace-profile-rbe-driver-amd64-linux-16x32;container.mount-scratch=true
     container:
+      # The RBE worker image of .github/actions/bazel-namespace/rbe.bazelrc: the
+      # update-image-references job of container-autobuild.yml rewrites both.
       image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c
       # ic-os image builds run 'podman build' (rootless) and are forced to run locally in
       # this container by --strategy_regexp=ic-os[:/].*=local in bazel/conf/.bazelrc.build.
@@ -169,7 +171,10 @@ jobs:
         # forwarded like the credentials above; the "Prepare the Bazel repository cache"
         # step checks it and the other repository-cache steps are skipped when it is unset.
         NSC_CACHE_PATH: ${{ env.NSC_CACHE_PATH }}
-    timeout-minutes: 250
+    # A job timeout cancels the job, skipping the uploads of the bazel-namespace action, so this
+    # exceeds the steps' timeout-minutes (35 + 20 + 100 + 130 = 285) plus all other steps (setup,
+    # uploads and reports take under a minute together).
+    timeout-minutes: 300
     steps:
       - uses: namespacelabs/nscloud-setup@df198f982fcecfb8264bea3f1274b56a61b6dfdc # v0
       - name: Set up Bazel Remote Execution
@@ -220,11 +225,11 @@ jobs:
           spacectl-version: 0.12.3
 
       - name: Configure the Bazel repository cache
-        # /tmp/bazel-rbe.bazelrc is read by every bazel invocation of this job (both
-        # targets.py queries, the build and the test step), so one `common` line reaches
-        # all of them and they keep sharing one server. Bazel puts its repo contents cache
-        # (the extracted repositories) under the same directory, so a warm run neither
-        # downloads nor extracts.
+        # /tmp/bazel-rbe.bazelrc is read by every bazel invocation of this job (all of them
+        # run through ./.github/actions/bazel-namespace, whose bazel wrapper passes it), so one
+        # `common` line reaches all of them and they keep sharing one server. Bazel puts its
+        # repo contents cache (the extracted repositories) under the same directory, so a warm
+        # run neither downloads nor extracts.
         if: steps.repo-cache.outcome == 'success'
         run: echo "common --repository_cache=/var/cache/bazel-repository-cache" >>/tmp/bazel-rbe.bazelrc
 
@@ -283,60 +288,57 @@ jobs:
           echo "bazel-args=${bazel_args[@]}" >> $GITHUB_OUTPUT
 
       - name: Infer Bazel Targets
-        timeout-minutes: 30
-        shell: bash
-        run: |
-          set -euo pipefail
+        id: infer-bazel-targets
+        # Backstop for the action's timeout-minutes, which stops bazel gracefully in time for
+        # the action's uploads (see .github/actions/bazel-namespace/action.yaml).
+        timeout-minutes: 35
+        uses: ./.github/actions/bazel-namespace
+        with:
+          timeout-minutes: 30
+          run: |
+            # Farm-based system-tests run via .github/workflows/ci-main.yml so skip them here:
+            targets_args=(--exclude_tags=farm_system_test)
+            if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
+              targets_args+=("--skip_long_tests")
+            fi
+            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+              targets_args+=("--exclude_tags=buf")
+            fi
+            if [[ '${{ needs.config.outputs.skip_system_tests }}' == 'true' ]]; then
+              targets_args+=("--exclude_tags=system_test")
+            fi
+            if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
+              targets_args+=(
+                '--base=${{ github.event.pull_request.base.sha }}'
+                '--head=${{ github.event.pull_request.head.sha }}'
+                )
+            fi
 
-          # Farm-based system-tests run via .github/workflows/ci-main.yml so skip them here:
-          targets_args=(--exclude_tags=farm_system_test)
-          if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
-            targets_args+=("--skip_long_tests")
-          fi
-          if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
-            targets_args+=("--exclude_tags=buf")
-          fi
-          if [[ '${{ needs.config.outputs.skip_system_tests }}' == 'true' ]]; then
-            targets_args+=("--exclude_tags=system_test")
-          fi
-          if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
-            targets_args+=(
-              '--base=${{ github.event.pull_request.base.sha }}'
-              '--head=${{ github.event.pull_request.head.sha }}'
-              )
-          fi
-
-          # Use the same bazelrc files as the build and test steps below so the query
-          # shares their bazel server and Namespace's remote asset API for fetching
-          # repositories, instead of the workspace .bazelrc which points at DFINITY's
-          # internal cache that isn't reachable from here.
-          bazel_startup_args=(
-            --bazel_startup_arg=--noworkspace_rc
-            --bazel_startup_arg=--bazelrc=./bazel/conf/.bazelrc.build
-            --bazel_startup_arg=--bazelrc=/tmp/bazel-rbe.bazelrc
-          )
-
-          # Create the lists of targets to build and test which are consumed via
-          # --target_pattern_file by the steps below. The bazel server this starts and
-          # the packages and repositories it loads are reused by those steps.
-          # (${{ runner.temp }} is not used since it expands to the host path.)
-          mkdir -p "$HOME/bazel-targets"
-          /usr/bin/time ci/scripts/targets.py "${bazel_startup_args[@]}" build "${targets_args[@]}" >"$HOME/bazel-targets/build-targets"
-          /usr/bin/time ci/scripts/targets.py "${bazel_startup_args[@]}" test "${targets_args[@]}" >"$HOME/bazel-targets/test-targets"
+            # Create the lists of targets to build and test which are consumed via
+            # --target_pattern_file by the steps below. targets.py's `bazel query` runs the
+            # action's bazel wrapper, so it uses the same bazel server as those steps (which
+            # reuse the packages and repositories it loads) and fetches repositories through
+            # Namespace's remote asset API, not DFINITY's cache, which isn't reachable from here.
+            # (${{ runner.temp }} is not used since it expands to the host path.)
+            mkdir -p "$HOME/bazel-targets"
+            /usr/bin/time ci/scripts/targets.py build "${targets_args[@]}" >"$HOME/bazel-targets/build-targets"
+            /usr/bin/time ci/scripts/targets.py test "${targets_args[@]}" >"$HOME/bazel-targets/test-targets"
 
       - name: Warm the Bazel repository cache for the PR queries
+        id: warm-repository-cache
         # Only master runs commit the Namespace cache volume, and a master run queries
         # plain //... and builds one configuration, so on its own it never fetches the
         # repositories that only the rdeps(//..., ...) query of PR runs loads (other
         # platforms' toolchains, unselected select() branches). Load the same closure here
         # so PR runs find every repository in the cache. Same server as the steps around it.
         if: github.event_name == 'push' && env.BRANCH_NAME == 'master' && steps.repo-cache.outcome == 'success'
-        timeout-minutes: 15
         continue-on-error: true
-        shell: bash
-        run: |
-          /usr/bin/time bazel --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-rbe.bazelrc \
-            query --keep_going 'deps(//...)' >/dev/null
+        timeout-minutes: 20 # Backstop, see "Infer Bazel Targets".
+        uses: ./.github/actions/bazel-namespace
+        with:
+          timeout-minutes: 15
+          run: |
+            /usr/bin/time bazel query --keep_going 'deps(//...)' >/dev/null
 
       - name: Upload target files to Namespace Artifact Storage
         uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
@@ -352,236 +354,35 @@ jobs:
       # such that lateron build artifacts can be uploaded even when tests fail.
 
       - name: Bazel Build with RBE
-        timeout-minutes: 90
-        shell: bash
+        id: bazel-build
+        timeout-minutes: 100 # Backstop, see "Infer Bazel Targets".
         env:
           # Bazel's local strategy hands actions the client's TMPDIR (--action_env has no
           # effect on it), so this is what moves the ic-os image builds' scratch to the
           # scratch filesystem; see the "Prepare the scratch directory" step.
           TMPDIR: /namespace/scratch/tmp
-        run: |
-          set -euo pipefail
-
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c"
-
-          # Directory for the Build Event Protocol and execution profile files,
-          # later uploaded to Namespace Artifact Storage for offline analysis.
-          mkdir -p /tmp/bep
-
-          read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
-
-          build_targets="$HOME/bazel-targets/build-targets"
-
-          bazel_args=(
-            --noworkspace_rc
-            --bazelrc=./bazel/conf/.bazelrc.build
-            --bazelrc=/tmp/bazel-rbe.bazelrc
-
-            build
-
-            "${inferred_args[@]}"
-
-            --spawn_strategy=remote,sandboxed,local
-            --strategy=Genrule=remote,sandboxed,local
-
-            --remote_default_exec_properties=namespace_action_isolation=sandboxed
-            --remote_default_exec_properties=container-image="$worker_image"
-
-            # Namespace currently deploys 30 RBE workers that each can run 16 actions concurrently:
-            --jobs=480
-
-            # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
-            # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
-            # mid-build, actions fail with "Lost inputs no longer available remotely" or
-            # "Exec failed due to IOException: Missing digest" (under BwoB Bazel has no local
-            # copy to re-upload). Periodically re-issue FindMissingBlobs for referenced blobs
-            # so the CAS extends their TTL and stops evicting live inputs.
-            --experimental_remote_cache_lease_extension
-            --experimental_remote_cache_eviction_retries=10
-
-            --remote_download_minimal
-
-            # Capture the Build Event Protocol and the execution profile so this
-            # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
-            # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
-            # by the "Upload Bazel BEP" step below.
-            --build_event_binary_file=/tmp/bep/bazel-bep-build.pb
-            --profile=/tmp/bep/profile-build.json
-            --experimental_profile_include_target_label
-
-            --target_pattern_file=$build_targets
-          )
-
-          bazel "${bazel_args[@]}"
+        uses: ./.github/actions/bazel-namespace
+        with:
+          timeout-minutes: 90
+          run: |
+            read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
+            bazel build "${inferred_args[@]}" --target_pattern_file="$HOME/bazel-targets/build-targets"
 
       - name: Bazel Test with RBE
-        timeout-minutes: 120
-        shell: bash
+        id: bazel-test
+        timeout-minutes: 130 # Backstop, see "Infer Bazel Targets".
         env:
           # Same as in the build step, for locally executed tests and actions.
           TMPDIR: /namespace/scratch/tmp
-        run: |
-          set -euo pipefail
-
-          worker_image="docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c"
-
-          # Directory for the Build Event Protocol and execution profile files,
-          # later uploaded to Namespace Artifact Storage for offline analysis.
-          mkdir -p /tmp/bep
-
-          read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
-
-          test_targets="$HOME/bazel-targets/test-targets"
-
-          bazel_args=(
-            --noworkspace_rc
-            --bazelrc=./bazel/conf/.bazelrc.build
-            --bazelrc=/tmp/bazel-rbe.bazelrc
-
-            test
-
-            "${inferred_args[@]}"
-
-            --spawn_strategy=remote,sandboxed,local
-            --strategy=Genrule=remote,sandboxed,local
-
-            --remote_default_exec_properties=namespace_action_isolation=sandboxed
-            --remote_default_exec_properties=container-image="$worker_image"
-
-            # Namespace currently deploys 30 RBE workers that each can run 16 actions concurrently:
-            --jobs=480
-
-            # Namespace's RBE runs with Build-without-the-Bytes (BwoB), so intermediate action
-            # outputs live only in the remote CAS. When the CAS evicts a still-needed blob
-            # mid-build, actions fail with "Lost inputs no longer available remotely" or
-            # "Exec failed due to IOException: Missing digest" (under BwoB Bazel has no local
-            # copy to re-upload). Periodically re-issue FindMissingBlobs for referenced blobs
-            # so the CAS extends their TTL and stops evicting live inputs.
-            --experimental_remote_cache_lease_extension
-            --experimental_remote_cache_eviction_retries=10
-
-            --remote_download_minimal
-
-            # Force the test logs of every test to be downloaded from the
-            # remote CAS. Under BwoB (--remote_download_minimal) test outputs stay
-            # remote, and --test_output=errors can't even echo the failing logs
-            # because multi-MB (system-)test logs exceed
-            # --experimental_ui_max_stdouterr_bytes (default 1 MiB), leaving only
-            # unreachable CAS paths in the console. Downloading them lets the
-            # "Stage failed and flaky test logs" step below collect and
-            # upload the logs of the tests that failed or were flaky.
-            --remote_download_regex='.*/testlogs/.*'
-
-            # Capture the Build Event Protocol and the execution profile so this
-            # invocation can be analyzed offline (e.g. `bazel analyze-profile`,
-            # BuildBuddy, EngFlow). Both are uploaded to Namespace Artifact Storage
-            # by the "Upload Bazel BEP" step below.
-            --build_event_binary_file=/tmp/bep/bazel-bep-tests.pb
-            --profile=/tmp/bep/profile-tests.json
-            --experimental_profile_include_target_label
-
-            --target_pattern_file=$test_targets
-          )
-
-          # Tee the output to a file (in /tmp/test-logs, separate from the BEP
-          # directory) so the "Stage failed and flaky test logs" step below
-          # can parse which targets failed or were flaky. pipefail preserves
-          # Bazel's exit code so the step still fails when a test fails.
-          mkdir -p /tmp/test-logs
-          bazel "${bazel_args[@]}" 2>&1 | tee /tmp/test-logs/tests-bazel-output.log
-
-      - name: Stage failed and flaky test logs
-        # Collect the Bazel test logs of the tests that FAILED or were
-        # FLAKY so the "Upload failed and flaky test logs" step below can
-        # push them to Namespace Artifact Storage. Runs even when the test step
-        # failed, but not when the job is cancelled.
-        if: ${{ !cancelled() }}
-        shell: bash
-        run: |
-          set -uo pipefail
-
-          out=/tmp/test-logs/tests-bazel-output.log
-          dest=/tmp/test-logs/failed-test-logs
-          mkdir -p "$dest"
-
-          if [ ! -f "$out" ]; then
-            echo "No Bazel output captured at $out; nothing to stage."
-            exit 0
-          fi
-
-          # Resolve the testlogs tree of the tests invocation (compilation
-          # mode 'opt' -> bazel-out/k8-opt/testlogs). Prefer the convenience
-          # symlink; fall back to 'bazel info' with the same bazelrc so the
-          # configuration (and thus the path) matches.
-          testlogs="$(readlink -f bazel-testlogs 2>/dev/null || true)"
-          if [ -z "$testlogs" ] || [ ! -d "$testlogs" ]; then
-            testlogs="$(bazel --noworkspace_rc --bazelrc=./bazel/conf/.bazelrc.build info bazel-testlogs 2>/dev/null || true)"
-          fi
-          if [ -z "$testlogs" ] || [ ! -d "$testlogs" ]; then
-            echo "Could not resolve the bazel-testlogs directory; nothing to stage."
-            exit 0
-          fi
-
-          # Bazel's end-of-run summary prints one status line per test target:
-          # "<label>  FAILED in ..." for tests that ultimately failed and
-          # "<label>  FLAKY, failed in ..." for tests that passed only on retry.
-          # Match both: the per-attempt logs of a flaky test are just as useful
-          # for debugging as those of a hard failure. (Their failed attempts live
-          # under test_attempts/ in the same directory, which we copy wholesale.)
-          mapfile -t failed < <(grep -oE '^//[^ ]+ +(FAILED|FLAKY)' "$out" | awk '{print $1}' | sort -u)
-
-          if [ "${#failed[@]}" -eq 0 ]; then
-            echo "No failed or flaky tests found; nothing to stage."
-            exit 0
-          fi
-
-          echo "Staging logs for ${#failed[@]} failed/flaky test(s):"
-          for label in "${failed[@]}"; do
-            echo "  $label"
-            rel="${label#//}"     # //rs/tests/nns:foo_test -> rs/tests/nns:foo_test
-            rel="${rel/:/\/}"     # rs/tests/nns:foo_test    -> rs/tests/nns/foo_test
-            src="$testlogs/$rel"
-            if [ -d "$src" ]; then
-              mkdir -p "$dest/$rel"
-              # -L dereferences the CAS symlinks so we copy the actual log content.
-              cp -RL "$src/." "$dest/$rel/"
-            else
-              echo "    WARNING: test log directory not found: $src"
+        uses: ./.github/actions/bazel-namespace
+        with:
+          timeout-minutes: 120
+          run: |
+            read -r -a inferred_args <<< '${{ steps.infer-bazel-args.outputs.bazel-args }}'
+            test_targets="$HOME/bazel-targets/test-targets"
+            if [ -s "$test_targets" ]; then # bazel errors out if no test targets are listed
+              bazel test "${inferred_args[@]}" --target_pattern_file="$test_targets"
             fi
-          done
-
-      - name: Upload Bazel BEP and profile to Namespace Artifact Storage
-        # Store the Build Event Protocol (.pb) and execution profile (.json) from
-        # both bazel invocations in Namespace's private, workspace-scoped Artifact
-        # Storage. Runs on success or failure so we always capture insight, but not
-        # when the job is cancelled. Retrieve later with
-        # namespace-actions/download-artifact or `nsc artifact`. No GPG encryption
-        # is needed: the storage is private to the workspace and access-controlled.
-        if: ${{ !cancelled() }}
-        uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
-        with:
-          name: bazel-bep-rbe
-          path: |
-            /tmp/bep/*.pb
-            /tmp/bep/*.json
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Upload failed and flaky test logs to Namespace Artifact Storage
-        # Push the logs staged above (test.log, test.xml and per-attempt logs of
-        # every FAILED or FLAKY test), plus the captured Bazel console
-        # output, to Namespace Artifact Storage. Runs on failure too, but not when
-        # the job is cancelled. Retrieve with namespace-actions/download-artifact
-        # or `nsc artifact`.
-        if: ${{ !cancelled() }}
-        uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
-        with:
-          name: failed-test-logs
-          path: |
-            /tmp/test-logs/failed-test-logs/**
-            /tmp/test-logs/tests-bazel-output.log
-          if-no-files-found: ignore
-          retention-days: 14
 
       - name: Report the cache volume usage at the end
         # On master this is what gets committed; compared with the report before the build
