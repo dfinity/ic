@@ -370,9 +370,10 @@ mod tests {
     /// Compares `actual` with the golden file `filename` in the `golden/` directory.
     ///
     /// If the `UPDATE_GOLDENFILES` environment variable is set to `1`, the golden file is
-    /// overwritten with `actual` instead (resolved against `BUILD_WORKSPACE_DIRECTORY` when
-    /// running under Bazel, so that the checked-in file gets updated). See the comment on the
-    /// test target in BUILD.bazel for the exact command.
+    /// (re)generated from `actual` instead (resolved against `BUILD_WORKSPACE_DIRECTORY` when
+    /// running under Bazel, so that the checked-in file gets updated). This is also how a golden
+    /// file for a new test case is created in the first place. See the comment on the test
+    /// target in BUILD.bazel for the exact command.
     fn assert_matches_goldenfile(filename: &str, actual: &str) {
         let golden_path = goldenfiles_path().join(filename);
 
@@ -387,8 +388,14 @@ mod tests {
             return;
         }
 
-        let expected = std::fs::read_to_string(&golden_path)
-            .unwrap_or_else(|e| panic!("failed to read {}: {e}", golden_path.display()));
+        let expected = std::fs::read_to_string(&golden_path).unwrap_or_else(|e| {
+            panic!(
+                "failed to read goldenfile {}: {e}\n\
+                 note: if the goldenfile does not exist yet, generate it by running the test \
+                 with `UPDATE_GOLDENFILES=1`",
+                golden_path.display()
+            )
+        });
         assert!(
             expected == actual,
             "goldenfile changed: {}\n\

@@ -660,6 +660,7 @@ colored = "^2.0.0"
 comparable = { git = "https://github.com/dfinity/comparable", rev = "8338f595496454f9e770389e2edc0d96e137a4e9", features = [
     "derive",
 ] }
+configparser = "3.3.0"
 crc32fast = "^1.2.0"
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"

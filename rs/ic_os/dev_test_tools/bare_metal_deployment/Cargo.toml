@@ -11,11 +11,11 @@ anyhow = { workspace = true }
 config_types = { path = "../../config/types" }
 deterministic_ips = { path = "../../networking/deterministic_ips" }
 clap = { workspace = true }
+configparser = { workspace = true }
 grub = { path = "../../boot/grub" }
 http = { workspace = true }
 macaddr = { workspace = true }
 rand = { workspace = true }
 rexpect = { workspace = true }
 thiserror = { workspace = true }
-utils = { path = "../../utils" }
 ssh2 = { workspace = true }

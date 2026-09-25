@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "f056a7585e30dbc9cfcdbe08ecc4039f08ff3551b46cc9c0831e58a50700244e",
+  "checksum": "7a12f962e111592cf23bc071aa83d2cf20eb43ea968002d682b8ffdbecad483b",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -12394,6 +12394,35 @@
       ],
       "version": "2.5.0"
     },
+    "configparser 3.3.0": {
+      "common_attrs": {
+        "edition": "2024"
+      },
+      "library_target_name": "configparser",
+      "license": "MIT OR LGPL-3.0-or-later",
+      "license_file": "LICENSE-LGPL",
+      "license_ids": [
+        "LGPL-3.0",
+        "MIT"
+      ],
+      "name": "configparser",
+      "package_url": "https://github.com/QEDK/configparser-rs",
+      "repository": {
+        "Http": {
+          "sha256": "031ad3d167622974ed636505ae4556267ed4aa2aea0464122fa6bc9698a32825",
+          "url": "https://static.crates.io/crates/configparser/3.3.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "configparser",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "3.3.0"
+    },
     "console 0.11.3": {
       "common_attrs": {
         "crate_features": [
@@ -16996,6 +17025,10 @@
           {
             "id": "comparable 0.5.6",
             "target": "comparable"
+          },
+          {
+            "id": "configparser 3.3.0",
+            "target": "configparser"
           },
           {
             "id": "console 0.11.3",
@@ -66672,6 +66705,7 @@
     "clap 4.5.53",
     "colored 2.0.4",
     "comparable 0.5.6",
+    "configparser 3.3.0",
     "console 0.11.3",
     "crc32fast 1.3.2",
     "criterion 0.5.1",

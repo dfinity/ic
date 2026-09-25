@@ -1692,6 +1692,7 @@ dependencies = [
  "anyhow",
  "clap",
  "config_types",
+ "configparser",
  "deterministic_ips",
  "grub",
  "http 1.4.0",
@@ -1700,7 +1701,6 @@ dependencies = [
  "rexpect",
  "ssh2",
  "thiserror 2.0.18",
- "utils",
 ]
 
 [[package]]
@@ -2956,6 +2956,7 @@ dependencies = [
  "base64 0.22.1",
  "clap",
  "config_types",
+ "configparser",
  "deterministic_ips",
  "fs_extra",
  "ic-config",
@@ -3000,6 +3001,12 @@ dependencies = [
  "serde_json",
  "url",
 ]
+
+[[package]]
+name = "configparser"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "031ad3d167622974ed636505ae4556267ed4aa2aea0464122fa6bc9698a32825"
 
 [[package]]
 name = "consensus-backup-system-tests"
