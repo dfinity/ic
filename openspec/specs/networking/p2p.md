@@ -106,6 +106,12 @@ The connection manager maintains persistent connections to all subnet peers, usi
 - **THEN** the old connection is closed with reason "using newer connection"
 - **AND** the new connection replaces the old one in the peer map
 
+#### Scenario: Backoff on short-lived connection teardown
+- **WHEN** an established connection closes sooner than 1 second after being established (`MIN_HEALTHY_CONNECTION_LIFETIME`) -- e.g. the peer rejects the client's certificate right after the handshake, which can happen for a while after a subnet split
+- **THEN** the peer is re-added to the connect queue with the same `CONNECT_RETRY_BACKOFF` delay used for a failed connection attempt, instead of retrying instantly
+- **AND** the `short_lived_connections_total` metric is incremented
+- **AND** a connection that lived at least that long, including one closed by the idle timeout, is retried immediately with no delay
+
 #### Scenario: Graceful endpoint shutdown
 - **WHEN** the connection manager is shut down
 - **THEN** the peer map is cleared
