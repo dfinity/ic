@@ -25,6 +25,9 @@ system_test(
     name = "basic_health_test",
     cpus = MIN_LOCAL_CPUS + 8 * DEFAULT_VCPUS_PER_VM,  # 8 IC Node VMs (2 subnets * 4 nodes) * 6 vCPUs.
     enable_metrics = True,
+    tags = [
+        "long_test",  # The P90 duration was over 6 minutes in the month up to 2026-09-17.
+    ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.

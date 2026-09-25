@@ -136,6 +136,7 @@ impl ConsensusImpl {
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        upgrade_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -166,6 +167,7 @@ impl ConsensusImpl {
             canister_http_payload_builder,
             query_stats_payload_builder,
             chain_key_payload_builder,
+            upgrade_payload_builder,
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -667,6 +669,7 @@ mod tests {
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
+            Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             dkg_pool,

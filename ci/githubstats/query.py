@@ -1166,6 +1166,8 @@ def top(args):
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        job=sql.Literal(args.job if args.job else ""),
+        exclude_jobs=sql.SQL("{}::text[]").format(sql.Literal(args.exclude_job)),
         exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
         exclude_commits=sql.SQL("{}::text[]").format(
             sql.Literal([resolve_full_commit_sha(c) for c in dict.fromkeys(args.exclude_commit)])
@@ -1269,6 +1271,8 @@ def last(args):
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        job=sql.Literal(args.job if args.job else ""),
+        exclude_jobs=sql.SQL("{}::text[]").format(sql.Literal(args.exclude_job)),
         exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
         exclude_commits=sql.SQL("{}::text[]").format(
             sql.Literal([resolve_full_commit_sha(c) for c in dict.fromkeys(args.exclude_commit)])
@@ -1405,6 +1409,24 @@ Mutually exclusive with --day/--week/--month""",
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
     filter_parser.add_argument("--branch", metavar="B", type=str, help="Filter by branch SQL LIKE pattern")
     filter_parser.add_argument(
+        "--job",
+        metavar="JOB",
+        type=str,
+        help="""Filter by CI job SQL LIKE pattern. The job of a bazel invocation is named after the '*-bep' artifact
+it was uploaded in, minus that suffix, like 'bazel-test-all-__self_3' for the tests of bazel-test-all in ci-main.yml
+(whose number shifts when steps are added, so match 'bazel-test-all-__self%%') and 'bazel-test-all-rbe-bazel-test-%%'
+for those of bazel-test-all-rbe in ci-rbe-evaluation.yml, which run on RBE @ Namespace and have no logs in BuildBuddy.
+Note that 'bazel-test-all-%%' matches both, and that of these two only the former runs *_farm system-tests, the latter *_local ones""",
+    )
+    filter_parser.add_argument(
+        "--exclude-job",
+        metavar="JOB",
+        type=str,
+        action="append",
+        default=[],
+        help="Exclude bazel invocations of CI jobs matching this SQL LIKE pattern (can be repeated), see --job",
+    )
+    filter_parser.add_argument(
         "--exclude-pr",
         metavar="PR_NUMBER",
         type=int,
@@ -1446,6 +1468,9 @@ Examples:
 
   # Show the top 10 most impactful tests that ran since the time of a specific commit
   bazel run //ci/githubstats:query -- top 10 impact --since abc123def
+
+  # Show the top 10 most flaky tests in the last week on RBE @ Namespace
+  bazel run //ci/githubstats:query -- top 10 flaky% --week --job 'bazel-test-all-rbe-bazel-test-%'
 """,
     )
     top_parser.add_argument(
@@ -1540,6 +1565,9 @@ Examples:
 
   # Show all runs of a test since the time of a specific commit
   bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since abc123def
+
+  # Show the last non-successful runs of the //rs/ tests in the last day except those on RBE @ Namespace (no logs in BuildBuddy)
+  bazel run //ci/githubstats:query -- last --non_success '//rs/%' --day --exclude-job 'bazel-test-all-rbe-%'
 """,
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")

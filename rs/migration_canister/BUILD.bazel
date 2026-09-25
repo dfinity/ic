@@ -107,6 +107,9 @@ rust_test(
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
+    tags = [
+        "long_test",  # The P90 duration was over 8 minutes in the month up to 2026-09-17.
+    ],
     deps = [
         # Keep sorted
         "//packages/ic-http-types",

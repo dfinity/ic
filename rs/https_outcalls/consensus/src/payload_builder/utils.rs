@@ -600,8 +600,7 @@ pub(crate) fn group_shares_by_callback_id<
 ///
 /// Iterates over response shares grouped by metadata, looking for one
 /// where at least `threshold` distinct replicas produced the same
-/// response hash. If found, returns the assembled
-/// [`CanisterHttpResponseWithConsensus`].
+/// response hash. If found, returns the assembled [`NonFlexibleCandidate`].
 ///
 /// A response is only returned once the signing replicas left enough of their
 /// allowances unspent to cover the consensus cost of putting it into a block
@@ -609,14 +608,14 @@ pub(crate) fn group_shares_by_callback_id<
 /// further shares have arrived, each of which contributes another allowance.
 /// If no further shares can be received that would add enough allowance, we
 /// will generate an out-of-cycles error instead (see [`check_flexible_out_of_cycles`]).
-pub(crate) fn find_fully_replicated_response(
+pub(crate) fn find_fully_replicated_response<'a>(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     threshold: usize,
     context: &CanisterHttpRequestContext,
-    pool_access: &dyn CanisterHttpPool,
+    pool_access: &'a dyn CanisterHttpPool,
     log: &ReplicaLogger,
     metrics: &CanisterHttpPayloadBuilderMetrics,
-) -> Option<CanisterHttpResponseWithConsensus> {
+) -> Option<NonFlexibleCandidate<'a>> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
         let signers: BTreeSet<_> = shares.iter().map(|share| share.signature.signer).collect();
         if signers.len() < threshold {
@@ -631,19 +630,19 @@ pub(crate) fn find_fully_replicated_response(
 /// Finds a non-replicated HTTP outcall response from the designated node.
 ///
 /// Looks through the grouped shares for one signed by `designated_node_id`.
-/// If found, returns the assembled [`CanisterHttpResponseWithConsensus`].
+/// If found, returns the assembled [`NonFlexibleCandidate`].
 ///
 /// As for fully-replicated responses, the response is held back while its
 /// collective spend exceeds the designated replica's allowance. In that case,
 /// we will generate an out-of-cycles error instead (see [`check_flexible_out_of_cycles`]).
-pub(crate) fn find_non_replicated_response(
+pub(crate) fn find_non_replicated_response<'a>(
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
     designated_node_id: &NodeId,
     context: &CanisterHttpRequestContext,
-    pool_access: &dyn CanisterHttpPool,
+    pool_access: &'a dyn CanisterHttpPool,
     log: &ReplicaLogger,
     metrics: &CanisterHttpPayloadBuilderMetrics,
-) -> Option<CanisterHttpResponseWithConsensus> {
+) -> Option<NonFlexibleCandidate<'a>> {
     grouped_shares.iter().find_map(|(metadata, shares)| {
         let correct_share = shares
             .iter()
@@ -654,17 +653,50 @@ pub(crate) fn find_non_replicated_response(
     })
 }
 
-/// Assembles a [`CanisterHttpResponseWithConsensus`] from `content` and `proof`,
-/// computing the collective initial spend of the proof's signers. Returns `None`
-/// if that spend exceeds their collective allowance, in which case the response
-/// must not be delivered yet.
-fn assemble_non_flexible_response(
-    content: CanisterHttpResponse,
+/// A fully- or non-replicated response ready for delivery, whose content is still
+/// borrowed from the pool, so that it is only cloned once it is known to fit into
+/// the payload.
+pub(crate) struct NonFlexibleCandidate<'a> {
+    content: &'a CanisterHttpResponse,
+    proof: CanisterHttpResponseProof,
+    initial_spent: Cycles,
+}
+
+impl NonFlexibleCandidate<'_> {
+    /// The [`CountBytes`] of the response returned by [`Self::into_response`].
+    pub(crate) fn count_bytes(&self) -> usize {
+        let Self {
+            content,
+            proof,
+            initial_spent,
+        } = self;
+        proof.count_bytes() + content.count_bytes() + size_of_val(initial_spent)
+    }
+
+    /// Clones the borrowed content into an owned [`CanisterHttpResponseWithConsensus`].
+    pub(crate) fn into_response(self) -> CanisterHttpResponseWithConsensus {
+        let size = self.count_bytes();
+        let response = CanisterHttpResponseWithConsensus {
+            content: self.content.clone(),
+            proof: self.proof,
+            initial_spent: self.initial_spent,
+        };
+        debug_assert_eq!(response.count_bytes(), size);
+        response
+    }
+}
+
+/// Assembles a [`NonFlexibleCandidate`] from `content` and `proof`, computing the
+/// collective initial spend of the proof's signers. Returns `None` if that spend
+/// exceeds their collective allowance, in which case the response must not be
+/// delivered yet.
+fn assemble_non_flexible_response<'a>(
+    content: &'a CanisterHttpResponse,
     proof: CanisterHttpResponseProof,
     context: &CanisterHttpRequestContext,
     log: &ReplicaLogger,
     metrics: &CanisterHttpPayloadBuilderMetrics,
-) -> Option<CanisterHttpResponseWithConsensus> {
+) -> Option<NonFlexibleCandidate<'a>> {
     let initial_spent = non_flexible_initial_spent(&proof, context.subnet_size);
     check_initial_spent_within_limit(
         initial_spent,
@@ -674,7 +706,7 @@ fn assemble_non_flexible_response(
         Some((log, metrics)),
     )
     .ok()?;
-    Some(CanisterHttpResponseWithConsensus {
+    Some(NonFlexibleCandidate {
         content,
         proof,
         initial_spent,
@@ -696,7 +728,7 @@ pub(crate) enum FlexibleFindResult {
 /// produced, its signed receipt, and the number of payload bytes that delivering
 /// that response takes.
 struct FlexibleCandidate<'a> {
-    response: CanisterHttpResponse,
+    response: &'a CanisterHttpResponse,
     share: &'a CanisterHttpResponseShare,
     size: usize,
 }
@@ -722,7 +754,7 @@ struct FlexibleCandidate<'a> {
 /// shares](FlexibleCanisterHttpResponses::extra_shares) as needed to cover their
 /// consensus cost (see [`fund_flexible_selection`]).
 ///
-/// The cloning of the share is only done when building the [`FlexibleCanisterHttpResponses`] result.
+/// Shares and responses are only cloned for the items of the returned result.
 pub(crate) fn find_flexible_result(
     callback_id: CallbackId,
     grouped_shares: &BTreeMap<CanisterHttpResponseMetadata, Vec<&CanisterHttpResponseShare>>,
@@ -752,7 +784,7 @@ pub(crate) fn find_flexible_result(
             };
             all_shares.push(share);
             let candidate = FlexibleCandidate {
-                size: FlexibleCanisterHttpResponseWithProof::count_bytes(&response, share),
+                size: FlexibleCanisterHttpResponseWithProof::count_bytes(response, share),
                 response,
                 share,
             };
@@ -890,7 +922,7 @@ fn into_responses_with_proof(
         .into_iter()
         .take(selected)
         .map(|candidate| FlexibleCanisterHttpResponseWithProof {
-            response: candidate.response,
+            response: candidate.response.clone(),
             proof: candidate.share.clone(),
         })
         .collect()

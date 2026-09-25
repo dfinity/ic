@@ -116,6 +116,7 @@ system_test_nns(
     enable_uvm = True,
     tags = [
         "colocate",
+        "long_test",  # The P90 duration was over 8 minutes in the month up to 2026-09-17.
     ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
         "BTC_WASM_PATH": "@btc_canister//file",
