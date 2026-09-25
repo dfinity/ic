@@ -8,12 +8,15 @@ documentation.workspace = true
 
 [dependencies]
 axum = { workspace = true }
+bytes = { workspace = true }
+http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-config = { path = "../../config" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
+ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }

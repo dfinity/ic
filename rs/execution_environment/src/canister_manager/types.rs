@@ -3,7 +3,9 @@ use crate::types::Response;
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, HypervisorError};
+use ic_interfaces::execution_environment::{
+    CanisterOutOfCyclesError, HypervisorError, SubnetAvailableMemoryError,
+};
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs, InstallCodeArgsV2,
@@ -519,6 +521,38 @@ pub(crate) enum CanisterManagerError {
     FetchCanisterLogsAccessDenied {
         caller: PrincipalId,
     },
+}
+
+impl From<SubnetAvailableMemoryError> for CanisterManagerError {
+    fn from(err: SubnetAvailableMemoryError) -> Self {
+        let SubnetAvailableMemoryError::InsufficientMemory {
+            execution_requested,
+            guaranteed_response_message_requested,
+            wasm_custom_sections_requested,
+            available_execution,
+            available_guaranteed_response_messages: _,
+            available_wasm_custom_sections,
+        } = err;
+        debug_assert_eq!(
+            guaranteed_response_message_requested,
+            NumBytes::new(0),
+            "no guaranteed response message memory is requested by the `try_decrement` \
+             calls whose error is converted here"
+        );
+        if wasm_custom_sections_requested.get() != 0
+            && wasm_custom_sections_requested.get() as i128 > available_wasm_custom_sections as i128
+        {
+            Self::SubnetWasmCustomSectionCapacityOverSubscribed {
+                requested: wasm_custom_sections_requested,
+                available: NumBytes::new(available_wasm_custom_sections.max(0) as u64),
+            }
+        } else {
+            Self::SubnetMemoryCapacityOverSubscribed {
+                requested: execution_requested,
+                available: NumBytes::new(available_execution.max(0) as u64),
+            }
+        }
+    }
 }
 
 impl AsErrorHelp for CanisterManagerError {

@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use ic_canonical_state::{CURRENT_CERTIFICATION_VERSION, LabelLike};
+use ic_config::message_routing::ADVERT_MAX_BODY_BYTES;
 use ic_crypto_tree_hash::{Label, LabeledTree, flat_map::FlatMap};
 use ic_interfaces::messaging::XNetAdvertOutcome;
 use ic_interfaces_certified_stream_store::{
@@ -10,6 +11,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{messaging::xnet::v1, proxy::ProtoProxy};
 use ic_replicated_state::Stream;
+use ic_replicated_state::testing::StreamTesting;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     HistogramStats, fetch_int_counter_vec, metric_vec, nonzero_values,
@@ -17,7 +19,10 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_state::arb_stream_slice;
 use ic_test_utilities_types::xnet::{StreamHeaderBuilder, StreamSliceBuilder};
 use ic_types::messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT;
-use ic_types::xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex, StreamSlice};
+use ic_types::xnet::{
+    CertifiedStreamSlice, RejectReason, RejectSignal, StreamHeader, StreamIndex,
+    StreamIndexedQueue, StreamSlice,
+};
 use ic_types::{CountBytes, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{
     CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError, CertifiedSlicePool,
@@ -2332,6 +2337,42 @@ fn pool_classify_advert_collecting_reject_signal(
         assert_eq!(
             classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_before_begin),
             XNetAdvertOutcome::InPayload
+        );
+    });
+}
+
+/// An advert carrying as many reject signals as a stream header can hold must
+/// fit within `ADVERT_MAX_BODY_BYTES`, or we would reject valid adverts.
+///
+/// The signals are consecutive because that is the widest case reachable: they
+/// are delta encoded as variable length integers, and the signals we hold span
+/// at most `MAX_STREAM_MESSAGES` indices, as the peer cannot send beyond that
+/// without the `begin` that garbage collects them. Spreading them out further
+/// does grow the advert — to ~90 KB at the extreme — but that would require us
+/// to have inducted more than `MAX_STREAM_MESSAGES` at once (which we don't).
+#[test]
+fn worst_case_advert_size() {
+    with_test_replica_logger(|log| {
+        let reject_signals = (0..MAX_SIGNALS as u64)
+            .map(|index| {
+                RejectSignal::new(RejectReason::CanisterMigrating, StreamIndex::new(index))
+            })
+            .collect();
+        let stream = Stream::with_signals(
+            StreamIndexedQueue::with_begin(StreamIndex::new(0)),
+            StreamIndex::new(MAX_SIGNALS as u64),
+            reject_signals,
+        );
+        let fixture = StateManagerFixture::remote(log).with_stream(DST_SUBNET, stream);
+
+        // A header-only slice, as `certified_header()` produces.
+        let advert = fixture.get_slice(DST_SUBNET, StreamIndex::new(0), 0);
+        let advert_bytes = v1::CertifiedStreamSlice::proxy_encode(advert).len();
+
+        assert!(
+            advert_bytes < ADVERT_MAX_BODY_BYTES,
+            "an advert with {MAX_SIGNALS} reject signals encodes to {advert_bytes} bytes, \
+             at or above the {ADVERT_MAX_BODY_BYTES} byte limit"
         );
     });
 }
