@@ -474,6 +474,11 @@ Subnet merging is the inverse of subnet splitting: it reroutes a source subnet's
 - **AND** the source subnet must host at least one canister ID range
 - **AND** the merge is rejected if the source subnet's ranges overlap an ongoing canister migration, since rerouting them would break the recorded migration trace
 
+#### Scenario: Propose a subnet merge via ic-admin
+- **WHEN** an operator runs `ic-admin propose-to-merge-subnets --source-subnet <M> --destination-subnet <R>`
+- **THEN** an NNS proposal titled "Merge subnet `<M>` into subnet `<R>`" is submitted carrying a `MergeSubnetsPayload`
+- **AND** once the proposal executes, the source subnet hosts no canister ID range and is expected to be deleted afterwards
+
 ### Requirement: Engine Deletion
 
 CloudEngine subnets can be deleted, cascading registry cleanup.
