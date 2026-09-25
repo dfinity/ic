@@ -41,16 +41,19 @@ pub async fn fetch_metrics(logger: &Logger, node_ips: &[IpAddr], metrics: &[&str
 }
 
 async fn fetch_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<String> {
-    let response =
-        tokio::time::timeout(REQUEST_TIMEOUT, reqwest::get(format!("http://[{ip}]:9090"))).await;
+    // The timeout covers reading the body too: `reqwest::get` completes as soon
+    // as the response headers arrive, and a node stalling after that would
+    // otherwise keep `fetch_metrics` from ever returning.
+    let response = tokio::time::timeout(REQUEST_TIMEOUT, async {
+        reqwest::get(format!("http://[{ip}]:9090"))
+            .await?
+            .error_for_status()?
+            .text()
+            .await
+    })
+    .await;
     match response {
-        Ok(Ok(response)) => match response.text().await {
-            Ok(body) => Some(body),
-            Err(err) => {
-                warn!(logger, "Failed to decode the metrics of node {ip}: {err}");
-                None
-            }
-        },
+        Ok(Ok(body)) => Some(body),
         Ok(Err(err)) => {
             warn!(logger, "Failed to request the metrics of node {ip}: {err}");
             None
