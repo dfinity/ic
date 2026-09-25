@@ -1223,11 +1223,13 @@ impl CanisterManager {
         // that the canister's directory is deleted from the tip.
         let canister_to_delete = state.remove_canister(&canister_id_to_delete).unwrap();
         let canister_memory_allocated_bytes = canister_to_delete.memory_allocated_bytes();
+        let canister_wasm_custom_sections_bytes =
+            canister_to_delete.wasm_custom_sections_memory_usage();
 
         round_limits.subnet_available_memory.increment(
             canister_memory_allocated_bytes,
             NumBytes::from(0),
-            NumBytes::from(0),
+            canister_wasm_custom_sections_bytes,
         );
 
         // Leftover cycles in the canister are considered `consumed`.
@@ -1855,25 +1857,26 @@ impl CanisterManager {
             new_memory_allocated_bytes.saturating_sub(&old_memory_allocated_bytes);
         let deallocated_bytes =
             old_memory_allocated_bytes.saturating_sub(&new_memory_allocated_bytes);
+        let old_wasm_custom_sections_memory_usage =
+            old_canister.wasm_custom_sections_memory_usage();
+        let new_wasm_custom_sections_memory_usage = canister.wasm_custom_sections_memory_usage();
+        let allocated_wasm_custom_sections_bytes = new_wasm_custom_sections_memory_usage
+            .saturating_sub(&old_wasm_custom_sections_memory_usage);
+        let deallocated_wasm_custom_sections_bytes = old_wasm_custom_sections_memory_usage
+            .saturating_sub(&new_wasm_custom_sections_memory_usage);
         round_limits.subnet_available_memory.increment(
             deallocated_bytes,
             NumBytes::from(0),
-            NumBytes::from(0),
+            deallocated_wasm_custom_sections_bytes,
         );
         round_limits
             .subnet_available_memory
-            .try_decrement(allocated_bytes, NumBytes::from(0), NumBytes::from(0))
-            .map_err(
-                |_| CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                    requested: allocated_bytes,
-                    available: NumBytes::from(
-                        round_limits
-                            .subnet_available_memory
-                            .get_execution_memory()
-                            .max(0) as u64,
-                    ),
-                },
-            )?;
+            .try_decrement(
+                allocated_bytes,
+                NumBytes::from(0),
+                allocated_wasm_custom_sections_bytes,
+            )
+            .map_err(CanisterManagerError::from_subnet_available_memory_error)?;
 
         // Consume cycles for instructions w.r.t. the old memory usage,
         // i.e., the memory usage for which the instructions were executed,
