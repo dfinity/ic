@@ -823,10 +823,10 @@ pub mod test {
         CanisterHttpRequestContext {
             request: ic_test_utilities_types::messages::RequestBuilder::new()
                 .sender(requester())
-                .build(),
+                .build_arc(),
             url: "".to_string(),
             max_response_bytes,
-            headers: vec![],
+            headers: Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,

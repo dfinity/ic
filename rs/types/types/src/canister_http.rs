@@ -73,6 +73,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
     mem::size_of,
+    sync::Arc,
     time::Duration,
 };
 use strum::FromRepr;
@@ -144,16 +145,15 @@ impl From<TransformContext> for Transform {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CanisterHttpRequestContext {
-    pub request: Request,
+    pub request: Arc<Request>,
     pub url: String,
     pub max_response_bytes: Option<NumBytes>,
-    pub headers: Vec<CanisterHttpHeader>,
-    #[serde(with = "serde_bytes", skip_serializing_if = "Option::is_none", default)]
-    pub body: Option<Vec<u8>>,
+    pub headers: Arc<Vec<CanisterHttpHeader>>,
+    pub body: Option<Arc<Vec<u8>>>,
     pub http_method: CanisterHttpMethod,
-    pub transform: Option<Transform>,
+    pub transform: Option<Arc<Transform>>,
     pub time: Time,
     /// The replication strategy for this request.
     pub replication: Replication,
@@ -391,21 +391,20 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
         };
 
         pb_metadata::CanisterHttpRequestContext {
-            request: Some((&context.request).into()),
+            request: Some(context.request.as_ref().into()),
             url: context.url.clone(),
             max_response_bytes: context
                 .max_response_bytes
                 .map(|max_response_bytes| max_response_bytes.get()),
             headers: context
                 .headers
-                .clone()
-                .into_iter()
+                .iter()
                 .map(|h| pb_metadata::HttpHeader {
-                    name: h.name,
-                    value: h.value,
+                    name: h.name.clone(),
+                    value: h.value.clone(),
                 })
                 .collect(),
-            body: context.body.clone(),
+            body: context.body.as_ref().map(|body| body.as_ref().clone()),
             transform_method_name: context
                 .transform
                 .as_ref()
@@ -523,18 +522,20 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
         };
 
         Ok(CanisterHttpRequestContext {
-            request,
+            request: Arc::new(request),
             url: context.url,
             max_response_bytes: context.max_response_bytes.map(NumBytes::from),
-            headers: context
-                .headers
-                .into_iter()
-                .map(|h| CanisterHttpHeader {
-                    name: h.name,
-                    value: h.value,
-                })
-                .collect(),
-            body: context.body,
+            headers: Arc::new(
+                context
+                    .headers
+                    .into_iter()
+                    .map(|h| CanisterHttpHeader {
+                        name: h.name,
+                        value: h.value,
+                    })
+                    .collect(),
+            ),
+            body: context.body.map(Arc::new),
             http_method: pb_metadata::HttpMethod::try_from(context.http_method)
                 .map_err(|_| ProxyDecodeError::ValueOutOfRange {
                     typ: "ic_protobuf::state::system_metadata::v1::HttpMethod",
@@ -544,7 +545,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                     ),
                 })?
                 .try_into()?,
-            transform,
+            transform: transform.map(Arc::new),
             time: Time::from_nanos_since_unix_epoch(context.time),
             replication,
             pricing_version,
@@ -734,13 +735,13 @@ impl CanisterHttpRequestContext {
         };
 
         Ok(CanisterHttpRequestContext {
-            request: request.clone(),
+            request: Arc::new(request.clone()),
             url: args.url,
             max_response_bytes,
-            headers: args.headers.get().iter().cloned().map(From::from).collect(),
-            body: args.body,
+            headers: Arc::new(args.headers.get().iter().cloned().map(From::from).collect()),
+            body: args.body.map(Arc::new),
             http_method: args.method.into(),
-            transform: args.transform.map(From::from),
+            transform: args.transform.map(|transform| Arc::new(transform.into())),
             time,
             replication,
             pricing_version: {
@@ -854,13 +855,13 @@ impl CanisterHttpRequestContext {
             .collect();
 
         Ok(CanisterHttpRequestContext {
-            request: request.clone(),
+            request: Arc::new(request.clone()),
             url: args.url,
             max_response_bytes,
-            headers: args.headers.get().iter().cloned().map(Into::into).collect(),
-            body: args.body,
+            headers: Arc::new(args.headers.get().iter().cloned().map(Into::into).collect()),
+            body: args.body.map(Arc::new),
             http_method: args.method.into(),
-            transform: args.transform.map(From::from),
+            transform: args.transform.map(|transform| Arc::new(transform.into())),
             time,
             replication: Replication::Flexible {
                 committee,
@@ -1604,18 +1605,18 @@ mod tests {
     fn test_request_arg_variable_size() {
         let context = CanisterHttpRequestContext {
             url: "https://example.com".to_string(),
-            headers: vec![CanisterHttpHeader {
+            headers: Arc::new(vec![CanisterHttpHeader {
                 name: "hi".to_string(),
                 value: "bye".to_string(),
-            }],
-            body: Some(vec![0; 1024]),
+            }]),
+            body: Some(Arc::new(vec![0; 1024])),
             max_response_bytes: None,
             http_method: CanisterHttpMethod::GET,
-            transform: Some(Transform {
+            transform: Some(Arc::new(Transform {
                 method_name: "willchange".to_string(),
                 context: vec![],
-            }),
-            request: Request {
+            })),
+            request: Arc::new(Request {
                 receiver: CanisterId::ic_00(),
                 sender: CanisterId::ic_00(),
                 sender_reply_callback: CallbackId::from(3),
@@ -1624,7 +1625,7 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
-            },
+            }),
             time: UNIX_EPOCH,
             replication: Replication::FullyReplicated,
             pricing_version: PricingVersion::Legacy,
@@ -1655,15 +1656,15 @@ mod tests {
     fn test_request_arg_variable_size_some_empty() {
         let context = CanisterHttpRequestContext {
             url: "https://example.com".to_string(),
-            headers: vec![],
+            headers: Arc::new(vec![]),
             body: None,
             max_response_bytes: None,
             http_method: CanisterHttpMethod::GET,
-            transform: Some(Transform {
+            transform: Some(Arc::new(Transform {
                 method_name: "willchange".to_string(),
                 context: vec![],
-            }),
-            request: Request {
+            })),
+            request: Arc::new(Request {
                 receiver: CanisterId::ic_00(),
                 sender: CanisterId::ic_00(),
                 sender_reply_callback: CallbackId::from(3),
@@ -1672,7 +1673,7 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
-            },
+            }),
             time: UNIX_EPOCH,
             replication: Replication::FullyReplicated,
             pricing_version: PricingVersion::Legacy,
@@ -1730,18 +1731,18 @@ mod tests {
             for pricing_version in [PricingVersion::Legacy, PricingVersion::PayAsYouGo] {
                 let initial = CanisterHttpRequestContext {
                     url: "https://example.com".to_string(),
-                    headers: vec![CanisterHttpHeader {
+                    headers: Arc::new(vec![CanisterHttpHeader {
                         name: "Content-Type".to_string(),
                         value: "application/json".to_string(),
-                    }],
-                    body: Some(b"{\"hello\":\"world\"}".to_vec()),
+                    }]),
+                    body: Some(Arc::new(b"{\"hello\":\"world\"}".to_vec())),
                     max_response_bytes: Some(NumBytes::from(1234)),
                     http_method: CanisterHttpMethod::POST,
-                    transform: Some(Transform {
+                    transform: Some(Arc::new(Transform {
                         method_name: "transform_response".to_string(),
                         context: vec![1, 2, 3],
-                    }),
-                    request: Request {
+                    })),
+                    request: Arc::new(Request {
                         receiver: CanisterId::ic_00(),
                         sender: CanisterId::ic_00(),
                         sender_reply_callback: CallbackId::from(3),
@@ -1750,7 +1751,7 @@ mod tests {
                         method_payload: Vec::new(),
                         metadata: Default::default(),
                         deadline: NO_DEADLINE,
-                    },
+                    }),
                     time: UNIX_EPOCH,
                     replication: replication.clone(),
                     pricing_version,
@@ -1775,7 +1776,7 @@ mod tests {
     #[test]
     fn canister_http_request_context_cost_schedule_proto_round_trip() {
         let base = CanisterHttpRequestContext {
-            request: Request {
+            request: Arc::new(Request {
                 receiver: CanisterId::ic_00(),
                 sender: CanisterId::ic_00(),
                 sender_reply_callback: CallbackId::from(3),
@@ -1784,10 +1785,10 @@ mod tests {
                 method_payload: Vec::new(),
                 metadata: Default::default(),
                 deadline: NO_DEADLINE,
-            },
+            }),
             url: "https://example.com".to_string(),
             max_response_bytes: None,
-            headers: vec![],
+            headers: Arc::new(vec![]),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,

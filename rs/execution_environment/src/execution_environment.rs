@@ -2357,14 +2357,15 @@ impl ExecutionEnvironment {
             PricingVersion::Legacy => {
                 // Legacy pricing deducts the full request fee from the payment.
                 // The remaining payment is refunded when the response is delivered.
-                canister_http_request_context.request.payment -= legacy_fee.real();
+                Arc::make_mut(&mut canister_http_request_context.request).payment -=
+                    legacy_fee.real();
             }
             PricingVersion::PayAsYouGo => {
                 // Deduct the base fee plus the per-replica allowances.
                 // The remaining payment is refunded when the response is delivered.
                 // Part of the per-replica allowances may be refunded after the response is delivered.
                 if !http_outcalls_are_free {
-                    canister_http_request_context.request.payment -=
+                    Arc::make_mut(&mut canister_http_request_context.request).payment -=
                         base_fee.real() + refundable_cycles;
                 }
             }
@@ -4071,7 +4072,7 @@ impl ExecutionEnvironment {
 
         state.metadata.subnet_call_context_manager.push_context(
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
-                request,
+                request: Arc::new(request),
                 args,
                 derivation_path: Arc::new(derivation_path),
                 batch_time: state.metadata.batch_time,
