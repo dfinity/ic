@@ -186,18 +186,26 @@ pub fn median_across_replicas(
     median(&values)
 }
 
-/// `min(<metric>{<labels_match>})`: the smallest value any replica reports for
-/// any matching series. `None` if there is no such series.
+/// `min(<metric>{<labels_match>})` over all `replicas` replicas: the smallest
+/// value any of them reports for any matching series. `None` if fewer than
+/// `replicas` values are reported, i.e. if a replica does not export the
+/// series: unlike the medians above, which describe the replicas that do
+/// report a series, a minimum that has to hold on every replica is only
+/// meaningful once every one of them reports.
 pub fn min_across_replicas(
     metrics: &Metrics,
     metric: &str,
     labels_match: impl Fn(&str) -> bool,
+    replicas: usize,
 ) -> Option<f64> {
-    matching_series(metrics, metric, labels_match)
+    let values: Vec<f64> = matching_series(metrics, metric, labels_match)
         .into_iter()
         .flatten()
         .copied()
-        .reduce(f64::min)
+        .collect();
+    (values.len() >= replicas)
+        .then(|| values.into_iter().reduce(f64::min))
+        .flatten()
 }
 
 #[cfg(test)]
@@ -274,11 +282,16 @@ some_other_metric 12
             None
         );
         assert_eq!(
-            min_across_replicas(&metrics, "mr_stream_messages", |_| true),
+            min_across_replicas(&metrics, "mr_stream_messages", |_| true, 3),
             Some(1.0)
         );
         assert_eq!(
-            min_across_replicas(&metrics, "mr_registry_version", |_| true),
+            min_across_replicas(&metrics, "mr_stream_messages", |_| true, 4),
+            None,
+            "a replica that does not report the series must not be skipped"
+        );
+        assert_eq!(
+            min_across_replicas(&metrics, "mr_registry_version", |_| true, 0),
             None
         );
     }

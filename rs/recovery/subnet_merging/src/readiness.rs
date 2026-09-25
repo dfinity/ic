@@ -90,8 +90,9 @@ impl std::error::Error for ReadinessError {
 ///
 /// Every term is evaluated on the median across the replicas reporting the
 /// respective series, except for the registry version, which is the minimum
-/// across replicas: the term has to hold on every single replica, and a median
-/// would already hold (or interpolate to `V`) while some replicas lag behind.
+/// across all replicas: the term has to hold on every single replica, and a
+/// median would already hold (or interpolate to `V`) while some replicas lag
+/// behind. A replica that does not report its registry version reads as zero.
 /// Fails if any node of any subnet (the cooling down one included) cannot be
 /// scraped, rather than evaluating the terms on partial data: most terms
 /// compare against zero, which missing data would satisfy. A series that a
@@ -123,7 +124,7 @@ pub async fn evaluate_merge_readiness(
     let remote_label = format!("remote=\"{source_subnet_id}\"");
     let mut min_registry_version = None;
     let mut incoming_stream_messages = 0.0;
-    for &subnet_id in subnets.keys() {
+    for (&subnet_id, node_ips) in subnets {
         let metrics = if subnet_id == source_subnet_id {
             own_metrics.clone()
         } else {
@@ -134,9 +135,15 @@ pub async fn evaluate_merge_readiness(
             )
             .await?
         };
-        let version =
-            metrics_helper::min_across_replicas(&metrics, METRIC_REGISTRY_VERSION, |_| true)
-                .unwrap_or(0.0);
+        // A replica that does not report its registry version reads as zero,
+        // so that the term fails closed until every replica reports it.
+        let version = metrics_helper::min_across_replicas(
+            &metrics,
+            METRIC_REGISTRY_VERSION,
+            |_| true,
+            node_ips.len(),
+        )
+        .unwrap_or(0.0);
         min_registry_version = Some(min_registry_version.map_or(version, |v: f64| v.min(version)));
         if subnet_id != source_subnet_id {
             incoming_stream_messages += metrics_helper::median_across_replicas(
