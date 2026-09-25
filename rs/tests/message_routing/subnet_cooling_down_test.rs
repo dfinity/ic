@@ -64,6 +64,11 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_registry_subnet_type::SubnetType;
+use ic_subnet_merging::metrics_helper::{fetch_metrics, sum_of_medians};
+use ic_subnet_merging::readiness::{
+    Condition, METRIC_SUBNET_CALL_CONTEXTS, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, SubnetNodeIps,
+    Term, evaluate_merge_readiness,
+};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -74,8 +79,7 @@ use ic_system_test_driver::driver::test_env_api::{
 use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    MetricsFetcher, UniversalCanister, assert_create_agent, block_on, create_canister,
-    set_controller,
+    UniversalCanister, assert_create_agent, block_on, create_canister, set_controller,
 };
 use ic_types::Height;
 use ic_universal_canister::management::InstallMode;
@@ -83,30 +87,7 @@ use ic_universal_canister::{
     CallInterface, call_args, get_universal_canister_wasm, management, wasm,
 };
 use slog::{Logger, info};
-use std::collections::BTreeMap;
 use std::time::Duration;
-
-/// The metrics making up the "merge readiness" condition.
-///
-/// The registry version every subnet has to have observed.
-const METRIC_REGISTRY_VERSION: &str = "mr_registry_version";
-/// The messages held in the streams of a subnet, by remote subnet (the subnet
-/// itself included, i.e. its loopback stream).
-const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
-/// The entries of the ingress history, by status.
-const METRIC_INGRESS_HISTORY_BY_STATE: &str = "replicated_state_ingress_history_length_by_state";
-/// The messages held in the input and output queues of the subnet itself, i.e.
-/// the management canister's.
-const METRIC_SUBNET_INPUT_QUEUE_MESSAGES: &str = "execution_subnet_input_queue_messages";
-const METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES: &str = "execution_subnet_output_queue_messages";
-/// The call contexts of the subnet call context manager, e.g. the `install_code`
-/// calls that are still running.
-const METRIC_SUBNET_CALL_CONTEXTS: &str = "replicated_state_subnet_call_contexts";
-/// The number of pending anonymous refunds, i.e. the size of the refund pool.
-const METRIC_PENDING_REFUNDS: &str = "replicated_state_pending_refunds";
-/// The total value of those refunds, which is logged next to the term above
-/// when the refund pool is not empty, but is not itself a condition.
-const METRIC_PENDING_REFUNDS_CYCLES: &str = "replicated_state_pending_refunds_cycles";
 
 /// The label selecting the `install_code` call contexts of
 /// `METRIC_SUBNET_CALL_CONTEXTS`.
@@ -170,19 +151,6 @@ const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
 const PER_TEST_TIMEOUT: Duration = Duration::from_secs(900);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(1500);
 
-/// The individual conditions the "merge readiness" condition is made of.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Condition {
-    RegistryVersion,
-    IncomingStreams,
-    OutgoingStreams,
-    IngressHistory,
-    SubnetInputQueues,
-    SubnetOutputQueues,
-    SubnetCallContexts,
-    RefundPool,
-}
-
 /// The conditions this scenario violates, i.e. the ones step 7 checks. The
 /// three that are missing are expected to hold:
 ///
@@ -208,14 +176,6 @@ const VIOLATED_CONDITIONS: [Condition; 5] = [
     Condition::SubnetInputQueues,
     Condition::SubnetCallContexts,
 ];
-
-/// A term of the "merge readiness" condition: which condition it states, what
-/// has to hold for it, and whether that does hold.
-struct Term {
-    condition: Condition,
-    description: String,
-    satisfied: bool,
-}
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -421,8 +381,10 @@ async fn run(env: TestEnv) {
 /// readiness" condition holds for `m_subnet`, i.e. that the condition a subnet
 /// merging tool waits for is one this scenario does not satisfy.
 ///
-/// Every term is evaluated repeatedly until all of `VIOLATED_CONDITIONS` are
-/// violated at the same evaluation.
+/// The terms are evaluated by `ic_subnet_merging::readiness`, i.e. by the same
+/// code a subnet merging tool evaluates them with. Every term is evaluated
+/// repeatedly until all of `VIOLATED_CONDITIONS` are violated at the same
+/// evaluation.
 async fn check_conditions_violated(
     topology: &TopologySnapshot,
     m_subnet: &SubnetSnapshot,
@@ -448,7 +410,13 @@ async fn check_conditions_violated(
         CONDITIONS_TIMEOUT,
         CONDITIONS_BACKOFF,
         || async {
-            let terms = evaluate_merge_readiness(topology, m_subnet, registry_version).await?;
+            let terms = evaluate_merge_readiness(
+                &subnet_node_ips(topology),
+                m_subnet.subnet_id,
+                registry_version,
+                logger,
+            )
+            .await;
             let satisfied: Vec<&str> = VIOLATED_CONDITIONS
                 .iter()
                 .map(|condition| term(&terms, *condition))
@@ -484,147 +452,26 @@ async fn check_conditions_violated(
     );
 }
 
+/// The nodes of every subnet, which is what the merge readiness condition is
+/// evaluated on.
+fn subnet_node_ips(topology: &TopologySnapshot) -> SubnetNodeIps {
+    topology
+        .subnets()
+        .map(|subnet| {
+            (
+                subnet.subnet_id,
+                subnet.nodes().map(|node| node.get_ip_addr()).collect(),
+            )
+        })
+        .collect()
+}
+
 /// The term of `terms` stating `condition`.
 fn term(terms: &[Term], condition: Condition) -> &Term {
     terms
         .iter()
         .find(|term| term.condition == condition)
         .unwrap_or_else(|| panic!("the readiness condition has no term for {condition:?}"))
-}
-
-/// Evaluates the terms of the "merge readiness" condition for `subnet` (the
-/// subnet that would be merged away) and `registry_version` (`V`). Returns one
-/// term per condition.
-///
-/// Every term is evaluated on the median across the replicas reporting the
-/// respective series, and missing data reads as zero.
-async fn evaluate_merge_readiness(
-    topology: &TopologySnapshot,
-    subnet: &SubnetSnapshot,
-    registry_version: u64,
-) -> Result<Vec<Term>> {
-    let subnet_id = subnet.subnet_id;
-    let own_metrics = fetch_metrics(
-        subnet,
-        &[
-            METRIC_REGISTRY_VERSION,
-            METRIC_STREAM_MESSAGES,
-            METRIC_INGRESS_HISTORY_BY_STATE,
-            METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
-            METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
-            METRIC_SUBNET_CALL_CONTEXTS,
-            METRIC_PENDING_REFUNDS,
-            METRIC_PENDING_REFUNDS_CYCLES,
-        ],
-    )
-    .await?;
-
-    // The first two terms range over all subnets: the registry version of every
-    // subnet and the streams of all remote subnets towards this one.
-    let remote_label = format!("remote=\"{subnet_id}\"");
-    let mut min_registry_version = None;
-    let mut incoming_stream_messages = 0.0;
-    for other in topology.subnets() {
-        let metrics = if other.subnet_id == subnet_id {
-            own_metrics.clone()
-        } else {
-            fetch_metrics(&other, &[METRIC_REGISTRY_VERSION, METRIC_STREAM_MESSAGES]).await?
-        };
-        let version =
-            median_across_replicas(&metrics, METRIC_REGISTRY_VERSION, |_| true).unwrap_or(0.0);
-        min_registry_version = Some(min_registry_version.map_or(version, |v: f64| v.min(version)));
-        if other.subnet_id != subnet_id {
-            incoming_stream_messages +=
-                median_across_replicas(&metrics, METRIC_STREAM_MESSAGES, |labels| {
-                    labels.contains(&remote_label)
-                })
-                .unwrap_or(0.0);
-        }
-    }
-    let min_registry_version = min_registry_version.unwrap_or(0.0);
-
-    let outgoing_stream_messages = sum_of_medians(&own_metrics, METRIC_STREAM_MESSAGES, |_| true);
-    let ingress_history_messages =
-        sum_of_medians(&own_metrics, METRIC_INGRESS_HISTORY_BY_STATE, |labels| {
-            !labels.contains("state=\"processing\"")
-        });
-    let subnet_input_queue_messages =
-        sum_of_medians(&own_metrics, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, |_| true);
-    let subnet_output_queue_messages =
-        median_across_replicas(&own_metrics, METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES, |_| true)
-            .unwrap_or(0.0);
-    let subnet_call_contexts = sum_of_medians(&own_metrics, METRIC_SUBNET_CALL_CONTEXTS, |_| true);
-    let pending_refunds =
-        median_across_replicas(&own_metrics, METRIC_PENDING_REFUNDS, |_| true).unwrap_or(0.0);
-    let pending_refunds_cycles =
-        median_across_replicas(&own_metrics, METRIC_PENDING_REFUNDS_CYCLES, |_| true)
-            .unwrap_or(0.0);
-
-    let term = |condition, description: String, satisfied: bool| Term {
-        condition,
-        description,
-        satisfied,
-    };
-    Ok(vec![
-        term(
-            Condition::RegistryVersion,
-            format!(
-                "every subnet has reached registry version {registry_version} (the lowest one is \
-                 at {min_registry_version})"
-            ),
-            min_registry_version >= registry_version as f64,
-        ),
-        term(
-            Condition::IncomingStreams,
-            format!(
-                "no remote subnet holds a message in its stream to subnet {subnet_id} \
-                 ({incoming_stream_messages} messages)"
-            ),
-            incoming_stream_messages == 0.0,
-        ),
-        term(
-            Condition::OutgoingStreams,
-            format!(
-                "subnet {subnet_id} holds no message in any of its streams, loopback included \
-                 ({outgoing_stream_messages} messages)"
-            ),
-            outgoing_stream_messages == 0.0,
-        ),
-        term(
-            Condition::IngressHistory,
-            format!(
-                "the ingress history holds nothing but `processing` entries \
-                 ({ingress_history_messages} other entries)"
-            ),
-            ingress_history_messages == 0.0,
-        ),
-        term(
-            Condition::SubnetInputQueues,
-            format!("the subnet input queues are empty ({subnet_input_queue_messages} messages)"),
-            subnet_input_queue_messages == 0.0,
-        ),
-        term(
-            Condition::SubnetOutputQueues,
-            format!("the subnet output queues are empty ({subnet_output_queue_messages} messages)"),
-            subnet_output_queue_messages == 0.0,
-        ),
-        term(
-            Condition::SubnetCallContexts,
-            format!(
-                "the subnet call context manager holds no call context ({subnet_call_contexts} \
-                 call contexts)"
-            ),
-            subnet_call_contexts == 0.0,
-        ),
-        term(
-            Condition::RefundPool,
-            format!(
-                "the refund pool holds no pending anonymous refund ({pending_refunds} refunds, \
-                 worth {pending_refunds_cycles} cycles)"
-            ),
-            pending_refunds == 0.0,
-        ),
-    ])
 }
 
 /// Starts an endless loop of calls from `canister` to `peer` (on another
@@ -743,6 +590,7 @@ fn install_code_payload(targets: &[Principal]) -> Vec<u8> {
 /// queues hold nothing but those calls by the time they are inducted.
 async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &Logger) {
     let expected = INSTALL_CODE_TARGETS.len() as f64;
+    let node_ips: Vec<_> = subnet.nodes().map(|node| node.get_ip_addr()).collect();
     retry_with_msg_async!(
         format!(
             "waiting until all {} `install_code` requests are inducted on subnet {}",
@@ -754,13 +602,14 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
         INDUCTION_BACKOFF,
         || async {
             let metrics = fetch_metrics(
-                subnet,
+                logger,
+                &node_ips,
                 &[
                     METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
                     METRIC_SUBNET_CALL_CONTEXTS,
                 ],
             )
-            .await?;
+            .await;
             let enqueued = sum_of_medians(&metrics, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, |_| true);
             let executing = sum_of_medians(&metrics, METRIC_SUBNET_CALL_CONTEXTS, |labels| {
                 labels.contains(LABEL_INSTALL_CODE)
@@ -805,90 +654,4 @@ async fn global_counter(canister: &UniversalCanister<'_>) -> Result<u64> {
         .try_into()
         .map_err(|_| anyhow!("expected 8 bytes, got {} bytes: {reply:?}", reply.len()))?;
     Ok(u64::from_le_bytes(reply))
-}
-
-/// Fetches the given metrics from all nodes of `subnet`, keyed by series (i.e.
-/// metric name plus labels), with one value per node reporting the series.
-async fn fetch_metrics(
-    subnet: &SubnetSnapshot,
-    metrics: &[&str],
-) -> Result<BTreeMap<String, Vec<f64>>> {
-    MetricsFetcher::new(
-        subnet.nodes(),
-        metrics.iter().map(|metric| metric.to_string()).collect(),
-    )
-    .fetch::<f64>()
-    .await
-    .map_err(|e| {
-        anyhow!(
-            "failed to fetch the metrics of subnet {}: {e}",
-            subnet.subnet_id
-        )
-    })
-}
-
-/// The per-node values of every series of `metric` whose labels (`{...}`, or the
-/// empty string for an unlabeled series) match `labels_match`.
-///
-/// `MetricsFetcher` matches metric names by prefix, so this also filters out
-/// the series of any other metric that `metric` happens to be a prefix of.
-fn matching_series<'a>(
-    metrics: &'a BTreeMap<String, Vec<f64>>,
-    metric: &str,
-    labels_match: impl Fn(&str) -> bool,
-) -> Vec<&'a Vec<f64>> {
-    metrics
-        .iter()
-        .filter(|(series, _)| match series.strip_prefix(metric) {
-            Some(labels) if labels.is_empty() || labels.starts_with('{') => labels_match(labels),
-            _ => false,
-        })
-        .map(|(_, values)| values)
-        .collect()
-}
-
-/// Prometheus' `quantile(0.5, ...)`: the median of `values`, interpolating
-/// between the two middle values if there is an even number of them. `None` iff
-/// `values` is empty.
-fn median(values: &[f64]) -> Option<f64> {
-    if values.is_empty() {
-        return None;
-    }
-    let mut values = values.to_vec();
-    values.sort_by(|a, b| a.partial_cmp(b).expect("metric value should not be NaN"));
-    let middle = (values.len() - 1) as f64 / 2.0;
-    Some((values[middle.floor() as usize] + values[middle.ceil() as usize]) / 2.0)
-}
-
-/// `sum(quantile without(ic_node, instance) (0.5, <metric>{<labels_match>}))`:
-/// the median across the replicas reporting each matching series, summed over
-/// those series.
-fn sum_of_medians(
-    metrics: &BTreeMap<String, Vec<f64>>,
-    metric: &str,
-    labels_match: impl Fn(&str) -> bool,
-) -> f64 {
-    matching_series(metrics, metric, labels_match)
-        .into_iter()
-        .filter_map(|values| median(values))
-        .sum()
-}
-
-/// `quantile(0.5, <metric>{<labels_match>})`: the median across all replicas
-/// reporting any matching series. `None` if there is no such series.
-///
-/// This pools the values of all matching series (e.g. across all `remote` or
-/// `state` label values), so it is only meaningful for unlabeled metrics or if
-/// `labels_match` selects a single label combination.
-fn median_across_replicas(
-    metrics: &BTreeMap<String, Vec<f64>>,
-    metric: &str,
-    labels_match: impl Fn(&str) -> bool,
-) -> Option<f64> {
-    let values: Vec<f64> = matching_series(metrics, metric, labels_match)
-        .into_iter()
-        .flatten()
-        .copied()
-        .collect();
-    median(&values)
 }

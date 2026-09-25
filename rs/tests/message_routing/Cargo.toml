@@ -15,6 +15,7 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-management-canister-types = { workspace = true }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-subnet-merging = { path = "../../recovery/subnet_merging" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
