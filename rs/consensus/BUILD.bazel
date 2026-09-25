@@ -252,6 +252,9 @@ rust_test(
     timeout = "long",
     srcs = glob(["tests/**"]),
     crate_root = "tests/slow_checkpointing.rs",
+    tags = [
+        "long_test",  # The P90 duration was over 6 minutes in the month up to 2026-09-17.
+    ],
     deps = [
         # Keep sorted.
         ":malicious_consensus",

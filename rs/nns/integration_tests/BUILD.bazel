@@ -253,6 +253,7 @@ rust_ic_test_suite_with_extra_srcs(
             # mostly due to long running times.
             "src/canister_playground.rs",
             "src/canister_snapshot.rs",
+            "src/node_provider_remuneration.rs",
             "src/upgrade_canisters_with_golden_nns_state.rs",
             "src/node_provider_remuneration_with_golden_nns_state.rs",
         ],
@@ -314,6 +315,25 @@ rust_ic_test(
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+# Broken out of the `integration_tests` suite above so that it can be tagged
+# `long_test` on its own, without taking the rest of the suite off PRs.
+rust_ic_test(
+    name = "node_provider_remuneration",
+    timeout = "long",
+    srcs = [
+        "src/lib.rs",
+        "src/node_provider_remuneration.rs",
+    ],
+    crate_root = "src/node_provider_remuneration.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "long_test",  # The P90 duration was over 6 minutes in the month up to 2026-09-17.
+    ],
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
 # Run this test as follows:
