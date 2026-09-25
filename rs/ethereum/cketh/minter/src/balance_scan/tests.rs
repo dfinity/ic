@@ -3,10 +3,12 @@ use crate::deposit_address::DepositAddress;
 use crate::state::automatic_deposits::{DepositRequest, ScanProgress};
 use crate::test_fixtures;
 use crate::test_fixtures::mock::MockTimeProvider;
-use evm_rpc_types::{ConsensusStrategy, Hex, MultiRpcResult, RpcServices};
-use ic_canister_runtime::{IcError, StubRuntime};
+use crate::test_fixtures::stub_rpc_client;
+use evm_rpc_types::{Hex, MultiRpcResult};
+use ic_canister_runtime::IcError;
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
+use std::time::Duration;
 
 const TOKEN_A: Address = Address::new([0x22; 20]);
 
@@ -153,7 +155,7 @@ async fn should_skip_without_scanning() {
         seed_state(case.latest_block, MIN_DEPOSITS[0].0, &case.holders, now);
 
         // No stub responses: the scan must short-circuit before any outcall.
-        scan(now, stub_client(vec![]), &records_no_event()).await;
+        scan(now, stub_rpc_client(vec![]), &records_no_event()).await;
 
         // A skipped scan advances no watchlist entry.
         for (account, _) in &case.holders {
@@ -178,7 +180,7 @@ async fn should_advance_scanned_non_candidate_pairs() {
     // and nothing is moved to the sweep queue.
     scan(
         now,
-        stub_client(vec![ok_balances(&[below_min, below_min])]),
+        stub_rpc_client(vec![ok_balances(&[below_min, below_min])]),
         &records_no_event(),
     )
     .await;
@@ -189,6 +191,14 @@ async fn should_advance_scanned_non_candidate_pairs() {
         assert_eq!(entry.last_scanned_block, Some(latest));
     }
     assert_eq!(read_state(|s| s.automatic_deposits.sweep_len()), 0);
+    assert_eq!(
+        read_state(|s| s.sweep_observations.last_balance_scan_age(now)),
+        Some(Duration::ZERO)
+    );
+    assert_eq!(
+        read_state(|s| s.sweep_observations.balance_scan_chunks_read()),
+        1
+    );
 }
 
 #[tokio::test]
@@ -214,7 +224,7 @@ async fn should_split_into_chunks_when_calls_exceed_the_batch_cap() {
     // whole set advances (no sweep events), letting the test assert the chunk split directly.
     scan(
         now,
-        stub_client(vec![
+        stub_rpc_client(vec![
             ok_balances(&vec![below_min; MAX_CALLS_PER_BATCH]),
             ok_balances(&vec![below_min; extra]),
         ]),
@@ -241,17 +251,23 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
     struct Case {
         name: &'static str,
         response: Result<MultiRpcResult<Hex>, IcError>,
+        call_errors: u64,
+        decode_errors: u64,
     }
 
     let cases = vec![
         Case {
             name: "rpc call fails",
             response: Err(IcError::CallPerformFailed),
+            call_errors: 1,
+            decode_errors: 0,
         },
         Case {
             // A one-call chunk expects a single 32-byte word; five bytes cannot decode.
             name: "response fails to decode",
             response: Ok(MultiRpcResult::Consistent(Ok(Hex::from(vec![0_u8; 5])))),
+            call_errors: 0,
+            decode_errors: 1,
         },
     ];
 
@@ -261,7 +277,12 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
         let holder = (account(1), DepositAddress::new(Address::new([0xa1; 20])));
         seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
 
-        scan(now, stub_client(vec![case.response]), &records_no_event()).await;
+        scan(
+            now,
+            stub_rpc_client(vec![case.response]),
+            &records_no_event(),
+        )
+        .await;
 
         let entry = live_entry(now, &holder.0, MIN_DEPOSITS[0].0);
         assert_eq!(
@@ -270,6 +291,30 @@ async fn should_not_advance_pairs_when_the_chunk_fails() {
             case.name
         );
         assert_eq!(entry.last_scanned_block, None, "case: {}", case.name);
+        assert_eq!(
+            read_state(|s| s.sweep_observations.last_balance_scan_age(now)),
+            None,
+            "case '{}': a pass that read nothing must not look fresh",
+            case.name
+        );
+        assert_eq!(
+            read_state(|s| s.sweep_observations.balance_scan_chunks_read()),
+            0,
+            "case: {}",
+            case.name
+        );
+        assert_eq!(
+            read_state(|s| s.sweep_observations.balance_scan_call_errors()),
+            case.call_errors,
+            "case: {}",
+            case.name
+        );
+        assert_eq!(
+            read_state(|s| s.sweep_observations.balance_scan_decode_errors()),
+            case.decode_errors,
+            "case: {}",
+            case.name
+        );
     }
 }
 
@@ -288,10 +333,15 @@ async fn should_detect_a_funded_pair_from_pre_scan_targets_even_after_eviction()
 
     // The funded pair is still detected: scan_balances works off the captured targets alone, so the
     // detection is never lost to a mid-scan eviction.
-    let outcomes = scan_balances(&targets, latest, &stub_client(vec![ok_balances(&[min])])).await;
+    let pass = scan_balances(
+        &targets,
+        latest,
+        &stub_rpc_client(vec![ok_balances(&[min])]),
+    )
+    .await;
 
     assert_eq!(
-        outcomes,
+        pass.outcomes,
         vec![ScanOutcome::Detected(AutomaticDeposit {
             owner: holder.0.owner,
             subaccount: holder.0.subaccount,
@@ -314,10 +364,15 @@ async fn should_yield_nothing_found_for_a_below_minimum_pair() {
     seed_state(Some(latest), token, &[holder], now);
 
     let targets = due_targets(now, latest);
-    let outcomes = scan_balances(&targets, latest, &stub_client(vec![ok_balances(&[below])])).await;
+    let pass = scan_balances(
+        &targets,
+        latest,
+        &stub_rpc_client(vec![ok_balances(&[below])]),
+    )
+    .await;
 
     assert_eq!(
-        outcomes,
+        pass.outcomes,
         vec![ScanOutcome::NothingFound(DepositRequest::new(
             holder.0,
             Asset::Erc20(token)
@@ -333,14 +388,18 @@ async fn should_yield_no_outcome_for_a_pair_whose_chunk_failed() {
     seed_state(Some(latest), MIN_DEPOSITS[0].0, &[holder], now);
 
     let targets = due_targets(now, latest);
-    let outcomes = scan_balances(
+    let pass = scan_balances(
         &targets,
         latest,
-        &stub_client(vec![Err(IcError::CallPerformFailed)]),
+        &stub_rpc_client(vec![Err(IcError::CallPerformFailed)]),
     )
     .await;
 
-    assert!(outcomes.is_empty(), "a failed chunk must yield no outcome");
+    assert!(
+        pass.outcomes.is_empty(),
+        "a failed chunk must yield no outcome"
+    );
+    assert_eq!(pass.errors, ScanErrors { decode: 0, call: 1 });
 }
 
 fn due_targets(now: Timestamp, latest: BlockNumber) -> Vec<ScanTarget<Erc20Asset>> {
@@ -361,7 +420,12 @@ async fn should_timestamp_a_detected_deposit_with_the_current_time() {
         .times(1)
         .return_const(DETECTED_AT_NANOS);
 
-    scan(now, stub_client(vec![ok_balances(&[min])]), &time_provider).await;
+    scan(
+        now,
+        stub_rpc_client(vec![ok_balances(&[min])]),
+        &time_provider,
+    )
+    .await;
 
     let recorded = last_recorded_event().expect("the detected deposit should be recorded");
     assert_eq!(recorded.timestamp, DETECTED_AT_NANOS);
@@ -396,26 +460,6 @@ fn seed_state(
             .expect("BUG: failed to arm deposit");
     }
     test_fixtures::init_state(state);
-}
-
-fn stub_client(
-    responses: Vec<Result<MultiRpcResult<Hex>, IcError>>,
-) -> EvmRpcClient<StubRuntime, CandidResponseConverter, DoubleCycles> {
-    let mut runtime = StubRuntime::new();
-    for response in responses {
-        runtime = match response {
-            Ok(result) => runtime.add_stub_response(result),
-            Err(error) => runtime.add_stub_error(error),
-        };
-    }
-    EvmRpcClient::builder(runtime, candid::Principal::anonymous())
-        .with_rpc_sources(RpcServices::EthMainnet(None))
-        .with_consensus_strategy(ConsensusStrategy::Threshold {
-            total: Some(4),
-            min: 3,
-        })
-        .with_retry_strategy(DoubleCycles::with_max_num_retries(10))
-        .build()
 }
 
 fn ok_balances(balances: &[Erc20Value]) -> Result<MultiRpcResult<Hex>, IcError> {

@@ -73,10 +73,12 @@ struct XNetPayloadBuilderFixture {
 
 impl XNetPayloadBuilderFixture {
     fn new(fixture: StateManagerFixture) -> Self {
+        let log = fixture.log.clone();
         let state_manager = Arc::new(fixture.state_manager);
         let registry = get_registry_for_test();
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
-        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&fixture.metrics)));
+        let certified_slice_pool =
+            Arc::new(Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log)));
         let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let (refill_trigger, _refill_receiver) = mpsc::channel(100);
         let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
@@ -168,7 +170,7 @@ impl XNetPayloadBuilderFixture {
             certified_slice,
             self.state_manager.as_ref(),
             REGISTRY_VERSION,
-            log.clone(),
+            log,
         )
         .unwrap();
         slice_size_bytes
@@ -866,7 +868,7 @@ fn system_subnet_stream_throttling(
             certified_slice,
             xnet_payload_builder.state_manager.as_ref(),
             REGISTRY_VERSION,
-            log.clone(),
+            &log,
         )
         .unwrap();
 
@@ -1023,23 +1025,25 @@ enum FakeXNetClientError {
 /// from every subnet (as opposed to progressively less).
 #[test]
 fn refill_stream_slice_indices_byte_limits_empty_pool() {
-    let metrics_registry = MetricsRegistry::new();
-    let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
-    // A dozen peer subnets with cached stream positions, but nothing pooled.
-    pool.lock().unwrap().garbage_collect(
-        (1..=12)
-            .map(|i| (subnet_test_id(i), ExpectedIndices::default()))
-            .collect(),
-    );
+    with_test_replica_logger(|log| {
+        let metrics_registry = MetricsRegistry::new();
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry, log)));
+        // A dozen peer subnets with cached stream positions, but nothing pooled.
+        pool.lock().unwrap().garbage_collect(
+            (1..=12)
+                .map(|i| (subnet_test_id(i), ExpectedIndices::default()))
+                .collect(),
+        );
 
-    let byte_limits = refill_stream_slice_indices(Arc::clone(&pool), OWN_SUBNET)
-        .map(|(_, indices)| indices.byte_limit)
-        .collect::<Vec<_>>();
+        let byte_limits = refill_stream_slice_indices(Arc::clone(&pool), OWN_SUBNET)
+            .map(|(_, indices)| indices.byte_limit)
+            .collect::<Vec<_>>();
 
-    assert_eq!(
-        vec![adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX); 12],
-        byte_limits
-    );
+        assert_eq!(
+            vec![adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX); 12],
+            byte_limits
+        );
+    });
 }
 
 /// Tests that a pooled slice lowers the maximum slice size for all subnets; and
@@ -1056,7 +1060,10 @@ fn refill_stream_slice_indices_byte_limits_non_empty_pool() {
             .returning(move |_, _, _| Ok(stream.slice(0.into(), None)));
 
         let metrics_registry = MetricsRegistry::new();
-        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            &metrics_registry,
+            log.clone(),
+        )));
         // A dozen peer subnets with cached stream positions, plus a 13th with a pooled
         // slice.
         CertifiedSlicePool::put(
@@ -1065,7 +1072,7 @@ fn refill_stream_slice_indices_byte_limits_non_empty_pool() {
             slice,
             &certified_stream_store,
             REGISTRY_VERSION,
-            log.clone(),
+            &log,
         )
         .unwrap();
         pool.lock().unwrap().garbage_collect(
@@ -1111,7 +1118,7 @@ fn refill_pool_empty(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
-            min_useful_header_begin: None,
+            ..Default::default()
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1120,7 +1127,10 @@ fn refill_pool_empty(
             .returning(move |_, _, _| Ok(slice.clone()));
         let metrics_registry = MetricsRegistry::new();
         let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
-        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            &metrics_registry,
+            log.clone(),
+        )));
         pool.lock()
             .unwrap()
             .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
@@ -1230,7 +1240,7 @@ fn refill_pool_append(
         let stream_position = ExpectedIndices {
             message_index: stream_begin,
             signal_index: stream.signals_end(),
-            min_useful_header_begin: None,
+            ..Default::default()
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1240,7 +1250,10 @@ fn refill_pool_append(
             .returning(move |_, _, _| Ok(slice.clone()));
         let metrics_registry = MetricsRegistry::new();
         let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
-        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            &metrics_registry,
+            log.clone(),
+        )));
         let prefix_size_bytes = UnpackedStreamSlice::try_from(certified_prefix.clone())
             .unwrap()
             .count_bytes();
@@ -1250,7 +1263,7 @@ fn refill_pool_append(
             certified_prefix,
             store.as_ref(),
             REGISTRY_VERSION,
-            log.clone(),
+            &log,
         )
         .unwrap();
         pool.lock()
@@ -1346,7 +1359,7 @@ fn refill_pool_put_invalid_slice(
         let stream_position = ExpectedIndices {
             message_index: from,
             signal_index: stream.signals_end(),
-            min_useful_header_begin: None,
+            ..Default::default()
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1355,7 +1368,10 @@ fn refill_pool_put_invalid_slice(
             .returning(|_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
         let metrics_registry = MetricsRegistry::new();
         let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
-        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            &metrics_registry,
+            log.clone(),
+        )));
         pool.lock()
             .unwrap()
             .garbage_collect(btreemap! [REMOTE_SUBNET => stream_position.clone()]);
@@ -1460,7 +1476,7 @@ fn refill_pool_append_invalid_slice(
         let stream_position = ExpectedIndices {
             message_index: stream_begin,
             signal_index: stream.signals_end(),
-            min_useful_header_begin: None,
+            ..Default::default()
         };
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1474,7 +1490,10 @@ fn refill_pool_append_invalid_slice(
             .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
         let metrics_registry = MetricsRegistry::new();
         let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
-        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(&metrics_registry)));
+        let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            &metrics_registry,
+            log.clone(),
+        )));
         let prefix_size_bytes = UnpackedStreamSlice::try_from(certified_prefix.clone())
             .unwrap()
             .count_bytes();
@@ -1485,7 +1504,7 @@ fn refill_pool_append_invalid_slice(
             certified_prefix.clone(),
             store.as_ref(),
             REGISTRY_VERSION,
-            log.clone(),
+            &log,
         )
         .unwrap();
         pool.lock()
