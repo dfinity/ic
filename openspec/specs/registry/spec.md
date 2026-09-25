@@ -490,6 +490,21 @@ CloudEngine subnets can be deleted, cascading registry cleanup.
 - **AND** routing table entries for the engine are removed
 - **AND** the deletion must not leave orphaned references in the registry
 
+### Requirement: Engine Controller Payload Scope
+
+The `ic-engine-controller` canister submits `UpdateSubnetPayload` mutations on behalf of a CloudEngine's own control plane. It is restricted to a small allow-listed set of fields, checked both in its own proxy (`ensure_only_allowed_fields_set`) and again, as defence-in-depth, in the registry canister (`ensure_engine_controller_payload_scope`).
+
+#### Scenario: Allowed fields
+- **WHEN** the engine controller submits an `UpdateSubnetPayload`
+- **THEN** only `subnet_admins`, `is_halted`, and `cooling_down` may be set
+- **AND** the mutation is rejected if any other field of `UpdateSubnetPayload` is set
+- **AND** the target subnet must be of type `CloudEngine`
+
+#### Scenario: Cool down a CloudEngine subnet
+- **WHEN** the engine controller sets `cooling_down` on a `CloudEngine` subnet
+- **THEN** the subnet quiesces: it drains its subnet queues and streams while executing no canister messages and serving no queries
+- **AND** this lets the engine controller quiesce the subnet before halting it
+
 ### Requirement: Firewall Rules Management
 
 Firewall rules are managed per scope (global, replica nodes, API boundary nodes, subnet, or node) and can be added, removed, or updated through governance proposals.
