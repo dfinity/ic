@@ -164,6 +164,12 @@ impl StateMachine for StateMachineImpl {
             }
         };
 
+        state.metadata.upgrade_state.apply(
+            &batch_messages.upgrade.actions,
+            batch.batch_number,
+            &registry_settings.node_ids,
+        );
+
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
         if let Some(query_stats) = &batch_messages.query_stats {
             deliver_query_stats(

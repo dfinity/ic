@@ -13785,6 +13785,7 @@ dependencies = [
  "maplit",
  "more-asserts",
  "nix 0.31.3",
+ "num-traits",
  "phantom_newtype",
  "prometheus",
  "proptest",

@@ -42,13 +42,17 @@ use ic_types::canister_http::{
     CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, RefundStatus, Replication,
     Transform,
 };
+use ic_types::consensus::UpgradePermitRequest;
 use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature};
+use ic_types::consensus::upgrade::UpgradePermitAction;
 use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::Signed;
 use ic_types::crypto::canister_threshold_sig::SchnorrPreSignatureTranscript;
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript};
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
+use ic_types::signature::BasicSignatureBatch;
 use ic_types::time::{CoarseTime, current_time};
 use ic_types::{ExecutionRound, Height, NumberOfNodes, RegistryVersion};
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, NominalCyclesTesting};
@@ -3720,4 +3724,210 @@ fn network_topology_reference_subnet_size_is_never_zero() {
             );
         }
     }
+}
+
+fn upgrade_state_members(nodes: &[u64]) -> BTreeSet<NodeId> {
+    nodes.iter().map(|&i| node_test_id(i)).collect()
+}
+
+fn upgrade_request_action(requestor: NodeId, request_height: Height) -> UpgradePermitAction {
+    UpgradePermitAction::RequestPermit(UpgradePermitRequest {
+        requestor,
+        request_height,
+    })
+}
+
+fn upgrade_authorize_action(requestor: NodeId, request_height: Height) -> UpgradePermitAction {
+    UpgradePermitAction::AuthorizePermit(Signed {
+        content: UpgradePermitRequest {
+            requestor,
+            request_height,
+        },
+        signature: BasicSignatureBatch {
+            signatures_map: BTreeMap::new(),
+        },
+    })
+}
+
+#[test]
+fn upgrade_state_applies_request() {
+    let mut state = UpgradeState::default();
+    state.apply(
+        &[upgrade_request_action(node_test_id(1), Height::new(3))],
+        Height::new(3),
+        &upgrade_state_members(&[1, 2, 3]),
+    );
+    assert_eq!(
+        state.upgrade_requests,
+        BTreeMap::from([(node_test_id(1), Height::new(3))])
+    );
+    assert!(state.authorized_nodes.is_empty());
+}
+
+#[test]
+fn upgrade_state_authorize_moves_request_to_authorized() {
+    let members = upgrade_state_members(&[1, 2, 3]);
+    let mut state = UpgradeState::default();
+
+    state.apply(
+        &[upgrade_request_action(node_test_id(1), Height::new(1))],
+        Height::new(1),
+        &members,
+    );
+    state.apply(
+        &[upgrade_authorize_action(node_test_id(1), Height::new(1))],
+        Height::new(5),
+        &members,
+    );
+    assert!(state.upgrade_requests.is_empty());
+    assert_eq!(state.authorized_nodes, BTreeSet::from([node_test_id(1)]));
+}
+
+#[test]
+fn upgrade_state_return_removes_authorization() {
+    let members = upgrade_state_members(&[1, 2, 3]);
+    let mut state = UpgradeState::default();
+
+    state.apply(
+        &[upgrade_request_action(node_test_id(1), Height::new(1))],
+        Height::new(1),
+        &members,
+    );
+    state.apply(
+        &[upgrade_authorize_action(node_test_id(1), Height::new(1))],
+        Height::new(2),
+        &members,
+    );
+    state.apply(
+        &[UpgradePermitAction::ReturnPermit {
+            node: node_test_id(1),
+        }],
+        Height::new(3),
+        &members,
+    );
+    assert!(state.upgrade_requests.is_empty());
+    assert!(state.authorized_nodes.is_empty());
+}
+
+#[test]
+fn upgrade_state_expires_stale_requests() {
+    let members = upgrade_state_members(&[1, 2, 3]);
+    let mut state = UpgradeState::default();
+
+    // A request survives until UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS have passed...
+    state.apply(
+        &[upgrade_request_action(node_test_id(1), Height::new(1))],
+        Height::new(1 + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS.get()),
+        &members,
+    );
+    assert_eq!(
+        state.upgrade_requests.get(&node_test_id(1)),
+        Some(&Height::new(1))
+    );
+
+    // ... and expires one block later.
+    state.apply(
+        &[],
+        Height::new(2 + UPGRADE_PERMIT_REQUEST_TIMEOUT_BLOCKS.get()),
+        &members,
+    );
+    assert!(state.upgrade_requests.is_empty());
+}
+
+#[test]
+fn upgrade_state_prunes_departed_members() {
+    let old_members = upgrade_state_members(&[1, 2, 3, 7]);
+    let mut state = UpgradeState::default();
+
+    state.apply(
+        &[upgrade_request_action(node_test_id(1), Height::new(1))],
+        Height::new(1),
+        &old_members,
+    );
+    state.apply(
+        &[upgrade_request_action(node_test_id(7), Height::new(2))],
+        Height::new(2),
+        &old_members,
+    );
+    state.apply(
+        &[upgrade_authorize_action(node_test_id(7), Height::new(2))],
+        Height::new(3),
+        &old_members,
+    );
+
+    // Node 7 leaves the subnet; its request and permit are pruned.
+    state.apply(&[], Height::new(4), &upgrade_state_members(&[1, 2, 3]));
+    assert_eq!(
+        state.upgrade_requests,
+        BTreeMap::from([(node_test_id(1), Height::new(1))])
+    );
+    assert!(state.authorized_nodes.is_empty());
+}
+
+#[test]
+fn upgrade_state_applies_multiple_actions_per_block() {
+    let members = upgrade_state_members(&[1, 2, 3]);
+    let mut state = UpgradeState::default();
+
+    // Two nodes request...
+    state.apply(
+        &[upgrade_request_action(node_test_id(1), Height::new(1))],
+        Height::new(1),
+        &members,
+    );
+    state.apply(
+        &[upgrade_request_action(node_test_id(2), Height::new(2))],
+        Height::new(2),
+        &members,
+    );
+    assert_eq!(state.upgrade_requests.len(), 2);
+
+    // ... and both are authorized in the same block.
+    state.apply(
+        &[
+            upgrade_authorize_action(node_test_id(1), Height::new(1)),
+            upgrade_authorize_action(node_test_id(2), Height::new(2)),
+        ],
+        Height::new(5),
+        &members,
+    );
+    assert!(state.upgrade_requests.is_empty());
+    assert_eq!(
+        state.authorized_nodes,
+        BTreeSet::from([node_test_id(1), node_test_id(2)])
+    );
+}
+#[test]
+fn upgrade_state_proto_roundtrip() {
+    let state = UpgradeState {
+        upgrade_requests: BTreeMap::from([
+            (node_test_id(1), Height::new(3)),
+            (node_test_id(2), Height::new(7)),
+        ]),
+        authorized_nodes: BTreeSet::from([node_test_id(3)]),
+    };
+    let proto = pb_metadata::UpgradeState::from(&state);
+    assert_eq!(proto.upgrade_requests.len(), 2);
+    assert_eq!(proto.authorized_nodes.len(), 1);
+
+    assert_eq!(UpgradeState::try_from(proto).unwrap(), state);
+}
+
+#[test]
+fn upgrade_state_proto_default_roundtrip() {
+    let state = UpgradeState::default();
+    let proto = pb_metadata::UpgradeState::from(&state);
+    assert_eq!(UpgradeState::try_from(proto).unwrap(), state);
+}
+
+#[test]
+fn upgrade_state_proto_rejects_missing_node() {
+    let proto = pb_metadata::UpgradeState {
+        upgrade_requests: vec![pb_metadata::upgrade_state::UpgradePermitRequest {
+            node: None,
+            request_height: 1,
+        }],
+        authorized_nodes: vec![],
+    };
+    assert!(UpgradeState::try_from(proto).is_err());
 }
