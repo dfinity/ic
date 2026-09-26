@@ -5,6 +5,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Fixed
+- `/account/balance` no longer answers above the highest block for which account balances have been
+  computed. Previously the response was labelled with the highest *stored* block while the balance
+  itself was the one computed at the highest *processed* block, so while the balance
+  synchronization lagged the block synchronization the endpoint reported a balance at a block
+  height at which it was never true. Queries without a block identifier are now answered at the
+  highest processed block, which is the same height that `/network/status` reports, and queries for
+  an explicit block above that height now fail with the new retriable error 14 instead of being
+  answered from a lower height. Note that this means that `/account/balance` may report a block
+  height lower than the one `/block` serves, and may reject a block identifier that `/block`
+  accepts, until the balance synchronization catches up.
+- The `rosetta_verified_block_height` metric is now read from the computed account balances instead
+  of from the block store, matching its documented meaning.
 
 ## [1.2.10] - 2026-07-02
 ### Added
