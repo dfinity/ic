@@ -1396,7 +1396,7 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
         }
         Err(_) => {
             let rt = {
-                let cpus = num_cpus::get();
+                let cpus = crate::driver::group::available_parallelism();
                 let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
                 Builder::new_multi_thread()
                     .worker_threads(workers)

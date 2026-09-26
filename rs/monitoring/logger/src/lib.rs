@@ -8,6 +8,11 @@ use std::sync::{Arc, Mutex};
 pub mod context_logger;
 pub mod replica_logger;
 
+// Re-exported so that the logging macros in `context_logger::macros` can
+// name `slog` via `$crate::slog` and callers do not need their own direct
+// dependency on `slog` just to use `info!`, `warn!` and friends.
+pub use slog;
+
 pub use crate::replica_logger::{ReplicaLogger, no_op_logger};
 
 pub fn new_replica_logger(log: slog::Logger, config: &LoggerConfig) -> ReplicaLogger {

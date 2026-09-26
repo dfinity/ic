@@ -10,6 +10,29 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(target_os = "linux")]
 use thiserror::Error;
 
+/// Converts the return value of a libc call that signals failure by returning
+/// `-1` into an `io::Result`, capturing `errno` on failure (like the `cvt`
+/// helper in `libstd`).
+#[cfg(target_family = "unix")]
+pub fn cvt<T: Copy + PartialEq + From<i8>>(ret: T) -> io::Result<T> {
+    if ret == T::from(-1) {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(ret)
+    }
+}
+
+/// Like [`cvt`], but retries the call as long as it fails with `EINTR`.
+#[cfg(target_family = "unix")]
+pub fn cvt_r<T: Copy + PartialEq + From<i8>>(mut f: impl FnMut() -> T) -> io::Result<T> {
+    loop {
+        match cvt(f()) {
+            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+            other => return other,
+        }
+    }
+}
+
 /// Represents an action that should be run when this objects runs out of scope,
 /// unless it's explicitly deactivated.
 ///
@@ -163,7 +186,6 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
         return copy_file_sparse_portable(from, to);
     }
 
-    use cvt::*;
     use fs::OpenOptions;
     use io::{ErrorKind, Read};
     use libc::{ftruncate64, lseek64};
@@ -781,6 +803,29 @@ mod tests {
     use std::fs;
     use std::io::{ErrorKind, Write};
     use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn cvt_captures_errno_and_cvt_r_retries_on_eintr() {
+        use super::{cvt, cvt_r};
+        use nix::errno::Errno;
+
+        assert_eq!(cvt(42_i64).unwrap(), 42);
+        Errno::EBADF.set();
+        assert_eq!(cvt(-1_i32).unwrap_err().raw_os_error(), Some(libc::EBADF));
+
+        let mut calls = 0;
+        let result = cvt_r(|| {
+            calls += 1;
+            if calls < 3 {
+                Errno::EINTR.set();
+                -1_i32
+            } else {
+                5
+            }
+        });
+        assert_eq!((result.unwrap(), calls), (5, 3));
+    }
 
     #[test]
     fn test_write_success() {

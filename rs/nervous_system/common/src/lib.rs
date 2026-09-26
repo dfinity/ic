@@ -1,6 +1,4 @@
-use by_address::ByAddress;
 use core::{
-    cmp::Reverse,
     fmt::Debug,
     ops::{Add, AddAssign, Div, Mul, Sub},
 };
@@ -15,7 +13,6 @@ use ic_ledger_core::{
 use lazy_static::lazy_static;
 use maplit::hashmap;
 use num_traits::ops::inv::Inv;
-use priority_queue::priority_queue::PriorityQueue;
 use rust_decimal::Decimal;
 use std::{
     collections::HashMap,
@@ -398,14 +395,9 @@ where
         }
     }
 
-    /// Based on the timestamp of the head log entry; earlier entries have
-    /// higher priority.
-    fn priority(&self) -> impl Ord + Debug + use<I> {
-        Reverse(
-            self.head
-                .map(|log_entry| log_entry.timestamp)
-                .unwrap_or_default(),
-        )
+    /// The timestamp of the next log entry, or None if this is exhausted.
+    fn head_timestamp(&self) -> Option<u64> {
+        self.head.map(|log_entry| log_entry.timestamp)
     }
 }
 
@@ -508,43 +500,29 @@ impl LogsRequest {
     ///
     ///     b. Implement the filtering specified by the query parameters.
     pub fn render_json(&self, info_logs: &LogBuffer, error_logs: &LogBuffer) -> String {
-        let mut info_logs = LogIter::new(LogSeverity::Info, self.skip_old_log_entries(info_logs));
-        let mut error_logs =
-            LogIter::new(LogSeverity::Error, self.skip_old_log_entries(error_logs));
+        let info_logs = LogIter::new(LogSeverity::Info, self.skip_old_log_entries(info_logs));
+        let error_logs = LogIter::new(LogSeverity::Error, self.skip_old_log_entries(error_logs));
 
         // Select sources. They will be merged later.
-        // Prioritize them by the timestamp of their first element.
-        let mut sources = PriorityQueue::new();
-        {
-            let info_priority = info_logs.priority();
-            let error_priority = error_logs.priority();
-            match self.severity {
-                LogSeverity::Info => {
-                    sources.push(ByAddress(&mut info_logs), info_priority);
-                    sources.push(ByAddress(&mut error_logs), error_priority);
-                }
-                LogSeverity::Error => {
-                    sources.push(ByAddress(&mut error_logs), error_priority);
-                }
-            }
-        }
+        let mut sources = match self.severity {
+            LogSeverity::Info => vec![info_logs, error_logs],
+            LogSeverity::Error => vec![error_logs],
+        };
 
         // Merge sources by timestamp.
         let mut approximate_total_size = 0;
         let mut interleaved_logs = vec![];
-        loop {
-            // PriorityQueue::pop removes the element with the highest priority.
-            // We prioritize by Reverse(first_log_entry.timestamp). See
-            // LogIter::priority. Therefore, this should be an Iterator with the
-            // earliest first LogEntry.
-            let mut log_iter = match sources.pop() {
-                None => break, // No more sources.
-                Some((log_iter, _priority)) => log_iter,
-            };
-
-            let log_entry = match log_iter.next() {
-                Some(log_entry) => log_entry,
-                None => continue,
+        // Keep picking the (non-exhausted) source whose next log entry is the
+        // earliest, until all sources are exhausted. In case of a tie, the
+        // source that comes first in `sources` wins. There are only a couple
+        // of sources, so a linear scan is perfectly adequate.
+        while let Some(log_iter) = sources
+            .iter_mut()
+            .filter(|log_iter| log_iter.head.is_some())
+            .min_by_key(|log_iter| log_iter.head_timestamp())
+        {
+            let Some(log_entry) = log_iter.next() else {
+                break; // Unreachable, because exhausted sources were filtered out above.
             };
 
             let enhanced_log_entry = EnhancedLogEntry::new(log_iter.severity, log_entry);
@@ -553,13 +531,6 @@ impl LogsRequest {
                 break;
             }
             interleaved_logs.push(enhanced_log_entry);
-
-            if log_iter.head.is_some() {
-                // This guard is a minor optimization, because earlier in this
-                // loop continue handles log_iter being empty.
-                let priority = log_iter.priority();
-                sources.push(log_iter, priority);
-            }
         }
 
         serde_json::json!({
@@ -668,7 +639,7 @@ pub fn serve_logs_v2(
             };
             return HttpResponseBuilder::bad_request()
                 .header("Content-Type", "application/json")
-                .with_body_and_content_length(json5::to_string(&body).unwrap_or_default())
+                .with_body_and_content_length(serde_json::to_string(&body).unwrap_or_default())
                 .build();
         }
     };

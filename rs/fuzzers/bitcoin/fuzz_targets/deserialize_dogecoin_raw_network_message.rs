@@ -1,8 +1,9 @@
 #![no_main]
 use bitcoin::consensus::encode::deserialize;
+use bitcoin::dogecoin::{Block, Header};
 use bitcoin::p2p::message::RawNetworkMessage;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
-    let _ = deserialize::<RawNetworkMessage<bitcoin::block::Header, bitcoin::Block>>(data);
+    let _ = deserialize::<RawNetworkMessage<Header, Block>>(data);
 });

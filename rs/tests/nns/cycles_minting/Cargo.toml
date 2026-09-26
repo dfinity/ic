@@ -22,9 +22,7 @@ ic-types = { path = "../../../types/types" }
 candid = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
-serde_cbor = { workspace = true }
 url = { workspace = true }
-wat = { workspace = true }
 
 [lib]
 name = "cycles_minting"

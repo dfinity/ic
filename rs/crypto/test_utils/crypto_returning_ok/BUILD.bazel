@@ -10,17 +10,11 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/crypto/interfaces/sig_verification",
-        "//rs/crypto/internal/crypto_lib/types",
-        "//rs/crypto/temp_crypto",
         "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/crypto/test_utils/ni-dkg",
         "//rs/interfaces",
-        "//rs/interfaces/registry",
-        "//rs/registry/fake",
-        "//rs/registry/proto_data_provider",
         "//rs/test_utilities/types",
         "//rs/types/types",
         "//rs/types/types_test_utils",
-        "@crate_index//:rand",
     ],
 )

@@ -59,8 +59,8 @@ A dictionary that contains three key / value pairs:
 The proxy object determines where to listen on, where to fetch metrics from,
 and how the fetched metrics will be post-processed by the proxy.
 
-Optionally, a `cache_duration` can be specified (as a Rust duration string),
-which will cause successful metrics fetches from the backend (`connect_to`)
+Optionally, a `cache_duration` can be specified (as a duration string, see
+below), which will cause successful metrics fetches from the backend (`connect_to`)
 to be cached for that duration of time.  Leaving the value absent will
 defeat the cache.  The cache respects different URI query strings and
 authorization headers so backends that generate different contents based
@@ -83,7 +83,7 @@ command
 `openssl req -newkey rsa:2048 -nodes -keyout key.pem -x509 -days 365 -out certificate.pem`,
 taking care to add a common name to the certificate when prompted.
 
-Additionally, two timeouts can be specified (as a Rust duration string):
+Additionally, two timeouts can be specified (as a duration string, see below):
 
 * `header_read_timeout` (default 5 seconds) specifies how long the
   proxy will wait for clients to finish uploading their request body.
@@ -107,7 +107,7 @@ A dictionary with one mandatory field: `url`.  The protocol of the URL
 must be one of `http` or `https`, fragments are not allowed in the
 URL, and authentication specification is not allowed.
 
-Optionally, a `timeout` can be specified (as a Rust duration string) to
+Optionally, a `timeout` can be specified (as a duration string, see below) to
 instruct the proxy on how long it should wait until the proxied exporter has
 fully responded.  The default timeout is 30 seconds.
 
@@ -161,6 +161,16 @@ Currently, there are three action classes:
   should make sure that `reduce_time_resolution` is ordered *after*
   `add_absolute_noise`, so the noise is not added to the cached sample
   returned by `reduce_time_resolution`.
+
+### Duration strings
+
+All durations in the configuration file (`cache_duration`, `timeout`,
+`header_read_timeout`, `request_response_timeout` and the `resolution` of
+`reduce_time_resolution`) are strings consisting of an integer followed by a
+unit, as understood by the
+[`duration-string`](https://docs.rs/duration-string) crate: `ns`, `us`, `ms`,
+`s`, `m`, `h`, `d`, `w` or `y`.  Examples: `100ms`, `5s`, `30s`, `1m`.  A bare
+number without a unit is rejected.
 
 ### `metrics`
 

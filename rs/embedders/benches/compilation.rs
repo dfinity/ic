@@ -38,7 +38,7 @@ fn set_production_rayon_threads() {
 
 /// Unzip a the bytes before converting to a binary encoded Wasm.
 fn unzip_wasm(bytes: &[u8]) -> BinaryEncodedWasm {
-    let mut decoder = libflate::gzip::Decoder::new(bytes).unwrap();
+    let mut decoder = flate2::read::GzDecoder::new(bytes);
     let mut buf = vec![];
     decoder.read_to_end(&mut buf).unwrap();
     BinaryEncodedWasm::new(buf)

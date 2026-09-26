@@ -88,7 +88,6 @@ ic-test-utilities-privileges = { path = "../../../test_utilities/privileges" }
 ic-test-utilities-time = { path = "../../../test_utilities/time" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 mockall = { workspace = true }
-num_cpus = { workspace = true }
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
 rsa = { workspace = true }

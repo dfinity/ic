@@ -7,7 +7,7 @@ rust_fuzz_test_binary(
     srcs = ["fuzz_targets/deserialize_bitcoin_transaction.rs"],
     deps = [
         # Keep sorted.
-        "@crate_index//:bitcoin-0.28.2",
+        "@crate_index//:bitcoin_dogecoin",
         "@crate_index//:libfuzzer-sys",
     ],
 )
@@ -17,7 +17,7 @@ rust_fuzz_test_binary(
     srcs = ["fuzz_targets/deserialize_bitcoin_block.rs"],
     deps = [
         # Keep sorted.
-        "@crate_index//:bitcoin-0.28.2",
+        "@crate_index//:bitcoin_dogecoin",
         "@crate_index//:libfuzzer-sys",
     ],
 )
@@ -27,7 +27,17 @@ rust_fuzz_test_binary(
     srcs = ["fuzz_targets/deserialize_bitcoin_raw_network_message.rs"],
     deps = [
         # Keep sorted.
-        "@crate_index//:bitcoin-0.28.2",
+        "@crate_index//:bitcoin_dogecoin",
+        "@crate_index//:libfuzzer-sys",
+    ],
+)
+
+rust_fuzz_test_binary(
+    name = "deserialize_dogecoin_raw_network_message",
+    srcs = ["fuzz_targets/deserialize_dogecoin_raw_network_message.rs"],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:bitcoin_dogecoin",
         "@crate_index//:libfuzzer-sys",
     ],
 )

@@ -9,7 +9,6 @@ rust_library(
     version = "0.0.1",
     deps = [
         # Keep sorted.
-        "//packages/ic-error-types",
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//packages/pocket-ic",
         "//rs/ledger_suite/icp:icp_ledger",
@@ -50,7 +49,6 @@ rust_library(
     version = "0.0.1",
     deps = [
         # Keep sorted.
-        "//packages/ic-error-types",
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//packages/pocket-ic",
         "//rs/ledger_suite/icp:icp_ledger",
@@ -88,7 +86,6 @@ rust_test(
     crate = ":agent",
     deps = [
         # Keep sorted.
-        "//packages/ic-error-types",
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//packages/pocket-ic",
         "//rs/ledger_suite/icp:icp_ledger",

@@ -15,7 +15,6 @@ rust_library(
         "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:prometheus",
-        "@crate_index//:slog",
     ],
 )
 

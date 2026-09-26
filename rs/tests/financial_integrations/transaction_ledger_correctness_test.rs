@@ -21,7 +21,6 @@ Not Covered:: Ledger archives, Timestamps, Mint & Burn, Subaccounts
 end::catalog[] */
 
 use anyhow::Result;
-use async_recursion::async_recursion;
 use canister_test::{Canister, Runtime};
 use dfn_candid::{candid, candid_one};
 use dfn_protobuf::protobuf;
@@ -50,6 +49,8 @@ use quickcheck::{Arbitrary, Gen};
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use slog::info;
+use std::future::Future;
+use std::pin::Pin;
 
 // Seed for a random generator
 const RND_SEED: u64 = 42;
@@ -375,36 +376,39 @@ fn funds(ptr: &Result<PrincipalId, u32>, plan: &Plan) -> Tokens {
 /// numerical canister identifications into principal ids, also resolving
 /// them in transfers. A populated plan won't contain numerical ids (i.e
 /// `Err`) any more.
-#[async_recursion(?Send)]
-async fn populate_plan(
-    app_rt: &Runtime,
-    agent: &Agent,
+fn populate_plan<'a>(
+    app_rt: &'a Runtime,
+    agent: &'a Agent,
     effective_canister_id: PrincipalId,
-    plan: &Plan,
-    rng: &mut rand_chacha::ChaCha8Rng,
-) -> Plan {
-    match plan {
-        Plan::Empty => Plan::Empty,
-        Plan::IdentityAccount(Err(_), tail) => {
-            let tail = populate_plan(app_rt, agent, effective_canister_id, tail, rng).await;
-            let keypair = Ed25519KeyPair::generate(rng);
-            Plan::IdentityAccount(Ok((keypair.secret_key, keypair.public_key)), Box::new(tail))
+    plan: &'a Plan,
+    rng: &'a mut rand_chacha::ChaCha8Rng,
+) -> Pin<Box<dyn Future<Output = Plan> + 'a>> {
+    // Recursive async fns need a boxed future; this replaces the former
+    // `#[async_recursion(?Send)]` attribute.
+    Box::pin(async move {
+        match plan {
+            Plan::Empty => Plan::Empty,
+            Plan::IdentityAccount(Err(_), tail) => {
+                let tail = populate_plan(app_rt, agent, effective_canister_id, tail, rng).await;
+                let keypair = Ed25519KeyPair::generate(rng);
+                Plan::IdentityAccount(Ok((keypair.secret_key, keypair.public_key)), Box::new(tail))
+            }
+            Plan::CanisterAccount(Err(_), tail) => {
+                let (tail, can) = tokio::join!(
+                    populate_plan(app_rt, agent, effective_canister_id, tail, rng),
+                    holder::new(app_rt, agent, effective_canister_id)
+                );
+                Plan::CanisterAccount(Ok(can.canister_id().get()), Box::new(tail))
+            }
+            Plan::Transfer((Err(from), amount, to), itail) => {
+                let otail = populate_plan(app_rt, agent, effective_canister_id, itail, rng).await;
+                let from0 = link0(&Err(*from), itail, &otail);
+                let to = link(to, itail, &otail);
+                Plan::Transfer((Ok(from0), *amount, to), Box::new(otail))
+            }
+            _ => panic!("wuut?"),
         }
-        Plan::CanisterAccount(Err(_), tail) => {
-            let (tail, can) = tokio::join!(
-                populate_plan(app_rt, agent, effective_canister_id, tail, rng),
-                holder::new(app_rt, agent, effective_canister_id)
-            );
-            Plan::CanisterAccount(Ok(can.canister_id().get()), Box::new(tail))
-        }
-        Plan::Transfer((Err(from), amount, to), itail) => {
-            let otail = populate_plan(app_rt, agent, effective_canister_id, itail, rng).await;
-            let from0 = link0(&Err(*from), itail, &otail);
-            let to = link(to, itail, &otail);
-            Plan::Transfer((Ok(from0), *amount, to), Box::new(otail))
-        }
-        _ => panic!("wuut?"),
-    }
+    })
 }
 
 #[derive(Debug)]
