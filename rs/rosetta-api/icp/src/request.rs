@@ -1,13 +1,13 @@
 use crate::{
     convert, convert::principal_id_from_public_key_or_principal, errors::ApiError, models,
-    models::seconds::Seconds, request_types::*,
+    models::seconds::Seconds, request_types::*, signed_target::verify_signed_envelopes,
 };
 use candid::Decode;
 use ic_nns_governance_api::{
     ManageNeuronCommandRequest,
     manage_neuron::{self, Configure, configure},
 };
-use ic_types::PrincipalId;
+use ic_types::{CanisterId, PrincipalId};
 use icp_ledger::Tokens;
 use std::convert::{TryFrom, TryInto};
 
@@ -226,14 +226,32 @@ impl Request {
                 | Request::DisburseMaturity(_)
         )
     }
-}
 
-/// Sort of the inverse of `construction_payloads`.
-impl TryFrom<&models::Request> for Request {
-    type Error = ApiError;
-
-    fn try_from(req: &models::Request) -> Result<Self, Self::Error> {
+    /// Sort of the inverse of `construction_payloads`.
+    ///
+    /// Takes the canisters this Rosetta instance is configured for so that the
+    /// verification below can bind the request to them; that is also why this
+    /// is not a `TryFrom`.
+    pub fn from_signed_request(
+        req: &models::Request,
+        ledger_canister_id: &CanisterId,
+        governance_canister_id: &CanisterId,
+    ) -> Result<Self, ApiError> {
         let (request_type, calls) = req;
+
+        // The submit path reconstructs the same `Request` values that
+        // `/construction/parse` returns, and reports them back in the
+        // `/construction/submit` response, so it needs the same guarantee that
+        // the wrapper metadata matches the signed payload. It checks every
+        // envelope, because `do_request` broadcasts whichever one is currently
+        // valid rather than the first.
+        verify_signed_envelopes(
+            request_type,
+            calls,
+            ledger_canister_id,
+            governance_canister_id,
+        )?;
+
         let payload: &models::EnvelopePair = calls
             .first()
             .ok_or_else(|| ApiError::invalid_request("No request payload provided."))?;
