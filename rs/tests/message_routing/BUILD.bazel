@@ -150,6 +150,7 @@ system_test_nns(
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/recovery/subnet_merging",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",

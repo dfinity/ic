@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/types/base_types",
+    "@crate_index//:futures",
+    "@crate_index//:reqwest",
+    "@crate_index//:tokio",
+]
+
+rust_library(
+    name = "subnet_merging",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_subnet_merging",
+    version = "0.1.0",
+    visibility = ["//rs:system-tests-pkg"],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "subnet_merging_test",
+    crate = ":subnet_merging",
+    deps = DEPENDENCIES,
+)
