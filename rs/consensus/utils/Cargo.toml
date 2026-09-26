@@ -26,7 +26,9 @@ thiserror = { workspace = true }
 assert_matches = { workspace = true }
 ic-consensus-mocks = { path = "../mocks" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
+ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
