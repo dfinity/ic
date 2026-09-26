@@ -176,6 +176,22 @@ impl AutomaticDeposits {
             .sent_transactions_to_finalize(finalized_transaction_count)
     }
 
+    pub fn queued_sweep_requests_len(&self) -> usize {
+        self.sweeper_transactions.requests_len()
+    }
+
+    pub fn unsent_sweep_requests_len(&self) -> usize {
+        self.sweeper_transactions.unsent_requests_len()
+    }
+
+    pub fn sent_sweep_requests_len(&self) -> usize {
+        self.sweeper_transactions.sent_requests_len()
+    }
+
+    pub fn sent_sweep_transactions_len(&self) -> usize {
+        self.sweeper_transactions.sent_transactions_len()
+    }
+
     pub fn record_sweep_request(&mut self, request: SweepRequest) {
         self.sweeper_transactions.record_request(request)
     }

@@ -1369,6 +1369,47 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "The age of the oldest incomplete ETH withdrawal request in seconds.",
                 )?;
 
+                w.gauge_vec(
+                    "cketh_minter_unfinalized_requests",
+                    "Requests the minter still owes a finalized transaction, by pipeline and stage.",
+                )?
+                .value(
+                    &[("pipeline", "withdrawal"), ("stage", "queued")],
+                    s.withdrawal_transactions.requests_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "withdrawal"), ("stage", "unsent")],
+                    s.withdrawal_transactions.unsent_requests_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "withdrawal"), ("stage", "sent")],
+                    s.withdrawal_transactions.sent_requests_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper"), ("stage", "queued")],
+                    s.automatic_deposits.queued_sweep_requests_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper"), ("stage", "unsent")],
+                    s.automatic_deposits.unsent_sweep_requests_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper"), ("stage", "sent")],
+                    s.automatic_deposits.sent_sweep_requests_len() as f64,
+                )?;
+                w.gauge_vec(
+                    "cketh_minter_unfinalized_transactions",
+                    "Transactions behind the sent stage, one per attempt including fee bumps.",
+                )?
+                .value(
+                    &[("pipeline", "withdrawal")],
+                    s.withdrawal_transactions.sent_transactions_len() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper")],
+                    s.automatic_deposits.sent_sweep_transactions_len() as f64,
+                )?;
+
                 w.encode_gauge(
                     "cketh_minter_stored_attestations",
                     s.automatic_deposits.attestations_len() as f64,

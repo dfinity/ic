@@ -2496,6 +2496,142 @@ mod oldest_incomplete_request_timestamp {
     }
 }
 
+mod unfinalized_request_counts {
+    use super::*;
+    use crate::numeric::TransactionCount;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+
+    /// The counts the backlog metrics read, in the order `(queued, unsent, sent, transactions)`.
+    fn counts(transactions: &WithdrawalTransactions) -> (usize, usize, usize, usize) {
+        (
+            transactions.requests_len(),
+            transactions.unsent_requests_len(),
+            transactions.sent_requests_len(),
+            transactions.sent_transactions_len(),
+        )
+    }
+
+    /// The fee estimate a resubmission needs to be priced above `gas_fee_estimate`.
+    fn higher_gas_fee_estimate() -> GasFeeEstimate {
+        let estimate = gas_fee_estimate();
+        GasFeeEstimate {
+            base_fee_per_gas: estimate.base_fee_per_gas.checked_mul(2_u8).unwrap(),
+            max_priority_fee_per_gas: estimate.max_priority_fee_per_gas.checked_mul(2_u8).unwrap(),
+        }
+    }
+
+    #[test]
+    fn should_be_zero_when_the_pipeline_is_empty() {
+        let transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
+
+        assert_eq!(counts(&transactions), (0, 0, 0, 0));
+    }
+
+    #[test]
+    fn should_count_a_withdrawal_at_a_single_stage_as_it_advances() {
+        let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
+        let mut rng = reproducible_rng();
+        let [withdrawal_request] =
+            create_and_record_ck_withdrawal_requests(&mut transactions, &mut rng);
+        let cketh_ledger_burn_index = withdrawal_request.cketh_ledger_burn_index();
+        assert_eq!(counts(&transactions), (1, 0, 0, 0));
+
+        let created_tx = create_and_record_transaction(
+            &mut transactions,
+            withdrawal_request,
+            gas_fee_estimate(),
+        );
+        assert_eq!(counts(&transactions), (0, 1, 0, 0));
+
+        let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+        assert_eq!(counts(&transactions), (0, 0, 1, 1));
+
+        transactions.record_finalized_transaction(
+            cketh_ledger_burn_index,
+            transaction_receipt(&signed_tx, TransactionStatus::Success),
+        );
+        assert_eq!(counts(&transactions), (0, 0, 0, 0));
+    }
+
+    #[test]
+    fn should_count_a_withdrawal_once_however_many_transactions_carry_it() {
+        let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
+        let mut rng = reproducible_rng();
+        let [first_withdrawal, second_withdrawal] =
+            create_and_record_ck_withdrawal_requests(&mut transactions, &mut rng);
+
+        let first_tx =
+            create_and_record_transaction(&mut transactions, first_withdrawal, gas_fee_estimate());
+        let first_sent_tx = create_and_record_signed_transaction(&mut transactions, first_tx);
+        let bumped_once = resubmit_transaction_with_bumped_price(
+            &mut transactions,
+            first_sent_tx.transaction().clone(),
+        );
+        resubmit_transaction_with_bumped_price(
+            &mut transactions,
+            bumped_once.transaction().clone(),
+        );
+        let second_tx =
+            create_and_record_transaction(&mut transactions, second_withdrawal, gas_fee_estimate());
+        create_and_record_signed_transaction(&mut transactions, second_tx);
+
+        assert_eq!(
+            counts(&transactions),
+            (0, 0, 2, 4),
+            "two withdrawals, the first of them resubmitted twice"
+        );
+        assert_eq!(
+            transactions.sent_transactions_len(),
+            transactions
+                .sent_transactions_to_finalize(&TransactionCount::TWO)
+                .len(),
+            "no two attempts collide on a hash, so once every nonce has finalized the two agree"
+        );
+        assert_eq!(
+            transactions
+                .sent_transactions_to_finalize(&TransactionCount::ONE)
+                .len(),
+            3,
+            "a round asks only about the transactions whose nonce is below the finalized \
+             transaction count, here the three attempts of the first withdrawal"
+        );
+        assert!(
+            transactions
+                .sent_transactions_to_finalize(&TransactionCount::ONE)
+                .len()
+                < transactions.sent_transactions_len(),
+            "the transaction count bounds what a round fetches from above, it is not what it fetches"
+        );
+    }
+
+    #[test]
+    fn should_hold_a_withdrawal_being_resubmitted_at_the_sent_stage() {
+        let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
+        let mut rng = reproducible_rng();
+        let [withdrawal_request] =
+            create_and_record_ck_withdrawal_requests(&mut transactions, &mut rng);
+        let created_tx = create_and_record_transaction(
+            &mut transactions,
+            withdrawal_request,
+            gas_fee_estimate(),
+        );
+        create_and_record_signed_transaction(&mut transactions, created_tx);
+
+        let resubmitted = transactions
+            .create_resubmit_transactions(TransactionCount::ZERO, higher_gas_fee_estimate());
+        let [Ok((_id, bumped_tx))] = resubmitted.as_slice() else {
+            panic!("BUG: expected exactly one transaction to resubmit, got {resubmitted:?}");
+        };
+        transactions.record_resubmit_transaction(bumped_tx.clone());
+
+        assert_eq!(
+            counts(&transactions),
+            (0, 0, 1, 1),
+            "the withdrawal holds a created transaction again, but its first attempt is already out"
+        );
+    }
+}
+
 mod eth_withdrawal_request {
     use crate::numeric::LedgerBurnIndex;
     use crate::state::transactions::tests::cketh_withdrawal_request_with_index;

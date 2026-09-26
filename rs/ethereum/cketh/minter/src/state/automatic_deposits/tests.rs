@@ -15,7 +15,9 @@ use crate::test_fixtures::{
     deposit_address, deposits_with_enqueued_sweep, gas_fee_estimate, usdc, usdt,
 };
 use crate::timed_sized_map::{Entry, Timestamp};
-use crate::tx::{SignableTransaction, Signed, SignedAuthorization, TransactionSignature};
+use crate::tx::{
+    SignableTransaction, Signed, SignedAuthorization, TransactionPrice, TransactionSignature,
+};
 use candid::Principal;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -1173,6 +1175,78 @@ async fn should_advance_the_delegation_nonce_once_for_two_sweeps_carrying_the_sa
             "only one of two authorizations signed for the same nonce can apply, in whichever order the \
              sweeps carrying them land"
         );
+    }
+}
+
+#[tokio::test]
+async fn should_count_the_sweeps_at_each_stage_of_the_sweeper_pipeline() {
+    /// The counts the backlog metrics read, in the order `(queued, unsent, sent, transactions)`.
+    fn counts(deposits: &AutomaticDeposits) -> (usize, usize, usize, usize) {
+        (
+            deposits.queued_sweep_requests_len(),
+            deposits.unsent_sweep_requests_len(),
+            deposits.sent_sweep_requests_len(),
+            deposits.sent_sweep_transactions_len(),
+        )
+    }
+
+    let (mut deposits, request) = deposits_with_enqueued_sweep(&[(account(0), usdc())]).await;
+    let id = request.id;
+    assert_eq!(counts(&deposits), (1, 0, 0, 0));
+
+    let transaction = request
+        .create_transaction(
+            deposits.next_sweeper_transaction_nonce(),
+            gas_fee_estimate(),
+            request.gas_limit(),
+            EthereumNetwork::Sepolia,
+        )
+        .expect("BUG: the fixture prices the request with the estimate it creates with");
+    deposits.record_created_sweep_transaction(id, transaction.clone());
+    assert_eq!(counts(&deposits), (0, 1, 0, 0));
+
+    let signed = Signed::from((transaction, dummy_signature()));
+    deposits.record_signed_sweep_transaction(signed.clone());
+    assert_eq!(counts(&deposits), (0, 0, 1, 1));
+
+    let bumped = signed.transaction().with_price_and_amount(
+        TransactionPrice {
+            max_priority_fee_per_gas: signed
+                .transaction()
+                .max_priority_fee_per_gas()
+                .checked_mul(2_u8)
+                .expect("BUG: the fixture priority fee doubles without overflowing"),
+            ..signed.transaction().transaction_price()
+        },
+        *signed.transaction().amount(),
+    );
+    deposits.record_resubmit_sweep_transaction(bumped.clone());
+    let resubmitted = Signed::from((bumped, dummy_signature()));
+    deposits.record_signed_sweep_transaction(resubmitted.clone());
+    assert_ne!(resubmitted.hash(), signed.hash());
+    assert_eq!(
+        counts(&deposits),
+        (0, 0, 1, 2),
+        "the fee bump is a second transaction for the one sweep, not a second sweep"
+    );
+
+    let receipt = TransactionReceipt {
+        block_hash: Hash([0x11; 32]),
+        block_number: BlockNumber::new(4_190_269),
+        effective_gas_price: resubmitted.transaction().max_fee_per_gas(),
+        gas_used: resubmitted.transaction().gas_limit(),
+        status: TransactionStatus::Success,
+        transaction_hash: resubmitted.hash(),
+    };
+    deposits.record_finalized_sweep_transaction(id, &receipt);
+    assert_eq!(counts(&deposits), (0, 0, 0, 0));
+}
+
+fn dummy_signature() -> TransactionSignature {
+    TransactionSignature {
+        signature_y_parity: false,
+        r: Default::default(),
+        s: Default::default(),
     }
 }
 
