@@ -24,6 +24,9 @@ pub trait PipelineRequest {
     /// for sweeps.
     type Id: Copy + Ord + fmt::Debug;
 
+    /// The log prefix of the task driving this pipeline.
+    const TASK_NAME: &'static str;
+
     /// The transaction this request turns into.
     type Transaction: SignableTransaction;
 
@@ -63,6 +66,8 @@ impl PipelineRequest for WithdrawalRequest {
     type Id = LedgerBurnIndex;
     type Transaction = Eip1559TransactionRequest;
     type Error = CreateTransactionError;
+
+    const TASK_NAME: &'static str = "finalize_transactions_batch";
 
     fn id(&self) -> LedgerBurnIndex {
         self.cketh_ledger_burn_index()
@@ -204,6 +209,8 @@ impl PipelineRequest for SweepRequest {
     type Id = SweepId;
     type Transaction = SweepTransaction;
     type Error = CreateSweepTransactionError;
+
+    const TASK_NAME: &'static str = "process_sweeper_transactions";
 
     fn id(&self) -> SweepId {
         self.id

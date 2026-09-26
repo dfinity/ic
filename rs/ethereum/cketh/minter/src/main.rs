@@ -1516,6 +1516,72 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Age of the sweeper funding awaiting finalization; 0 if none is outstanding.",
                 )?;
 
+                let withdrawal_pipeline = s.withdrawal_transactions.pipeline();
+                let sweeper_pipeline = s.automatic_deposits.sweeper_pipeline();
+                let receipt_fetch = [
+                    ("withdrawal", withdrawal_pipeline.receipt_fetch_counters()),
+                    ("sweeper", sweeper_pipeline.receipt_fetch_counters()),
+                ];
+                w.gauge_vec(
+                    "cketh_minter_receipt_fetch_window",
+                    "Maximum pipeline ids one finalization round fetches receipts for, per pipeline.",
+                )?
+                .value(
+                    &[("pipeline", "withdrawal")],
+                    withdrawal_pipeline.receipt_fetch_window() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper")],
+                    sweeper_pipeline.receipt_fetch_window() as f64,
+                )?;
+                w.gauge_vec(
+                    "cketh_minter_receipt_fetch_rounds_since_chain_read",
+                    "Consecutive rounds failing or skipping the finalized-count read, per pipeline.",
+                )?
+                .value(
+                    &[("pipeline", "withdrawal")],
+                    withdrawal_pipeline.rounds_since_chain_read() as f64,
+                )?
+                .value(
+                    &[("pipeline", "sweeper")],
+                    sweeper_pipeline.rounds_since_chain_read() as f64,
+                )?;
+                let mut receipt_lookups = w.counter_vec(
+                    "cketh_minter_receipt_lookups_total",
+                    "Transaction receipt lookups, by pipeline and outcome. Resets on upgrade.",
+                )?;
+                for (pipeline, counters) in receipt_fetch {
+                    receipt_lookups = receipt_lookups
+                        .value(
+                            &[("pipeline", pipeline), ("outcome", "receipt")],
+                            counters.receipts as f64,
+                        )?
+                        .value(
+                            &[("pipeline", pipeline), ("outcome", "not_mined")],
+                            counters.not_mined as f64,
+                        )?
+                        .value(
+                            &[("pipeline", pipeline), ("outcome", "error")],
+                            counters.failures as f64,
+                        )?;
+                }
+                let mut abandoned_rounds = w.counter_vec(
+                    "cketh_minter_receipt_fetch_abandoned_rounds_total",
+                    "Rounds dropped because two receipts named the same id. Resets on upgrade.",
+                )?;
+                for (pipeline, counters) in receipt_fetch {
+                    abandoned_rounds = abandoned_rounds
+                        .value(&[("pipeline", pipeline)], counters.abandoned_rounds as f64)?;
+                }
+                let mut stalled_ids = w.counter_vec(
+                    "cketh_minter_receipt_fetch_stalled_ids_total",
+                    "Ids with no receipt though their nonce is finalized. Resets on upgrade.",
+                )?;
+                for (pipeline, counters) in receipt_fetch {
+                    stalled_ids = stalled_ids
+                        .value(&[("pipeline", pipeline)], counters.stalled_ids as f64)?;
+                }
+
                 w.encode_gauge(
                     "cketh_minter_last_max_fee_per_gas",
                     s.last_transaction_price_estimate
