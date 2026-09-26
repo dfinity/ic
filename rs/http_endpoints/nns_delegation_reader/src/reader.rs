@@ -67,17 +67,29 @@ impl NNSDelegationReader {
         Self { receiver, logger }
     }
 
-    /// Returns the most recent NNS delegation known to the replica.
-    /// Consecutive calls might return different delegations.
-    /// Note: on the NNS subnet this always returns `None`.
-    pub fn get_delegation(
+    /// Verifies the most recent NNS delegation known to the replica against the given view
+    /// of the subnet information recorded in a replicated state and, only if it is
+    /// consistent, builds and returns it (see [`NNSDelegationBuilder::build_verified`]).
+    /// Consecutive calls might verify and return different delegations.
+    /// Note: on the NNS subnet this always returns `Ok(None)`.
+    pub fn get_delegation<'a>(
         &self,
-        canister_ranges_filter: CanisterRangesFilter,
-    ) -> Option<CertificateDelegation> {
+        ranges_check: CanisterRangesCheck,
+        routing_table: &RoutingTable,
+        public_key_for_subnet: impl FnOnce(SubnetId) -> Option<&'a [u8]>,
+    ) -> Result<Option<CertificateDelegation>, DelegationVerificationError> {
         self.receiver
             .borrow()
             .as_ref()
-            .map(|builder| builder.build_unverified(canister_ranges_filter, &self.logger))
+            .map(|builder| {
+                builder.build_verified(
+                    ranges_check,
+                    routing_table,
+                    public_key_for_subnet,
+                    &self.logger,
+                )
+            })
+            .transpose()
     }
 
     /// Returns the most recent NNS delegation known to the replica together with some metadata.
@@ -101,6 +113,18 @@ impl NNSDelegationReader {
                 metadata,
             )
         })
+    }
+
+    /// Returns the most recent NNS delegation known to the replica without verifying it, to be used
+    /// in tests to avoid having to set up a routing table and public key for the delegated subnet.
+    pub fn get_unverified_delegation_for_test(
+        &self,
+        canister_ranges_filter: CanisterRangesFilter,
+    ) -> Option<CertificateDelegation> {
+        self.receiver
+            .borrow()
+            .as_ref()
+            .map(|builder| builder.build_unverified(canister_ranges_filter, &self.logger))
     }
 
     pub async fn wait_until_updated(&mut self) -> Result<(), watch::error::RecvError> {
@@ -446,16 +470,6 @@ mod tests {
         NNSDelegationBuilder::try_new(delegation.certificate, SUBNET_0, &no_op_logger()).unwrap()
     }
 
-    fn create_reader(delegation: Option<CertificateDelegation>) -> NNSDelegationReader {
-        let builder = delegation.map(create_builder);
-        let (_sender, receiver) = watch::channel(builder);
-
-        NNSDelegationReader {
-            receiver,
-            logger: no_op_logger(),
-        }
-    }
-
     #[test]
     fn no_ranges_test() {
         let (full_delegation, root_public_key) = create_fake_certificate_delegation(
@@ -465,11 +479,9 @@ mod tests {
             ],
             SUBNET_0,
         );
-        let reader = create_reader(Some(full_delegation));
+        let builder = create_builder(full_delegation);
 
-        let delegation = reader
-            .get_delegation(CanisterRangesFilter::None)
-            .expect("Should succeed");
+        let delegation = builder.build_unverified(CanisterRangesFilter::None, &no_op_logger());
 
         assert!(
             !path_exists(&delegation, &[b"canister_ranges"]),
@@ -501,11 +513,9 @@ mod tests {
             ],
             SUBNET_0,
         );
-        let reader = create_reader(Some(full_delegation));
+        let builder = create_builder(full_delegation);
 
-        let delegation = reader
-            .get_delegation(CanisterRangesFilter::Flat)
-            .expect("Should succeed");
+        let delegation = builder.build_unverified(CanisterRangesFilter::Flat, &no_op_logger());
 
         assert!(
             !path_exists(&delegation, &[b"canister_ranges"]),
@@ -541,11 +551,12 @@ mod tests {
             ],
             SUBNET_0,
         );
-        let reader = create_reader(Some(full_delegation));
+        let builder = create_builder(full_delegation);
 
-        let delegation = reader
-            .get_delegation(CanisterRangesFilter::Tree(CanisterId::from(150)))
-            .expect("Should succeed");
+        let delegation = builder.build_unverified(
+            CanisterRangesFilter::Tree(CanisterId::from(150)),
+            &no_op_logger(),
+        );
 
         assert!(
             path_exists(&delegation, &[b"canister_ranges"]),
@@ -592,11 +603,12 @@ mod tests {
             ],
             SUBNET_0,
         );
-        let reader = create_reader(Some(full_delegation));
+        let builder = create_builder(full_delegation);
 
-        let delegation = reader
-            .get_delegation(CanisterRangesFilter::Tree(CanisterId::from(0)))
-            .expect("Should succeed");
+        let delegation = builder.build_unverified(
+            CanisterRangesFilter::Tree(CanisterId::from(0)),
+            &no_op_logger(),
+        );
 
         assert!(
             !path_exists(&delegation, &[b"canister_ranges"]),

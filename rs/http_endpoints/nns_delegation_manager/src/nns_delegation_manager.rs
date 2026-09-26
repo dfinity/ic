@@ -1272,7 +1272,11 @@ mod tests {
 
         reader.wait_until_updated().await.unwrap();
 
-        assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_none());
+        assert!(
+            reader
+                .get_unverified_delegation_for_test(CanisterRangesFilter::Flat)
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -1307,7 +1311,7 @@ mod tests {
             reader.wait_until_updated().await.unwrap();
 
             let delegation = reader
-                .get_delegation(CanisterRangesFilter::Flat)
+                .get_unverified_delegation_for_test(CanisterRangesFilter::Flat)
                 .expect("Should return some delegation on non NNS subnet");
             let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
                 .expect("Should return a certificate which can be deserialized");
@@ -1928,7 +1932,11 @@ mod tests {
         .await
         .expect("The initial delegation should be published without waiting for the state")
         .unwrap();
-        assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_some());
+        assert!(
+            reader
+                .get_unverified_delegation_for_test(CanisterRangesFilter::Flat)
+                .is_some()
+        );
 
         // Since the state disagrees with what the NNS keeps serving, the manager should keep
         // reactively refreshing the delegation.
