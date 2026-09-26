@@ -162,10 +162,14 @@ pub fn construction_payloads(
         .and_then(|meta| meta.ingress_start)
         .unwrap_or(now);
 
+    // `ingress_start` originates from optional, caller-controlled metadata, so a
+    // near-`u64::MAX` value would overflow this default computation and panic
+    // before `validate_ingress_window` runs. Saturate instead: the resulting
+    // out-of-range window is then rejected by the validation below.
     let ingress_end = metadata
         .as_ref()
         .and_then(|meta| meta.ingress_end)
-        .unwrap_or(ingress_start + ingress_interval);
+        .unwrap_or(ingress_start.saturating_add(ingress_interval));
 
     let created_at_time = metadata
         .as_ref()
@@ -336,6 +340,34 @@ mod tests {
         let max = MAX_INGRESS_WINDOW.as_nanos() as u64;
         assert!(validate_ingress_window(NOW_NANOS, NOW_NANOS, NOW_NANOS + max).is_ok());
         assert!(validate_ingress_window(NOW_NANOS, NOW_NANOS, NOW_NANOS + max + 1).is_err());
+    }
+
+    #[test]
+    fn near_u64_max_ingress_start_is_rejected_without_panic() {
+        let metadata = ConstructionPayloadsRequestMetadata {
+            memo: None,
+            ingress_start: Some(u64::MAX - 10),
+            ingress_end: None,
+            created_at_time: None,
+        };
+        let err = construction_payloads(
+            vec![],
+            Some(metadata),
+            &Principal::anonymous(),
+            vec![],
+            SystemTime::UNIX_EPOCH + std::time::Duration::from_nanos(NOW_NANOS),
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.0.message,
+            "Processing of the construction request failed."
+        );
+        assert!(
+            err.0
+                .description
+                .unwrap()
+                .contains("ingress_end must not be more than"),
+        );
     }
 
     fn call_construction_derive<T: RosettaSupportedKeyPair>(key_pair: &T) {
