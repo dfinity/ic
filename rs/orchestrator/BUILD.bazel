@@ -111,11 +111,22 @@ rust_test(
         "testdata/nftables_unassigned_replica.conf.golden",
     ],
     crate = ":lib",
+    data = [
+        # Keep sorted.
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/rust_canisters/cloud_engine_mock:cloud_engine_mock_canister",
+    ],
+    env = {
+        # Keep sorted.
+        "CLOUD_ENGINE_MOCK_WASM": "$(rootpath //rs/rust_canisters/cloud_engine_mock:cloud_engine_mock_canister)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
     # Disable optimizations to speed up compilation otherwise it will take over 9 minutes on CI.
     # It does not have an effect on the test runtime.
     rustc_flags = ["-Copt-level=0"],
     deps = [
         # Keep sorted.
+        "//packages/pocket-ic",
         "//rs/crypto/temp_crypto",
         "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/crypto/test_utils/crypto_returning_ok",

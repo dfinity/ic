@@ -1,0 +1,16 @@
+[package]
+name = "cloud-engine-mock"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "cloud_engine_mock_canister"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+serde = { workspace = true }

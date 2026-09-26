@@ -2869,6 +2869,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cloud-engine-mock"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-cdk",
+ "serde",
+]
+
+[[package]]
 name = "cmake"
 version = "0.1.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19354,6 +19363,7 @@ dependencies = [
  "mockall",
  "nix 0.31.3",
  "pem 3.0.6",
+ "pocket-ic",
  "prometheus",
  "prost",
  "qrcode",
