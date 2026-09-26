@@ -26,6 +26,7 @@ rust_test(
     crate = ":cup_utils",
     deps = [
         "//rs/crypto/test_utils/ni-dkg",
+        "//rs/registry/keys",
         "//rs/types/types_test_utils",
         "@crate_index//:prost",
     ],

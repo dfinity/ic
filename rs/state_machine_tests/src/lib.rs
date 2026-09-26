@@ -87,12 +87,9 @@ use ic_protobuf::{
         routing_table::v1::{
             CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
         },
-        subnet::v1::CatchUpPackageContents,
+        subnet::v1::{CatchUpPackageContents, GenesisArgs, catch_up_package_contents::CupType},
     },
-    types::{
-        v1 as pb,
-        v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
-    },
+    types::v1::{self as pb, PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
 };
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -591,6 +588,7 @@ fn add_cup_contents_and_key_record(
     let cup_contents = CatchUpPackageContents {
         initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript.into()),
         initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript.into()),
+        cup_type: Some(CupType::Genesis(GenesisArgs {})),
         ..Default::default()
     };
     registry_data_provider

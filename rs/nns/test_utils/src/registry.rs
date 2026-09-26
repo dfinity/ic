@@ -30,8 +30,8 @@ use ic_protobuf::registry::{
     replica_version::v1::ReplicaVersionRecord,
     routing_table::v1::RoutingTable as RoutingTablePB,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig, InitialNiDkgTranscriptRecord, SubnetListRecord,
-        SubnetRecord,
+        CatchUpPackageContents, ChainKeyConfig, GenesisArgs, InitialNiDkgTranscriptRecord,
+        SubnetListRecord, SubnetRecord, catch_up_package_contents::CupType,
     },
 };
 use ic_registry_canister_api::{AddNodePayload, Chunk, GetChunkRequest};
@@ -574,6 +574,7 @@ fn dummy_cup_for_subnet(nodes: Vec<NodeId>) -> CatchUpPackageContents {
     CatchUpPackageContents {
         initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript_record),
         initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript_record),
+        cup_type: Some(CupType::Genesis(GenesisArgs {})),
         ..Default::default()
     }
 }
