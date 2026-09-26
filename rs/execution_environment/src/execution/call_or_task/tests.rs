@@ -948,6 +948,70 @@ fn dts_abort_of_replicated_execution_works() {
         );
     });
 }
+/// An execution that is aborted and restarted after its subnet grew is charged for
+/// the instructions it uses at the subnet size in effect when it is restarted.
+///
+/// The aborted execution carries the cycles it prepaid at the old subnet size over
+/// to its restart, while the cycles for the instructions it does not use are
+/// refunded at the new one. Without adjusting the carried-over prepayment to the
+/// new subnet size, the refund for the unused instructions alone would reach the
+/// whole prepayment, where it is capped, and the execution would be free.
+#[test]
+fn dts_aborted_execution_is_charged_at_the_subnet_size_at_the_restart() {
+    let instruction_limit = 100_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(1_000_000)
+        .with_initial_canister_cycles(1_000_000_000_000_000)
+        .with_manual_execution()
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+    let payload = wasm()
+        .instruction_counter_is_at_least(2_000_000)
+        .push_bytes(&[42])
+        .append_and_reply()
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(canister_id, "update", payload);
+
+    // The balance and the execution cost accumulated before the execution starts,
+    // i.e. with the induction of the ingress message above already paid for.
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let execution_cost_before = test.canister_execution_cost(canister_id);
+
+    // Run a single slice, so that the execution prepays at the subnet size in
+    // effect now and then pauses, and abort it.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+    test.abort_all_paused_executions();
+
+    // The subnet doubles in size before the aborted execution is restarted, so the
+    // restarted execution costs twice what the aborted one prepaid.
+    let subnet_size_before = test.get_own_subnet_cycles_config().subnet_size;
+    test.set_own_subnet_size(2 * subnet_size_before);
+
+    test.execute_message(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+    let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![42]));
+
+    // The canister paid for the instructions that the restarted execution used, at
+    // the subnet size in effect when it was restarted: exactly what it would have
+    // paid had the execution never been aborted and run at that subnet size.
+    let charged = test.canister_execution_cost(canister_id) - execution_cost_before;
+    assert_gt!(charged.real(), Cycles::zero());
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        balance_before - charged.real(),
+    );
+}
 
 #[test]
 fn dts_ingress_induction_cycles_debit_is_applied_on_replicated_execution_aborts() {
