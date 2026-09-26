@@ -130,6 +130,34 @@ type http_request_result = record {
     body : blob;
 };
 
+type http_request_resource_report = record {
+    raw_response_bytes : opt variant { used : nat64; exceeded : reserved };
+    http_roundtrip_time_ms : opt variant { used : nat64; exceeded : reserved };
+    transform_instructions : opt variant { used : nat64; exceeded : reserved };
+    transformed_response_bytes : opt variant { used : nat64; exceeded : reserved };
+    cycles : opt variant { used : nat; exceeded : reserved };
+};
+
+type flexible_http_request_err = record {
+    global_error : opt variant {
+        timeout : reserved;
+        out_of_cycles : reserved;
+        responses_too_large : reserved;
+        too_many_rejects : reserved;
+    };
+    node_details : vec record {
+        node_id : principal;
+        report : http_request_resource_report;
+        error : opt record { code : text; message : text };
+    };
+    message : text;
+};
+
+type flexible_http_request_result = variant {
+    ok : vec http_request_result;
+    err : flexible_http_request_err;
+};
+
 type ecdsa_curve = variant {
     secp256k1;
     secp256r1;
@@ -372,6 +400,23 @@ type http_request_args = record {
     };
     is_replicated : opt bool;
     pricing_version : opt nat32;
+};
+
+type flexible_http_request_args = record {
+    url : text;
+    max_response_bytes : opt nat64;
+    method : variant { get; head; post; put; delete; patch };
+    headers : vec http_header;
+    body : opt blob;
+    transform : opt record {
+        function : func(record { response : http_request_result; context : blob }) -> (http_request_result) query;
+        context : blob;
+    };
+    replication : opt record {
+        min_responses : nat32;
+        max_responses : nat32;
+        total_requests : nat32;
+    };
 };
 
 type ecdsa_public_key_args = record {
@@ -706,6 +751,29 @@ type rename_canister_args = record {
    sender_canister_version : nat64;
 };
 
+type cycles_consumed = record {
+  memory : nat;
+  compute_allocation : nat;
+  ingress_induction : nat;
+  instructions : nat;
+  request_and_response_transmission : nat;
+  // This metric applies to canisters that ran out of cycles. In particular,
+  // uninstalling code explicitly would not result in this metric being updated.
+  // In fact, others might be updated in that case, e.g. cycles for ingress induction
+  // if the uninstallation of the canister was requested via an ingress message.
+  uninstall : nat;
+  canister_creation : nat;
+  http_outcalls : nat;
+  burned_cycles : nat;
+};
+
+type canister_metrics_args = record {
+  canister_id : canister_id;
+};
+
+type canister_metrics_result = record {
+  cycles_consumed : cycles_consumed;
+};
 
 service ic : {
     create_canister : (create_canister_args) -> (create_canister_result);
@@ -718,13 +786,16 @@ service ic : {
     uninstall_code : (uninstall_code_args) -> ();
     start_canister : (start_canister_args) -> ();
     stop_canister : (stop_canister_args) -> ();
-    canister_status : (canister_status_args) -> (canister_status_result);
+    canister_status : (canister_status_args) -> (canister_status_result) query;
+    // Returns canister related metrics
+    canister_metrics : (canister_metrics_args) -> (canister_metrics_result) query;
     canister_info : (canister_info_args) -> (canister_info_result) query;
     canister_metadata : (canister_metadata_args) -> (canister_metadata_result);
     delete_canister : (delete_canister_args) -> ();
     deposit_cycles : (deposit_cycles_args) -> ();
     raw_rand : () -> (raw_rand_result);
     http_request : (http_request_args) -> (http_request_result);
+    flexible_http_request : (flexible_http_request_args) -> (flexible_http_request_result);
 
     // Threshold ECDSA signature
     ecdsa_public_key : (ecdsa_public_key_args) -> (ecdsa_public_key_result);
@@ -733,6 +804,17 @@ service ic : {
     // Threshold Schnorr signature
     schnorr_public_key : (schnorr_public_key_args) -> (schnorr_public_key_result);
     sign_with_schnorr : (sign_with_schnorr_args) -> (sign_with_schnorr_result);
+
+    // Threshold key derivation
+    vetkd_public_key : (vetkd_public_key_args) -> (vetkd_public_key_result);
+    vetkd_derive_key : (vetkd_derive_key_args) -> (vetkd_derive_key_result);
+
+    // bitcoin interface
+    bitcoin_get_balance : (bitcoin_get_balance_args) -> (bitcoin_get_balance_result);
+    bitcoin_get_utxos : (bitcoin_get_utxos_args) -> (bitcoin_get_utxos_result);
+    bitcoin_send_transaction : (bitcoin_send_transaction_args) -> ();
+    bitcoin_get_current_fee_percentiles : (bitcoin_get_current_fee_percentiles_args) -> (bitcoin_get_current_fee_percentiles_result);
+    bitcoin_get_block_headers : (bitcoin_get_block_headers_args) -> (bitcoin_get_block_headers_result);
 
     // metrics interface
     node_metrics_history : (node_metrics_history_args) -> (node_metrics_history_result);

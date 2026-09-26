@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added the `Secp256r1` variant to the `EcdsaCurve` enum, selecting threshold ECDSA on the NIST P-256 curve. It maps to `1` in the `u32` conversion used by the `ic0.cost_sign_with_ecdsa` system API. No key of this curve is available yet; enabling one is a separate registry and governance step.
+- Added the `million_round_instructions_total` field to `SubnetMetricsResult`: the total instructions the subnet accounted for across all rounds, in units of one million (rounded up).
 
 ## [0.10.0] - 2026-09-10
 
