@@ -470,43 +470,6 @@ pub(crate) fn verify_luks_parameters(luks_parameters: &LuksParameters) -> Result
     Ok(())
 }
 
-// TODO: Legacy headers may carry more than one keyslot. Once all nodes have been
-// updated (i.e., the num_keyslots metric is 1 everywhere), this function can be
-// deleted: re-keying always keeps only the first keyslot.
-/// Destroys all keyslots except the first one.
-pub(crate) fn destroy_keyslots_except_first(crypt_device: &mut CryptDevice) -> Result<()> {
-    for keyslot in 1..LUKS2_N_KEYSLOTS {
-        // If this key slot is active, destroy it.
-        if matches!(
-            crypt_device.keyslot_handle().status(keyslot),
-            Ok(KeyslotInfo::Active | KeyslotInfo::ActiveLast)
-        ) {
-            crypt_device
-                .keyslot_handle()
-                .destroy(keyslot)
-                .with_context(|| format!("Failed to remove old keyslot {keyslot}"))?;
-        }
-    }
-
-    Ok(())
-}
-
-fn remove_all_tokens(crypt_device: &mut CryptDevice) -> Result<()> {
-    for token_id in 0..LUKS2_N_TOKENS {
-        if !matches!(
-            crypt_device.token_handle().status(token_id),
-            Ok(CryptTokenInfo::Inactive)
-        ) {
-            crypt_device
-                .token_handle()
-                .json_set(TokenInput::RemoveToken(token_id))
-                .with_context(|| format!("Failed to remove IC key metadata token {token_id}"))?;
-        }
-    }
-
-    Ok(())
-}
-
 /// Reads the device's single token.
 pub fn read_single_keyslot_token(crypt_device: &mut CryptDevice) -> Result<KeyslotToken> {
     let json = crypt_device
@@ -517,17 +480,12 @@ pub fn read_single_keyslot_token(crypt_device: &mut CryptDevice) -> Result<Keysl
         .with_context(|| format!("Failed to parse IC key metadata token {SINGLE_TOKEN_INDEX}"))
 }
 
-/// Writes the metadata token of the device's single keyslot, replacing all existing
-/// tokens.
+/// Writes the metadata token of the device's single keyslot, replacing the token's
+/// previous contents.
 pub fn write_keyslot_token(
     crypt_device: &mut CryptDevice,
     sev_metadata: SevMetadata,
 ) -> Result<()> {
-    // TODO: Legacy headers may carry more than one IC key metadata token. Once all nodes
-    // have been updated (i.e., the num_tokens metric is 1 everywhere), this removal can
-    // be deleted so that only one token is written.
-    remove_all_tokens(crypt_device)?;
-
     let json = serde_json::to_value(KeyslotToken::new_sev(sev_metadata))
         .context("Failed to serialize key slot metadata")?;
 
