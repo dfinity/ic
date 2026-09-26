@@ -10,8 +10,7 @@ use ic_agent::identity::BasicIdentity;
 use ic_agent::{Agent, Identity};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc_rosetta::common::constants::STATUS_COMPLETED;
-use ic_icrc_rosetta::common::types::Error;
-use ic_icrc_rosetta::common::types::OperationType;
+use ic_icrc_rosetta::common::types::{BlockMetadata, Error, FeeCollectorMetadata, OperationType};
 use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_transaction;
 use ic_icrc_rosetta::common::utils::utils::{
     icrc1_operation_to_rosetta_core_operations, icrc1_rosetta_block_to_rosetta_core_block,
@@ -1025,6 +1024,7 @@ fn test_fee_collector_107() {
         )
         .await;
 
+        let fee_col_block_index = block_index;
         let (block_index, block_hash) = set_fee_col_107(
             &agent,
             &env,
@@ -1035,6 +1035,7 @@ fn test_fee_collector_107() {
         )
         .await;
 
+        let second_round_start = block_index;
         // The 107 fee collector should collect all 4 fees.
         let (block_index, block_hash) = transfer_and_check_collected_fees(
             &agent,
@@ -1046,6 +1047,140 @@ fn test_fee_collector_107() {
             [(fc_legacy, 2), (fc_107, 4)].to_vec(),
         )
         .await;
+
+        // Verify blocks via Rosetta's /block endpoint.
+
+        // Fee collector block (ICRC-107): single FEE_COLLECTOR operation, no account/amount.
+        let block_response = env
+            .rosetta_client
+            .block(
+                env.network_identifier.clone(),
+                PartialBlockIdentifier {
+                    hash: None,
+                    index: Some(fee_col_block_index),
+                },
+            )
+            .await
+            .expect("Failed to get fee collector block from Rosetta");
+        let fc_block = block_response
+            .block
+            .expect("Fee collector block should be present");
+        let fc_ops = &fc_block.transactions[0].operations;
+        assert_eq!(fc_ops.len(), 1);
+        assert_eq!(fc_ops[0].type_, OperationType::FeeCollector.to_string());
+        assert_eq!(fc_ops[0].status.as_deref(), Some(STATUS_COMPLETED));
+        assert!(fc_ops[0].account.is_none());
+        assert!(fc_ops[0].amount.is_none());
+        let fc_block_meta = BlockMetadata::try_from(fc_block.metadata)
+            .expect("Failed to parse fee collector block metadata");
+        assert_eq!(fc_block_meta.btype.as_deref(), Some("107feecol"));
+        let fc_op_meta = FeeCollectorMetadata::try_from(fc_ops[0].metadata.clone().unwrap())
+            .expect("Failed to parse fee collector operation metadata");
+        assert_eq!(fc_op_meta.fee_collector, Some(fc_107));
+
+        // Mint block: MINT operation with positive amount, FEE operation with negative amount.
+        let block_response = env
+            .rosetta_client
+            .block(
+                env.network_identifier.clone(),
+                PartialBlockIdentifier {
+                    hash: None,
+                    index: Some(second_round_start),
+                },
+            )
+            .await
+            .expect("Failed to get mint block from Rosetta");
+        let mint_block = block_response.block.expect("Mint block should be present");
+        let mint_ops = &mint_block.transactions[0].operations;
+        assert_eq!(mint_ops.len(), 2);
+        assert_eq!(mint_ops[0].type_, OperationType::Mint.to_string());
+        assert_eq!(mint_ops[0].status.as_deref(), Some(STATUS_COMPLETED));
+        assert!(mint_ops[0].account.is_some());
+        assert_eq!(mint_ops[0].amount.as_ref().unwrap().value, "1000");
+        assert_eq!(mint_ops[1].type_, OperationType::Fee.to_string());
+        assert_eq!(mint_ops[1].amount.as_ref().unwrap().value, "-1");
+        let mint_block_meta = BlockMetadata::try_from(mint_block.metadata)
+            .expect("Failed to parse mint block metadata");
+        assert!(mint_block_meta.fee_collector.is_some());
+
+        // Transfer block: two TRANSFER operations (positive/negative) and a FEE operation.
+        let block_response = env
+            .rosetta_client
+            .block(
+                env.network_identifier.clone(),
+                PartialBlockIdentifier {
+                    hash: None,
+                    index: Some(second_round_start + 1),
+                },
+            )
+            .await
+            .expect("Failed to get transfer block from Rosetta");
+        let transfer_block = block_response
+            .block
+            .expect("Transfer block should be present");
+        let transfer_ops = &transfer_block.transactions[0].operations;
+        assert_eq!(transfer_ops.len(), 3);
+        assert_eq!(transfer_ops[0].type_, OperationType::Transfer.to_string());
+        assert_eq!(transfer_ops[0].status.as_deref(), Some(STATUS_COMPLETED));
+        assert_eq!(transfer_ops[0].amount.as_ref().unwrap().value, "1");
+        assert_eq!(transfer_ops[1].type_, OperationType::Transfer.to_string());
+        assert_eq!(transfer_ops[1].amount.as_ref().unwrap().value, "-1");
+        assert_eq!(transfer_ops[2].type_, OperationType::Fee.to_string());
+        assert_eq!(transfer_ops[2].amount.as_ref().unwrap().value, "-1");
+        let transfer_block_meta = BlockMetadata::try_from(transfer_block.metadata)
+            .expect("Failed to parse transfer block metadata");
+        assert_eq!(
+            transfer_block_meta.fee_collector_block_index,
+            Some(second_round_start)
+        );
+
+        // Approve block: APPROVE, SPENDER, and FEE operations.
+        let block_response = env
+            .rosetta_client
+            .block(
+                env.network_identifier.clone(),
+                PartialBlockIdentifier {
+                    hash: None,
+                    index: Some(second_round_start + 2),
+                },
+            )
+            .await
+            .expect("Failed to get approve block from Rosetta");
+        let approve_block = block_response
+            .block
+            .expect("Approve block should be present");
+        let approve_ops = &approve_block.transactions[0].operations;
+        assert_eq!(approve_ops.len(), 3);
+        assert_eq!(approve_ops[0].type_, OperationType::Approve.to_string());
+        assert_eq!(approve_ops[0].status.as_deref(), Some(STATUS_COMPLETED));
+        assert_eq!(approve_ops[1].type_, OperationType::Spender.to_string());
+        assert_eq!(approve_ops[2].type_, OperationType::Fee.to_string());
+        assert_eq!(approve_ops[2].amount.as_ref().unwrap().value, "-1");
+
+        // TransferFrom block: two TRANSFER operations, SPENDER, and FEE operations.
+        let block_response = env
+            .rosetta_client
+            .block(
+                env.network_identifier.clone(),
+                PartialBlockIdentifier {
+                    hash: None,
+                    index: Some(second_round_start + 3),
+                },
+            )
+            .await
+            .expect("Failed to get transfer_from block from Rosetta");
+        let xfer_from_block = block_response
+            .block
+            .expect("TransferFrom block should be present");
+        let xfer_from_ops = &xfer_from_block.transactions[0].operations;
+        assert_eq!(xfer_from_ops.len(), 4);
+        assert_eq!(xfer_from_ops[0].type_, OperationType::Transfer.to_string());
+        assert_eq!(xfer_from_ops[0].amount.as_ref().unwrap().value, "1");
+        assert_eq!(xfer_from_ops[1].type_, OperationType::Transfer.to_string());
+        assert_eq!(xfer_from_ops[1].amount.as_ref().unwrap().value, "-1");
+        assert_eq!(xfer_from_ops[2].type_, OperationType::Spender.to_string());
+        assert_eq!(xfer_from_ops[3].type_, OperationType::Fee.to_string());
+        assert_eq!(xfer_from_ops[3].amount.as_ref().unwrap().value, "-1");
 
         let (block_index, block_hash) = set_fee_col_107(
             &agent,
