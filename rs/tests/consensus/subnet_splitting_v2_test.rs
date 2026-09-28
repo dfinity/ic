@@ -273,58 +273,70 @@ async fn call_counter_canisters_until_stopped(
     };
     futures::future::join_all(counter_canister_ids.iter().map(|canister_id| async move {
         while !stop.load(Ordering::Relaxed) {
-            retry_with_msg_async_quiet!(
-                format!("Calling counter canister {canister_id} during the subnet split"),
-                &env.logger(),
+            // The retry only checks its timeout after a failed attempt, so a slow but
+            // eventually successful call (e.g. `call_and_wait` polling for a long time)
+            // would go unnoticed. Enforce a hard bound on the whole downtime instead.
+            tokio::time::timeout(
                 timeout(canister_id),
-                Duration::from_secs(1),
-                || async {
-                    // Re-resolve the host on every attempt: the migrated canisters move from
-                    // the source to the destination subnet partway through the split.
-                    let node = env
-                        .topology_snapshot()
-                        .subnets()
-                        .find(|subnet| {
-                            subnet
-                                .subnet_canister_ranges()
-                                .iter()
-                                .any(|range| range.contains(canister_id))
-                        })
-                        .and_then(|subnet| {
-                            subnet
-                                .nodes()
-                                .nth(rand::random::<usize>() % subnet.nodes().count())
-                        })
-                        .expect("The counter canister is not hosted by any subnet");
+                retry_with_msg_async_quiet!(
+                    format!("Calling counter canister {canister_id} during the subnet split"),
+                    &env.logger(),
+                    timeout(canister_id),
+                    Duration::from_secs(1),
+                    || async {
+                        // Re-resolve the host on every attempt: the migrated canisters move from
+                        // the source to the destination subnet partway through the split.
+                        let node = env
+                            .topology_snapshot()
+                            .subnets()
+                            .find(|subnet| {
+                                subnet
+                                    .subnet_canister_ranges()
+                                    .iter()
+                                    .any(|range| range.contains(canister_id))
+                            })
+                            .and_then(|subnet| {
+                                subnet
+                                    .nodes()
+                                    .nth(rand::random::<usize>() % subnet.nodes().count())
+                            })
+                            .expect("The counter canister is not hosted by any subnet");
 
-                    let agent = create_agent(node.get_public_url().as_str()).await?;
-                    match futures::future::try_join(
-                        agent.query(&canister_id.get().0, "read".to_string()).call(),
-                        agent
-                            .update(&canister_id.get().0, "read".to_string())
-                            .call_and_wait(),
-                    )
-                    .await
-                    {
-                        Ok(_) => Ok(()),
-                        Err(err @ AgentError::CertificateNotAuthorized())
-                        | Err(err @ AgentError::CertificateVerificationFailed())
-                        | Err(err @ AgentError::CertificateOutdated(_)) => {
-                            // These errors could happen with an invalid/stale delegation.
-                            // Replicas could be able to detect this and refresh their delegations
-                            // before attempting to reply (and we could panic here to ensure we do
-                            // not observe those errors), but this is not yet implemented. So we
-                            // retry instead.
-                            Err(err.into())
-                        }
-                        Err(err) => {
-                            // Transient errors are expected during the subnet split, so we retry.
-                            Err(err.into())
+                        let agent = create_agent(node.get_public_url().as_str()).await?;
+                        match futures::future::try_join(
+                            agent.query(&canister_id.get().0, "read".to_string()).call(),
+                            agent
+                                .update(&canister_id.get().0, "read".to_string())
+                                .call_and_wait(),
+                        )
+                        .await
+                        {
+                            Ok(_) => Ok(()),
+                            Err(err @ AgentError::CertificateNotAuthorized())
+                            | Err(err @ AgentError::CertificateVerificationFailed())
+                            | Err(err @ AgentError::CertificateOutdated(_)) => {
+                                // These errors could happen with an invalid/stale delegation.
+                                // Replicas could be able to detect this and refresh their delegations
+                                // before attempting to reply (and we could panic here to ensure we do
+                                // not observe those errors), but this is not yet implemented. So we
+                                // retry instead.
+                                Err(err.into())
+                            }
+                            Err(err) => {
+                                // Transient errors are expected during the subnet split, so we retry.
+                                Err(err.into())
+                            }
                         }
                     }
-                }
+                ),
             )
             .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Counter canister {canister_id} was unavailable for more than {:?} during the subnet split",
+                    timeout(canister_id)
+                )
+            })
             .expect("A call to a counter canister failed during the subnet split");
 
             tokio::time::sleep(Duration::from_secs(1)).await;
