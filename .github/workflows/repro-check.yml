@@ -24,12 +24,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   repro-check:
     name: Run repro-check for ${{ inputs.github_sha || github.sha }}
-    # run on all events except on PRs from forks
+    # Only on dfinity/ic, whose source a verifier can fetch and whose builds are attested; not on PRs from forks.
     if: |
-      github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+      github.repository == 'dfinity/ic' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on:
       labels: dind-large
     container:
@@ -54,23 +58,29 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
         with:
           sparse-checkout: "ci/scripts/repro-check"
+          persist-credentials: false
 
       - name: Repro check for PR
         shell: bash
         if: ${{ github.event_name == 'pull_request' }}
         env:
           CI_PROJECT_DIR: ${{ github.workspace }}
+          COMMIT: ${{ github.sha }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
           set -euo pipefail
-          sudo -u ubuntu -- "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit ${{ github.sha }} --dry-run
+          sudo -u ubuntu -- "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit "$COMMIT" --dry-run
 
       - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
         if: ${{ github.event_name != 'pull_request' }}
+        env:
+          COMMIT: ${{ inputs.github_sha }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
-          sudo -u ubuntu bash -c '
-            curl -fsSL https://raw.githubusercontent.com/dfinity/ic/${{ github.sha }}/ci/scripts/repro-check |
-            python3 - -c ${{ inputs.github_sha }}
+          # The command the README gives verifiers, with the commit's own script; pipefail so that a failed fetch fails the job.
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "github_sha must be a full commit id, got '$COMMIT'" >&2; exit 1; }
+          sudo --preserve-env=COMMIT -u ubuntu -- bash -o pipefail -c '
+            curl -fsSL "https://raw.githubusercontent.com/dfinity/ic/$COMMIT/ci/scripts/repro-check" |
+            python3 - -c "$COMMIT"
           '
