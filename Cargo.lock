@@ -9950,7 +9950,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-test-utilities-registry",
  "ic-types",
- "slog",
  "strum 0.26.3",
 ]
 
