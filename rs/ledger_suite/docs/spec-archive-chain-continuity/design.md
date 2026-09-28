@@ -399,8 +399,8 @@ controllable, Req 4.2's `false` rests on review of the branch that sets the flag
 | 10 | archive | genesis at offset 0; parentless block refused at non-zero offset and into a non-empty archive; parented block refused at index 0; parentless block declared at 5 refused | 1.4, 2.2 |
 | 11 | archive | no Expected_Parent: first indexed append stored, unverifiable counter rises, `verified` false; the same first append **index-less**: stored, empty reply, counter rises (the only shape PR 1 sees in production); with Expected_Parent: mismatching first batch refused, matching one stored and not counted | 1.2, 1.7, 1.8, 3.4, 6.1 |
 | 12 | archive | one-argument call against the new archive: stored, empty reply, a mismatch traps | 5.1, 5.2, 5.4 |
-| 13 | unit, candid | `test_old_ledger_decodes_new_archive_reply_as_unit`: `(None::<append_result>,)` decodes as `()` the way the old ledger does; undeclared trailing bytes still fail. **Release gate**, written on the spec branch, lands with PR 1 | 5.1 |
-| 14 | archive | `should_ignore_an_extra_optional_start_index` (ICP archive): extra argument tolerated. **Release gate**, written on the spec branch, lands with PR 1 | D8 |
+| 13 | unit, candid | `test_old_ledger_decodes_new_archive_reply_as_unit`: `(None::<append_result>,)` decodes as `()` the way the old ledger does; undeclared trailing bytes still fail. **Release gate**, already written and landing with this specification | 5.1 |
+| 14 | archive | `should_ignore_an_extra_optional_start_index` (ICP archive): extra argument tolerated. **Release gate**, already written and landing with this specification | D8 |
 | 15 | archive | each counter in Req 6.1 moves for its own cause, `Undecodable` included, and is readable after; the same refusals index-less fail the call and move nothing | 6.1–6.3 |
 | 16 | archive | growth refused by a route that returns control (wasm stable maximum or subnet cap): `at_capacity` false, prefix readable; a low `reserved_cycles_limit`: call rejected, nothing stored | 4.2, 4.5 |
 | 17 | unit, archive | pre-change `ArchiveConfig` CBOR decodes with the new field absent | D4 |
@@ -457,9 +457,10 @@ release lands much later.
 
 **Archive release — PR 1** (DEFI-3016). `append_blocks`'s new argument and result,
 placement, the clamp, the chain check on every stored block, the Expected_Parent at
-`init`, capacity reporting, the counters, the `.did`, and the release-gate tests of rows
-13 and 14. Retires `test_append_blocks_ignores_an_extra_optional_start_index`, whose
-`Option<u64>` decode stops describing the archive. Until the ledger release, a re-send
+`init`, capacity reporting, the counters, the `.did`. The release-gate tests of rows 13
+and 14 land with this specification and must pass before it. Retires
+`test_append_blocks_ignores_an_extra_optional_start_index`, whose `Option<u64>` decode
+stops describing the archive. Until the ledger release, a re-send
 after a lost callback is refused and the old ledger halts on it, retrying per
 transaction: survivable, but keep the window short. *Acceptance:* Req 1–6.
 
