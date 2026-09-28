@@ -278,7 +278,10 @@ if [ "$RUNTIME" = docker ]; then
 else
     # Privileged rootful podman is required due to requirements of IC-OS guest build;
     # additionally, we need to use hosts's cgroups and network.
-    RUNTIME_RUN_ARGS+=(--pids-limit=-1 --privileged --network=host --cgroupns=host)
+    #
+    # `--pids-limit=-1` turns into `--pids-limit=1` somewhere down the podman -> runc
+    # stack, so use a very high positive limit instead.
+    RUNTIME_RUN_ARGS+=(--pids-limit=4194304 --privileged --network=host --cgroupns=host)
 fi
 
 # In the devenv, inject some extra files into the container for convenience
