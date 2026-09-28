@@ -7,6 +7,8 @@ on:
   pull_request:
     paths:
       - '.github/workflows/update-mainnet-icos-revisions.yaml'
+      - 'ci/src/mainnet_revisions/mainnet_revisions.py'
+      - 'ci/scripts/fetch-attested-sums.sh'
 
 defaults:
   run:
@@ -28,6 +30,40 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ steps.app-token.outputs.token }}
+
+      # The updater verifies CDN-served SHA256SUMS files against build-provenance
+      # attestations via ci/scripts/fetch-attested-sums.sh, which needs a gh
+      # version with `gh attestation verify --source-digest`. Pin it instead of
+      # trusting whatever the runner image ships (same step as in
+      # update-mainnet-canister-revisions.yaml).
+      - name: Setup gh cli
+        env:
+          GH_CLI_VERSION: 2.98.0
+          # sha256 of gh_${GH_CLI_VERSION}_linux_amd64.tar.gz. When bumping the
+          # version, take the new value from that release's
+          # gh_${GH_CLI_VERSION}_checksums.txt asset.
+          GH_CLI_SHA256: 3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de
+        run: |
+          set -eEuxo pipefail
+
+          # Without --fail, 4xx and 5xx are considered "success", because UNIX.
+          # If this keeps failing, consider applying other --retry-??? flags.
+          curl \
+            --location https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_amd64.tar.gz \
+            --output gh_cli.tar.gz \
+            --fail \
+            --retry 7
+
+          # Release assets are mutable under an existing tag, so the URL alone is
+          # not a trust anchor: verify against the checksum pinned above before
+          # unpacking or running anything.
+          echo "${GH_CLI_SHA256}  gh_cli.tar.gz" | sha256sum --check
+
+          tar -xvf gh_cli.tar.gz
+          mv "gh_${GH_CLI_VERSION}_linux_amd64" gh_cli
+          chmod +x ./gh_cli/bin/gh
+          sudo cp ./gh_cli/bin/gh /usr/local/bin/
+          rm -rf gh_cli*
 
       - name: Update mainnet ICOS versions file
         env:
