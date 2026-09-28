@@ -1,6 +1,6 @@
 # HTTPS Outcalls (Canister HTTP Requests)
 
-**Crates**: `ic-https-outcalls-adapter`, `ic-https-outcalls-adapter-client`, `ic-https-outcalls-consensus`, `ic-https-outcalls-pricing`, `ic-https-outcalls-service`
+**Crates**: `ic-https-outcalls-adapter`, `ic-https-outcalls-adapter-client`, `ic-https-outcalls-consensus`, `ic-https-outcalls-pricing`, `ic-https-outcalls-service`, `ic-https-outcalls-socks-proxy`
 
 ## Requirements
 
@@ -32,6 +32,26 @@ The HTTPS outcalls adapter is an out-of-process gRPC service that executes HTTP 
 - **AND** SOCKS proxies are tried in random order
 - **AND** up to 2 SOCKS proxy attempts are made (`MAX_SOCKS_PROXY_TRIES`)
 - **AND** SOCKS proxy clients are cached for reuse
+
+### Requirement: SOCKS Proxy Resolution
+
+Which nodes an outcall may be proxied through is registry policy, shared by every outcall path (the consensus pool manager, and an upcoming caller for HTTP outcalls from composite queries). `SocksProxyCache` (`ic-https-outcalls-socks-proxy`) resolves and memoizes that answer.
+
+#### Scenario: Resolve SOCKS proxy addresses by subnet type
+- **WHEN** `SocksProxyCache::addrs` is called
+- **THEN** for a `System` subnet, the eligible boundary nodes are the system API boundary nodes; for every other subnet type, the app API boundary nodes
+- **AND** each eligible node's address is formatted as `socks5h://[ip_addr]:1080`
+- **AND** a node that fails to resolve (no node record, or no HTTP endpoint) is skipped rather than failing the whole lookup
+
+#### Scenario: Resolution is memoized per registry version
+- **WHEN** `addrs` is called again before the registry's latest version has advanced
+- **THEN** the memoized result is returned without re-reading the registry
+- **AND** once the latest version advances, the next call recomputes and re-memoizes
+
+#### Scenario: Resolution never fails the caller
+- **WHEN** the registry is unreadable, or contains no eligible boundary nodes
+- **THEN** `addrs` returns an empty list rather than an error, degrading an outcall to a direct attempt
+- **AND** each resolution failure is still reported through the optional error observer, on every call even while memoized
 
 #### Scenario: Response size limit enforcement
 - **WHEN** the response headers plus body exceed `max_response_size_bytes`
