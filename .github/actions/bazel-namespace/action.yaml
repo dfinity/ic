@@ -14,10 +14,13 @@ description: |
 
   Afterwards, also when `run` failed or ran out of timeout-minutes, but not when the job was
   cancelled, the logs of the tests that FAILED, were FLAKY or hit a TIMEOUT are staged and two
-  artifacts are uploaded to Namespace Artifact Storage:
-    <artifact-name>-bep:  the BEP files and profiles;
-    <artifact-name>-logs: the console output of `run` and the staged test logs.
-  Retrieve them with namespace-actions/download-artifact or `nsc artifact`.
+  artifacts are uploaded:
+    <artifact-name>-logs: the console output of `run` and the staged test logs, to Namespace
+                          Artifact Storage. Retrieve it with namespace-actions/download-artifact
+                          or `nsc artifact`;
+    <artifact-name>-bep:  the profiles and, if GPG_PASSPHRASE is set, the BEP files encrypted with
+                          it, to GitHub, where github-stats (dfinity-ops/k8s) ingests them into
+                          the database of ci/githubstats.
 
   Before using this action the job must:
     * run namespacelabs/nscloud-setup and
@@ -26,7 +29,7 @@ description: |
     * check out the repository;
     * in a container job: mount /var/run/nsc/ and forward NSC_TOKEN_FILE and
       NAMESPACE_ACTIONS_{RESULTS_URL,RESULTS_SERVICE,DIRECT_ZIP_UPLOAD} via container.env for the
-      uploads, see https://namespace.so/docs/reference/github-actions/upload-artifact.
+      Namespace uploads, see https://namespace.so/docs/reference/github-actions/upload-artifact.
   Give the calling step an `id:` (for stable artifact names) and set both the timeout-minutes
   input and, as a backstop, a higher timeout-minutes on the calling step (see the input).
 
@@ -54,7 +57,15 @@ inputs:
     default: ${{ github.job }}-${{ github.action }}-${{ github.run_attempt }}
     description: |
       Prefix of the names of the uploaded artifacts, which must be unique in the workflow run.
-      Pass one explicitly in matrix jobs.
+      Pass one explicitly in matrix jobs. It is also the job name (at most 100 characters) under
+      which github-stats stores the bazel invocations of the <artifact-name>-bep artifact.
+  GPG_PASSPHRASE:
+    required: false
+    default: ''
+    description: |
+      Passphrase to encrypt the BEP files with for the public <artifact-name>-bep artifact on
+      GitHub: pass secrets.GPG_PASSPHRASE, with which github-stats decrypts them. BEP files contain
+      the options and environment of the bazel client, so they are only uploaded encrypted.
 
 runs:
   using: composite
@@ -159,22 +170,8 @@ runs:
           fi
         done
 
-    - name: Upload the BEP files and profiles to Namespace Artifact Storage
-      # Analyze the profiles with e.g. `bazel analyze-profile` or
-      # https://github.com/EngFlow/bazel_invocation_analyzer. A failed upload must not fail the
-      # calling step, which would skip the workflow steps after it.
-      if: ${{ !cancelled() }}
-      continue-on-error: true
-      uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
-      with:
-        name: ${{ inputs.artifact-name }}-bep
-        path: |
-          ${{ steps.out.outputs.dir }}/bazel-bep-*.pb
-          ${{ steps.out.outputs.dir }}/profile-*.json.gz
-        if-no-files-found: ignore
-        retention-days: 14
-
     - name: Upload the console output and the staged test logs to Namespace Artifact Storage
+      # A failed upload must not fail the calling step, which would skip the later workflow steps.
       if: ${{ !cancelled() }}
       continue-on-error: true
       uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
@@ -185,3 +182,69 @@ runs:
           ${{ steps.out.outputs.dir }}/test-logs/**
         if-no-files-found: ignore
         retention-days: 14
+
+    - name: Encrypt the BEP files
+      # For the GitHub artifact below. The passphrase is only in the env of this step, not in the
+      # one of `run`, whose environment the BEP files record. A BEP file that can't be encrypted
+      # isn't uploaded; that must not fail the calling step.
+      if: ${{ !cancelled() && inputs.GPG_PASSPHRASE != '' }}
+      continue-on-error: true
+      shell: bash
+      env:
+        BAZEL_NAMESPACE_OUT: ${{ steps.out.outputs.dir }}
+        GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
+      run: |
+        # Not -e: one BEP file that can't be encrypted mustn't stop the others.
+        set +e -uo pipefail
+        shopt -s nullglob
+
+        beps=("$BAZEL_NAMESPACE_OUT"/bazel-bep-*.pb)
+        if [ "${#beps[@]}" -eq 0 ]; then
+          echo "No BEP files; nothing to encrypt."
+          exit 0
+        fi
+        if ! command -v gpg >/dev/null; then
+          echo "::error::gpg is not installed, so the BEP files are not uploaded."
+          exit 1
+        fi
+
+        # Keep the passphrase out of the environment of gpg and of the gpg-agent it starts, which
+        # outlives this step, and out of argv: gpg reads it from stdin, printf being a builtin.
+        passphrase="$GPG_PASSPHRASE"
+        unset GPG_PASSPHRASE
+        case "$passphrase" in *$'\n'*)
+          echo "::error::GPG_PASSPHRASE contains a newline, which --passphrase-fd would drop, so the BEP files are not uploaded."
+          exit 1
+          ;;
+        esac
+
+        status=0
+        for bep in "${beps[@]}"; do
+          # Plain AES256 without AEAD: github-stats decrypts with the GnuPG 2.2 of Debian bookworm.
+          if printf '%s' "$passphrase" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --no-symkey-cache --symmetric --cipher-algo AES256 --output "$bep.gpg" "$bep"; then
+            rm -f "$bep"
+          else
+            # github-stats would skip the whole artifact, profiles included, for a broken .gpg file.
+            rm -f "$bep.gpg"
+            echo "::warning::Could not encrypt $bep, so it is not uploaded."
+            status=1
+          fi
+        done
+        exit "$status"
+
+    - name: Upload the profiles and the encrypted BEP files to GitHub
+      # github-stats (dfinity-ops/k8s) reads the root of the archive, pairs profile-<id>.json with
+      # bazel-bep-<id>.pb.gpg and stores them in the database of ci/githubstats. The artifacts of
+      # dfinity/ic are public: never upload unencrypted BEP files.
+      if: ${{ !cancelled() }}
+      continue-on-error: true
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      with:
+        name: ${{ inputs.artifact-name }}-bep
+        path: |
+          ${{ steps.out.outputs.dir }}/profile-*.json
+          ${{ steps.out.outputs.dir }}/bazel-bep-*.pb.gpg
+        if-no-files-found: ignore
+        retention-days: 14
+        compression-level: 9

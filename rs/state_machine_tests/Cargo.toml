@@ -20,6 +20,7 @@ ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
+ic-consensus-upgrade = { path = "../consensus/upgrade" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }

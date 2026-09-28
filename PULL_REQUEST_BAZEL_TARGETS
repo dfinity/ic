@@ -46,6 +46,10 @@ mainnet-icos-revisions.json
   //rs/tests/consensus/backup:backup_manager_upgrade_test_farm_colocate
   //rs/tests/consensus/upgrade:upgrade_downgrade_app_subnet_test_farm_colocate
 
+mainnet-canister-revisions.json
+  //rs/nervous_system/integration_tests:upgrade_everything_test
+  //rs/nervous_system/integration_tests:sns_lifecycle
+
 ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_long_test_farm
 
 # Run most nested tests for any ic-os/ or rs/ic_os/ changes:
@@ -93,6 +97,8 @@ rs/bitcoin/ckbtc/*   //rs/tests/ckbtc:ckdoge_minter_basics_test_farm
 rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test_farm
 
 rs/migration_canister/* //rs/tests/execution:canister_migration_test_head_nns_farm
+
+rs/node_rewards/canister/* //rs/nns/integration_tests:node_provider_remuneration
 
 rs/nns/governance/* //rs/nns/governance:governance_integration_test
                     //rs/nns/governance:merge_neurons_test
