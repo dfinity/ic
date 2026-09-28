@@ -312,6 +312,45 @@ fn bless_alternative_guest_os_title_shortens_rootfs_hash_for_explicit_nodes() {
 }
 
 #[test]
+fn split_subnet_parses_flags_and_derives_title() {
+    let source_subnet = PrincipalId::new_subnet_test_id(1);
+    let initial_dkg_subnet = PrincipalId::new_subnet_test_id(2);
+    let node_ids = [
+        PrincipalId::new_node_test_id(3),
+        PrincipalId::new_node_test_id(4),
+    ];
+    let canister_id_range = CanisterIdRange {
+        start: CanisterId::from_u64(0),
+        end: CanisterId::from_u64(99),
+    };
+    let cmd = ProposeToSplitSubnetCmd::parse_from([
+        "propose-to-split-subnet",
+        "--source-subnet",
+        &source_subnet.to_string(),
+        "--destination-node-ids",
+        &node_ids[0].to_string(),
+        &node_ids[1].to_string(),
+        "--destination-canister-id-ranges",
+        &format!("{}:{}", canister_id_range.start, canister_id_range.end),
+        "--initial-dkg-subnet",
+        &initial_dkg_subnet.to_string(),
+    ]);
+
+    assert_eq!(cmd.source_subnet, source_subnet);
+    assert_eq!(cmd.destination_node_ids, node_ids);
+    assert_eq!(cmd.destination_canister_id_ranges, vec![canister_id_range]);
+    assert_eq!(cmd.initial_dkg_subnet, Some(initial_dkg_subnet));
+    assert_eq!(
+        cmd.title(),
+        format!(
+            "Split subnet {} by moving nodes {} and 1 canister ranges to a new subnet",
+            shortened_pid_string(&source_subnet),
+            shortened_pids_string(&node_ids),
+        )
+    );
+}
+
+#[test]
 fn convert_from_flags_to_create_service_nervous_system_without_start_time() {
     let logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
     let token_logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAAAAAAEAAEvUrSNAAAAAElFTkSuQmCC";

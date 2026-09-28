@@ -150,6 +150,7 @@ use registry_canister::mutations::{
     do_set_subnet_operational_level::{
         NodeSshAccess, SetSubnetOperationalLevelPayload, operational_level,
     },
+    do_split_subnet::SplitSubnetPayload,
     do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
     do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
     do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
@@ -477,8 +478,12 @@ enum SubCommand {
     /// Submits a proposal to uninstall and install root to a particular version
     ProposeToHardResetNnsRootToVersion(ProposeToHardResetNnsRootToVersionCmd),
 
-    // Submits a proposal to add custom upgrade path entries
+    /// Submits a proposal to add custom upgrade path entries
     ProposeToInsertSnsWasmUpgradePathEntries(ProposeToInsertSnsWasmUpgradePathEntriesCmd),
+
+    /// Submits a proposal to split a subnet, i.e. to move some of its nodes and
+    /// canister ID ranges to a newly created subnet.
+    ProposeToSplitSubnet(ProposeToSplitSubnetCmd),
 
     /// Submits a proposal to merge a subnet into another one, i.e. to reroute
     /// the canister ID ranges of the source subnet to the destination subnet.
@@ -1126,6 +1131,62 @@ impl ProposalPayload<DeleteSubnetPayload> for ProposeToDeleteSubnetCmd {
     async fn payload(&self, _: &Agent) -> DeleteSubnetPayload {
         DeleteSubnetPayload {
             subnet_id: Principal::from(self.subnet_id),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to split a subnet.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToSplitSubnetCmd {
+    /// The subnet to split. It keeps the nodes and canister ID ranges that are
+    /// not moved to the destination subnet.
+    #[clap(long)]
+    pub source_subnet: PrincipalId,
+
+    /// The nodes of the source subnet that form the newly created destination
+    /// subnet. They must make up half of the source subnet.
+    #[clap(long, num_args(1..), required = true)]
+    pub destination_node_ids: Vec<PrincipalId>,
+
+    /// The canister ID ranges of the source subnet that are rerouted to the
+    /// newly created destination subnet.
+    #[clap(long, num_args(1..), required = true)]
+    pub destination_canister_id_ranges: Vec<CanisterIdRange>,
+
+    /// The subnet that handles the initial DKG of the destination subnet. If
+    /// not set, the NNS subnet handles it. It must not be the source subnet.
+    #[clap(long)]
+    pub initial_dkg_subnet: Option<PrincipalId>,
+}
+
+impl ProposalTitle for ProposeToSplitSubnetCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Split subnet {} by moving nodes {} and {} canister ranges to a new subnet",
+                shortened_pid_string(&self.source_subnet),
+                shortened_pids_string(&self.destination_node_ids),
+                self.destination_canister_id_ranges.len(),
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<SplitSubnetPayload> for ProposeToSplitSubnetCmd {
+    async fn payload(&self, _: &Agent) -> SplitSubnetPayload {
+        SplitSubnetPayload {
+            destination_canister_ranges: self.destination_canister_id_ranges.clone(),
+            destination_node_ids: self
+                .destination_node_ids
+                .iter()
+                .copied()
+                .map(NodeId::from)
+                .collect(),
+            source_subnet_id: SubnetId::from(self.source_subnet),
+            initial_dkg_subnet_id: self.initial_dkg_subnet.map(SubnetId::from),
         }
     }
 }
@@ -4809,6 +4870,7 @@ async fn main() {
             SubCommand::ProposeToSetAuthorizedSubnetworks(_) => (),
             SubCommand::ProposeToSetBitcoinConfig(_) => (),
             SubCommand::ProposeToSetFirewallConfig(_) => (),
+            SubCommand::ProposeToSplitSubnet(_) => (),
             SubCommand::ProposeToStartCanister(_) => (),
             SubCommand::ProposeToStopCanister(_) => (),
             SubCommand::ProposeToTakeCanisterSnapshot(_) => (),
@@ -5251,6 +5313,21 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::MergeSubnets,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToSplitSubnet(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::SplitSubnet,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
