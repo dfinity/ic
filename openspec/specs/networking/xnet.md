@@ -48,7 +48,7 @@ The XNet endpoint serves certified stream slices over HTTPS to other subnets for
 - **THEN** the request is refused before reaching the handler if the caller is over its per-node token budget (5/s sustained, burst 10), if the registry does not list the caller as a member of the source subnet, if the method is not `POST`, or if the body exceeds `ADVERT_MAX_BODY_BYTES` (32 KiB)
 - **AND** the body is fully read, within `ADVERT_BODY_TIMEOUT` (1 second), before one of the endpoint's few request permits is taken, so a caller cannot starve other callers by holding a permit open without sending its announced body
 - **AND** a body that does not arrive within that timeout is rejected with `408 Request Timeout`
-- **AND** otherwise the body is decoded and passed to the `XNetAdvertHandler` implemented by `XNetPayloadBuilderImpl`
+- **AND** otherwise the body is decoded and passed to the `XNetAdvertHandler` implemented by `XNetAdvertHandlerImpl`, which shares the `CertifiedSlicePool` with `XNetPayloadBuilderImpl` (exposed via its `advert_handler()` accessor)
 - **AND** an advert that brings nothing new is answered with our own certified header, so the sender can observe that we have consumed its stream
 - **AND** an actionable advert is classified and counted, but for now simply dropped, since there is no schedule yet to enqueue it on
 
