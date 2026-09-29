@@ -42,7 +42,7 @@ impl TryFrom<&str> for HostosVersion {
     type Error = HostosVersionParseError;
 
     fn try_from(version_str: &str) -> Result<Self, Self::Error> {
-        if !version_str.chars().all(is_valid_version_symbol) {
+        if version_str.is_empty() || !version_str.chars().all(is_valid_version_symbol) {
             Err(HostosVersionParseError(version_str.to_string()))
         } else {
             Ok(HostosVersion {
@@ -67,7 +67,7 @@ impl fmt::Display for HostosVersionParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "version must contain only alpha-numeric characters, dots(.), dashes(-) and underscores(_), got {}",
+            "version must not be empty, and contain only alpha-numeric characters, dots(.), dashes(-) and underscores(_), got '{}'",
             self.0
         )
     }
@@ -85,5 +85,6 @@ mod test {
         assert!(HostosVersion::try_from("1.2.1").is_ok());
         assert!(HostosVersion::try_from("8aefz17q_1").is_ok());
         assert!(HostosVersion::try_from("?+").is_err());
+        assert!(HostosVersion::try_from("").is_err());
     }
 }

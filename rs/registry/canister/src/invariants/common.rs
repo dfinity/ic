@@ -3,6 +3,7 @@ use std::{
     convert::TryFrom,
     error,
     fmt::{Display, Formatter, Result as FmtResult},
+    ops::Bound::{Included, Unbounded},
 };
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
@@ -12,8 +13,8 @@ use ic_protobuf::registry::{
     replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
-    CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
-    REPLICA_VERSION_KEY_PREFIX, get_api_boundary_node_record_node_id, get_node_record_node_id,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX,
+    HOSTOS_VERSION_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, REPLICA_VERSION_KEY_PREFIX,
     make_node_record_key, make_subnet_list_record_key,
 };
 use prost::Message;
@@ -46,124 +47,98 @@ impl error::Error for InvariantCheckError {
     }
 }
 
-/// Returns all node records in the snapshot.
-pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> BTreeMap<NodeId, NodeRecord> {
+fn registry_snapshot_range<T: Message + Default>(
+    snapshot: &RegistrySnapshot,
+    prefix: &str,
+) -> Result<BTreeMap<String, T>, InvariantCheckError> {
     let mut nodes = BTreeMap::new();
-    for (k, v) in snapshot {
-        if let Some(id) = get_node_record_node_id(str::from_utf8(k).unwrap()) {
-            let record = NodeRecord::decode(v.as_slice()).unwrap();
-            nodes.insert(NodeId::from(id), record);
-        }
+
+    // Note: effectively .range(PREFIX..)
+    for (k, v) in snapshot.range::<[u8], _>((Included(prefix.as_bytes()), Unbounded)) {
+        let Some(k) = k.strip_prefix(prefix.as_bytes()) else {
+            break;
+        };
+
+        let key = str::from_utf8(k)
+            .map_err(|err| InvariantCheckError {
+                msg: format!("Failed to decode keys from the RegistrySnapshot: {err}"),
+                source: None,
+            })?
+            .to_string();
+        let value = T::decode(v.as_slice()).map_err(|err| InvariantCheckError {
+            msg: format!("Deserialize registry value for key '{key}' failed with {err}"),
+            source: None,
+        })?;
+
+        nodes.insert(key, value);
     }
 
-    nodes
+    Ok(nodes)
+}
+
+/// Returns all node records in the snapshot.
+pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> BTreeMap<NodeId, NodeRecord> {
+    registry_snapshot_range::<NodeRecord>(snapshot, NODE_RECORD_KEY_PREFIX)
+        .unwrap()
+        .into_iter()
+        .map(|(k, v)| (NodeId::from(k.parse::<PrincipalId>().unwrap()), v))
+        .collect()
 }
 
 /// Returns all replica version records in the snapshot.
 pub(crate) fn get_all_replica_version_records(
     snapshot: &RegistrySnapshot,
 ) -> BTreeMap<String, ReplicaVersionRecord> {
-    let mut replica_versions = BTreeMap::new();
-    for (k, v) in snapshot {
-        if let Some(key) = str::from_utf8(k)
-            .unwrap()
-            .strip_prefix(REPLICA_VERSION_KEY_PREFIX)
-        {
-            let record = ReplicaVersionRecord::decode(v.as_slice()).unwrap();
-            replica_versions.insert(key.to_owned(), record);
-        }
-    }
-
-    replica_versions
-}
-
-pub(crate) fn get_value_from_snapshot<T: Message + Default>(
-    snapshot: &RegistrySnapshot,
-    key: String,
-) -> Option<T> {
-    snapshot
-        .get(key.as_bytes())
-        .map(|v| T::decode(v.as_slice()).unwrap())
+    registry_snapshot_range::<ReplicaVersionRecord>(snapshot, REPLICA_VERSION_KEY_PREFIX).unwrap()
 }
 
 // Retrieve all records that serve as lists of subnets that can sign with chain keys
-#[allow(dead_code)]
 pub(crate) fn get_all_chain_key_signing_subnet_list_records(
     snapshot: &RegistrySnapshot,
 ) -> BTreeMap<String, ChainKeyEnabledSubnetList> {
-    let mut result = BTreeMap::<String, ChainKeyEnabledSubnetList>::new();
-    for key in snapshot.keys() {
-        let signing_subnet_list_key = String::from_utf8(key.clone()).unwrap();
-        if signing_subnet_list_key.starts_with(CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX) {
-            let chain_key_signing_subnet_list_record = match snapshot.get(key) {
-                Some(chain_key_signing_subnet_list_record) => ChainKeyEnabledSubnetList::decode(
-                    chain_key_signing_subnet_list_record.as_slice(),
-                )
-                .unwrap(),
-                None => panic!("Cannot fetch ChainKeySigningSubnetList record for an existing key"),
-            };
-            result.insert(
-                signing_subnet_list_key,
-                chain_key_signing_subnet_list_record,
-            );
-        }
-    }
-    result
+    registry_snapshot_range::<ChainKeyEnabledSubnetList>(
+        snapshot,
+        CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX,
+    )
+    .unwrap()
+    // TODO: Cleanup downstream users, and remove this workaround.
+    .into_iter()
+    // Preserve the prefix for crypto code, which depends on it downstream.
+    .map(|(k, v)| (format!("{CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX}{k}"), v))
+    .collect()
 }
 
 // Retrieve all HostOS version records
 pub(crate) fn get_all_hostos_version_records(
     snapshot: &RegistrySnapshot,
-) -> BTreeSet<HostosVersionRecord> {
-    let mut result = BTreeSet::new();
-    for (k, v) in snapshot {
-        if k.starts_with(HOSTOS_VERSION_KEY_PREFIX.as_bytes()) {
-            let hostos_version_record = HostosVersionRecord::decode(v.as_slice()).unwrap();
-            result.insert(hostos_version_record);
-        }
-    }
-
-    result
+) -> BTreeMap<String, HostosVersionRecord> {
+    registry_snapshot_range::<HostosVersionRecord>(snapshot, HOSTOS_VERSION_KEY_PREFIX).unwrap()
 }
 
 /// Returns all api boundary node records from the snapshot.
 pub(crate) fn get_api_boundary_node_records_from_snapshot(
     snapshot: &RegistrySnapshot,
 ) -> BTreeMap<NodeId, ApiBoundaryNodeRecord> {
-    let mut result = BTreeMap::<NodeId, ApiBoundaryNodeRecord>::new();
-    for (key, value) in snapshot.iter() {
-        let key_str =
-            String::from_utf8(key.clone()).expect("failed to convert UTF-8 byte vector to string");
-        if let Some(principal_id) = get_api_boundary_node_record_node_id(&key_str) {
-            // This is indeed an api boundary node record
-            let api_boundary_node_record = ApiBoundaryNodeRecord::decode(value.as_slice()).unwrap();
-            let node_id = NodeId::from(principal_id);
-            result.insert(node_id, api_boundary_node_record);
-        }
-    }
-    result
+    registry_snapshot_range::<ApiBoundaryNodeRecord>(snapshot, API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
+        .unwrap()
+        .into_iter()
+        .map(|(k, v)| (NodeId::from(k.parse::<PrincipalId>().unwrap()), v))
+        .collect()
 }
 
-/// Returns an all api boundary node ids record from the registry snapshot.
-pub(crate) fn get_api_boundary_node_ids_from_snapshot(
+pub(crate) fn get_value_from_snapshot<T: Message + Default>(
     snapshot: &RegistrySnapshot,
-) -> Result<BTreeSet<NodeId>, InvariantCheckError> {
+    key: &str,
+) -> Result<Option<T>, InvariantCheckError> {
     snapshot
-        .keys()
-        .cloned()
-        .map(|key| {
-            String::from_utf8(key).map_err(|_| InvariantCheckError {
-                msg: "Failed to decode keys from the RegistrySnapshot".to_string(),
+        .get(key.as_bytes())
+        .map(|v| {
+            T::decode(v.as_slice()).map_err(|err| InvariantCheckError {
+                msg: format!("Deserialize registry value for key '{key}' failed with {err}"),
                 source: None,
             })
         })
-        .collect::<Result<BTreeSet<String>, InvariantCheckError>>()
-        .map(|keys| {
-            keys.into_iter()
-                .filter_map(|key_str| get_api_boundary_node_record_node_id(&key_str))
-                .map(NodeId::from)
-                .collect()
-        })
+        .transpose()
 }
 
 /// Returns node record from the snapshot corresponding to a key.
@@ -171,24 +146,16 @@ pub(crate) fn get_node_record_from_snapshot(
     key: NodeId,
     snapshot: &RegistrySnapshot,
 ) -> Result<Option<NodeRecord>, InvariantCheckError> {
-    let key = make_node_record_key(key);
-    let value = snapshot.get(key.as_bytes());
-    value
-        .map(|bytes| {
-            NodeRecord::decode(bytes.as_slice()).map_err(|err| InvariantCheckError {
-                msg: format!("Deserialize registry value failed with {err}"),
-                source: None,
-            })
-        })
-        .transpose()
+    get_value_from_snapshot::<NodeRecord>(snapshot, &make_node_record_key(key))
 }
 
 pub(crate) fn get_subnet_ids_from_snapshot(snapshot: &RegistrySnapshot) -> BTreeSet<SubnetId> {
-    get_value_from_snapshot::<SubnetListRecord>(snapshot, make_subnet_list_record_key())
+    get_value_from_snapshot::<SubnetListRecord>(snapshot, &make_subnet_list_record_key())
+        .unwrap()
         .map(|r| {
             r.subnets
                 .iter()
-                .map(|s| SubnetId::from(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
+                .map(|s| SubnetId::from(PrincipalId::try_from(s).unwrap()))
                 .collect()
         })
         .unwrap_or_default()
@@ -254,7 +221,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "DecodeError")]
+    #[should_panic(expected = "failed to decode")]
     fn test_get_api_boundary_node_records_from_snapshot_with_wrongly_encoded_record() {
         let mut snapshot = RegistrySnapshot::new();
         let node_id: NodeId = PrincipalId::new_node_test_id(0).into();
@@ -267,7 +234,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "DecodeError")]
+    #[should_panic(expected = "failed to decode")]
     fn test_get_value_from_snapshot_panics() {
         let mut snapshot = RegistrySnapshot::new();
         let node_id: NodeId = PrincipalId::new_node_test_id(0).into();
@@ -277,6 +244,6 @@ mod tests {
             vec![0],                  // incorrect value, not an encoded ApiBoundaryNodeRecord
         );
         // this call should panic when decoding the ApiBoundaryNodeRecord
-        get_value_from_snapshot::<ApiBoundaryNodeRecord>(&snapshot, key);
+        get_value_from_snapshot::<ApiBoundaryNodeRecord>(&snapshot, &key).unwrap();
     }
 }
