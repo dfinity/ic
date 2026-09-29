@@ -226,21 +226,24 @@ fn should_count_the_depth_of_universal_containers_without_the_constructed_bit() 
     }
 }
 
-/// Elements using the high-tag-number form can carry the SEQUENCE and SET tag
-/// numbers, so their depth is counted as well.
 #[test]
-fn should_count_the_depth_of_elements_using_the_high_tag_number_form() {
-    // The SEQUENCE tag number encoded in the (non-minimal) long form.
-    let tag = [0x1f, 0x80, 0x10];
+fn should_reject_der_using_the_high_tag_number_form() {
+    let high_tag_number_identifiers: [&[u8]; 3] = [
+        // SEQUENCE, in the (non-minimal) high-tag-number form.
+        &[0x3f, 0x10],
+        &[0x1f, 0x80, 0x10],
+        // Context-specific tag number 31, the lowest that needs this form.
+        &[0x9f, 0x1f],
+    ];
 
-    assert_eq!(
-        KeyDerParser::check_der_limits(&nested_with_tag_bytes(&tag, MAX_DER_NESTING_DEPTH)),
-        Ok(())
-    );
-    assert!(
-        KeyDerParser::check_der_limits(&nested_with_tag_bytes(&tag, MAX_DER_NESTING_DEPTH + 1))
-            .is_err()
-    );
+    for identifier in high_tag_number_identifiers {
+        assert_eq!(
+            algo_id_and_public_key_bytes_from_der(&nested_with_tag_bytes(identifier, 1))
+                .unwrap_err()
+                .internal_error,
+            "DER uses the high-tag-number form, which is not supported"
+        );
+    }
 }
 
 /// Keys whose headers cannot be walked from start to end are rejected.
@@ -315,27 +318,6 @@ fn should_reject_oids_above_the_maximum_length() {
     assert_eq!(
         error.internal_error,
         format!("DER OBJECT IDENTIFIER length exceeds the maximum of {MAX_OID_OCTETS}")
-    );
-}
-
-#[test]
-fn should_reject_tag_numbers_above_the_maximum_length() {
-    let element_with_tag_number_of_octets = |num_octets| {
-        let mut der = vec![0x1f_u8];
-        der.resize(num_octets, 0x81);
-        der.extend_from_slice(&[0x01, 0x00]);
-        der
-    };
-
-    assert_eq!(
-        KeyDerParser::check_der_limits(&element_with_tag_number_of_octets(MAX_TAG_NUMBER_OCTETS)),
-        Ok(())
-    );
-    assert!(
-        KeyDerParser::check_der_limits(&element_with_tag_number_of_octets(
-            MAX_TAG_NUMBER_OCTETS + 1
-        ))
-        .is_err()
     );
 }
 

@@ -92,8 +92,8 @@ pub struct KeyDerParsingError {
 /// * `KeyDerParsingError` if:
 ///   - `pk_der` is malformed ASN.1
 ///   - `pk_der` is *not* the expected ASN.1 structure
-///   - `pk_der` exceeds [`MAX_DER_NESTING_DEPTH`], [`MAX_DER_ELEMENTS`],
-///     [`MAX_OID_OCTETS`] or [`MAX_TAG_NUMBER_OCTETS`]
+///   - `pk_der` exceeds [`MAX_DER_NESTING_DEPTH`], [`MAX_DER_ELEMENTS`] or
+///     [`MAX_OID_OCTETS`], or uses the high-tag-number form
 pub fn algo_id_and_public_key_bytes_from_der(
     der: &[u8],
 ) -> Result<(PkixAlgorithmIdentifier, Vec<u8>), KeyDerParsingError> {
@@ -113,14 +113,10 @@ pub const MAX_DER_ELEMENTS: usize = 16;
 /// DER-encoded key. Those of supported algorithms have at most 10.
 pub const MAX_OID_OCTETS: usize = 64;
 
-/// The maximum length in octets of a high tag number in a DER-encoded key.
-/// Supported keys use only low tag numbers.
-pub const MAX_TAG_NUMBER_OCTETS: usize = 4;
-
-const HIGH_TAG_NUMBER_FORM: u32 = 0x1f;
-const OBJECT_IDENTIFIER_TAG_NUMBER: u32 = 0x06;
-const SEQUENCE_TAG_NUMBER: u32 = 0x10;
-const SET_TAG_NUMBER: u32 = 0x11;
+const HIGH_TAG_NUMBER_FORM: u8 = 0x1f;
+const OBJECT_IDENTIFIER_TAG_NUMBER: u8 = 0x06;
+const SEQUENCE_TAG_NUMBER: u8 = 0x10;
+const SET_TAG_NUMBER: u8 = 0x11;
 
 const INCOMPLETE_ELEMENT: &str = "DER ends in the middle of an element";
 const LENGTH_TOO_LARGE: &str = "DER element length is too large";
@@ -256,8 +252,8 @@ impl<'a> KeyDerParser<'a> {
     }
 
     /// Returns an error if `der` exceeds [`MAX_DER_NESTING_DEPTH`],
-    /// [`MAX_DER_ELEMENTS`], [`MAX_OID_OCTETS`] or [`MAX_TAG_NUMBER_OCTETS`],
-    /// or if its tag-length headers cannot be walked from start to end.
+    /// [`MAX_DER_ELEMENTS`] or [`MAX_OID_OCTETS`], uses the high-tag-number
+    /// form, or if its tag-length headers cannot be walked from start to end.
     fn check_der_limits(der: &[u8]) -> Result<(), KeyDerParsingError> {
         // Exclusive end offsets of the elements that are currently open; their
         // number is the current nesting depth.
@@ -283,11 +279,14 @@ impl<'a> KeyDerParser<'a> {
             let first_identifier_octet = der[index];
             let universal_class = first_identifier_octet & 0xc0 == 0;
             let constructed = first_identifier_octet & 0x20 != 0;
-            let mut tag_number = u32::from(first_identifier_octet & 0x1f);
-            index += 1;
+            let tag_number = first_identifier_octet & 0x1f;
+            // Supported keys use only low tag numbers.
             if tag_number == HIGH_TAG_NUMBER_FORM {
-                tag_number = Self::read_high_tag_number(der, &mut index)?;
+                return Err(Self::parsing_error(
+                    "DER uses the high-tag-number form, which is not supported",
+                ));
             }
+            index += 1;
 
             // SEQUENCEs and SETs hold other elements whatever their
             // constructed bit says; elements of the other classes hold other
@@ -348,24 +347,6 @@ impl<'a> KeyDerParser<'a> {
             }
         }
         Ok(())
-    }
-
-    /// Reads the high tag number starting at `der[*index]`.
-    fn read_high_tag_number(der: &[u8], index: &mut usize) -> Result<u32, KeyDerParsingError> {
-        let mut tag_number = 0;
-        for _ in 0..MAX_TAG_NUMBER_OCTETS {
-            let Some(&octet) = der.get(*index) else {
-                return Err(Self::parsing_error(INCOMPLETE_ELEMENT));
-            };
-            *index += 1;
-            tag_number = (tag_number << 7) | u32::from(octet & 0x7f);
-            if octet & 0x80 == 0 {
-                return Ok(tag_number);
-            }
-        }
-        Err(Self::parsing_error(&format!(
-            "DER tag number length exceeds the maximum of {MAX_TAG_NUMBER_OCTETS}"
-        )))
     }
 
     /// parses the entire DER-string provided upon construction.
