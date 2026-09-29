@@ -7,6 +7,7 @@ use ic_types::{
     consensus::Payload,
     xnet::CertifiedStreamSlice,
 };
+use thiserror::Error;
 
 /// Errors that `MessageRouting` may return.
 #[derive(Eq, PartialEq, Debug)]
@@ -165,11 +166,11 @@ impl XNetAdvertOutcome {
 }
 
 /// The reason for rejecting a XNet advert.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum XNetAdvertError {
-    /// Could not be decoded.
+    #[error("Failed to decode advert: {0}")]
     DecodeError(String),
-    /// Invalid certification or mismatching witness.
+    #[error("Invalid certification or mismatching witness")]
     InvalidSignature,
 }
 
