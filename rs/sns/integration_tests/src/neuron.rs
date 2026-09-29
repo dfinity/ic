@@ -980,7 +980,7 @@ async fn create_sns_canisters_with_staked_neuron_and_maturity<'a>(
         .with_nervous_system_parameters(nervous_system_parameters)
         .build();
 
-    let sns_canisters = SnsCanisters::set_up(runtime, sns_init_payload).await;
+    let sns_canisters = SnsCanisters::set_up_with_test_governance(runtime, sns_init_payload).await;
     sns_canisters.wait_for_maturity_modulation_or_panic().await;
 
     // Stake and claim a neuron capable of making a proposal
@@ -2673,7 +2673,8 @@ fn test_disburse_neuron_to_self_succeeds() {
             .with_nervous_system_parameters(params.clone())
             .build();
 
-        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+        let sns_canisters =
+            SnsCanisters::set_up_with_test_governance(&runtime, sns_init_payload).await;
 
         // Stake and claim a neuron for the user. The dissolve delay is set to ONE_YEAR_SECONDS
         // and is in state `NotDissolving`
@@ -2890,7 +2891,8 @@ fn test_disburse_neuron_burns_neuron_fees() {
             .with_nervous_system_parameters(params.clone())
             .build();
 
-        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+        let sns_canisters =
+            SnsCanisters::set_up_with_test_governance(&runtime, sns_init_payload).await;
 
         // Stake and claim a neuron for the user. The dissolve delay is set to ONE_YEAR_SECONDS
         // and is in state `NotDissolving`
