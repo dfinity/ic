@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use futures::{StreamExt, stream};
 use ic_agent::Agent;
 use ic_base_types::CanisterId;
@@ -16,8 +16,8 @@ use reqwest::Client;
 use serde::Deserialize;
 use sha2::Digest;
 use std::env;
-use std::fs::File;
-use std::io::BufReader;
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
 
 pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 13] = [
@@ -411,16 +411,33 @@ async fn get_mainnet_canister_git_tag_and_module_hash(
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 3 {
-        eprintln!(
-            "Unexpected args: {args:?}\nUsage: {} <path_to_workspace_file> <path_to_ic_wasm>",
-            args[0]
-        );
-        std::process::exit(1);
-    }
-
-    let workspace_file_path = PathBuf::from(&args[1]);
-    let ic_wasm_path = PathBuf::from(&args[2]);
+    // With `--output`, the updated canister data is written there instead of back to
+    // the workspace file, so that a caller can verify it before it reaches the
+    // repository (see ci/src/mainnet_revisions/mainnet_revisions.py). The path must be
+    // absolute since `bazel run` executes the tool in its runfiles directory.
+    let (workspace_file_path, ic_wasm_path, output_path) = match args.as_slice() {
+        [_, workspace_file, ic_wasm] => (
+            PathBuf::from(workspace_file),
+            PathBuf::from(ic_wasm),
+            PathBuf::from(workspace_file),
+        ),
+        [_, workspace_file, ic_wasm, flag, output]
+            if flag == "--output" && Path::new(output).is_absolute() =>
+        {
+            (
+                PathBuf::from(workspace_file),
+                PathBuf::from(ic_wasm),
+                PathBuf::from(output),
+            )
+        }
+        _ => {
+            eprintln!(
+                "Unexpected args: {args:?}\nUsage: {} <path_to_workspace_file> <path_to_ic_wasm> [--output <absolute_path>]",
+                args[0]
+            );
+            std::process::exit(1);
+        }
+    };
 
     let agent = get_mainnet_agent()?;
 
@@ -542,7 +559,7 @@ async fn main() -> Result<()> {
 
     canister_updates.extend(external_canister_updates);
 
-    update_mainnet_canisters_bzl_file(&workspace_file_path, canister_updates)?;
+    update_mainnet_canisters_bzl_file(&workspace_file_path, &output_path, canister_updates)?;
 
     Ok(())
 }
@@ -573,13 +590,16 @@ struct CanisterUpdate {
     new_sha256: String,
 }
 
+/// Reads the canister revisions from `canisters_json`, applies `updates` and writes
+/// the result to `output` (which may be `canisters_json` itself).
 fn update_mainnet_canisters_bzl_file(
     canisters_json: &Path,
+    output: &Path,
     updates: Vec<CanisterUpdate>,
 ) -> Result<()> {
     if updates.is_empty() {
+        // Still write `output` below: a caller passing `--output` reads it back.
         println!("No updates to apply");
-        return Ok(());
     }
 
     // Read the existing content of the file
@@ -614,10 +634,71 @@ fn update_mainnet_canisters_bzl_file(
         let _prev = m.insert(canister.canister_name.clone(), entry);
     }
 
-    // Write the new content back to the file
-    let file = File::create(canisters_json)?;
-    serde_json::to_writer_pretty(file, &m).unwrap();
+    write_file_atomically(output, &serde_json::to_vec_pretty(&m)?)
+}
 
+/// Replaces the contents of `path` with `contents` atomically: a failure (or a crash)
+/// halfway through leaves either the previous or the new contents, never a truncated
+/// file.
+///
+/// A symlink at `path` is resolved first: under `bazel run`, the workspace file is
+/// passed as a runfiles symlink into the source tree, and renaming onto the symlink
+/// would replace the symlink instead of the file it points to.
+fn write_file_atomically(path: &Path, contents: &[u8]) -> Result<()> {
+    let target = match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => fs::canonicalize(path)
+            .with_context(|| format!("Could not resolve the symlink {}", path.display()))?,
+        _ => path.to_path_buf(),
+    };
+
+    let mut temporary_name = target
+        .file_name()
+        .ok_or_else(|| anyhow!("{} has no file name", target.display()))?
+        .to_os_string();
+
+    temporary_name.push(format!(".tmp-{}", std::process::id()));
+    let temporary_path = target.with_file_name(temporary_name);
+
+    let result = write_new_file_and_rename(&temporary_path, &target, contents);
+    if result.is_err() {
+        // Nothing refers to the temporary file unless the rename succeeded.
+        let _ = fs::remove_file(&temporary_path);
+    }
+    result
+}
+
+/// Writes `contents` to `temporary_path`, which must not exist yet, and then renames it
+/// onto `target`, keeping the permissions of an existing `target`.
+fn write_new_file_and_rename(temporary_path: &Path, target: &Path, contents: &[u8]) -> Result<()> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(temporary_path)
+        .with_context(|| format!("Could not create {}", temporary_path.display()))?;
+
+    file.write_all(contents)
+        .with_context(|| format!("Could not write {}", temporary_path.display()))?;
+
+    if let Ok(metadata) = fs::metadata(target) {
+        file.set_permissions(metadata.permissions())
+            .with_context(|| {
+                format!(
+                    "Could not set the permissions of {}",
+                    temporary_path.display()
+                )
+            })?;
+    }
+
+    file.sync_all()
+        .with_context(|| format!("Could not sync {}", temporary_path.display()))?;
+
+    fs::rename(temporary_path, target).with_context(|| {
+        format!(
+            "Could not rename {} to {}",
+            temporary_path.display(),
+            target.display()
+        )
+    })?;
     Ok(())
 }
 
