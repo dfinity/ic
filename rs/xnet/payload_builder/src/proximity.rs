@@ -6,7 +6,6 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::node::NodeRecord;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
 use prometheus::{GaugeVec, IntCounter, IntGauge, Opts};
 use rand::{Rng, thread_rng};
 use std::collections::BTreeMap;
@@ -14,7 +13,7 @@ use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use super::{Error, get_node_operator_id, get_node_record};
+use super::{Error, get_node_operator_id, get_node_record, get_subnet_nodes};
 
 /// Function that generates a random value in the range [`low`, `high`), i.e.
 /// inclusive of `low` and exclusive of `high`
@@ -149,12 +148,7 @@ impl ProximityMap {
         version: RegistryVersion,
     ) -> Result<(NodeId, NodeRecord), Error> {
         // Retrieve `subnet`'s nodes, minus the unhealthy ones.
-        let mut nodes = self
-            .registry
-            .get_node_ids_on_subnet(subnet, version)
-            .map_err(|e| Error::RegistryGetSubnetInfoFailed(subnet, e))?
-            .filter(|nodes| !nodes.is_empty())
-            .ok_or(Error::MissingSubnet(subnet))?;
+        let mut nodes = get_subnet_nodes(self.registry.as_ref(), subnet, version)?;
         self.unhealthy_nodes.filter_at_least(1, &mut nodes);
 
         // Compute the individual and total weight of all nodes with explicit weights

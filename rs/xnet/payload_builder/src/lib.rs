@@ -1569,6 +1569,21 @@ fn get_node_record(
         .ok_or(Error::MissingXNetEndpoint(node))
 }
 
+/// Retrieves the nodes of the given subnet at the given registry version.
+///
+/// Returns an error if the subnet is missing or has no nodes.
+fn get_subnet_nodes(
+    registry: &dyn RegistryClient,
+    subnet: SubnetId,
+    version: RegistryVersion,
+) -> Result<Vec<NodeId>, Error> {
+    registry
+        .get_node_ids_on_subnet(subnet, version)
+        .map_err(|e| Error::RegistryGetSubnetInfoFailed(subnet, e))?
+        .filter(|nodes| !nodes.is_empty())
+        .ok_or(Error::MissingSubnet(subnet))
+}
+
 /// Maps `StateManagerErrors` to their `XNetPayloadError` namesakes.
 fn from_state_manager_error(e: StateManagerError) -> XNetPayloadValidationError {
     match e {
@@ -1693,14 +1708,14 @@ pub fn refill_stream_slice_indices(
 /// what posting an advert needs, and the trigger, the conditions and the choice
 /// of targets are yet to come.
 pub struct AdvertTask {
+    /// Handles the headers that peers reply with, as it handles the adverts they
+    /// post to us.
+    advert_handler: Arc<dyn XNetAdvertHandler>,
+
     endpoint_resolver: XNetEndpointResolver,
 
     /// Async client for posting adverts to `XNetEndpoints`.
     xnet_client: Arc<dyn XNetClient>,
-
-    /// Handles the headers that peers reply with, as it handles the adverts they
-    /// post to us.
-    advert_handler: Arc<dyn XNetAdvertHandler>,
 
     metrics: AdvertTaskMetrics,
 
@@ -1709,33 +1724,32 @@ pub struct AdvertTask {
 
 impl AdvertTask {
     pub fn new(
+        advert_handler: Arc<dyn XNetAdvertHandler>,
         endpoint_resolver: XNetEndpointResolver,
         xnet_client: Arc<dyn XNetClient>,
-        advert_handler: Arc<dyn XNetAdvertHandler>,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
         Self {
-            xnet_client,
-            endpoint_resolver,
             advert_handler,
+            endpoint_resolver,
+            xnet_client,
             metrics: AdvertTaskMetrics::new(metrics_registry),
             log,
         }
     }
 
-    /// Advertises our stream to `subnet_id` to the given node of it: posts our own
-    /// certified header and feeds a header returned in the reply back through the
-    /// receive path, a reply being an advert in the opposite direction, telling us
-    /// that the peer has fully consumed our stream.
-    ///
-    /// Does nothing if we have no stream to `subnet_id`.
-    pub async fn advertise_to(&self, subnet_id: SubnetId, node: NodeId) {
+    /// Advertises our stream to `subnet_id` to the given node of it: posts `advert`,
+    /// our own certified header, and feeds any header returned in the reply back
+    /// through the receive path, a reply being an advert in the opposite direction,
+    /// telling us that the peer has fully consumed our stream.
+    pub async fn advertise_to(
+        &self,
+        subnet_id: SubnetId,
+        node: NodeId,
+        advert: CertifiedStreamSlice,
+    ) {
         let since = Instant::now();
-        let Some(advert) = self.advert_handler.certified_header(subnet_id) else {
-            return;
-        };
-
         let status = match self.post_advert(subnet_id, node, advert).await {
             // Advert delivered and accepted.
             Ok(None) => STATUS_SUCCESS.to_string(),
@@ -1789,13 +1803,19 @@ impl AdvertTask {
         let result = self.xnet_client.post_advert(&endpoint, advert).await;
         self.metrics.outstanding_adverts.dec();
 
-        if let Some(reply) = result? {
-            // The peer's certified state already has the content we advertised and it
-            // replied with a header that proves this.
-            Ok(Some(self.advert_handler.handle_advert(subnet_id, reply)?))
-        } else {
-            Ok(None)
-        }
+        let Some(reply) = result? else {
+            return Ok(None);
+        };
+
+        // The peer's certified state already has the content we advertised and it
+        // replied with a header that proves this. `handle_advert()` verifies the
+        // threshold signature, so offload it to a blocking task.
+        let advert_handler = Arc::clone(&self.advert_handler);
+        let outcome =
+            tokio::task::spawn_blocking(move || advert_handler.handle_advert(subnet_id, reply))
+                .await
+                .expect("Handling an advert reply panicked")?;
+        Ok(Some(outcome))
     }
 }
 

@@ -1285,8 +1285,8 @@ impl XNetClient for FakeAdvertClient {
     }
 }
 
-/// An `AdvertTask` posting through `xnet_client`, with `payload_builder` both
-/// providing the headers to advertise and handling the replies.
+/// An `AdvertTask` posting through `xnet_client`, with `payload_builder` handling
+/// the replies.
 fn advert_task(
     xnet_client: Arc<dyn XNetClient>,
     payload_builder: XNetPayloadBuilderImpl,
@@ -1309,21 +1309,17 @@ fn advert_task(
         log.clone(),
     );
     AdvertTask::new(
+        Arc::new(payload_builder),
         endpoint_resolver,
         xnet_client,
-        Arc::new(payload_builder),
         metrics,
         log,
     )
 }
 
-/// Makes `store` encode the header of `own_stream_for_advert_tests()` as ours to
-/// advertise.
-fn with_own_header(mut store: MockCertifiedStreamStore) -> MockCertifiedStreamStore {
-    store
-        .expect_encode_certified_stream_slice()
-        .returning(|_, _, _, _, _| Ok(make_advert(&own_stream_for_advert_tests())));
-    store
+/// Our certified header, as advertised: that of `own_stream_for_advert_tests()`.
+fn own_advert() -> CertifiedStreamSlice {
+    make_advert(&own_stream_for_advert_tests())
 }
 
 /// Asserts that `metrics` record exactly one advert, sent to `REMOTE_SUBNET` with
@@ -1357,18 +1353,15 @@ async fn advertise_to_without_reply() {
         let metrics = MetricsRegistry::new();
         let xnet_client = Arc::new(FakeAdvertClient::new(Ok(None), &metrics));
 
-        let store = with_own_header(MockCertifiedStreamStore::new());
-        let (payload_builder, pool) = advert_handler_and_pool(store, log.clone());
+        let (payload_builder, pool) =
+            advert_handler_and_pool(MockCertifiedStreamStore::new(), log.clone());
 
         advert_task(xnet_client.clone(), payload_builder, &metrics, log)
-            .advertise_to(REMOTE_SUBNET, REMOTE_NODE_2_OPERATOR_1)
+            .advertise_to(REMOTE_SUBNET, REMOTE_NODE_2_OPERATOR_1, own_advert())
             .await;
 
         assert_eq!(
-            vec![(
-                REMOTE_NODE_2_OPERATOR_1,
-                make_advert(&own_stream_for_advert_tests())
-            )],
+            vec![(REMOTE_NODE_2_OPERATOR_1, own_advert())],
             xnet_client.posted()
         );
         assert_eq!(None, recorded_peer_header(&pool));
@@ -1394,14 +1387,12 @@ async fn advertise_to_records_the_reply() {
             &metrics,
         ));
 
-        // Expect to encode our own header and then to have to verify the reply.
-        let (payload_builder, pool) = advert_handler_and_pool(
-            with_own_header(store_expecting_decodes(&remote_stream, 1)),
-            log.clone(),
-        );
+        // Expect to have to verify the reply.
+        let (payload_builder, pool) =
+            advert_handler_and_pool(store_expecting_decodes(&remote_stream, 1), log.clone());
 
         advert_task(xnet_client.clone(), payload_builder, &metrics, log)
-            .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1)
+            .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1, own_advert())
             .await;
 
         assert_eq!(1, xnet_client.posted().len());
@@ -1435,10 +1426,10 @@ async fn advertise_to_invalid_reply() {
             .expect_decode_certified_stream_slice()
             .times(1)
             .return_once(|_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
-        let (payload_builder, pool) = advert_handler_and_pool(with_own_header(store), log.clone());
+        let (payload_builder, pool) = advert_handler_and_pool(store, log.clone());
 
         advert_task(xnet_client.clone(), payload_builder, &metrics, log)
-            .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1)
+            .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1, own_advert())
             .await;
 
         assert_eq!(1, xnet_client.posted().len());
@@ -1455,11 +1446,11 @@ async fn advertise_to_post_failure() {
         let metrics = MetricsRegistry::new();
         let xnet_client = Arc::new(FakeAdvertClient::new(Err(()), &metrics));
 
-        let store = with_own_header(MockCertifiedStreamStore::new());
-        let (payload_builder, _pool) = advert_handler_and_pool(store, log.clone());
+        let (payload_builder, _pool) =
+            advert_handler_and_pool(MockCertifiedStreamStore::new(), log.clone());
 
         advert_task(xnet_client.clone(), payload_builder, &metrics, log)
-            .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1)
+            .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1, own_advert())
             .await;
 
         assert_eq!(1, xnet_client.posted().len());
@@ -1475,40 +1466,15 @@ async fn advertise_to_unknown_node() {
         let metrics = MetricsRegistry::new();
         let xnet_client = Arc::new(FakeAdvertClient::new(Ok(None), &metrics));
 
-        let store = with_own_header(MockCertifiedStreamStore::new());
-        let (payload_builder, _pool) = advert_handler_and_pool(store, log.clone());
+        let (payload_builder, _pool) =
+            advert_handler_and_pool(MockCertifiedStreamStore::new(), log.clone());
 
         advert_task(xnet_client.clone(), payload_builder, &metrics, log)
-            .advertise_to(REMOTE_SUBNET, NODE_42)
+            .advertise_to(REMOTE_SUBNET, NODE_42, own_advert())
             .await;
 
         assert!(xnet_client.posted().is_empty());
         assert_one_advert_sent(&metrics, "MissingXNetEndpoint");
-    })
-    .await;
-}
-
-/// With no stream to the peer there is nothing to advertise, so nothing is sent.
-#[tokio::test]
-async fn advertise_to_without_stream() {
-    with_test_replica_logger(|log| async {
-        let metrics = MetricsRegistry::new();
-        let xnet_client = Arc::new(FakeAdvertClient::new(Ok(None), &metrics));
-
-        let mut store = MockCertifiedStreamStore::new();
-        store
-            .expect_encode_certified_stream_slice()
-            .returning(|subnet_id, _, _, _, _| {
-                Err(EncodeStreamError::NoStreamForSubnet(subnet_id))
-            });
-        let (payload_builder, _pool) = advert_handler_and_pool(store, log.clone());
-
-        advert_task(xnet_client.clone(), payload_builder, &metrics, log)
-            .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1)
-            .await;
-
-        assert!(xnet_client.posted().is_empty());
-        assert!(fetch_int_counter_vec(&metrics, METRIC_ADVERTS_SENT).is_empty());
     })
     .await;
 }
