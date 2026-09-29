@@ -212,15 +212,10 @@ impl Tag {
         );
 
         let (client, token) = github_api_client_and_token()?;
-        let res = client.get(&release_url).bearer_auth(&token).send().await?;
-
-        // Not every tag must have a release, so we do not report an error if it does not. Any
-        // other failure is an error: skipping the release would move on to a later tag.
-        if res.status() == reqwest::StatusCode::NOT_FOUND {
+        let response = client.get(&release_url).bearer_auth(&token).send().await?;
+        let Some(release) = release_from_lookup_response(response, &release_url).await? else {
             return Ok(None);
-        }
-
-        let release: Release = decode_json_response(res, &release_url).await?;
+        };
 
         if release.tag_name != self.name {
             return Err(anyhow!(
@@ -243,6 +238,38 @@ impl Tag {
 
         Ok(Some(release))
     }
+}
+
+/// Returns the release that the lookup of the release URL `url` answered with `response`, or `None`
+/// if the tag has no release (404: not every tag has one). Any other failure is an error, so that
+/// the caller cannot mistake it for a tag without a release and move on to a later tag.
+async fn release_from_lookup_response(
+    response: reqwest::Response,
+    url: &str,
+) -> Result<Option<Release>> {
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+
+    let release = decode_json_response::<Release>(response, url).await?;
+    Ok(Some(release))
+}
+
+/// Checks `tags` in order with `check_tag`, and returns the first release that it finds.
+///
+/// An error while checking a tag is returned rather than moving on to the next tag: moving on
+/// could select a later tag in place of the genuine one.
+async fn find_first_release(
+    tags: &[&Tag],
+    check_tag: impl AsyncFn(&Tag) -> Result<Option<Release>>,
+) -> Result<Option<Release>> {
+    for tag in tags {
+        let release = check_tag(tag).await?;
+        if release.is_some() {
+            return Ok(release);
+        }
+    }
+    Ok(None)
 }
 
 /// Returns whether `release` contains the asset `filename` and that asset's content has the
@@ -359,28 +386,33 @@ async fn get_mainnet_canister_release(
         let response = fetch_github_url(&tags_url).await?;
         let tags: Vec<Tag> = decode_json_response(response, &tags_url).await?;
 
-        for tag in &tags {
-            if let Some(ref tag_name_prefix) = canister_tag_name_prefix
-                && !tag.name.starts_with(tag_name_prefix)
-            {
-                continue;
-            }
-            let release = tag
-                .release_for_canister(
-                    canister_repository.clone(),
-                    canister_filename.clone(),
-                    expected_module_hash_str.clone(),
+        let candidate_tags = tags
+            .iter()
+            .filter(|tag| {
+                canister_tag_name_prefix
+                    .as_ref()
+                    .is_none_or(|tag_name_prefix| tag.name.starts_with(tag_name_prefix))
+            })
+            .collect::<Vec<&Tag>>();
+
+        let release = find_first_release(&candidate_tags, async |tag: &Tag| {
+            tag.release_for_canister(
+                canister_repository.clone(),
+                canister_filename.clone(),
+                expected_module_hash_str.clone(),
+            )
+            .await
+            .with_context(|| {
+                format!(
+                    "Error while checking the GitHub tag {} for canister {}",
+                    tag.name, canister_name
                 )
-                .await
-                .with_context(|| {
-                    format!(
-                        "Error while checking the GitHub tag {} for canister {}",
-                        tag.name, canister_name
-                    )
-                })?;
-            if let Some(release) = release {
-                return Ok(release);
-            }
+            })
+        })
+        .await?;
+
+        if let Some(release) = release {
+            return Ok(release);
         }
 
         // We reached the last page.

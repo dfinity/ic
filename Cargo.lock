@@ -23685,6 +23685,7 @@ dependencies = [
  "candid",
  "colored",
  "futures",
+ "http 1.4.0",
  "ic-agent",
  "ic-base-types",
  "ic-nervous-system-agent",

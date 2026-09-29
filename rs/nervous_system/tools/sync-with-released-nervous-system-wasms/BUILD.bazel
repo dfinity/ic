@@ -42,4 +42,7 @@ rust_binary(
 rust_test(
     name = "sync-with-released-nervous-system-wasms_test",
     crate = ":sync-with-released-nervous-system-wasms",
+    deps = [
+        "@crate_index//:http",
+    ],
 )
