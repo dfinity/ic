@@ -21,6 +21,7 @@ use ic_interfaces::messaging::{
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types_private::CanisterStatusType;
+use ic_nns_delegation_reader::StateForDelegationVerification;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::RoutingTable;
@@ -1994,6 +1995,20 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
         assert!(self.metadata.streams.is_empty());
 
         *Arc::make_mut(&mut self.metadata.streams) = streams;
+    }
+}
+
+impl StateForDelegationVerification for ReplicatedState {
+    fn routing_table(&self) -> &RoutingTable {
+        self.metadata.network_topology.routing_table()
+    }
+
+    fn subnet_public_key(&self, subnet_id: SubnetId) -> Option<&[u8]> {
+        self.metadata
+            .network_topology
+            .subnets()
+            .get(&subnet_id)
+            .map(|subnet_topology| subnet_topology.public_key.as_slice())
     }
 }
 

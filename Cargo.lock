@@ -13778,6 +13778,7 @@ dependencies = [
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",
+ "ic-nns-delegation-reader",
  "ic-protobuf",
  "ic-registry-resource-limits",
  "ic-registry-routing-table",

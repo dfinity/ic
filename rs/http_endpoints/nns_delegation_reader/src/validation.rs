@@ -112,28 +112,44 @@ impl fmt::Display for DelegationVerificationError {
 
 impl std::error::Error for DelegationVerificationError {}
 
-/// Checks whether the delegation certificate tree is consistent with the given view
-/// of the subnet information recorded in a replicated state.
+/// What an NNS delegation is verified against, from a replicated state.
+///
+/// Implemented by `ic_replicated_state::ReplicatedState`. It is a trait rather than the
+/// concrete type because this crate cannot depend on `ic-replicated-state`.
+pub trait StateForDelegationVerification {
+    /// The routing table recorded in the state.
+    fn routing_table(&self) -> &RoutingTable;
+
+    /// The threshold public key which the state assigns to the given subnet, or `None` if
+    /// the state does not know the subnet.
+    fn subnet_public_key(&self, subnet_id: SubnetId) -> Option<&[u8]>;
+}
+
+/// Checks whether the delegation certificate tree is consistent with the given
+/// replicated state.
 ///
 /// Returns `Ok(true)` if, for the subnet the delegation refers to, both:
 /// * the threshold public key certified in `tree` (at `/subnet/<subnet_id>/public_key`)
-///   matches `expected_subnet_public_key`; and
+///   matches the one which `state` assigns to the subnet; and
 /// * the canister ranges certified in `tree` pass the check specified by
-///   `ranges_check`, against the state's `routing_table` (see [`CanisterRangesCheck`]).
+///   `ranges_check`, against the state's routing table (see [`CanisterRangesCheck`]).
 ///
 /// Returns `Ok(false)` if either of those does not match. Any error that
-/// prevents the comparison (malformed canister ranges, missing public key,
-/// missing canister ranges leaf, ...) is returned as `Err`.
+/// prevents the comparison is returned as `Err`.
 pub(crate) fn is_tree_consistent_with(
     tree: &LabeledTree<Vec<u8>>,
     subnet_id: SubnetId,
-    expected_subnet_public_key: &[u8],
-    routing_table: &RoutingTable,
+    state: &dyn StateForDelegationVerification,
     ranges_check: CanisterRangesCheck,
 ) -> Result<bool, DelegationValidationError> {
+    let expected_subnet_public_key = state
+        .subnet_public_key(subnet_id)
+        .ok_or(DelegationValidationError::UnknownSubnet(subnet_id))?;
     if !does_public_key_match(tree, subnet_id, expected_subnet_public_key)? {
         return Ok(false);
     }
+
+    let routing_table = state.routing_table();
 
     match ranges_check {
         CanisterRangesCheck::AllSubnetRanges => {
@@ -297,19 +313,51 @@ fn decode_ranges(bytes: &[u8]) -> Result<Vec<(CanisterId, CanisterId)>, Delegati
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        CanisterRangesCheck, DelegationValidationError, do_ranges_cover_canister,
-        is_tree_consistent_with,
-    };
+pub(crate) mod tests {
+    use super::*;
     use crate::reader::CanisterRangesFilter;
     use assert_matches::assert_matches;
     use ic_canonical_state::encoding::encode_subnet_canister_ranges;
     use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, flatmap};
-    use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+    use ic_registry_routing_table::CanisterIdRange;
     use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2};
     use ic_types::{CanisterId, PrincipalId, SubnetId};
     use rstest::rstest;
+
+    /// A [`StateForDelegationVerification`] returning the given routing table and public key.
+    pub(crate) struct MockState {
+        routing_table: RoutingTable,
+        subnet_public_key: Option<Vec<u8>>,
+    }
+
+    impl MockState {
+        /// A state assigning `subnet_ranges` to `subnet_id` in its routing table, and
+        /// `subnet_public_key` (if any) to every subnet.
+        pub(crate) fn new(
+            subnet_id: SubnetId,
+            subnet_ranges: &[ic_registry_routing_table::CanisterIdRange],
+            subnet_public_key: Option<&[u8]>,
+        ) -> Self {
+            let mut routing_table = RoutingTable::default();
+            for range in subnet_ranges {
+                routing_table.insert(*range, subnet_id).unwrap();
+            }
+            Self {
+                routing_table,
+                subnet_public_key: subnet_public_key.map(|key| key.to_vec()),
+            }
+        }
+    }
+
+    impl StateForDelegationVerification for MockState {
+        fn routing_table(&self) -> &RoutingTable {
+            &self.routing_table
+        }
+
+        fn subnet_public_key(&self, _subnet_id: SubnetId) -> Option<&[u8]> {
+            self.subnet_public_key.as_deref()
+        }
+    }
 
     /// Checks the tree against the given state view.
     fn validate(
@@ -319,16 +367,10 @@ mod tests {
         subnet_ranges: &[CanisterIdRange],
         ranges_check: CanisterRangesCheck,
     ) -> Result<bool, DelegationValidationError> {
-        let mut routing_table = RoutingTable::default();
-        for range in subnet_ranges {
-            routing_table.insert(*range, subnet_id).unwrap();
-        }
-
         is_tree_consistent_with(
             tree,
             subnet_id,
-            expected_public_key,
-            &routing_table,
+            &MockState::new(subnet_id, subnet_ranges, Some(expected_public_key)),
             ranges_check,
         )
     }
