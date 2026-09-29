@@ -274,6 +274,12 @@ Voting rewards are distributed to neurons that participate in governance.
 - **THEN** the modulation is obtained from the Cycles Minting Canister
 - **AND** if `maturity_modulation_disabled` is set in parameters, a modulation of 0 is used instead
 
+#### Scenario: Expose latest reward-event participation on neurons
+- **WHEN** a reward event settles and a neuron receives a positive reward share
+- **THEN** that share, together with the reward event's end timestamp, is recorded in the neuron's optional `latest_reward_event_participation` field
+- **AND** the field is exposed through `get_neuron` and paginated `list_neurons`, independently of whether the native SNS voting reward rate is zero
+- **AND** maturity allocation, proposal settlement, ballot clearing, and reward timing are unaffected by recording it
+
 ### Requirement: SNS Upgrade Management
 
 The governance canister orchestrates the upgrade of all SNS canisters.
