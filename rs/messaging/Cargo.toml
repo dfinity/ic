@@ -68,7 +68,7 @@ pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-test-strategy = "0.3.1"
+test-strategy = { workspace = true }
 
 [features]
 default = []

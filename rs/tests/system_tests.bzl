@@ -60,7 +60,7 @@ def system_test(
         If "local" the non `_local` variants will be tagged as "manual".
         If None, both the `_local` and the non `_local` variants won't be tagged as "manual" and will run by default.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
-      enable_uvm: if True, depend on the @farm_universal_vm_img for local system-tests.
+      enable_uvm: if True, depend on //rs/tests:universal_vm_img (the Universal VM disk image) for local system-tests.
       enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
       prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
       prometheus_vm_resources: a structure describing the required resources of the PrometheusVm. For example:
@@ -300,10 +300,10 @@ def system_test(
         _local_only_deps[image_name + "_PATH"] = image_path
 
     if enable_uvm:
-        _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
+        _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "//rs/tests:universal_vm_img"
 
     if enable_metrics:
-        _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
+        _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "//rs/tests:prometheus_vm_img"
 
     _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "@dnsmasq//:dnsmasq"
     _local_only_deps["ENV_DEPS__QEMU_IMG_PATH"] = "@qemu_img_prebuilt_linux_amd64//:qemu-img"
@@ -315,6 +315,19 @@ def system_test(
     # writable varstore template.
     _local_only_deps["ENV_DEPS__OVMF_CODE_PATH"] = "//:OVMF_CODE_4M.fd"
     _local_only_deps["ENV_DEPS__OVMF_VARS_PATH"] = "//:OVMF_VARS_4M.fd"
+
+    # The dev root CA, which the local backend's ic-gateway uses to issue its TLS
+    # certificate: every dev IC-OS image installs this CA into
+    # /usr/local/share/ca-certificates in the `output_dev` stage of the GuestOS and
+    # HostOS Dockerfiles, so a node trusts the gateway with no node-side config.
+    # See `IcGatewayVm::load_or_create_local_playnet`.
+    #
+    # Local-only on purpose. The Farm backend uses a playnet certificate and never
+    # reads these, and a runtime dep reaches *every* variant's runfiles -- which for
+    # a colocated test means being tarred up and copied to the driver's UVM. There
+    # is no reason to ship a CA signing key to Farm, public though this one is.
+    _local_only_deps["ENV_DEPS__DEV_ROOT_CA_CERT_PATH"] = "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert"
+    _local_only_deps["ENV_DEPS__DEV_ROOT_CA_KEY_PATH"] = "//ic-os/components:networking/dev-certs/canister_http_test_ca.key"
 
     local_dep_env = {
         name: "$(rootpath {})".format(dep)
@@ -353,15 +366,20 @@ def system_test(
         },
         env_inherit = env_inherit,
         tags = tags + ["local_system_test"] + (["manual"] if backend == "farm" else []),
-        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly:
-        exec_properties = {"cpu": str(reserved_cpus)} if reserved_cpus != None else {},
+        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly.
+        # The `test.` prefix scopes the reservation to the `test` exec group, i.e. to the test action only. Without it
+        # the reservation would also apply to every other action this target owns and those would needlessly reserve
+        # `reserved_cpus` cores on an RBE worker:
+        exec_properties = {"test.cpu": str(reserved_cpus)} if reserved_cpus != None else {},
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,
     )
 
+    farm_test_name = test_name + "_farm"
+
     sh_test(
-        name = test_name,
+        name = farm_test_name,
         srcs = ["//rs/tests:run_systest.sh"],
         data = data,
         env = env | farm_only_env | {
@@ -378,7 +396,7 @@ def system_test(
     # create a colocated version of the test (marked as manual _unless_ the test is tagged with "colocate")
     sh_test(
         srcs = ["//rs/tests:run_systest.sh"],
-        name = test_name + "_colocate",
+        name = farm_test_name + "_colocate",
         data = data + [
             "//rs/tests:colocate_uvm_config_image",
             "//rs/tests/idx:colocate_test_bin",

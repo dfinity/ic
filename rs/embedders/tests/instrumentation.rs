@@ -296,7 +296,7 @@ fn deterministic_tracker_overhead(n_heap_wasm_pages: u64, n_stable_wasm_pages: u
 #[allow(clippy::field_reassign_with_default)]
 fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
     let mut config = EmbeddersConfig::default();
-    config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
+    config.page_overhead = SchedulerConfig::application_subnet().page_overhead;
     WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -308,7 +308,7 @@ fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
 fn new_instance_for_stable_write(wat: &str, instruction_limit: u64) -> WasmtimeInstance {
     let mut config = EmbeddersConfig::default();
     config.metering_type = MeteringType::New;
-    config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
+    config.page_overhead = SchedulerConfig::application_subnet().page_overhead;
     WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -800,9 +800,7 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
         },
         wasm_memory_type,
     );
-    let cd = SchedulerConfig::application_subnet()
-        .dirty_page_overhead
-        .get();
+    let cd = SchedulerConfig::application_subnet().page_overhead.get();
 
     // Both stores target Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
     // so only one heap page-first-write event occurs.
@@ -899,9 +897,7 @@ fn run_charge_for_dirty_stable64_test() {
 
     let system_api = instance.store_data().system_api().unwrap();
 
-    let cd = SchedulerConfig::application_subnet()
-        .dirty_page_overhead
-        .get();
+    let cd = SchedulerConfig::application_subnet().page_overhead.get();
 
     let csg = system_api_complexity::overhead_native::STABLE_GROW.get();
     let csw = system_api_complexity::overhead_native::STABLE64_WRITE.get()
@@ -999,9 +995,7 @@ fn run_charge_for_dirty_stable_test() {
 
     let system_api = instance.store_data().system_api().unwrap();
 
-    let cd = SchedulerConfig::application_subnet()
-        .dirty_page_overhead
-        .get();
+    let cd = SchedulerConfig::application_subnet().page_overhead.get();
 
     let csg = system_api_complexity::overhead_native::STABLE_GROW.get();
     let csw = system_api_complexity::overhead_native::STABLE_WRITE.get()
@@ -1118,9 +1112,9 @@ fn metering_wasm64_load_store_canister() {
             (memory i64 1000)
         )"#;
 
-    let dirty_page_overhead = NumInstructions::new(1000);
+    let page_overhead = NumInstructions::new(1000);
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_dirty_page_overhead(dirty_page_overhead)
+        .with_page_overhead(page_overhead)
         .with_wat(wat)
         .with_num_instructions(NumInstructions::new(10000))
         .build();
@@ -1179,7 +1173,7 @@ fn metering_wasm64_load_store_canister() {
         + 2 * store
         + load
         + drop
-        + overhead * dirty_page_overhead.get();
+        + overhead * page_overhead.get();
     assert_eq!(instr_used_wasm64, total_cost);
 
     // Compute cost in Wasm32 mode and compare.
@@ -1194,7 +1188,7 @@ fn metering_wasm64_load_store_canister() {
             (memory 1000)
         )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
-        .with_dirty_page_overhead(dirty_page_overhead)
+        .with_page_overhead(page_overhead)
         .with_wat(wat_wasm32)
         .with_num_instructions(NumInstructions::new(10000))
         .build();
@@ -1249,7 +1243,7 @@ fn metering_wasm64_load_store_canister() {
         + 2 * store_wasm32
         + load_wasm32
         + drop_wasm32
-        + overhead * dirty_page_overhead.get();
+        + overhead * page_overhead.get();
     assert_eq!(wasm_32_instructions, total_cost_wasm32);
 
     // Check that the cost in Wasm64 mode is higher than in Wasm32 mode.

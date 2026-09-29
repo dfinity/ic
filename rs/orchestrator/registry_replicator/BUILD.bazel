@@ -61,6 +61,7 @@ rust_test(
         "//rs/registry/fake",
         "//rs/registry/proto_data_provider",
         "//rs/test_utilities/logger",
+        "//rs/test_utilities/types",
         "//rs/types/types_test_utils",
         "@crate_index//:rand",
         "@crate_index//:rstest",

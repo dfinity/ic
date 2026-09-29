@@ -9,11 +9,10 @@ use crate::driver::farm::{Farm, VmType};
 use crate::driver::ic::VmResources;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use crate::driver::ic::{ImageSizeGiB, VmResourceOverrides};
+use crate::driver::ic_images::get_empty_disk_image;
 use crate::driver::nested::{NestedNode, NestedNodeSpec};
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::{
-    get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
-};
+use crate::driver::test_env_api::{get_guestos_img_sha256, get_guestos_img_url};
 use crate::driver::test_setup::{GroupSetup, SystemTestBackend};
 use crate::driver::universal_vm::UniversalVm;
 use anyhow;
@@ -33,7 +32,11 @@ const DEFAULT_VM_RESOURCES: VmResources = VmResources {
 };
 
 pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(8);
-pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(33554432); // 32GiB
+/// Allocates 16 GiB so the nested GuestOS retains the standard 4 GiB
+/// ([`DEFAULT_MEMORY_KIB_PER_VM`]) after the two host deductions: 8 GiB for
+/// HostOS ([`HOSTOS_MEMORY_RESERVED_GIB`]) and 4 GiB for the upgrade VM
+/// (`UPGRADE_VM_MEMORY_GIB` in `rs/ic_os/os_tools/guest_vm_runner/src/guest_vm_config.rs`).
+pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(16 * 1024 * 1024); // 16GiB
 const DEFAULT_NESTED_VM_RESOURCES: VmResources = VmResources {
     vcpus: HOSTOS_VCPUS_PER_VM,
     memory_kibibytes: HOSTOS_MEMORY_KIB_PER_VM,
@@ -235,15 +238,7 @@ pub fn get_resource_request_for_nested_nodes(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let empty_disk_img_url = get_empty_disk_img_url()?;
-    let empty_disk_img_sha256 = get_empty_disk_img_sha256()?;
-
-    // Add a VM request for each node.
-    let mut res_req = ResourceRequest::new(DiskImage::Url {
-        ic_os_image: true,
-        url: empty_disk_img_url,
-        sha256: empty_disk_img_sha256,
-    });
+    let mut res_req = ResourceRequest::new(get_empty_disk_image(test_env)?);
     let group_setup = GroupSetup::read_attribute(test_env);
     let group_resource_overrides = group_setup.vm_resource_overrides;
     res_req.group_name = group_name.to_string();
@@ -260,7 +255,7 @@ pub fn get_resource_request_for_nested_nodes(
 /// Following through to the "Upload UVM images to S3" job and copying the <SHA256-HASH> from the line:
 /// upload: ../../../../../nix/store/...-nixos-disk-image-out-refs-discarded/nixos.img.zst to s3://dfinity-download/farm/universal-vm/<SHA256-HASH>/x86_64-linux/universal-vm.img.zst
 pub const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "ae94e672589c8cb47231976f8d0a4abaac4b8fde9ded1a664de6d7c32f0eac25";
+    "ba8b49004163fa15f13c8ebac1e7cb99499043cda9f0a5dee00eca1b95187aee";
 
 /// Returns the default Universal VM disk image as a Farm-style URL.
 pub fn default_universal_vm_disk_image() -> DiskImage {

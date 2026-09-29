@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::File;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 /// Number of bytes to use for the LUKS2 volume key
@@ -26,14 +26,22 @@ const PBKDF_ITERATIONS: u32 = 1000;
 pub const LUKS2_N_KEYSLOTS: u32 = 32;
 /// Number of tokens supported by LUKS2
 pub const LUKS2_N_TOKENS: u32 = 32;
-const IC_KEY_TOKEN_TYPE: &str = "ic-key-metadata";
+/// LUKS2 token type identifier for our key slot metadata.
+pub const IC_KEY_TOKEN_TYPE: &str = "ic-key-metadata";
+
+/// All encrypted partitions contain a single active keyslot with maximum 1 active token.
+/// (SEV-based derivation has 1 token, generated keys have no associated tokens)
+pub const SINGLE_KEYSLOT_INDEX: u32 = 0;
+pub const SINGLE_TOKEN_INDEX: u32 = 0;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KeyslotMetadata {
-    // token_type and keyslots are standard fields in LUKS tokens
+pub struct KeyslotToken {
+    /// LUKS2 token type — must be set to [`IC_KEY_TOKEN_TYPE`].
     #[serde(rename = "type")]
     token_type: String,
+    /// Key slots this token is associated with (LUKS2 requires this field).
     pub keyslots: Vec<String>,
+    /// Metadata used to derive the key this token refers to.
     pub sev_metadata: SevMetadata,
     // Note: this type is serialized and stored on disk. When adding a new field, make sure to
     // set the type to Optional or mark it with #[serde(default)].
@@ -41,31 +49,21 @@ pub struct KeyslotMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SevMetadata {
+    /// Hex-encoded SEV launch measurement (96 lowercase hex chars).
     pub launch_measurement_hex: String,
+    /// TCB version (raw `u64`, little-endian AMD SEV-SNP ABI layout) used for key derivation.
     pub tcb_version: u64,
     // Note: this type is serialized and stored on disk. When adding a new field, make sure to
     // set the type to Optional or mark it with #[serde(default)].
 }
 
-impl KeyslotMetadata {
-    pub fn new_sev(keyslot: u32, sev_metadata: SevMetadata) -> Self {
+impl KeyslotToken {
+    pub fn new_sev(sev_metadata: SevMetadata) -> Self {
         Self {
             token_type: IC_KEY_TOKEN_TYPE.to_string(),
-            keyslots: vec![keyslot.to_string()],
+            keyslots: vec![SINGLE_KEYSLOT_INDEX.to_string()],
             sev_metadata,
         }
-    }
-
-    pub fn keyslot(&self) -> Result<u32> {
-        if self.keyslots.len() != 1 {
-            bail!(
-                "Token must have exactly one keyslot, but found {:?}",
-                self.keyslots
-            );
-        }
-        self.keyslots[0]
-            .parse()
-            .context("Keyslot is not a valid number")
     }
 }
 
@@ -76,6 +74,9 @@ pub(crate) struct LuksParameters {
     pub(crate) cipher_mode: String,
     pub(crate) volume_key_size: usize,
     pub(crate) keyslots: Vec<KeyslotParameters>,
+    /// Number of LUKS2 tokens present in the header: SEV headers carry one IC key
+    /// metadata token, the generated-key path writes none.
+    pub(crate) num_tokens: usize,
 }
 
 #[derive(Debug)]
@@ -88,12 +89,12 @@ pub(crate) struct KeyslotParameters {
     pub(crate) key_size: Option<usize>,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum LuksHeaderLocation<'a> {
+#[derive(Clone, Debug)]
+pub enum LuksHeaderLocation {
     /// Use the attached LUKS header on the device.
     Attached,
     /// Use the detached LUKS header at the specified path.
-    Detached(&'a Path),
+    Detached(PathBuf),
 }
 
 /// Obtains a cryptsetup handle for `device_path`.
@@ -101,7 +102,7 @@ pub enum LuksHeaderLocation<'a> {
 /// detached header file while `device_path` remains the data device.
 fn obtain_crypt_device_handle(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
+    header_location: &LuksHeaderLocation,
 ) -> Result<CryptDevice> {
     if !device_path.exists() {
         bail!("Device does not exist: {}", device_path.display());
@@ -132,38 +133,53 @@ fn obtain_crypt_device_handle_with_detached_header(
         .context("Failed to initialize cryptographic device with detached header")
 }
 
-/// Initializes a cryptographic device at the specified path with LUKS2 format and activates it
-/// using the provided name and encryption key.
-/// Returns the crypt device and the activated keyslot.
-pub fn activate_crypt_device(
+/// Activates the LUKS2 device at the specified path under the given name,
+/// using the provided encryption key.
+pub fn activate_luks2_device(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
+    header_location: &LuksHeaderLocation,
     name: &str,
     passphrase: &[u8],
     flags: CryptActivate,
     verify_luks_params: bool,
-    metrics_registry: Option<&Registry>,
-) -> Result<(CryptDevice, u32)> {
-    let mut crypt_device = open_luks2_device(device_path, header_location)?;
+    metrics_registry: &Registry,
+) -> Result<()> {
+    let mut crypt_device = open_luks2_device(device_path, header_location, verify_luks_params)?;
+    activate_crypt_device(&mut crypt_device, name, passphrase, flags, metrics_registry)
+}
 
-    let luks_parameters = extract_luks_parameters(&mut crypt_device);
-    maybe_verify_luks_parameters(&luks_parameters, device_path, verify_luks_params)?;
-
+/// Same as [`activate_luks2_device`], but on an already-open crypt device.
+pub(crate) fn activate_crypt_device(
+    crypt_device: &mut CryptDevice,
+    name: &str,
+    passphrase: &[u8],
+    flags: CryptActivate,
+    metrics_registry: &Registry,
+) -> Result<()> {
     let active_keyslot = crypt_device
         .activate_handle()
         .activate_by_passphrase(Some(name), None, passphrase, flags)
         .context("Failed to activate cryptographic device")?;
 
-    if let Some(registry) = metrics_registry {
-        let log_result = luks_parameters.and_then(|luks_parameters| {
-            export_luks_parameters(registry, &luks_parameters, device_path, active_keyslot)
-        });
-        if let Err(e) = log_result {
-            warn!("Failed to export LUKS parameters: {e:#}");
-        }
+    let device_path = crypt_device
+        .status_handle()
+        .get_device_path()
+        .context("Failed to get the device path")?
+        .to_path_buf();
+
+    let log_result = extract_luks_parameters(crypt_device).and_then(|luks_parameters| {
+        export_luks_parameters(
+            metrics_registry,
+            &luks_parameters,
+            &device_path,
+            active_keyslot,
+        )
+    });
+    if let Err(e) = log_result {
+        warn!("Failed to export LUKS parameters: {e:#}");
     }
 
-    Ok((crypt_device, active_keyslot))
+    Ok(())
 }
 
 /// Deactivates the cryptographic device with the given name.
@@ -199,13 +215,13 @@ fn apply_default_settings(crypt_device: &mut CryptDevice) -> Result<()> {
 }
 
 /// Formats the given cryptographic device with LUKS2 and initializes it with the provided
-/// encryption key.
+/// encryption key in the first keyslot.
 /// WARNING: Leads to data loss on the device!
-pub fn format_crypt_device(
+pub fn format_luks2_device(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
-    encryption_key: &[u8],
-) -> Result<(CryptDevice, u32)> {
+    header_location: &LuksHeaderLocation,
+    passphrase: &[u8],
+) -> Result<CryptDevice> {
     if let LuksHeaderLocation::Detached(header_path) = header_location {
         File::create(header_path)
             .context("Failed to create detached LUKS header file")?
@@ -233,50 +249,60 @@ pub fn format_crypt_device(
             None,
         )
         .context("Failed to call format")?;
-    let keyslot = crypt_device
+    crypt_device
         .keyslot_handle()
-        .add_by_key(None, None, encryption_key, CryptVolumeKey::empty())
+        .add_by_key(
+            Some(SINGLE_KEYSLOT_INDEX),
+            None,
+            passphrase,
+            CryptVolumeKey::empty(),
+        )
         .context("Could not add key to cryptographic device")?;
 
-    Ok((crypt_device, keyslot))
+    Ok(crypt_device)
 }
 
 /// Opens a LUKS2 device at the specified path, loads its context, and prepares handle-local
 /// defaults for follow-on operations such as adding keyslots. Does not activate the device.
 pub fn open_luks2_device(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
+    header_location: &LuksHeaderLocation,
+    verify_luks_params: bool,
 ) -> Result<CryptDevice> {
     let mut crypt_device = obtain_crypt_device_handle(device_path, header_location)?;
 
     crypt_device
         .context_handle()
-        .load::<CryptParamsLuks2Ref>(Some(ENCRYPTION_FORMAT), None)?;
+        .load::<CryptParamsLuks2Ref>(Some(ENCRYPTION_FORMAT), None)
+        .context("Failed to load the LUKS2 header")?;
     apply_default_settings(&mut crypt_device)?;
+
+    let luks_parameters = extract_luks_parameters(&mut crypt_device);
+    maybe_verify_luks_parameters(&luks_parameters, device_path, verify_luks_params)?;
 
     Ok(crypt_device)
 }
 
 /// Checks if the provided encryption key can activate the cryptographic device at the given path.
 /// Does not activate the device.
-pub fn check_encryption_key(
+pub fn check_passphrase(
     device_path: &Path,
-    header_location: LuksHeaderLocation,
-    encryption_key: &[u8],
+    header_location: &LuksHeaderLocation,
+    passphrase: &[u8],
 ) -> Result<()> {
     // This method simply checks if the key works, we don't care about LUKS parameters
-    let mut crypt_device =
-        open_luks2_device(device_path, header_location).context("Failed to open LUKS2 device")?;
+    let mut crypt_device = open_luks2_device(device_path, header_location, false)
+        .context("Failed to open LUKS2 device")?;
 
     crypt_device
         .activate_handle()
-        .activate_by_passphrase(None, None, encryption_key, CryptActivate::empty())
+        .activate_by_passphrase(None, None, passphrase, CryptActivate::empty())
         .context("Failed to activate device")?;
 
     Ok(())
 }
 
-/// Checks if the LUKS parameters match the expected values set in format_crypt_device.
+/// Checks if the LUKS parameters match the expected values set in format_luks2_device.
 /// If verify_luks_params is false, it will only log a warning if the verification fails.
 fn maybe_verify_luks_parameters(
     luks_parameters: &Result<LuksParameters>,
@@ -361,16 +387,26 @@ pub(crate) fn extract_luks_parameters(crypt_device: &mut CryptDevice) -> Result<
         keyslots.push(keyslot_parameters);
     }
 
+    let num_tokens = (0..LUKS2_N_TOKENS)
+        .filter(|&token_id| {
+            !matches!(
+                crypt_device.token_handle().status(token_id),
+                Ok(CryptTokenInfo::Invalid) | Ok(CryptTokenInfo::Inactive) | Err(_)
+            )
+        })
+        .count();
+
     Ok(LuksParameters {
         format,
         cipher,
         cipher_mode,
         volume_key_size,
         keyslots,
+        num_tokens,
     })
 }
 
-/// Verifies that the LUKS parameters match the expected values set in format_crypt_device
+/// Verifies that the LUKS parameters match the expected values set in format_luks2_device
 pub(crate) fn verify_luks_parameters(luks_parameters: &LuksParameters) -> Result<()> {
     ensure!(
         luks_parameters.format == ENCRYPTION_FORMAT,
@@ -434,111 +470,70 @@ pub(crate) fn verify_luks_parameters(luks_parameters: &LuksParameters) -> Result
     Ok(())
 }
 
-/// Destroys all key slots in the cryptographic device except for the one that is activated with the
-/// provided encryption keys.
-pub(crate) fn destroy_keyslots_except(
-    crypt_device: &mut CryptDevice,
-    keyslots_to_keep: &[u32],
-) -> Result<()> {
-    for keyslot in 0..LUKS2_N_KEYSLOTS {
-        // If this key slot is active and not the one we want to keep, destroy it.
-        if !keyslots_to_keep.contains(&keyslot)
-            && matches!(
-                crypt_device.keyslot_handle().status(keyslot),
-                Ok(KeyslotInfo::Active | KeyslotInfo::ActiveLast)
-            )
-        {
-            let assigned_token_ids = token_ids_assigned_to_keyslot(crypt_device, keyslot)?;
+// TODO: Legacy headers may carry more than one keyslot. Once all nodes have been
+// updated (i.e., the num_keyslots metric is 1 everywhere), this function can be
+// deleted: re-keying always keeps only the first keyslot.
+/// Destroys all keyslots except the first one.
+pub(crate) fn destroy_keyslots_except_first(crypt_device: &mut CryptDevice) -> Result<()> {
+    for keyslot in 1..LUKS2_N_KEYSLOTS {
+        // If this key slot is active, destroy it.
+        if matches!(
+            crypt_device.keyslot_handle().status(keyslot),
+            Ok(KeyslotInfo::Active | KeyslotInfo::ActiveLast)
+        ) {
             crypt_device
                 .keyslot_handle()
                 .destroy(keyslot)
                 .with_context(|| format!("Failed to remove old keyslot {keyslot}"))?;
-            remove_token_ids(crypt_device, assigned_token_ids)?;
         }
     }
 
     Ok(())
 }
 
-fn remove_token_ids(
-    crypt_device: &mut CryptDevice,
-    token_ids: impl IntoIterator<Item = u32>,
-) -> Result<()> {
-    for token_id in token_ids {
-        crypt_device
-            .token_handle()
-            .json_set(TokenInput::RemoveToken(token_id))
-            .with_context(|| format!("Failed to remove IC key metadata token {token_id}"))?;
-    }
-
-    Ok(())
-}
-
-fn token_ids_assigned_to_keyslot(crypt_device: &mut CryptDevice, keyslot: u32) -> Result<Vec<u32>> {
-    let mut token_ids = Vec::new();
-
-    for token_id in 0..LUKS2_N_KEYSLOTS {
-        if crypt_device
-            .token_handle()
-            .is_assigned(token_id, keyslot)
-            .with_context(|| {
-                format!(
-                    "Failed to inspect assignment of IC key metadata token {token_id} to keyslot {keyslot}"
-                )
-            })?
-        {
-            token_ids.push(token_id);
-        }
-    }
-
-    Ok(token_ids)
-}
-
-fn ic_key_token_ids(crypt_device: &mut CryptDevice) -> Vec<u32> {
-    (0..LUKS2_N_TOKENS)
-        .filter(|&token_id| {
-            matches!(
-                crypt_device.token_handle().status(token_id),
-                Ok(CryptTokenInfo::External(ref token_type)
-                    | CryptTokenInfo::ExternalUnknown(ref token_type))
-                    if token_type == IC_KEY_TOKEN_TYPE
-            )
-        })
-        .collect()
-}
-
-pub fn read_keyslot_metadata(crypt_device: &mut CryptDevice) -> Result<Vec<KeyslotMetadata>> {
-    ic_key_token_ids(crypt_device)
-        .into_iter()
-        .map(|token_id| {
-            let json = crypt_device
+fn remove_all_tokens(crypt_device: &mut CryptDevice) -> Result<()> {
+    for token_id in 0..LUKS2_N_TOKENS {
+        if !matches!(
+            crypt_device.token_handle().status(token_id),
+            Ok(CryptTokenInfo::Inactive)
+        ) {
+            crypt_device
                 .token_handle()
-                .json_get(token_id)
-                .with_context(|| format!("Failed to read IC key metadata token {token_id}"))?;
-            let metadata = serde_json::from_value::<KeyslotMetadata>(json)
-                .with_context(|| format!("Failed to parse IC key metadata token {token_id}"))?;
-            metadata
-                .keyslot()
-                .with_context(|| format!("Invalid keyslot in IC key metadata token {token_id}"))?;
-            Ok(metadata)
-        })
-        .collect()
+                .json_set(TokenInput::RemoveToken(token_id))
+                .with_context(|| format!("Failed to remove IC key metadata token {token_id}"))?;
+        }
+    }
+
+    Ok(())
 }
 
-pub fn add_sev_metadata(
+/// Reads the device's single token.
+pub fn read_single_keyslot_token(crypt_device: &mut CryptDevice) -> Result<KeyslotToken> {
+    let json = crypt_device
+        .token_handle()
+        .json_get(SINGLE_TOKEN_INDEX)
+        .with_context(|| format!("Failed to read IC key metadata token {SINGLE_TOKEN_INDEX}"))?;
+    serde_json::from_value::<KeyslotToken>(json)
+        .with_context(|| format!("Failed to parse IC key metadata token {SINGLE_TOKEN_INDEX}"))
+}
+
+/// Writes the metadata token of the device's single keyslot, replacing all existing
+/// tokens.
+pub fn write_keyslot_token(
     crypt_device: &mut CryptDevice,
-    keyslot: u32,
     sev_metadata: SevMetadata,
 ) -> Result<()> {
-    let assigned_token_ids = token_ids_assigned_to_keyslot(crypt_device, keyslot)?;
-    remove_token_ids(crypt_device, assigned_token_ids)?;
+    // TODO: Legacy headers may carry more than one IC key metadata token. Once all nodes
+    // have been updated (i.e., the num_tokens metric is 1 everywhere), this removal can
+    // be deleted so that only one token is written.
+    remove_all_tokens(crypt_device)?;
 
-    let json = serde_json::to_value(KeyslotMetadata::new_sev(keyslot, sev_metadata))
+    let json = serde_json::to_value(KeyslotToken::new_sev(sev_metadata))
         .context("Failed to serialize key slot metadata")?;
 
     crypt_device
         .token_handle()
-        .json_set(TokenInput::AddToken(&json))
+        .json_set(TokenInput::ReplaceToken(SINGLE_TOKEN_INDEX, &json))
         .context("Failed to write LUKS2 token")?;
 
     Ok(())
@@ -577,6 +572,7 @@ mod tests {
             cipher_mode: CIPHER_MODE.to_string(),
             volume_key_size: VOLUME_KEY_BYTES,
             keyslots: vec![active_keyslot(0), inactive_keyslot(1)],
+            num_tokens: 1,
         }
     }
 

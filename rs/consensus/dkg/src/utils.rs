@@ -304,6 +304,7 @@ mod tests {
             parent.height.increment(),
             Rank(0),
             parent.context.clone(),
+            parent.version.clone(),
         );
         BlockProposal::fake(
             block,

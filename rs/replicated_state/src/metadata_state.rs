@@ -160,6 +160,7 @@ pub struct SystemMetadata {
     /// 2).
     pub heap_delta_estimate: NumBytes,
 
+    #[validate_eq(CompareWithValidateEq)]
     pub subnet_metrics: SubnetMetrics,
 
     /// The set of Wasm modules we expect to be present in the [`Hypervisor`]'s
@@ -384,6 +385,10 @@ pub struct SubnetTopology {
     ///
     ///  * it inducts no ingress messages, so the ingress history becomes free of
     ///    expiring message statuses;
+    ///  * it rejects all query calls;
+    ///  * it executes no canister messages and no canister tasks (`Heartbeat`,
+    ///    `GlobalTimer` or the on-low-wasm-memory hook), only draining its subnet
+    ///    queues;
     ///  * (on all subnets) no messages are routed to a cooling down subnet --
     ///    including into the cooling down subnet's own loopback stream -- but
     ///    retained in their respective output queues, so that streams to the
@@ -422,13 +427,33 @@ pub struct OwnSubnetInfo {
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub struct SubnetMetrics {
+    /// The cycles consumed by the canisters deleted on this subnet: for each
+    /// deleted canister, the cycles it had consumed plus the cycles left over in
+    /// its balance at deletion, which are considered consumed as well.
+    ///
+    /// This scalar already fully accounts for the following entries of
+    /// `consumed_cycles_by_use_case`, so a total that adds it must skip them:
+    ///
+    /// - `DeletedCanisters` holds the leftover cycles of deleted canisters,
+    ///   which are already included here.
+    /// - The canister-level use cases (`Memory`, `ComputeAllocation`,
+    ///   `IngressInduction`, `Instructions`, `RequestAndResponseTransmission`,
+    ///   `Uninstall`, `CanisterCreation`, `BurnedCycles`) only ever end up in
+    ///   that map when a canister is deleted, at which point the deleted
+    ///   canister's total consumption (the sum of these use cases) is also added
+    ///   here. Summing both would double count the cycles consumed by deleted
+    ///   canisters.
+    ///
+    /// The scalar predates the `consumed_cycles_by_use_case` map, so it may be
+    /// strictly larger than the sum of the entries above: deletions from before
+    /// use-case tracking are recorded in it alone.
     consumed_cycles_by_deleted_canisters: NominalCycles,
     consumed_cycles_http_outcalls: NominalCycles,
     consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
-    consumed_cycles_by_use_case_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
+    consumed_cycles_by_use_case_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
     pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
     pub num_canisters: u64,
@@ -438,6 +463,17 @@ pub struct SubnetMetrics {
     ///
     /// Transactions here refer to all messages processed in replicated mode.
     pub update_transactions_total: u64,
+
+    /// The total number of instructions this subnet accounted for across the
+    /// execution phases of all rounds. Covers both executed Wasm and the fixed
+    /// per-execution and per-canister scheduler overheads plus non-Wasm charges
+    /// (compilation, chunk assembly, snapshots), so it is not a Wasm meter.
+    pub round_instructions_total: u64,
+
+    /// Backing store of [`Self::consumed_cycles_total_including_canisters()`]; zero
+    /// until [`Self::refresh_consumed_cycles`] derives it.
+    #[validate_eq(Ignore)]
+    consumed_cycles_total_including_canisters: NominalCycles,
 }
 
 impl SubnetMetrics {
@@ -454,7 +490,7 @@ impl SubnetMetrics {
             .entry(use_case)
             .or_insert_with(NominalCycles::zero) += cycles;
         *self
-            .consumed_cycles_by_use_case_as_counters
+            .consumed_cycles_by_use_case_monotonic
             .entry(use_case)
             .or_insert_with(NominalCycles::zero) += cycles;
     }
@@ -471,12 +507,18 @@ impl SubnetMetrics {
         self.consumed_cycles_http_outcalls += cycles;
     }
 
+    /// Cycles consumed by HTTP outcalls (`CyclesUseCase::HTTPOutcalls`).
     pub fn get_consumed_cycles_http_outcalls(&self) -> NominalCycles {
-        self.consumed_cycles_http_outcalls
+        self.get_consumed_cycles_subnet_use_case(CyclesUseCase::HTTPOutcalls)
     }
 
     pub fn observe_consumed_cycles_ecdsa_outcalls(&mut self, cycles: NominalCycles) {
         self.consumed_cycles_ecdsa_outcalls += cycles;
+    }
+
+    /// Cycles consumed by ECDSA outcalls (`CyclesUseCase::ECDSAOutcalls`).
+    pub fn get_consumed_cycles_ecdsa_outcalls(&self) -> NominalCycles {
+        self.get_consumed_cycles_subnet_use_case(CyclesUseCase::ECDSAOutcalls)
     }
 
     /// Migrates the cycles consumed by HTTP and ECDSA outcalls that are tracked
@@ -505,13 +547,13 @@ impl SubnetMetrics {
     /// + delta)`. It is also idempotent, so extra invocations are harmless.
     ///
     /// Only the `consumed_cycles_by_use_case` map is migrated; the monotonic
-    /// `consumed_cycles_by_use_case_as_counters` map is intentionally left
+    /// `consumed_cycles_by_use_case_monotonic` map is intentionally left
     /// untouched (backfilling it would introduce a spurious counter jump).
     ///
     /// The scalar fields are intentionally kept (and kept up to date) rather
-    /// than zeroed, so that they remain the source of truth for readers such as
-    /// `consumed_cycles_total` (which still reads them for now) and so that
-    /// downgrading to an earlier replica version observes the correct totals.
+    /// than zeroed, even though nothing reads their value anymore (all readers
+    /// go through `consumed_cycles_by_use_case`), so that downgrading to an
+    /// earlier replica version observes the correct totals.
     pub fn migrate_outcalls_cycles_to_use_cases(&mut self) {
         for (scalar, use_case) in [
             (
@@ -534,33 +576,28 @@ impl SubnetMetrics {
         }
     }
 
-    pub fn get_consumed_cycles_ecdsa_outcalls(&self) -> NominalCycles {
-        self.consumed_cycles_ecdsa_outcalls
-    }
-
-    /// Cycles consumed by Schnorr threshold-signature outcalls. Unlike ECDSA and
-    /// HTTP outcalls, this use case has no dedicated field; it is only tracked in
-    /// the by-use-case map (it can never originate from a deleted canister, so
-    /// the map entry is exactly the subnet-level consumption).
+    /// Cycles consumed by Schnorr threshold-signature outcalls
+    /// (`CyclesUseCase::SchnorrOutcalls`).
     pub fn get_consumed_cycles_schnorr_outcalls(&self) -> NominalCycles {
-        self.consumed_cycles_by_use_case
-            .get(&CyclesUseCase::SchnorrOutcalls)
-            .copied()
-            .unwrap_or_else(NominalCycles::zero)
+        self.get_consumed_cycles_subnet_use_case(CyclesUseCase::SchnorrOutcalls)
     }
 
-    /// Cycles consumed by VetKd outcalls. See `get_consumed_cycles_schnorr_outcalls`.
+    /// Cycles consumed by VetKd outcalls (`CyclesUseCase::VetKd`).
     pub fn get_consumed_cycles_vetkd(&self) -> NominalCycles {
-        self.consumed_cycles_by_use_case
-            .get(&CyclesUseCase::VetKd)
-            .copied()
-            .unwrap_or_else(NominalCycles::zero)
+        self.get_consumed_cycles_subnet_use_case(CyclesUseCase::VetKd)
     }
 
-    /// Cycles lost due to dropped messages. See `get_consumed_cycles_schnorr_outcalls`.
+    /// Cycles lost due to dropped messages (`CyclesUseCase::DroppedMessages`).
     pub fn get_consumed_cycles_dropped_messages(&self) -> NominalCycles {
+        self.get_consumed_cycles_subnet_use_case(CyclesUseCase::DroppedMessages)
+    }
+
+    /// Cycles consumed by a subnet-level use case, i.e. one that is never
+    /// charged to a canister's balance and can thus never originate from a
+    /// deleted canister.
+    fn get_consumed_cycles_subnet_use_case(&self, use_case: CyclesUseCase) -> NominalCycles {
         self.consumed_cycles_by_use_case
-            .get(&CyclesUseCase::DroppedMessages)
+            .get(&use_case)
             .copied()
             .unwrap_or_else(NominalCycles::zero)
     }
@@ -569,52 +606,31 @@ impl SubnetMetrics {
         &self.consumed_cycles_by_use_case
     }
 
-    pub fn get_consumed_cycles_by_use_case_as_counters(
+    pub fn get_consumed_cycles_by_use_case_monotonic(
         &self,
     ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
-        &self.consumed_cycles_by_use_case_as_counters
+        &self.consumed_cycles_by_use_case_monotonic
     }
 
-    /// Computes the total consumed cycles on the subnet.
+    /// Computes the subnet-level aggregate of the consumed cycles, i.e. the part
+    /// of the total that is not held by the canisters that still exist.
     ///
     /// This is the current computation, which avoids double counting the cycles
-    /// consumed by deleted canisters. The canonical state consumer uses it
-    /// starting with certification version `V29`, adding on top the cycles
-    /// consumed by all non-deleted canisters; for earlier certification
-    /// versions the consumer uses the legacy [`Self::consumed_cycles_total_v28`]
-    /// instead.
+    /// consumed by deleted canisters, as the legacy
+    /// [`Self::consumed_cycles_total_v28`] does. It is one of the two summands of
+    /// [`Self::consumed_cycles_total_including_canisters`], which is what the
+    /// canonical state consumer reports from certification version `V29` on.
     pub fn consumed_cycles_total(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
         total += self.consumed_cycles_by_deleted_canisters;
-        total += self.consumed_cycles_http_outcalls;
-        total += self.consumed_cycles_ecdsa_outcalls;
 
         for (use_case, cycles) in self.consumed_cycles_by_use_case.iter() {
             match use_case {
                 // Skip the use cases that are already fully accounted for by the
-                // scalar metrics added above:
-                //
-                // - `ECDSAOutcalls` and `HTTPOutcalls` are supersets of the
-                //   corresponding use case entries (see
-                //   `consumed_cycles_ecdsa_outcalls` and
-                //   `consumed_cycles_http_outcalls`).
-                // - `DeletedCanisters` holds the leftover cycles of deleted
-                //   canisters, which are already included in
-                //   `consumed_cycles_by_deleted_canisters`.
-                // - The remaining canister-level use cases below
-                //   (`Memory`, `ComputeAllocation`, `IngressInduction`,
-                //   `Instructions`, `RequestAndResponseTransmission`,
-                //   `Uninstall`, `CanisterCreation`, `BurnedCycles`) only ever
-                //   end up in this map when a canister is deleted, at which point
-                //   the deleted canister's total consumption (the sum of these
-                //   use cases) is also added to
-                //   `consumed_cycles_by_deleted_canisters`. Summing them here as
-                //   well would double count the cycles consumed by deleted
-                //   canisters.
-                CyclesUseCase::ECDSAOutcalls
-                | CyclesUseCase::HTTPOutcalls
-                | CyclesUseCase::DeletedCanisters
+                // `consumed_cycles_by_deleted_canisters` scalar added above; see
+                // its doc comment.
+                CyclesUseCase::DeletedCanisters
                 | CyclesUseCase::Memory
                 | CyclesUseCase::ComputeAllocation
                 | CyclesUseCase::IngressInduction
@@ -625,15 +641,43 @@ impl SubnetMetrics {
                 | CyclesUseCase::BurnedCycles => {}
                 // The remaining use cases are only ever recorded at the subnet
                 // level (never charged to a canister's balance), so they are not
-                // covered by any of the scalar metrics above and must be added to
-                // the total.
-                CyclesUseCase::SchnorrOutcalls
+                // covered by the scalar metric above and must be added to the
+                // total.
+                CyclesUseCase::ECDSAOutcalls
+                | CyclesUseCase::HTTPOutcalls
+                | CyclesUseCase::SchnorrOutcalls
                 | CyclesUseCase::VetKd
                 | CyclesUseCase::DroppedMessages => total += *cycles,
             }
         }
 
         total
+    }
+
+    /// All cycles removed from circulation on this subnet, by both deleted and
+    /// still-existing canisters: [`Self::consumed_cycles_total`] plus the sum of
+    /// `CanisterMetrics::consumed_cycles()` over the canisters that currently
+    /// exist, as of the end of the last committed round.
+    ///
+    /// Every consumer of the full total reads it here -- the certified state tree at
+    /// `/subnet/<subnet_id>/metrics` (from certification version `V29`) and the
+    /// `replicated_state_consumed_cycles_since_replica_started` gauge -- so they
+    /// cannot drift apart.
+    pub fn consumed_cycles_total_including_canisters(&self) -> NominalCycles {
+        self.consumed_cycles_total_including_canisters
+    }
+
+    /// Recomputes [`Self::consumed_cycles_total_including_canisters`] from the
+    /// subnet-level aggregate and `consumed_by_canisters`, the sum of
+    /// `CanisterMetrics::consumed_cycles()` over the canisters that currently exist.
+    ///
+    /// Callers pass the canisters' part only; adding the subnet-level part happens
+    /// here, so no caller can get it wrong. The total is derived, not
+    /// persisted: `ReplicatedState::refresh_consumed_cycles` calls this whenever a
+    /// state is committed and `ReplicatedState::new_from_checkpoint` on load.
+    pub fn refresh_consumed_cycles(&mut self, consumed_by_canisters: NominalCycles) {
+        self.consumed_cycles_total_including_canisters =
+            self.consumed_cycles_total() + consumed_by_canisters;
     }
 
     /// Legacy computation of the total consumed cycles, used by the canonical
@@ -644,25 +688,24 @@ impl SubnetMetrics {
     /// `consumed_cycles_by_deleted_canisters` and to the
     /// `consumed_cycles_by_use_case` map, and both are summed here. It is kept
     /// unchanged to preserve the certified state for certification versions up
-    /// to and including `V28`; [`Self::consumed_cycles_total`] fixes the double
-    /// counting starting with certification version `V29`.
+    /// to and including `V28`; from `V29` on the consumer reports
+    /// [`Self::consumed_cycles_total_including_canisters`], which does not
+    /// double count.
     pub fn consumed_cycles_total_v28(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
         total += self.consumed_cycles_by_deleted_canisters;
-        total += self.consumed_cycles_http_outcalls;
-        total += self.consumed_cycles_ecdsa_outcalls;
 
         for (use_case, cycles) in self.consumed_cycles_by_use_case.iter() {
             match use_case {
-                // For ecdsa outcalls, http outcalls and deleted canisters, skip
-                // updating the total using the use case specific metric as the
-                // update above should be sufficient (the old metric is a superset).
+                // For deleted canisters, skip updating the total using the use
+                // case specific metric as the update above should be sufficient
+                // (the old metric is a superset).
+                CyclesUseCase::DeletedCanisters => {}
+                // For the remaining use cases simply add the values to the total.
                 CyclesUseCase::ECDSAOutcalls
                 | CyclesUseCase::HTTPOutcalls
-                | CyclesUseCase::DeletedCanisters => {}
-                // For the remaining use cases simply add the values to the total.
-                CyclesUseCase::Memory
+                | CyclesUseCase::Memory
                 | CyclesUseCase::ComputeAllocation
                 | CyclesUseCase::IngressInduction
                 | CyclesUseCase::Instructions
@@ -1260,8 +1303,8 @@ impl SystemMetadata {
             subnet_call_context_manager = Default::default();
 
             // The canister count and state size will both be updated just before
-            // `commit_and_certify()` is called. All counters (cycles burned and update
-            // transactions) should start at zero.
+            // `commit_and_certify()` is called. All counters (cycles burned, update
+            // transactions and round instructions) should start at zero.
             subnet_metrics = Default::default();
         }
 
@@ -1457,13 +1500,6 @@ pub struct Stream {
     /// Indexed queue of outgoing messages.
     messages: StreamIndexedQueue<StreamMessage>,
 
-    /// Index of the first signal that may not have been observed by the remote
-    /// subnet, updated from the `begin` in the reverse stream header.
-    ///
-    /// If `messages` is empty and this is equal to `signals_end`, then there is
-    /// definitely nothing in this stream for the remote subnet to induct.
-    signals_begin: StreamIndex,
-
     /// Index of the next expected reverse stream message.
     ///
     /// Conceptually we use a gap-free queue containing one signal for each
@@ -1475,7 +1511,7 @@ pub struct Stream {
     ///
     /// Invariants:
     ///  * `reject_signals[i].index < reject_signals[i+1].index`
-    ///  * `signals_begin <= reject_signals[i].index < signals_end`
+    ///  * `reject_signals[i].index < signals_end`
     reject_signals: VecDeque<RejectSignal>,
 
     /// Estimated byte size of `self.messages`.
@@ -1494,7 +1530,6 @@ pub struct Stream {
 impl Default for Stream {
     fn default() -> Self {
         let messages = Default::default();
-        let signals_begin = Default::default();
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
         let messages_size_bytes = Self::calculate_size_bytes(&messages);
@@ -1505,7 +1540,6 @@ impl Default for Stream {
         let guaranteed_response_counts = BTreeMap::default();
         Self {
             messages,
-            signals_begin,
             signals_end,
             reject_signals,
             messages_size_bytes,
@@ -1676,10 +1710,8 @@ impl Stream {
 
     /// Garbage collects signals before `new_signals_begin`.
     pub fn discard_signals_before(&mut self, new_signals_begin: StreamIndex) {
-        debug_assert!(new_signals_begin >= self.signals_begin);
         debug_assert!(new_signals_begin <= self.signals_end);
 
-        self.signals_begin = new_signals_begin;
         while let Some(reject_signal) = self.reject_signals.front() {
             if reject_signal.index < new_signals_begin {
                 self.reject_signals.pop_front();
@@ -1694,15 +1726,23 @@ impl Stream {
         &self.reject_signals
     }
 
-    /// Returns the index of the first signal that may not have been observed by
-    /// the remote subnet.
-    pub fn signals_begin(&self) -> StreamIndex {
-        self.signals_begin
-    }
-
-    /// Returns `true` if the stream is empty, i.e. it holds no messages or signals.
-    pub fn is_empty(&self) -> bool {
-        self.messages.is_empty() && self.signals_end == self.signals_begin
+    /// Returns the index of the first reject signal at or after `from_index`, if
+    /// any.
+    ///
+    /// This allows us to decide whether inducting a slice will allow us to garbage
+    /// collect any reject signals, based on its `header.begin()`. `None` means that
+    /// no slice can, whatever its `header.begin()`.
+    pub fn next_reject_signal_index(&self, from_index: StreamIndex) -> Option<StreamIndex> {
+        let next_reject_signal_pos: usize = match self
+            .reject_signals
+            .binary_search_by(|reject_signal| reject_signal.index.cmp(&from_index))
+        {
+            Ok(pos) => pos,
+            Err(pos) => pos,
+        };
+        self.reject_signals
+            .get(next_reject_signal_pos)
+            .map(|reject_signal| reject_signal.index)
     }
 
     /// Returns the index just beyond the last sent signal.
@@ -2462,7 +2502,6 @@ pub mod testing {
         /// Creates a new `Stream` with the given `messages` and signals.
         fn with_signals(
             messages: StreamIndexedQueue<StreamMessage>,
-            signals_begin: StreamIndex,
             signals_end: StreamIndex,
             reject_signals: VecDeque<RejectSignal>,
         ) -> Stream;
@@ -2470,12 +2509,11 @@ pub mod testing {
 
     impl StreamTesting for Stream {
         fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Stream {
-            Stream::with_signals(messages, StreamIndex::new(0), signals_end, VecDeque::new())
+            Stream::with_signals(messages, signals_end, VecDeque::new())
         }
 
         fn with_signals(
             messages: StreamIndexedQueue<StreamMessage>,
-            signals_begin: StreamIndex,
             signals_end: StreamIndex,
             reject_signals: VecDeque<RejectSignal>,
         ) -> Self {
@@ -2484,7 +2522,6 @@ pub mod testing {
             let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
             Self {
                 messages,
-                signals_begin,
                 signals_end,
                 reject_signals,
                 messages_size_bytes,

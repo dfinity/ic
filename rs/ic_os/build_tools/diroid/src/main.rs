@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use walkdir::{DirEntryExt, WalkDir};
+use walkdir::WalkDir;
 
 /// Generate an e2fsdroid fs_config file for a given directory tree
 #[derive(Parser)]
@@ -33,12 +33,19 @@ fn main() -> Result<()> {
 
         let metadata = entry.metadata()?;
 
-        let (uid, gid) = match fakeroot_map.get(&entry.ino()) {
+        // Look the entry up by the inode number that stat(2) reports (st_ino), which is
+        // what fakeroot recorded, not by the one readdir(3) reports (d_ino, which is what
+        // walkdir's DirEntryExt::ino() returns). The two differ for directories on an
+        // overlayfs whose layers are on different filesystems (e.g. a GitHub Actions
+        // runner's root filesystem) unless it is mounted with xino=on: there st_ino is
+        // an overlay-private number while d_ino is the real inode of the upper layer.
+        let ino = metadata.ino();
+        let (uid, gid) = match fakeroot_map.get(&ino) {
             Some(v) => v,
             // fakeroot does not track /, so special case this ownership
             None if entry.path() == args.input_dir => &(0, 0),
             None => {
-                bail!("fakeroot map does not contain inode: '{}'", entry.ino());
+                bail!("fakeroot map does not contain inode: '{}'", ino);
             }
         };
 

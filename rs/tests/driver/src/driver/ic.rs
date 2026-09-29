@@ -3,7 +3,7 @@ use crate::driver::{
     bootstrap::{init_ic, setup_and_start_vms},
     farm::{DnsRecord, DnsRecordType, Farm, HostFeature},
     ic_gateway_vm::Playnet,
-    local_backend::LocalBackend,
+    local_backend::{IN_GROUP_DOMAIN_SUFFIX, LocalBackend},
     nested::UnassignedRecordConfig,
     node_software_version::NodeSoftwareVersion,
     resource::{AllocatedVm, ResourceGroup, allocate_resources, get_resource_request},
@@ -37,18 +37,15 @@ use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::Path;
 use std::time::Duration;
 
-/// Domain suffix of an API boundary node that is not part of a Farm playnet.
+/// The domain of the `idx`-th API boundary node outside a Farm playnet.
 ///
 /// Only ever resolved from inside a test group: on the local backend by the
 /// group's own `dnsmasq` (see
 /// [`InternetComputer::setup_api_bn_local_playnet`]), and on Farm not at all —
 /// [`InternetComputer::with_api_boundary_nodes`] hands out these names without
 /// creating DNS records for them.
-const API_BOUNDARY_NODE_DOMAIN_SUFFIX: &str = "ic.net";
-
-/// The domain of the `idx`-th API boundary node outside a Farm playnet.
 fn api_boundary_node_domain(idx: usize) -> String {
-    format!("apibn-{idx}.{API_BOUNDARY_NODE_DOMAIN_SUFFIX}")
+    format!("apibn-{idx}.{IN_GROUP_DOMAIN_SUFFIX}")
 }
 
 /// The TLS material behind the local backend's replacement for a Farm playnet,
@@ -255,10 +252,10 @@ impl InternetComputer {
     ///
     /// Needed by tests that have a VM other than the driver talk to a node. Such
     /// a VM shares the nodes' `/64`, which the GuestOS firewall already accepts
-    /// on 7070, 9090, 9091, 9100, 19100, 19522 and 19531 (plus 9314 on cloud
-    /// engines and 9324 on API boundary nodes) — so this is only required to
-    /// reach a node on one of the *other* whitelisted ports: 22, 2497, 4100,
-    /// 8080 and 19523.
+    /// on 7070, 9090, 9091, 9100, 19100 and 19531 (plus 9314 on cloud
+    /// engines and 9324 on API boundary nodes; 19522 is restricted to the peer
+    /// Guest VM) — so this is only required to reach a node on one of the
+    /// *other* whitelisted ports: 22, 2497, 4100, 8080 and 19523.
     ///
     /// The prefixes and ports are added to the driver's, never replace them, so
     /// a caller cannot lock the driver out. Ignored on the Farm backend, whose

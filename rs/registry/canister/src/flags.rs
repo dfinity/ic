@@ -106,6 +106,10 @@ pub mod temporary_overrides {
     pub fn test_set_blank_replica_version_id_for_cloud_engines_enabled(override_value: bool) {
         IS_BLANK_REPLICA_VERSION_ID_FOR_CLOUD_ENGINES_ENABLED.replace(override_value);
     }
+
+    pub fn test_set_subnet_splitting_enabled(override_value: bool) {
+        IS_SUBNET_SPLITTING_ENABLED.replace(override_value);
+    }
 }
 
 pub(crate) fn is_node_swapping_enabled_on_subnet(subnet_id: SubnetId) -> bool {

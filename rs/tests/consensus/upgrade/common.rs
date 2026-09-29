@@ -38,10 +38,10 @@ use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-const ALLOWED_FAILURES: usize = 1;
+pub const ALLOWED_FAILURES: usize = 1;
 
-pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
-pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_mins(35);
+pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_mins(30);
 
 pub fn elect_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> ReplicaVersion {
     let logger = env.logger();

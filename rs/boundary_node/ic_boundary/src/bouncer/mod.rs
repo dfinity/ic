@@ -287,7 +287,7 @@ pub async fn middleware(
         .map(|x| x.remote_addr.ip());
 
     if let Some(v) = ip {
-        if !bouncer.acquire_token(v) {
+        if !v.is_loopback() && !bouncer.acquire_token(v) {
             return Err(ErrorCause::RateLimited(RateLimitCause::Bouncer));
         }
     } else {

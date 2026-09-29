@@ -212,7 +212,6 @@ go.sum                    @dfinity/infra
 /rs/tests/nns/                                          @dfinity/governance-team
 /rs/tests/node/                                         @dfinity/node
 /rs/tests/query_stats/                                  @dfinity/core-protocol
-/rs/tests/sdk/                                          @dfinity/sdk
 /rs/tla_instrumentation/                                @dfinity/core-protocol
 /rs/tools/                                              @dfinity/core-protocol
 /rs/tools/check_did/                                    @dfinity/defi

@@ -21,6 +21,7 @@ serde_cbor = { workspace = true }
 tracing = { workspace = true }
 uuid = { workspace = true }
 
+alternative_guestos = { path = "../alternative_guestos" }
 attestation = { path = "../sev/attestation" }
 command_runner = { path = "../command_runner" }
 config_tool = { path = "../config/tool" }

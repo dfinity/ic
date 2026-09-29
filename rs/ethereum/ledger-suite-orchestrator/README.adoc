@@ -73,6 +73,7 @@ To understand how ckERC20 tokens are managed, it's essential to understand the l
 
 Remarks:
 
+* Archiving is temporarily disabled for newly created ledger suites: the orchestrator sets `trigger_threshold` to `4_200_000_000` so that no archive canister is ever spawned and all blocks remain in the ledger. This is a stopgap until the minters can safely process blocks that were moved to an archive.
 * Upgrading the ledger won't upgrade any spawned archive canisters.
 * The initial version (Git hash `4472b0064d347a88649beb526214fde204f906fb`) of the ledger used doesn't use stable memory.
 * Both the index canister and archive canisters used in ckERC20 use stable memory. It's therefore possible to configure the `archive_options` in such a way that it will be very unlikely that a second archive canister is ever needed.

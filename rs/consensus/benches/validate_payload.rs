@@ -49,7 +49,7 @@ use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, node_test_id, subnet_test_id},
+    ids::{canister_test_id, node_test_id, subnet_test_id, test_replica_version},
     messages::SignedIngressBuilder,
 };
 use ic_types::{
@@ -117,6 +117,7 @@ where
         let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
             subnet_test_id(0),
+            &test_replica_version(),
             make_genesis(summary).into(),
             pool_config.clone(),
             ic_metrics::MetricsRegistry::new(),
@@ -173,6 +174,7 @@ where
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
+            Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             metrics_registry,

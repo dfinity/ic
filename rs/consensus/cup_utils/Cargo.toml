@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-consensus-idkg = { path = "../idkg" }
 ic-consensus-dkg = { path = "../dkg" }
+ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-protobuf = { path = "../../protobuf" }

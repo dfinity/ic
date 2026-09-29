@@ -54,7 +54,7 @@ system_test_nns(
     env = ENV,
     guestos_update = "test",
     setupos = True,
-    tags = ["long_test"],
+    tags = ["system_test_large"],
     test_timeout = "eternal",
     runtime_deps = RUNTIME_DEPS,
     deps = [
@@ -70,7 +70,7 @@ system_test_nns(
 #     bazel \
 #         test \
 #         --test_timeout=7200 \  # 2 hours
-#         //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state_colocate
+#         //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state_farm_colocate
 #
 # You should use `--test_timeout=7200` because the test is expected to take a very long time.
 # You should also have your `SSH_AUTH_SOCK` environment variable set, and the corresponding SSH agent
@@ -117,7 +117,7 @@ system_test_nns(
     env = ENV,
     guestos_update = "test",
     setupos = True,
-    tags = ["long_test"],
+    tags = ["system_test_large"],
     test_timeout = "eternal",
     runtime_deps = RUNTIME_DEPS,
     deps = [
@@ -136,7 +136,7 @@ system_test_nns(
     env = ENV,
     guestos_update = "test",
     setupos = True,
-    tags = ["long_test"],
+    tags = ["system_test_large"],
     test_timeout = "eternal",
     runtime_deps = RUNTIME_DEPS,
     deps = [
@@ -155,7 +155,7 @@ system_test_nns(
     env = ENV,
     guestos_update = "test",
     setupos = True,
-    tags = ["long_test"],
+    tags = ["system_test_large"],
     test_timeout = "eternal",
     runtime_deps = RUNTIME_DEPS,
     deps = [

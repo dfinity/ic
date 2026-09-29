@@ -489,6 +489,42 @@ pub struct UpgradeSnsControlledCanister {
     /// empty, and this field should be set instead.
     #[prost(message, optional, tag = "5")]
     pub chunked_canister_wasm: ::core::option::Option<ChunkedCanisterWasm>,
+    /// Options that only apply when mode is upgrade.
+    #[prost(message, optional, tag = "6")]
+    pub canister_upgrade_options:
+        ::core::option::Option<upgrade_sns_controlled_canister::CanisterUpgradeOptions>,
+}
+/// Nested message and enum types in `UpgradeSnsControlledCanister`.
+pub mod upgrade_sns_controlled_canister {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Message,
+    )]
+    pub struct CanisterUpgradeOptions {
+        /// Whether to skip the canister's pre_upgrade hook. This would generally be
+        /// used in emergencies. See the corresponding field in the Management
+        /// canister API.
+        #[prost(bool, optional, tag = "1")]
+        pub skip_pre_upgrade: ::core::option::Option<bool>,
+        /// Whether to retain (keep) or drop (replace) the canister's Wasm main
+        /// memory across the upgrade. If the old WASM had a custom section named
+        /// "icp:private enhanced-orthogonal-persistence", then this must be set
+        /// (otherwise, the Management canister will block the upgrade). If keep is
+        /// used here, then the new WASM must also have the same custom section.
+        #[prost(
+            enumeration = "::ic_protobuf::types::v1::WasmMemoryPersistence",
+            optional,
+            tag = "2"
+        )]
+        pub wasm_memory_persistence: ::core::option::Option<i32>,
+    }
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.

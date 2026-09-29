@@ -8,7 +8,7 @@ use crate::{
     },
     governance::{
         NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER, TREASURY_SUBACCOUNT_NONCE, bytes_to_subaccount,
-        log_prefix,
+        log_prefix, valid_canister_upgrade_options,
     },
     logs::{ERROR, INFO},
     pb::v1::{
@@ -30,6 +30,7 @@ use crate::{
             MintSnsTokensActionAuxiliary, TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
+        upgrade_sns_controlled_canister::CanisterUpgradeOptions,
     },
     sns_upgrade::{UpgradeSnsParams, get_proposal_id_that_added_wasm, get_upgrade_params},
     treasury::assess_treasury_balance,
@@ -40,6 +41,7 @@ use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
+use ic_management_canister_types_private::CanisterInstallMode as RootCanisterInstallMode;
 use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS, denominations_to_tokens, i2d,
     ledger::compute_distribution_subaccount_bytes, ledger_validation,
@@ -47,6 +49,7 @@ use ic_nervous_system_common::{
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_protobuf::types::v1::CanisterInstallMode;
+use ic_protobuf::types::v1::WasmMemoryPersistence as WasmMemoryPersistenceProto;
 use ic_sns_governance_api::{format_full_hash, pb::v1 as pb_api};
 use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
@@ -1041,6 +1044,40 @@ impl TokenProposalAction for MintSnsTokens {
     }
 }
 
+/// Renders the "## Upgrade options" section (including its own leading blank
+/// lines and heading), so that voters can tell whether the proposal includes
+/// skip_pre_upgrade and/or wasm_memory_persistence.
+///
+/// Returns "" (i.e. no section at all) when there is nothing to say.
+fn render_canister_upgrade_options_section(
+    canister_upgrade_options: &Option<CanisterUpgradeOptions>,
+) -> String {
+    let Some(CanisterUpgradeOptions {
+        skip_pre_upgrade,
+        wasm_memory_persistence,
+    }) = canister_upgrade_options
+    else {
+        return "".to_string();
+    };
+
+    let skip_pre_upgrade: bool = skip_pre_upgrade.unwrap_or_default();
+
+    let wasm_memory_persistence = match wasm_memory_persistence {
+        None => "Unspecified".to_string(),
+        Some(code) => match WasmMemoryPersistenceProto::try_from(*code) {
+            Ok(value) => format!("{value:?}"),
+            // This is unreachable because of validation performed by the caller.
+            Err(_) => format!("Unrecognized({code})"),
+        },
+    };
+
+    format!(
+        "\n\n## Upgrade options\n\n\
+         skip_pre_upgrade: {skip_pre_upgrade}\n\
+         wasm_memory_persistence: {wasm_memory_persistence}"
+    )
+}
+
 /// Validates and renders a proposal with action UpgradeSnsControlledCanister.
 async fn validate_and_render_upgrade_sns_controlled_canister(
     upgrade: &UpgradeSnsControlledCanister,
@@ -1053,6 +1090,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
         canister_id,
         canister_upgrade_arg,
         mode,
+        canister_upgrade_options,
         // The WASM-related fields are extracted separately.
         chunked_canister_wasm: _,
         new_canister_wasm: _,
@@ -1066,6 +1104,21 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
     }
     // Assume mode is the default if it is not set
     let mode = upgrade.mode_or_upgrade();
+
+    // Inspect canister_upgrade_options.
+    match RootCanisterInstallMode::try_from(mode) {
+        Err(err) => {
+            // This would happen if mode was originally 0, Unspecified. Of
+            // course, if canister_upgrade_options is Some, that's also wrong
+            // here, but moot, so we do not add to defects for that.
+            defects.push(format!("Invalid mode: {err}"));
+        }
+        Ok(mode) => {
+            if let Err(err) = valid_canister_upgrade_options(mode, *canister_upgrade_options) {
+                defects.push(err);
+            }
+        }
+    }
 
     // Inspect canister_id.
     let canister_id = match validate_required_field("canister_id", canister_id) {
@@ -1133,6 +1186,8 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
         })
         .unwrap_or_else(|| "No upgrade argument.".to_string());
 
+    let upgrade_options_section = render_canister_upgrade_options_section(canister_upgrade_options);
+
     Ok(format!(
         r"# Proposal to Upgrade an SNS Controlled Canister
 
@@ -1142,7 +1197,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
 
 {wasm_info}
 
-## Mode: {mode:?}
+## Mode: {mode:?}{upgrade_options_section}
 
 ## Argument info
 
@@ -3055,6 +3110,7 @@ mod tests {
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
+            canister_upgrade_options: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
         let text = validate_and_render_upgrade_sns_controlled_canister(
@@ -3085,6 +3141,57 @@ No upgrade argument."#
     }
 
     #[tokio::test]
+    async fn render_upgrade_sns_controlled_canister_proposal_with_upgrade_options() {
+        let upgrade = UpgradeSnsControlledCanister {
+            // The point of this test is to make sure that this gets reflected
+            // in the description of the proposal.
+            canister_upgrade_options: Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(true),
+                wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Keep as i32),
+            }),
+
+            // Similar to other test(s).
+            canister_id: Some(basic_canister_id()),
+            new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: None,
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
+            chunked_canister_wasm: None,
+        };
+        let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
+
+        let text = validate_and_render_upgrade_sns_controlled_canister(
+            &upgrade,
+            &env,
+            canister_test_id(55),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            text,
+            r#"# Proposal to Upgrade an SNS Controlled Canister
+
+## Target canister: xbgkv-fyaaa-aaaaa-aaava-cai
+
+## Wasm info
+
+Embedded module with 8 bytes and SHA256 `93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476`.
+
+## Mode: Upgrade
+
+## Upgrade options
+
+skip_pre_upgrade: true
+wasm_memory_persistence: Keep
+
+## Argument info
+
+No upgrade argument."#
+                .to_string()
+        );
+    }
+
+    #[tokio::test]
     async fn render_upgrade_sns_controlled_canister_proposal_with_chunked_wasm() {
         let upgrade = UpgradeSnsControlledCanister {
             canister_id: Some(basic_canister_id()),
@@ -3096,6 +3203,7 @@ No upgrade argument."#
                 store_canister_id: Some(canister_test_id(111).get()),
                 chunk_hashes_list: vec![vec![1, 1, 1], vec![2, 2, 2], vec![3, 3, 3]],
             }),
+            canister_upgrade_options: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
         let text = validate_and_render_upgrade_sns_controlled_canister(
@@ -3143,6 +3251,7 @@ No upgrade argument."#
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
+            canister_upgrade_options: None,
         };
 
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
@@ -3179,6 +3288,7 @@ No upgrade argument."#
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
+            canister_upgrade_options: None,
         };
 
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
@@ -3217,6 +3327,7 @@ No upgrade argument."#
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
+            canister_upgrade_options: None,
         };
 
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
@@ -3251,6 +3362,7 @@ No upgrade argument."#
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: Some(chunked_canister_wasm.clone()),
+            canister_upgrade_options: None,
         };
 
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
@@ -3280,6 +3392,7 @@ No upgrade argument."#
             canister_upgrade_arg: Some(vec![10, 20, 30, 40, 50, 60, 70, 80]),
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
+            canister_upgrade_options: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
         let text = validate_and_render_upgrade_sns_controlled_canister(
@@ -3317,6 +3430,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             canister_upgrade_arg: None,
             mode: Some(100), // 100 is not a valid mode
             chunked_canister_wasm: None,
+            canister_upgrade_options: None,
         };
         let env = setup_for_upgrade_sns_controlled_canister_tests(&upgrade);
         let text = validate_and_render_upgrade_sns_controlled_canister(
@@ -3336,6 +3450,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
+            canister_upgrade_options: None,
         };
         let result = validate_and_render_upgrade_sns_controlled_canister(
             &upgrade,
@@ -5442,6 +5557,7 @@ Payload rendering here"#
                         canister_upgrade_arg: Some(vec![4, 5, 6, 7]),
                         mode: Some(1),
                         chunked_canister_wasm: None,
+                        canister_upgrade_options: None,
                     },
                 )),
                 ..Default::default()
@@ -5463,6 +5579,7 @@ Payload rendering here"#
                             canister_upgrade_arg: Some(vec![4, 5, 6, 7]),
                             mode: Some(1),
                             chunked_canister_wasm: None,
+                            canister_upgrade_options: None,
                         },
                     )),
                     ..Default::default()

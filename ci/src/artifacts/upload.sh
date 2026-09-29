@@ -103,5 +103,5 @@ for fullrelpath in $(find -L "$BUNDLE" -type f); do
     upload "$fullrelpath" "$bucket_path"
 
     artifact_checksum="$(sha256sum "$fullrelpath" | cut -d' ' -f1)"
-    echo "$artifact_checksum,https://download.dfinity.systems/$bucket_path"
+    echo "$artifact_checksum  $bucket_path"
 done

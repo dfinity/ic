@@ -1,7 +1,7 @@
 use ic_config::{
     embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
-    subnet_config::{DEFAULT_DIRTY_PAGE_OVERHEAD, DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
+    subnet_config::{DEFAULT_PAGE_OVERHEAD, DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
 };
 use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
@@ -53,7 +53,7 @@ const OS_PAGES_PER_WASM_PAGE: usize =
 /// Returns the per-Wasm-page instruction charge applied by the deterministic
 /// memory tracker.
 fn dsm_charge_per_wasm_page() -> u64 {
-    OS_PAGES_PER_WASM_PAGE as u64 * DEFAULT_DIRTY_PAGE_OVERHEAD.get()
+    OS_PAGES_PER_WASM_PAGE as u64 * DEFAULT_PAGE_OVERHEAD.get()
 }
 
 lazy_static! {
@@ -1083,13 +1083,13 @@ mod tests {
         let wasm = wat2wasm(&wat).unwrap();
 
         let config = EmbeddersConfig {
-            dirty_page_overhead: match subnet_type {
+            page_overhead: match subnet_type {
                 SubnetType::System => SchedulerConfig::system_subnet(),
                 SubnetType::Application => SchedulerConfig::application_subnet(),
                 SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
                 SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
             }
-            .dirty_page_overhead,
+            .page_overhead,
             ..EmbeddersConfig::default()
         };
         let embedder = WasmtimeEmbedder::new(config, log.clone());

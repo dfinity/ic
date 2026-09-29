@@ -53,6 +53,7 @@ impl From<HttpError> for ScrapeError {
 ///
 /// # Errors
 /// * `ScrapeError`
+#[allow(clippy::result_large_err)]
 pub async fn scrape(
     client: reqwest::Client,
     c: &crate::config::ConnectTo,

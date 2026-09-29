@@ -16,7 +16,7 @@ use futures::{
     future::{join_all, select_all, try_join_all},
 };
 use ic_agent::{
-    Agent, AgentError, Identity, Signature,
+    Agent, AgentError, Identity, RequestId, Signature,
     agent::{
         CallResponse, EnvelopeContent, RejectCode, RejectResponse,
         http_transport::reqwest_transport::reqwest,
@@ -593,6 +593,30 @@ impl<'a> UniversalCanister<'a> {
             .call_and_wait()
             .await
     }
+
+    /// Submits `payload` as an ingress message to the canister's `update`
+    /// method without waiting for the call to complete, and returns the ID of
+    /// the submitted message, so that its status can be polled later. `None` if
+    /// the call happened to complete before the submission returned, in which
+    /// case there is nothing left to poll for.
+    ///
+    /// Useful for update calls that are not expected to complete for a long
+    /// time, or at all.
+    pub async fn submit_update<P: Into<Vec<u8>>>(
+        &self,
+        payload: P,
+    ) -> Result<Option<RequestId>, AgentError> {
+        let response = self
+            .agent
+            .update(&self.canister_id, "update")
+            .with_arg(payload.into())
+            .call()
+            .await?;
+        Ok(match response {
+            CallResponse::Response(_) => None,
+            CallResponse::Poll(request_id) => Some(request_id),
+        })
+    }
 }
 
 /// Provides an abstraction to the message canister.
@@ -736,6 +760,14 @@ impl<'a> MessageCanister<'a> {
     /// Forwards a message to the `receiver` that calls
     /// `receiver.method(payload)` along with the specified amount of cycles
     /// and returns the result.
+    ///
+    /// If the receiver rejects the call, the message canister re-rejects it via
+    /// `msg_reject(err.to_string())`. The caller therefore always observes the
+    /// reject code `CanisterReject` and a reject message of the form
+    /// `"call rejected: <code> - <message>"` (ic-cdk's `CallRejected` `Display`),
+    /// where `<code>` and `<message>` are the receiver's original reject code and
+    /// message. Don't rely on the observed reject code or on a prefix of the
+    /// message when classifying such errors.
     pub async fn forward_with_cycles_to(
         &self,
         receiver: &Principal,
@@ -760,6 +792,9 @@ impl<'a> MessageCanister<'a> {
 
     /// Forwards a message to the `receiver` that calls
     /// `receiver.method(payload)` and returns the result.
+    ///
+    /// See [`Self::forward_with_cycles_to`] for how rejects of the receiver are
+    /// reported.
     pub async fn forward_to(
         &self,
         receiver: &Principal,
@@ -1575,6 +1610,7 @@ pub fn get_config() -> ConfigOptional {
         node_reward_type: "".to_string(),
         malicious_behavior: "null".to_string(),
         extra_api_boundary_node_trust_anchors_pem: "null".to_string(),
+        peer_guest_vm_address: None,
     };
 
     let ic_json =

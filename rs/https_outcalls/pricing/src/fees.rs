@@ -173,10 +173,7 @@ pub(crate) fn max_transform_instructions(budget: Cycles) -> NumInstructions {
 /// all `subnet_size` nodes of the subnet. Only gossiping (flexible and
 /// non-replicated) outcalls are charged this; for fully-replicated ones,
 /// disseminating the response is a consensus cost instead.
-pub(crate) fn gossip_usage_fee(
-    transformed_response_size: NumBytes,
-    subnet_size: NumberOfNodes,
-) -> Cycles {
+pub fn gossip_usage_fee(transformed_response_size: NumBytes, subnet_size: NumberOfNodes) -> Cycles {
     FLEXIBLE_PER_TRANSFORMED_BYTE_NODE_FEE
         * transformed_response_size.get()
         * (subnet_size.get() as u64)
@@ -538,7 +535,7 @@ mod tests {
     //! only compare these functions against themselves and would not.)
     use super::*;
     use ic_types::{
-        NodeId, PrincipalId, ReplicaVersion,
+        NodeId, PrincipalId,
         canister_http::{
             CanisterHttpPaymentReceipt, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
             CanisterHttpResponseReceipt, CanisterHttpResponseShare, CanisterHttpResponseSignature,
@@ -548,6 +545,7 @@ mod tests {
         signature::BasicSignature,
     };
     use ic_types_cycles::CanisterCyclesCostSchedule;
+    use ic_types_test_utils::ids::test_replica_version;
     use std::collections::BTreeMap;
 
     fn node(i: u64) -> NodeId {
@@ -569,7 +567,7 @@ mod tests {
             content_hash: CryptoHashOf::new(CryptoHash(vec![])),
             content_size,
             is_reject: false,
-            replica_version: ReplicaVersion::default(),
+            replica_version: test_replica_version(),
         }
     }
 

@@ -31,7 +31,9 @@ use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metr
 use ic_test_utilities_registry::{SubnetRecordBuilder, get_mainnet_delta_00_6d_c1};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::batch::BatchBuilder;
-use ic_test_utilities_types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{
+    canister_test_id, node_test_id, subnet_test_id, test_replica_version, user_test_id,
+};
 use ic_types::batch::{Batch, BatchMessages, BlockmakerMetrics};
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
@@ -39,7 +41,6 @@ use ic_types::time::Time;
 use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
 use ic_types::{
     CanisterId, ExecutionRound, NodeId, NumBytes, NumInstructions, PrincipalId, Randomness,
-    ReplicaVersion,
 };
 use maplit::{btreemap, btreeset};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
@@ -677,6 +678,8 @@ fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
         ),
         metrics: metrics.clone(),
         log,
+        ingress_history_memory_capacity: HypervisorConfig::default()
+            .ingress_history_memory_capacity,
         malicious_flags: MaliciousFlags::default(),
     };
     (batch_processor, metrics, state_manager, registry_settings)
@@ -1045,8 +1048,8 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             randomness: Randomness::new([123; 32]),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-            replica_version: ReplicaVersion::default(),
+            blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
+            replica_version: test_replica_version(),
         });
         let latest_state = state_manager.get_latest_state().take();
         assert_eq!(
@@ -2337,8 +2340,8 @@ fn process_batch_updates_subnet_metrics() {
             randomness: Randomness::new([123; 32]),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-            replica_version: ReplicaVersion::default(),
+            blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
+            replica_version: test_replica_version(),
         });
 
         let latest_state = state_manager.get_latest_state().take();
@@ -2389,14 +2392,13 @@ fn process_batch_resets_split_marker() {
         // Reading from the registry must succeed for fully specified records.
         let (batch_processor, _metrics, state_manager, _registry_settings) =
             make_batch_processor(fixture.registry.clone(), log);
-        let (mut height, mut state) = state_manager.take_tip();
+        let (_, mut state) = state_manager.take_tip();
         state.metadata.own_subnet_id = own_subnet_id;
         state.metadata.subnet_split_from = Some(other_subnet_id);
-        height.inc_assign();
         state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
 
         batch_processor.process_batch(Batch {
-            batch_number: height.increment(),
+            batch_number: state_manager.tip_height().increment(),
             batch_summary: None,
             content: BatchContent::Data {
                 batch_messages: BatchMessages::default(),
@@ -2408,13 +2410,77 @@ fn process_batch_resets_split_marker() {
             randomness: Randomness::new([123; 32]),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(1),
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
-            replica_version: ReplicaVersion::default(),
+            blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
+            replica_version: test_replica_version(),
         });
 
         // The subnet split marker was reset.
         let latest_state = state_manager.get_latest_state().take();
         assert_eq!(None, latest_state.metadata.subnet_split_from);
+    });
+}
+
+#[test]
+fn process_batch_resets_merge_marker() {
+    with_test_replica_logger(|log| {
+        use Integrity::*;
+
+        let own_subnet_id = subnet_test_id(13);
+        let nns_subnet_id = subnet_test_id(42);
+
+        let own_transcript = dummy_transcript_for_tests_with_params(
+            vec![node_test_id(123)], // committee
+            NiDkgTag::HighThreshold, // dkg_tag
+            2,                       // threshold
+            3,                       // registry_version
+        );
+
+        let fixture = RegistryFixture::new();
+        fixture
+            .write_test_records(&TestRecords {
+                subnet_ids: Valid([own_subnet_id]),
+                subnet_records: [Valid(&SubnetRecord::default())],
+                ni_dkg_transcripts: [Valid(Some(&own_transcript))],
+                nns_subnet_id: Valid(nns_subnet_id),
+                chain_key_enabled_subnets: &BTreeMap::default(),
+                provisional_whitelist: Valid(&ProvisionalWhitelist::All),
+                routing_table: Valid(&RoutingTable::new()),
+                canister_migrations: Valid(&CanisterMigrations::new()),
+                node_public_keys: &BTreeMap::default(),
+                api_boundary_node_records: &BTreeMap::default(),
+                node_records: &BTreeMap::default(),
+            })
+            .unwrap();
+
+        // Reading from the registry must succeed for fully specified records.
+        let (batch_processor, _metrics, state_manager, _registry_settings) =
+            make_batch_processor(fixture.registry.clone(), log);
+        let (_, mut state) = state_manager.take_tip();
+        state.metadata.own_subnet_id = own_subnet_id;
+        state.metadata.subnet_merged = true;
+        state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
+
+        batch_processor.process_batch(Batch {
+            batch_number: state_manager.tip_height().increment(),
+            batch_summary: None,
+            content: BatchContent::Data {
+                batch_messages: BatchMessages::default(),
+                consensus_responses: Vec::new(),
+                canister_http_spent: Default::default(),
+                chain_key_data: Default::default(),
+                requires_full_state_hash: false,
+            },
+            randomness: Randomness::new([123; 32]),
+            registry_version: fixture.registry.get_latest_version(),
+            time: Time::from_nanos_since_unix_epoch(1),
+            blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
+            replica_version: test_replica_version(),
+        });
+
+        // The subnet merge marker was reset. (Which only happens in `after_merge()`,
+        // whose behavior is covered by the `ic-replicated-state` unit tests.)
+        let latest_state = state_manager.get_latest_state().take();
+        assert!(!latest_state.metadata.subnet_merged);
     });
 }
 

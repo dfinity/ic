@@ -7,7 +7,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_vetkd::VetKdArgsOwned;
 use ic_management_canister_types_private::{
-    EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdKeyId,
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdKeyId,
 };
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     EcdsaArguments, EcdsaMatchedPreSignature, PreSignatureStash, ReshareChainKeyContext,
@@ -228,7 +228,7 @@ pub fn fake_signature_request_context_with_pre_sig(
     let rv = RegistryVersion::from(10);
     let height = Height::from(1);
     let context = SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
+        request: RequestBuilder::new().build_arc(),
         args: fake_signature_request_args(key_id.into(), height, pre_signature, rv),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
@@ -245,7 +245,7 @@ pub fn fake_signature_request_context_from_id(
     let rv = RegistryVersion::from(10);
     let height = request_id.height;
     let context = SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
+        request: RequestBuilder::new().build_arc(),
         args: fake_signature_request_args(key_id, height, Some(pre_sig_id), rv),
         derivation_path: Arc::new(vec![vec![]]),
         batch_time: UNIX_EPOCH,
@@ -300,7 +300,7 @@ pub fn fake_signature_request_context_with_registry_version(
 ) -> SignWithThresholdContext {
     let height = Height::from(1);
     SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
+        request: RequestBuilder::new().build_arc(),
         args: fake_signature_request_args(key_id.clone(), height, pre_sig_id, rv),
         derivation_path: Arc::new(vec![]),
         batch_time: UNIX_EPOCH,
@@ -425,11 +425,22 @@ pub fn key_id_with_name(key_id: &MasterPublicKeyId, name: &str) -> MasterPublicK
 }
 
 pub fn fake_ecdsa_key_id() -> EcdsaKeyId {
-    EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()
+    fake_ecdsa_key_id_with_curve(EcdsaCurve::Secp256k1)
+}
+
+pub fn fake_ecdsa_key_id_with_curve(curve: EcdsaCurve) -> EcdsaKeyId {
+    EcdsaKeyId {
+        curve,
+        name: String::from("some_key"),
+    }
 }
 
 pub fn fake_ecdsa_idkg_master_public_key_id() -> IDkgMasterPublicKeyId {
-    MasterPublicKeyId::Ecdsa(fake_ecdsa_key_id())
+    fake_ecdsa_idkg_master_public_key_id_with_curve(EcdsaCurve::Secp256k1)
+}
+
+pub fn fake_ecdsa_idkg_master_public_key_id_with_curve(curve: EcdsaCurve) -> IDkgMasterPublicKeyId {
+    MasterPublicKeyId::Ecdsa(fake_ecdsa_key_id_with_curve(curve))
         .try_into()
         .unwrap()
 }
@@ -469,6 +480,9 @@ pub fn fake_master_public_key_ids_for_all_idkg_algorithms() -> Vec<IDkgMasterPub
     AlgorithmId::iter()
         .flat_map(|alg| match alg {
             AlgorithmId::ThresholdEcdsaSecp256k1 => Some(fake_ecdsa_idkg_master_public_key_id()),
+            AlgorithmId::ThresholdEcdsaSecp256r1 => Some(
+                fake_ecdsa_idkg_master_public_key_id_with_curve(EcdsaCurve::Secp256r1),
+            ),
             AlgorithmId::ThresholdSchnorrBip340 => Some(fake_schnorr_idkg_master_public_key_id(
                 SchnorrAlgorithm::Bip340Secp256k1,
             )),

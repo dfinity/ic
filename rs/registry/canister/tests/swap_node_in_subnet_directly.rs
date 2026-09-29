@@ -20,7 +20,8 @@ use ic_registry_transport::{
     pb::v1::{RegistryAtomicMutateRequest, RegistryMutation},
     upsert,
 };
-use ic_types::{NodeId, ReplicaVersion, SubnetId};
+use ic_test_utilities_types::ids::test_replica_version;
+use ic_types::{NodeId, SubnetId};
 use pocket_ic::PocketIcBuilder;
 use prost::Message;
 use registry_canister::{
@@ -109,7 +110,7 @@ fn get_mutations_and_node_ids(
                     .iter()
                     .map(|vk| vk.node_id().get().to_vec())
                     .collect(),
-                replica_version_id: ReplicaVersion::default().to_string(),
+                replica_version_id: test_replica_version().to_string(),
                 subnet_type: SubnetType::System as i32,
                 ..Default::default()
             }

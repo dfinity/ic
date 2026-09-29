@@ -24,7 +24,7 @@ concurrency:
 jobs:
   ci-main:
     name: CI Main
-    # for dfinity/ic: run on all events except for forked PRs
+    # for dfinity/ic: run on all events except on PRs from forks
     # for dfinity/ic-private: only run on PRs
     if: |
       (github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) ||
@@ -36,6 +36,13 @@ jobs:
       release-build: ${{ inputs.release-build }}
     permissions:
       actions: write
+      # The upload jobs of ci-main.yml attest what they uploaded; only release
+      # builds upload. The grant also applies to this workflow's pull-request,
+      # merge-group and dev-gh-* runs, which never upload: an attestation minted
+      # from one of those would carry that run's ref (refs/pull/N/merge,
+      # refs/heads/gh-readonly-queue/..., refs/heads/dev-gh-*) and commit, which
+      # the release workflows consuming attestations reject.
+      attestations: write
       contents: read
       id-token: write
       pull-requests: read

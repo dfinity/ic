@@ -260,7 +260,7 @@ pub struct IcConfig {
     /// topology of the network.
     ///
     /// The version id of the initial replica.
-    initial_replica_version_id: ReplicaVersion,
+    pub initial_replica_version_id: ReplicaVersion,
     /// The URL of the initial release package.
     initial_release_package_url: Option<Url>,
     /// The hash of the initial release package.

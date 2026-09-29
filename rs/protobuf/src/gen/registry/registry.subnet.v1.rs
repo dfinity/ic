@@ -148,7 +148,8 @@ pub mod chain_key_initialization {
 }
 /// Contains the initial DKG transcripts for the subnet and materials to construct a base CUP (i.e.
 /// a CUP with no dependencies on previous CUPs or blocks). Such CUP materials can be used to
-/// construct the genesis CUP or a recovery CUP in the event of a subnet stall.
+/// construct the genesis CUP, a recovery CUP in the event of a subnet stall, or a post-split CUP
+/// when the subnet is split in two.
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct CatchUpPackageContents {
     /// Initial non-interactive low-threshold DKG transcript
@@ -203,11 +204,7 @@ pub mod catch_up_package_contents {
 #[derive(
     serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq, Hash, ::prost::Message,
 )]
-pub struct GenesisArgs {
-    /// Initial height of the subnet
-    #[prost(uint64, tag = "1")]
-    pub height: u64,
-}
+pub struct GenesisArgs {}
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RecoveryArgs {
     /// The blockchain height that the CUP should have
@@ -461,8 +458,8 @@ pub struct ResourceLimits {
     /// The protocol uses a default value if the limit of `0` is specified.
     #[prost(uint64, optional, tag = "3")]
     pub maximum_query_instructions: ::core::option::Option<u64>,
-    /// The maximum wall-clock time, in seconds, that a query (including a composite query call
-    /// graph) is allowed to run.
+    /// The maximum wall-clock time, in seconds, that a composite query call graph is allowed to
+    /// run.
     /// The protocol uses a default value if the limit of `0` is specified.
     #[prost(uint64, optional, tag = "4")]
     pub maximum_query_walltime_seconds: ::core::option::Option<u64>,

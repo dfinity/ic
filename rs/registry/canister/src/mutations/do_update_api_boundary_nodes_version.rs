@@ -83,7 +83,7 @@ mod tests {
     };
     use ic_registry_keys::{make_api_boundary_node_record_key, make_replica_version_key};
     use ic_registry_transport::insert;
-    use ic_types::ReplicaVersion;
+    use ic_test_utilities_types::ids::test_replica_version;
     use prost::Message;
 
     use crate::{
@@ -135,7 +135,7 @@ mod tests {
             insert(
                 make_api_boundary_node_record_key(node_id), // key
                 ApiBoundaryNodeRecord {
-                    version: ReplicaVersion::default().to_string(),
+                    version: test_replica_version().to_string(),
                 }
                 .encode_to_vec(),
             ),

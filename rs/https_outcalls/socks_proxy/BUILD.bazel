@@ -1,0 +1,31 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "socks_proxy",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_https_outcalls_socks_proxy",
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "//rs/interfaces/registry",
+        "//rs/monitoring/logger",
+        "//rs/registry/helpers",
+        "//rs/registry/subnet_type",
+        "//rs/types/types",
+        "@crate_index//:slog",
+    ],
+)
+
+rust_test(
+    name = "socks_proxy_test",
+    crate = ":socks_proxy",
+    deps = [
+        # Keep sorted.
+        "//rs/registry/fake",
+        "//rs/registry/proto_data_provider",
+        "//rs/test_utilities/registry",
+        "@crate_index//:strum",
+    ],
+)

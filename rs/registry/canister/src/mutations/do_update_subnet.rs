@@ -235,10 +235,15 @@ impl Registry {
 
 /// Defence-in-depth check that the engine controller canister never reaches
 /// `do_update_subnet` with anything other than the small set of fields it is
-/// allowed to manage (currently `subnet_admins` and `is_halted`). The engine
-/// controller proxy already enforces this, but mirroring the check here keeps
-/// the registry's invariants self-contained and prevents future drift if the
-/// proxy's surface ever changes.
+/// allowed to manage, currently:
+///
+/// - `subnet_admins`
+/// - `is_halted`
+/// - `cooling_down`
+///
+/// The engine controller proxy already enforces this, but mirroring the check
+/// here keeps the registry's invariants self-contained and prevents future
+/// drift if the proxy's surface ever changes.
 ///
 /// Uses exhaustive destructuring so adding a new field to `UpdateSubnetPayload`
 /// will fail to compile here until it is explicitly classified as
@@ -249,6 +254,7 @@ fn ensure_engine_controller_payload_scope(payload: &UpdateSubnetPayload) {
         // The fields the engine controller is allowed to set.
         subnet_admins: _,
         is_halted: _,
+        cooling_down: _,
 
         max_ingress_bytes_per_message,
         max_ingress_bytes_per_block,
@@ -261,7 +267,6 @@ fn ensure_engine_controller_payload_scope(payload: &UpdateSubnetPayload) {
         start_as_nns,
         subnet_type,
         halt_at_cup_height,
-        cooling_down,
         features,
         resource_limits,
         chain_key_config,
@@ -306,7 +311,6 @@ fn ensure_engine_controller_payload_scope(payload: &UpdateSubnetPayload) {
     check_none!(start_as_nns, "start_as_nns");
     check_none!(subnet_type, "subnet_type");
     check_none!(halt_at_cup_height, "halt_at_cup_height");
-    check_none!(cooling_down, "cooling_down");
     check_none!(features, "features");
     check_none!(resource_limits, "resource_limits");
     check_none!(chain_key_config, "chain_key_config");
@@ -333,8 +337,8 @@ fn ensure_engine_controller_payload_scope(payload: &UpdateSubnetPayload) {
     assert!(
         disallowed.is_empty(),
         "{LOG_PREFIX}do_update_subnet: engine controller may only update \
-         `subnet_admins` and `is_halted`, but the following fields were also \
-         set: {disallowed:?}",
+         `subnet_admins`, `is_halted` and `cooling_down`, but the following \
+         fields were also set: {disallowed:?}",
     );
 }
 
@@ -682,8 +686,8 @@ mod tests {
     use ic_registry_resource_limits::ResourceLimits;
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
-    use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{NumBytes, NumInstructions, PrincipalId, ReplicaVersion, SubnetId};
+    use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
+    use ic_types::{NumBytes, NumInstructions, PrincipalId, SubnetId};
     use maplit::btreemap;
     use std::str::FromStr;
 
@@ -735,7 +739,7 @@ mod tests {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns: false,
@@ -835,7 +839,7 @@ mod tests {
                 max_block_payload_size: 200,
                 unit_delay_millis: 300,
                 initial_notary_delay_millis: 200,
-                replica_version_id: ReplicaVersion::default().into(),
+                replica_version_id: test_replica_version().to_string(),
                 dkg_interval_length: 8,
                 dkg_dealings_per_block: 1,
                 start_as_nns: true,
@@ -883,7 +887,7 @@ mod tests {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns: false,
@@ -959,7 +963,7 @@ mod tests {
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 100,
                 initial_notary_delay_millis: 1500,
-                replica_version_id: ReplicaVersion::default().into(),
+                replica_version_id: test_replica_version().to_string(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
                 start_as_nns: false,
@@ -1269,7 +1273,7 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
         add_guest_launch_measurements_to_replica_version(
             &mut registry,
-            ReplicaVersion::default().as_ref(),
+            test_replica_version().as_ref(),
         );
 
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_chip_id(1, 2);
@@ -1909,7 +1913,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "engine controller may only update `subnet_admins` and `is_halted`")]
+    #[should_panic(
+        expected = "engine controller may only update `subnet_admins`, `is_halted` and `cooling_down`"
+    )]
     fn engine_controller_cannot_update_disallowed_fields() {
         use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
 
@@ -1937,18 +1943,25 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "engine controller may only update `subnet_admins` and `is_halted`")]
-    fn engine_controller_cannot_set_cooling_down() {
+    fn engine_controller_can_set_cooling_down() {
         use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
 
         let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
 
-        let mut payload = make_empty_update_payload(subnet_id);
-        // `cooling_down` is outside the engine controller's scope, even though
-        // it is halting-adjacent: only `is_halted` is in scope.
-        payload.cooling_down = Some(true);
+        // Sanity check: subnets do not cool down by default.
+        assert!(!registry.get_subnet_or_panic(subnet_id).cooling_down);
 
-        registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+        for cooling_down in [true, false] {
+            let mut payload = make_empty_update_payload(subnet_id);
+            payload.cooling_down = Some(cooling_down);
+
+            registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+
+            assert_eq!(
+                registry.get_subnet_or_panic(subnet_id).cooling_down,
+                cooling_down
+            );
+        }
     }
 
     #[test]

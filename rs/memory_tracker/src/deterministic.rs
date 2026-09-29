@@ -12,12 +12,8 @@
 //! The set of pages that get mapped and marked as dirty is independent of the
 //! order in which signals are received. This is because each 64KiB region gets
 //! mapped (or marked dirty) if and only if some read (or write) signal occurs
-//! in that region.
-//!
-//! This is in contrast to the `prefetching` tracker which makes prefetching
-//! decisions based on it's state when a signal is received and therefore will
-//! prefetch different pages if the same signals are received in different
-//! orders.
+//! in that region. In particular, no prefetching decision depends on how much
+//! of the memory the tracker happens to have mapped when a signal arrives.
 //!
 //! ## Assumptions
 //!
@@ -69,9 +65,9 @@ use ic_types::{NumBytes, NumOsPages};
 use nix::sys::mman::{ProtFlags, mprotect};
 
 use crate::{
-    AccessKind, DirtyPageTracking, MemoryArea, MemoryLimits, MemoryTracker, MemoryTrackerMetrics,
-    PageBitmap, apply_memory_instructions, map_unaccessed_pages, print_enomem_help,
-    range_size_in_bytes, signal_mutex::SignalMutex,
+    AccessKind, DirtyPageTracking, MemoryArea, MemoryLimits, MemoryTrackerMetrics,
+    apply_memory_instructions, map_unaccessed_pages, print_enomem_help, range_size_in_bytes,
+    signal_mutex::SignalMutex,
 };
 
 use crate::conversions::{
@@ -318,12 +314,9 @@ impl DeterministicState {
     }
 }
 
-pub(crate) struct DeterministicMemoryTracker {
+pub struct DeterministicMemoryTracker {
     memory_area: MemoryArea,
-    accessed_bitmap: RefCell<PageBitmap>,
     accessed_pages: RefCell<Vec<PageIndex>>,
-    dirty_bitmap: RefCell<PageBitmap>,
-    speculatively_dirty_pages: RefCell<Vec<PageIndex>>,
     dirty_page_tracking: DirtyPageTracking,
     page_map: PageMap,
     #[cfg(feature = "sigsegv_handler_checksum")]
@@ -370,7 +363,7 @@ impl DeterministicMemoryTracker {
 
     /// A missing OS page handler that provides deterministic prefetching behavior
     /// and works on all platforms.
-    pub fn handle_missing_os_page(
+    fn handle_missing_os_page(
         &self,
         access_kind: Option<AccessKind>,
         faulting_address: *mut libc::c_void,
@@ -463,11 +456,10 @@ impl DeterministicMemoryTracker {
         let state = &*self.state.borrow();
         NumOsPages::from_num_wasm_pages(state.accessed_wasm_pages_count)
     }
-}
 
-impl MemoryTracker for DeterministicMemoryTracker {
+    /// Creates a new memory tracker.
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    fn new(
+    pub fn new(
         start: *mut libc::c_void,
         size: NumBytes,
         log: ReplicaLogger,
@@ -491,17 +483,11 @@ impl MemoryTracker for DeterministicMemoryTracker {
         );
 
         let memory_area = MemoryArea::new(start, size);
-        let accessed_bitmap = RefCell::new(PageBitmap::new(num_pages));
         let accessed_pages = RefCell::new(Vec::new());
-        let dirty_bitmap = RefCell::new(PageBitmap::new(num_pages));
-        let speculatively_dirty_pages = RefCell::new(Vec::new());
         let state = DeterministicState::new(num_pages, memory_limits);
         let tracker = DeterministicMemoryTracker {
             memory_area,
-            accessed_bitmap,
             accessed_pages,
-            dirty_bitmap,
-            speculatively_dirty_pages,
             dirty_page_tracking,
             page_map,
             #[cfg(feature = "sigsegv_handler_checksum")]
@@ -514,9 +500,9 @@ impl MemoryTracker for DeterministicMemoryTracker {
 
         let mut instructions = tracker.page_map.get_base_memory_instructions();
         // Restrict to tracked range before applying
-        instructions.restrict_to_range(&tracker.accessed_bitmap.borrow().page_range());
+        instructions.restrict_to_range(&tracker.memory_area.page_range());
         apply_memory_instructions(
-            tracker.memory_area(),
+            &tracker.memory_area,
             ProtFlags::PROT_NONE,
             instructions,
             &tracker.metrics,
@@ -525,7 +511,8 @@ impl MemoryTracker for DeterministicMemoryTracker {
         Ok(tracker)
     }
 
-    fn handle_sigsegv(
+    /// Handles missing page signal (SIGSEGV or SIGBUS).
+    pub fn handle_sigsegv(
         &self,
         access_kind: Option<AccessKind>,
         fault_address: *mut libc::c_void,
@@ -534,43 +521,47 @@ impl MemoryTracker for DeterministicMemoryTracker {
         self.handle_missing_os_page(access_kind, fault_address)
     }
 
-    fn memory_area(&self) -> &MemoryArea {
+    /// Returns the memory area covered by the tracker.
+    pub fn memory_area(&self) -> &MemoryArea {
         &self.memory_area
     }
 
-    fn expand(&self, delta: NumBytes) {
+    /// Expands the tracked memory area.
+    pub fn expand(&self, delta: NumBytes) {
         let old_size = self.memory_area.size.get();
         self.memory_area.size.set(old_size + delta);
-        let delta_pages = NumOsPages::new(delta.get() / PAGE_SIZE as u64);
-        debug_assert_eq!(
-            delta_pages.get() * PAGE_SIZE as u64,
-            delta.get(),
+        debug_assert!(
+            delta.get().is_multiple_of(PAGE_SIZE as u64),
             "Expand delta {delta} must be page-size aligned (page size: {PAGE_SIZE})"
         );
-        self.accessed_bitmap.borrow_mut().grow(delta_pages);
-        self.dirty_bitmap.borrow_mut().grow(delta_pages);
     }
 
-    fn num_accessed_pages(&self) -> usize {
+    /// Returns a number of accessed pages.
+    pub fn num_accessed_pages(&self) -> usize {
         self.num_accessed_os_pages().get() as usize
     }
 
-    fn take_accessed_pages(&self) -> Vec<PageIndex> {
+    /// Returns a list of accessed page indexes.
+    pub fn take_accessed_pages(&self) -> Vec<PageIndex> {
         let mut pages = self.accessed_pages.take();
         pages.sort_unstable();
         pages
     }
 
-    fn take_dirty_pages(&self) -> Vec<PageIndex> {
+    /// Returns a list of dirty page indexes.
+    ///
+    /// Dirtiness is tracked at Wasm page granularity, so this reports every OS
+    /// page of a Wasm page that was written to. Use `validate_dirty_page` to
+    /// narrow the list down to the OS pages whose contents actually changed.
+    pub fn take_dirty_pages(&self) -> Vec<PageIndex> {
         let state = &mut *self.state.borrow_mut();
         state.take_dirty_os_pages()
     }
 
-    fn take_speculatively_dirty_pages(&self) -> Vec<PageIndex> {
-        self.speculatively_dirty_pages.take()
-    }
-
-    fn validate_speculatively_dirty_page(&self, page_idx: PageIndex) -> Option<PageIndex> {
+    /// Returns `None` if the page is identical to the one in the `PageMap`,
+    /// i.e. if it was reported dirty only because another OS page of the same
+    /// Wasm page was written to.
+    pub fn validate_dirty_page(&self, page_idx: PageIndex) -> Option<PageIndex> {
         let maybe_dirty_page = self.memory_area.page_start_addr_from(page_idx);
         let original_page = self.page_map.get_page(page_idx).as_ptr() as *const libc::c_void;
         match unsafe { libc::memcmp(maybe_dirty_page, original_page, PAGE_SIZE) } {
@@ -579,17 +570,20 @@ impl MemoryTracker for DeterministicMemoryTracker {
         }
     }
 
-    fn is_accessed(&self, page_idx: PageIndex) -> bool {
+    /// Returns `true` if a specified page was marked as accessed.
+    pub fn is_accessed(&self, page_idx: PageIndex) -> bool {
         let state = &*self.state.borrow();
         let wasm_page = WasmPageIndex::from_os_page_idx(page_idx);
         state.is_wasm_page_accessed(wasm_page)
     }
 
-    fn get_page(&self, page_idx: PageIndex) -> &PageBytes {
+    /// Returns a reference to the specified page map OS page content.
+    pub fn get_page(&self, page_idx: PageIndex) -> &PageBytes {
         self.page_map.get_page(page_idx)
     }
 
-    fn metrics(&self) -> &MemoryTrackerMetrics {
+    /// Returns the associated metrics.
+    pub fn metrics(&self) -> &MemoryTrackerMetrics {
         &self.metrics
     }
 }

@@ -257,7 +257,7 @@ mod scraping {
         use crate::lifecycle::EthereumNetwork;
         use crate::numeric::BlockNumber;
         use crate::state::eth_logs_scraping::LogScrapingId;
-        use crate::test_fixtures::initial_state;
+        use crate::test_fixtures::{initial_state, state_with_deposit_helper};
         use evm_rpc_types::Hex32;
         use hex_literal::hex;
         use ic_ethereum_types::Address;
@@ -276,11 +276,7 @@ mod scraping {
         fn should_always_contain_the_zero_address_in_second_topic() {
             let last_scraped_block_number = BlockNumber::from(6_970_446_u32);
             let state = {
-                let mut state = initial_state();
-                state.log_scrapings.set_contract_address(
-                    LogScrapingId::EthOrErc20DepositWithSubaccount,
-                    CONTRACT_ADDRESS,
-                );
+                let mut state = state_with_deposit_helper(CONTRACT_ADDRESS);
                 state.log_scrapings.set_last_scraped_block_number(
                     LogScrapingId::EthOrErc20DepositWithSubaccount,
                     last_scraped_block_number,
@@ -558,6 +554,29 @@ mod encode_principal {
         assert_eq!(
             parse_principal_from_slice(&encode_principal(&Principal::anonymous())),
             Err("anonymous principal is not allowed".to_string())
+        );
+    }
+}
+
+mod event_source {
+    use crate::eth_logs::EventSource;
+    use crate::eth_rpc::Hash;
+    use crate::numeric::LogIndex;
+    use std::str::FromStr;
+
+    #[test]
+    fn should_display_event_source_with_single_hex_prefix() {
+        let event_source = EventSource {
+            transaction_hash: Hash::from_str(
+                "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
+            )
+            .unwrap(),
+            log_index: LogIndex::from(29_u8),
+        };
+
+        assert_eq!(
+            event_source.to_string(),
+            "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3:29"
         );
     }
 }

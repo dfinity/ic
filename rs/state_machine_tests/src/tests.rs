@@ -20,7 +20,7 @@ fn test_remove_subnet_local_registry_records() {
     use ic_registry_routing_table::RoutingTable;
     use ic_registry_subnet_features::SubnetFeatures;
     use ic_registry_subnet_type::SubnetType;
-    use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
+    use ic_types::{CanisterId, PrincipalId, SubnetId};
     use ic_types_cycles::CanisterCyclesCostSchedule;
     use rand::SeedableRng;
     use rand::rngs::StdRng;
@@ -91,7 +91,7 @@ fn test_remove_subnet_local_registry_records() {
         make_canister_ranges_key(CanisterId::from_u64(0)),
         make_subnet_list_record_key(),
         make_provisional_whitelist_record_key(),
-        make_replica_version_key(ReplicaVersion::default()),
+        make_replica_version_key(ic_test_utilities_types::ids::test_replica_version()),
         make_chain_key_enabled_subnet_list_key(&MasterPublicKeyId::Ecdsa(EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: "test_ecdsa_key".to_string(),
@@ -332,4 +332,58 @@ fn public_derivation_path() {
         hex::encode(&derived_key),
         "03fda02786d72d691d807a10a3de60522b664472ec2f06a704cc34ebe2fc26724c"
     );
+}
+
+#[test]
+fn pocket_ingress_pool_prunes_inducted_and_expired_messages() {
+    use ic_test_utilities_types::{ids::node_test_id, messages::SignedIngressBuilder};
+    use ic_types::{artifact::IngressMessageId, messages::SignedIngress, time::UNIX_EPOCH};
+    use std::time::Duration;
+
+    let now = UNIX_EPOCH + Duration::from_secs(100);
+    let msg = |expiry_secs: u64, nonce: u64| -> SignedIngress {
+        SignedIngressBuilder::new()
+            .nonce(nonce)
+            .expiry_time(UNIX_EPOCH + Duration::from_secs(expiry_secs))
+            .build()
+    };
+
+    // Expired: the ingress selector only considers the expiry range
+    // `[context.time, context.time + MAX_INGRESS_TTL]` and `StateMachine` time is
+    // monotone, so this can never be selected again and must be pruned.
+    let expired = msg(99, 1);
+    // The `split_off` boundary is non-inclusive, so a message expiring exactly at
+    // `now` is still selectable and must be retained.
+    let boundary = msg(100, 2);
+    // Neither expired nor included in a block: must be retained.
+    let future = msg(110, 3);
+    // Included in the block being assembled: must be pruned.
+    let inducted = msg(120, 4);
+
+    let mut pool = super::PocketIngressPool::new();
+    for m in [&expired, &boundary, &future, &inducted] {
+        pool.push(m.clone(), now, node_test_id(0));
+    }
+    assert_eq!(pool.validated.len(), 4);
+
+    pool.remove_inducted_and_expired(std::slice::from_ref(&inducted), now);
+
+    let retained = |m: &SignedIngress| pool.validated.contains_key(&IngressMessageId::from(m));
+    assert!(
+        !retained(&expired),
+        "a message expiring before `now` must be pruned"
+    );
+    assert!(
+        !retained(&inducted),
+        "a message included in a block must be pruned"
+    );
+    assert!(
+        retained(&boundary),
+        "`expiry == now` is the non-inclusive boundary and must be retained"
+    );
+    assert!(
+        retained(&future),
+        "an unexpired message not included in a block must be retained"
+    );
+    assert_eq!(pool.validated.len(), 2);
 }

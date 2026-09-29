@@ -9,12 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-- Support for `snapshot_visibility` in `ManageDappCanisterSettingsRequest`.
-
-- Support for upgrade options. The one of greatest interest is
-  wasm_memory_persistence, which is needed for modern Motoko canisters that use
-  Enhanced Orthogonal Persistence.
-
 ## Changed
 
 ## Deprecated

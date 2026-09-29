@@ -5,6 +5,7 @@ pub(in crate::state) mod tests;
 
 pub use request::PipelineRequest;
 
+use crate::asset::Asset;
 use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus, WithdrawalStatus};
 use crate::eth_logs::LedgerSubaccount;
 use crate::eth_rpc::Hash;
@@ -13,9 +14,10 @@ use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::logs::INFO;
 use crate::map::MultiKeyMap;
 use crate::numeric::{
-    CkTokenAmount, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
+    CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
+use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch, encode_sweep_eth_batch};
 use crate::tx::{
     Eip1559TransactionRequest, Finalized, FinalizedEip1559Transaction, GasFeeEstimate,
     Resubmittable, SignableTransaction, Signed, SignedAuthorization,
@@ -216,36 +218,154 @@ impl SweepId {
 /// sequence — the request type of the sweeper [`TransactionPipeline`]. It carries no ckETH burn
 /// and is never reimbursed.
 ///
-/// The sweep-queue-driven construction of the delegate call data is a follow-up.
+/// Like [`WithdrawalRequest`], this says *what* to sweep, not how the transaction carrying it
+/// looks: the nonce, the gas price and the call data are the pipeline's to decide in
+/// [`PipelineRequest::create_transaction`].
 #[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub struct SweepRequest {
     /// This sweep's identity (the pipeline's alternate map key).
     #[n(0)]
     pub id: SweepId,
     /// Address the sweep transaction is sent to: the sweeper contract, whose batch entry point
-    /// sweeps every delegated deposit address named in `data`.
+    /// sweeps every delegated deposit address the sweep names.
     #[n(1)]
     pub destination: Address,
-    /// ETH value moved by the transaction (zero for an ERC-20 sweep, which moves tokens via calldata).
+    /// The single asset this sweep moves: one ERC-20 token, or ETH. One asset per sweep: the
+    /// delegate applies the token list to every item it walks, so a sweep mixing tokens would
+    /// check balances that cannot be there. Holding it as one asset rather than a list is what
+    /// makes that an invariant of the request instead of a property of how the batch happened to
+    /// be picked.
     #[n(2)]
-    pub amount: Wei,
-    /// Transaction call data: the sweeper contract's batch call, naming the deposit addresses to
-    /// sweep, the IC account each is credited to, and the tokens to move. Its size is bounded by
-    /// the number of deposits the enqueuing side puts in one batch, which is where that limit
-    /// lives.
+    pub asset: Asset,
+    /// The deposits this sweep moves, one per account. A deposit address is derived per account,
+    /// so an account has one address, one attestation and one authorization however many tokens
+    /// it has queued.
     #[n(3)]
-    pub data: Vec<u8>,
+    pub items: Vec<AuthorizedSweepItem>,
     /// Ceiling on the transaction fee, used as the resubmission fee cap.
     #[n(4)]
     pub max_transaction_fee: Wei,
     /// The IC time at which the sweep was decided.
     #[n(5)]
     pub created_at: u64,
-    /// Delegations to install on the way, one signed by each deposit address the sweep touches
-    /// that is not yet delegated to the sweeper contract. Empty once they all are, and a sweep
-    /// with none is a plain EIP-1559 transaction.
-    #[n(6)]
-    pub authorizations: Vec<SignedAuthorization>,
+}
+
+/// A sweep item together with the delegation that lets the delegate code run at its address.
+///
+/// The two travel together but land in different parts of the transaction: the item is call data,
+/// the authorization is a transaction field. Pairing them here is what stops the two lists from
+/// drifting out of order against the account they describe.
+///
+/// The delegation is absent for an address already delegated to the sweeper contract, which needs
+/// no tuple to install one again. A sweep all of whose items are delegated carries no
+/// authorization at all, and is sent as a plain EIP-1559 transaction.
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
+pub struct AuthorizedSweepItem {
+    #[n(0)]
+    pub item: SweepItem,
+    #[n(1)]
+    pub authorization: Option<SignedAuthorization>,
+}
+
+/// This and the constants below are derived from the EVM's own costs rather than from the ~42'000
+/// per deposit measured for a batch of 20, which does not record how many distinct tokens that
+/// batch covered and so cannot separate the work that grows with the pairs from the work that grows
+/// with the transfers. Each is deliberately generous: unspent gas is refunded, whereas an
+/// underestimate wastes the whole transaction.
+const SWEEP_BASE_GAS: GasAmount = GasAmount::new(60_000);
+
+/// Gas each `balanceOf` the delegate makes costs. `sweepErc20Batch` hands the whole token array to
+/// every item and `sweepErc20` loops over it, so a sweep pays one balance check per
+/// `(address, token)` pair whether or not the pair holds anything — and therefore at least one per
+/// address, which is where that address' calldata, `ecrecover` and delegated call are accounted
+/// for. A cold `balanceOf` is ~5'000 (2'600 account access, 2'100 cold slot, call overhead) and the
+/// per-address dispatch ~10'000.
+const SWEEP_GAS_PER_BALANCE_CHECK: GasAmount = GasAmount::new(15_000);
+
+/// Gas moving one pair costs beyond its balance check: the `approve` (a 20'000 slot write), the
+/// helper's `depositErc20` and the `transferFrom` it makes (two slot writes and two logs), ~55'000
+/// in the worst case, doubled.
+///
+/// Budgeted for every pair the batch touches rather than only for the deposits the queue named:
+/// `sweepErc20` moves whatever balance it finds, and a deposit address accumulates residue — a pair
+/// armed but not yet scanned, a pair whose watchlist window closed before the funds arrived, a token
+/// the sender was never asked for. A pair therefore costs a balance check and, on top of it,
+/// possibly a transfer.
+const SWEEP_GAS_PER_TRANSFER: GasAmount = GasAmount::new(110_000);
+
+/// Gas one EIP-7702 authorization costs: 25'000 (`PER_EMPTY_ACCOUNT_COST`) charged upfront for
+/// every tuple, before any of them is looked at.
+///
+/// Budgeted for the authorizations the sweep carries, which are those of the addresses it still has
+/// to delegate. An authorization the EVM skips — another sweep delegated the address in between, so
+/// the nonce it was signed for no longer matches — still costs the full 25'000: [EIP-7702] refunds
+/// 12'500 for an authority that already exists only once the authorization passed every check,
+/// including the nonce. That refund lands after execution and so cannot shrink the limit the
+/// transaction had to declare, leaving 25'000 the figure to budget either way. Rounded up as its
+/// siblings are.
+///
+/// [EIP-7702]: https://eips.ethereum.org/EIPS/eip-7702
+const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
+
+/// Gas one address of an ETH sweep costs beyond its authorization: the per-address dispatch
+/// (calldata, `ecrecover`, the delegated call), one warm `address(this).balance` read and the
+/// helper's `depositEth`, a value transfer and one log. `sweepEth` walks no token array, so unlike
+/// an ERC-20 address there is no balance check or transfer to budget per pair. Measured at ~14'000
+/// on top of the tuple's 25'000 for a ten-deposit batch, rounded up as its siblings are.
+const SWEEP_GAS_PER_ETH_DEPOSIT: GasAmount = GasAmount::new(40_000);
+
+pub fn sweep_gas_limit(asset: Asset, items: &[AuthorizedSweepItem]) -> GasAmount {
+    let addresses = items
+        .iter()
+        .map(|authorized| authorized.item.deposit)
+        .collect::<BTreeSet<_>>()
+        .len() as u64;
+    let authorizations = items
+        .iter()
+        .filter(|authorized| authorized.authorization.is_some())
+        .count() as u64;
+    let gas_per_address: &[GasAmount] = match asset {
+        Asset::Eth => &[SWEEP_GAS_PER_ETH_DEPOSIT],
+        Asset::Erc20(_) => &[SWEEP_GAS_PER_BALANCE_CHECK, SWEEP_GAS_PER_TRANSFER],
+    };
+    gas_per_address
+        .iter()
+        .map(|gas_each| (*gas_each, addresses))
+        .chain([(SWEEP_GAS_PER_AUTHORIZATION, authorizations)])
+        .fold(SWEEP_BASE_GAS, |total, (gas_each, occurrences)| {
+            total
+                .checked_add(gas_each.checked_mul(occurrences).unwrap_or(GasAmount::MAX))
+                .unwrap_or(GasAmount::MAX)
+        })
+}
+
+impl SweepRequest {
+    pub fn gas_limit(&self) -> GasAmount {
+        sweep_gas_limit(self.asset, &self.items)
+    }
+
+    /// The delegate's batch call, naming every deposit address this sweep walks and the single
+    /// asset it moves.
+    pub fn call_data(&self) -> Vec<u8> {
+        let items: Vec<_> = self.items.iter().map(|item| item.item.clone()).collect();
+        match self.asset {
+            Asset::Erc20(token) => encode_sweep_erc20_batch(&items, &[token]),
+            Asset::Eth => encode_sweep_eth_batch(&items),
+        }
+    }
+
+    /// The delegations the sweep installs on the way, one per deposit address it still has to point
+    /// at the configured sweeper contract, an address delegated to another contract included.
+    /// Signed for the nonce the minter tracks for the address, so an authorization another sweep's
+    /// delegation raced is skipped rather than sinking the sweep. Empty once every address the
+    /// sweep touches is delegated to that contract, which is what makes it a plain EIP-1559
+    /// transaction.
+    pub fn authorizations(&self) -> Vec<SignedAuthorization> {
+        self.items
+            .iter()
+            .filter_map(|item| item.authorization.clone())
+            .collect()
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
@@ -771,6 +891,26 @@ where
         self.pending_requests.iter()
     }
 
+    /// When the oldest request the pipeline still owes a finalized transaction was recorded, or
+    /// `None` when every request it holds has finalized.
+    pub fn oldest_unfinalized_request_timestamp(&self) -> Option<u64> {
+        self.unfinalized_requests_iter()
+            .filter_map(PipelineRequest::created_at)
+            .min()
+    }
+
+    /// Every request the pipeline still owes a finalized transaction: those queued, and those whose
+    /// transaction has been created or sent but not finalized. A resubmitted request is yielded
+    /// once per stage it sits in, which callers that only aggregate do not care about.
+    fn unfinalized_requests_iter(&self) -> impl Iterator<Item = &R> {
+        self.pending_requests.iter().chain(
+            self.created_tx
+                .alt_keys()
+                .chain(self.sent_tx.alt_keys())
+                .filter_map(|id| self.processed_requests.get(id)),
+        )
+    }
+
     pub fn requests_len(&self) -> usize {
         self.pending_requests.len()
     }
@@ -893,16 +1033,26 @@ where
             buf
         }
 
+        let Self {
+            pending_requests,
+            processed_requests,
+            created_tx,
+            sent_tx,
+            finalized_tx,
+            next_nonce,
+        } = self;
+
         // We can reorder request in `reschedule_request`. The audit log won't
         // reflect this change, so we must sort the queues before comparing them.
         ensure_eq!(
-            sorted_requests(&self.pending_requests),
+            sorted_requests(pending_requests),
             sorted_requests(&other.pending_requests)
         );
-        ensure_eq!(self.created_tx, other.created_tx);
-        ensure_eq!(self.sent_tx, other.sent_tx);
-        ensure_eq!(self.finalized_tx, other.finalized_tx);
-        ensure_eq!(self.next_nonce, other.next_nonce);
+        ensure_eq!(processed_requests, &other.processed_requests);
+        ensure_eq!(created_tx, &other.created_tx);
+        ensure_eq!(sent_tx, &other.sent_tx);
+        ensure_eq!(finalized_tx, &other.finalized_tx);
+        ensure_eq!(next_nonce, &other.next_nonce);
 
         Ok(())
     }
@@ -1031,10 +1181,17 @@ impl WithdrawalTransactions {
     pub fn is_equivalent_to(&self, other: &Self) -> Result<(), String> {
         use ic_utils_ensure::ensure_eq;
 
-        ensure_eq!(self.maybe_reimburse, other.maybe_reimburse);
-        ensure_eq!(self.reimbursement_requests, other.reimbursement_requests);
-        ensure_eq!(self.reimbursed, other.reimbursed);
-        self.pipeline.is_equivalent_to(&other.pipeline)
+        let Self {
+            pipeline,
+            maybe_reimburse,
+            reimbursement_requests,
+            reimbursed,
+        } = self;
+
+        ensure_eq!(maybe_reimburse, &other.maybe_reimburse);
+        ensure_eq!(reimbursement_requests, &other.reimbursement_requests);
+        ensure_eq!(reimbursed, &other.reimbursed);
+        pipeline.is_equivalent_to(&other.pipeline)
     }
 
     pub fn next_transaction_nonce(&self) -> TransactionNonce {
@@ -1087,6 +1244,27 @@ impl WithdrawalTransactions {
 
     pub fn requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
         self.pipeline.requests_iter()
+    }
+
+    /// The sweeper funding whose transaction has not finalized yet, if any.
+    ///
+    /// Read off the pipeline rather than tracked next to it, so the two cannot disagree, and walked
+    /// from the furthest stage backwards, so that two outstanding fundings report the older one.
+    pub fn outstanding_sweeper_funding(&self) -> Option<&EthWithdrawalRequest> {
+        fn as_funding(request: &WithdrawalRequest) -> Option<&EthWithdrawalRequest> {
+            match request {
+                WithdrawalRequest::SweeperFunding(request) => Some(request),
+                WithdrawalRequest::CkEth(_) | WithdrawalRequest::CkErc20(_) => None,
+            }
+        }
+
+        self.pipeline
+            .sent_tx
+            .alt_keys()
+            .chain(self.pipeline.created_tx.alt_keys())
+            .filter_map(|id| self.pipeline.processed_requests.get(id))
+            .chain(self.pipeline.pending_requests.iter())
+            .find_map(as_funding)
     }
 
     pub fn requests_len(&self) -> usize {
@@ -1259,18 +1437,10 @@ impl WithdrawalTransactions {
         );
     }
 
-    fn maybe_reimburse_requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
-        self.maybe_reimburse
-            .iter()
-            .filter_map(|index| self.pipeline.get_processed_request(index))
-    }
-
-    /// Whether any request is still in flight, either awaiting a transaction or a reimbursement.
+    /// When the oldest withdrawal still awaiting a finalized transaction was recorded, or `None`
+    /// when none is outstanding.
     pub fn oldest_incomplete_request_timestamp(&self) -> Option<u64> {
-        self.requests_iter()
-            .chain(self.maybe_reimburse_requests_iter())
-            .flat_map(|req| req.created_at().into_iter())
-            .min()
+        self.pipeline.oldest_unfinalized_request_timestamp()
     }
 
     pub fn withdrawal_status(

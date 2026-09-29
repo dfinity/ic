@@ -55,6 +55,115 @@ fn stops_executing_messages_when_heap_delta_capacity_reached() {
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
+/// The heap delta limit is checked only after the consensus queue has been
+/// drained, so a skipped round still has to count the messages it drained.
+#[test]
+fn heap_delta_limit_still_counts_drained_consensus_queue_messages() {
+    use super::make_ecdsa_key_id;
+    use ic_error_types::RejectCode;
+    use ic_management_canister_types_private::{
+        DerivationPath, MasterPublicKeyId, SignWithECDSAArgs,
+    };
+    use ic_types::batch::ConsensusResponse;
+    use ic_types::messages::RejectContext;
+
+    fn rounds_skipped(test: &SchedulerTest) -> u64 {
+        test.scheduler()
+            .metrics
+            .round_skipped_due_to_current_heap_delta_above_limit
+            .get()
+    }
+
+    let ecdsa_key_id = make_ecdsa_key_id(0);
+    let mut test = SchedulerTestBuilder::new()
+        .with_chain_keys(vec![MasterPublicKeyId::Ecdsa(ecdsa_key_id.clone())])
+        .with_scheduler_config(SchedulerConfig {
+            subnet_heap_delta_capacity: NumBytes::from(10),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    let canister_id = test.create_canister();
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        Encode!(&SignWithECDSAArgs {
+            message_hash: [1; 32],
+            derivation_path: DerivationPath::new(Vec::new()),
+            key_id: ecdsa_key_id,
+        })
+        .unwrap(),
+        test.ecdsa_signature_fee().real(),
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+    // Dirtying a page takes the heap delta estimate past the limit above, so
+    // that the *next* round is the one that returns early.
+    test.send_ingress(canister_id, ingress(10).dirty_pages(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(rounds_skipped(&test), 0);
+
+    let callback_id = *test
+        .state()
+        .signature_request_contexts()
+        .keys()
+        .next()
+        .expect("the signing request should have created a context");
+    test.state_mut()
+        .consensus_queue
+        .push(ConsensusResponse::new(
+            callback_id,
+            Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),
+        ));
+
+    let before = test.state().metadata.subnet_metrics.clone();
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert_eq!(rounds_skipped(&test), 1);
+    // The response was drained despite the round being skipped.
+    assert!(test.state().signature_request_contexts().is_empty());
+
+    let after = &test.state().metadata.subnet_metrics;
+    assert_eq!(
+        after.update_transactions_total,
+        before.update_transactions_total + 1
+    );
+}
+
+/// The counter tracks the round histogram across ordinary rounds too.
+#[test]
+fn round_instructions_total_tracks_the_round_histogram() {
+    use ic_test_utilities_metrics::fetch_histogram_stats;
+    use more_asserts::assert_gt;
+
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister_id = test.create_canister();
+
+    for _ in 0..3 {
+        test.send_ingress(canister_id, ingress(1000));
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        let observed =
+            fetch_histogram_stats(test.metrics_registry(), "execution_round_instructions")
+                .unwrap()
+                .sum as u64;
+        assert_eq!(
+            test.state()
+                .metadata
+                .subnet_metrics
+                .round_instructions_total,
+            observed
+        );
+    }
+    assert_gt!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .round_instructions_total,
+        0
+    );
+}
+
 #[test]
 fn restarts_executing_messages_after_checkpoint_when_heap_delta_capacity_reached() {
     fn rounds_skipped_metric(test: &SchedulerTest) -> u64 {

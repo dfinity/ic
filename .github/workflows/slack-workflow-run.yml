@@ -7,6 +7,7 @@ on:
     branches:
       - master
       - rc--*
+      - hotfix-*
       - ic-mainnet-revisions
       - ic-nervous-system-wasms
     workflows:

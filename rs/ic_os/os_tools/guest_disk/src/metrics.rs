@@ -89,6 +89,7 @@ fn build_luks_metric_labels(
         ("keyslot_cipher", keyslot_cipher.clone()),
         ("keyslot_key_size", keyslot_key_size.to_string()),
         ("num_keyslots", num_keyslots.to_string()),
+        ("num_tokens", luks_parameters.num_tokens.to_string()),
         ("passes_verification", passes_verification.to_string()),
     ])
 }

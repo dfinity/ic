@@ -1,8 +1,7 @@
 //! Types for the Groth20-BLS12-381 implementation of Non-interactive
 //! Distributed Key Generation.
 
-// TODO: Remove after https://github.com/rust-lang/rust/issues/147648 is fixed
-#![allow(unused_assignments)]
+use base64::prelude::*;
 
 use ic_crypto_internal_types::curves::bls12_381::{G1Bytes, G2Bytes};
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
@@ -56,7 +55,7 @@ impl fmt::Debug for BTENodeBytes {
         write!(
             f,
             "tau: {}, a: REDACTED, b: REDACTED, d_t: REDACTED, d_h: REDACTED, e: REDACTED",
-            base64::encode(&self.tau)
+            BASE64_STANDARD.encode(&self.tau)
         )
     }
 }

@@ -446,6 +446,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::mocks::{MockPeers, MockTransport, MockValidatedPoolReader};
     use ic_test_utilities_consensus::fake::{FakeContent, FakeContentSigner};
+    use ic_test_utilities_types::ids::test_replica_version;
     use ic_test_utilities_types::messages::SignedIngressBuilder;
     use ic_types::{
         Height,
@@ -768,9 +769,12 @@ mod tests {
     async fn rpc_get_idkg_dealing_from_consensus_pool_wrong_consensus_id_test() {
         let node_index = 1;
         let dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
-        let finalization = ConsensusMessage::Finalization(Finalization::fake(
-            FinalizationContent::new(Height::new(100), CryptoHashOf::from(CryptoHash(vec![]))),
-        ));
+        let finalization =
+            ConsensusMessage::Finalization(Finalization::fake(FinalizationContent::new(
+                Height::new(100),
+                CryptoHashOf::from(CryptoHash(vec![])),
+                test_replica_version(),
+            )));
         let pools = mock_pools(
             PoolMessage::None,
             None,

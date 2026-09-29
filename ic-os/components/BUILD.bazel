@@ -1,6 +1,10 @@
 load("//bazel:defs.bzl", "write_stable_status_file_var")
 load("//ic-os/components/conformance_tests:defs.bzl", "check_unused_components_test")
-load("guestos.bzl", guestos_component_files = "component_files")
+load(
+    "guestos.bzl",
+    guestos_component_files = "component_files",
+    guestos_upgrade_overlay_component_files = "upgrade_overlay_component_files",
+)
 load("hostos.bzl", hostos_component_files = "component_files")
 load("setupos.bzl", setupos_component_files = "component_files")
 
@@ -32,7 +36,13 @@ write_stable_status_file_var(
     varname = "STABLE_COMMIT_TIMESTAMP",
 )
 
-used_components = guestos_component_files("dev") | guestos_component_files("prod") | hostos_component_files | setupos_component_files
+used_components = (
+    guestos_component_files("dev") |
+    guestos_component_files("prod") |
+    guestos_upgrade_overlay_component_files |
+    hostos_component_files |
+    setupos_component_files
+)
 
 REPO_COMPONENTS = glob(
     ["**/*"],

@@ -35,6 +35,10 @@ pub trait PipelineRequest {
     /// The identity of this request, used as the pipeline's alternate map key.
     fn id(&self) -> Self::Id;
 
+    /// When this request was recorded, in nanoseconds since the epoch, if known: requests recorded
+    /// before the minter stamped them carry no time.
+    fn created_at(&self) -> Option<u64>;
+
     /// The fee-bump strategy for this request's resubmitted transactions.
     fn resubmission_strategy(&self) -> ResubmissionStrategy;
 
@@ -62,6 +66,10 @@ impl PipelineRequest for WithdrawalRequest {
 
     fn id(&self) -> LedgerBurnIndex {
         self.cketh_ledger_burn_index()
+    }
+
+    fn created_at(&self) -> Option<u64> {
+        WithdrawalRequest::created_at(self)
     }
 
     fn resubmission_strategy(&self) -> ResubmissionStrategy {
@@ -201,6 +209,10 @@ impl PipelineRequest for SweepRequest {
         self.id
     }
 
+    fn created_at(&self) -> Option<u64> {
+        Some(self.created_at)
+    }
+
     fn resubmission_strategy(&self) -> ResubmissionStrategy {
         ResubmissionStrategy::GuaranteeEthAmount {
             allowed_max_transaction_fee: self.max_transaction_fee,
@@ -215,17 +227,17 @@ impl PipelineRequest for SweepRequest {
         );
         assert_eq!(
             transaction.amount(),
-            &self.amount,
-            "BUG: sweep transaction amount should equal the request amount"
+            &Wei::ZERO,
+            "BUG: an ERC-20 sweep moves its tokens through call data, not as value"
         );
         assert_eq!(
             transaction.data(),
-            self.data,
+            self.call_data(),
             "BUG: sweep transaction should carry the request's call data"
         );
         assert_eq!(
             transaction.authorizations(),
-            self.authorizations.as_slice(),
+            self.authorizations().as_slice(),
             "BUG: sweep transaction should install exactly the request's delegations"
         );
     }
@@ -268,11 +280,11 @@ impl PipelineRequest for SweepRequest {
                 max_fee_per_gas,
                 gas_limit,
                 destination: self.destination,
-                amount: self.amount,
-                data: self.data.clone(),
+                amount: Wei::ZERO,
+                data: self.call_data(),
                 access_list: Default::default(),
             },
-            self.authorizations.clone(),
+            self.authorizations(),
         ))
     }
 }

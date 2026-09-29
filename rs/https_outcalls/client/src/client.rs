@@ -23,7 +23,7 @@ use ic_types::{
         MAXIMUM_CANISTER_HTTP_ERROR_MESSAGE_BYTES, Transform, validate_http_headers_and_body,
     },
     ingress::WasmResult,
-    messages::{Query, QuerySource, Request},
+    messages::{Query, QuerySource},
 };
 use ic_utils::str::StrEllipsize;
 use std::{
@@ -69,6 +69,9 @@ pub struct CanisterHttpAdapterClientImpl {
     metrics: Metrics,
     pricing_factory: PricingFactory,
     log: ReplicaLogger,
+    /// The response time to charge for instead of the time an outcall actually
+    /// took, if any. See [`Self::without_response_time_charge`].
+    charged_response_time: Option<Duration>,
 }
 
 impl CanisterHttpAdapterClientImpl {
@@ -92,7 +95,21 @@ impl CanisterHttpAdapterClientImpl {
             metrics,
             pricing_factory,
             log,
+            charged_response_time: None,
         }
+    }
+
+    /// Charges every outcall as if its response had arrived instantaneously,
+    /// instead of charging for the time it actually took.
+    ///
+    /// The time an outcall took is wall-clock time, so what it is charged for
+    /// depends on how fast and how loaded the machine running it is. A test
+    /// framework that answers outcalls itself has no meaningful response time to
+    /// charge for, and wants the cost of an outcall to be reproducible, so it
+    /// charges for none.
+    pub fn without_response_time_charge(mut self) -> Self {
+        self.charged_response_time = Some(Duration::ZERO);
+        self
     }
 }
 
@@ -128,6 +145,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let metrics = self.metrics.clone();
         let pricing_factory = self.pricing_factory.clone();
         let log = self.log.clone();
+        let charged_response_time = self.charged_response_time;
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
         // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.
@@ -142,19 +160,14 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             let mut budget = pricing_factory.new_tracker(&request_context);
             let request_size = request_context.variable_parts_size();
 
+            let request_sender = request_context.request.sender;
+            let reply_callback_id = request_context.request.sender_reply_callback;
             let CanisterHttpRequestContext {
-                request:
-                    Request {
-                        sender: request_sender,
-                        sender_reply_callback: reply_callback_id,
-                        ..
-                    },
                 url: request_url,
                 headers: request_headers,
                 body: request_body,
                 http_method: request_http_method,
                 transform: request_transform,
-                pricing_version: request_pricing_version,
                 replication: request_replication,
                 max_response_bytes: request_max_response_bytes,
                 ..
@@ -165,40 +178,17 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             let max_response_size_bytes = request_max_response_bytes
                 .map_or(MAX_CANISTER_HTTP_RESPONSE_BYTES, |bytes| bytes.get());
 
-            if request_pricing_version == ic_types::canister_http::PricingVersion::PayAsYouGo {
-                warn!(
-                    log,
-                    "Canister HTTP request with PayAsYouGo pricing is not supported yet: \
-                    request_id {}, sender {}, process_id: {}",
-                    request_id,
-                    request_sender,
-                    std::process::id(),
-                );
-                let _ = permit.send((
-                    CanisterHttpResponse {
-                        id: request_id,
-                        content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
-                            reject_code: RejectCode::SysFatal,
-                            message:
-                                "Canister HTTP request with PayAsYouGo pricing is not supported"
-                                    .to_string(),
-                        }),
-                    },
-                    budget.create_payment_receipt(),
-                ));
-                return;
-            }
-
             let mut payload = async {
                 // Execute the HTTP request and get the adapter response.
                 let (adapter_response, downloaded_bytes, elapsed) = execute_http_request(
                     &mut http_adapter_client,
                     request_url,
                     request_http_method,
-                    request_headers,
-                    request_body,
+                    &request_headers,
+                    request_body.as_deref().map(Vec::as_slice),
                     socks_proxy_addrs,
                     &mut *budget,
+                    charged_response_time,
                 )
                 .await?;
 
@@ -364,10 +354,11 @@ async fn execute_http_request(
     adapter_client: &mut HttpsOutcallsServiceClient<Channel>,
     url: String,
     http_method: CanisterHttpMethod,
-    headers: Vec<CanisterHttpHeader>,
-    body: Option<Vec<u8>>,
+    headers: &[CanisterHttpHeader],
+    body: Option<&[u8]>,
     socks_proxy_addrs: Vec<String>,
     budget: &mut dyn BudgetTracker,
+    charged_response_time: Option<Duration>,
 ) -> Result<(HttpsOutcallResponse, NumBytes, Duration), CanisterHttpReject> {
     let AdapterLimits {
         max_response_size,
@@ -386,13 +377,13 @@ async fn execute_http_request(
         },
         max_response_size_bytes: max_response_size.get(),
         headers: headers
-            .into_iter()
+            .iter()
             .map(|h| HttpHeader {
-                name: h.name,
-                value: h.value,
+                name: h.name.clone(),
+                value: h.value.clone(),
             })
             .collect(),
-        body: body.unwrap_or_default(),
+        body: body.unwrap_or_default().to_vec(),
         socks_proxy_addrs,
     };
 
@@ -429,7 +420,9 @@ async fn execute_http_request(
     budget
         .subtract_network_usage(NetworkUsage {
             response_size: downloaded_bytes,
-            response_time: elapsed,
+            // The measured time is still what the metrics and the log report; only
+            // what the request is charged for can be overridden.
+            response_time: charged_response_time.unwrap_or(elapsed),
         })
         .map_err(|PricingError::InsufficientCycles| CanisterHttpReject {
             reject_code: RejectCode::CanisterReject,
@@ -766,10 +759,11 @@ mod tests {
             &mut HttpsOutcallsServiceClient::new(grpc_channel),
             "http://notused.invalid".to_string(),
             CanisterHttpMethod::GET,
-            Vec::new(),
+            &[],
             None,
             Vec::new(),
             budget,
+            None,
         )
         .await
     }
@@ -824,15 +818,17 @@ mod tests {
                 request: RequestBuilder::default()
                     .receiver(CanisterId::from(1))
                     .sender(CanisterId::from(1))
-                    .build(),
+                    .build_arc(),
                 url: "http://notused.com".to_string(),
                 max_response_bytes: None,
-                headers: Vec::new(),
+                headers: Arc::new(Vec::new()),
                 body: None,
                 http_method: CanisterHttpMethod::GET,
-                transform: transform_method.map(|method_name| Transform {
-                    method_name,
-                    context: vec![],
+                transform: transform_method.map(|method_name| {
+                    Arc::new(Transform {
+                        method_name,
+                        context: vec![],
+                    })
                 }),
                 time: UNIX_EPOCH,
                 replication: Replication::FullyReplicated,
