@@ -1739,10 +1739,10 @@ impl AdvertTask {
         }
     }
 
-    /// Advertises our stream to `subnet_id` to the given node of it: posts `advert`,
-    /// our own certified header, and feeds any header returned in the reply back
-    /// through the receive path, a reply being an advert in the opposite direction,
-    /// telling us that the peer has fully consumed our stream.
+    /// Advertises our stream to `subnet_id` to the given `node`: posts `advert`,
+    /// our own certified header, and feeds back any reply to the advert handler, a
+    /// reply being the reverse certified header, proving that the peer has already
+    /// fully consumed our stream.
     pub async fn advertise_to(
         &self,
         subnet_id: SubnetId,
@@ -1754,11 +1754,11 @@ impl AdvertTask {
             // Advert delivered and accepted.
             Ok(None) => STATUS_SUCCESS.to_string(),
 
-            // Peer has already processed our stream and responded with its header. This is
-            // the outcome of us having processed that header.
+            // Peer had already processed our stream and responded with its header as proof.
+            // This is the outcome of us having processed that header.
             Ok(Some(outcome)) => outcome.as_str().to_string(),
 
-            // Always log: a bad reply implicates the node, which only the log names.
+            // A bad reply implicates the node, which only the log names, so always log.
             Err(err @ AdvertError::HandleReply(_)) => {
                 warn!(
                     self.log,
@@ -1807,9 +1807,9 @@ impl AdvertTask {
             return Ok(None);
         };
 
-        // The peer's certified state already has the content we advertised and it
-        // replied with a header that proves this. `handle_advert()` verifies the
-        // threshold signature, so offload it to a blocking task.
+        // The peer already had the advertised content and it replied with a certified
+        // header proving it. `handle_advert()` verifies the threshold signature,
+        // so offload it to a blocking task.
         let advert_handler = Arc::clone(&self.advert_handler);
         let outcome =
             tokio::task::spawn_blocking(move || advert_handler.handle_advert(subnet_id, reply))
@@ -1851,7 +1851,7 @@ impl AdvertTaskMetrics {
     }
 }
 
-/// The reason an advert could not be posted; or its reply not handled.
+/// The reason why an advert could not be posted; or its reply handled.
 #[derive(Debug, Error)]
 enum AdvertError {
     #[error("Failed to resolve the advert endpoint: {0}")]

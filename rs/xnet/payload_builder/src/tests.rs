@@ -1406,7 +1406,8 @@ async fn advertise_to_records_the_reply() {
     .await;
 }
 
-/// A reply whose certification does not verify is an error, and is not recorded.
+/// A reply whose certification does not verify is an error, and is not
+/// recorded by the pool.
 #[tokio::test]
 async fn advertise_to_invalid_reply() {
     with_test_replica_logger(|log| async {
