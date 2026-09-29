@@ -8,7 +8,7 @@ use axum::{
     Router,
     http::{HeaderMap, StatusCode, header::CONTENT_TYPE},
     response::IntoResponse,
-    routing::{MethodRouter, get},
+    routing::{MethodRouter, get, post},
 };
 use hyper::Uri;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
@@ -329,6 +329,114 @@ async fn query_request_failed() {
     assert_eq!(Some(1), fetch_int_gauge(metrics, METRIC_UNHEALTHY_NODES));
 }
 
+/// An advert that the peer answers with its own certified header, because it
+/// brought it nothing new.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn advert_reply() {
+    let metrics = MetricsRegistry::new();
+    let reply = get_stream_slice_for_testing();
+    let expected = reply.clone();
+
+    let respond_with_reply =
+        post(move || proto_axum_response::<_, pb::CertifiedStreamSlice>(reply.clone()));
+
+    let result = with_test_replica_logger(|log| async {
+        do_xnet_client_advert(&make_xnet_client(&metrics, log), respond_with_reply).await
+    })
+    .await;
+
+    assert_eq!(Some(expected), result.unwrap());
+    assert_eq!(Some(0), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
+}
+
+/// An advert the peer took, with nothing to reply.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn advert_no_reply() {
+    let metrics = MetricsRegistry::new();
+
+    let respond_with_no_content = post(|| async { StatusCode::NO_CONTENT });
+
+    let result = with_test_replica_logger(|log| async {
+        do_xnet_client_advert(&make_xnet_client(&metrics, log), respond_with_no_content).await
+    })
+    .await;
+
+    assert_eq!(None, result.unwrap());
+    assert_eq!(Some(0), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
+}
+
+/// Being refused (e.g. rate limited) says nothing about the node's health.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn advert_refused() {
+    let metrics = MetricsRegistry::new();
+
+    let respond_with_too_many_requests =
+        post(|| async { (StatusCode::TOO_MANY_REQUESTS, b"Slow down".to_vec()) });
+
+    let result = with_test_replica_logger(|log| async {
+        do_xnet_client_advert(
+            &make_xnet_client(&metrics, log),
+            respond_with_too_many_requests,
+        )
+        .await
+    })
+    .await;
+
+    match result {
+        Err(XNetClientError::ErrorResponse(StatusCode::TOO_MANY_REQUESTS, _)) => (),
+        _ => panic!("Expecting Err(ErrorResponse(_)), got {result:?}"),
+    }
+    assert_eq!(Some(0), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
+}
+
+/// A node that fails to serve an advert is marked unhealthy, so that node
+/// selection skips it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn advert_server_error() {
+    let metrics = MetricsRegistry::new();
+
+    let respond_with_server_error =
+        post(|| async { (StatusCode::SERVICE_UNAVAILABLE, b"Oops".to_vec()) });
+
+    let result = with_test_replica_logger(|log| async {
+        do_xnet_client_advert(&make_xnet_client(&metrics, log), respond_with_server_error).await
+    })
+    .await;
+
+    match result {
+        Err(XNetClientError::ErrorResponse(StatusCode::SERVICE_UNAVAILABLE, _)) => (),
+        _ => panic!("Expecting Err(ErrorResponse(_)), got {result:?}"),
+    }
+    assert_eq!(Some(1), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
+}
+
+/// An advert above `ADVERT_MAX_BODY_BYTES` is not sent at all: the peer would
+/// refuse it, and the fault is ours.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn advert_too_large() {
+    let metrics = MetricsRegistry::new();
+    let oversized = CertifiedStreamSlice {
+        payload: vec![0; ADVERT_MAX_BODY_BYTES],
+        ..get_stream_slice_for_testing()
+    };
+
+    // Nothing is listening: an advert actually sent would fail to connect.
+    let nowhere = SocketAddr::from(([127, 0, 0, 1], 1));
+
+    let result = with_test_replica_logger(|log| async {
+        make_xnet_client(&metrics, log)
+            .post_advert(&advert_endpoint(nowhere), oversized)
+            .await
+    })
+    .await;
+
+    match result {
+        Err(XNetClientError::AdvertTooLarge(bytes)) => assert!(bytes > ADVERT_MAX_BODY_BYTES),
+        _ => panic!("Expecting Err(AdvertTooLarge(_)), got {result:?}"),
+    }
+    assert_eq!(Some(0), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
+}
+
 /// Returns the result of invoking `xnet_client.query()` against an HTTP server
 /// in a spawned thread that processes a single request using `handle_request`.
 async fn do_xnet_client_query(
@@ -358,6 +466,29 @@ async fn do_async_query(
     xnet_client.query(&endpoint).await
 }
 
+/// Serves `method_router` and posts an advert against it.
+async fn do_xnet_client_advert(
+    xnet_client: &XNetClientImpl,
+    method_router: MethodRouter,
+) -> Result<Option<CertifiedStreamSlice>, XNetClientError> {
+    let router = Router::new().route("/", method_router);
+    let socket = start_server(router).await;
+
+    xnet_client
+        .post_advert(&advert_endpoint(socket), get_stream_slice_for_testing())
+        .await
+}
+
+fn advert_endpoint(socket: SocketAddr) -> EndpointLocator {
+    EndpointLocator {
+        node_id: LOCAL_NODE,
+        url: format!("http://aaaaa-aa.1@{}:{}", socket.ip(), socket.port())
+            .parse::<Uri>()
+            .unwrap(),
+        proximity: PeerLocation::Local,
+    }
+}
+
 async fn start_server(router: Router) -> SocketAddr {
     let address = SocketAddr::from(([127, 0, 0, 1], 0));
     let listener = tokio::net::TcpListener::bind(address).await.unwrap();
@@ -368,6 +499,7 @@ async fn start_server(router: Router) -> SocketAddr {
     });
     socket
 }
+
 /// Generates a stream slice from `DST_SUBNET`.
 fn get_stream_slice_for_testing() -> CertifiedStreamSlice {
     make_certified_stream_slice(
