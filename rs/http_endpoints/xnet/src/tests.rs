@@ -27,6 +27,8 @@ use ic_types::{
 };
 use maplit::btreemap;
 use std::sync::{Barrier, OnceLock};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 use url::Url;
 
 const SRC_CANISTER: u64 = 2;
@@ -890,6 +892,97 @@ async fn handle_advert_undecodable() {
         metric_vec(&[(&[("status", &"400".to_string())], 1)]),
         fixture.advert_counts()
     );
+}
+
+/// An advert whose body did not arrive within `ADVERT_BODY_TIMEOUT` is rejected
+/// without reaching the handler.
+#[tokio::test]
+async fn handle_advert_body_timeout() {
+    let fixture = EndpointTestFixture::with_replicated_state();
+    let url = Url::parse(&format!(
+        "http://localhost/api/v1/advert/{NO_STREAM_SUBNET}"
+    ))
+    .unwrap();
+    let elapsed = tokio::time::timeout(Duration::ZERO, std::future::pending::<()>())
+        .await
+        .unwrap_err();
+
+    let response = route_request(
+        url,
+        Method::POST,
+        Err(axum::Error::new(elapsed)),
+        Some(NO_STREAM_SUBNET_NODE),
+        fixture.context(),
+    );
+
+    assert_eq!(408, response.status().as_u16());
+    assert!(fixture.advert_handler.adverts().is_empty());
+    assert_eq!(
+        metric_vec(&[(&[("status", &"408".to_string())], 1)]),
+        fixture.advert_counts()
+    );
+}
+
+/// Adverts whose bodies are withheld tie up neither the permits nor, beyond
+/// `ADVERT_BODY_TIMEOUT`, their requests: other requests are served meanwhile;
+/// and the adverts are rejected once their bodies time out.
+///
+/// Heavyweight test that starts an `XNetEndpoint` and talks to it over TCP.
+#[test]
+fn withheld_advert_bodies() {
+    with_test_replica_logger(|log| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let fixture = EndpointTestFixture::with_replicated_state();
+        let xnet_endpoint = fixture.new_endpoint(rt.handle().clone(), log);
+
+        rt.block_on(async {
+            // As many adverts as there are permits, promising bodies they never send.
+            let request = format!(
+                "POST {API_URL_ADVERT_PREFIX}{NO_STREAM_SUBNET} HTTP/1.1\r\n\
+                 Host: localhost\r\n\
+                 Content-Length: 100\r\n\r\n"
+            );
+            let mut connections = Vec::new();
+            for _ in 0..XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS {
+                let mut connection = TcpStream::connect(("127.0.0.1", xnet_endpoint.server_port()))
+                    .await
+                    .unwrap();
+                connection.write_all(request.as_bytes()).await.unwrap();
+                connections.push(connection);
+            }
+            // Give the endpoint time to start waiting for their bodies.
+            tokio::time::sleep(ADVERT_BODY_TIMEOUT / 5).await;
+
+            // Concurrent request does not get an HTTP 503 response.
+            let response = http_get(&http_url("/api/v1/streams", &xnet_endpoint)).await;
+            assert_eq!(format!("[\"{DST_SUBNET}\"]"), response);
+
+            for mut connection in connections {
+                let mut status_line = [0; 12];
+                tokio::time::timeout(
+                    ADVERT_BODY_TIMEOUT * 10,
+                    connection.read_exact(&mut status_line),
+                )
+                .await
+                .expect("Timed out waiting for the advert to be rejected")
+                .unwrap();
+                // Rejected as coming from no known node, as tests have no TLS. Not worth
+                // trading off rate limiting of timed out requests just to get a 408 here.
+                assert_eq!(b"HTTP/1.1 403", &status_line);
+            }
+        });
+
+        assert_eq!(
+            metric_vec(&[
+                (
+                    &[("resource", "advert"), ("status", "403")],
+                    XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS as u64
+                ),
+                (&[("resource", "streams"), ("status", "200")], 1),
+            ]),
+            fixture.request_counts()
+        );
+    });
 }
 
 /// A node may only advertise at the configured rate; the adverts beyond it are
