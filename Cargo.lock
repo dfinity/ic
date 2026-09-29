@@ -10113,6 +10113,7 @@ dependencies = [
  "serde_json",
  "slog",
  "tokio",
+ "tokio-io-timeout",
  "tokio-rustls",
  "tower",
  "url",

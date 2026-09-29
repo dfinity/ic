@@ -52,7 +52,7 @@ serde_cbor = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-tokio-io-timeout = "1.2.0"
+tokio-io-timeout = { workspace = true }
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }

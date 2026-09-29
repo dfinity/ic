@@ -389,6 +389,30 @@ fn query_stream_parallel() {
     });
 }
 
+/// A connection that sends nothing for `CONNECTION_READ_TIMEOUT` is closed.
+///
+/// Heavyweight test that starts an `XNetEndpoint` and talks to it over TCP.
+#[test]
+fn silent_connection() {
+    with_test_replica_logger(|log| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let fixture = EndpointTestFixture::with_replicated_state();
+        let xnet_endpoint = fixture.new_endpoint(rt.handle().clone(), log);
+
+        rt.block_on(async {
+            let mut connection = TcpStream::connect(("127.0.0.1", xnet_endpoint.server_port()))
+                .await
+                .unwrap();
+
+            let mut buf = [0; 1];
+            let read = tokio::time::timeout(CONNECTION_READ_TIMEOUT * 5, connection.read(&mut buf))
+                .await
+                .expect("Timed out waiting for the connection to be closed");
+            assert_eq!(0, read.unwrap());
+        });
+    });
+}
+
 #[tokio::test]
 async fn handle_streams() {
     let fixture = EndpointTestFixture::with_replicated_state();
