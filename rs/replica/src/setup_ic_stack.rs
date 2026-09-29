@@ -251,7 +251,7 @@ pub fn construct_ic_stack(
     let xnet_endpoint = XNetEndpoint::new(
         rt_handle_xnet.clone(),
         Arc::clone(&certified_stream_store),
-        Arc::clone(&xnet_payload_builder) as Arc<_>,
+        xnet_payload_builder.advert_handler(),
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
         config.message_routing,
