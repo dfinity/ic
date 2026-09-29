@@ -83,7 +83,7 @@ const MAINNET_NNS_DAPP_CANISTER_ID: &str = "qoctq-giaaa-aaaaa-aaaea-cai";
 
 // TODO: Turn to `Mainnet` after #11437 reaches mainnet NNS
 const IC_REPLAY_VERSION: BinaryVersion = BinaryVersion::Head;
-// TODO: Turn to `Mainnet` after #??? reaches mainnet NNS
+// TODO: Turn to `Mainnet` after #11699 reaches mainnet NNS
 const IC_RECOVERY_VERSION: BinaryVersion = BinaryVersion::Head;
 #[allow(dead_code)]
 enum BinaryVersion {
