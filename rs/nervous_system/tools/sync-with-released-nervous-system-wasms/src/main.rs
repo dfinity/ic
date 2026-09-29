@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use futures::{StreamExt, stream};
 use ic_agent::Agent;
 use ic_base_types::CanisterId;
@@ -195,8 +195,8 @@ struct Tag {
 
 impl Tag {
     /// Returns the release for this tag if a release exists and contains a release artifact (canister WASM)
-    /// with a matching filename (`canister_filename`) and sha256 hash (`expected_module_hash_str`).
-    /// The sha256 hash is extracted from a release asset `{canister_filename}.sha256` if it exists.
+    /// with a matching filename (`canister_filename`) and sha256 hash (`expected_module_hash_str`),
+    /// see [`release_has_mainnet_asset`].
     /// The repository is passed separately (via `canister_repository`) because GitHub API does not include
     /// the repository in the tag and we do not want to parse it from URLs of the form
     /// `https://api.github.com/repos/dfinity/cycles-ledger/commits/93f5c0f5779e31673786c83aa50ff2bbf9650162`.
@@ -214,8 +214,9 @@ impl Tag {
         let (client, token) = github_api_client_and_token()?;
         let res = client.get(&release_url).bearer_auth(&token).send().await?;
 
-        // not every tag must have a release so we do not report an error if it does not
-        if !res.status().is_success() {
+        // Not every tag must have a release, so we do not report an error if it does not. Any
+        // other failure is an error: skipping the release would move on to a later tag.
+        if res.status() == reqwest::StatusCode::NOT_FOUND {
             return Ok(None);
         }
 
@@ -229,26 +230,70 @@ impl Tag {
             ));
         }
 
-        let canister_sha256_filename = format!("{canister_filename}.sha256");
-        if let Some(prod_canister_sha256) = release.asset(&canister_sha256_filename) {
-            // The asset `{canister_filename}.sha256` has the form:
-            // `a2a0c65a94559aed373801a149bf4a31b176cb8cbabf77465eb25143ae880f37  cycles-ledger.wasm.gz`
-            // so we check if it starts with the expected module hash
-            // (having checked its length before to avoid trivial matches if the expected module hash was empty due to a bug).
-            if prod_canister_sha256
-                .text()
-                .await?
-                .starts_with(&expected_module_hash_str)
-            {
-                return Ok(Some(release));
-            }
-        } else if let Some(prod_canister) = release.asset(&canister_filename)
-            && prod_canister.sha256().await? == expected_module_hash_str
-        {
-            return Ok(Some(release));
+        let is_mainnet_release = release_has_mainnet_asset(
+            &release,
+            &canister_filename,
+            &expected_module_hash_str,
+            &GitHubAssetFetcher,
+        )
+        .await?;
+        if !is_mainnet_release {
+            return Ok(None);
         }
 
-        Ok(None)
+        Ok(Some(release))
+    }
+}
+
+/// Returns whether `release` contains the asset `filename` and that asset's content has the
+/// sha256 `expected_sha256`, i.e., the module hash of the canister on mainnet.
+///
+/// A release is only ever accepted after hashing the downloaded asset, which the module hash on
+/// mainnet anchors. A `{filename}.sha256` asset is never consulted: it is text written by whoever
+/// published the release, not a hash of anything. The `digest` that GitHub computes over the
+/// stored asset is only used to skip non-matching releases without downloading them.
+///
+/// Note that this cannot stop a release publisher from getting a release of their own selected:
+/// the production asset is public, so a new release can carry an identical copy of it next to any
+/// other asset. Other assets of the selected release (e.g. the test variants pinned for
+/// `nns_dapp_test` and `sns_aggregator_test`) are therefore not anchored by this check.
+async fn release_has_mainnet_asset(
+    release: &Release,
+    filename: &str,
+    expected_sha256: &str,
+    asset_fetcher: &impl AssetFetcher,
+) -> Result<bool> {
+    let Some(asset) = release.asset(filename) else {
+        return Ok(false);
+    };
+
+    let expected_digest = format!("sha256:{expected_sha256}");
+    let is_other_build = asset
+        .digest
+        .as_ref()
+        .is_some_and(|digest| *digest != expected_digest);
+
+    if is_other_build {
+        return Ok(false);
+    }
+
+    let asset_sha256 = asset_fetcher.fetch_sha256(&asset).await?;
+    Ok(asset_sha256 == expected_sha256)
+}
+
+/// Downloads release assets. [`release_has_mainnet_asset`] takes one so that it can be tested
+/// without GitHub.
+trait AssetFetcher {
+    /// Returns the hex sha256 of the content of `asset`.
+    async fn fetch_sha256(&self, asset: &ReleaseAsset) -> Result<String>;
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct GitHubAssetFetcher;
+
+impl AssetFetcher for GitHubAssetFetcher {
+    async fn fetch_sha256(&self, asset: &ReleaseAsset) -> Result<String> {
+        asset.sha256().await
     }
 }
 
@@ -256,6 +301,8 @@ impl Tag {
 struct ReleaseAsset {
     name: String,
     browser_download_url: String,
+    /// `sha256:<hex>` of the asset content, computed by GitHub. Absent for older assets.
+    digest: Option<String>,
 }
 
 impl ReleaseAsset {
@@ -265,13 +312,6 @@ impl ReleaseAsset {
         let asset_bytes = response.bytes().await?;
 
         Ok(module_hash_hex(sha2::Sha256::digest(&asset_bytes).to_vec()))
-    }
-
-    // Returns the textual content of the asset.
-    async fn text(&self) -> Result<String> {
-        let response = fetch_github_url(&self.browser_download_url).await?;
-
-        Ok(response.text().await?)
     }
 }
 
@@ -298,10 +338,11 @@ impl Release {
 ///   - it crawls all git tags of the given `canister_repository`;
 ///   - git tags whose name does not start with an optionally provided tag name prefix are skipped;
 ///   - for every git tag, it checks if there is an associated release and then
-///     - looks for a release asset whose name has the form `{canister_name}.sha256`:
-///       if that release asset starts with `expected_module_hash_str`, then the corresponding release is returned;
-///     - otherwise, this function looks for a release asset whose name matches `canister_name`:
-///       if the sha256 hash of that release asset matches `expected_module_hash_str`, then the corresponding release is returned.
+///     looks for a release asset named `canister_filename`:
+///     if the sha256 hash of that release asset's content matches `expected_module_hash_str`, then the corresponding release is returned
+///     (see [`release_has_mainnet_asset`]).
+///
+/// An error while checking a tag is returned rather than skipping the tag, as skipping it could select a later tag.
 async fn get_mainnet_canister_release(
     canister_name: String,
     canister_repository: String,
@@ -324,20 +365,21 @@ async fn get_mainnet_canister_release(
             {
                 continue;
             }
-            match tag
+            let release = tag
                 .release_for_canister(
                     canister_repository.clone(),
                     canister_filename.clone(),
                     expected_module_hash_str.clone(),
                 )
                 .await
-            {
-                Ok(Some(release)) => return Ok(release),
-                Ok(None) => (),
-                Err(e) => eprintln!(
-                    "Error while checking the GitHub tag {} for canister {}: {}",
-                    tag.name, canister_name, e
-                ),
+                .with_context(|| {
+                    format!(
+                        "Error while checking the GitHub tag {} for canister {}",
+                        tag.name, canister_name
+                    )
+                })?;
+            if let Some(release) = release {
+                return Ok(release);
             }
         }
 
@@ -687,3 +729,7 @@ async fn decode_json_response<T: serde::de::DeserializeOwned>(
         )
     })
 }
+
+#[cfg(test)]
+#[path = "main_tests.rs"]
+mod tests;
