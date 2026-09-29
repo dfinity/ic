@@ -35,11 +35,8 @@ use ic_logger::{error, warn};
 use ic_nns_delegation_manager::{CanisterRangesCheck, CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CanisterId, PrincipalId, SubnetId,
-    consensus::certification::Certification,
-    messages::{
-        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId,
-    },
+    CanisterId, Height, PrincipalId, SubnetId,
+    messages::{Blob, Certificate, HttpCallContent, HttpRequestEnvelope, MessageId},
 };
 use serde_cbor::Value as CBOR;
 use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
@@ -243,7 +240,7 @@ async fn call_sync(
     // Check if the message is already known.
     // If it is known, we can return the certificate without re-submitting the message
     // to the ingress pool.
-    match tree_cert_deleg_for_message(
+    match lookup_message_certificate(
         state_reader.clone(),
         &message_id,
         &verified_delegation_source,
@@ -251,27 +248,19 @@ async fn call_sync(
     )
     .await
     {
-        Ok(Some((tree, certification, delegation)))
-            if matches!(
-                parsed_message_status(&tree, &message_id),
-                ParsedMessageStatus::Known(_)
-            ) =>
-        {
-            let signature = certification.signed.signature.signature.get().0;
-
+        MessageCertificateLookup::StatusKnown { certificate, .. } => {
             metrics
                 .sync_call_early_response_trigger_total
                 .with_label_values(&[SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
                 .inc();
 
-            return SyncCallResponse::Certificate(Certificate {
-                tree,
-                signature: Blob(signature),
-                delegation,
-            });
+            return SyncCallResponse::Certificate(certificate);
         }
-        Ok(None) | Ok(Some(_)) => (),
-        Err(err) => return SyncCallResponse::HttpError(err),
+        MessageCertificateLookup::StatusUnknown { .. }
+        | MessageCertificateLookup::CertifiedStateUnavailable => (),
+        MessageCertificateLookup::DelegationUnverified(err) => {
+            return SyncCallResponse::HttpError(err);
+        }
     }
 
     let certification_subscriber = match ingress_watcher_handle
@@ -345,7 +334,7 @@ async fn call_sync(
         }
     }
 
-    let (tree, certification, delegation) = match tree_cert_deleg_for_message(
+    match lookup_message_certificate(
         state_reader,
         &message_id,
         &verified_delegation_source,
@@ -353,49 +342,41 @@ async fn call_sync(
     )
     .await
     {
-        Ok(Some((tree, certification, delegation))) => (tree, certification, delegation),
-        Ok(None) => {
-            return SyncCallResponse::Accepted(
-                "Certified state is not available. Please try /read_state.",
-            );
+        MessageCertificateLookup::StatusKnown {
+            certificate,
+            status,
+        } => {
+            metrics
+                .sync_call_certificate_status_total
+                .with_label_values(&[&status])
+                .inc();
+
+            SyncCallResponse::Certificate(certificate)
         }
-        Err(err) => return SyncCallResponse::HttpError(err),
-    };
+        MessageCertificateLookup::StatusUnknown { height } => {
+            metrics
+                .sync_call_certificate_status_total
+                .with_label_values(&["unknown"])
+                .inc();
+            error!(
+                every_n_seconds => LOG_EVERY_N_SECONDS,
+                log,
+                "{}: Unknown status of call {} in the certificate at height {}.",
+                CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS, message_id, height
+            );
+            metrics
+                .critical_error_sync_call_unknown_certificate_status
+                .inc();
 
-    let message_status = parsed_message_status(&tree, &message_id);
-
-    let status_label = match &message_status {
-        ParsedMessageStatus::Known(status) => status,
-        ParsedMessageStatus::Unknown => "unknown",
-    };
-
-    metrics
-        .sync_call_certificate_status_total
-        .with_label_values(&[status_label])
-        .inc();
-
-    if let ParsedMessageStatus::Unknown = message_status {
-        error!(
-            every_n_seconds => LOG_EVERY_N_SECONDS,
-            log,
-            "{}: Unknown status of call {} in the certificate at height {}.",
-            CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS, message_id, certification.height
-        );
-        metrics
-            .critical_error_sync_call_unknown_certificate_status
-            .inc();
-        return SyncCallResponse::Accepted(
-            "Certified state does not contain request status. Please try /read_state.",
-        );
+            SyncCallResponse::Accepted(
+                "Certified state does not contain request status. Please try /read_state.",
+            )
+        }
+        MessageCertificateLookup::CertifiedStateUnavailable => {
+            SyncCallResponse::Accepted("Certified state is not available. Please try /read_state.")
+        }
+        MessageCertificateLookup::DelegationUnverified(err) => SyncCallResponse::HttpError(err),
     }
-
-    let signature = certification.signed.signature.signature.get().0;
-
-    SyncCallResponse::Certificate(Certificate {
-        tree,
-        signature: Blob(signature),
-        delegation,
-    })
 }
 
 enum ParsedMessageStatus {
@@ -418,42 +399,69 @@ fn parsed_message_status(tree: &MixedHashTree, message_id: &MessageId) -> Parsed
     }
 }
 
+/// Outcome of [`lookup_message_certificate`].
+enum MessageCertificateLookup {
+    /// The latest certified state contains the status of the message.
+    StatusKnown {
+        /// The certificate for the message's request status, with the NNS delegation verified to be
+        /// consistent with the certified state.
+        certificate: Certificate,
+        /// The status of the message in the certified state.
+        status: String,
+    },
+    /// The latest certified state does not contain the status of the message.
+    StatusUnknown {
+        /// The height of the certified state.
+        height: Height,
+    },
+    /// The certificate could not be read from the latest certified state because there is no
+    /// certified state yet.
+    CertifiedStateUnavailable,
+    /// The NNS delegation could not be verified to be consistent with the certified state.
+    DelegationUnverified(HttpError),
+}
+
 /// Reads the certificate for the given message from the latest certified state, together
-/// with the NNS delegation to attach to it.
-///
-/// Returns `Ok(None)` if the certified state is not available.
-///
-/// Returns an error if the NNS delegation could not be verified to be consistent
-/// (according to `delegation_check`) with the certified state which the certificate is
-/// built from.
-async fn tree_cert_deleg_for_message(
+/// with the NNS delegation to attach to it, verified (according to `delegation_check`) to be
+/// consistent with that certified state, and looks up the message's status in it.
+async fn lookup_message_certificate(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     message_id: &MessageId,
     verified_delegation_source: &VerifiedDelegationSource,
     delegation_check: CanisterRangesCheck,
-) -> Result<Option<(MixedHashTree, Certification, Option<CertificateDelegation>)>, HttpError> {
-    let certified_state_reader = match tokio::task::spawn_blocking(move || {
-        state_reader.get_certified_state_snapshot()
-    })
-    .await
-    {
-        Ok(Some(certified_state_reader)) => certified_state_reader,
-        Ok(None) | Err(_) => return Ok(None),
-    };
-
-    let delegation = verified_delegation_source
-        .get_delegation(certified_state_reader.as_ref(), delegation_check)?;
-
+) -> MessageCertificateLookup {
     // We always add time path to comply with the IC spec.
     let time_path = Path::from(Label::from("time"));
     let request_status_path = Path::from(vec![
         Label::from("request_status"),
         Label::from(message_id.clone()),
     ]);
-    let tree: LabeledTree<()> = sparse_labeled_tree_from_paths(&[time_path, request_status_path])
+    let paths: LabeledTree<()> = sparse_labeled_tree_from_paths(&[time_path, request_status_path])
         .expect("Path is within length bound.");
 
-    Ok(certified_state_reader
-        .read_certified_state(&tree)
-        .map(|(tree, certification)| (tree, certification, delegation)))
+    let Ok(Some((certified_state, tree, certification))) =
+        tokio::task::spawn_blocking(move || state_reader.read_certified_state(&paths)).await
+    else {
+        return MessageCertificateLookup::CertifiedStateUnavailable;
+    };
+
+    let delegation =
+        match verified_delegation_source.get_delegation(&certified_state, delegation_check) {
+            Ok(delegation) => delegation,
+            Err(err) => return MessageCertificateLookup::DelegationUnverified(err),
+        };
+
+    match parsed_message_status(&tree, message_id) {
+        ParsedMessageStatus::Known(status) => MessageCertificateLookup::StatusKnown {
+            certificate: Certificate {
+                tree,
+                signature: Blob(certification.signed.signature.signature.get().0),
+                delegation,
+            },
+            status,
+        },
+        ParsedMessageStatus::Unknown => MessageCertificateLookup::StatusUnknown {
+            height: certification.height,
+        },
+    }
 }

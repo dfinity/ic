@@ -2,7 +2,6 @@
 
 use crate::{HttpError, common::LOG_EVERY_N_SECONDS, metrics::HttpHandlerMetrics};
 use hyper::StatusCode;
-use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_logger::{ReplicaLogger, warn};
 use ic_nns_delegation_manager::{
     CanisterRangesCheck, DelegationVerificationError, NNSDelegationReader,
@@ -44,10 +43,10 @@ impl VerifiedDelegationSource {
     /// metrics, and the HTTP error to reply with is returned.
     pub(crate) fn get_delegation(
         &self,
-        certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
+        certified_state: &ReplicatedState,
         canister_ranges_check: CanisterRangesCheck,
     ) -> Result<Option<CertificateDelegation>, HttpError> {
-        let network_topology = &certified_state_reader.get_state().metadata.network_topology;
+        let network_topology = &certified_state.metadata.network_topology;
 
         self.nns_delegation_reader
             .get_delegation(

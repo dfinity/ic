@@ -246,7 +246,7 @@ impl HttpHandlerMetrics {
     ) {
         let error_label = match error {
             DelegationVerificationError::Inconsistent => "inconsistent",
-            DelegationVerificationError::Validation(_) => "validation",
+            DelegationVerificationError::Validation(_) => "validation_error",
         };
         self.delegation_verification_failures_total
             .with_label_values(&[endpoint_type, error_label])
