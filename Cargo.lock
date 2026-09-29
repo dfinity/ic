@@ -9395,6 +9395,7 @@ name = "ic-crypto-utils-threshold-sig-der"
 version = "0.9.0"
 dependencies = [
  "hex",
+ "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-types",
  "ic-types",
  "pem 3.0.6",

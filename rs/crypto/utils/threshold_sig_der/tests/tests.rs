@@ -106,6 +106,40 @@ fn test_der_of_wrong_length_fails() {
 }
 
 #[test]
+fn test_der_with_unsupported_curve_fails() {
+    for tv in test_vectors() {
+        let mut der = der_bytes(&tv);
+        // The last octet of the curve OID.
+        der[33] = 0x02;
+
+        let error = public_key_from_der(&der).unwrap_err();
+
+        assert!(
+            error.starts_with("unsupported algorithm identifier"),
+            "unexpected error: {error}"
+        );
+    }
+}
+
+#[test]
+fn test_der_with_partial_last_key_octet_fails() {
+    for tv in test_vectors() {
+        let mut der = der_bytes(&tv);
+        // The BIT STRING's number of unused bits.
+        der[36] = 1;
+
+        assert_eq!(
+            public_key_from_der(&der),
+            Err(
+                "Expected the subjectPublicKey BIT STRING to contain whole octets, \
+                 got 767 bits in 96 octets"
+                    .to_string()
+            )
+        );
+    }
+}
+
+#[test]
 fn test_public_key_to_der_wrong_key_size() {
     // Key too short
     let short_key = [0_u8; PUBLIC_KEY_SIZE - 1];
