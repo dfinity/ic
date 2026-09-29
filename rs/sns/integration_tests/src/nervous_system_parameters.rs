@@ -87,7 +87,8 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                 .with_nervous_system_parameters(system_params.clone())
                 .build();
 
-            let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await; // slow
+            let sns_canisters =
+                SnsCanisters::set_up_with_test_governance(&runtime, sns_init_payload).await; // slow
 
             // Create neurons.
             let transaction_fee_e8s = system_params.transaction_fee_e8s();

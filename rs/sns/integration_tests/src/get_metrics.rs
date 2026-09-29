@@ -7,7 +7,7 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_constants::NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
 use ic_nns_test_utils::sns_wasm::{
-    build_governance_sns_wasm, build_mainnet_ledger_sns_wasm, build_swap_sns_wasm,
+    build_governance_test_sns_wasm, build_mainnet_ledger_sns_wasm, build_swap_sns_wasm,
 };
 use ic_nns_test_utils::state_test_helpers::setup_nns_canisters;
 use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
@@ -207,7 +207,7 @@ fn test_sns_metrics() {
     let expected_genesis_timestamp_seconds = 123456789; // Arbitrary value for testing
 
     let governance_canister_id = {
-        let wasm = build_governance_sns_wasm().wasm;
+        let wasm = build_governance_test_sns_wasm().wasm;
         let mut governance = GovernanceCanisterInitPayloadBuilder::new()
             .with_root_canister_id(CanisterId::from(42).get())
             .with_swap_canister_id(swap_canister_id.into())
