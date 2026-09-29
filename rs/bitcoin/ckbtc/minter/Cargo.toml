@@ -46,7 +46,7 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-bitcoin = { workspace = true }
+bitcoin = { version = "0.28.2" }
 candid_parser = { workspace = true }
 flate2 = { workspace = true }
 ic-agent = { workspace = true }

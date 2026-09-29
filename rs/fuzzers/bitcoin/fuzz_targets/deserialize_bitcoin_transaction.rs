@@ -1,5 +1,5 @@
 #![no_main]
-use bitcoin::Transaction;
+use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::{deserialize, serialize};
 use libfuzzer_sys::{Corpus, fuzz_target};
 

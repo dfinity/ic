@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "1303cd1c26ea10bdb24b80245e176fd12ff83b9eb0bee6655813818202005da7",
+  "checksum": "4046de1cdb9da932bc1d5e35b97ce7f853ffd12df420c861118ad46712c36292",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -7285,6 +7285,36 @@
       ],
       "version": "0.11.0"
     },
+    "bech32 0.8.1": {
+      "common_attrs": {
+        "crate_features": [
+          "std"
+        ],
+        "edition": "2015"
+      },
+      "library_target_name": "bech32",
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "bech32",
+      "package_url": "https://github.com/rust-bitcoin/rust-bech32",
+      "repository": {
+        "Http": {
+          "sha256": "cf9ff0bbfd639f15c74af777d81383cf53efb7c93613f6cab67c6c11e05bbf8b",
+          "url": "https://static.crates.io/crates/bech32/0.8.1/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bech32",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.8.1"
+    },
     "bech32 0.9.1": {
       "common_attrs": {
         "crate_features": [
@@ -8050,6 +8080,53 @@
       ],
       "version": "0.8.0"
     },
+    "bitcoin 0.28.2": {
+      "common_attrs": {
+        "crate_features": [
+          "default",
+          "secp-recovery",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "bech32 0.8.1",
+            "target": "bech32"
+          },
+          {
+            "id": "bitcoin_hashes 0.10.0",
+            "target": "bitcoin_hashes"
+          },
+          {
+            "id": "secp256k1 0.22.2",
+            "target": "secp256k1"
+          }
+        ],
+        "edition": "2015"
+      },
+      "library_target_name": "bitcoin",
+      "license": "CC0-1.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "name": "bitcoin",
+      "package_url": "https://github.com/rust-bitcoin/rust-bitcoin/",
+      "repository": {
+        "Http": {
+          "sha256": "d4d30fb43d287492017964a1fd7d3f82e8cc760818471c6ef2d44111e317d5c3",
+          "url": "https://static.crates.io/crates/bitcoin/0.28.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bitcoin",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.28.2"
+    },
     "bitcoin-dogecoin 0.32.7-doge.0": {
       "build_script_attrs": {},
       "common_attrs": {
@@ -8294,6 +8371,37 @@
         }
       ],
       "version": "0.1.2"
+    },
+    "bitcoin_hashes 0.10.0": {
+      "common_attrs": {
+        "crate_features": [
+          "std"
+        ],
+        "edition": "2015"
+      },
+      "library_target_name": "bitcoin_hashes",
+      "license": "CC0-1.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "name": "bitcoin_hashes",
+      "package_url": "https://github.com/rust-bitcoin/bitcoin_hashes/",
+      "repository": {
+        "Http": {
+          "sha256": "006cc91e1a1d99819bc5b8214be3555c1f0611b169f527a1fdc54ed1f2b745b0",
+          "url": "https://static.crates.io/crates/bitcoin_hashes/0.10.0/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bitcoin_hashes",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.10.0"
     },
     "bitcoin_hashes 0.14.0": {
       "common_attrs": {
@@ -16943,6 +17051,11 @@
           {
             "id": "bit-vec 0.6.3",
             "target": "bit_vec"
+          },
+          {
+            "alias": "bitcoin_0_28",
+            "id": "bitcoin 0.28.2",
+            "target": "bitcoin"
           },
           {
             "alias": "bitcoin_dogecoin",
@@ -48488,6 +48601,44 @@
       ],
       "version": "0.7.3"
     },
+    "secp256k1 0.22.2": {
+      "common_attrs": {
+        "crate_features": [
+          "recovery",
+          "std"
+        ],
+        "deps": [
+          {
+            "id": "secp256k1-sys 0.5.2",
+            "target": "secp256k1_sys"
+          }
+        ],
+        "edition": "2015"
+      },
+      "library_target_name": "secp256k1",
+      "license": "CC0-1.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "name": "secp256k1",
+      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
+      "repository": {
+        "Http": {
+          "sha256": "295642060261c80709ac034f52fca8e5a9fa2c7d341ded5cdb164b7c33768b2a",
+          "url": "https://static.crates.io/crates/secp256k1/0.22.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "secp256k1",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.22.2"
+    },
     "secp256k1 0.29.0": {
       "common_attrs": {
         "crate_features": [
@@ -48717,6 +48868,56 @@
         }
       ],
       "version": "0.11.0"
+    },
+    "secp256k1-sys 0.5.2": {
+      "build_script_attrs": {
+        "deps": [
+          {
+            "id": "cc 1.2.48",
+            "target": "cc"
+          }
+        ],
+        "links": "rustsecp256k1_v0_5_0"
+      },
+      "common_attrs": {
+        "crate_features": [
+          "recovery",
+          "std"
+        ],
+        "edition": "2015",
+        "extra_deps": [
+          ":build_script_build"
+        ]
+      },
+      "library_target_name": "secp256k1_sys",
+      "license": "CC0-1.0",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "name": "secp256k1-sys",
+      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
+      "repository": {
+        "Http": {
+          "sha256": "152e20a0fd0519390fc43ab404663af8a0b794273d2a91d60ad4a39f13ffe110",
+          "url": "https://static.crates.io/crates/secp256k1-sys/0.5.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "secp256k1_sys",
+            "crate_root": "src/lib.rs"
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "0.5.2"
     },
     "security-framework 2.11.1": {
       "common_attrs": {
@@ -66679,6 +66880,7 @@
     "bindgen 0.65.1",
     "bip32 0.5.1",
     "bit-vec 0.6.3",
+    "bitcoin 0.28.2",
     "bitcoin-dogecoin 0.32.7-doge.0",
     "bs58 0.5.1",
     "build-info 0.0.45",

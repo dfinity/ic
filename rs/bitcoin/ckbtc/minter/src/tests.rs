@@ -20,9 +20,8 @@ use crate::{
     tx,
 };
 use assert_matches::assert_matches;
-use bitcoin::Network as BtcNetwork;
-use bitcoin::consensus::{deserialize, serialize};
-use bitcoin::hashes::Hash as _;
+use bitcoin::network::constants::Network as BtcNetwork;
+use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use candid::Principal;
 use ic_btc_interface::{OutPoint, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
@@ -49,12 +48,9 @@ fn dummy_utxo_from_value(v: u64) -> Utxo {
     }
 }
 
-fn address_to_script_pubkey(address: &BitcoinAddress) -> bitcoin::ScriptBuf {
+fn address_to_script_pubkey(address: &BitcoinAddress) -> bitcoin::Script {
     let address_string = address.display(Network::Mainnet);
-    let btc_address = bitcoin::Address::from_str(&address_string)
-        .unwrap()
-        .require_network(BtcNetwork::Bitcoin)
-        .unwrap();
+    let btc_address = bitcoin::Address::from_str(&address_string).unwrap();
     btc_address.script_pubkey()
 }
 
@@ -67,43 +63,55 @@ fn network_to_btc_network(network: Network) -> BtcNetwork {
 }
 
 fn address_to_btc_address(address: &BitcoinAddress, network: Network) -> bitcoin::Address {
-    use bitcoin::{WitnessProgram, WitnessVersion};
-    let btc_network = network_to_btc_network(network);
+    use bitcoin::util::address::{Payload, WitnessVersion};
     match address {
-        BitcoinAddress::P2wpkhV0(pkhash) => bitcoin::Address::from_witness_program(
-            WitnessProgram::new(WitnessVersion::V0, pkhash).unwrap(),
-            btc_network,
-        ),
-        BitcoinAddress::P2wshV0(script_hash) => bitcoin::Address::from_witness_program(
-            WitnessProgram::new(WitnessVersion::V0, script_hash).unwrap(),
-            btc_network,
-        ),
-        BitcoinAddress::P2pkh(pkhash) => bitcoin::Address::p2pkh(
-            bitcoin::PubkeyHash::from_slice(pkhash).unwrap(),
-            btc_network,
-        ),
-        BitcoinAddress::P2sh(script_hash) => bitcoin::Address::p2sh_from_hash(
-            bitcoin::ScriptHash::from_slice(script_hash).unwrap(),
-            btc_network,
-        ),
-        BitcoinAddress::P2trV1(pkhash) => bitcoin::Address::from_witness_program(
-            WitnessProgram::new(WitnessVersion::V1, pkhash).unwrap(),
-            btc_network,
-        ),
+        BitcoinAddress::P2wpkhV0(pkhash) => bitcoin::Address {
+            payload: Payload::WitnessProgram {
+                version: WitnessVersion::V0,
+                program: pkhash.to_vec(),
+            },
+            network: network_to_btc_network(network),
+        },
+        BitcoinAddress::P2wshV0(script_hash) => bitcoin::Address {
+            payload: Payload::WitnessProgram {
+                version: WitnessVersion::V0,
+                program: script_hash.to_vec(),
+            },
+            network: network_to_btc_network(network),
+        },
+        BitcoinAddress::P2pkh(pkhash) => bitcoin::Address {
+            payload: Payload::PubkeyHash(bitcoin::PubkeyHash::from_hash(
+                bitcoin::hashes::Hash::from_slice(pkhash).unwrap(),
+            )),
+            network: network_to_btc_network(network),
+        },
+        BitcoinAddress::P2sh(script_hash) => bitcoin::Address {
+            payload: Payload::ScriptHash(bitcoin::ScriptHash::from_hash(
+                bitcoin::hashes::Hash::from_slice(script_hash).unwrap(),
+            )),
+            network: network_to_btc_network(network),
+        },
+        BitcoinAddress::P2trV1(pkhash) => bitcoin::Address {
+            payload: Payload::WitnessProgram {
+                version: WitnessVersion::V1,
+                program: pkhash.to_vec(),
+            },
+            network: network_to_btc_network(network),
+        },
     }
 }
 
 fn as_txid(hash: &[u8; 32]) -> bitcoin::Txid {
-    bitcoin::Txid::from_slice(hash).unwrap()
+    bitcoin::Txid::from_hash(bitcoin::hashes::Hash::from_slice(hash).unwrap())
 }
 
-fn p2wpkh_script_code(pkhash: &[u8; 20]) -> bitcoin::ScriptBuf {
-    use bitcoin::{opcodes, script::Builder};
+fn p2wpkh_script_code(pkhash: &[u8; 20]) -> bitcoin::Script {
+    use bitcoin::blockdata::{opcodes, script::Builder};
 
     Builder::new()
         .push_opcode(opcodes::all::OP_DUP)
         .push_opcode(opcodes::all::OP_HASH160)
-        .push_slice(pkhash)
+        .push_slice(&pkhash[..])
         .push_opcode(opcodes::all::OP_EQUALVERIFY)
         .push_opcode(opcodes::all::OP_CHECKSIG)
         .into_script()
@@ -111,8 +119,8 @@ fn p2wpkh_script_code(pkhash: &[u8; 20]) -> bitcoin::ScriptBuf {
 
 fn unsigned_tx_to_bitcoin_tx(tx: &tx::UnsignedTransaction) -> bitcoin::Transaction {
     bitcoin::Transaction {
-        version: bitcoin::transaction::Version(tx::TX_VERSION as i32),
-        lock_time: bitcoin::absolute::LockTime::from_consensus(tx.lock_time),
+        version: tx::TX_VERSION as i32,
+        lock_time: tx.lock_time,
         input: tx
             .inputs
             .iter()
@@ -121,8 +129,8 @@ fn unsigned_tx_to_bitcoin_tx(tx: &tx::UnsignedTransaction) -> bitcoin::Transacti
                     txid: as_txid(&txin.previous_output.txid.into()),
                     vout: txin.previous_output.vout,
                 },
-                sequence: bitcoin::Sequence(txin.sequence),
-                script_sig: bitcoin::ScriptBuf::new(),
+                sequence: txin.sequence,
+                script_sig: bitcoin::Script::default(),
                 witness: bitcoin::Witness::default(),
             })
             .collect(),
@@ -130,7 +138,7 @@ fn unsigned_tx_to_bitcoin_tx(tx: &tx::UnsignedTransaction) -> bitcoin::Transacti
             .outputs
             .iter()
             .map(|txout| bitcoin::TxOut {
-                value: bitcoin::Amount::from_sat(txout.value),
+                value: txout.value,
                 script_pubkey: address_to_script_pubkey(&txout.address),
             })
             .collect(),
@@ -139,8 +147,8 @@ fn unsigned_tx_to_bitcoin_tx(tx: &tx::UnsignedTransaction) -> bitcoin::Transacti
 
 fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
     bitcoin::Transaction {
-        version: bitcoin::transaction::Version(tx::TX_VERSION as i32),
-        lock_time: bitcoin::absolute::LockTime::from_consensus(tx.lock_time),
+        version: tx::TX_VERSION as i32,
+        lock_time: tx.lock_time,
         input: tx
             .inputs
             .iter()
@@ -149,11 +157,11 @@ fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
                     txid: as_txid(&txin.previous_output.txid.into()),
                     vout: txin.previous_output.vout,
                 },
-                sequence: bitcoin::Sequence(txin.sequence),
-                script_sig: bitcoin::ScriptBuf::new(),
-                witness: bitcoin::Witness::from_slice(&[
-                    txin.signature.as_slice(),
-                    txin.pubkey.as_slice(),
+                sequence: txin.sequence,
+                script_sig: bitcoin::Script::default(),
+                witness: bitcoin::Witness::from_vec(vec![
+                    txin.signature.as_slice().to_vec(),
+                    txin.pubkey.to_vec(),
                 ]),
             })
             .collect(),
@@ -161,7 +169,7 @@ fn signed_tx_to_bitcoin_tx(tx: &tx::SignedTransaction) -> bitcoin::Transaction {
             .outputs
             .iter()
             .map(|txout| bitcoin::TxOut {
-                value: bitcoin::Amount::from_sat(txout.value),
+                value: txout.value,
                 script_pubkey: address_to_script_pubkey(&txout.address),
             })
             .collect(),
@@ -498,13 +506,13 @@ proptest! {
         let arb_tx = tx::UnsignedTransaction { inputs, outputs, lock_time };
         println!("{arb_tx:?}");
         let btc_tx = unsigned_tx_to_bitcoin_tx(&arb_tx);
-        println!("{:?}", serialize(&btc_tx));
+        println!("{:?}", btc_tx.serialize());
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
         println!("{tx_bytes:?}");
-        let decoded_btc_tx: bitcoin::Transaction = deserialize(&tx_bytes).expect("failed to deserialize an unsigned transaction");
+        let decoded_btc_tx = bitcoin::Transaction::deserialize(&tx_bytes).expect("failed to deserialize an unsigned transaction");
 
-        prop_assert_eq!(serialize(&btc_tx), tx_bytes);
+        prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
     }
 
@@ -533,7 +541,7 @@ proptest! {
         let btc_tx = unsigned_tx_to_bitcoin_tx(&arb_tx);
 
         let sighasher = tx::TxSigHasher::new(&arb_tx);
-        let mut btc_sighasher = bitcoin::sighash::SighashCache::new(&btc_tx);
+        let mut btc_sighasher = bitcoin::util::sighash::SighashCache::new(&btc_tx);
 
         for (i, (utxo, _, pubkey)) in inputs_data.iter().enumerate() {
             let mut buf = Vec::<u8>::new();
@@ -543,15 +551,13 @@ proptest! {
 
             let mut btc_buf = Vec::<u8>::new();
             let script_code = p2wpkh_script_code(&pkhash);
-            btc_sighasher.segwit_v0_encode_signing_data_to(&mut btc_buf, i, &script_code, bitcoin::Amount::from_sat(utxo.value), bitcoin::EcdsaSighashType::All)
+            btc_sighasher.segwit_encode_signing_data_to(&mut btc_buf, i, &script_code, utxo.value, bitcoin::EcdsaSighashType::All)
                 .expect("failed to encode sighash data");
             prop_assert_eq!(hex::encode(&buf), hex::encode(&btc_buf));
 
             let sighash = sighasher.sighash(&arb_tx.inputs[i], &pkhash);
-            let script_pubkey = bitcoin::ScriptBuf::new_p2wpkh(&bitcoin::WPubkeyHash::from_slice(&pkhash).unwrap());
-            prop_assert_eq!(script_pubkey.p2wpkh_script_code().unwrap(), script_code);
-            let btc_sighash = btc_sighasher.p2wpkh_signature_hash(i, &script_pubkey, bitcoin::Amount::from_sat(utxo.value), bitcoin::EcdsaSighashType::All).unwrap();
-            prop_assert_eq!(hex::encode(sighash), hex::encode(btc_sighash.to_byte_array()));
+            let btc_sighash = btc_sighasher.segwit_signature_hash(i, &script_code, utxo.value, bitcoin::EcdsaSighashType::All).unwrap();
+            prop_assert_eq!(hex::encode(sighash), hex::encode(btc_sighash));
         }
     }
 
@@ -564,16 +570,16 @@ proptest! {
         let arb_tx = tx::SignedTransaction { inputs, outputs, lock_time };
         println!("{arb_tx:?}");
         let btc_tx = signed_tx_to_bitcoin_tx(&arb_tx);
-        println!("{:?}", serialize(&btc_tx));
+        println!("{:?}", btc_tx.serialize());
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
         println!("{tx_bytes:?}");
-        let decoded_btc_tx: bitcoin::Transaction = deserialize(&tx_bytes).expect("failed to deserialize a signed transaction");
+        let decoded_btc_tx = bitcoin::Transaction::deserialize(&tx_bytes).expect("failed to deserialize a signed transaction");
 
-        prop_assert_eq!(serialize(&btc_tx), tx_bytes);
+        prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
-        prop_assert_eq!(arb_tx.wtxid(), btc_tx.compute_wtxid().to_byte_array());
-        prop_assert_eq!(<[u8;32]>::from(arb_tx.compute_txid()), btc_tx.compute_txid().to_byte_array());
+        prop_assert_eq!(&arb_tx.wtxid(), &*btc_tx.wtxid());
+        prop_assert_eq!(&<[u8;32]>::from(arb_tx.compute_txid()), &*btc_tx.txid());
         prop_assert_eq!(arb_tx.vsize(), btc_tx.vsize());
     }
 
@@ -894,14 +900,13 @@ proptest! {
 
         for network in [Network::Mainnet, Network::Testnet, Network::Regtest].iter() {
             let btc_net = network_to_btc_network(*network);
-            let btc_addr = bitcoin::Address::p2pkh(pk, btc_net);
+            let btc_addr = bitcoin::Address::p2pkh(&pk, btc_net);
             prop_assert_eq!(
                 Ok(BitcoinAddress::P2pkh(tx::hash160(&pkbytes))),
                 BitcoinAddress::parse(&btc_addr.to_string(), *network)
             );
 
-            let compressed_pk = bitcoin::CompressedPublicKey::try_from(pk).unwrap();
-            let btc_addr = bitcoin::Address::p2wpkh(&compressed_pk, btc_net);
+            let btc_addr = bitcoin::Address::p2wpkh(&pk, btc_net).unwrap();
             prop_assert_eq!(
                 Ok(BitcoinAddress::P2wpkhV0(pkhash)),
                 BitcoinAddress::parse(&btc_addr.to_string(), *network)
@@ -914,10 +919,7 @@ proptest! {
         for network in [Network::Mainnet, Network::Testnet].iter() {
             let addr_str = address.display(*network);
             let btc_addr = address_to_btc_address(&address, *network);
-            prop_assert_eq!(
-                btc_addr,
-                bitcoin::Address::from_str(&addr_str).unwrap().require_network(network_to_btc_network(*network)).unwrap()
-            );
+            prop_assert_eq!(btc_addr, bitcoin::Address::from_str(&addr_str).unwrap());
         }
     }
 
