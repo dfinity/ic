@@ -1702,11 +1702,12 @@ pub fn refill_stream_slice_indices(
     result.into_iter()
 }
 
-/// Advertises our streams to the subnets they are addressed to.
+/// Advertises our streams to their respective destination subnets.
 ///
-/// The counterpart of `PoolRefillTask`, on the sending side: what it holds is
-/// what posting an advert needs, and the trigger, the conditions and the choice
-/// of targets are yet to come.
+/// The counterpart of `PoolRefillTask`, for sending adverts: holds a
+/// `XNetEndpointResolver` and `XNetClient` for posting adverts; and a
+/// `XNetAdvertHandler` for handling replies. The trigger, the conditions and
+/// the choice of targets are yet to come.
 pub struct AdvertTask {
     /// Handles the headers that peers reply with, as it handles the adverts they
     /// post to us.
