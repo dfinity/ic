@@ -49,18 +49,10 @@ where
 
 fn make_xnet_client(metrics: &MetricsRegistry, log: ReplicaLogger) -> XNetClientImpl {
     let registry = get_simple_registry_for_test();
-    let unhealthy_nodes = Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, metrics));
     XNetClientImpl::new(
         metrics,
         Arc::new(MockTlsConfig::new()) as Arc<_>,
-        Arc::new(ProximityMap::new(
-            LOCAL_NODE,
-            registry,
-            unhealthy_nodes.clone(),
-            metrics,
-            log,
-        )),
-        unhealthy_nodes,
+        Arc::new(ProximityMap::new(LOCAL_NODE, registry, metrics, log)),
     )
 }
 

@@ -10,12 +10,11 @@ mod tests;
 #[cfg(test)]
 mod xnet_client_tests;
 
-pub use crate::proximity::{GenRangeFn, ProximityMap, UnhealthyNodes};
+pub use crate::proximity::{GenRangeFn, ProximityMap};
 
 use crate::certified_slice_pool::{
     CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes, decode_slice_header,
 };
-use crate::proximity::UNHEALTHY_NODE_TTL;
 use async_trait::async_trait;
 use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
@@ -355,13 +354,9 @@ impl XNetPayloadBuilderImpl {
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> XNetPayloadBuilderImpl {
-        // Shared by the node selection of every component talking to other
-        // subnets: `ProximityMap` below, the advert task once it exists.
-        let unhealthy_nodes = Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, metrics_registry));
         let proximity_map = Arc::new(ProximityMap::new(
             node_id,
             registry.clone(),
-            unhealthy_nodes.clone(),
             metrics_registry,
             log.clone(),
         ));
@@ -369,7 +364,6 @@ impl XNetPayloadBuilderImpl {
             metrics_registry,
             tls_handshake,
             proximity_map.clone(),
-            unhealthy_nodes,
         ));
 
         let slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
@@ -377,13 +371,13 @@ impl XNetPayloadBuilderImpl {
             log.clone(),
         )));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(metrics_registry));
-        let endpoint_resolver = XNetEndpointResolver::new(
+        let endpoint_resolver = Arc::new(XNetEndpointResolver::new(
             Arc::clone(&registry),
             node_id,
             subnet_id,
             proximity_map,
             log.clone(),
-        );
+        ));
         let refill_task_handle = PoolRefillTask::start(
             Arc::clone(&slice_pool),
             endpoint_resolver,
@@ -1705,7 +1699,7 @@ pub struct AdvertTask {
     /// post to us.
     advert_handler: Arc<dyn XNetAdvertHandler>,
 
-    endpoint_resolver: XNetEndpointResolver,
+    endpoint_resolver: Arc<XNetEndpointResolver>,
 
     /// Async client for posting adverts to `XNetEndpoints`.
     xnet_client: Arc<dyn XNetClient>,
@@ -1718,7 +1712,7 @@ pub struct AdvertTask {
 impl AdvertTask {
     pub fn new(
         advert_handler: Arc<dyn XNetAdvertHandler>,
-        endpoint_resolver: XNetEndpointResolver,
+        endpoint_resolver: Arc<XNetEndpointResolver>,
         xnet_client: Arc<dyn XNetClient>,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
@@ -1871,7 +1865,7 @@ pub struct PoolRefillTask {
     /// A pool of slices, filled in the background by an async task.
     pool: Arc<Mutex<CertifiedSlicePool>>,
 
-    endpoint_resolver: XNetEndpointResolver,
+    endpoint_resolver: Arc<XNetEndpointResolver>,
 
     /// Async client for querying `XNetEndpoints`.
     xnet_client: Arc<dyn XNetClient>,
@@ -1891,7 +1885,7 @@ impl PoolRefillTask {
     /// Starts an async task that fills the slice pool in the background.
     pub fn start(
         pool: Arc<Mutex<CertifiedSlicePool>>,
-        endpoint_resolver: XNetEndpointResolver,
+        endpoint_resolver: Arc<XNetEndpointResolver>,
         xnet_client: Arc<dyn XNetClient>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         runtime_handle: runtime::Handle,
@@ -2184,11 +2178,9 @@ struct XNetClientImpl {
     /// Response body (encoded slice) size.
     response_body_size: HistogramVec,
 
-    /// Proximity map to update after every query with the time-to-first-byte.
+    /// Proximity map to update with the outcome of every request; and with the
+    /// time-to-first-byte of every query.
     proximity_map: Arc<ProximityMap>,
-
-    /// Unhealthy node set to update after every query with its outcome.
-    unhealthy_nodes: Arc<UnhealthyNodes>,
 }
 
 impl XNetClientImpl {
@@ -2198,7 +2190,6 @@ impl XNetClientImpl {
         metrics_registry: &MetricsRegistry,
         tls: Arc<dyn TlsConfig>,
         proximity_map: Arc<ProximityMap>,
-        unhealthy_nodes: Arc<UnhealthyNodes>,
     ) -> XNetClientImpl {
         #[cfg(not(test))]
         let https = TlsConnector::new(tls);
@@ -2243,7 +2234,6 @@ impl XNetClientImpl {
             http_client,
             response_body_size,
             proximity_map,
-            unhealthy_nodes,
         }
     }
 
@@ -2368,8 +2358,8 @@ impl XNetClientImpl {
     /// Updates the node's health status, based on whether it served the request.
     fn update_node_health<T>(&self, node_id: NodeId, result: &Result<T, XNetClientError>) {
         match result {
-            Err(e) if e.is_node_failure() => self.unhealthy_nodes.observe_failure(node_id),
-            _ => self.unhealthy_nodes.observe_success(node_id),
+            Err(e) if e.is_node_failure() => self.proximity_map.observe_failure(node_id),
+            _ => self.proximity_map.observe_success(node_id),
         }
     }
 }
@@ -2463,7 +2453,7 @@ pub mod testing {
     pub use super::{
         EndpointLocator, GenRangeFn, LABEL_STATUS, METRIC_BUILD_PAYLOAD_DURATION,
         METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE, POOLED_SLICE_BYTE_SIZE_MAX,
-        PoolRefillTask, ProximityMap, RefillTaskHandle, STATUS_SUCCESS, UnhealthyNodes, XNetClient,
+        PoolRefillTask, ProximityMap, RefillTaskHandle, STATUS_SUCCESS, XNetClient,
         XNetClientError, XNetEndpointResolver, XNetPayloadBuilderMetrics,
     };
 
