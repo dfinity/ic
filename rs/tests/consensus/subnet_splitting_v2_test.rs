@@ -51,6 +51,7 @@ use ic_system_test_driver::{
     util::{create_agent, runtime_from_url},
 };
 use ic_types::{CanisterId, Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
+use rand::seq::IteratorRandom;
 use registry_canister::{
     init::RegistryCanisterInitPayload, mutations::do_split_subnet::SplitSubnetPayload,
 };
@@ -295,12 +296,10 @@ async fn call_counter_canisters_until_stopped(
                                     .iter()
                                     .any(|range| range.contains(canister_id))
                             })
-                            .and_then(|subnet| {
-                                subnet
-                                    .nodes()
-                                    .nth(rand::random::<usize>() % subnet.nodes().count())
-                            })
-                            .expect("The counter canister is not hosted by any subnet");
+                            .expect("The counter canister is not hosted by any subnet")
+                            .nodes()
+                            .choose(&mut rand::thread_rng())
+                            .expect("The subnet has no nodes");
 
                         let agent = create_agent(node.get_public_url().as_str()).await?;
                         match futures::future::try_join(
