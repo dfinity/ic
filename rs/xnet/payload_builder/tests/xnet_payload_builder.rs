@@ -39,7 +39,7 @@ use ic_xnet_payload_builder::certified_slice_pool::{CertifiedSlicePool, Unpacked
 use ic_xnet_payload_builder::testing::*;
 use ic_xnet_payload_builder::{
     ExpectedIndices, LABEL_STATUS, MAX_SIGNALS, METRIC_PULL_ATTEMPT_COUNT, POOL_BYTE_SIZE_SOFT_CAP,
-    POOLED_SLICE_BYTE_SIZE_DIVISOR, XNetPayloadBuilderImpl, XNetSlicePoolImpl, adjusted_byte_limit,
+    POOLED_SLICE_BYTE_SIZE_DIVISOR, XNetPayloadBuilderImpl, adjusted_byte_limit,
     refill_stream_slice_indices,
 };
 use maplit::btreemap;
@@ -76,10 +76,8 @@ impl XNetPayloadBuilderFixture {
         let log = fixture.log.clone();
         let state_manager = Arc::new(fixture.state_manager);
         let registry = get_registry_for_test();
-        let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
         let certified_slice_pool =
             Arc::new(Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log)));
-        let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let (refill_trigger, _refill_receiver) = mpsc::channel(100);
         let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&fixture.metrics));
@@ -87,13 +85,14 @@ impl XNetPayloadBuilderFixture {
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             registry,
-            rng,
-            Some(0), // Always try to add one more slice.
-            slice_pool,
+            certified_slice_pool.clone(),
             refill_task_handle,
             metrics,
             fixture.log,
-        );
+        )
+        .with_deterministic_rng(StdRng::seed_from_u64(42))
+        // Always try to add one more slice.
+        .with_slice_byte_size_min(0);
 
         Self {
             xnet_payload_builder,
@@ -1147,17 +1146,16 @@ fn refill_pool_empty(
         let proximity_map = Arc::new(ProximityMap::new(
             OWN_NODE,
             registry.clone(),
-            UnhealthyNodes::new(Duration::from_secs(10), &metrics_registry).into(),
             &metrics_registry,
             log.clone(),
         ));
-        let endpoint_resolver = XNetEndpointResolver::new(
+        let endpoint_resolver = Arc::new(XNetEndpointResolver::new(
             registry.clone(),
             OWN_NODE,
             OWN_SUBNET,
             proximity_map,
             log.clone(),
-        );
+        ));
         let byte_limit = adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX);
         let url = endpoint_resolver
             .xnet_endpoint_url(REMOTE_SUBNET, from, from, byte_limit)
@@ -1282,17 +1280,16 @@ fn refill_pool_append(
         let proximity_map = Arc::new(ProximityMap::new(
             OWN_NODE,
             registry.clone(),
-            UnhealthyNodes::new(Duration::from_secs(10), &metrics_registry).into(),
             &metrics_registry,
             log.clone(),
         ));
-        let endpoint_resolver = XNetEndpointResolver::new(
+        let endpoint_resolver = Arc::new(XNetEndpointResolver::new(
             registry.clone(),
             OWN_NODE,
             OWN_SUBNET,
             proximity_map,
             log.clone(),
-        );
+        ));
         // The pooled prefix takes up pool space, lowering the maximum slice size.
         let slice_byte_size_max =
             (POOL_BYTE_SIZE_SOFT_CAP - prefix_size_bytes) / POOLED_SLICE_BYTE_SIZE_DIVISOR;
@@ -1388,17 +1385,16 @@ fn refill_pool_put_invalid_slice(
         let proximity_map = Arc::new(ProximityMap::new(
             OWN_NODE,
             registry.clone(),
-            UnhealthyNodes::new(Duration::from_secs(10), &metrics_registry).into(),
             &metrics_registry,
             log.clone(),
         ));
-        let endpoint_resolver = XNetEndpointResolver::new(
+        let endpoint_resolver = Arc::new(XNetEndpointResolver::new(
             registry.clone(),
             OWN_NODE,
             OWN_SUBNET,
             proximity_map,
             log.clone(),
-        );
+        ));
         let byte_limit = adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX);
         let url = endpoint_resolver
             .xnet_endpoint_url(REMOTE_SUBNET, from, from, byte_limit)
@@ -1523,17 +1519,16 @@ fn refill_pool_append_invalid_slice(
         let proximity_map = Arc::new(ProximityMap::new(
             OWN_NODE,
             registry.clone(),
-            UnhealthyNodes::new(Duration::from_secs(10), &metrics_registry).into(),
             &metrics_registry,
             log.clone(),
         ));
-        let endpoint_resolver = XNetEndpointResolver::new(
+        let endpoint_resolver = Arc::new(XNetEndpointResolver::new(
             registry.clone(),
             OWN_NODE,
             OWN_SUBNET,
             proximity_map,
             log.clone(),
-        );
+        ));
         // The pooled prefix takes up pool space, lowering the maximum slice size.
         let slice_byte_size_max =
             (POOL_BYTE_SIZE_SOFT_CAP - prefix_size_bytes) / POOLED_SLICE_BYTE_SIZE_DIVISOR;

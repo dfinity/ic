@@ -2,6 +2,7 @@
 
 use super::test_fixtures::*;
 use super::*;
+use crate::testing::XNetPayloadBuilderTesting;
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces_certified_stream_store::DecodeStreamError;

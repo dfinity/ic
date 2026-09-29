@@ -497,11 +497,11 @@ fn add_subnet_record(
 
 /// Creates a registry to be used with the `xnet_endpoint_url` tests. The setup
 /// is as follows:
-/// * `LOCAL_SUBNET` consisting of `LOCAL_NODE_1_OPERATOR_1` (operated by node
-///   operator 1); and
-/// * `REMOTE_SUBNET` consisting of 3 nodes: `LOCAL_NODE_1_OPERATOR_1` and
-///   `LOCAL_NODE_2_OPERATOR_1` (both operated by node operator 1) and
-///   `LOCAL_NODE_3_OPERATOR_2` (operated by node operator 2).
+/// * `LOCAL_SUBNET` consisting of `LOCAL_NODE_1_OPERATOR_1` (operated by
+///   `OPERATOR_1`); and
+/// * `REMOTE_SUBNET` consisting of 3 nodes: `REMOTE_NODE_1_OPERATOR_1` and
+///   `REMOTE_NODE_2_OPERATOR_1` (both operated by `OPERATOR_1`) and
+///   `REMOTE_NODE_3_OPERATOR_2` (operated by `OPERATOR_2`).
 pub(crate) fn create_xnet_endpoint_url_test_fixture() -> Arc<FakeRegistryClient> {
     let data_provider = ProtoRegistryDataProvider::new();
 

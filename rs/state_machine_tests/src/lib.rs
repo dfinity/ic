@@ -187,8 +187,9 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_xnet_payload_builder::{
-    RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
+    RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
     certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
+    testing::XNetPayloadBuilderTesting,
 };
 
 use maplit::btreemap;
@@ -1790,26 +1791,25 @@ impl StateMachineBuilder {
         let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
 
         // Instantiate a `XNetPayloadBuilderImpl`.
-        // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
-        let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
         let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
         let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
             &sm.metrics_registry,
             sm.replica_logger.clone(),
         )));
-        let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
-        let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new_from_components(
-            sm.state_manager.clone(),
-            sm.state_manager.clone(),
-            sm.registry_client.clone(),
-            rng,
-            None,
-            xnet_slice_pool_impl,
-            refill_task_handle,
-            metrics,
-            sm.replica_logger.clone(),
-        ));
+        let xnet_payload_builder = Arc::new(
+            XNetPayloadBuilderImpl::new_from_components(
+                sm.state_manager.clone(),
+                sm.state_manager.clone(),
+                sm.registry_client.clone(),
+                certified_slice_pool.clone(),
+                refill_task_handle,
+                metrics,
+                sm.replica_logger.clone(),
+            )
+            // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
+            .with_deterministic_rng(StdRng::seed_from_u64(42)),
+        );
 
         let adapters_config = AdaptersConfig {
             bitcoin_mainnet_uds_path: None,
