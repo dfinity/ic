@@ -35,8 +35,8 @@ const LABEL_TO: &str = "to";
 
 const OPERATOR_UNKNOWN: &str = "unknown";
 
-/// Helper for probabilistically selecting a healthy node on a given subnet,
-/// weighted by proximity.
+/// Helper for probabilistically selecting healthy nodes on a given subnet:
+/// weighted by proximity, when pulling; or uniformly, when advertising.
 ///
 /// Proximity is modeled as the exponential moving average (EMA) of roundtrip
 /// time (RTT) per datacenter operator (under the assumption that all nodes
@@ -58,7 +58,7 @@ pub struct ProximityMap {
     unhealthy_nodes: UnhealthyNodes,
 
     /// Generates a random value in the range [`low`, `high`), i.e. inclusive of
-    /// `low` and exclusive of `high`, to use for picking a replica.
+    /// `low` and exclusive of `high`, to use for picking replicas.
     gen_range: GenRangeFn,
 
     /// Exported `roundtrip_ema_nanos` values.
@@ -187,6 +187,21 @@ impl ProximityMap {
             node,
             get_node_record(self.registry.as_ref(), node, version)?,
         ))
+    }
+
+    /// Samples `count` `nodes` uniformly at random, without replacement. Only
+    /// healthy nodes are sampled, unless fewer than `count` are healthy.
+    pub fn uniform_sample(&self, count: usize, mut nodes: Vec<NodeId>) -> Vec<NodeId> {
+        self.unhealthy_nodes.filter_at_least(count, &mut nodes);
+
+        // A partial Fisher-Yates shuffle, driven by `gen_range` so tests can mock it.
+        let count = count.min(nodes.len());
+        for i in 0..count {
+            let j = (self.gen_range)(i as u64, nodes.len() as u64) as usize;
+            nodes.swap(i, j);
+        }
+        nodes.truncate(count);
+        nodes
     }
 
     /// Records a request to `node` that it served.

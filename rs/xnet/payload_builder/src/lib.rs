@@ -61,7 +61,8 @@ use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use thiserror::Error;
-use tokio::{runtime, sync::mpsc};
+use tokio::runtime;
+use tokio::sync::{mpsc, watch};
 
 /// A `StreamIndex` past every index a stream can reasonably hold, used as a
 /// bound that nothing reaches.
@@ -276,7 +277,7 @@ pub struct XNetPayloadBuilderImpl {
     /// A pool of slices, filled in the background by an async task.
     slice_pool: Arc<Mutex<CertifiedSlicePool>>,
 
-    /// Advert handling logic, for `XNetEndpoint`.
+    /// Advert handling logic, shared by `XNetEndpoint` and `AdvertTask`.
     advert_handler: Arc<XNetAdvertHandlerImpl>,
 
     /// Handle to the pool refill task, used to asynchronously trigger refill.
@@ -338,6 +339,9 @@ impl XNetPayloadBuilderImpl {
     /// Creates a new `XNetPayloadBuilderImpl` for a node on `subnet_id`, using
     /// the given `StateManager`, `CertifiedStreamStore` and`RegistryClient`.
     ///
+    /// Also starts the advert task, advertising on every certified height from
+    /// `max_certified_height_rx`.
+    ///
     /// # Panics
     ///
     /// Panics if reading the node's own `node_operator_id` from the registry
@@ -351,6 +355,7 @@ impl XNetPayloadBuilderImpl {
         runtime_handle: runtime::Handle,
         node_id: NodeId,
         subnet_id: SubnetId,
+        max_certified_height_rx: watch::Receiver<Height>,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> XNetPayloadBuilderImpl {
@@ -380,26 +385,37 @@ impl XNetPayloadBuilderImpl {
         ));
         let refill_task_handle = PoolRefillTask::start(
             Arc::clone(&slice_pool),
-            endpoint_resolver,
+            Arc::clone(&endpoint_resolver),
             Arc::clone(&xnet_client),
             Arc::clone(&certified_stream_store),
-            runtime_handle,
+            runtime_handle.clone(),
             Arc::clone(&metrics),
             log.clone(),
         );
-        Self::new_from_components(
+        let payload_builder = Self::new_from_components(
             state_manager,
             certified_stream_store,
             registry,
             slice_pool,
             refill_task_handle,
             metrics,
+            log.clone(),
+        );
+        AdvertTask::new(
+            Arc::clone(&payload_builder.advert_handler),
+            endpoint_resolver,
+            xnet_client,
+            metrics_registry,
             log,
         )
+        .start(max_certified_height_rx, &runtime_handle);
+
+        payload_builder
     }
 
     /// Same as `new` except that this constructor uses the provided `slice_pool`
-    /// and `refill_task_handle` instead of constructing fresh ones.
+    /// and `refill_task_handle` instead of constructing fresh ones; and starts no
+    /// advert task.
     pub fn new_from_components(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
@@ -1171,6 +1187,25 @@ impl XNetEndpointResolver {
         )
     }
 
+    /// Picks the nodes of `subnet_id` to advertise to: `advert_target_count()` of
+    /// them, sampled uniformly from the healthy ones, unless too few are. Not by
+    /// proximity, as all our nodes would then advertise to the same few.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if retrieving either subnet's nodes from the registry
+    /// fails; or if either subnet is missing or has no nodes.
+    pub fn advert_targets(&self, subnet_id: SubnetId) -> Result<Vec<NodeId>, Error> {
+        // No `ValidationContext` here, so go with the latest.
+        let version = self.registry.get_latest_version();
+        let own_subnet_size =
+            get_subnet_nodes(self.registry.as_ref(), self.subnet_id, version)?.len();
+        let nodes = get_subnet_nodes(self.registry.as_ref(), subnet_id, version)?;
+
+        let count = advert_target_count(own_subnet_size, nodes.len());
+        Ok(self.proximity_map.uniform_sample(count, nodes))
+    }
+
     /// Returns the `/api/v1/advert` `XNetEndpoint` URL of the given node, for
     /// posting our own certified header to it. Which node to advertise to is the
     /// caller's choice, unlike with `xnet_endpoint_url()`.
@@ -1374,10 +1409,11 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
 }
 
 /// Handles the adverts peers post to us, and the headers they reply to ours
-/// with. Owns no state of its own: it shares the slice pool with
-/// `XNetPayloadBuilderImpl`.
+/// with; and decides which subnets we owe an advert to. Owns no state of its
+/// own: it shares the slice pool with `XNetPayloadBuilderImpl`.
 struct XNetAdvertHandlerImpl {
-    /// Used for reading the certified state, to classify adverts against.
+    /// Used for reading the certified state: to classify adverts against, and to
+    /// decide which adverts we owe.
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
 
     /// Used for verifying adverts and encoding our own certified headers.
@@ -1445,6 +1481,40 @@ impl XNetAdvertHandlerImpl {
             header,
             &have_reject_signal_between,
         )
+    }
+
+    /// Our certified header, for every subnet we owe an advert to.
+    fn adverts_owed(&self) -> Vec<(SubnetId, CertifiedStreamSlice)> {
+        self.subnets_owed()
+            .into_iter()
+            .filter_map(|subnet_id| Some((subnet_id, self.certified_header(subnet_id)?)))
+            .collect()
+    }
+
+    /// Returns the subnets we owe an advert to, as of our latest certified state:
+    /// those whose stream holds messages, i.e. that have not signalled everything
+    /// we sent them; and those that have not yet seen our latest signals, as far as
+    /// the peer header on record tells.
+    fn subnets_owed(&self) -> Vec<SubnetId> {
+        let Some(state) = self.state_manager.get_latest_certified_state() else {
+            return Vec::new();
+        };
+        let state = state.get_ref();
+        let slice_pool = self.slice_pool.lock().unwrap();
+
+        state
+            .streams()
+            .iter()
+            // The loopback stream is not routed through XNet.
+            .filter(|(subnet_id, _)| **subnet_id != state.metadata.own_subnet_id)
+            .filter(|(subnet_id, stream)| {
+                let peer_begin = slice_pool
+                    .peer_header(**subnet_id)
+                    .map_or(StreamIndex::from(0), |header| header.begin());
+                !stream.messages().is_empty() || stream.signals_end() > peer_begin
+            })
+            .map(|(subnet_id, _)| *subnet_id)
+            .collect()
     }
 }
 
@@ -1688,17 +1758,22 @@ pub fn refill_stream_slice_indices(
     result.into_iter()
 }
 
+/// Expected number of adverts each node of a destination subnet receives from
+/// a source subnet per certified height, from which the number of targets
+/// each source node picks is derived.
+const ADVERTS_PER_NODE: usize = 3;
+
 /// Advertises our streams to their respective destination subnets.
 ///
-/// The counterpart of `PoolRefillTask`, for sending adverts: holds a
-/// `XNetEndpointResolver` and `XNetClient` for posting adverts; and a
-/// `XNetAdvertHandler` for handling replies. The trigger, the conditions and
-/// the choice of targets are yet to come.
-pub struct AdvertTask {
-    /// Handles the headers that peers reply with, as it handles the adverts they
-    /// post to us.
-    advert_handler: Arc<dyn XNetAdvertHandler>,
+/// The counterpart of `PoolRefillTask`, for sending adverts. On every new
+/// certified height, advertises our stream for each subnet that may not have
+/// seen all of it, to a few of that subnet's nodes, picked at random.
+struct AdvertTask {
+    /// Decides which subnets we owe an advert to; and handles the headers that
+    /// peers reply with, as it handles the adverts they post to us.
+    advert_handler: Arc<XNetAdvertHandlerImpl>,
 
+    /// Picks the nodes to advertise to and resolves their URLs.
     endpoint_resolver: Arc<XNetEndpointResolver>,
 
     /// Async client for posting adverts to `XNetEndpoints`.
@@ -1710,8 +1785,8 @@ pub struct AdvertTask {
 }
 
 impl AdvertTask {
-    pub fn new(
-        advert_handler: Arc<dyn XNetAdvertHandler>,
+    fn new(
+        advert_handler: Arc<XNetAdvertHandlerImpl>,
         endpoint_resolver: Arc<XNetEndpointResolver>,
         xnet_client: Arc<dyn XNetClient>,
         metrics_registry: &MetricsRegistry,
@@ -1726,16 +1801,73 @@ impl AdvertTask {
         }
     }
 
+    /// Starts an async task advertising on every change of
+    /// `max_certified_height_rx`. It ends once the sender is dropped.
+    fn start(
+        self,
+        mut max_certified_height_rx: watch::Receiver<Height>,
+        runtime_handle: &runtime::Handle,
+    ) {
+        let task = Arc::new(self);
+        runtime_handle.spawn(async move {
+            while max_certified_height_rx.changed().await.is_ok() {
+                task.advertise().await;
+            }
+        });
+    }
+
+    /// Posts our certified header to the chosen targets of every subnet we owe an
+    /// advert to. Does not wait for the posts to complete.
+    async fn advertise(self: &Arc<Self>) {
+        let task = Arc::clone(self);
+        let adverts = match tokio::task::spawn_blocking(move || task.adverts_to_send()).await {
+            Ok(adverts) => adverts,
+            Err(err) => {
+                warn!(self.log, "Failed to join advert blocking thread: {}", err);
+                return;
+            }
+        };
+
+        for (subnet_id, advert, targets) in adverts {
+            for node in targets {
+                let task = Arc::clone(self);
+                let advert = advert.clone();
+                tokio::spawn(async move { task.advertise_to(subnet_id, node, advert).await });
+            }
+        }
+    }
+
+    /// Returns our certified header and the nodes to post it to, for every subnet
+    /// we owe an advert to.
+    fn adverts_to_send(&self) -> Vec<(SubnetId, CertifiedStreamSlice, Vec<NodeId>)> {
+        self.advert_handler
+            .adverts_owed()
+            .into_iter()
+            .filter_map(|(subnet_id, advert)| {
+                match self.endpoint_resolver.advert_targets(subnet_id) {
+                    Ok(targets) => Some((subnet_id, advert, targets)),
+                    Err(err) => {
+                        log!(
+                            self.log,
+                            err.log_level(),
+                            "Failed to advertise to {subnet_id}: {err}"
+                        );
+                        self.metrics
+                            .adverts_sent
+                            .with_label_values(&[&subnet_id.to_string(), err.to_label_value()])
+                            .inc();
+                        None
+                    }
+                }
+            })
+            .collect()
+    }
+
     /// Advertises our stream to `subnet_id` to the given `node`: posts `advert`,
     /// our own certified header, and feeds back any reply to the advert handler, a
     /// reply being the reverse certified header, proving that the peer has already
     /// fully consumed our stream.
-    pub async fn advertise_to(
-        &self,
-        subnet_id: SubnetId,
-        node: NodeId,
-        advert: CertifiedStreamSlice,
-    ) {
+    async fn advertise_to(&self, subnet_id: SubnetId, node: NodeId, advert: CertifiedStreamSlice) {
         let since = Instant::now();
         let status = match self.post_advert(subnet_id, node, advert).await {
             // Advert delivered and accepted.
@@ -1804,6 +1936,15 @@ impl AdvertTask {
                 .expect("Handling an advert reply panicked")?;
         Ok(Some(outcome))
     }
+}
+
+/// Number of nodes of a subnet of `peer_subnet_size` nodes that each of our
+/// nodes should advertise to, for each of the peer's nodes to receive
+/// `ADVERTS_PER_NODE` adverts, based on the two subnet sizes.
+fn advert_target_count(own_subnet_size: usize, peer_subnet_size: usize) -> usize {
+    (ADVERTS_PER_NODE * peer_subnet_size)
+        .div_ceil(own_subnet_size.max(1))
+        .clamp(1, peer_subnet_size.max(1))
 }
 
 struct AdvertTaskMetrics {

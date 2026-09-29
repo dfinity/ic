@@ -221,6 +221,42 @@ async fn pick_node_unhealthy_nodes() {
     });
 }
 
+/// `uniform_sample()` draws each position from the nodes not drawn yet; and
+/// draws no more nodes than there are.
+#[test]
+fn uniform_sample() {
+    with_test_replica_logger(|log| {
+        let registry = create_xnet_endpoint_url_test_fixture();
+        let nodes = vec![
+            REMOTE_NODE_1_OPERATOR_1,
+            REMOTE_NODE_2_OPERATOR_1,
+            REMOTE_NODE_3_OPERATOR_2,
+        ];
+        let sample = |gen_range, count| {
+            ProximityMap::with_rng(
+                gen_range,
+                LOCAL_NODE,
+                registry.clone(),
+                &MetricsRegistry::new(),
+                log.clone(),
+            )
+            .uniform_sample(count, nodes.clone())
+        };
+
+        // Always drawing the first node not drawn yet.
+        assert_eq!(
+            vec![REMOTE_NODE_1_OPERATOR_1, REMOTE_NODE_2_OPERATOR_1],
+            sample(mock_gen_range_low(0, 1), 2)
+        );
+        // Always drawing the last one.
+        assert_eq!(
+            vec![REMOTE_NODE_3_OPERATOR_2, REMOTE_NODE_1_OPERATOR_1],
+            sample(mock_gen_range_high(1, 1), 2)
+        );
+        assert_eq!(nodes, sample(mock_gen_range_low(0, 1), 5));
+    });
+}
+
 #[test]
 fn unhealthy_nodes_filter_at_least() {
     let all_nodes = vec![
