@@ -440,13 +440,15 @@ impl CyclesAccountManager {
 
     /// Withdraws and consumes the cost of executing the given number of
     /// instructions in the management canister.
+    ///
+    /// Returns the consumed cycles.
     pub fn consume_cycles_for_management_canister_instructions(
         &self,
         sender: &PrincipalId,
         canister: &mut CanisterState,
         amount: NumInstructions,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-    ) -> Result<(), CanisterOutOfCyclesError> {
+    ) -> Result<CompoundCycles<Instructions>, CanisterOutOfCyclesError> {
         let memory_usage = canister.memory_usage();
         let message_memory = canister.message_memory_usage();
         let cycles = self.management_canister_cost(amount, subnet_cycles_config);
@@ -459,6 +461,7 @@ impl CyclesAccountManager {
             subnet_cycles_config,
             reveal_top_up,
         )
+        .map(|_| cycles)
     }
 
     /// Prepays the cost of executing a message with the given number of
@@ -555,12 +558,13 @@ impl CyclesAccountManager {
         }
         let num_instructions_to_refund =
             std::cmp::min(num_instructions, num_instructions_initially_charged);
+        // Never refund more than was prepaid, in either the real or the nominal part.
         let cycles_to_refund = self
             .scale_cost(
                 self.convert_instructions_to_cycles(num_instructions_to_refund, execution_mode),
                 subnet_cycles_config,
             )
-            .min(prepaid_execution_cycles);
+            .component_wise_min(prepaid_execution_cycles);
         system_state.refund_cycles(prepaid_execution_cycles, cycles_to_refund);
     }
 
@@ -849,6 +853,108 @@ impl CyclesAccountManager {
         )
     }
 
+    /// Adjusts the cycles prepaid for the execution of a response so that they match
+    /// exactly the cycles required for executing the response in the given Wasm
+    /// execution mode.
+    ///
+    /// The cycles for a response execution are prepaid when the corresponding call
+    /// is performed, i.e., using the instruction costs of the Wasm execution mode
+    /// of the calling canister and the cost schedule of its subnet at that time. The
+    /// canister might have been upgraded to a different Wasm execution mode, or the
+    /// cost schedule of its subnet might have changed, before the response arrives:
+    ///
+    /// - if the prepayment falls short of the requirement (e.g., the canister was
+    ///   upgraded to a more expensive Wasm execution mode), then the missing cycles
+    ///   are withdrawn from the canister's balance. No freezing threshold is applied:
+    ///   the canister already committed to executing the response when it performed
+    ///   the corresponding call;
+    /// - if the prepayment exceeds the requirement (e.g., the canister was upgraded
+    ///   to a cheaper Wasm execution mode), then the excess is refunded immediately.
+    ///
+    /// Matching the prepayment to the requirement lets the canister pay exactly for
+    /// the instructions it executed, at the instruction costs of the Wasm execution
+    /// mode it executed them in.
+    ///
+    /// Both directions are applied unconditionally instead of picking one of them by
+    /// comparing the prepayment against the requirement: subtracting two
+    /// `CompoundCycles` saturates part by part, so `required - prepaid` is the
+    /// shortfall and `prepaid - required` the excess of the real and of the nominal
+    /// part on its own, and for either part at most one of the two is non-zero.
+    /// Hence the adjustment does not rely on the prepayment and the requirement
+    /// carrying the same cost schedule, which a comparison of the two would (see the
+    /// `No ordering` section of the `CompoundCycles` documentation): the canister
+    /// ends up with exactly the prepayment that the cost schedule in effect when the
+    /// response is executed requires, whatever cost schedule the prepayment recorded
+    /// in the callback carries.
+    ///
+    /// A failing adjustment must leave the canister state unchanged: neither the
+    /// balance nor the consumed cycles metrics may move. The withdrawal is therefore
+    /// performed before the refund, which cannot fail.
+    ///
+    /// Returns the prepayment matching the cycles required for executing the response
+    /// in the given Wasm execution mode, or a `CanisterOutOfCyclesError` if the
+    /// canister's balance does not cover the additional prepayment, in which case
+    /// the canister state is left unchanged.
+    pub fn adjust_prepayment_for_response_execution(
+        &self,
+        system_state: &mut SystemState,
+        prepayment_for_response_execution: CompoundCycles<Instructions>,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+        execution_mode: WasmExecutionMode,
+        reveal_top_up: bool,
+    ) -> Result<CompoundCycles<Instructions>, CanisterOutOfCyclesError> {
+        let required = self.prepayment_for_response_execution(subnet_cycles_config, execution_mode);
+        let prepaid = prepayment_for_response_execution;
+        // No freezing threshold is applied, i.e., the threshold is zero.
+        self.consume_with_threshold_impl(
+            system_state,
+            required - prepaid,
+            Cycles::zero(),
+            reveal_top_up,
+        )?;
+        // The excess part of the prepayment is refunded in full and hence it does not
+        // contribute to the consumed cycles of the canister.
+        let excess = prepaid - required;
+        system_state.refund_cycles(excess, excess);
+        Ok(required)
+    }
+
+    /// Settles the cycles prepaid for the execution of a response whose callback is
+    /// not executed at all: the canister is charged the fixed per-message execution
+    /// fee and the rest of the prepayment is refunded to it.
+    ///
+    /// Since no instructions are executed, the fixed per-message execution fee is all
+    /// that is due, no matter which Wasm execution mode the cycles were prepaid for
+    /// and which one the canister has now. In particular, the canister keeps the rest
+    /// of its prepayment even if the prepayment falls short of the cycles that
+    /// executing the response in its current Wasm execution mode would require.
+    ///
+    /// Note that the prepayment is never topped up for such a response: the additional
+    /// cycles would be refunded right away and, unlike this refund, the withdrawal
+    /// could fail. The subtraction below saturates in both the real and the nominal
+    /// part, so the canister is charged at most what it prepaid in each of them.
+    pub fn settle_prepayment_for_unexecuted_response(
+        &self,
+        system_state: &mut SystemState,
+        prepayment_for_response_execution: CompoundCycles<Instructions>,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+        execution_mode: WasmExecutionMode,
+    ) {
+        // Executing no instructions costs the fixed per-message execution fee only.
+        let base_fee = self.execution_cost(
+            NumInstructions::from(0),
+            subnet_cycles_config,
+            execution_mode,
+        );
+        // The prepayment covers the fixed per-message execution fee. The subtraction
+        // saturates in both the real and the nominal part, so no more than the
+        // prepayment is ever charged.
+        system_state.refund_cycles(
+            prepayment_for_response_execution,
+            prepayment_for_response_execution - base_fee,
+        );
+    }
+
     /// Returns the amount of cycles required for transmitting the largest
     /// response message.
     pub fn prepayment_for_response_transmission(
@@ -888,8 +994,9 @@ impl CyclesAccountManager {
             self.config.xnet_byte_transmission_fee * transmitted_bytes,
             subnet_cycles_config,
         );
-        prepayment_for_response_transmission
-            - transmission_cost.min(prepayment_for_response_transmission)
+        // The subtraction saturates in both the real and the nominal part, so a
+        // transmission cost exceeding the prepayment leaves nothing to refund.
+        prepayment_for_response_transmission - transmission_cost
     }
 
     ////////////////////////////////////////////////////////////////////////////

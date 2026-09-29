@@ -1,5 +1,6 @@
 //! Types for ECDSA secp256k1 signatures
 
+use base64::prelude::*;
 use ic_crypto_secrets_containers::SecretVec;
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use serde::{Deserialize, Serialize};
@@ -35,7 +36,7 @@ impl From<Vec<u8>> for PublicKeyBytes {
 
 impl fmt::Debug for PublicKeyBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", base64::encode(&self.0[..]))
+        write!(f, "{:?}", BASE64_STANDARD.encode(&self.0[..]))
     }
 }
 
@@ -54,7 +55,7 @@ impl SignatureBytes {
 
 impl fmt::Debug for SignatureBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", base64::encode(&self.0[..]))
+        write!(f, "{:?}", BASE64_STANDARD.encode(&self.0[..]))
     }
 }
 

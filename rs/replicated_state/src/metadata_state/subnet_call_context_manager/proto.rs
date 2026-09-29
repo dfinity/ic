@@ -548,7 +548,7 @@ impl TryFrom<pb_metadata::ThresholdArguments> for ThresholdArguments {
 impl From<&SignWithThresholdContext> for pb_metadata::SignWithThresholdContext {
     fn from(context: &SignWithThresholdContext) -> Self {
         Self {
-            request: Some((&context.request).into()),
+            request: Some(context.request.as_ref().into()),
             args: Some((&context.args).into()),
             derivation_path_vec: context.derivation_path.to_vec(),
             batch_time: context.batch_time.as_nanos_since_unix_epoch(),
@@ -565,7 +565,7 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
         let args: ThresholdArguments =
             try_from_option_field(context.args, "SignWithThresholdContext::args")?;
         Ok(SignWithThresholdContext {
-            request,
+            request: Arc::new(request),
             args,
             derivation_path: Arc::new(context.derivation_path_vec),
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),

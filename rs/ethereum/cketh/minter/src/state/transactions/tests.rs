@@ -549,46 +549,23 @@ mod withdrawal_transactions {
             }
         }
 
-        #[allow(deprecated)]
         fn erc20_transfer_data(
             expected_address: &Address,
             expected_amount: &Erc20Value,
         ) -> Vec<u8> {
             use crate::state::transactions::ERC_20_TRANSFER_FUNCTION_SELECTOR;
-            use ethers_core::abi::{Param, ParamType, Token};
+            use alloy_sol_types::{SolCall, sol};
 
-            let erc20_transfer = ethers_core::abi::Function {
-                name: "transfer".to_string(),
-                inputs: vec![
-                    Param {
-                        name: "_to".to_string(),
-                        kind: ParamType::Address,
-                        internal_type: None,
-                    },
-                    Param {
-                        name: "_value".to_string(),
-                        kind: ParamType::Uint(256),
-                        internal_type: None,
-                    },
-                ],
-                outputs: vec![Param {
-                    name: "success".to_string(),
-                    kind: ParamType::Bool,
-                    internal_type: None,
-                }],
-                constant: None,
-                state_mutability: ethers_core::abi::StateMutability::NonPayable,
-            };
-            assert_eq!(
-                erc20_transfer.short_signature(),
-                ERC_20_TRANSFER_FUNCTION_SELECTOR
-            );
-            erc20_transfer
-                .encode_input(&[
-                    Token::Address(expected_address.to_string().parse().unwrap()),
-                    Token::Uint(expected_amount.to_be_bytes().into()),
-                ])
-                .expect("failed to encode transfer data")
+            sol! {
+                function transfer(address to, uint256 value) external returns (bool success);
+            }
+
+            assert_eq!(transferCall::SELECTOR, ERC_20_TRANSFER_FUNCTION_SELECTOR);
+            transferCall {
+                to: alloy_primitives::Address::from(expected_address.into_bytes()),
+                value: alloy_primitives::U256::from_be_bytes(expected_amount.to_be_bytes()),
+            }
+            .abi_encode()
         }
 
         #[test]
@@ -1565,12 +1542,17 @@ mod withdrawal_transactions {
                 gas_fee_estimate(),
             );
             let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
-            let maybe_reimburse_request = transactions
-                .maybe_reimburse_requests_iter()
-                .find(|r| r.cketh_ledger_burn_index() == cketh_ledger_burn_index)
-                .expect("maybe reimburse request not found");
-            assert_eq!(maybe_reimburse_request, &withdrawal_request);
-            assert!(!transactions.maybe_reimburse.is_empty());
+            assert!(
+                transactions
+                    .maybe_reimburse
+                    .contains(&cketh_ledger_burn_index)
+            );
+            assert_eq!(
+                transactions
+                    .pipeline
+                    .get_processed_request(&cketh_ledger_burn_index),
+                Some(&withdrawal_request)
+            );
 
             let receipt = transaction_receipt(&signed_tx, TransactionStatus::Success);
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
@@ -1707,11 +1689,17 @@ mod withdrawal_transactions {
                 gas_fee_estimate(),
             );
             let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
-            let maybe_reimburse_request = transactions
-                .maybe_reimburse_requests_iter()
-                .find(|r| r.cketh_ledger_burn_index() == cketh_ledger_burn_index)
-                .expect("maybe reimburse request not found");
-            assert_eq!(maybe_reimburse_request, &withdrawal_request.clone().into());
+            assert!(
+                transactions
+                    .maybe_reimburse
+                    .contains(&cketh_ledger_burn_index)
+            );
+            assert_eq!(
+                transactions
+                    .pipeline
+                    .get_processed_request(&cketh_ledger_burn_index),
+                Some(&withdrawal_request.clone().into())
+            );
 
             let receipt = transaction_receipt(&signed_tx, TransactionStatus::Failure);
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
@@ -2466,6 +2454,18 @@ mod oldest_incomplete_request_timestamp {
     }
 
     #[test]
+    fn should_include_a_sweeper_funding_awaiting_finalization() {
+        let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
+        let mut funding = cketh_withdrawal_request_with_index(LedgerBurnIndex::new(15));
+        funding.created_at = Some(10);
+        let funding = WithdrawalRequest::SweeperFunding(funding);
+        transactions.record_request(funding.clone());
+        create_and_record_transaction(&mut transactions, funding, gas_fee_estimate());
+
+        assert_eq!(transactions.oldest_incomplete_request_timestamp(), Some(10));
+    }
+
+    #[test]
     fn should_ignore_finalized_requests() {
         let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
         let mut rng = reproducible_rng();
@@ -2980,7 +2980,8 @@ mod sweep_lane {
     };
 
     const SWEEP_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(100_000);
-    use crate::sweeper_contract::SweepItem;
+    use crate::asset::Asset;
+    use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch, encode_sweep_eth_batch};
     use crate::tx::{
         DelegatingSweep, Eip1559TransactionRequest, Eip7702TransactionRequest, GasFeeEstimate,
         SignableTransaction, SignedAuthorization, SweepTransaction, TransactionSignature,
@@ -2990,6 +2991,7 @@ mod sweep_lane {
     use ethnum::u256;
     use ic_ethereum_types::Address;
     use icrc_ledger_types::icrc1::account::Account;
+    use std::slice::from_ref;
 
     const EIP1559_TX_ID: u8 = 2;
     const SET_CODE_TX_ID: u8 = 4;
@@ -3000,7 +3002,7 @@ mod sweep_lane {
         SweepRequest {
             id: SweepId(id),
             destination: Address::new([id as u8; 20]),
-            token: Address::new([0xc0; 20]),
+            asset: Asset::Erc20(Address::new([0xc0; 20])),
             items: vec![sweep_item(1, None), sweep_item(2, None)],
             max_transaction_fee: Wei::from(1_000_000_000_000_000_u64),
             created_at: 1_620_328_630_000_000_000,
@@ -3078,21 +3080,100 @@ mod sweep_lane {
 
     #[test]
     fn should_scale_the_sweep_gas_limit_with_the_distinct_addresses_walked() {
-        const MEASURED_TEN_DEPOSIT_SWEEP_GAS: u128 = 609_431;
+        const MEASURED_TEN_DEPOSIT_ERC20_SWEEP_GAS: u128 = 609_431;
+        const MEASURED_TEN_DEPOSIT_ETH_SWEEP_GAS: u128 = 413_076;
+        let erc20 = Asset::Erc20(Address::new([0xc0; 20]));
 
         let items_for = |addresses: u8| -> Vec<AuthorizedSweepItem> {
-            (1..=addresses).map(|seed| sweep_item(seed, None)).collect()
+            (1..=addresses)
+                .map(|seed| sweep_item(seed, Some(authorization(seed))))
+                .collect()
         };
 
-        assert_eq!(sweep_gas_limit(&items_for(1)), GasAmount::new(225_000));
-        assert_eq!(sweep_gas_limit(&items_for(10)), GasAmount::new(1_710_000));
-        assert!(sweep_gas_limit(&items_for(10)) > GasAmount::new(MEASURED_TEN_DEPOSIT_SWEEP_GAS));
+        assert_eq!(
+            sweep_gas_limit(erc20, &items_for(1)),
+            GasAmount::new(225_000)
+        );
+        assert_eq!(
+            sweep_gas_limit(erc20, &items_for(10)),
+            GasAmount::new(1_710_000)
+        );
+        assert!(
+            sweep_gas_limit(erc20, &items_for(10))
+                > GasAmount::new(MEASURED_TEN_DEPOSIT_ERC20_SWEEP_GAS)
+        );
+
+        assert_eq!(
+            sweep_gas_limit(Asset::Eth, &items_for(1)),
+            GasAmount::new(140_000)
+        );
+        assert_eq!(
+            sweep_gas_limit(Asset::Eth, &items_for(10)),
+            GasAmount::new(860_000)
+        );
+        assert!(
+            sweep_gas_limit(Asset::Eth, &items_for(10))
+                > GasAmount::new(MEASURED_TEN_DEPOSIT_ETH_SWEEP_GAS)
+        );
+        assert!(
+            sweep_gas_limit(Asset::Eth, &items_for(10)) < sweep_gas_limit(erc20, &items_for(10))
+        );
 
         let one_address_ten_times: Vec<_> = (0..10).map(|_| sweep_item(1, None)).collect();
         assert_eq!(
-            sweep_gas_limit(&one_address_ten_times),
-            sweep_gas_limit(&items_for(1))
+            sweep_gas_limit(erc20, &one_address_ten_times),
+            sweep_gas_limit(erc20, &[sweep_item(1, None)])
         );
+    }
+
+    #[test]
+    fn should_charge_authorization_gas_only_for_items_carrying_an_authorization() {
+        let erc20 = Asset::Erc20(Address::new([0xc0; 20]));
+        let delegated = sweep_item(1, None);
+        let to_delegate = sweep_item(2, Some(authorization(2)));
+
+        assert_eq!(
+            sweep_gas_limit(erc20, from_ref(&delegated)),
+            GasAmount::new(185_000),
+            "an address swept without an authorization costs its balance check and its transfer only"
+        );
+        assert_eq!(
+            sweep_gas_limit(erc20, &[delegated.clone(), to_delegate.clone()]),
+            GasAmount::new(350_000)
+        );
+        assert_eq!(
+            sweep_gas_limit(Asset::Eth, from_ref(&delegated)),
+            GasAmount::new(100_000)
+        );
+        assert_eq!(
+            sweep_gas_limit(Asset::Eth, &[delegated, to_delegate]),
+            GasAmount::new(180_000)
+        );
+    }
+
+    #[test]
+    fn should_encode_the_batch_call_of_the_asset_the_sweep_moves() {
+        let token = Address::new([0xc0; 20]);
+        let items: Vec<SweepItem> = sweep_request(0)
+            .items
+            .iter()
+            .map(|authorized| authorized.item.clone())
+            .collect();
+        let erc20_sweep = SweepRequest {
+            asset: Asset::Erc20(token),
+            ..sweep_request(0)
+        };
+        let eth_sweep = SweepRequest {
+            asset: Asset::Eth,
+            ..sweep_request(0)
+        };
+
+        assert_eq!(
+            erc20_sweep.call_data(),
+            encode_sweep_erc20_batch(&items, &[token])
+        );
+        assert_eq!(eth_sweep.call_data(), encode_sweep_eth_batch(&items));
+        assert_ne!(eth_sweep.call_data(), erc20_sweep.call_data());
     }
 
     #[test]
@@ -3107,8 +3188,14 @@ mod sweep_lane {
             )
             .expect("BUG: the fixture allowance covers the fixture fee");
 
-        assert_eq!(request.gas_limit(), sweep_gas_limit(&request.items));
-        assert_eq!(transaction.gas_limit(), sweep_gas_limit(&request.items));
+        assert_eq!(
+            request.gas_limit(),
+            sweep_gas_limit(request.asset, &request.items)
+        );
+        assert_eq!(
+            transaction.gas_limit(),
+            sweep_gas_limit(request.asset, &request.items)
+        );
     }
 
     #[test]

@@ -15,7 +15,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::{CanisterLog, NumBytes};
+use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::sync::Arc;
@@ -260,17 +260,6 @@ impl LogMemoryStore {
         self.get_header()
             .map(|h| self.virtual_memory_for_data_capacity(h.data_capacity.get() as usize))
             .unwrap_or(0)
-    }
-
-    /// Returns the projected memory usage after `resize(limit)` would complete,
-    /// without mutating any state.
-    pub fn memory_usage_for_limit(&self, limit: NumBytes) -> NumBytes {
-        if limit == NumBytes::new(0) {
-            return NumBytes::new(0);
-        }
-        // Mirror resize_impl's capacity clamping exactly.
-        let target_capacity = data_capacity_for_limit(limit.get() as usize);
-        NumBytes::new(self.virtual_memory_for_data_capacity(target_capacity) as u64)
     }
 
     /// Single source of truth for the ring-buffer memory layout formula.

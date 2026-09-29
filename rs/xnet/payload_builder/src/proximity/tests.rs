@@ -1,7 +1,9 @@
 use super::super::test_fixtures::*;
 use super::*;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{MetricVec, fetch_gauge_vec, fetch_int_counter, metric_vec};
+use ic_test_utilities_metrics::{
+    MetricVec, fetch_gauge_vec, fetch_int_counter, fetch_int_gauge, metric_vec,
+};
 
 /// Asserts that `proximity_map.pick_node()` will pick `expected_node` for all
 /// `gen_range()` values in the `[low + numerator_low * (high - low) /
@@ -50,6 +52,7 @@ async fn pick_node_no_roundtrip_times() {
             mock_gen_range_low(0, 0),
             LOCAL_NODE,
             registry,
+            Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics)),
             &metrics,
             log,
         );
@@ -77,6 +80,7 @@ async fn pick_node_some_roundtrip_times() {
             mock_gen_range_low(0, 0),
             LOCAL_NODE,
             registry,
+            Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics)),
             &metrics,
             log,
         );
@@ -104,6 +108,7 @@ async fn pick_node_all_roundtrip_times() {
             mock_gen_range_low(0, 0),
             LOCAL_NODE,
             registry,
+            Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics)),
             &metrics,
             log,
         );
@@ -138,6 +143,7 @@ async fn pick_node_extreme_roundtrip_times() {
             mock_gen_range_low(0, 0),
             LOCAL_NODE,
             registry,
+            Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics)),
             &metrics,
             log,
         );
@@ -183,4 +189,97 @@ async fn pick_node_extreme_roundtrip_times() {
         );
         assert_eq!(Some(0), fetch_int_counter(&metrics, METRIC_UNKNOWN_DCOP));
     });
+}
+
+#[tokio::test]
+async fn pick_node_unhealthy_nodes() {
+    with_test_replica_logger(|log| {
+        let registry = create_xnet_endpoint_url_test_fixture();
+        let metrics = MetricsRegistry::new();
+        let unhealthy_nodes = Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics));
+
+        let mut proximity_map = ProximityMap::with_rng(
+            mock_gen_range_low(0, 0),
+            LOCAL_NODE,
+            registry,
+            unhealthy_nodes.clone(),
+            &metrics,
+            log,
+        );
+
+        // With node 1 unhealthy, the other two nodes are picked from.
+        unhealthy_nodes.observe_failure(REMOTE_NODE_1_OPERATOR_1);
+        assert_pick_node(REMOTE_NODE_2_OPERATOR_1, &mut proximity_map, 0, 1, 2);
+        assert_pick_node(REMOTE_NODE_3_OPERATOR_2, &mut proximity_map, 1, 2, 2);
+
+        // With all three unhealthy, all three are picked from again.
+        unhealthy_nodes.observe_failure(REMOTE_NODE_2_OPERATOR_1);
+        unhealthy_nodes.observe_failure(REMOTE_NODE_3_OPERATOR_2);
+        assert_pick_node(REMOTE_NODE_1_OPERATOR_1, &mut proximity_map, 0, 1, 3);
+        assert_pick_node(REMOTE_NODE_2_OPERATOR_1, &mut proximity_map, 1, 2, 3);
+        assert_pick_node(REMOTE_NODE_3_OPERATOR_2, &mut proximity_map, 2, 3, 3);
+        assert_eq!(Some(3), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
+
+        // A successful request to node 1 leaves it as the only node to pick.
+        unhealthy_nodes.observe_success(REMOTE_NODE_1_OPERATOR_1);
+        assert_pick_node(REMOTE_NODE_1_OPERATOR_1, &mut proximity_map, 0, 1, 1);
+        assert_eq!(Some(2), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
+    });
+}
+
+#[test]
+fn unhealthy_nodes_filter_at_least() {
+    let all_nodes = vec![
+        REMOTE_NODE_1_OPERATOR_1,
+        REMOTE_NODE_2_OPERATOR_1,
+        REMOTE_NODE_3_OPERATOR_2,
+    ];
+    let filter_at_least = |unhealthy_nodes: &UnhealthyNodes, minimum| {
+        let mut nodes = all_nodes.clone();
+        unhealthy_nodes.filter_at_least(minimum, &mut nodes);
+        nodes
+    };
+
+    let metrics = MetricsRegistry::new();
+    let unhealthy_nodes = UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics);
+
+    // No unhealthy nodes, all nodes retained.
+    assert_eq!(all_nodes, filter_at_least(&unhealthy_nodes, 3));
+
+    unhealthy_nodes.observe_failure(REMOTE_NODE_1_OPERATOR_1);
+    assert_eq!(
+        vec![REMOTE_NODE_2_OPERATOR_1, REMOTE_NODE_3_OPERATOR_2],
+        filter_at_least(&unhealthy_nodes, 2)
+    );
+    // Too few healthy nodes left, all nodes retained.
+    assert_eq!(all_nodes, filter_at_least(&unhealthy_nodes, 3));
+
+    // All nodes unhealthy, all nodes retained.
+    unhealthy_nodes.observe_failure(REMOTE_NODE_2_OPERATOR_1);
+    unhealthy_nodes.observe_failure(REMOTE_NODE_3_OPERATOR_2);
+    assert_eq!(all_nodes, filter_at_least(&unhealthy_nodes, 1));
+
+    unhealthy_nodes.observe_success(REMOTE_NODE_2_OPERATOR_1);
+    assert_eq!(
+        vec![REMOTE_NODE_2_OPERATOR_1],
+        filter_at_least(&unhealthy_nodes, 1)
+    );
+    assert_eq!(Some(2), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
+}
+
+#[test]
+fn unhealthy_nodes_expire() {
+    let metrics = MetricsRegistry::new();
+    // A zero TTL, i.e. entries expire as soon as they are recorded.
+    let unhealthy_nodes = UnhealthyNodes::new(Duration::ZERO, &metrics);
+
+    unhealthy_nodes.observe_failure(REMOTE_NODE_1_OPERATOR_1);
+
+    let mut nodes = vec![REMOTE_NODE_1_OPERATOR_1, REMOTE_NODE_2_OPERATOR_1];
+    unhealthy_nodes.filter_at_least(1, &mut nodes);
+    assert_eq!(
+        vec![REMOTE_NODE_1_OPERATOR_1, REMOTE_NODE_2_OPERATOR_1],
+        nodes
+    );
+    assert_eq!(Some(0), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
 }

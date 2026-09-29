@@ -431,6 +431,7 @@ mod tests {
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{NodeId, NumberOfNodes, RegistryVersion};
     use std::collections::BTreeSet;
+    use std::sync::Arc;
     use std::time::Duration;
 
     const INITIAL_BALANCE: Cycles = Cycles::new(1_000_000_000_000);
@@ -548,10 +549,10 @@ mod tests {
         cost_schedule: CanisterCyclesCostSchedule,
     ) {
         let context = CanisterHttpRequestContext {
-            request: RequestBuilder::default().sender(sender).build(),
+            request: RequestBuilder::default().sender(sender).build_arc(),
             url: "https://example.com".to_string(),
             max_response_bytes: None,
-            headers: Vec::new(),
+            headers: Arc::new(Vec::new()),
             body: None,
             http_method: CanisterHttpMethod::GET,
             transform: None,
@@ -628,7 +629,7 @@ mod tests {
             .unwrap()
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::HTTPOutcalls)
             .map(|n| n.get())
             .unwrap_or(0)
@@ -660,7 +661,7 @@ mod tests {
         let gauge = get(subnet_metrics.get_consumed_cycles_by_use_case());
         assert_eq!(
             gauge,
-            get(subnet_metrics.get_consumed_cycles_by_use_case_as_counters())
+            get(subnet_metrics.get_consumed_cycles_by_use_case_monotonic())
         );
         match use_case {
             CyclesUseCase::HTTPOutcalls => {

@@ -107,6 +107,7 @@ pub fn start_nns_delegation_manager(
         subnet_id,
         subnet_type,
         nns_subnet_id,
+        last_delegation: PublishedDelegation::Uninitialized,
         state_reader,
         registry_client,
         tls_config,
@@ -126,12 +127,24 @@ pub fn start_nns_delegation_manager(
     (join_handle, NNSDelegationReader::new(rx, logger))
 }
 
+/// What the [`DelegationManager`] last published to the [`NNSDelegationReader`]s.
+#[allow(clippy::large_enum_variant)]
+enum PublishedDelegation {
+    /// Nothing has been published yet, i.e. the readers are still waiting to be initialized.
+    Uninitialized,
+    /// We are on the NNS subnet, where there is no delegation. Published as `None`.
+    AbsentBecauseNNS,
+    /// A delegation which has been published.
+    Present(NNSDelegationBuilder),
+}
+
 struct DelegationManager {
     config: Config,
     log: ReplicaLogger,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
     nns_subnet_id: SubnetId,
+    last_delegation: PublishedDelegation,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     registry_client: Arc<dyn RegistryClient>,
     tls_config: Arc<dyn TlsConfig>,
@@ -145,14 +158,8 @@ impl DelegationManager {
     /// available).
     fn is_delegation_valid_with_respect_to_state(
         &self,
-        delegation: Option<&NNSDelegationBuilder>,
+        delegation: &NNSDelegationBuilder,
     ) -> Option<bool> {
-        let Some(delegation) = delegation else {
-            // No delegation: Initialization or on the NNS subnet: return true to proactively fetch
-            // a new one (which is a no-op on the NNS).
-            return Some(true);
-        };
-
         let state = self.state_reader.get_latest_certified_state()?;
         let network_topology = &state.get_ref().metadata.network_topology;
         delegation
@@ -199,11 +206,20 @@ impl DelegationManager {
     /// caught up (i.e. returns `None`).
     async fn proactive_fetch(&self) -> Option<Option<NNSDelegationBuilder>> {
         let new_delegation = self.fetch().await;
-        if self.is_delegation_valid_with_respect_to_state(new_delegation.as_ref()) == Some(false) {
+
+        // If we do not have any delegation yet, we publish whatever we fetched right now to avoid
+        // delaying the initialization of the readers (i.e. the HTTP endpoints).
+        if matches!(self.last_delegation, PublishedDelegation::Uninitialized) {
+            return Some(new_delegation);
+        }
+
+        if let Some(actual_new_delegation) = &new_delegation
+            && self.is_delegation_valid_with_respect_to_state(actual_new_delegation) == Some(false)
+        {
             // If the new delegation is incompatible with our state, hold it back. Once the state
-            // will have caught up, `reactive_fetch` will fetch the new delegation.
-            // When not being able to determine this (e.g. the call above returned `None`, still
-            // accept it)
+            // will have caught up, `reactive_fetch` will fetch a new delegation.
+            // When not being able to determine this (e.g. the call above returned `None`), still
+            // accept it.
             self.metrics.held_back_delegations.inc();
             return None;
         }
@@ -214,11 +230,18 @@ impl DelegationManager {
     /// Fetches a delegation from the NNS subnet reactively, i.e. only if the current delegation is
     /// incompatible with the certified state. If the delegation is still valid, it will not be
     /// fetched again (i.e. returns `None`).
-    async fn reactive_fetch(
-        &self,
-        old_delegation: Option<&NNSDelegationBuilder>,
-    ) -> Option<Option<NNSDelegationBuilder>> {
-        if self.is_delegation_valid_with_respect_to_state(old_delegation) == Some(false) {
+    async fn reactive_fetch(&self) -> Option<Option<NNSDelegationBuilder>> {
+        let last_delegation = match &self.last_delegation {
+            // If we do not have any delegation yet, we cannot check if it is still valid. Let
+            // `proactive_fetch` handle the initial fetch instead.
+            PublishedDelegation::Uninitialized => return None,
+            // If we are on the NNS subnet, there is nothing to compare against (and nothing to
+            // fetch anyways).
+            PublishedDelegation::AbsentBecauseNNS => return None,
+            PublishedDelegation::Present(delegation) => delegation,
+        };
+
+        if self.is_delegation_valid_with_respect_to_state(last_delegation) == Some(false) {
             // If the old delegation is incompatible with our state, reactively fetch a new one.
             self.metrics.reactive_fetches.inc();
             return Some(self.fetch().await);
@@ -227,7 +250,7 @@ impl DelegationManager {
         None
     }
 
-    async fn run(self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
+    async fn run(mut self, sender: watch::Sender<Option<NNSDelegationBuilder>>) {
         let mut proactive_interval = tokio::time::interval(DELEGATION_PROACTIVE_UPDATE_INTERVAL);
         let mut reactive_interval = tokio::time::interval(DELEGATION_REACTIVE_UPDATE_INTERVAL);
         // If we miss a tick because fetching the delegation took too long (f.ex. because the NNS
@@ -235,40 +258,24 @@ impl DelegationManager {
         // while keeping a consistent duration between ticks.
         proactive_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         reactive_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        // Since we can't distinguish between yet uninitialized and simply not present
-        // (because we are on the NNS subnet) certification delegation, we explicitely keep
-        // track whether the value has been initialized and notify all receivers when we initialize
-        // it for the first time.
-        let mut initialized = false;
-
-        // Keep track of the last delegation we fetched. This is used to compare it with the latest
-        // state.
-        let mut last_delegation = None;
 
         loop {
-            // Fetch the delegation if enough time has passed
+            // Fetch the delegation if enough time has passed.
             let Some(new_delegation) = select!(
                 _ = proactive_interval.tick() => self.proactive_fetch().await,
-                _ = reactive_interval.tick() => self.reactive_fetch(last_delegation.as_ref()).await,
+                _ = reactive_interval.tick() => self.reactive_fetch().await,
             ) else {
                 // No new delegation was fetched. Retry on the next tick.
                 continue;
             };
 
-            sender.send_if_modified(|old_delegation: &mut Option<NNSDelegationBuilder>| {
-                let modified = if &new_delegation != old_delegation {
-                    old_delegation.clone_from(&new_delegation);
-                    self.metrics.updates.inc();
-                    true
-                } else {
-                    false
-                };
+            sender.send_replace(new_delegation.clone());
+            self.metrics.updates.inc();
 
-                modified || !initialized
-            });
-
-            initialized = true;
-            last_delegation = new_delegation;
+            self.last_delegation = match new_delegation {
+                None => PublishedDelegation::AbsentBecauseNNS,
+                Some(delegation) => PublishedDelegation::Present(delegation),
+            };
         }
     }
 }
@@ -1263,7 +1270,7 @@ mod tests {
             CancellationToken::new(),
         );
 
-        reader.wait_until_initialized().await.unwrap();
+        reader.wait_until_updated().await.unwrap();
 
         assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_none());
     }
@@ -1297,7 +1304,7 @@ mod tests {
                 CancellationToken::new(),
             );
 
-            reader.wait_until_initialized().await.unwrap();
+            reader.wait_until_updated().await.unwrap();
 
             let delegation = reader
                 .get_delegation(CanisterRangesFilter::Flat)
@@ -1339,13 +1346,13 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.wait_until_initialized().await.unwrap();
+        reader.wait_until_updated().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_PROACTIVE_UPDATE_INTERVAL`
         // has elapsed.
         assert!(
             timeout(
                 DELEGATION_PROACTIVE_UPDATE_INTERVAL / 2,
-                reader.wait_until_initialized()
+                reader.wait_until_updated()
             )
             .await
             .is_err()
@@ -1377,14 +1384,14 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.wait_until_initialized().await.unwrap();
+        reader.wait_until_updated().await.unwrap();
         // The subsequent delegations should be fetched only after `DELEGATION_PROACTIVE_UPDATE_INTERVAL`
         // has passed. We use a timeout of 2x the interval to give enough margin for the
         // time it takes to fetch the delegation (TLS handshake, HTTP request, etc.).
         assert!(
             timeout(
                 DELEGATION_PROACTIVE_UPDATE_INTERVAL * 2,
-                reader.wait_until_initialized()
+                reader.wait_until_updated()
             )
             .await
             .is_ok()
@@ -1417,7 +1424,7 @@ mod tests {
         );
 
         // The initial *valid* delegation should be fetched immediately.
-        assert!(reader.wait_until_initialized().await.is_ok());
+        assert!(reader.wait_until_updated().await.is_ok());
 
         // Mock an *invalid* certificate delegation.
         *override_nns_delegation.write().unwrap() = Some(CertificateDelegation {
@@ -1430,7 +1437,7 @@ mod tests {
         assert!(
             timeout(
                 DELEGATION_PROACTIVE_UPDATE_INTERVAL,
-                reader.wait_until_initialized()
+                reader.wait_until_updated()
             )
             .await
             .is_err()
@@ -1439,7 +1446,7 @@ mod tests {
         *override_nns_delegation.write().unwrap() = None;
         // The mocked NNS node should now return a valid certification, so we expect that
         // the manager will fetch and send it to all receivers.
-        assert!(reader.wait_until_initialized().await.is_ok());
+        assert!(reader.wait_until_updated().await.is_ok());
     }
 
     #[tokio::test]
@@ -1709,6 +1716,7 @@ mod tests {
             subnet_id: APP_SUBNET_ID,
             subnet_type: SubnetType::Application,
             nns_subnet_id: NNS_SUBNET_ID,
+            last_delegation: PublishedDelegation::Present(old_delegation.clone()),
             state_reader,
             registry_client,
             tls_config,
@@ -1717,18 +1725,13 @@ mod tests {
         };
 
         assert_eq!(
-            manager.is_delegation_valid_with_respect_to_state(Some(&old_delegation)),
+            manager.is_delegation_valid_with_respect_to_state(&old_delegation),
             Some(false)
         );
         // Since the public key changed, `proactive_fetch` should not fetch a new delegation...
         assert!(manager.proactive_fetch().await.is_none());
         // ... while `reactive_fetch` should.
-        assert!(
-            manager
-                .reactive_fetch(Some(&old_delegation))
-                .await
-                .is_some()
-        );
+        assert!(manager.reactive_fetch().await.is_some());
     }
 
     #[tokio::test]
@@ -1750,6 +1753,7 @@ mod tests {
             subnet_id: APP_SUBNET_ID,
             subnet_type: SubnetType::Application,
             nns_subnet_id: NNS_SUBNET_ID,
+            last_delegation: PublishedDelegation::Present(old_delegation.clone()),
             state_reader,
             registry_client,
             tls_config,
@@ -1758,18 +1762,13 @@ mod tests {
         };
 
         assert_eq!(
-            manager.is_delegation_valid_with_respect_to_state(Some(&old_delegation)),
+            manager.is_delegation_valid_with_respect_to_state(&old_delegation),
             Some(true)
         );
         // Since the public key is unchanged, `proactive_fetch` should fetch a new delegation...
         assert!(manager.proactive_fetch().await.is_some());
         // ... while `reactive_fetch` should not.
-        assert!(
-            manager
-                .reactive_fetch(Some(&old_delegation))
-                .await
-                .is_none()
-        );
+        assert!(manager.reactive_fetch().await.is_none());
     }
 
     #[tokio::test]
@@ -1797,12 +1796,12 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.wait_until_initialized().await.unwrap();
+        reader.wait_until_updated().await.unwrap();
 
         // The next refresh can only be produced by `proactive_fetch`.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.wait_until_initialized(),
+            reader.wait_until_updated(),
         )
         .await
         .expect_err(
@@ -1836,7 +1835,7 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.wait_until_initialized().await.unwrap();
+        reader.wait_until_updated().await.unwrap();
 
         // Change the public key in the state, which should trigger a reactive refresh.
         {
@@ -1856,7 +1855,7 @@ mod tests {
         // The next refresh should be produced by `reactive_fetch`.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.wait_until_initialized(),
+            reader.wait_until_updated(),
         )
         .await
         .expect("`reactive_fetch` should refresh the delegation when the public key changed")
@@ -1866,10 +1865,79 @@ mod tests {
         // to refresh the delegation until it matches the current state.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.wait_until_initialized(),
+            reader.wait_until_updated(),
         )
         .await
         .expect("Should try to reactively refresh the delegation until the latter matches the current state")
+        .unwrap();
+    }
+
+    /// Edge case: The *initial* delegation is inconsistent with the certified state, but the
+    /// manager should still publish it immediately. This can happen when restarting on a recovery
+    /// CUP, where the certified state does not reflect the changed public key yet. We still want to
+    /// get an initial delegation as fast as possible to serve requests, and accept the risk that it
+    /// could be inconsistent for a short while.
+    #[tokio::test]
+    async fn manager_run_publishes_initial_delegation_even_if_inconsistent_with_state_test() {
+        let rt_handle = tokio::runtime::Handle::current();
+        let (registry_client, tls_config, state_reader, mutable_state) =
+            set_up_nns_delegation_dependencies(
+                rt_handle.clone(),
+                Arc::new(RwLock::new(None)),
+                /*delay=*/ None,
+                APP_SUBNET_ID,
+            );
+
+        // Make the state disagree with the delegation which the NNS serves *before* the manager
+        // starts.
+        {
+            let mut state = mutable_state.write().unwrap();
+            let subnet_id = state.metadata.own_subnet_id;
+            state.metadata.modify_network_topology(|topology| {
+                topology.set_subnets(BTreeMap::from_iter([(
+                    subnet_id,
+                    SubnetTopology {
+                        public_key: vec![0xDE, 0xAD, 0xBE, 0xEF],
+                        ..Default::default()
+                    },
+                )]));
+            });
+        }
+
+        let (_, mut reader) = start_nns_delegation_manager(
+            &MetricsRegistry::new(),
+            Config::default(),
+            no_op_logger(),
+            rt_handle,
+            APP_SUBNET_ID,
+            SubnetType::Application,
+            NNS_SUBNET_ID,
+            state_reader,
+            registry_client,
+            tls_config,
+            CancellationToken::new(),
+        );
+
+        // The initial delegation should be published immediately, even though it is inconsistent
+        // with the state. The window is kept below any interval to ensure that the manager does not
+        // wait for any interval.
+        timeout(
+            DELEGATION_REACTIVE_UPDATE_INTERVAL / 2,
+            reader.wait_until_updated(),
+        )
+        .await
+        .expect("The initial delegation should be published without waiting for the state")
+        .unwrap();
+        assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_some());
+
+        // Since the state disagrees with what the NNS keeps serving, the manager should keep
+        // reactively refreshing the delegation.
+        timeout(
+            DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
+            reader.wait_until_updated(),
+        )
+        .await
+        .expect("`reactive_fetch` should refresh a delegation which is inconsistent with the state")
         .unwrap();
     }
 
@@ -1939,7 +2007,7 @@ mod tests {
         );
 
         // The initial delegation should be fetched immediately.
-        reader.wait_until_initialized().await.unwrap();
+        reader.wait_until_updated().await.unwrap();
 
         // Change the canister ranges in the state, which should trigger a reactive refresh.
         {
@@ -1959,7 +2027,7 @@ mod tests {
         // The next refresh should be produced by `reactive_fetch`.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.wait_until_initialized(),
+            reader.wait_until_updated(),
         )
         .await
         .expect("`reactive_fetch` should refresh the delegation when the canister ranges changed")
@@ -1969,7 +2037,7 @@ mod tests {
         // to refresh the delegation until it matches the current state.
         timeout(
             DELEGATION_REACTIVE_UPDATE_INTERVAL * 2,
-            reader.wait_until_initialized(),
+            reader.wait_until_updated(),
         )
         .await
         .expect("Should try to reactively refresh the delegation until the latter matches the current state")

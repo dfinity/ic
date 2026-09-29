@@ -146,6 +146,13 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
         Ok(())
     }
 
+    /// Repeatedly calls `bitcoin_get_successors` starting from `anchor` until at least
+    /// `max_num_blocks` blocks have been collected or `max_tries` requests have been made.
+    ///
+    /// Every request counts towards `max_tries`, whether it returned blocks or failed with a
+    /// transient adapter error (see [`is_transient_adapter_reject_message`]). Transient errors
+    /// are retried after a one second pause; once `max_tries` is exhausted the last transient
+    /// error is returned. Any other error is returned immediately.
     pub async fn sync_blocks(
         &self,
         headers: &mut Vec<Vec<u8>>,
@@ -158,36 +165,24 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
 
         while blocks.len() < max_num_blocks && tries < max_tries {
             let (new_blocks, _) = loop {
+                tries += 1;
                 match self.get_successors(anchor.clone(), headers.clone()).await {
                     // Break inner loop, if adapter returned data
                     Ok(successor) => break successor,
-                    // Retry on transient adapter errors. The request fails with
-                    // `Unavailable` while the adapter is not yet reachable (e.g. still
-                    // starting up or syncing the header chain), and with
-                    // `Cancelled(Timeout expired)` when the adapter does not respond within
-                    // the replica's (short, 50ms) adapter timeout, which can happen e.g. for
-                    // the very first request right after the adapter started. Both are
-                    // transient, so the request should simply be retried.
-                    //
-                    // Note: the call is proxied through the `message` canister, which
-                    // re-rejects any error via `msg_reject`. The reject code observed here is
-                    // therefore always `CanisterReject`, regardless of the adapter's original
-                    // reject code, so we match on the reject message instead.
-                    Err(AgentError::CertifiedReject { reject, .. })
-                    | Err(AgentError::UncertifiedReject { reject, .. })
-                        if reject.reject_message.starts_with("Unavailable")
-                            || reject.reject_message.starts_with("Cancelled") => {}
+                    Err(err) if is_transient_adapter_reject(&err) => {
+                        // Don't retry forever: once `max_tries` is exhausted, surface the last
+                        // transient error instead of silently returning the blocks collected
+                        // so far.
+                        if tries >= max_tries {
+                            return Err(err);
+                        }
+                        info!(
+                            self.log,
+                            "Transient adapter error on get_successors try {tries}/{max_tries}, retrying in 1s: {err}"
+                        );
+                    }
                     // Other errors are fatal
                     Err(err) => return Err(err),
-                }
-
-                tries += 1;
-                // Don't retry forever: once `max_tries` is exhausted, give up and
-                // return the blocks collected so far (matching the outer loop's
-                // behaviour) instead of looping indefinitely on a persistently failing
-                // adapter.
-                if tries >= max_tries {
-                    break (vec![], vec![]);
                 }
                 tokio::time::sleep(Duration::from_secs(1)).await;
             };
@@ -200,7 +195,6 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
             headers.extend(new_headers);
             blocks.extend(new_blocks);
 
-            tries += 1;
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
@@ -239,6 +233,52 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
 
         Ok((vec![reconstructed_block], next))
     }
+}
+
+/// Returns whether `err` is a transient adapter error that is worth retrying.
+///
+/// Requests to the adapter are proxied through the `message` canister, which re-rejects any
+/// error from the management canister via `msg_reject`, so the reject code observed by the
+/// caller is always `CanisterReject` regardless of the original one. The classification
+/// therefore has to be based on the reject message, see
+/// [`is_transient_adapter_reject_message`].
+fn is_transient_adapter_reject(err: &AgentError) -> bool {
+    match err {
+        AgentError::CertifiedReject { reject, .. }
+        | AgentError::UncertifiedReject { reject, .. } => {
+            is_transient_adapter_reject_message(&reject.reject_message)
+        }
+        _ => false,
+    }
+}
+
+/// Returns whether a reject message received through the `message` proxy canister describes a
+/// transient adapter error.
+///
+/// The bitcoin payload builder turns every adapter `RpcError` into a `SysTransient` reject whose
+/// message is the error's `Display`: `Unavailable(...)` while the replica cannot connect to the
+/// adapter's socket yet (tonic maps a refused/reset connection to `Code::Unavailable`, with the
+/// transport error as the message), or `Cancelled(Timeout expired)` when the adapter did not
+/// respond within the replica's (short, 50ms by default) adapter timeout, which regularly
+/// happens for the very first request after the adapter started. Only these two are transient;
+/// `ConnectionBroken` and `Unknown(...)` are fatal, so the reject code alone cannot be used to
+/// decide whether to retry.
+///
+/// The `message` canister rejects with ic-cdk's `CallRejected` `Display`, so the message
+/// arrives wrapped as `"call rejected: <code> - <adapter error>"` (before the canister migrated
+/// to the new ic-cdk call API it was the adapter error verbatim). Unwrap that envelope, if
+/// present, and classify by the top-level `RpcError` variant only, so that a fatal
+/// `Unknown(...)` whose inner text happens to mention a transient variant is not retried. The
+/// unit tests derive the envelope from ic-cdk itself, so a change of the wrapper text fails
+/// loudly instead of silently disabling the retry again.
+fn is_transient_adapter_reject_message(reject_message: &str) -> bool {
+    let adapter_error = reject_message
+        .strip_prefix("call rejected: ")
+        .and_then(|rest| rest.split_once(" - "))
+        .map_or(reject_message, |(_reject_code, adapter_error)| {
+            adapter_error
+        });
+    adapter_error.starts_with("Unavailable(") || adapter_error.starts_with("Cancelled(")
 }
 
 pub fn fund_with_tokens<T: RpcClientType>(
@@ -293,4 +333,86 @@ fn calculate_regtest_reward<T: RpcClientType>(height: u64) -> Amount {
     let halvings = (height / 150) as u32;
     let base_reward = T::REGTEST_INITIAL_BLOCK_REWARDS;
     base_reward / 2_u64.pow(halvings)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_transient_adapter_reject_message;
+    use ic_agent::agent::RejectCode;
+    use ic_cdk::call::{CallFailed, CallRejected};
+
+    /// Wraps an adapter error the way the `message` canister does: it rejects with
+    /// `CallFailed::to_string()` of the reject it received from the management canister, whose
+    /// reject code is `SysTransient` for every adapter error (see the bitcoin payload builder).
+    fn proxied(adapter_error: &str) -> String {
+        CallFailed::CallRejected(CallRejected::with_rejection(
+            RejectCode::SysTransient as u32,
+            adapter_error.to_string(),
+        ))
+        .to_string()
+    }
+
+    #[test]
+    fn proxied_envelope_matches_ic_cdk() {
+        // The envelope unwrapped by `is_transient_adapter_reject_message` must be the one ic-cdk
+        // actually produces.
+        assert_eq!(
+            proxied("Cancelled(Timeout expired)"),
+            "call rejected: 2 - Cancelled(Timeout expired)"
+        );
+    }
+
+    #[test]
+    fn raw_transient_adapter_errors_are_retried() {
+        // Reject messages in the form produced by the bitcoin payload builder (the adapter
+        // `RpcError` `Display`), i.e. how the `message` canister used to pass them on verbatim.
+        // `Cancelled(Timeout expired)` is verbatim; the inner text of `Unavailable(..)` is tonic's
+        // transport error.
+        assert!(is_transient_adapter_reject_message(
+            "Cancelled(Timeout expired)"
+        ));
+        assert!(is_transient_adapter_reject_message(
+            "Unavailable(Connection refused (os error 111))"
+        ));
+    }
+
+    #[test]
+    fn proxied_transient_adapter_errors_are_retried() {
+        // Reject messages as re-rejected by the `message` canister.
+        assert!(is_transient_adapter_reject_message(&proxied(
+            "Cancelled(Timeout expired)"
+        )));
+        assert!(is_transient_adapter_reject_message(&proxied(
+            "Unavailable(Connection refused (os error 111))"
+        )));
+    }
+
+    #[test]
+    fn other_errors_are_fatal() {
+        assert!(!is_transient_adapter_reject_message(&proxied(
+            "Unknown(unexpected error)"
+        )));
+        assert!(!is_transient_adapter_reject_message(&proxied(
+            "ConnectionBroken"
+        )));
+        assert!(!is_transient_adapter_reject_message(
+            "call rejected: 5 - Canister trapped explicitly: Unavailable"
+        ));
+        assert!(!is_transient_adapter_reject_message(""));
+    }
+
+    #[test]
+    fn fatal_errors_mentioning_transient_variants_are_not_retried() {
+        // Only the top-level `RpcError` variant decides; a fatal `Unknown(..)` whose inner text
+        // happens to contain a transient variant must not be retried, whether wrapped or not.
+        assert!(!is_transient_adapter_reject_message(&proxied(
+            "Unknown(Cancelled(upstream))"
+        )));
+        assert!(!is_transient_adapter_reject_message(
+            "Unknown(Unavailable(Connection refused (os error 111)))"
+        ));
+        assert!(!is_transient_adapter_reject_message(
+            "call rejected: 2 - something else - Cancelled(Timeout expired)"
+        ));
+    }
 }

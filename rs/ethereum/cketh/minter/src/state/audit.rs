@@ -123,7 +123,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             state.next_sweep_id = request.id.next();
             state.automatic_deposits.record_sweep_scheduled(
                 request.id,
-                request.token,
+                request.asset,
                 request.items.iter().map(|item| item.item.account),
             );
             state.update_sweeper_balance_upon_accepted_sweep(request);

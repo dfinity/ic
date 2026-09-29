@@ -1169,6 +1169,7 @@ fn state_equivalence() {
     };
     let state = State {
         sweeper_funding: Default::default(),
+        sweep_observations: Default::default(),
         next_sweep_id: SweepId(0),
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),

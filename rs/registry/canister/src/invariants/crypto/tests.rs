@@ -740,12 +740,12 @@ mod chain_key_enabled_subnet_lists {
     }
 
     #[test]
-    #[should_panic(expected = "Unable to convert 2 to an EcdsaCurve")]
+    #[should_panic(expected = "Unable to convert 3 to an EcdsaCurve")]
     fn should_fail_if_unkown_ecdsa_curve() {
         let mut config = invariant_compliant_chain_key_config();
         config.key_configs[1].key_id = Some(MasterPublicKeyIdPb {
             key_id: Some(master_public_key_id::KeyId::Ecdsa(pb::EcdsaKeyId {
-                curve: 2,
+                curve: 3,
                 name: "ecdsa_key".to_string(),
             })),
         });

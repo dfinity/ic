@@ -697,6 +697,26 @@ fn canister_creation_timestamp_survives_a_checkpoint() {
 }
 
 #[test]
+fn round_instructions_total_survives_a_checkpoint() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let (height, mut state) = state_manager.take_tip();
+        assert_eq!(height, Height(0));
+        state.metadata.subnet_metrics.round_instructions_total = 42_000_000;
+        state_manager.commit_and_certify(state, CertificationScope::Full, None);
+
+        // Restart the state manager so the state is reloaded from the checkpoint.
+        let state_manager = restart_fn(state_manager, None);
+
+        let (height, state) = state_manager.take_tip();
+        assert_eq!(height, Height(1));
+        assert_eq!(
+            state.metadata.subnet_metrics.round_instructions_total,
+            42_000_000
+        );
+    });
+}
+
+#[test]
 fn last_install_timestamp_survives_a_checkpoint() {
     use ic_types::time::Time;
     state_manager_restart_test(|state_manager, restart_fn| {
@@ -1749,8 +1769,6 @@ fn cannot_remove_latest_height_or_checkpoint() {
             Some(&Height(10))
         );
 
-        // We need to wait for hashing to complete, otherwise the
-        // checkpoint can be retained until the hashing is complete.
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(Height(11));
         state_manager.remove_inmemory_states_below(Height(11), &BTreeSet::new());
@@ -1800,10 +1818,8 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
                 CertificationScope::Metadata
             };
 
-            state_manager.commit_and_certify(state, scope.clone(), None);
+            state_manager.commit_and_certify_sync(state, scope.clone(), None);
         }
-        // We need to wait for hashing to complete, otherwise the
-        // checkpoint can be retained until the hashing is complete.
         state_manager.flush_tip_channel();
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
@@ -1855,10 +1871,8 @@ fn remove_inmemory_states_below_can_keep_extra_states() {
                 CertificationScope::Metadata
             };
 
-            state_manager.commit_and_certify(state, scope.clone(), None);
+            state_manager.commit_and_certify_sync(state, scope.clone(), None);
         }
-        // We need to wait for hashing to complete, otherwise the
-        // checkpoint can be retained until the hashing is complete.
         state_manager.flush_tip_channel();
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
@@ -2310,7 +2324,7 @@ fn can_keep_the_latest_snapshot_after_removal() {
                 CertificationScope::Metadata
             };
 
-            state_manager.commit_and_certify(state, scope.clone(), None);
+            state_manager.commit_and_certify_sync(state, scope.clone(), None);
         }
         state_manager.flush_tip_channel();
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
@@ -2341,7 +2355,7 @@ fn can_purge_intermediate_snapshots() {
                 CertificationScope::Metadata
             };
 
-            state_manager.commit_and_certify(state, scope.clone(), None);
+            state_manager.commit_and_certify_sync(state, scope.clone(), None);
         }
         state_manager.flush_tip_channel();
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);

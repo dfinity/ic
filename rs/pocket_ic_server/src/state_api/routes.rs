@@ -36,6 +36,7 @@ use axum::{
 use axum_extra::headers;
 use axum_extra::headers::HeaderMapExt;
 use backon::{BackoffBuilder, ExponentialBuilder};
+use base64::prelude::*;
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
 use ic_registry_routing_table::RoutingTable;
@@ -354,7 +355,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                         break (
                             StatusCode::ACCEPTED,
                             ApiResponse::Started {
-                                state_label: base64::encode_config(state_label.0, base64::URL_SAFE),
+                                state_label: BASE64_URL_SAFE.encode(state_label.0),
                                 op_id: op_id.0.to_string(),
                             },
                         );
@@ -382,10 +383,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                             break (
                                 StatusCode::CONFLICT,
                                 ApiResponse::Busy {
-                                    state_label: base64::encode_config(
-                                        state_label.0,
-                                        base64::URL_SAFE,
-                                    ),
+                                    state_label: BASE64_URL_SAFE.encode(state_label.0),
                                     op_id: op_id.0.to_string(),
                                 },
                             );
@@ -1254,7 +1252,7 @@ pub async fn handler_read_graph(
     // TODO: type state label and op id correctly but such that axum can handle it
     Path((state_label_str, op_id_str)): Path<(String, String)>,
 ) -> Response {
-    let Ok(vec) = base64::decode_config(state_label_str.as_bytes(), base64::URL_SAFE) else {
+    let Ok(vec) = BASE64_URL_SAFE.decode(state_label_str.as_bytes()) else {
         return (StatusCode::BAD_REQUEST, "Malformed state label.").into_response();
     };
     if let Ok(state_label) = StateLabel::try_from(vec) {
@@ -1289,7 +1287,7 @@ pub async fn handler_prune_graph(
     State(AppState { api_state, .. }): State<AppState>,
     Path((state_label_str, op_id_str)): Path<(String, String)>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
-    let Ok(vec) = base64::decode_config(state_label_str.as_bytes(), base64::URL_SAFE) else {
+    let Ok(vec) = BASE64_URL_SAFE.decode(state_label_str.as_bytes()) else {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::Error {

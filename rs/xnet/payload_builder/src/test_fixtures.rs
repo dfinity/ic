@@ -2,6 +2,7 @@
 
 use super::*;
 use ic_base_types::PrincipalId;
+use ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
 use ic_interfaces_state_manager::CertificationScope;
 use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, NodeRecord},
@@ -10,12 +11,15 @@ use ic_protobuf::registry::{
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     ReplicatedState, Stream,
     metadata_state::StreamMap,
     testing::{ReplicatedStateTesting, StreamTesting},
 };
+use ic_state_manager::stream_encoding;
 use ic_test_utilities::state_manager::FakeStateManager;
+use ic_test_utilities_consensus::fake::Fake;
 use ic_test_utilities_registry::test_subnet_record;
 use ic_test_utilities_types::{
     ids::{
@@ -25,8 +29,11 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    Height, NumBytes, RegistryVersion, SubnetId,
+    CryptoHashOfPartialState, Height, NumBytes, RegistryVersion, SubnetId,
+    consensus::certification::{Certification, CertificationContent},
+    crypto::{CryptoHash, Signed},
     messages::CallbackId,
+    signature::ThresholdSignature,
     time::UNIX_EPOCH,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue},
 };
@@ -45,7 +52,7 @@ pub(crate) const SRC_CANISTER: u64 = 2;
 pub(crate) const DST_CANISTER: u64 = 3;
 pub(crate) const CALLBACK_ID: u64 = 4;
 
-pub(crate) const PAYLOAD_BYTES_LIMIT: NumBytes = NumBytes::new(POOL_SLICE_BYTE_SIZE_MAX as u64);
+pub(crate) const PAYLOAD_BYTES_LIMIT: NumBytes = NumBytes::new(4 << 20);
 
 pub(crate) const LOCAL_NODE_1_OPERATOR_1: NodeId = NODE_1;
 pub(crate) const REMOTE_NODE_1_OPERATOR_1: NodeId = NODE_2;
@@ -162,11 +169,15 @@ pub(crate) fn get_xnet_state_for_testing_with_subnet_type(
     (
         vec![payload_3, payload_2, payload_1],
         btreemap![
-            SUBNET_1 => ExpectedIndices {message_index:StreamIndex::new(21), signal_index:StreamIndex::new(16)},
-            SUBNET_2 => ExpectedIndices {message_index:StreamIndex::new(7), signal_index:StreamIndex::new(3)},
-            SUBNET_3 => ExpectedIndices {message_index:StreamIndex::new(2), signal_index:StreamIndex::new(0)},
-            SUBNET_4 => ExpectedIndices {message_index:StreamIndex::new(1), signal_index:StreamIndex::new(0)},
-            SUBNET_5 => ExpectedIndices {message_index:StreamIndex::new(0), signal_index:StreamIndex::new(0)},
+            // None of these streams hold reject signals, so nothing constrains
+            // `max_no_gc_header_begin`.
+            // See `expected_indices_for_stream_reject_signal_gc()` for the cases where
+            // reject signals actually constrain it.
+            SUBNET_1 => ExpectedIndices { message_index: 21.into(), signal_index: 16.into(), ..Default::default()},
+            SUBNET_2 => ExpectedIndices { message_index: 7.into(), signal_index: 3.into(), ..Default::default()},
+            SUBNET_3 => ExpectedIndices { message_index: 2.into(), signal_index: 0.into(), ..Default::default()},
+            SUBNET_4 => ExpectedIndices { message_index: 1.into(), signal_index: 0.into(), ..Default::default()},
+            SUBNET_5 => ExpectedIndices { message_index: 0.into(), signal_index: 0.into(), ..Default::default()},
         ],
     )
 }
@@ -202,6 +213,16 @@ pub(crate) fn make_certified_stream_slice(
     from: SubnetId,
     config: StreamConfig,
 ) -> CertifiedStreamSlice {
+    make_certified_stream_slice_with_msg_limit(from, config, None)
+}
+
+/// As `make_certified_stream_slice()`, but including at most `msg_limit`
+/// messages, e.g. `Some(0)` for a header-only slice of a non-empty stream.
+pub(crate) fn make_certified_stream_slice_with_msg_limit(
+    from: SubnetId,
+    config: StreamConfig,
+    msg_limit: Option<usize>,
+) -> CertifiedStreamSlice {
     let state_manager = FakeStateManager::new();
     let (mut height, mut state) = state_manager.take_tip();
     while height < CERTIFIED_HEIGHT.decrement() {
@@ -216,10 +237,49 @@ pub(crate) fn make_certified_stream_slice(
             from,
             Some(StreamIndex::new(config.message_begin)),
             Some(StreamIndex::new(config.message_begin)),
-            Some((config.message_end - config.message_begin) as usize),
+            msg_limit.or(Some((config.message_end - config.message_begin) as usize)),
             None,
         )
         .unwrap()
+}
+
+/// Creates an advert for `LOCAL_SUBNET` out of the given stream: a header-only
+/// `CertifiedStreamSlice`, with empty witness and certification.
+///
+/// Unlike `make_certified_stream_slice`, which goes through `FakeStateManager`
+/// and its test-only CBOR encoding, this uses the canonical encoding and can be
+/// handed directly to `decode_slice_header()`.
+pub(crate) fn make_advert(stream: &Stream) -> CertifiedStreamSlice {
+    // `REMOTE_SUBNET`'s state, holding the advertised stream to us.
+    let mut state = ReplicatedState::new(REMOTE_SUBNET, SubnetType::Application);
+    state.with_streams(btreemap![LOCAL_SUBNET => stream.clone()]);
+    state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
+
+    let begin = stream.messages_begin();
+    let (tree, _) = stream_encoding::encode_stream_slice(
+        &state,
+        CERTIFIED_HEIGHT,
+        LOCAL_SUBNET,
+        begin,
+        begin,
+        None,
+        false,
+    );
+
+    CertifiedStreamSlice {
+        payload: stream_encoding::encode_tree(tree),
+        merkle_proof: vec![],
+        certification: Certification {
+            height: CERTIFIED_HEIGHT,
+            height_witness: None,
+            signed: Signed {
+                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
+                    vec![],
+                ))),
+                signature: ThresholdSignature::fake(),
+            },
+        },
+    }
 }
 
 /// Configuration for generating a stream: begin/end indices for messages; and
@@ -339,7 +399,7 @@ pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
             LOCAL_SUBNET,
             expected_index,
             expected_index,
-            (POOL_SLICE_BYTE_SIZE_MAX - 350) * 98 / 100
+            adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX)
         ));
     }
 

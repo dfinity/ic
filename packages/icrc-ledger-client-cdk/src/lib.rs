@@ -8,16 +8,30 @@ pub use icrc_ledger_client::{ICRC1Client, Runtime};
 
 /// Translates a failed call into the `(reject code, message)` pair that
 /// [`Runtime`] reports to its callers.
+///
+/// The match is deliberately exhaustive (rather than using a catch-all arm) so
+/// that a new [`Error`] variant forces us to revisit this mapping instead of
+/// silently misclassifying it.
 fn map_call_error(err: Error) -> (i32, String) {
     match err {
+        // The system (or the callee) already rejected the call and assigned a reject
+        // code; surface it unchanged.
         Error::CallRejected(rejected) => (
             rejected.raw_reject_code() as i32,
             rejected.reject_message().to_string(),
         ),
-        // A response that cannot be decoded means the callee misbehaved.
+        // The callee replied, but its response did not decode into the expected type,
+        // so it did not honor its interface: treat it as a canister-side error.
         Error::CandidDecodeFailed(err) => (RejectCode::CanisterError as i32, err.to_string()),
-        // The call never left this canister, so it may well succeed if retried.
-        err => (RejectCode::SysTransient as i32, err.to_string()),
+        // The call was not performed because this canister's liquid cycles balance
+        // was too low. The protocol itself classifies an insufficient cycles balance
+        // as `SysTransient`, so mirror that here rather than remapping it.
+        Error::InsufficientLiquidCycleBalance(err) => {
+            (RejectCode::SysTransient as i32, err.to_string())
+        }
+        // `ic0.call_perform` could not enqueue the call (e.g. a full output queue),
+        // a transient system condition that a later retry may clear.
+        Error::CallPerformFailed(err) => (RejectCode::SysTransient as i32, err.to_string()),
     }
 }
 

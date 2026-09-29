@@ -17,7 +17,7 @@ use crate::driver::{
 use crate::driver::{
     keepalive_task::{KEEPALIVE_TASK_NAME, keepalive_task},
     log_consoles_task::{LOG_CONSOLES_TASK_NAME, log_consoles_task},
-    logs_stream_task::{LOGS_STREAM_TASK_NAME, logs_stream_task},
+    logs_stream_task::{LOGS_STREAM_TASK_NAME, journald_node_logs_dir, logs_stream_task},
     metrics_setup_task::{METRICS_SETUP_TASK_NAME, metrics_setup_task},
     metrics_sync_task::{METRICS_SYNC_TASK_NAME, metrics_sync_task},
     report::SystemTestGroupError,
@@ -25,6 +25,7 @@ use crate::driver::{
     subprocess_task::SubprocessTask,
     task::{SkipTestTask, Task},
     timeout::TimeoutTask,
+    unallowed_log_patterns::{LogSource, check_unallowed_log_patterns},
     vector_logging_task::{VECTOR_LOGGING_TASK_NAME, vector_logging_task},
 };
 use crate::driver::{
@@ -34,7 +35,6 @@ use crate::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_setup::{GroupSetup, SystemTestBackend},
 };
-use crate::util::block_on;
 use anyhow::{Result, bail};
 use chrono::Utc;
 use clap::Parser;
@@ -128,18 +128,21 @@ pub struct CliArgs {
     )]
     pub enable_metrics: bool,
 
-    #[clap(long = "no-logs", help = "If set, the vector vm will not be spawned.")]
+    #[clap(
+        long = "no-logs",
+        help = "If set, the vector vm will not be spawned. On Farm this also disables the `assert_no_unallowed_log_patterns` teardown, which queries the logs that vector ships to ElasticSearch."
+    )]
     pub no_logs: bool,
 
     #[clap(
         long = "exclude-logs",
-        help = "The list of regexes which will be skipped from the streaming."
+        help = "The list of regexes which will be skipped from the streaming. Note that on the local backend an IC node excluded from streaming is not scanned by the `assert_no_unallowed_log_patterns` teardown either."
     )]
     pub exclude_logs: Vec<Regex>,
 
     #[clap(
         long = "stream-ic-node-logs",
-        help = "If set, the journald logs of all IC nodes are streamed to the test log. Used by the local backend which has no Vector VM to ship logs to ElasticSearch."
+        help = "If set, the journald logs of all IC nodes are streamed to the test log and persisted under `<working-dir>/journald_logs/nodes/<node_id>.jsonl`. Used by the local backend which has no Vector VM to ship logs to ElasticSearch; there the `assert_no_unallowed_log_patterns` teardown scans those files instead."
     )]
     pub stream_ic_node_logs: bool,
 
@@ -216,7 +219,7 @@ impl TestEnvAttribute for SetupResult {
 /// (which run in separate child processes where `Utc::now()` would otherwise reflect only
 /// the teardown process start) can query log backends for the full test duration.
 #[derive(Deserialize, Serialize)]
-struct GroupStartTime(chrono::DateTime<Utc>);
+pub(crate) struct GroupStartTime(pub(crate) chrono::DateTime<Utc>);
 
 impl TestEnvAttribute for GroupStartTime {
     fn attribute_name() -> String {
@@ -351,217 +354,6 @@ fn get_or_create_env(gctx: GroupContext, task_id: TaskId) -> Result<TestEnv> {
     process_ctx.group_context.create_test_env(&task_id.name())
 }
 
-/// Query ElasticSearch for IC log lines produced by the Farm group of the current test whose
-/// `MESSAGE` field matches any of the provided unallowed patterns using ElasticSearch phrase
-/// matching semantics (`match_phrase`). Each pattern can be paired with a set of exclusion
-/// phrases: a log line only counts as a match if its `MESSAGE` matches the pattern AND does
-/// not match any of the pattern's exclusions.
-/// Panics if at least one matching log line is found. Transport / parse errors are logged
-/// and treated as a soft-skip, matching the behaviour of the metrics teardown.
-fn check_unallowed_log_patterns(env: &TestEnv, patterns: &BTreeMap<String, BTreeSet<String>>) {
-    if patterns.is_empty() {
-        return;
-    }
-
-    let logger = env.logger();
-
-    let group_setup = match GroupSetup::try_read_attribute(env) {
-        Ok(g) => g,
-        Err(e) => {
-            info!(
-                logger,
-                "GroupSetup attribute is not available ({e:?}) \
-                 => skipping unallowed log pattern check."
-            );
-            return;
-        }
-    };
-    let group_name = group_setup.infra_group_name;
-    let start_time = match GroupStartTime::try_read_attribute(env) {
-        Ok(g) => g.0,
-        Err(e) => {
-            info!(
-                logger,
-                "GroupStartTime attribute is not available ({e:?}) \
-                 => skipping unallowed log pattern check."
-            );
-            return;
-        }
-    };
-    let end_time = Utc::now();
-
-    // One `should` clause per pattern: match_phrase on the pattern, minus match_phrase on
-    // any of its exclusions. A hit needs to satisfy at least one such clause.
-    let should: Vec<serde_json::Value> = patterns
-        .iter()
-        .map(|(pattern, exclusions)| {
-            let must_not: Vec<serde_json::Value> = exclusions
-                .iter()
-                .map(|e| serde_json::json!({ "match_phrase": { "MESSAGE": e } }))
-                .collect();
-            serde_json::json!({
-                "bool": {
-                    "filter": [ { "match_phrase": { "MESSAGE": pattern } } ],
-                    "must_not": must_not,
-                }
-            })
-        })
-        .collect();
-
-    let body = serde_json::json!({
-        "size": 100,
-        "query": {
-            "bool": {
-                "must": [
-                    { "match_phrase": { "ic": group_name } },
-                    { "range": { "timestamp": {
-                        "gte": start_time.to_rfc3339(),
-                        "lte": end_time.to_rfc3339(),
-                    }}},
-                ],
-                "should": should,
-                "minimum_should_match": 1,
-            }
-        },
-        "_source": ["timestamp", "ic_node", "MESSAGE"],
-    });
-
-    let url = "https://elasticsearch.testnet.dfinity.network/testnet-vector-push-*/_search?filter_path=hits.hits";
-
-    info!(
-        logger,
-        "Querying {url} for unallowed log patterns with body: {body} ..."
-    );
-
-    let client = match reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(60))
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            info!(
-                logger,
-                "Failed to build reqwest client for ES query ({e:?}) \
-                 => skipping unallowed log pattern check."
-            );
-            return;
-        }
-    };
-
-    let response: Result<serde_json::Value, reqwest::Error> = block_on(async {
-        client
-            .post(url)
-            .json(&body)
-            .send()
-            .await?
-            .error_for_status()?
-            .json::<serde_json::Value>()
-            .await
-    });
-
-    let value = match response {
-        Ok(v) => v,
-        Err(e) => {
-            info!(
-                logger,
-                "Failed to query ElasticSearch for unallowed log patterns ({e:?}) \
-                 => skipping unallowed log pattern check."
-            );
-            return;
-        }
-    };
-
-    let hits = value
-        .get("hits")
-        .and_then(|h| h.get("hits"))
-        .and_then(|h| h.as_array())
-        .cloned()
-        .unwrap_or_default();
-
-    if hits.is_empty() {
-        return;
-    }
-
-    // Group each hit to the pattern(s) it contains.
-    let mut matches_by_pattern: BTreeMap<&String, Vec<String>> = BTreeMap::new();
-    for hit in &hits {
-        let source = match hit.get("_source") {
-            Some(s) => s,
-            None => continue,
-        };
-        let message = source.get("MESSAGE").and_then(|m| m.as_str()).unwrap_or("");
-        let timestamp = source
-            .get("timestamp")
-            .and_then(|t| t.as_str())
-            .unwrap_or("");
-        let node = source.get("ic_node").and_then(|n| n.as_str()).unwrap_or("");
-        for (pattern, exclusions) in patterns {
-            if message.contains(pattern) && !exclusions.iter().any(|e| message.contains(e)) {
-                matches_by_pattern
-                    .entry(pattern)
-                    .or_default()
-                    .push(format!("[{timestamp} {node}] {message}"));
-            }
-        }
-    }
-
-    const MAX_SAMPLES_PER_PATTERN: usize = 3;
-    let mut report = String::new();
-    if matches_by_pattern.is_empty() {
-        report.push_str(&format!(
-            "\n- ElasticSearch returned {} hit(s), but none could be attributed via local MESSAGE substring matching.\n",
-            hits.len()
-        ));
-        for hit in hits.iter().take(MAX_SAMPLES_PER_PATTERN) {
-            let source = match hit.get("_source") {
-                Some(s) => s,
-                None => {
-                    report.push_str("    [missing _source]\n");
-                    continue;
-                }
-            };
-            let message = source.get("MESSAGE").and_then(|m| m.as_str()).unwrap_or("");
-            let timestamp = source
-                .get("timestamp")
-                .and_then(|t| t.as_str())
-                .unwrap_or("");
-            let node = source.get("ic_node").and_then(|n| n.as_str()).unwrap_or("");
-            report.push_str(&format!("    [{timestamp} {node}] {message}\n"));
-        }
-        if hits.len() > MAX_SAMPLES_PER_PATTERN {
-            report.push_str(&format!(
-                "    ... and {} more raw hit(s)\n",
-                hits.len() - MAX_SAMPLES_PER_PATTERN
-            ));
-        }
-    } else {
-        for (pattern, lines) in &matches_by_pattern {
-            report.push_str(&format!(
-                "\n- Pattern `{pattern}`: {} match(es)\n",
-                lines.len()
-            ));
-            for line in lines.iter().take(MAX_SAMPLES_PER_PATTERN) {
-                report.push_str(&format!("    {line}\n"));
-            }
-            if lines.len() > MAX_SAMPLES_PER_PATTERN {
-                report.push_str(&format!(
-                    "    ... and {} more\n",
-                    lines.len() - MAX_SAMPLES_PER_PATTERN
-                ));
-            }
-        }
-    }
-
-    panic!(
-        "Found unallowed log patterns in IC logs for group `{group_name}`:{report}\n\
-         If these patterns are expected in the test, create `SystemTestGroup` with \
-         `add_unallowed_log_pattern_except(\"<pattern>\", \"<exclusion>\")`, \
-         `remove_unallowed_log_pattern(\"<pattern>\")`, or \
-         `remove_all_unallowed_log_patterns()`.",
-    );
-}
-
 pub enum SystemTestSubGroup {
     Multiple {
         tasks: Vec<SystemTestSubGroup>,
@@ -674,6 +466,8 @@ fn default_replica_metrics() -> BTreeMap<&'static str, u64> {
         ("idkg_invalidated_artifacts", 0),
         ("certification_invalidated_artifacts", 0),
         ("canister_http_invalidated_artifacts", 0),
+        ("mr_canister_http_accounting_errors_total", 0),
+        ("canister_http_pool_manager_errors", 0),
     ])
 }
 
@@ -760,8 +554,10 @@ pub struct SystemTestGroup {
     replica_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
     orchestrator_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
     /// Map from an unallowed log phrase to a set of exclusion phrases. A log line counts
-    /// as a match if its `MESSAGE` matches the pattern (ES `match_phrase`) and does not
-    /// match any of the associated exclusions.
+    /// as a match if its (Vector-normalized) `MESSAGE` contains the pattern and does not
+    /// contain any of the associated exclusions, comparing ASCII case-insensitively.
+    /// See `crate::driver::unallowed_log_patterns` for how the IC node logs are obtained
+    /// on each backend.
     unallowed_log_patterns: BTreeMap<String, BTreeSet<String>>,
 }
 
@@ -866,11 +662,12 @@ impl SystemTestGroup {
         self
     }
 
-    /// Add a log-message phrase pattern that must not match any IC log line collected during
-    /// the test. After the test, ElasticSearch is queried using `match_phrase` semantics on
-    /// the `MESSAGE` field, and the test fails if at least one matching log line is found.
-    /// This is not a raw-substring search: matching depends on the indexed field's
-    /// analyzer/tokenization behavior.
+    /// Add a log-message phrase pattern that must not appear in any IC node log line
+    /// collected during the test. After the tests, the IC node logs are checked and the
+    /// test fails if at least one log line contains the pattern (ASCII case-insensitively,
+    /// plain phrase, not a regex): on Farm by querying ElasticSearch (`match_phrase` on the
+    /// `MESSAGE` field as a pre-filter), on the local backend by scanning the journald
+    /// records persisted by `logs_stream_task`. See `crate::driver::unallowed_log_patterns`.
     ///
     /// If the pattern was already registered (possibly with exclusions), its existing
     /// exclusions are preserved.
@@ -881,9 +678,9 @@ impl SystemTestGroup {
         self
     }
 
-    /// Like `add_unallowed_log_pattern` but exempts log lines whose `MESSAGE` also matches
-    /// `exclusion` (ES `match_phrase`) from triggering a failure. Multiple calls with the
-    /// same `pattern` accumulate exclusions.
+    /// Like `add_unallowed_log_pattern` but exempts log lines whose `MESSAGE` also contains
+    /// `exclusion` from triggering a failure. Multiple calls with the same `pattern`
+    /// accumulate exclusions.
     pub fn add_unallowed_log_pattern_except(
         mut self,
         pattern: impl Into<String>,
@@ -904,8 +701,8 @@ impl SystemTestGroup {
         self
     }
 
-    /// Remove all unallowed log patterns, disabling the ElasticSearch log-pattern check
-    /// entirely for this group.
+    /// Remove all unallowed log patterns, disabling the log-pattern check entirely for
+    /// this group (on both backends).
     pub fn remove_all_unallowed_log_patterns(mut self) -> Self {
         self.unallowed_log_patterns = BTreeMap::new();
         self
@@ -1181,22 +978,40 @@ impl SystemTestGroup {
                 None
             };
 
-        let assert_no_unallowed_log_patterns_fn: Option<(String, Box<dyn PotSetupFn>)> = if self
-            .with_farm
-            && group_ctx.logs_enabled
-            && !self.unallowed_log_patterns.is_empty()
+        // Where the `assert_no_unallowed_log_patterns` teardown reads the IC node
+        // logs from: on Farm, Vector ships them to ElasticSearch unless `--no-logs`
+        // is set; on the Local backend (no network, no Vector VM) `logs_stream_task`
+        // persists them to files, but only with `--stream-ic-node-logs`. Without a
+        // source there is nothing to check, so no task is scheduled.
+        let unallowed_log_source: Option<LogSource> = if !self.with_farm
+            || self.unallowed_log_patterns.is_empty()
         {
-            let unallowed_log_patterns = self.unallowed_log_patterns.clone();
-            let teardown_fn = move |env: TestEnv| {
-                check_unallowed_log_patterns(&env, &unallowed_log_patterns);
-            };
-            Some((
-                ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME.to_string(),
-                Box::new(teardown_fn),
-            ))
+            None
+        } else if use_local_backend && group_ctx.stream_ic_node_logs {
+            Some(LogSource::JournaldLogFiles {
+                nodes_dir: journald_node_logs_dir(&group_ctx.group_dir),
+            })
+        } else if !use_local_backend && group_ctx.logs_enabled {
+            Some(LogSource::ElasticSearch)
         } else {
+            debug!(
+                logger,
+                "Not scheduling {ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME}: no IC node log source \
+                     (local backend without --stream-ic-node-logs, or farm with --no-logs)"
+            );
             None
         };
+        let assert_no_unallowed_log_patterns_fn: Option<(String, Box<dyn PotSetupFn>)> =
+            unallowed_log_source.map(|source| {
+                let unallowed_log_patterns = self.unallowed_log_patterns.clone();
+                let teardown_fn = move |env: TestEnv| {
+                    check_unallowed_log_patterns(&env, &source, &unallowed_log_patterns);
+                };
+                (
+                    ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME.to_string(),
+                    Box::new(teardown_fn) as Box<dyn PotSetupFn>,
+                )
+            });
 
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
             .teardowns

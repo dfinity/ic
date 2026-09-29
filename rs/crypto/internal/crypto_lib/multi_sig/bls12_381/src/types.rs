@@ -1,5 +1,6 @@
 //! BLS12-381 multisignature types.
 #![allow(clippy::unit_arg)] // Arbitrary is a unit arg in: derive(proptest_derive::Arbitrary)
+use base64::prelude::*;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_secrets_containers::SecretArray;
 use serde::{Deserialize, Serialize};
@@ -61,7 +62,7 @@ impl IndividualSignatureBytes {
 
 impl fmt::Debug for IndividualSignatureBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", base64::encode(&self.0[..]))
+        write!(f, "{:?}", BASE64_STANDARD.encode(&self.0[..]))
     }
 }
 
@@ -89,7 +90,7 @@ impl CombinedSignatureBytes {
 
 impl fmt::Debug for CombinedSignatureBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", base64::encode(&self.0[..]))
+        write!(f, "{:?}", BASE64_STANDARD.encode(&self.0[..]))
     }
 }
 

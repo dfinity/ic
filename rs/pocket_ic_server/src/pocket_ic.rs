@@ -12,6 +12,7 @@ use axum::{
     extract::State,
     response::{Html, IntoResponse},
 };
+use base64::prelude::*;
 use bitcoin::Network as BitcoinAdapterNetwork;
 use bitcoin::dogecoin::Network as DogecoinAdapterNetwork;
 use bytes::Bytes;
@@ -569,7 +570,7 @@ struct PocketIcStateDir {
 
 impl PocketIcStateDir {
     fn new(state_dir: Option<PathBuf>) -> Result<Self, String> {
-        if wsl::is_wsl()
+        if *ic_sys::IS_WSL
             && let Some(state_dir) = state_dir
         {
             let temp_dir = TempDir::new()
@@ -3793,7 +3794,7 @@ fn get_canister_http_requests(pic: &PocketIc) -> Vec<CanisterHttpRequest> {
                 http_method: http_method_from(&c.http_method),
                 url: c.url,
                 headers: c.headers.iter().map(http_header_from).collect(),
-                body: c.body.unwrap_or_default(),
+                body: c.body.map_or_else(Vec::new, |body| body.as_ref().clone()),
                 max_response_bytes: c.max_response_bytes.map(|b| b.get()),
                 replication: replication_from(&c.replication),
                 pricing_version: pricing_version_from(&c.pricing_version),
@@ -4590,7 +4591,7 @@ impl Operation for CanisterSnapshotDownload {
             self.sender,
             self.canister_id,
             self.snapshot_id,
-            base64::encode_config(self.snapshot_dir.display().to_string(), base64::URL_SAFE)
+            BASE64_URL_SAFE.encode(self.snapshot_dir.display().to_string())
         ))
     }
 }
@@ -4767,7 +4768,7 @@ impl Operation for CanisterSnapshotUpload {
             "canister_snapshot_upload(sender={},canister_id={},snapshot_dir='{}')",
             self.sender,
             self.canister_id,
-            base64::encode_config(self.snapshot_dir.display().to_string(), base64::URL_SAFE)
+            BASE64_URL_SAFE.encode(self.snapshot_dir.display().to_string())
         ))
     }
 }

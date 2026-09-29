@@ -32,6 +32,7 @@ rust_library(
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/utils",
+        "//rs/utils/thousands",
         "//rs/utils/validate_eq",
         "@crate_index//:base64",
         "@crate_index//:bincode",
@@ -49,7 +50,6 @@ rust_library(
         "@crate_index//:serde_with",
         "@crate_index//:strum",
         "@crate_index//:thiserror",
-        "@crate_index//:thousands",
     ] + select({
         "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
         "//conditions:default": ["@crate_index//:chrono"],
@@ -81,6 +81,7 @@ rust_test(
         "//rs/types/management_canister_types",
         "//rs/types/types_test_utils",
         "//rs/utils",
+        "//rs/utils/thousands",
         "//rs/utils/validate_eq",
         "@crate_index//:assert_matches",
         "@crate_index//:base64",
@@ -103,7 +104,6 @@ rust_test(
         "@crate_index//:serde_with",
         "@crate_index//:strum",
         "@crate_index//:thiserror",
-        "@crate_index//:thousands",
     ],
 )
 

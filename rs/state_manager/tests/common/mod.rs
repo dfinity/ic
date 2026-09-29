@@ -195,7 +195,8 @@ pub fn encode_decode_stream_test<
 /// `CertifiedStreamSlice`, and checks that:
 ///
 ///  1. the payload is the same as that of a `CertifiedStreamSlice` with both
-///     witness and payload beginning at `msg_begin` and the same limits; and
+///     witness and payload beginning at `msg_begin` and covering the same
+///     messages; and
 ///  2. the witness is the same as that of a `CertifiedStreamSlice` with both
 ///     witness and payload beginning at `witness_begin` and matching message limit.
 ///
@@ -232,30 +233,24 @@ pub fn encode_partial_slice_test(
             )
             .expect("failed to encode certified stream");
 
+        // Actual message count, potentially cut short by `byte_limit`.
+        let msg_count = stream_encoding::decode_stream_slice(&slice.payload)
+            .expect("failed to decode slice payload")
+            .1
+            .messages()
+            .map_or(0, |messages| messages.len());
+
         // Slice with the same payload and matching witness.
         let same_payload_slice = state_manager
             .encode_certified_stream_slice(
                 destination_subnet,
                 Some(msg_begin),
                 Some(msg_begin),
-                Some(msg_limit),
-                Some(byte_limit),
+                Some(msg_count),
+                None,
             )
             .expect("failed to encode certified stream");
         assert_eq!(same_payload_slice.payload, slice.payload);
-
-        let receiver_metrics = MetricsRegistry::new();
-        let (receiver_state_manager, _tmp) =
-            state_manager_with_verifier_result(destination_subnet, true, &receiver_metrics, log);
-
-        let decoded_slice = receiver_state_manager
-            .decode_certified_stream_slice(
-                sender_subnet,
-                RegistryVersion::new(1),
-                &same_payload_slice,
-            )
-            .unwrap_or_else(|e| panic!("Failed to decode slice with error {e:?}"));
-        let msg_count = decoded_slice.messages().map_or(0, |m| m.len());
 
         // Slice with the same witness and matching payload.
         let same_witness_slice = state_manager
@@ -268,6 +263,10 @@ pub fn encode_partial_slice_test(
             )
             .expect("failed to encode certified stream");
         assert_eq!(same_witness_slice.merkle_proof, slice.merkle_proof);
+
+        let receiver_metrics = MetricsRegistry::new();
+        let (receiver_state_manager, _tmp) =
+            state_manager_with_verifier_result(destination_subnet, true, &receiver_metrics, log);
 
         // Sanity check: if an actual partial slice, decoding should fail.
         if witness_begin != msg_begin {

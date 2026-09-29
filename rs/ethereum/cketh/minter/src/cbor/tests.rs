@@ -1,4 +1,6 @@
+use crate::asset::Asset;
 use crate::checked_amount::CheckedAmountOf;
+use crate::test_fixtures::arb::{arb_address, arb_asset};
 use minicbor::{Decode, Encode};
 use phantom_newtype::Id;
 use proptest::prelude::*;
@@ -43,5 +45,20 @@ proptest! {
         check_roundtrip(&U64NewtypeContainer {
             value: U64Newtype::new(n),
         })?;
+    }
+
+    #[test]
+    fn asset_encoding_roundtrip(asset in arb_asset()) {
+        check_roundtrip(&asset)?;
+    }
+
+    #[test]
+    fn asset_erc20_encodes_as_the_bare_address(address in arb_address()) {
+        prop_assert_eq!(
+            minicbor::to_vec(Asset::Erc20(address)).unwrap(),
+            minicbor::to_vec(address).unwrap(),
+            "events recorded before the Asset enum hold a bare address at the asset's \
+             index, so the Erc20 encoding must stay byte-identical to decode them"
+        );
     }
 }

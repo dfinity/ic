@@ -93,7 +93,9 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             chain_key_data,
             ..
         } => (batch_messages.clone(), chain_key_data.clone()),
-        BatchContent::Splitting { .. } => unimplemented!(),
+        BatchContent::Splitting { .. } | BatchContent::CheckpointingWithoutExecution => {
+            unimplemented!()
+        }
     };
 
     let mut demux = Box::new(MockDemux::new());
@@ -743,10 +745,12 @@ const CANISTER_RANGE_B: CanisterIdRange = CanisterIdRange {
     end: CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1),
 };
 
-/// Returns a test fixture for subnet splitting tests with mocks for Demux,
-/// Scheduler, and StreamBuilder. The mocks ensure that only expected calls are
-/// made, and they are made in the expected order.
-fn split_fixture() -> StateMachineTestFixture {
+/// Returns a test fixture for batches whose round creates a checkpoint without
+/// executing anything, with mocks for Demux, Scheduler, and StreamBuilder. The
+/// mocks ensure that only expected calls are made, and they are made in the
+/// expected order; in particular they panic if any message is inducted, executed
+/// or routed.
+fn checkpoint_round_fixture() -> StateMachineTestFixture {
     // Initial state, with 2 canisters.
     let mut initial_state = ReplicatedState::new(SUBNET_A, SubnetType::Application);
     initial_state.put_canister_state(new_canister_state(
@@ -804,7 +808,7 @@ fn split_fixture() -> StateMachineTestFixture {
 }
 
 fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> ReplicatedState {
-    let fixture = split_fixture();
+    let fixture = checkpoint_round_fixture();
     let split_batch = Batch {
         batch_number: Height::from(0),
         batch_summary: None,
@@ -820,7 +824,7 @@ fn test_online_split(new_subnet_id: SubnetId, other_subnet_id: SubnetId) -> Repl
             .batch_time
             .checked_add(Duration::from_secs(1))
             .unwrap(),
-        blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+        blockmaker_metrics: Some(BlockmakerMetrics::new_for_test()),
         replica_version: ReplicaVersion::from_str("foo").unwrap(),
     };
 
@@ -878,6 +882,66 @@ fn test_online_split_subnet_b() {
             .canister_states()
             .all_keys()
             .collect::<Vec<_>>()
+    );
+}
+
+/// Tests that a `CheckpointingWithoutExecution` batch only creates a checkpoint:
+/// paused executions are aborted and `SystemMetadata` caches are wiped (both done
+/// by `checkpoint_round_with_no_execution()`, mocked out here), while nothing is
+/// executed -- the `Demux`, `Scheduler` and `StreamBuilder` mocks panic if any
+/// message is inducted, a round is executed or a stream is built -- and the state
+/// is left untouched apart from the batch time.
+#[test]
+fn test_checkpointing_without_execution() {
+    let fixture = checkpoint_round_fixture();
+    let batch_time = fixture
+        .initial_state
+        .metadata
+        .batch_time
+        .checked_add(Duration::from_secs(1))
+        .unwrap();
+    let canisters_before = fixture.initial_state.canister_states().clone();
+    let checkpointing_batch = Batch {
+        batch_number: Height::from(0),
+        batch_summary: None,
+        content: BatchContent::CheckpointingWithoutExecution,
+        randomness: Randomness::from([0; 32]),
+        registry_version: RegistryVersion::from(1),
+        time: batch_time,
+        blockmaker_metrics: None,
+        replica_version: ReplicaVersion::from_str("foo").unwrap(),
+    };
+    assert!(checkpointing_batch.requires_full_state_hash());
+
+    let state_after_checkpointing = with_test_replica_logger(|log| {
+        let state_machine = Box::new(StateMachineImpl::new(
+            fixture.scheduler,
+            fixture.demux,
+            fixture.stream_builder,
+            log,
+            fixture.metrics,
+        ));
+
+        state_machine.execute_round(
+            fixture.initial_state,
+            checkpointing_batch,
+            fixture.network_topology.clone(),
+            Default::default(),
+            &test_registry_settings(),
+        )
+    });
+
+    assert_eq!(
+        BTreeMap::new(),
+        nonzero_values(fetch_int_counter_vec(
+            &fixture.metrics_registry,
+            "critical_errors"
+        ))
+    );
+    assert_eq!(batch_time, state_after_checkpointing.metadata.batch_time);
+    assert_eq!(
+        &canisters_before,
+        state_after_checkpointing.canister_states()
     );
 }
 

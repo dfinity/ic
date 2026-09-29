@@ -473,7 +473,7 @@ impl StorageClient {
             .await?)
     }
 
-    // Retrieves the account balance at the heighest block height in the database
+    // Retrieves the account balance at the highest block height in the database
     // Returns None if the account does not exist in the database
     pub async fn get_account_balance(&self, account: &Account) -> anyhow::Result<Option<Nat>> {
         let account = *account;

@@ -59,7 +59,11 @@ fn main() -> Result<()> {
         })
         .add_test(systest!(test; TestConfig {
             use_mainnet_state: true,
-            local_recovery: true,
+            // TODO: Revert back to `local_recovery: true` after #11203 reaches mainnet NNS
+            // This is currently broken because the second part of the local recovery (waiting for a
+            // CUP) deserializes the output of a `ic-replay` run according to the post-#11203
+            // format, which is not compatible with pre-#11203.
+            local_recovery: false,
             break_dfinity_owned_node: false,
             num_broken_nodes: LARGE_F + 1,
             add_upgrade_version: true,

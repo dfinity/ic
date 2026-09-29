@@ -185,9 +185,11 @@ use crate::{
     metrics::{CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS, IDkgClientMetrics, timed_call},
     pre_signer::{IDkgPreSigner, IDkgPreSignerImpl},
     signer::{ThresholdSigner, ThresholdSignerImpl},
-    utils::{IDkgBlockReaderImpl, build_thread_pool},
+    utils::IDkgBlockReaderImpl,
 };
-use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
+use ic_consensus_utils::{
+    bouncer_metrics::BouncerMetrics, build_thread_pool, crypto::ConsensusCrypto,
+};
 use ic_interfaces::{
     consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
     crypto::IDkgProtocol,

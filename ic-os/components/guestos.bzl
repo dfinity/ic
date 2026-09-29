@@ -191,3 +191,9 @@ def component_files(mode):
         Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
         Label("upgrade/boot-state.sh"): "/opt/ic/bin/boot-state.sh",
     }
+
+# Component files packed into the fast-upgrade overlay image
+upgrade_overlay_component_files = {
+    Label("guestos/fast-upgrade/restart.list"): "/opt/upgrade_metadata/restart.list",
+    Label("guestos/fast-upgrade/extension-release.ic-upgrade"): "/usr/lib/extension-release.d/extension-release.ic-upgrade",
+}

@@ -10,15 +10,16 @@ use ic_artifact_pool::{
     ingress_pool::IngressPoolImpl,
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
-use ic_consensus::consensus::{
-    ConsensusBouncer, ConsensusImpl, MAX_CONSENSUS_THREADS, build_thread_pool,
-};
+use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
 use ic_consensus_certification::{CertificationCrypto, CertifierBouncer, CertifierImpl};
 use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_consensus_dkg::DkgBouncer;
 use ic_consensus_idkg::{IDkgBouncer, IDkgStatsImpl};
 use ic_consensus_manager::{AbortableBroadcastChannel, AbortableBroadcastChannelBuilder};
-use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
+use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilderImpl;
+use ic_consensus_utils::{
+    MAX_CONSENSUS_THREADS, build_thread_pool, crypto::ConsensusCrypto, pool_reader::PoolReader,
+};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -47,7 +48,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
-    NodeId, ReplicaVersion, SubnetId,
+    NodeId, PlatformVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpRequest, CanisterHttpResponse,
@@ -336,7 +337,7 @@ pub fn setup_consensus_and_p2p(
     node_id: NodeId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    replica_version: ReplicaVersion,
+    platform_version: PlatformVersion,
     tls_config: Arc<dyn TlsConfig>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_sync_client: Arc<dyn StateSyncClient<Message = StateSyncMessage>>,
@@ -440,7 +441,7 @@ pub fn setup_consensus_and_p2p(
         node_id,
         subnet_id,
         subnet_type,
-        replica_version,
+        platform_version,
         artifact_pools,
         channels,
         Arc::clone(&consensus_crypto) as Arc<_>,
@@ -472,7 +473,7 @@ fn start_consensus(
     node_id: NodeId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
-    replica_version: ReplicaVersion,
+    platform_version: PlatformVersion,
     artifact_pools: ArtifactPools,
     abortable_broadcast_channels: AbortableBroadcastChannels,
     // ConsensusCrypto is an extension of the Crypto trait and we can
@@ -525,6 +526,7 @@ fn start_consensus(
         consensus_pool_cache.clone(),
         consensus_crypto.clone(),
         state_reader.clone(),
+        consensus_thread_pool.clone(),
         subnet_id,
         registry_client.clone(),
         metrics_registry,
@@ -542,12 +544,14 @@ fn start_consensus(
         metrics_registry,
         log.clone(),
     ));
+
+    let upgrade_payload_builder = Arc::new(UpgradePayloadBuilderImpl);
     // ------------------------------------------------------------------------
 
     let replica_config = ReplicaConfig {
         node_id,
         subnet_id,
-        replica_version,
+        platform_version,
     };
     let dkg_key_manager = Arc::new(Mutex::new(ic_consensus_dkg::DkgKeyManager::new(
         metrics_registry.clone(),
@@ -571,6 +575,7 @@ fn start_consensus(
         https_outcalls_payload_builder,
         Arc::from(query_stats_payload_builder),
         chain_key_payload_builder,
+        upgrade_payload_builder,
         Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
         Arc::clone(&artifact_pools.idkg_pool) as Arc<_>,
         Arc::clone(&dkg_key_manager) as Arc<_>,
