@@ -458,6 +458,11 @@ Subnet splitting creates a new subnet by splitting an existing subnet's canister
 - **AND** the specified canister ranges must be hosted by the source subnet
 - **AND** the split must not violate routing table invariants
 
+#### Scenario: Propose a subnet split via ic-admin
+- **WHEN** an operator runs `ic-admin propose-to-split-subnet --source-subnet <M> --destination-node-ids <N...> --destination-canister-id-ranges <R...> [--initial-dkg-subnet <D>]`
+- **THEN** an NNS proposal titled "Split subnet `<M>` (`<N>` nodes moved out)" is submitted carrying a `SplitSubnetPayload`
+- **AND** `destination_node_ids` must make up exactly half of the source subnet's membership, and `initial_dkg_subnet`, if set, must not be the source subnet (defaulting to the NNS subnet otherwise)
+
 ### Requirement: Subnet Merging
 
 Subnet merging is the inverse of subnet splitting: it reroutes a source subnet's canister ID ranges into a destination subnet.
