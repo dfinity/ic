@@ -1,6 +1,7 @@
 use super::test_fixtures::*;
 use super::*;
 use crate::certified_slice_pool::{CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError};
+use crate::testing::XNetPayloadBuilderTesting;
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces::messaging::{InvalidXNetPayload, XNetPayloadValidationFailure};
@@ -537,101 +538,6 @@ impl PayloadBuilderTestFixture {
     }
 }
 
-/// A minimal `XNetSlicePool` for testing: stores one slice per subnet and
-/// never garbage collects (neither `garbage_collect` nor `garbage_collect_slice`
-/// removes or trims slices).
-struct TestSlicePool(Mutex<BTreeMap<SubnetId, CertifiedStreamSlice>>);
-
-impl XNetSlicePool for TestSlicePool {
-    fn take_slice(
-        &self,
-        subnet_id: SubnetId,
-        _begin: Option<&ExpectedIndices>,
-        _msg_limit: Option<usize>,
-        _byte_limit: Option<usize>,
-    ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>> {
-        Ok(self.0.lock().unwrap().remove(&subnet_id).map(|s| (s, 1)))
-    }
-
-    fn observe_pool_size_bytes(&self) {}
-
-    fn garbage_collect(&self, _: BTreeMap<SubnetId, ExpectedIndices>) {}
-
-    fn garbage_collect_slice(&self, _: SubnetId, _: ExpectedIndices) {}
-
-    fn classify_advert(
-        &self,
-        _: SubnetId,
-        _: &StreamHeader,
-        _: &dyn Fn(StreamIndex, StreamIndex) -> bool,
-    ) -> XNetAdvertOutcome {
-        XNetAdvertOutcome::Actionable
-    }
-
-    fn record_peer_header(&self, _: SubnetId, _: &StreamHeader) {}
-}
-
-/// `get_xnet_payload` must not include a slice from a deleted subnet even if
-/// the pool contains one (e.g., populated just before deletion). The deleted
-/// subnet is absent from `expected_stream_indices`, so it is never iterated
-/// over during payload assembly and never appears in the result.
-#[tokio::test]
-async fn get_xnet_payload_excludes_deleted_subnet_slice() {
-    with_test_replica_logger(|log| {
-        // State with an outgoing stream to SUBNET_2 committed at CERTIFIED_HEIGHT.
-        let state_manager = Arc::new(FakeStateManager::new());
-        put_replicated_state_for_testing(
-            state_manager.as_ref(),
-            btreemap! {
-                SUBNET_2 => generate_stream(&StreamConfig {
-                    message_begin: 0,
-                    message_end: 5,
-                    signal_end: 3,
-                }),
-            },
-        );
-
-        // Seed the pool with SUBNET_2's slice, simulating a pool populated just
-        // before SUBNET_2 was deleted from the registry.
-        let slice = make_certified_stream_slice(
-            SUBNET_2,
-            StreamConfig {
-                message_begin: 3,
-                message_end: 5,
-                signal_end: 3,
-            },
-        );
-        let slice_pool = Box::new(TestSlicePool(Mutex::new(btreemap! { SUBNET_2 => slice })));
-
-        // Registry with only SUBNET_1; SUBNET_2 is absent (deleted).
-        let (registry, _) = get_registry_and_urls_for_test(1, btreemap![]);
-
-        let metrics_registry = MetricsRegistry::new();
-        let (refill_trigger, _refill_receiver) = tokio::sync::mpsc::channel(1);
-        let xnet_payload_builder = XNetPayloadBuilderImpl::new_from_components(
-            Arc::clone(&state_manager) as Arc<_>,
-            Arc::clone(&state_manager) as Arc<_>,
-            registry as Arc<_>,
-            Arc::new(None),
-            None,
-            slice_pool,
-            RefillTaskHandle(Mutex::new(refill_trigger)),
-            Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
-            log,
-        )
-        .with_count_bytes_fn(|_| Ok(1));
-
-        let validation_context = get_validation_context_for_test();
-        let (payload, _) =
-            xnet_payload_builder.get_xnet_payload(&validation_context, &[], PAYLOAD_BYTES_LIMIT);
-
-        assert!(
-            !payload.stream_slices.contains_key(&SUBNET_2),
-            "deleted SUBNET_2's slice must not appear in the payload"
-        );
-    });
-}
-
 /// A payload containing a certified stream slice from a deleted subnet (absent
 /// from the registry at the block's registry version) must be rejected by
 /// `validate_xnet_payload`, even if the deleted subnet still had a non-empty
@@ -889,13 +795,13 @@ fn own_stream_for_advert_tests() -> Stream {
     })
 }
 
-/// Builds an `XNetPayloadBuilderImpl` around `certified_stream_store`, with a
+/// Builds an `XNetAdvertHandlerImpl` around `certified_stream_store`, with a
 /// registry that only knows `REMOTE_SUBNET` and a pool that actually records
 /// peer headers.
 fn advert_handler_and_pool(
     certified_stream_store: MockCertifiedStreamStore,
     log: ReplicaLogger,
-) -> (XNetPayloadBuilderImpl, Arc<Mutex<CertifiedSlicePool>>) {
+) -> (XNetAdvertHandlerImpl, Arc<Mutex<CertifiedSlicePool>>) {
     advert_handler_and_pool_for(own_stream_for_advert_tests(), certified_stream_store, log)
 }
 
@@ -905,7 +811,7 @@ fn advert_handler_and_pool_for(
     own_stream: Stream,
     certified_stream_store: MockCertifiedStreamStore,
     log: ReplicaLogger,
-) -> (XNetPayloadBuilderImpl, Arc<Mutex<CertifiedSlicePool>>) {
+) -> (XNetAdvertHandlerImpl, Arc<Mutex<CertifiedSlicePool>>) {
     let state_manager = Arc::new(FakeStateManager::new());
     put_replicated_state_for_testing(
         state_manager.as_ref(),
@@ -923,25 +829,19 @@ fn advert_handler_and_pool_for(
     });
     let (registry, _) = get_registry_and_urls_for_test(1, btreemap![]);
 
-    let metrics_registry = MetricsRegistry::new();
     let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-        &metrics_registry,
+        &MetricsRegistry::new(),
         log.clone(),
     )));
-    let (refill_trigger, _refill_receiver) = tokio::sync::mpsc::channel(1);
-    let payload_builder = XNetPayloadBuilderImpl::new_from_components(
+    let advert_handler = XNetAdvertHandlerImpl::new(
         state_manager as Arc<_>,
         Arc::new(certified_stream_store) as Arc<_>,
         registry as Arc<_>,
-        Arc::new(None),
-        None,
-        Box::new(XNetSlicePoolImpl::new(Arc::clone(&pool))),
-        RefillTaskHandle(Mutex::new(refill_trigger)),
-        Arc::new(XNetPayloadBuilderMetrics::new(&metrics_registry)),
+        Arc::clone(&pool),
         log,
     );
 
-    (payload_builder, pool)
+    (advert_handler, pool)
 }
 
 /// A mock store expecting exactly `count` verifying decodes of an advert
@@ -973,11 +873,11 @@ async fn handle_advert_actionable() {
             signal_end: OWN_MESSAGES_BEGIN,
         });
         let header = advertised.header();
-        let (payload_builder, pool) =
+        let (advert_handler, pool) =
             advert_handler_and_pool(store_expecting_decodes(&advertised, 1), log);
 
         assert_matches!(
-            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
             Ok(XNetAdvertOutcome::Actionable)
         );
         assert_eq!(Some(Arc::new(header)), recorded_peer_header(&pool));
@@ -986,7 +886,7 @@ async fn handle_advert_actionable() {
         // and not verified again.
         for _ in 0..2 {
             assert_matches!(
-                payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+                advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
                 Ok(XNetAdvertOutcome::Duplicate)
             );
         }
@@ -1003,7 +903,7 @@ async fn handle_advert_in_payload() {
             message_end: OWN_SIGNALS_END + 4,
             signal_end: OWN_MESSAGES_BEGIN,
         });
-        let (payload_builder, pool) =
+        let (advert_handler, pool) =
             advert_handler_and_pool(store_expecting_decodes(&advertised, 0), log);
 
         // A past payload already covers all of it.
@@ -1016,7 +916,7 @@ async fn handle_advert_in_payload() {
         });
 
         assert_matches!(
-            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
             Ok(XNetAdvertOutcome::InPayload)
         );
         // The advertised header was not (verified and) recorded.
@@ -1037,7 +937,7 @@ async fn handle_advert_new_signals() {
             signal_end: OWN_MESSAGES_BEGIN + 2,
         });
         let header = advertised.header();
-        let (payload_builder, pool) =
+        let (advert_handler, pool) =
             advert_handler_and_pool(store_expecting_decodes(&advertised, 1), log);
 
         // A header on record covering everything except the new signals.
@@ -1051,7 +951,7 @@ async fn handle_advert_new_signals() {
             .record_peer_header(REMOTE_SUBNET, &recorded.header());
 
         assert_matches!(
-            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
             Ok(XNetAdvertOutcome::Actionable)
         );
         assert_eq!(Some(Arc::new(header)), recorded_peer_header(&pool));
@@ -1069,7 +969,7 @@ async fn handle_advert_duplicate_content() {
             signal_end: OWN_MESSAGES_BEGIN,
         });
         let header = advertised.header();
-        let (payload_builder, pool) =
+        let (advert_handler, pool) =
             advert_handler_and_pool(store_expecting_decodes(&advertised, 0), log);
 
         pool.lock()
@@ -1077,7 +977,7 @@ async fn handle_advert_duplicate_content() {
             .record_peer_header(REMOTE_SUBNET, &header);
 
         assert_matches!(
-            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
             Ok(XNetAdvertOutcome::Duplicate)
         );
     });
@@ -1115,11 +1015,11 @@ async fn handle_advert_nothing_new() {
                 assert_eq!(msg_limit, Some(0));
                 Ok(own_header.clone())
             });
-        let (payload_builder, pool) = advert_handler_and_pool(store, log);
+        let (advert_handler, pool) = advert_handler_and_pool(store, log);
 
         for _ in 0..2 {
             assert_matches!(
-                payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+                advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
                 Ok(XNetAdvertOutcome::NothingNew)
             );
             // Advertised header was recorded regardless.
@@ -1129,7 +1029,7 @@ async fn handle_advert_nothing_new() {
             );
             assert_eq!(
                 Some(expected_reply.clone()),
-                payload_builder.certified_header(REMOTE_SUBNET)
+                advert_handler.certified_header(REMOTE_SUBNET)
             );
         }
     });
@@ -1161,24 +1061,24 @@ async fn handle_advert_collecting_reject_signal() {
         };
 
         // A `begin` at the reject signal leaves it uncollected.
-        let (payload_builder, _pool) = advert_handler_and_pool_for(
+        let (advert_handler, _pool) = advert_handler_and_pool_for(
             own_stream.clone(),
             store_expecting_decodes(&advertised(REJECT_SIGNAL), 1),
             log.clone(),
         );
         assert_matches!(
-            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised(REJECT_SIGNAL))),
+            advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised(REJECT_SIGNAL))),
             Ok(XNetAdvertOutcome::NothingNew)
         );
 
         // One past it collects it, so there is something to fetch after all.
-        let (payload_builder, _pool) = advert_handler_and_pool_for(
+        let (advert_handler, _pool) = advert_handler_and_pool_for(
             own_stream,
             store_expecting_decodes(&advertised(REJECT_SIGNAL + 1), 1),
             log,
         );
         assert_matches!(
-            payload_builder
+            advert_handler
                 .handle_advert(REMOTE_SUBNET, make_advert(&advertised(REJECT_SIGNAL + 1))),
             Ok(XNetAdvertOutcome::Actionable)
         );
@@ -1192,7 +1092,7 @@ async fn handle_advert_decode_error() {
     with_test_replica_logger(|log| {
         // No expectations: verifying an advert we cannot even decode would panic.
         let store = MockCertifiedStreamStore::new();
-        let (payload_builder, pool) = advert_handler_and_pool(store, log);
+        let (advert_handler, pool) = advert_handler_and_pool(store, log);
 
         let advert = CertifiedStreamSlice {
             payload: b"garbage".to_vec(),
@@ -1200,7 +1100,7 @@ async fn handle_advert_decode_error() {
         };
 
         assert_matches!(
-            payload_builder.handle_advert(REMOTE_SUBNET, advert),
+            advert_handler.handle_advert(REMOTE_SUBNET, advert),
             Err(XNetAdvertError::DecodeError(_))
         );
         assert_eq!(None, recorded_peer_header(&pool));
@@ -1222,10 +1122,10 @@ async fn handle_advert_invalid_signature() {
             .expect_decode_certified_stream_slice()
             .times(1)
             .return_once(|_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
-        let (payload_builder, pool) = advert_handler_and_pool(store, log);
+        let (advert_handler, pool) = advert_handler_and_pool(store, log);
 
         assert_matches!(
-            payload_builder.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
+            advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
             Err(XNetAdvertError::InvalidSignature)
         );
         assert_eq!(None, recorded_peer_header(&pool));
@@ -1285,11 +1185,11 @@ impl XNetClient for FakeAdvertClient {
     }
 }
 
-/// An `AdvertTask` posting through `xnet_client`, with `payload_builder` handling
+/// An `AdvertTask` posting through `xnet_client`, with `advert_handler` handling
 /// the replies.
 fn advert_task(
     xnet_client: Arc<dyn XNetClient>,
-    payload_builder: XNetPayloadBuilderImpl,
+    advert_handler: XNetAdvertHandlerImpl,
     metrics: &MetricsRegistry,
     log: ReplicaLogger,
 ) -> AdvertTask {
@@ -1309,7 +1209,7 @@ fn advert_task(
         log.clone(),
     );
     AdvertTask::new(
-        Arc::new(payload_builder),
+        Arc::new(advert_handler),
         endpoint_resolver,
         xnet_client,
         metrics,
@@ -1353,10 +1253,10 @@ async fn advertise_to_without_reply() {
         let metrics = MetricsRegistry::new();
         let xnet_client = Arc::new(FakeAdvertClient::new(Ok(None), &metrics));
 
-        let (payload_builder, pool) =
+        let (advert_handler, pool) =
             advert_handler_and_pool(MockCertifiedStreamStore::new(), log.clone());
 
-        advert_task(xnet_client.clone(), payload_builder, &metrics, log)
+        advert_task(xnet_client.clone(), advert_handler, &metrics, log)
             .advertise_to(REMOTE_SUBNET, REMOTE_NODE_2_OPERATOR_1, own_advert())
             .await;
 
@@ -1388,10 +1288,10 @@ async fn advertise_to_records_the_reply() {
         ));
 
         // Expect to have to verify the reply.
-        let (payload_builder, pool) =
+        let (advert_handler, pool) =
             advert_handler_and_pool(store_expecting_decodes(&remote_stream, 1), log.clone());
 
-        advert_task(xnet_client.clone(), payload_builder, &metrics, log)
+        advert_task(xnet_client.clone(), advert_handler, &metrics, log)
             .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1, own_advert())
             .await;
 
@@ -1427,9 +1327,9 @@ async fn advertise_to_invalid_reply() {
             .expect_decode_certified_stream_slice()
             .times(1)
             .return_once(|_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
-        let (payload_builder, pool) = advert_handler_and_pool(store, log.clone());
+        let (advert_handler, pool) = advert_handler_and_pool(store, log.clone());
 
-        advert_task(xnet_client.clone(), payload_builder, &metrics, log)
+        advert_task(xnet_client.clone(), advert_handler, &metrics, log)
             .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1, own_advert())
             .await;
 
@@ -1447,10 +1347,10 @@ async fn advertise_to_post_failure() {
         let metrics = MetricsRegistry::new();
         let xnet_client = Arc::new(FakeAdvertClient::new(Err(()), &metrics));
 
-        let (payload_builder, _pool) =
+        let (advert_handler, _pool) =
             advert_handler_and_pool(MockCertifiedStreamStore::new(), log.clone());
 
-        advert_task(xnet_client.clone(), payload_builder, &metrics, log)
+        advert_task(xnet_client.clone(), advert_handler, &metrics, log)
             .advertise_to(REMOTE_SUBNET, REMOTE_NODE_1_OPERATOR_1, own_advert())
             .await;
 
@@ -1467,10 +1367,10 @@ async fn advertise_to_unknown_node() {
         let metrics = MetricsRegistry::new();
         let xnet_client = Arc::new(FakeAdvertClient::new(Ok(None), &metrics));
 
-        let (payload_builder, _pool) =
+        let (advert_handler, _pool) =
             advert_handler_and_pool(MockCertifiedStreamStore::new(), log.clone());
 
-        advert_task(xnet_client.clone(), payload_builder, &metrics, log)
+        advert_task(xnet_client.clone(), advert_handler, &metrics, log)
             .advertise_to(REMOTE_SUBNET, NODE_42, own_advert())
             .await;
 

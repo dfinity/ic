@@ -13,8 +13,7 @@ mod xnet_client_tests;
 pub use crate::proximity::{GenRangeFn, ProximityMap, UnhealthyNodes};
 
 use crate::certified_slice_pool::{
-    CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes,
-    decode_slice_header,
+    CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes, decode_slice_header,
 };
 use crate::proximity::UNHEALTHY_NODE_TTL;
 use async_trait::async_trait;
@@ -54,7 +53,9 @@ use ic_types::{Height, NodeId, NumBytes, RegistryVersion, SubnetId};
 use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
-use rand::{Rng, rngs::StdRng, thread_rng};
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use rand::{Rng, thread_rng};
 use std::collections::{BTreeMap, VecDeque};
 use std::net::SocketAddr;
 use std::ops::DerefMut;
@@ -103,58 +104,6 @@ impl Default for ExpectedIndices {
             max_no_gc_header_begin: STREAM_INDEX_MAX,
         }
     }
-}
-
-/// Interface for a pool of incoming `CertifiedStreamSlices`.
-pub trait XNetSlicePool: Send + Sync {
-    /// Takes a sub-slice of the stream from `subnet_id` starting at `begin`,
-    /// respecting the given message count and byte limits; or, if the provided
-    /// `byte_limit` is too small for a header-only slice, returns `Ok(None)`.
-    ///
-    /// If the pooled slice begins after `begin.message_index`, its messages cannot
-    /// be taken (yet), so a header-only slice is returned.
-    ///
-    /// If `Ok(Some(_))` is returned and no messages are left, the slice is removed
-    /// from the pool.
-    ///
-    /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` and drops
-    /// the pooled slice if malformed.
-    fn take_slice(
-        &self,
-        subnet_id: SubnetId,
-        begin: Option<&ExpectedIndices>,
-        msg_limit: Option<usize>,
-        byte_limit: Option<usize>,
-    ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>>;
-
-    /// Observes the total size of all pooled slices.
-    fn observe_pool_size_bytes(&self);
-
-    /// Garbage collects all messages and signals before the given stream
-    /// positions. Slices from subnets not present in the provided map are all
-    /// dropped.
-    fn garbage_collect(&self, new_stream_positions: BTreeMap<SubnetId, ExpectedIndices>);
-
-    /// Garbage collects all messages and signals before the given stream
-    /// position for the given slice.
-    fn garbage_collect_slice(&self, subnet_id: SubnetId, stream_position: ExpectedIndices);
-
-    /// Classifies an advertised header by how much of its content the pool already
-    /// has, `have_reject_signal_between(from, to)` saying whether we hold a reject
-    /// signal in `[from, to)`.
-    ///
-    /// Never returns `NothingNew`, which would require comparison against the
-    /// certified state.
-    fn classify_advert(
-        &self,
-        subnet_id: SubnetId,
-        header: &StreamHeader,
-        have_reject_signal_between: &dyn Fn(StreamIndex, StreamIndex) -> bool,
-    ) -> XNetAdvertOutcome;
-
-    /// Records a verified header as the peer's high-water-mark header, unless the
-    /// one on record is already at or past it in all indices.
-    fn record_peer_header(&self, subnet_id: SubnetId, header: &StreamHeader);
 }
 
 pub struct XNetPayloadBuilderMetrics {
@@ -326,7 +275,10 @@ pub struct XNetPayloadBuilderImpl {
     registry: Arc<dyn RegistryClient>,
 
     /// A pool of slices, filled in the background by an async task.
-    slice_pool: Box<dyn XNetSlicePool>,
+    slice_pool: Arc<Mutex<CertifiedSlicePool>>,
+
+    /// Advert handling logic, for `XNetEndpoint`.
+    advert_handler: Arc<XNetAdvertHandlerImpl>,
 
     /// Handle to the pool refill task, used to asynchronously trigger refill.
     refill_task_handle: RefillTaskHandle,
@@ -343,8 +295,8 @@ pub struct XNetPayloadBuilderImpl {
     /// Always `SLICE_BYTE_SIZE_MIN` in production, can be overridden for testing.
     slice_byte_size_min: usize,
 
-    /// A deterministic pseudo-random number generator.
-    deterministic_rng_for_testing: Arc<Option<Mutex<StdRng>>>,
+    /// A deterministic pseudo-random number generator, for testing only.
+    deterministic_rng_for_testing: Option<Mutex<StdRng>>,
 
     metrics: Arc<XNetPayloadBuilderMetrics>,
 
@@ -420,12 +372,10 @@ impl XNetPayloadBuilderImpl {
             unhealthy_nodes,
         ));
 
-        let deterministic_rng_for_testing = Arc::new(None);
-        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+        let slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
             metrics_registry,
             log.clone(),
         )));
-        let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(metrics_registry));
         let endpoint_resolver = XNetEndpointResolver::new(
             Arc::clone(&registry),
@@ -435,7 +385,7 @@ impl XNetPayloadBuilderImpl {
             log.clone(),
         );
         let refill_task_handle = PoolRefillTask::start(
-            Arc::clone(&certified_slice_pool),
+            Arc::clone(&slice_pool),
             endpoint_resolver,
             Arc::clone(&xnet_client),
             Arc::clone(&certified_stream_store),
@@ -447,8 +397,6 @@ impl XNetPayloadBuilderImpl {
             state_manager,
             certified_stream_store,
             registry,
-            deterministic_rng_for_testing,
-            None,
             slice_pool,
             refill_task_handle,
             metrics,
@@ -457,43 +405,41 @@ impl XNetPayloadBuilderImpl {
     }
 
     /// Same as `new` except that this constructor uses the provided `slice_pool`
-    /// instead of constructing a fresh one.
-    #[allow(clippy::too_many_arguments)]
+    /// and `refill_task_handle` instead of constructing fresh ones.
     pub fn new_from_components(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         registry: Arc<dyn RegistryClient>,
-        deterministic_rng_for_testing: Arc<Option<Mutex<StdRng>>>,
-        slice_byte_size_min_override: Option<usize>,
-        slice_pool: Box<dyn XNetSlicePool>,
+        slice_pool: Arc<Mutex<CertifiedSlicePool>>,
         refill_task_handle: RefillTaskHandle,
         metrics: Arc<XNetPayloadBuilderMetrics>,
         log: ReplicaLogger,
     ) -> XNetPayloadBuilderImpl {
+        let advert_handler = Arc::new(XNetAdvertHandlerImpl::new(
+            Arc::clone(&state_manager),
+            Arc::clone(&certified_stream_store),
+            Arc::clone(&registry),
+            Arc::clone(&slice_pool),
+            log.clone(),
+        ));
         Self {
             state_manager,
             certified_stream_store,
             registry,
-            deterministic_rng_for_testing,
-            slice_byte_size_min: slice_byte_size_min_override.unwrap_or(SLICE_BYTE_SIZE_MIN),
             slice_pool,
+            advert_handler,
             refill_task_handle,
             count_bytes_fn: certified_slice_count_bytes,
+            slice_byte_size_min: SLICE_BYTE_SIZE_MIN,
+            deterministic_rng_for_testing: None,
             metrics,
             log,
         }
     }
 
-    /// Testing only: replaces the function to be used for calculating
-    /// `CertifiedStreamSlice` byte sizes with the provided one.
-    #[doc(hidden)]
-    #[allow(dead_code)]
-    pub(crate) fn with_count_bytes_fn(
-        mut self,
-        certified_slice_count_bytes: fn(&CertifiedStreamSlice) -> CertifiedSliceResult<usize>,
-    ) -> Self {
-        self.count_bytes_fn = certified_slice_count_bytes;
-        self
+    /// The handler for adverts posted to the `XNetEndpoint`.
+    pub fn advert_handler(&self) -> Arc<dyn XNetAdvertHandler> {
+        Arc::clone(&self.advert_handler) as Arc<_>
     }
 
     /// Calculates the next expected message and signal indices for a given
@@ -561,40 +507,6 @@ impl XNetPayloadBuilderImpl {
                 .next_reject_signal_index(max_header_begin)
                 .unwrap_or(STREAM_INDEX_MAX),
         }
-    }
-
-    /// Classifies an advertised header by the strongest statement we can make
-    /// about its content; see `XNetAdvertOutcome`.
-    fn classify_advert(&self, source_subnet: SubnetId, header: &StreamHeader) -> XNetAdvertOutcome {
-        // Only a certified header proves that there is nothing new, so the test for
-        // whether to reply must come from the certified state, same as the reply.
-        let state = self.state_manager.get_latest_certified_state();
-        let own_stream = state
-            .as_ref()
-            .and_then(|state| state.get_ref().streams().get(&source_subnet));
-
-        // Whether we hold a reject signal in `[from, to)`; none, without a certified
-        // state.
-        let have_reject_signal_between = |from, to| {
-            own_stream
-                .and_then(|stream| stream.next_reject_signal_index(from))
-                .is_some_and(|index| index < to)
-        };
-
-        if let Some(stream) = own_stream {
-            // `NothingNew` if our certified stream has signals for all advertised messages;
-            // no messages before the advertised `signals_end`; and no reject signals before
-            // the advertised `begin`.
-            if header.end() <= stream.signals_end()
-                && header.signals_end() <= stream.messages_begin()
-                && !have_reject_signal_between(StreamIndex::from(0), header.begin())
-            {
-                return XNetAdvertOutcome::NothingNew;
-            }
-        }
-
-        self.slice_pool
-            .classify_advert(source_subnet, header, &have_reject_signal_between)
     }
 
     /// Computes the expected message and signal indices for every known subnet
@@ -957,8 +869,7 @@ impl XNetPayloadBuilderImpl {
     /// Shuffles the provided `Vec` using `self.deterministic_rng_for_testing` when
     /// set, `thread_rng()` otherwise.
     fn random_shuffle<T>(&self, vec: &mut [T]) {
-        use rand::seq::SliceRandom;
-        match *self.deterministic_rng_for_testing {
+        match self.deterministic_rng_for_testing {
             None => vec.shuffle(&mut thread_rng()),
             Some(ref rng) => vec.shuffle(rng.lock().unwrap().deref_mut()),
         }
@@ -999,18 +910,21 @@ impl XNetPayloadBuilderImpl {
         let mut stream_slices = BTreeMap::new();
 
         {
-            self.slice_pool.observe_pool_size_bytes();
+            let mut slice_pool = self.slice_pool.lock().unwrap();
+            slice_pool.observe_pool_size_bytes();
 
             // Trim off messages in the state or past payloads.
-            self.slice_pool.garbage_collect(stream_positions);
+            slice_pool.garbage_collect(stream_positions);
+        }
 
+        {
             // Takes from the pool a slice of the stream from `subnet_id` starting at
             // `begin`, of at most `msg_limit` messages and `byte_limit` bytes.
             //
             // If the slice is valid, returns it, its message count and its byte size.
             // If no slice is available or the slice is empty / invalid, returns `None`.
             let take_valid_slice = |subnet_id, begin, msg_limit, byte_limit| {
-                let (slice, slice_bytes) = match self.slice_pool.take_slice(
+                let (slice, slice_bytes) = match self.slice_pool.lock().unwrap().take_slice(
                     subnet_id,
                     Some(&begin),
                     msg_limit,
@@ -1439,12 +1353,13 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
 
         // Garbage collect payload contents from the pool.
         {
-            self.slice_pool.observe_pool_size_bytes();
+            let mut slice_pool = self.slice_pool.lock().unwrap();
+            slice_pool.observe_pool_size_bytes();
 
             for (subnet_id, message_index, signal_index, max_no_gc_header_begin) in
                 new_stream_positions
             {
-                self.slice_pool.garbage_collect_slice(
+                slice_pool.garbage_collect_slice(
                     subnet_id,
                     ExpectedIndices {
                         message_index,
@@ -1464,7 +1379,82 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
     }
 }
 
-impl XNetAdvertHandler for XNetPayloadBuilderImpl {
+/// Handles the adverts peers post to us, and the headers they reply to ours
+/// with. Owns no state of its own: it shares the slice pool with
+/// `XNetPayloadBuilderImpl`.
+struct XNetAdvertHandlerImpl {
+    /// Used for reading the certified state, to classify adverts against.
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+
+    /// Used for verifying adverts and encoding our own certified headers.
+    certified_stream_store: Arc<dyn CertifiedStreamStore>,
+
+    /// Used for retrieving the registry version to verify adverts against.
+    registry: Arc<dyn RegistryClient>,
+
+    /// Classifies adverts against the pooled slices and stream positions; and
+    /// holds the peer headers.
+    slice_pool: Arc<Mutex<CertifiedSlicePool>>,
+
+    log: ReplicaLogger,
+}
+
+impl XNetAdvertHandlerImpl {
+    fn new(
+        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
+        registry: Arc<dyn RegistryClient>,
+        slice_pool: Arc<Mutex<CertifiedSlicePool>>,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            state_manager,
+            certified_stream_store,
+            registry,
+            slice_pool,
+            log,
+        }
+    }
+
+    /// Classifies an advertised header by the strongest statement we can make
+    /// about its content; see `XNetAdvertOutcome`.
+    fn classify_advert(&self, source_subnet: SubnetId, header: &StreamHeader) -> XNetAdvertOutcome {
+        // Only a certified header proves that there is nothing new, so the test for
+        // whether to reply must come from the certified state, same as the reply.
+        let state = self.state_manager.get_latest_certified_state();
+        let own_stream = state
+            .as_ref()
+            .and_then(|state| state.get_ref().streams().get(&source_subnet));
+
+        // Whether we hold a reject signal in `[from, to)`; none, without a certified
+        // state.
+        let have_reject_signal_between = |from, to| {
+            own_stream
+                .and_then(|stream| stream.next_reject_signal_index(from))
+                .is_some_and(|index| index < to)
+        };
+
+        if let Some(stream) = own_stream {
+            // `NothingNew` if our certified stream has signals for all advertised messages;
+            // no messages before the advertised `signals_end`; and no reject signals before
+            // the advertised `begin`.
+            if header.end() <= stream.signals_end()
+                && header.signals_end() <= stream.messages_begin()
+                && !have_reject_signal_between(StreamIndex::from(0), header.begin())
+            {
+                return XNetAdvertOutcome::NothingNew;
+            }
+        }
+
+        self.slice_pool.lock().unwrap().classify_advert(
+            source_subnet,
+            header,
+            &have_reject_signal_between,
+        )
+    }
+}
+
+impl XNetAdvertHandler for XNetAdvertHandlerImpl {
     fn handle_advert(
         &self,
         source_subnet: SubnetId,
@@ -1505,6 +1495,8 @@ impl XNetAdvertHandler for XNetPayloadBuilderImpl {
         // garbage collected its messages, which is what tells us whether we still owe
         // it an advert.
         self.slice_pool
+            .lock()
+            .unwrap()
             .record_peer_header(source_subnet, slice.header());
 
         Ok(outcome)
@@ -2072,61 +2064,6 @@ impl RefillTaskHandle {
     }
 }
 
-/// Wrapper around a `CertifiedSlicePool`, implementing the `XNetSlicePool` trait.
-pub struct XNetSlicePoolImpl {
-    /// A pool of slices, filled in the background by an async task.
-    slice_pool: Arc<Mutex<CertifiedSlicePool>>,
-}
-
-impl XNetSlicePoolImpl {
-    pub fn new(slice_pool: Arc<Mutex<CertifiedSlicePool>>) -> Self {
-        Self { slice_pool }
-    }
-}
-
-impl XNetSlicePool for XNetSlicePoolImpl {
-    fn take_slice(
-        &self,
-        subnet_id: SubnetId,
-        begin: Option<&ExpectedIndices>,
-        msg_limit: Option<usize>,
-        byte_limit: Option<usize>,
-    ) -> Result<Option<(CertifiedStreamSlice, usize)>, CertifiedSliceError> {
-        let mut slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.take_slice(subnet_id, begin, msg_limit, byte_limit)
-    }
-
-    fn observe_pool_size_bytes(&self) {
-        let slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.observe_pool_size_bytes();
-    }
-
-    fn garbage_collect(&self, new_stream_positions: BTreeMap<SubnetId, ExpectedIndices>) {
-        let mut slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.garbage_collect(new_stream_positions);
-    }
-
-    fn garbage_collect_slice(&self, subnet_id: SubnetId, stream_position: ExpectedIndices) {
-        let mut slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.garbage_collect_slice(subnet_id, stream_position);
-    }
-
-    fn classify_advert(
-        &self,
-        subnet_id: SubnetId,
-        header: &StreamHeader,
-        have_reject_signal_between: &dyn Fn(StreamIndex, StreamIndex) -> bool,
-    ) -> XNetAdvertOutcome {
-        let slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.classify_advert(subnet_id, header, have_reject_signal_between)
-    }
-
-    fn record_peer_header(&self, subnet_id: SubnetId, header: &StreamHeader) {
-        let mut slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.record_peer_header(subnet_id, header);
-    }
-}
-
 #[derive(Clone, Eq, PartialEq, Debug)]
 enum SignalsValidationResult {
     Valid,
@@ -2529,4 +2466,43 @@ pub mod testing {
         PoolRefillTask, ProximityMap, RefillTaskHandle, STATUS_SUCCESS, UnhealthyNodes, XNetClient,
         XNetClientError, XNetEndpointResolver, XNetPayloadBuilderMetrics,
     };
+
+    use super::*;
+
+    /// Overrides of `XNetPayloadBuilderImpl` defaults, for testing.
+    pub trait XNetPayloadBuilderTesting {
+        /// Replaces the function to be used for calculating `CertifiedStreamSlice`
+        /// byte sizes with the provided one.
+        fn with_count_bytes_fn(
+            self,
+            count_bytes_fn: fn(&CertifiedStreamSlice) -> CertifiedSliceResult<usize>,
+        ) -> Self;
+
+        /// Replaces `SLICE_BYTE_SIZE_MIN` with the provided value.
+        fn with_slice_byte_size_min(self, slice_byte_size_min: usize) -> Self;
+
+        /// Shuffles stream positions using the provided RNG instead of
+        /// `thread_rng()`.
+        fn with_deterministic_rng(self, rng: StdRng) -> Self;
+    }
+
+    impl XNetPayloadBuilderTesting for XNetPayloadBuilderImpl {
+        fn with_count_bytes_fn(
+            mut self,
+            count_bytes_fn: fn(&CertifiedStreamSlice) -> CertifiedSliceResult<usize>,
+        ) -> Self {
+            self.count_bytes_fn = count_bytes_fn;
+            self
+        }
+
+        fn with_slice_byte_size_min(mut self, slice_byte_size_min: usize) -> Self {
+            self.slice_byte_size_min = slice_byte_size_min;
+            self
+        }
+
+        fn with_deterministic_rng(mut self, rng: StdRng) -> Self {
+            self.deterministic_rng_for_testing = Some(Mutex::new(rng));
+            self
+        }
+    }
 }
