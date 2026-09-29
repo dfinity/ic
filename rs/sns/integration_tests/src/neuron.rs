@@ -45,6 +45,7 @@ use ic_sns_governance::{
     },
     types::{Environment, test_helpers::NativeEnvironment},
 };
+use ic_sns_governance_api::pb::v1 as pb_api;
 use ic_sns_test_utils::{
     icrc1,
     itest_helpers::{
@@ -1585,6 +1586,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     );
 
     let rewards_e8s = reward_event.distributed_e8s_equivalent;
+    let reward_event_end_timestamp_seconds = reward_event.end_timestamp_seconds.unwrap();
     assert!(rewards_e8s > 0, "{reward_event:#?}",);
     let observed_reward_rate_per_round = i2d(rewards_e8s) / i2d(TOTAL_SUPPLY);
     let reward_rate_per_round_range = {
@@ -1616,6 +1618,19 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             .neurons
             .get(&neuron.id.as_ref().unwrap().to_string())
             .unwrap();
+        let api_neuron = pb_api::Neuron::from(neuron.clone());
+        let expected_participation = if weight == 0 {
+            None
+        } else {
+            Some(pb_api::neuron::RewardEventParticipation {
+                reward_event_end_timestamp_seconds: Some(reward_event_end_timestamp_seconds),
+                reward_shares: Some(candid::Nat::from(weight)),
+            })
+        };
+        assert_eq!(
+            api_neuron.latest_reward_event_participation, expected_participation,
+            "{neuron:#?}",
+        );
         let expected_share = i2d(weight) / dec!(5);
         let observed_reward = if weight == 3 {
             // auto-staking neuron
