@@ -35,30 +35,15 @@ impl VerifiedDelegationSource {
         }
     }
 
-    /// Returns the most recent NNS delegation known to the replica, verified (according to
-    /// `canister_ranges_check`) to be consistent with the given certified state, or `None`
-    /// if there is no delegation (i.e. on the NNS subnet).
-    ///
-    /// If the delegation cannot be verified, the failure is logged and recorded in the
-    /// metrics, and the HTTP error to reply with is returned.
+    /// Wrapper around `NNSDelegationReader::get_delegation` to convert errors, log, and record
+    /// metrics.
     pub(crate) fn get_delegation(
         &self,
-        certified_state: &ReplicatedState,
         canister_ranges_check: CanisterRangesCheck,
+        certified_state: &ReplicatedState,
     ) -> Result<Option<CertificateDelegation>, HttpError> {
-        let network_topology = &certified_state.metadata.network_topology;
-
         self.nns_delegation_reader
-            .get_delegation(
-                canister_ranges_check,
-                network_topology.routing_table(),
-                |subnet_id| {
-                    network_topology
-                        .subnets()
-                        .get(&subnet_id)
-                        .map(|subnet_topology| subnet_topology.public_key.as_slice())
-                },
-            )
+            .get_delegation(canister_ranges_check, certified_state)
             .map_err(|err| {
                 warn!(
                     every_n_seconds => LOG_EVERY_N_SECONDS,

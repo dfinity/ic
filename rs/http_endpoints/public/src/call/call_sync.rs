@@ -446,7 +446,7 @@ async fn lookup_message_certificate(
     };
 
     let delegation =
-        match verified_delegation_source.get_delegation(&certified_state, delegation_check) {
+        match verified_delegation_source.get_delegation(delegation_check, &certified_state) {
             Ok(delegation) => delegation,
             Err(err) => return MessageCertificateLookup::DelegationUnverified(err),
         };

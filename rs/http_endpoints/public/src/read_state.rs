@@ -302,7 +302,7 @@ pub(crate) async fn read_state(
             }
         };
         let delegation_from_nns = match verified_delegation_source
-            .get_delegation(certified_state_reader.get_state(), canister_ranges_check)
+            .get_delegation(canister_ranges_check, certified_state_reader.get_state())
         {
             Ok(delegation) => delegation,
             Err(err) => {
