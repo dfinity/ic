@@ -3,6 +3,9 @@ use simple_asn1::{ASN1Block, oid};
 /// Byte size of the public key, which is a G2 element.
 pub const PUBLIC_KEY_SIZE: usize = 96;
 
+/// Byte size of the DER encoding of a public key.
+pub const PUBLIC_KEY_DER_SIZE: usize = 133;
+
 /// Converts public key bytes into its DER-encoded form.
 ///
 /// See [the Interface Spec](https://internetcomputer.org/docs/current/references/ic-interface-spec#certificate)
@@ -27,13 +30,21 @@ pub fn public_key_to_der(key: &[u8]) -> Result<Vec<u8>, String> {
 /// and [RFC 5480](https://tools.ietf.org/html/rfc5480).
 ///
 /// # Errors
-/// * Returns a string describing the error if the given `bytes` are not valid
-///   ASN.1, or include unexpected ASN.1 structures.
+/// * Returns a string describing the error if the given `bytes` are not
+///   [`PUBLIC_KEY_DER_SIZE`] long, are not valid ASN.1, or include unexpected
+///   ASN.1 structures.
 pub fn public_key_from_der(bytes: &[u8]) -> Result<[u8; PUBLIC_KEY_SIZE], String> {
     use simple_asn1::{
         ASN1Block::{BitString, Sequence},
         from_der,
     };
+
+    if bytes.len() != PUBLIC_KEY_DER_SIZE {
+        return Err(format!(
+            "unexpected DER length: {} bytes, expected {PUBLIC_KEY_DER_SIZE}",
+            bytes.len()
+        ));
+    }
 
     let unexpected_struct_err = |s: &ASN1Block| {
         format!("unexpected ASN1 structure: {s:?}, wanted: seq(seq(OID, OID), bitstring)")

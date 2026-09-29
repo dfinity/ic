@@ -52,6 +52,13 @@ fn should_use_correct_key_size_in_der_utils() {
     assert_eq!(PUBLIC_KEY_SIZE, PublicKeyBytes::SIZE);
 }
 
+#[test]
+fn should_use_correct_der_size() {
+    for tv in test_vectors() {
+        assert_eq!(der_bytes(&tv).len(), PUBLIC_KEY_DER_SIZE);
+    }
+}
+
 //Test conversion from raw public key to DER and back roundtrip
 #[test]
 fn test_raw_to_der_roundtrip() {
@@ -75,6 +82,26 @@ fn test_corrupted_der_fails() {
         let mut buf = der_bytes(&tv);
         buf[0] = !buf[0]; // Corrupt the first byte of the DER
         assert!(public_key_from_der(&buf).is_err());
+    }
+}
+
+#[test]
+fn test_der_of_wrong_length_fails() {
+    for tv in test_vectors() {
+        let mut too_long = der_bytes(&tv);
+        too_long.push(0);
+        let mut too_short = der_bytes(&tv);
+        too_short.pop();
+
+        for der in [too_long, too_short] {
+            assert_eq!(
+                public_key_from_der(&der),
+                Err(format!(
+                    "unexpected DER length: {} bytes, expected {PUBLIC_KEY_DER_SIZE}",
+                    der.len()
+                ))
+            );
+        }
     }
 }
 

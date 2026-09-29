@@ -249,18 +249,33 @@ impl CosePublicKey {
     }
 }
 
+/// The maximum length of a CBOR-encoded COSE key. The largest supported key
+/// (RSA-8192) is ~1.1 KiB.
+pub const MAX_COSE_PUBLIC_KEY_LEN: usize = 4096;
+
 /// Parse a CBOR-encoded key in the COSE (RFC 8152) format
 ///
 /// # Arguments
 /// * `pk_cose` the CBOR-encoded COSE key
 /// # Errors
-/// * `MalformedPublicKey` if the data could not be CBOR-decoded
+/// * `MalformedPublicKey` if the data is longer than
+///   [`MAX_COSE_PUBLIC_KEY_LEN`] or could not be CBOR-decoded
 /// * `AlgorithmNotSupported` if the key was decoded but is some unsupported
 ///   algorithm
 ///
 /// # Returns
 /// The decoded key as an SPKI
 pub fn parse_cose_public_key(pk_cose: &[u8]) -> CryptoResult<(AlgorithmId, Vec<u8>)> {
+    if pk_cose.len() > MAX_COSE_PUBLIC_KEY_LEN {
+        return Err(CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::Unspecified,
+            key_bytes: Some(pk_cose.to_vec()),
+            internal_error: format!(
+                "COSE public key length {} exceeds the maximum of {MAX_COSE_PUBLIC_KEY_LEN}",
+                pk_cose.len()
+            ),
+        });
+    }
     match CosePublicKey::from_cbor(pk_cose) {
         Ok(key) => Ok((key.algorithm_id(), key.encoded_key())),
         Err(CosePublicKeyParseError::MalformedPublicKey(algorithm)) => {
