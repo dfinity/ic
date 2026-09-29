@@ -67,6 +67,7 @@ members = [
     "rs/consensus/mocks",
     "rs/consensus/utils",
     "rs/consensus/chain_key",
+    "rs/consensus/upgrade",
     "rs/criterion_time",
     "rs/cross-chain/blob_store",
     "rs/cross-chain/proposal-cli",
@@ -959,6 +960,7 @@ syn = { version = "2.0.110", features = ["fold", "full"] }
 sys-mount = "3.0"
 sysinfo = "0.37"
 tar = "0.4.39"
+target-lexicon = "0.13.5"
 tempfile = "3.20"
 test-strategy = "0.4.0"
 textplots = "^0.8"

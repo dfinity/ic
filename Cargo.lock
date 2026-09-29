@@ -7941,6 +7941,7 @@ dependencies = [
  "ic-consensus-dkg",
  "ic-consensus-idkg",
  "ic-consensus-mocks",
+ "ic-consensus-upgrade",
  "ic-consensus-utils",
  "ic-crypto-prng",
  "ic-crypto-temp-crypto",
@@ -8238,6 +8239,15 @@ dependencies = [
  "ic-types",
  "mockall",
  "slog",
+]
+
+[[package]]
+name = "ic-consensus-upgrade"
+version = "0.9.0"
+dependencies = [
+ "ic-interfaces",
+ "ic-types",
+ "ic-types-test-utils",
 ]
 
 [[package]]
@@ -9615,6 +9625,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-cycles",
+ "ic-universal-canister",
  "ic-utils 0.9.0",
  "ic-utils-lru-cache",
  "ic-wasm-types",
@@ -9641,6 +9652,7 @@ dependencies = [
  "slog-term",
  "strum 0.26.3",
  "strum_macros 0.26.4",
+ "target-lexicon",
  "tempfile",
  "wasm-encoder 0.254.0",
  "wasmparser 0.254.0",
@@ -10068,6 +10080,7 @@ version = "0.9.0"
 dependencies = [
  "axum",
  "bytes",
+ "http-body-util",
  "hyper",
  "hyper-util",
  "ic-config",
@@ -10075,6 +10088,7 @@ dependencies = [
  "ic-crypto-tls-interfaces-mocks",
  "ic-crypto-utils-tls",
  "ic-http-endpoints-async-utils",
+ "ic-interfaces",
  "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
@@ -10240,6 +10254,7 @@ dependencies = [
  "ic-crypto-temp-crypto",
  "ic-error-types 0.2.0",
  "ic-https-outcalls-pricing",
+ "ic-https-outcalls-socks-proxy",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
  "ic-interfaces-mocks",
@@ -10250,7 +10265,6 @@ dependencies = [
  "ic-metrics",
  "ic-protobuf",
  "ic-registry-client-helpers",
- "ic-registry-keys",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
@@ -10271,7 +10285,6 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rayon",
  "slog",
- "strum 0.26.3",
 ]
 
 [[package]]
@@ -10296,6 +10309,22 @@ dependencies = [
  "tonic",
  "tonic-prost",
  "tonic-prost-build",
+]
+
+[[package]]
+name = "ic-https-outcalls-socks-proxy"
+version = "0.9.0"
+dependencies = [
+ "ic-interfaces-registry",
+ "ic-logger",
+ "ic-registry-client-fake",
+ "ic-registry-client-helpers",
+ "ic-registry-proto-data-provider",
+ "ic-registry-subnet-type",
+ "ic-test-utilities-registry",
+ "ic-types",
+ "slog",
+ "strum 0.26.3",
 ]
 
 [[package]]
@@ -13647,6 +13676,7 @@ dependencies = [
  "ic-consensus-features",
  "ic-consensus-idkg",
  "ic-consensus-manager",
+ "ic-consensus-upgrade",
  "ic-consensus-utils",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-tls-interfaces",
@@ -14710,6 +14740,7 @@ dependencies = [
  "ic-config",
  "ic-consensus",
  "ic-consensus-cup-utils",
+ "ic-consensus-upgrade",
  "ic-consensus-utils",
  "ic-crypto-iccsa",
  "ic-crypto-test-utils-crypto-returning-ok",
@@ -18142,6 +18173,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
+ "ic-universal-canister",
  "ic-utils 0.49.1",
  "itertools 0.12.1",
  "rand 0.8.6",

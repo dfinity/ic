@@ -53,10 +53,10 @@ jobs:
             launch_bare_metal --check_hostos_metrics
 
             # Run SEV tests
-            bazel test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-            bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-            bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-            bazel test //rs/tests/nested:sev_recovery --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+            bazel test //rs/tests/nested:guestos_upgrade_from_current_to_current_test_sev_farm --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+            bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev_farm --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+            bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current_sev_farm --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
+            bazel test //rs/tests/nested:sev_recovery_farm --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
 
             bazel clean
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}

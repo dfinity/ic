@@ -293,7 +293,7 @@ impl CanisterHttpPayloadBuilderImpl {
                                 continue;
                             }
                         };
-                        if let Some(response) = find_fully_replicated_response(
+                        if let Some(candidate) = find_fully_replicated_response(
                             grouped_shares,
                             threshold,
                             request,
@@ -301,10 +301,10 @@ impl CanisterHttpPayloadBuilderImpl {
                             &self.log,
                             &self.metrics,
                         ) {
-                            let candidate_size = response.count_bytes();
+                            let candidate_size = candidate.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
-                                responses.push(response);
+                                responses.push(candidate.into_response());
                                 responses_included += 1;
                                 accumulated_size += candidate_size;
                             }
@@ -343,7 +343,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         }
                     }
                     Replication::NonReplicated(designated_node_id) => {
-                        if let Some(response) = find_non_replicated_response(
+                        if let Some(candidate) = find_non_replicated_response(
                             grouped_shares,
                             designated_node_id,
                             request,
@@ -351,10 +351,10 @@ impl CanisterHttpPayloadBuilderImpl {
                             &self.log,
                             &self.metrics,
                         ) {
-                            let candidate_size = response.count_bytes();
+                            let candidate_size = candidate.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
-                                responses.push(response);
+                                responses.push(candidate.into_response());
                                 responses_included += 1;
                                 accumulated_size += candidate_size;
                             }
@@ -1316,7 +1316,10 @@ impl
         CanisterHttpSpent,
         CanisterHttpBatchStats,
     ) {
-        let mut stats = CanisterHttpBatchStats::default();
+        let mut stats = CanisterHttpBatchStats {
+            payload_bytes: payload.len(),
+            ..Default::default()
+        };
 
         let messages = bytes_to_payload(payload)
             .expect("Failed to parse a payload that was already validated");

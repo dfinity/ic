@@ -13,7 +13,10 @@ ConditionPathExists=/etc/danted.conf
 [Service]
 User=socks
 Group=socks
-ExecStart=/usr/sbin/danted -f /etc/danted.conf
+ExecStart=/usr/sbin/danted -f /etc/danted.conf -p /run/danted/danted.pid
+CapabilityBoundingSet=
+RuntimeDirectory=danted
+RuntimeDirectoryMode=0750
 Restart=always
 RestartSec=10
 

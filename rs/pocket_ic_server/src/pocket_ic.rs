@@ -3794,7 +3794,7 @@ fn get_canister_http_requests(pic: &PocketIc) -> Vec<CanisterHttpRequest> {
                 http_method: http_method_from(&c.http_method),
                 url: c.url,
                 headers: c.headers.iter().map(http_header_from).collect(),
-                body: c.body.unwrap_or_default(),
+                body: c.body.map_or_else(Vec::new, |body| body.as_ref().clone()),
                 max_response_bytes: c.max_response_bytes.map(|b| b.get()),
                 replication: replication_from(&c.replication),
                 pricing_version: pricing_version_from(&c.pricing_version),

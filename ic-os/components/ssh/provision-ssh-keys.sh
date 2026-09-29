@@ -1,13 +1,21 @@
 #!/bin/bash
 
+# Expects:
+# - name of account to install keys for as first argument
+# - replacement authorized_keys file on stdin
+
+case "$1" in
+    readonly | backup | recovery) ;;
+    *)
+        echo "$0: won't provision account '$1'" >&2
+        exit 1
+        ;;
+esac
+
 # Transparently switch uid to root in order to perform the privileged function.
 if [ $(id -u) != 0 ]; then
     exec sudo "$0" "$@"
 fi
-
-# Expects:
-# - name of account to install keys for as first argument
-# - replacement authorized_keys file on stdin
 
 ACCOUNT="$1"
 
@@ -25,22 +33,16 @@ cat >"${ORIGIN}"
 GROUP=$(id -ng "${ACCOUNT}")
 HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
 
-# Ensure directory and authorized_keys file exist, just in case they were not
-# set up earlier. This actually should not happen, just to be safe.
-if [ ! -e "${HOMEDIR}/.ssh" -o ! -e "${HOMEDIR}/.ssh/authorized_keys" ]; then
-    mkdir -p "${HOMEDIR}/.ssh"
-    touch "${HOMEDIR}/.ssh/authorized_keys"
-    chmod 700 "${HOMEDIR}"
-    chmod 700 "${HOMEDIR}/.ssh"
-    chmod 600 "${HOMEDIR}/.ssh/authorized_keys"
-    chown -R "${ACCOUNT}:${GROUP}" "${HOMEDIR}"
-    restorecon -r "${HOMEDIR}"
-fi
-
 # Transfer keys from master location, set up permissions and label, swap
 # out old keys.
-cp -L "${ORIGIN}" "${HOMEDIR}/.ssh/authorized_keys.new"
-chmod 600 "${HOMEDIR}/.ssh/authorized_keys.new"
+mkdir -p "${HOMEDIR}"
+chown "${ACCOUNT}:${GROUP}" "${HOMEDIR}"
+chmod 700 "${HOMEDIR}"
+runuser -u "${ACCOUNT}" -- sh -c 'umask 077
+    mkdir -p "$1/.ssh" && cat >"$1/.ssh/authorized_keys.new" \
+        && chmod 600 "$1/.ssh/authorized_keys.new" \
+        && mv "$1/.ssh/authorized_keys.new" "$1/.ssh/authorized_keys"' \
+    sh "${HOMEDIR}" <"${ORIGIN}" || exit 1
+
 chown -R "${ACCOUNT}:${GROUP}" "${HOMEDIR}"
-chcon --reference="${HOMEDIR}/.ssh/authorized_keys" "${HOMEDIR}/.ssh/authorized_keys.new"
-mv "${HOMEDIR}/.ssh/authorized_keys.new" "${HOMEDIR}/.ssh/authorized_keys"
+restorecon -r "${HOMEDIR}"

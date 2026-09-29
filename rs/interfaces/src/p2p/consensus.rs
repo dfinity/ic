@@ -52,7 +52,7 @@ pub struct ArtifactTransmits<T: IdentifiableArtifact> {
     /// The list of replication transmits returned by the client. Mutations are applied in order by P2P-replication.
     pub transmits: Vec<ArtifactTransmit<T>>,
     /// The field instructs the polling component (the one that calls `on_state_change` + `apply_changes`)
-    /// that polling immediately can be benefitial. For example, polling consensus when the field is set to
+    /// that polling immediately can be beneficial. For example, polling consensus when the field is set to
     /// true results in lower consensus latencies.
     pub poll_immediately: bool,
 }
