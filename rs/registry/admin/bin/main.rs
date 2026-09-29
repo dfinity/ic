@@ -1165,10 +1165,9 @@ impl ProposalTitle for ProposeToSplitSubnetCmd {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => format!(
-                "Split subnet {} by moving nodes {} and {} canister ranges to a new subnet",
+                "Split subnet {} ({} nodes)",
                 shortened_pid_string(&self.source_subnet),
-                shortened_pids_string(&self.destination_node_ids),
-                self.destination_canister_id_ranges.len(),
+                self.destination_node_ids.len(),
             ),
         }
     }
