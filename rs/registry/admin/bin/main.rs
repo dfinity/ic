@@ -1165,7 +1165,7 @@ impl ProposalTitle for ProposeToSplitSubnetCmd {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => format!(
-                "Split subnet {} ({} nodes)",
+                "Split subnet {} ({} nodes moved out)",
                 shortened_pid_string(&self.source_subnet),
                 self.destination_node_ids.len(),
             ),

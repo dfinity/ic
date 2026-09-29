@@ -343,9 +343,9 @@ fn split_subnet_parses_flags_and_derives_title() {
     assert_eq!(
         cmd.title(),
         format!(
-            "Split subnet {} by moving nodes {} and 1 canister ranges to a new subnet",
+            "Split subnet {} ({} nodes moved out)",
             shortened_pid_string(&source_subnet),
-            shortened_pids_string(&node_ids),
+            node_ids.len(),
         )
     );
 }
