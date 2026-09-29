@@ -5,20 +5,15 @@ use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_registry_client_helpers::{
-    node::{NodeRecord, NodeRegistry},
-    subnet::SubnetRegistry,
-};
+use ic_registry_client_helpers::node::NodeRecord;
 use prometheus::{GaugeVec, IntCounter, IntGauge, Opts};
 use rand::{Rng, thread_rng};
-use std::{
-    collections::BTreeMap,
-    convert::TryFrom,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::collections::BTreeMap;
+use std::convert::TryFrom;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-use super::{Error, get_node_operator_id};
+use super::{Error, get_node_operator_id, get_node_record, get_subnet_nodes};
 
 /// Function that generates a random value in the range [`low`, `high`), i.e.
 /// inclusive of `low` and exclusive of `high`
@@ -153,12 +148,7 @@ impl ProximityMap {
         version: RegistryVersion,
     ) -> Result<(NodeId, NodeRecord), Error> {
         // Retrieve `subnet`'s nodes, minus the unhealthy ones.
-        let mut nodes = self
-            .registry
-            .get_node_ids_on_subnet(subnet, version)
-            .map_err(|e| Error::RegistryGetSubnetInfoFailed(subnet, e))?
-            .filter(|nodes| !nodes.is_empty())
-            .ok_or(Error::MissingSubnet(subnet))?;
+        let mut nodes = get_subnet_nodes(self.registry.as_ref(), subnet, version)?;
         self.unhealthy_nodes.filter_at_least(1, &mut nodes);
 
         // Compute the individual and total weight of all nodes with explicit weights
@@ -197,15 +187,10 @@ impl ProximityMap {
             .unwrap_or_else(|e| e);
 
         let node = nodes[node_index];
-        let node_record = self
-            .registry
-            .get_node_record(node, version)
-            .map_err(|e| Error::RegistryGetNodeInfoFailed(node, e))?;
-
-        match node_record {
-            Some(node_record) => Ok((node, node_record)),
-            None => Err(Error::MissingXNetEndpoint(node)),
-        }
+        Ok((
+            node,
+            get_node_record(self.registry.as_ref(), node, version)?,
+        ))
     }
 
     /// Updates the RTT EMA for the node operator of `node` with the newly
