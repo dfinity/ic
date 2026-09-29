@@ -61,8 +61,6 @@ fn build_delegation_bench(
             create_fake_certificate_delegation(&canister_id_ranges, SUBNET_0);
         let certificate: Certificate = serde_cbor::from_slice(&delegation.certificate).unwrap();
         let labeled_tree = LabeledTree::try_from(certificate.tree.clone()).unwrap();
-        // Extract the public key certified in the delegation so that the verification performed by
-        // `build_verified` succeeds
         let certified_public_key = match lookup_path(
             &labeled_tree,
             &[b"subnet", SUBNET_0.get().as_ref(), b"public_key"],

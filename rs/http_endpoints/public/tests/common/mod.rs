@@ -549,12 +549,6 @@ impl HttpEndpointBuilder {
         let builder = self.delegation_from_nns.map(|delegation| {
             NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &log).unwrap()
         });
-        // Start the channel empty and *publish* the initial delegation below.
-        // Publishing (rather than seeding the channel with the initial value)
-        // triggers a change notification, which is what `wait_until_initialized`
-        // waits for before the endpoint becomes healthy. This lets us keep the
-        // sender alive (and hand it back to the test) so that tests can swap the
-        // delegation at runtime, instead of dropping it.
         let (nns_delegation_watcher_tx, nns_delegation_watcher_rx) = watch::channel(None);
         let nns_delegation_reader =
             NNSDelegationReader::new(nns_delegation_watcher_rx, log.clone());
