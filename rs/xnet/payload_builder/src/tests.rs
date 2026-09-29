@@ -70,7 +70,6 @@ fn resolve_xnet_endpoint(remote_node_index: u64, log: ReplicaLogger) -> Endpoint
         mock_gen_range_low(remote_node_index, 3),
         LOCAL_NODE,
         registry.clone(),
-        Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics)),
         &metrics,
         log.clone(),
     ));
@@ -1197,7 +1196,6 @@ fn advert_task(
     let proximity_map = Arc::new(ProximityMap::new(
         LOCAL_NODE,
         registry.clone(),
-        Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, metrics)),
         metrics,
         log.clone(),
     ));
@@ -1210,7 +1208,7 @@ fn advert_task(
     );
     AdvertTask::new(
         Arc::new(advert_handler),
-        endpoint_resolver,
+        Arc::new(endpoint_resolver),
         xnet_client,
         metrics,
         log,
