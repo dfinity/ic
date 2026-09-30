@@ -29,9 +29,10 @@ SELECT
 
   bi.job_name,
 
-  -- Whether bazel took the result from the cache, i.e. its test summary says '(cached) PASSED'.
+  -- Whether bazel took the result from the cache, i.e. its test summary says '(cached) PASSED':
+  -- the test passed and all its runs were cached. (No test is sharded, and bazel_tests has no shard count.)
   -- The logs of such a result are those of the earlier bazel invocation that ran the test.
-  COALESCE(bt.total_num_cached, 0) > 0 AS "cached"
+  COALESCE(bt.overall_status = 1 AND COALESCE(bt.total_num_cached, 0) >= GREATEST(bt.run_count, 1), FALSE) AS "cached"
 
 FROM
   workflow_runs     AS wr JOIN
