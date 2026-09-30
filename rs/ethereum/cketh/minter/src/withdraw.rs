@@ -584,7 +584,7 @@ fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
     // A selected id's nonce is below the finalized transaction count, so one of its transactions
     // must have a receipt: none having one means the chain, the providers or our own bookkeeping is
     // wrong. Logged and left pending rather than trapped, which would take the whole minter down.
-    // An id a provider failed to answer is not one of these, and is already counted as a failure.
+    // An id a provider failed to answer is not one of these: it was logged as a failure above.
     for id in expected_finalized_ids
         .iter()
         .filter(|id| !receipts.contains_key(id) && !unanswered.contains(id))
