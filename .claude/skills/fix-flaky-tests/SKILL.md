@@ -62,6 +62,7 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
      bazel run //ci/githubstats:query -- last --flaky --week <label>
      ```
      These tests use the `Local` backend which doesn't run via Farm and doesn't upload its journald logs to ElasticSearch. Instead the journald and console logs are streamed to the test log itself (the `FAILED.log`/`PASSED.log` files), so there's nothing to download from ElasticSearch or Farm.
+     They only run on RBE @ Namespace, so their logs come from GitHub artifacts instead of BuildBuddy. GitHub deletes those after 14 days, and downloading them needs `gh` to be logged in (see the prerequisites).
 
    Note the command will print `Downloading logs to: <LOG_DIR>`.
 
