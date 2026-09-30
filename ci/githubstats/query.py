@@ -6,14 +6,19 @@
 #
 import argparse
 import contextlib
+import io
 import json
 import os
 import re
 import shlex
+import struct
 import subprocess
 import sys
 import threading
 import urllib.parse
+import zipfile
+import zlib
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
@@ -37,6 +42,10 @@ REPO = "ic"
 
 FAILED = "FAILED"
 PASSED = "PASSED"
+
+# The tests of CI jobs named like this ran on RBE @ Namespace, which BuildBuddy doesn't know.
+# .github/actions/bazel-namespace uploads the logs of the tests that ran as the GitHub artifact <job_name>-logs.
+RBE_TEST_JOB_PREFIX = "bazel-test-all-rbe-bazel-test-"
 
 
 def die(*args):
@@ -352,6 +361,16 @@ def download_and_process_logs(
     # or the last line of the log for other tests.
     df["error_summaries"] = [{} for _ in range(len(df))]
 
+    # The logs of the tests that ran on RBE @ Namespace are in GitHub artifacts instead of BuildBuddy.
+    artifacts = open_logs_artifacts(df)
+
+    if (download_console_logs or download_ic_logs) and df["label"].str.match(r"//rs/tests/.*_local$").any():
+        print(
+            "Not downloading IC logs from ElasticSearch or console logs from Farm for *_local system-tests:"
+            " they don't run on Farm and their test logs already contain the logs of their nodes and consoles.",
+            file=sys.stderr,
+        )
+
     # Collect all download tasks
     download_tasks = []
     output_dirs = set()
@@ -367,25 +386,30 @@ def download_and_process_logs(
         # Add a lock to each row for thread-safe updates when annotating the DataFrame with errors below
         row["lock"] = threading.Lock()
 
-        buildbuddy_url = row["buildbuddy_url"]
         invocation_id = row["build_id"]
         last_started_at = row["first_start_time"].strftime("%Y-%m-%dT%H:%M:%S")
         invocation_dir = output_dir / f"{last_started_at}_{invocation_id}"
 
-        # Parse the BuildBuddy URL to extract the cluster and its base URL for use with gRPC later.
-        parsed_buildbuddy_url = urllib.parse.urlparse(buildbuddy_url)
-        cluster = parsed_buildbuddy_url.netloc.split(".")[1]  # e.g., "dash.zh1-idx1.dfinity.network'" -> "zh1-idx1"
-        buildbuddy_base_url = f"{parsed_buildbuddy_url.scheme}://{parsed_buildbuddy_url.netloc}"
+        if row["rbe"]:
+            artifact = None if row["cached"] else artifacts.get((row["run_id"], row["job_name"]))
+            log_sources = (
+                [] if artifact is None else get_all_log_members_from_artifact(artifact, test_target, row["status"])
+            )
+        else:
+            # Parse the BuildBuddy URL to extract the cluster and its base URL for use with gRPC later.
+            parsed_buildbuddy_url = urllib.parse.urlparse(row["logs_url"])
+            cluster = parsed_buildbuddy_url.netloc.split(".")[1]  # e.g., "dash.zh1-idx1.dfinity.network'" -> "zh1-idx1"
+            buildbuddy_base_url = f"{parsed_buildbuddy_url.scheme}://{parsed_buildbuddy_url.netloc}"
 
-        # Get all log URLs for this test run
-        log_urls = get_all_log_urls_from_buildbuddy(buildbuddy_base_url, cluster, str(invocation_id), test_target)
+            # Get all log URLs for this test run
+            log_sources = get_all_log_urls_from_buildbuddy(
+                buildbuddy_base_url, cluster, str(invocation_id), test_target
+            )
 
-        for attempt_num, download_url, attempt_status in log_urls:
+        for attempt_num, source, attempt_status in log_sources:
             attempt_dir = invocation_dir / str(attempt_num)
             download_to_path = attempt_dir / f"{attempt_status}.log"
-            download_tasks.append(
-                (row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path, output_dir)
-            )
+            download_tasks.append((row, attempt_num, attempt_status, source, attempt_dir, download_to_path, output_dir))
 
     execute_download_tasks(
         download_tasks,
@@ -491,6 +515,235 @@ def convert_download_url(uri, cluster) -> str:
     return f"https://artifacts.{cluster}.dfinity.network/cas/{hash}"
 
 
+def github_token() -> Optional[str]:
+    """
+    Return the GitHub token of the user's `gh auth login`, or the GH_TOKEN or GITHUB_TOKEN that gh prefers when set.
+    Only look at those environment variables directly when gh isn't installed.
+    """
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token", "--hostname", "github.com"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+            stdin=subprocess.DEVNULL,
+        )
+        return result.stdout.strip() or None
+    except FileNotFoundError:
+        return os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return None
+
+
+def open_logs_artifacts(df: pd.DataFrame) -> dict[tuple[int, str], "LogsArtifact"]:
+    """
+    Open the <job_name>-logs artifacts with the logs of the runs of tests on RBE @ Namespace in the given DataFrame,
+    keyed by (run_id, job_name).
+    """
+    ran = df[df["rbe"] & ~df["cached"].astype(bool)]
+    cached = df["rbe"].sum() - len(ran)
+    if cached > 0:
+        print(
+            f"Not downloading the logs of {cached} of the runs on RBE @ Namespace: bazel took their result from the"
+            " remote cache, so their logs are those of an earlier bazel invocation, which the database doesn't record.",
+            file=sys.stderr,
+        )
+    rows_per_run = Counter(zip(ran["run_id"], ran["job_name"]))
+    if not rows_per_run:
+        return {}
+
+    token = github_token()
+    if token is None:
+        print(
+            f"Not downloading the logs of {len(ran)} of the runs on RBE @ Namespace:"
+            " they're in GitHub artifacts, which need a GitHub token. Run `gh auth login` to get one.",
+            file=sys.stderr,
+        )
+        return {}
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {run: executor.submit(open_logs_artifact, *run, token) for run in rows_per_run}
+
+    artifacts, missing_runs, runs_per_error = {}, [], {}
+    for run, future in futures.items():
+        try:
+            if (artifact := future.result()) is None:
+                missing_runs.append(run)
+            else:
+                artifacts[run] = artifact
+        except Exception as e:
+            runs_per_error.setdefault(str(e), []).append(run)
+
+    if missing_runs:
+        print(
+            f"Not downloading the logs of {sum(rows_per_run[run] for run in missing_runs)} of the runs on RBE @ Namespace:"
+            f" {len(missing_runs)} of their workflow runs have no <job_name>-logs artifact,"
+            " because GitHub deletes it after 14 days and workflow runs before 2026-09-30 didn't upload one.",
+            file=sys.stderr,
+        )
+    # Print each error once, since a bad token or a rate limit makes all artifacts fail the same way.
+    for error, runs in runs_per_error.items():
+        (run_id, job_name), more = runs[0], f" and of {len(runs) - 1} more workflow runs" if len(runs) > 1 else ""
+        print(
+            f"Could not open the artifact {job_name}-logs of https://github.com/{ORG}/{REPO}/actions/runs/{run_id}{more}:"
+            f" {error}",
+            file=sys.stderr,
+        )
+    return artifacts
+
+
+def open_logs_artifact(run_id: int, job_name: str, token: str) -> Optional["LogsArtifact"]:
+    """
+    Open the artifact <job_name>-logs of the given workflow run, or return None if it has none
+    because GitHub deleted it after 14 days, the run predates it or its upload failed.
+    """
+    response = requests.get(
+        f"https://api.github.com/repos/{ORG}/{REPO}/actions/runs/{run_id}/artifacts",
+        params={"name": f"{job_name}-logs"},
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=60,
+    )
+    if not response.ok:
+        raise RuntimeError(
+            f"listing the artifacts failed with HTTP {response.status_code}: '{shorten(response.text.strip(), 80)}'"
+        )
+    artifacts = [artifact for artifact in response.json()["artifacts"] if not artifact["expired"]]
+    return LogsArtifact(artifacts[0], token) if artifacts else None
+
+
+# The central directory of a zip takes about 120 bytes per file and a test has about 3 files,
+# so this holds the central directory of about 700 tests, more than a master run executes.
+# Bigger ones take a second request.
+ZIP_TAIL_SIZE = 256 * 1024
+
+
+class LogsArtifact:
+    """
+    A <job_name>-logs artifact of a workflow run, whose zip holds the bazel-testlogs tree of the tests that ran.
+
+    To not download the whole zip, which exceeds 100 MB on master, only its central directory
+    and the files that are read are downloaded, with HTTP range requests.
+    """
+
+    def __init__(self, artifact: dict, token: str):
+        """The artifact is an item of GitHub's list of the artifacts of a workflow run."""
+        self.name = artifact["name"]
+        self.run_id = artifact["workflow_run"]["id"]
+        self.download_url = artifact["archive_download_url"]
+        self.token = token
+        self.blob_url = self.get_blob_url()
+
+        size = artifact["size_in_bytes"]
+        tail_start = max(0, size - ZIP_TAIL_SIZE)
+        tail = self.get_range(tail_start, size)
+        # The zip ends with the 22 bytes of its end of central directory record (upload-artifact writes no zip comment),
+        # whose bytes 16-20 are the offset of the central directory.
+        if tail[-22:-18] != b"PK\x05\x06":
+            raise zipfile.BadZipFile("the zip doesn't end with an end of central directory record")
+        (cd_offset,) = struct.unpack("<L", tail[-6:-2])
+        if cd_offset < tail_start:
+            tail, tail_start = self.get_range(cd_offset, tail_start) + tail, cd_offset
+        # zipfile takes the bytes before the tail for data prepended to the zip,
+        # so it makes the header_offset of each file relative to the start of the tail.
+        with zipfile.ZipFile(io.BytesIO(tail)) as zf:
+            infos = sorted(zf.infolist(), key=lambda info: info.header_offset)
+            ends = [info.header_offset for info in infos[1:]] + [zf.start_dir]
+        # Each file spans from its local header to the next one, or to the central directory.
+        self.members = {
+            info.filename: (info, tail_start + info.header_offset, tail_start + end) for info, end in zip(infos, ends)
+        }
+
+    def __str__(self):
+        return f"the artifact {self.name} of workflow run {self.run_id}"
+
+    def get_blob_url(self) -> str:
+        """
+        Return the URL of the zip in Azure Blob Storage, where GitHub redirects its download to.
+        It's valid for 10 minutes. The redirect isn't followed because that would download the whole zip.
+        """
+        response = requests.get(
+            self.download_url, headers={"Authorization": f"Bearer {self.token}"}, allow_redirects=False, timeout=60
+        )
+        if not response.is_redirect:
+            raise RuntimeError(
+                f"getting its download URL failed with HTTP {response.status_code}: '{shorten(response.text.strip(), 80)}'"
+            )
+        return response.headers["Location"]
+
+    def get_range(self, start: int, end: int) -> bytes:
+        """
+        Return the bytes [start, end) of the zip.
+
+        Azure ignores suffix ranges like bytes=-N and then returns the whole zip, so only absolute ranges are requested.
+        The GitHub token isn't sent because Azure rejects any Authorization header.
+        """
+        for attempt in (1, 2):
+            try:
+                with requests.get(
+                    self.blob_url, headers={"Range": f"bytes={start}-{end - 1}"}, stream=True, timeout=60
+                ) as response:
+                    if response.status_code == 206:
+                        return response.content
+                    error = f"HTTP {response.status_code} {response.headers.get('x-ms-error-code', '')}".strip()
+            except requests.RequestException as e:
+                # Not chained: its message contains the URL, whose query string grants access to the zip.
+                raise RuntimeError(f"reading the zip failed with {type(e).__name__}") from None
+            if response.status_code != 403 or attempt == 2:
+                raise RuntimeError(f"reading the zip failed with {error}")
+            # The URL expired.
+            self.blob_url = self.get_blob_url()
+
+    def read(self, name: str) -> bytes:
+        """Return the contents of the file with the given name in the zip, downloading it with one request."""
+        info, start, end = self.members[name]
+        data = self.get_range(start, end)
+        # The 30 bytes of the local file header end with the lengths of the file name and extra field that follow it.
+        name_length, extra_length = struct.unpack("<HH", data[26:30])
+        compressed = data[30 + name_length + extra_length :][: info.compress_size]
+        content = compressed if info.compress_type == zipfile.ZIP_STORED else zlib.decompress(compressed, -15)
+        if len(content) != info.file_size or zlib.crc32(content) != info.CRC:
+            raise zipfile.BadZipFile(f"bad size or CRC-32 of {name} in the zip")
+        return content
+
+
+@dataclass(frozen=True)
+class ArtifactMember:
+    """A file in a LogsArtifact, which execute_download_tasks downloads like a URL."""
+
+    artifact: LogsArtifact
+    name: str
+
+    def __str__(self):
+        return f"{self.name} in {self.artifact}"
+
+
+def get_all_log_members_from_artifact(
+    artifact: LogsArtifact, test_target: str, status: str
+) -> list[tuple[int, ArtifactMember, str]]:
+    """
+    Like get_all_log_urls_from_buildbuddy but for the logs of a test in a LogsArtifact,
+    which are laid out like in bazel-testlogs:
+
+        <package>/<name>/test_attempts/attempt_<n>.log  the failed attempts before the last one
+        <package>/<name>/test.log                       the last attempt
+    """
+    test_dir = test_target.removeprefix("//").replace(":", "/", 1).removeprefix("/")  # "//:foo" -> "foo"
+    log_members = []
+    while (name := f"{test_dir}/test_attempts/attempt_{len(log_members) + 1}.log") in artifact.members:
+        log_members.append((len(log_members) + 1, ArtifactMember(artifact, name), FAILED))
+
+    if (name := f"{test_dir}/test.log") not in artifact.members:
+        print(f"No logs of {test_target} in {artifact}.", file=sys.stderr)
+        return []
+    if status == "FLAKY" and not log_members:
+        print(f"No failed attempts of the FLAKY {test_target} in {artifact}, only its last attempt.", file=sys.stderr)
+    log_members.append(
+        (len(log_members) + 1, ArtifactMember(artifact, name), PASSED if status in ("SUCCESS", "FLAKY") else FAILED)
+    )
+    return log_members
+
+
 def execute_download_tasks(
     download_tasks: list,
     df: pd.DataFrame,
@@ -511,43 +764,47 @@ def execute_download_tasks(
     ):
 
         def download_log(task):
-            row, attempt_num, attempt_status, download_url, attempt_dir, download_to_path, output_dir = task
+            row, attempt_num, attempt_status, source, attempt_dir, download_to_path, output_dir = task
             shortened_path = download_to_path.relative_to(output_dir)
             try:
-                response = requests.get(download_url, timeout=60, stream=True)
-                if response.ok:
+                if isinstance(source, ArtifactMember):
+                    content = source.artifact.read(source.name)
+                    download_to_path.parent.mkdir(parents=True, exist_ok=True)
+                    download_to_path.write_bytes(content)
+                else:
+                    response = requests.get(source, timeout=60, stream=True)
+                    if not response.ok:
+                        error_line = shorten(response.text.split("\n")[0].strip(), 80)
+                        msg = f"Download {source} to .../{shortened_path} failed with HTTP {response.status_code}: '{error_line}'."
+                        if response.status_code == 404:
+                            msg += " The log has probably already been garbage collected from the bazel-remote cache."
+                        print(msg, file=sys.stderr)
+                        return None
                     download_to_path.parent.mkdir(parents=True, exist_ok=True)
                     with open(download_to_path, "wb") as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
-                    # Fork a thread to process the log while the other logs are still downloading to speed up the whole process.
-                    thread = threading.Thread(
-                        target=process_log,
-                        args=(
-                            row,
-                            attempt_num,
-                            attempt_status,
-                            attempt_dir,
-                            download_to_path,
-                            df,
-                            download_console_logs,
-                            download_ic_logs,
-                            verbose,
-                            download_console_log_executor,
-                            download_ic_log_executor,
-                        ),
-                    )
-                    thread.start()
-                    return thread
-                else:
-                    error_line = shorten(response.text.split("\n")[0].strip(), 80)
-                    msg = f"Download {download_url} to .../{shortened_path} failed with HTTP {response.status_code}: '{error_line}'."
-                    if response.status_code == 404:
-                        msg += " The log has probably already been garbage collected from the bazel-remote cache."
-                    print(msg, file=sys.stderr)
-                    return None
+                # Fork a thread to process the log while the other logs are still downloading to speed up the whole process.
+                thread = threading.Thread(
+                    target=process_log,
+                    args=(
+                        row,
+                        attempt_num,
+                        attempt_status,
+                        attempt_dir,
+                        download_to_path,
+                        df,
+                        download_console_logs,
+                        download_ic_logs,
+                        verbose,
+                        download_console_log_executor,
+                        download_ic_log_executor,
+                    ),
+                )
+                thread.start()
+                return thread
             except Exception as e:
-                print(f"Error downloading {download_url} -> .../{shortened_path}: {e}", file=sys.stderr)
+                print(f"Error downloading {source} -> .../{shortened_path}: {e}", file=sys.stderr)
                 return None
 
         # Download test logs concurrently.
@@ -653,7 +910,8 @@ def process_log(
                     verbose,
                 )
 
-        if group_name is not None and download_ic_logs:
+        # *_local system-tests don't send the logs of their nodes to ElasticSearch but stream them into their test log.
+        if group_name is not None and download_ic_logs and not row["label"].endswith("_local"):
             # If it's a system-test, we want to download the IC logs from ElasticSearch to get more context on the failure.
             # We fork a thread for downloading the IC logs to speed up the whole process instead of doing it sequentially after downloading all test logs.
             download_ic_log_executor.submit(
@@ -992,7 +1250,7 @@ LAST_COLUMNS = [
     ("branch",              "branch",                "left"),
     ("PR",                  "PR",                    "left"),
     ("commit",              "commit",                "left"),
-    ("buildbuddy",          "buildbuddy",            "left"),
+    ("logs",                "logs",                  "left"),
     ("errors",              "errors per attempt",    "left")
 ]
 # fmt: on
@@ -1018,7 +1276,7 @@ def write_log_dir_readme(
         ("head_branch",         "branch",                "left"),
         ("pull_request_number", "PR",                    "left"),
         ("head_sha",            "commit",                "left"),
-        ("buildbuddy_url",      "buildbuddy",            "left"),
+        ("logs_url",            "logs",                  "left"),
     ]
     # fmt: on
 
@@ -1039,13 +1297,22 @@ def write_log_dir_readme(
         if download_console_logs
         else ""
     )
-    contains_system_tests = df["label"].str.startswith("//rs/tests/").any()
+    # *_local system-tests don't run on Farm and stream the logs of their nodes and consoles into their test log.
+    contains_farm_system_tests = (df["label"].str.startswith("//rs/tests/") & ~df["label"].str.endswith("_local")).any()
     system_test_desc = (
         f"""
 
 The attempt directory will also contain:{ic_logs_desc}{console_logs_desc}
 """
-        if contains_system_tests and (download_ic_logs or download_console_logs)
+        if contains_farm_system_tests and (download_ic_logs or download_console_logs)
+        else ""
+    )
+    rbe_desc = (
+        """
+
+The logs of the runs on RBE @ Namespace, whose logs link goes to GitHub, come from the `<job_name>-logs` artifact of their
+workflow run, which GitHub deletes after 14 days. It has no logs of the runs whose result bazel took from the remote cache."""
+        if df["rbe"].any()
         else ""
     )
     readme = f"""Test Logs
@@ -1061,7 +1328,7 @@ per bazel invocation.
 
 The invocation directory will have a directory per attempt of the test, named like `1`, `2`, `3`, etc.
 
-Each attempt directory will either contain a `FAILED.log` or `PASSED.log` file with the log of the test if the attempt failed or passed, respectively.{system_test_desc}"""
+Each attempt directory will either contain a `FAILED.log` or `PASSED.log` file with the log of the test if the attempt failed or passed, respectively.{rbe_desc}{system_test_desc}"""
     readme_path.write_text(readme)
 
 
@@ -1286,18 +1553,28 @@ def last(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
+    # The tests of jobs on RBE @ Namespace have their logs in GitHub artifacts instead of BuildBuddy.
+    df["rbe"] = df["job_name"].str.startswith(RBE_TEST_JOB_PREFIX, na=False)
+
     # We need to create links to the cluster-specific BuildBuddy service.
     # To get the cluster-specific BuildBuddy URL we need to resolve the redirect via the BuildBuddy redirect service.
     # Since this I/O takes time we parallelize to speed it up by an order of magnitude.
-    def direct_url_to_buildbuddy(invocation_id, target):
+    def logs_url(invocation_id, target, rbe, run_id, job_name):
+        if rbe:
+            # The page of the attempt of the workflow run, whose number ends the job name, lists its <job_name>-logs artifact.
+            return f"https://github.com/{ORG}/{REPO}/actions/runs/{run_id}/attempts/{job_name.rsplit('-', 1)[1]}"
         url = f"https://dash.idx.dfinity.network/invocation/{invocation_id}"
         redirect = get_redirect_location(url)
         return f"{redirect}?target={target}" if redirect else url
 
     with ThreadPoolExecutor() as executor:
-        df["buildbuddy_url"] = list(executor.map(direct_url_to_buildbuddy, df["build_id"], df["label"]))
+        df["logs_url"] = list(
+            executor.map(logs_url, df["build_id"], df["label"], df["rbe"], df["run_id"], df["job_name"])
+        )
 
-    df["buildbuddy"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("logs", url))
+    df["logs"] = [
+        terminal_hyperlink("GitHub" if rbe else "BuildBuddy", url) for rbe, url in zip(df["rbe"], df["logs_url"])
+    ]
 
     # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
     df["commit"] = df["head_sha"].apply(
@@ -1415,7 +1692,9 @@ Mutually exclusive with --day/--week/--month""",
         help="""Filter by CI job SQL LIKE pattern. The job of a bazel invocation is named after the '*-bep' artifact
 it was uploaded in, minus that suffix, like 'bazel-test-all-__self_3' for the tests of bazel-test-all in ci-main.yml
 (whose number shifts when steps are added, so match 'bazel-test-all-__self%%') and 'bazel-test-all-rbe-bazel-test-%%'
-for those of bazel-test-all-rbe in ci-rbe-evaluation.yml, which run on RBE @ Namespace and have no logs in BuildBuddy.
+for those of bazel-test-all-rbe in ci-rbe-evaluation.yml, which run on RBE @ Namespace. `last` downloads the logs of the latter
+from the '<job>-logs' artifact of their workflow run on GitHub instead of from BuildBuddy, which needs `gh auth login`.
+GitHub deletes these artifacts after 14 days.
 Note that 'bazel-test-all-%%' matches both, and that of these two only the former runs *_farm system-tests, the latter *_local ones""",
     )
     filter_parser.add_argument(
@@ -1566,8 +1845,8 @@ Examples:
   # Show all runs of a test since the time of a specific commit
   bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since abc123def
 
-  # Show the last non-successful runs of the //rs/ tests in the last day except those on RBE @ Namespace (no logs in BuildBuddy)
-  bazel run //ci/githubstats:query -- last --non_success '//rs/%' --day --exclude-job 'bazel-test-all-rbe-%'
+  # Show the last flaky runs of a *_local system-test, which only runs on RBE @ Namespace, and download their logs from GitHub
+  bazel run //ci/githubstats:query -- last --flaky //rs/tests/consensus:safety_test_local --week
 """,
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")

@@ -23,7 +23,15 @@ SELECT
       ELSE ''
   END AS "pull_request_number",
 
-  bi.head_sha
+  bi.head_sha,
+
+  bi.run_id,
+
+  bi.job_name,
+
+  -- Whether bazel took the result from the cache, i.e. its test summary says '(cached) PASSED'.
+  -- The logs of such a result are those of the earlier bazel invocation that ran the test.
+  COALESCE(bt.total_num_cached, 0) > 0 AS "cached"
 
 FROM
   workflow_runs     AS wr JOIN
