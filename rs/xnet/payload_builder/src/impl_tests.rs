@@ -63,7 +63,7 @@ async fn expected_stream_indices() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
-            no_op_receiver(),
+            already_closed_receiver(),
             &MetricsRegistry::new(),
             log,
         );
@@ -108,7 +108,7 @@ async fn expected_stream_indices_includes_engine_subnets() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
-            no_op_receiver(),
+            already_closed_receiver(),
             &MetricsRegistry::new(),
             log,
         );
@@ -182,7 +182,7 @@ async fn expected_stream_indices_excludes_deleted_subnet() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
-            no_op_receiver(),
+            already_closed_receiver(),
             &MetricsRegistry::new(),
             log,
         );
@@ -536,7 +536,7 @@ async fn validate_slice_invalid_signature() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
-            no_op_receiver(),
+            already_closed_receiver(),
             &MetricsRegistry::new(),
             log,
         );
@@ -888,7 +888,7 @@ fn get_xnet_payload_builder_for_test(
         tokio::runtime::Handle::current(),
         LOCAL_NODE,
         LOCAL_SUBNET,
-        no_op_receiver(),
+        already_closed_receiver(),
         &MetricsRegistry::new(),
         log,
     )

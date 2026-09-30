@@ -339,8 +339,8 @@ impl XNetPayloadBuilderImpl {
     /// Creates a new `XNetPayloadBuilderImpl` for a node on `subnet_id`, using
     /// the given `StateManager`, `CertifiedStreamStore` and`RegistryClient`.
     ///
-    /// Also starts the advert task, advertising on every certified height from
-    /// `max_certified_height_rx`.
+    /// Also starts the advert task, advertising on every certified height
+    /// received from `max_certified_height_rx`.
     ///
     /// # Panics
     ///
@@ -413,9 +413,8 @@ impl XNetPayloadBuilderImpl {
         payload_builder
     }
 
-    /// Same as `new` except that this constructor uses the provided `slice_pool`
-    /// and `refill_task_handle` instead of constructing fresh ones; and starts no
-    /// advert task.
+    /// Same as `new` except that this constructor uses the provided `slice_pool`;
+    /// and starts no refill or advert tasks.
     pub fn new_from_components(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
@@ -1109,8 +1108,9 @@ pub fn max_message_index(stream_begin: StreamIndex) -> StreamIndex {
     stream_begin + (MAX_SIGNALS as u64).into()
 }
 
-/// Resolves a stream index and byte limit to an `EndpointLocator`, consisting
-/// of URL, node ID and proximity.
+/// Selects nodes on peer subnets based on proximity and health; and resolves
+/// stream and advert XNet endpoints to `EndpointLocators`, consisting of URL,
+/// node ID and proximity.
 pub struct XNetEndpointResolver {
     /// Used for retrieving a subnet's nodes, in order to poll their
     /// `XNetEndpoints` for `CertifiedStreamSlices` to be included into
@@ -1187,25 +1187,6 @@ impl XNetEndpointResolver {
         )
     }
 
-    /// Picks the nodes of `subnet_id` to advertise to: `advert_target_count()` of
-    /// them, sampled uniformly from the healthy ones, unless too few are. Not by
-    /// proximity, as all our nodes would then advertise to the same few.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if retrieving either subnet's nodes from the registry
-    /// fails; or if either subnet is missing or has no nodes.
-    pub fn advert_targets(&self, subnet_id: SubnetId) -> Result<Vec<NodeId>, Error> {
-        // No `ValidationContext` here, so go with the latest.
-        let version = self.registry.get_latest_version();
-        let own_subnet_size =
-            get_subnet_nodes(self.registry.as_ref(), self.subnet_id, version)?.len();
-        let nodes = get_subnet_nodes(self.registry.as_ref(), subnet_id, version)?;
-
-        let count = advert_target_count(own_subnet_size, nodes.len());
-        Ok(self.proximity_map.uniform_sample(count, nodes))
-    }
-
     /// Returns the `/api/v1/advert` `XNetEndpoint` URL of the given node, for
     /// posting our own certified header to it. Which node to advertise to is the
     /// caller's choice, unlike with `xnet_endpoint_url()`.
@@ -1269,6 +1250,25 @@ impl XNetEndpointResolver {
                 url,
                 proximity,
             })
+    }
+
+    /// Picks `advert_target_count()` nodes of `subnet_id` to advertise to, sampled
+    /// uniformly (not by proximity, to avoid bias) from among the healthy ones,
+    /// unless too few are.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if reading the registry fails; or if either subnet is
+    /// missing or has no nodes.
+    pub fn advert_targets(&self, subnet_id: SubnetId) -> Result<Vec<NodeId>, Error> {
+        // No `ValidationContext` here, so go with the latest.
+        let version = self.registry.get_latest_version();
+        let own_subnet_size =
+            get_subnet_nodes(self.registry.as_ref(), self.subnet_id, version)?.len();
+        let nodes = get_subnet_nodes(self.registry.as_ref(), subnet_id, version)?;
+
+        let count = advert_target_count(own_subnet_size, nodes.len());
+        Ok(self.proximity_map.uniform_sample(count, nodes))
     }
 }
 
@@ -1408,9 +1408,9 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
     }
 }
 
-/// Handles the adverts peers post to us, and the headers they reply to ours
-/// with; and decides which subnets we owe an advert to. Owns no state of its
-/// own: it shares the slice pool with `XNetPayloadBuilderImpl`.
+/// Handles the adverts peers post to us, and any headers they reply to ours
+/// with; and decides which subnets we owe an advert to. Has no state of its
+/// own, it shares the slice pool with `XNetPayloadBuilderImpl`.
 struct XNetAdvertHandlerImpl {
     /// Used for reading the certified state: to classify adverts against, and to
     /// decide which adverts we owe.
@@ -1483,19 +1483,18 @@ impl XNetAdvertHandlerImpl {
         )
     }
 
-    /// Our certified header, for every subnet we owe an advert to.
+    /// Returns the certified headers for every subnet we owe an advert to.
     fn adverts_owed(&self) -> Vec<(SubnetId, CertifiedStreamSlice)> {
-        self.subnets_owed()
+        self.subnets_owed_adverts()
             .into_iter()
             .filter_map(|subnet_id| Some((subnet_id, self.certified_header(subnet_id)?)))
             .collect()
     }
 
     /// Returns the subnets we owe an advert to, as of our latest certified state:
-    /// those whose stream holds messages, i.e. that have not signalled everything
-    /// we sent them; and those that have not yet seen our latest signals, as far as
-    /// the peer header on record tells.
-    fn subnets_owed(&self) -> Vec<SubnetId> {
+    /// those whose stream holds messages; and those that we have signals for,
+    /// relative to the peer header on record.
+    fn subnets_owed_adverts(&self) -> Vec<SubnetId> {
         let Some(state) = self.state_manager.get_latest_certified_state() else {
             return Vec::new();
         };
@@ -1758,9 +1757,9 @@ pub fn refill_stream_slice_indices(
     result.into_iter()
 }
 
-/// Expected number of adverts each node of a destination subnet receives from
-/// a source subnet per certified height, from which the number of targets
-/// each source node picks is derived.
+/// Expected number of copies of an advert that each node of the destination
+/// subnet should receive; from which the number of targets advertised to by
+/// each source node is derived.
 const ADVERTS_PER_NODE: usize = 3;
 
 /// Advertises our streams to their respective destination subnets.
@@ -1801,7 +1800,7 @@ impl AdvertTask {
         }
     }
 
-    /// Starts an async task advertising on every change of
+    /// Starts an async task advertising streams with new content on every change of
     /// `max_certified_height_rx`. It ends once the sender is dropped.
     fn start(
         self,
@@ -1816,7 +1815,7 @@ impl AdvertTask {
         });
     }
 
-    /// Posts our certified header to the chosen targets of every subnet we owe an
+    /// Posts our certified header to the chosen targets, for every subnet we owe an
     /// advert to. Does not wait for the posts to complete.
     async fn advertise(self: &Arc<Self>) {
         let task = Arc::clone(self);
@@ -1863,10 +1862,10 @@ impl AdvertTask {
             .collect()
     }
 
-    /// Advertises our stream to `subnet_id` to the given `node`: posts `advert`,
+    /// Advertises our stream for `subnet_id` to the given `node`: posts `advert`,
     /// our own certified header, and feeds back any reply to the advert handler, a
-    /// reply being the reverse certified header, proving that the peer has already
-    /// fully consumed our stream.
+    /// reply being the reverse stream's certified header, proving that the peer has
+    /// already fully consumed our stream.
     async fn advertise_to(&self, subnet_id: SubnetId, node: NodeId, advert: CertifiedStreamSlice) {
         let since = Instant::now();
         let status = match self.post_advert(subnet_id, node, advert).await {

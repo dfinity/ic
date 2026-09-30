@@ -45,7 +45,7 @@ fn assert_pick_node(
 #[tokio::test]
 async fn pick_node_no_roundtrip_times() {
     with_test_replica_logger(|log| {
-        let registry = create_xnet_endpoint_url_test_fixture();
+        let registry = get_node_selection_registry_for_test();
         let metrics = MetricsRegistry::new();
 
         let mut proximity_map = ProximityMap::with_rng(
@@ -68,7 +68,7 @@ async fn pick_node_no_roundtrip_times() {
 #[tokio::test]
 async fn pick_node_some_roundtrip_times() {
     with_test_replica_logger(|log| {
-        let registry = create_xnet_endpoint_url_test_fixture();
+        let registry = get_node_selection_registry_for_test();
         let metrics = MetricsRegistry::new();
 
         // A proximity map with a recorded roundtrip time to operator 1. Should result
@@ -99,7 +99,7 @@ async fn pick_node_some_roundtrip_times() {
 #[tokio::test]
 async fn pick_node_all_roundtrip_times() {
     with_test_replica_logger(|log| {
-        let registry = create_xnet_endpoint_url_test_fixture();
+        let registry = get_node_selection_registry_for_test();
         let metrics = MetricsRegistry::new();
 
         let mut proximity_map = ProximityMap::with_rng(
@@ -133,7 +133,7 @@ async fn pick_node_all_roundtrip_times() {
 #[tokio::test]
 async fn pick_node_extreme_roundtrip_times() {
     with_test_replica_logger(|log| {
-        let registry = create_xnet_endpoint_url_test_fixture();
+        let registry = get_node_selection_registry_for_test();
         let metrics = MetricsRegistry::new();
 
         let mut proximity_map = ProximityMap::with_rng(
@@ -190,7 +190,7 @@ async fn pick_node_extreme_roundtrip_times() {
 #[tokio::test]
 async fn pick_node_unhealthy_nodes() {
     with_test_replica_logger(|log| {
-        let registry = create_xnet_endpoint_url_test_fixture();
+        let registry = get_node_selection_registry_for_test();
         let metrics = MetricsRegistry::new();
 
         let mut proximity_map = ProximityMap::with_rng(
@@ -226,7 +226,7 @@ async fn pick_node_unhealthy_nodes() {
 #[test]
 fn uniform_sample() {
     with_test_replica_logger(|log| {
-        let registry = create_xnet_endpoint_url_test_fixture();
+        let registry = get_node_selection_registry_for_test();
         let nodes = vec![
             REMOTE_NODE_1_OPERATOR_1,
             REMOTE_NODE_2_OPERATOR_1,

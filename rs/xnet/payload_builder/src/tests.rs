@@ -64,7 +64,7 @@ async fn build_payload_no_subnets() {
 /// Creates an `XNetEndpointResolver` around a `ProximityMap` that resolves to
 /// the remote node of the given index; and calls `xnet_endpoint_url()` on it.
 fn resolve_xnet_endpoint(remote_node_index: u64, log: ReplicaLogger) -> EndpointLocator {
-    let registry = create_xnet_endpoint_url_test_fixture();
+    let registry = get_node_selection_registry_for_test();
     let metrics = MetricsRegistry::new();
 
     let proximity_map = Arc::new(ProximityMap::with_rng(
@@ -253,7 +253,7 @@ async fn validate_duplicate_messages_against_state_only() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
-            no_op_receiver(),
+            already_closed_receiver(),
             &MetricsRegistry::new(),
             log,
         );
@@ -335,7 +335,7 @@ async fn validate_state_removed() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
-            no_op_receiver(),
+            already_closed_receiver(),
             &MetricsRegistry::new(),
             log,
         );
@@ -373,7 +373,7 @@ async fn validate_state_not_yet_committed() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
-            no_op_receiver(),
+            already_closed_receiver(),
             &MetricsRegistry::new(),
             log,
         );
@@ -500,7 +500,7 @@ impl PayloadBuilderTestFixture {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
-            no_op_receiver(),
+            already_closed_receiver(),
             &self.metrics,
             log,
         )
@@ -580,7 +580,7 @@ async fn validate_xnet_payload_rejects_slice_from_deleted_subnet() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
-            no_op_receiver(),
+            already_closed_receiver(),
             &MetricsRegistry::new(),
             log,
         )
@@ -1191,10 +1191,10 @@ impl XNetClient for FakeAdvertClient {
 }
 
 /// A `XNetEndpointResolver` for `LOCAL_NODE` on `LOCAL_SUBNET`, using the
-/// registry of `create_xnet_endpoint_url_test_fixture()`. Its node selection
+/// registry from `get_node_selection_registry_for_test()`. Its node selection
 /// always picks the first candidates, so advert targets are deterministic.
 fn endpoint_resolver(metrics: &MetricsRegistry, log: ReplicaLogger) -> XNetEndpointResolver {
-    let registry = create_xnet_endpoint_url_test_fixture();
+    let registry = get_node_selection_registry_for_test();
     let proximity_map = Arc::new(ProximityMap::with_rng(
         mock_gen_range_low(0, 1),
         LOCAL_NODE,
@@ -1206,8 +1206,8 @@ fn endpoint_resolver(metrics: &MetricsRegistry, log: ReplicaLogger) -> XNetEndpo
 }
 
 /// An `AdvertTask` posting through `xnet_client`, with `advert_handler` deciding
-/// what to advertise and handling the replies; and using the registry of
-/// `create_xnet_endpoint_url_test_fixture()`.
+/// what to advertise and handling the replies; and using the registry from
+/// `get_node_selection_registry_for_test()`.
 fn advert_task(
     xnet_client: Arc<dyn XNetClient>,
     advert_handler: XNetAdvertHandlerImpl,
@@ -1409,7 +1409,7 @@ fn advert_target_count_scales_with_subnet_sizes() {
 /// seen our latest signals, as far as its recorded header tells. Never to
 /// ourselves.
 #[test]
-fn subnets_owed() {
+fn subnets_owed_adverts() {
     with_test_replica_logger(|log| {
         let stream = |message_count: u64, signal_end: u64| {
             generate_stream(&StreamConfig {
@@ -1455,7 +1455,7 @@ fn subnets_owed() {
         // `SUBNET_1` for its messages, `SUBNET_3` and `SUBNET_4` for our signals.
         assert_eq!(
             vec![SUBNET_1, SUBNET_3, SUBNET_4],
-            advert_handler.subnets_owed()
+            advert_handler.subnets_owed_adverts()
         );
     });
 }
