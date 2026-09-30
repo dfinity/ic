@@ -14,6 +14,10 @@ enum CosePublicKey {
     Ed25519(Vec<u8>),
 }
 
+/// The maximum length of a CBOR-encoded COSE key. The largest supported key
+/// (RSA-8192) is ~1.1 KiB.
+pub const MAX_COSE_PUBLIC_KEY_LEN: usize = 4096;
+
 // see https://tools.ietf.org/html/rfc8152 section 8.1
 const COSE_PARAM_KTY: serde_cbor::Value = serde_cbor::Value::Integer(1);
 const COSE_PARAM_ALG: serde_cbor::Value = serde_cbor::Value::Integer(3);
@@ -255,10 +259,6 @@ impl CosePublicKey {
         }
     }
 }
-
-/// The maximum length of a CBOR-encoded COSE key. The largest supported key
-/// (RSA-8192) is ~1.1 KiB.
-pub const MAX_COSE_PUBLIC_KEY_LEN: usize = 4096;
 
 /// Parse a CBOR-encoded key in the COSE (RFC 8152) format
 ///
