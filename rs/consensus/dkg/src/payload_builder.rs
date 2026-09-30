@@ -610,6 +610,22 @@ fn as_next_transcripts(
 
     next_transcripts
 }
+/// Returns the genesis DKG summary, i.e. the summary at height 0, derived from
+/// the given CUP contents.
+pub fn get_genesis_dkg_summary_from_cup_contents(
+    cup_contents: CatchUpPackageContents,
+    subnet_id: SubnetId,
+    registry: &dyn RegistryClient,
+    registry_version: RegistryVersion,
+) -> Result<DkgSummary, String> {
+    get_dkg_summary_from_cup_contents(
+        cup_contents,
+        Height::from(0),
+        subnet_id,
+        registry,
+        registry_version,
+    )
+}
 
 pub fn get_dkg_summary_from_cup_contents(
     cup_contents: CatchUpPackageContents,
@@ -625,23 +641,6 @@ pub fn get_dkg_summary_from_cup_contents(
         registry,
         registry_version,
         CatchUpPackageType::Normal,
-    )
-}
-
-/// Returns the genesis DKG summary, i.e. the summary at height 0, derived from
-/// the given CUP contents.
-pub fn get_genesis_dkg_summary_from_cup_contents(
-    cup_contents: CatchUpPackageContents,
-    subnet_id: SubnetId,
-    registry: &dyn RegistryClient,
-    registry_version: RegistryVersion,
-) -> Result<DkgSummary, String> {
-    get_dkg_summary_from_cup_contents(
-        cup_contents,
-        Height::from(0),
-        subnet_id,
-        registry,
-        registry_version,
     )
 }
 
