@@ -28,7 +28,6 @@ candid = { workspace = true }
 candid_parser = { workspace = true }
 chrono = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
-dyn-clone = "1.0.14"
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
@@ -106,7 +105,6 @@ tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", 
 tla_instrumentation_proc_macros = { path = "../../tla_instrumentation/tla_instrumentation_proc_macros", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-csv = { workspace = true }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
@@ -119,7 +117,6 @@ build-info-build = { workspace = true }
 candid_parser = { workspace = true }
 criterion = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
-ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-governance = { path = ".", features = ["test"] }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }

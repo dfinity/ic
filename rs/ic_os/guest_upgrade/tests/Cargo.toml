@@ -10,7 +10,6 @@ attestation = { path = "../../sev/attestation" }
 config_types = { path = "../../config/types" }
 der = { workspace = true }
 futures = { workspace = true }
-guest_disk = { path = "../../os_tools/guest_disk" }
 guest_upgrade_client = { path = "../client" }
 guest_upgrade_server = { path = "../server" }
 guest_upgrade_shared = { path = "../shared" }
