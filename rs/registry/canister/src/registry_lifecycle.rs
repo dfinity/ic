@@ -12,11 +12,11 @@ use ic_protobuf::registry::subnet::v1::{
 };
 use ic_registry_keys::{
     CATCH_UP_PACKAGE_CONTENTS_KEY_PREFIX, REPLICA_VERSION_KEY_PREFIX,
-    make_node_operator_record_key, make_node_record_key, make_replica_version_key,
-    make_subnet_list_record_key,
+    make_catch_up_package_contents_key, make_node_operator_record_key, make_node_record_key,
+    make_replica_version_key, make_subnet_list_record_key,
 };
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
-use ic_types::NodeId;
+use ic_types::{NodeId, SubnetId};
 use maplit::btreemap;
 use prost::Message;
 use std::str::FromStr;
@@ -445,6 +445,16 @@ fn backfill_cup_type_on_catch_up_package_contents(registry: &Registry) -> Vec<Re
             continue;
         }
 
+        let subnet_id = match PrincipalId::from_str(&subnet_id) {
+            Ok(subnet_id) => SubnetId::from(subnet_id),
+            Err(e) => {
+                println!(
+                    "Failed to parse subnet id '{subnet_id}' from CatchUpPackageContents: {e}. Skipping."
+                );
+                continue;
+            }
+        };
+
         let cup_type = if cup_contents.height == 0
             && cup_contents.time == 0
             && cup_contents.state_hash.is_empty()
@@ -470,7 +480,7 @@ fn backfill_cup_type_on_catch_up_package_contents(registry: &Registry) -> Vec<Re
 
         cup_contents.cup_type = Some(cup_type);
         mutations.push(update(
-            format!("{CATCH_UP_PACKAGE_CONTENTS_KEY_PREFIX}{subnet_id}"),
+            make_catch_up_package_contents_key(subnet_id),
             cup_contents.encode_to_vec(),
         ));
     }
@@ -833,8 +843,6 @@ mod test {
 
     #[test]
     fn test_backfill_cup_type_on_catch_up_package_contents() {
-        use ic_registry_keys::make_catch_up_package_contents_key;
-
         // Step 1: Prepare the world: a registry with four CUP contents records — two written
         // before `cup_type` existed (one genesis, one recovery), and two written after (one
         // genesis, one recovery).
