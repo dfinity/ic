@@ -1464,14 +1464,23 @@ mod tests {
         );
     }
 
-    /// The whole point of the exercise: the block that goes on the wire must be
-    /// smaller than the one it was stripped from, by the size of the response
-    /// contents it no longer carries.
+    /// The whole point of the exercise: the block proposal that goes on the wire
+    /// must be smaller than the one it was stripped from, by roughly the size of
+    /// the response contents it no longer carries.
+    ///
+    /// Measured over the whole encoded proposal, not just its canister http
+    /// payload, because declaring a stripped content hash costs about 34 bytes
+    /// there. That is dwarfed by any response worth stripping, but it does mean a
+    /// response of only a handful of bytes would not pay for itself.
     #[test]
     fn stripping_a_block_removes_the_canister_http_responses() {
         let (payload, stripped_responses) = canister_http_payload_with_every_kind();
-        let unstripped_size = payload.len();
         let block_proposal = fake_block_proposal_with_canister_http(payload);
+        let unstripped_size =
+            pb::StrippedConsensusMessage::proxy_encode(MaybeStrippedConsensusMessage::Unstripped(
+                ConsensusMessage::BlockProposal(block_proposal.clone()),
+            ))
+            .len();
 
         let MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) =
             ConsensusMessage::BlockProposal(block_proposal).strip()
@@ -1479,21 +1488,26 @@ mod tests {
             panic!("Didn't properly strip the block proposal");
         };
 
-        let stripped_size = stripped
-            .pruned_block_proposal_proto
-            .value
-            .as_ref()
-            .unwrap()
-            .canister_http_payload_bytes
-            .len();
+        let stripped_size = pb::StrippedConsensusMessage::proxy_encode(
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped),
+        )
+        .len();
         let removed_size: usize = stripped_responses
             .iter()
             .map(|response| response.content.count_bytes())
             .sum();
+        // The declared hashes are the only thing stripping adds back.
+        let declaration_overhead = 34 * stripped_responses.len();
 
         assert!(
-            stripped_size + removed_size <= unstripped_size,
-            "stripped: {stripped_size}, removed: {removed_size}, unstripped: {unstripped_size}"
+            stripped_size + removed_size <= unstripped_size + declaration_overhead,
+            "stripped: {stripped_size}, removed: {removed_size}, \
+             unstripped: {unstripped_size}, overhead: {declaration_overhead}"
+        );
+        assert!(
+            stripped_size < unstripped_size,
+            "the stripped proposal ({stripped_size} B) is not smaller than the \
+             unstripped one ({unstripped_size} B)"
         );
     }
 

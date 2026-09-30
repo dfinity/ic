@@ -395,6 +395,12 @@ fn assemble_canister_http_responses(criterion: &mut Criterion) {
 /// `(responses, response size, signatures per response)`. A single signature is a
 /// non-replicated or flexible outcall; 27 is the quorum a fully replicated outcall
 /// carries on a 40-node subnet.
+///
+/// Every case has to fit into `MAX_CANISTER_HTTP_PAYLOAD_SIZE` once the metadata
+/// and the signatures are counted, which is why the larger response counts pair
+/// with smaller bodies: 500 responses of 27 signatures each spend around 1.4 MB of
+/// the 2 MiB limit on signatures alone. `fake_canister_http_payload` panics rather
+/// than let a case silently measure fewer messages than it names.
 const CANISTER_HTTP_BENCH_CASES: [(u64, usize, usize); 8] = [
     (1, 1, 1),
     (1, 2_000_000, 1),
@@ -402,8 +408,8 @@ const CANISTER_HTTP_BENCH_CASES: [(u64, usize, usize); 8] = [
     (100, 16 * 1024, 1),
     (100, 16 * 1024, 27),
     (500, 1, 1),
-    (500, 4 * 1024, 1),
-    (500, 4 * 1024, 27),
+    (500, 3 * 1024, 1),
+    (500, 1024, 27),
 ];
 
 fn bench_disassemble(
