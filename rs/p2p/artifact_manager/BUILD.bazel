@@ -25,16 +25,11 @@ rust_test(
     crate = ":artifact_manager",
     deps = [
         # Keep sorted.
-        "//rs/artifact_pool",
-        "//rs/config",
         "//rs/interfaces",
         "//rs/limits",
         "//rs/monitoring/metrics",
         "//rs/p2p/consensus_manager",
-        "//rs/protobuf",
-        "//rs/test_utilities",
         "//rs/types/types",
-        "@crate_index//:assert_matches",
         "@crate_index//:prometheus",
         "@crate_index//:tokio",
         "@crate_index//:tracing",

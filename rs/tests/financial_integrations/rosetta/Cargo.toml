@@ -28,7 +28,6 @@ ic-ledger-core = { path = "../../../ledger_suite/common/ledger_core" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-rosetta-api = { path = "../../../rosetta-api/icp" }
 rosetta_test_lib = { path = "./rosetta_test_lib" }
-assert-json-diff = "2.0.1"
 rand = { workspace = true }
 serde_json = { workspace = true }
 ic-agent = { workspace = true }

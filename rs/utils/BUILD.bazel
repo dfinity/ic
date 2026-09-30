@@ -21,9 +21,7 @@ rust_test(
     crate = ":utils",
     deps = [
         # Keep sorted.
-        "@crate_index//:assert_matches",
         "@crate_index//:serde",
-        "@crate_index//:tempfile",
     ],
 )
 

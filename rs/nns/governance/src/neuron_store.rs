@@ -13,7 +13,6 @@ use crate::{
         with_stable_neuron_store_mut, with_voting_history_store_mut,
     },
 };
-use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
 use ic_nervous_system_governance::index::{
@@ -222,10 +221,32 @@ impl From<NeuronStoreError> for GovernanceError {
     }
 }
 
-trait PracticalClock: Clock + Send + Sync + Debug + DynClone {}
-dyn_clone::clone_trait_object!(PracticalClock);
+trait PracticalClock: Clock + Send + Sync + Debug + ClonePracticalClock {}
 
 impl PracticalClock for IcClock {}
+
+/// Helper (super)trait of PracticalClock that makes `Box<dyn PracticalClock>`
+/// cloneable. A trait object cannot require `Clone` directly (`Clone: Sized`),
+/// so instead, every `Clone` implementor of PracticalClock gets this for free
+/// via the blanket impl below.
+trait ClonePracticalClock {
+    fn clone_box(&self) -> Box<dyn PracticalClock>;
+}
+
+impl<T> ClonePracticalClock for T
+where
+    T: PracticalClock + Clone + 'static,
+{
+    fn clone_box(&self) -> Box<dyn PracticalClock> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn PracticalClock> {
+    fn clone(&self) -> Self {
+        self.as_ref().clone_box()
+    }
+}
 
 // TODO impl PracticalClock for MockClock {}
 // This does not work, because MockClock does not implement Clone. Not sure how

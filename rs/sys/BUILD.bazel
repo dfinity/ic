@@ -24,7 +24,6 @@ rust_library(
         "//conditions:default": [],
     }) + select({
         "@rules_rust//rust/platform:linux": [
-            "@crate_index//:cvt",
             "@crate_index//:thiserror",
         ],
         "//conditions:default": [],

@@ -18,7 +18,6 @@ ic-metrics-encoder = { workspace = true }
 ic-nervous-system-time-helpers = { path = "../time_helpers" }
 ic-nervous-system-timers = { path = "../timers" }
 futures = { workspace = true }
-serde = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 ic-config = { path = "../../config" }

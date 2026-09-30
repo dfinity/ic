@@ -11,6 +11,4 @@ candid = { workspace = true }
 ic-agent = { workspace = true }
 ic-ckbtc-minter = { path = "../minter" }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
-ic-icrc1 = { path = "../../../ledger_suite/icrc1" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
-num-traits = { workspace = true }

@@ -35,11 +35,9 @@ rust_library(
         "//rs/crypto/sha2",
         "//rs/phantom_newtype",
         "//rs/protobuf",
-        "@crate_index//:byte-unit",
         "@crate_index//:bytes",
         "@crate_index//:candid",
         "@crate_index//:comparable",
-        "@crate_index//:hex",
         "@crate_index//:prost",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
@@ -58,19 +56,15 @@ rust_test(
         "@crate_index//:strum_macros",
     ] + [
         # Keep sorted.
-        "@crate_index//:proptest-derive",
     ],
     deps = [
         # Keep sorted.
         "//rs/crypto/sha2",
         "//rs/phantom_newtype",
         "//rs/protobuf",
-        "@crate_index//:assert_matches",
-        "@crate_index//:byte-unit",
         "@crate_index//:bytes",
         "@crate_index//:candid",
         "@crate_index//:comparable",
-        "@crate_index//:hex",
         "@crate_index//:proptest",
         "@crate_index//:prost",
         "@crate_index//:serde",

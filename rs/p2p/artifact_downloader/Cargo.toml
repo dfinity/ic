@@ -21,7 +21,6 @@ ic-quic-transport = { path = "../quic_transport" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 rand = { workspace = true }
-slog = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -30,13 +29,11 @@ tracing = { workspace = true }
 assert_matches = { workspace = true }
 criterion = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
-futures = { workspace = true }
 http-body-util = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../../crypto/test_utils/canister_threshold_sigs" }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
-ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 mockall = { workspace = true }

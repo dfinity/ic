@@ -58,7 +58,6 @@ system_test_nns(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/financial_integrations/rosetta/rosetta_test_lib",
         "@crate_index//:anyhow",
-        "@crate_index//:assert-json-diff",
         "@crate_index//:rand",
         "@crate_index//:serde_json",
     ],

@@ -17,5 +17,3 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-proptest = { workspace = true }
-serde_bytes = { workspace = true }

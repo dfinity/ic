@@ -151,7 +151,6 @@ rust_test(
         "//rs/registry/transport",
         "//rs/test_utilities/types",
         "//rs/types/base_types",
-        "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:candid",
         "@crate_index//:hex",

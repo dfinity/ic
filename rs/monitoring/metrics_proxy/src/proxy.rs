@@ -7,7 +7,6 @@ use axum::http::header;
 use http::HeaderName;
 use hyper::body::Bytes;
 use itertools::Itertools;
-use log::error;
 use prometheus_parse::{self, Sample, Value};
 use rand::Rng;
 use reqwest::Client;
@@ -15,7 +14,7 @@ use std::collections::HashMap;
 use std::f64;
 use std::iter::zip;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use tracing::error;
 
 // Headers that must not be relayed from backend to client or vice versa.
 static HOPBYHOP: [&str; 8] = [
@@ -337,8 +336,7 @@ impl MetricsProxier {
                                     // then the cache returns nothing.
                                     // Below, we insert it into the cache if nothing was returned
                                     // into the cache at all.
-                                    let staleness: Duration = (*resolution).into();
-                                    match cache.get(&sample, now, staleness) {
+                                    match cache.get(&sample, now, *resolution) {
                                         Some(got) => sample = got,
                                         None => must_cache_sample = true,
                                     }
@@ -421,7 +419,6 @@ impl MetricsProxier {
 mod tests {
     use super::render_scrape_data;
     use crate::config::{ConnectTo, HttpProxyTarget, LabelFilter};
-    use duration_string::DurationString;
     use pretty_assertions::assert_eq as pretty_assert_eq;
     use std::{str::FromStr, time::Duration};
 
@@ -429,11 +426,11 @@ mod tests {
         HttpProxyTarget {
             connect_to: ConnectTo {
                 url: url::Url::from_str("http://localhost:8080/metrics").unwrap(),
-                timeout: DurationString::new(Duration::new(5, 0)),
+                timeout: Duration::from_secs(5),
                 tolerate_bad_tls: false,
             },
             label_filters: filters,
-            cache_duration: DurationString::new(Duration::new(0, 0)),
+            cache_duration: Duration::ZERO,
         }
     }
 

@@ -12,7 +12,6 @@ ic-logger = { path = "../../monitoring/logger" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
-slog = { workspace = true }
 
 [dev-dependencies]
 ic-registry-client-fake = { path = "../../registry/fake" }

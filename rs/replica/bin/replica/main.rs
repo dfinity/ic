@@ -56,6 +56,14 @@ fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
     Ok((replica_binary_path, hex::encode(hasher.finish())))
 }
 
+/// Returns the number of CPUs available to this process, falling back to 1
+/// if it cannot be determined.
+fn available_parallelism() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+}
+
 fn main() -> io::Result<()> {
     // We do not support 32 bits architectures and probably never will.
     #[cfg(not(target_pointer_width = "64"))]
@@ -92,7 +100,7 @@ fn main() -> io::Result<()> {
 
     // Async components usually spend most of their time awaiting for I/O operations.
     // Ideally async components are not CPU intensive so they should not need many OS threads.
-    let rt_worker_threads = std::cmp::max(num_cpus::get() / 4, 2);
+    let rt_worker_threads = std::cmp::max(available_parallelism() / 4, 2);
 
     // The runtime is use for inter process communication - crypto, networking adapters, etc.
     let rt_main = tokio::runtime::Builder::new_multi_thread()

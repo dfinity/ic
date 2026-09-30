@@ -29,7 +29,6 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-rate-limit-canister-integration-tests = { path = "./integration_tests" }
 
 [lib]
 crate-type = ["cdylib"]

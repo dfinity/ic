@@ -19,6 +19,5 @@ ic-sns-governance = { path = "../../../sns/governance" }
 ic-sns-swap = { path = "../../../sns/swap" }
 rgb = { workspace = true }
 rust_decimal = { workspace = true }
-serde = { workspace = true }
 textplots = { workspace = true }
 tokio = { workspace = true }

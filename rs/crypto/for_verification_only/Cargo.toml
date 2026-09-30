@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 ic-crypto-temp-crypto = { path = "../temp_crypto" }
-ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 

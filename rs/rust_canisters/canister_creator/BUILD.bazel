@@ -31,7 +31,6 @@ rust_canister(
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
         "@crate_index//:rand",
-        "@crate_index//:rand_pcg",
         "@crate_index//:wat",
     ],
 )
@@ -60,7 +59,6 @@ rust_ic_test(
         "@crate_index//:ic-cdk",
         "@crate_index//:more-asserts",
         "@crate_index//:rand",
-        "@crate_index//:rand_pcg",
         "@crate_index//:wat",
     ],
 )

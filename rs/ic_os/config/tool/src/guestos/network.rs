@@ -1,7 +1,6 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
 
 use anyhow::{Context, Result};
-use getifs::IfNet;
 use network::interfaces::{get_interface_name, get_interface_paths};
 
 /// Picks the best interface from the list
@@ -35,39 +34,31 @@ pub fn get_best_interface_name() -> Result<String> {
 
 /// Gets the most appropriate IPv4/IPv6 addresses from the provided interface
 pub fn get_interface_addresses(interface: &str) -> Result<(Option<Ipv4Addr>, Option<Ipv6Addr>)> {
-    // Get the interface
-    let interface = getifs::interfaces()
-        .context("failed to get network interfaces")?
-        .into_iter()
-        .find(|x| x.name() == interface)
-        .with_context(|| format!("interface {interface} not found"))?;
+    // `getifaddrs` returns one entry per (interface, address); on Linux every interface also
+    // has an address-less AF_PACKET entry, so an interface without IP addresses still shows up.
+    let mut found = false;
+    let mut addrs_v4 = Vec::new();
+    let mut addrs_v6 = Vec::new();
 
-    // Get all of its addresses
-    let addrs = interface
-        .addrs()
-        .context("unable to get interface addresses")?;
+    for ifaddr in nix::ifaddrs::getifaddrs().context("failed to get network interfaces")? {
+        if ifaddr.interface_name != interface {
+            continue;
+        }
+        found = true;
 
-    let addrs_v4 = addrs
-        .iter()
-        .filter_map(|x| {
-            if let IfNet::V4(v) = x {
-                Some(v.addr())
-            } else {
-                None
-            }
-        })
-        .collect();
+        let Some(address) = ifaddr.address else {
+            continue;
+        };
+        if let Some(v4) = address.as_sockaddr_in() {
+            addrs_v4.push(v4.ip());
+        } else if let Some(v6) = address.as_sockaddr_in6() {
+            addrs_v6.push(v6.ip());
+        }
+    }
 
-    let addrs_v6 = addrs
-        .iter()
-        .filter_map(|x| {
-            if let IfNet::V6(v) = x {
-                Some(v.addr())
-            } else {
-                None
-            }
-        })
-        .collect();
+    if !found {
+        anyhow::bail!("interface {interface} not found");
+    }
 
     Ok((
         pick_best_ipv4_address(addrs_v4),

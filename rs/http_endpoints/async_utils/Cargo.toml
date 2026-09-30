@@ -12,9 +12,7 @@ futures = { workspace = true }
 futures-util = { workspace = true }
 hyper = { workspace = true }
 ic-logger = { path = "../../monitoring/logger" }
-slog = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 
 [dev-dependencies]
-rand = { workspace = true }

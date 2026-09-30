@@ -85,6 +85,38 @@ const SEV_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 const GUESTOS_BOOT_SUCCESS_MARKER: &str = "GUESTOS BOOT SUCCESS";
 const GUESTOS_BOOT_FAILURE_MARKER: &str = "GUESTOS BOOT FAILURE";
 
+/// Returns true if `needle` occurs anywhere in `haystack` (an empty needle always matches).
+///
+/// A naive search is sufficient here: it runs on individual serial console lines.
+fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
+    needle.is_empty()
+        || haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+}
+
+#[cfg(test)]
+mod contains_subslice_tests {
+    use super::*;
+
+    #[test]
+    fn finds_markers_in_serial_lines() {
+        let line = b"[  12.345] \xff\xfeGUESTOS BOOT SUCCESS\r";
+        assert!(contains_subslice(
+            line,
+            GUESTOS_BOOT_SUCCESS_MARKER.as_bytes()
+        ));
+        assert!(!contains_subslice(
+            line,
+            GUESTOS_BOOT_FAILURE_MARKER.as_bytes()
+        ));
+        assert!(contains_subslice(b"abc", b"abc"));
+        assert!(contains_subslice(b"abc", b""));
+        assert!(!contains_subslice(b"ab", b"abc"));
+        assert!(!contains_subslice(b"", b"a"));
+    }
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 pub enum GuestVMType {
@@ -786,18 +818,15 @@ impl GuestVmService {
         // cannot use the String type.
         let mut lines = reader.split(b'\n');
 
-        let success = memchr::memmem::Finder::new(GUESTOS_BOOT_SUCCESS_MARKER);
-        let fail = memchr::memmem::Finder::new(GUESTOS_BOOT_FAILURE_MARKER);
-
         loop {
             let Some(line) = lines.next_segment().await? else {
                 sleep(Duration::from_secs(1)).await;
                 continue;
             };
-            if success.find(&line).is_some() {
+            if contains_subslice(&line, GUESTOS_BOOT_SUCCESS_MARKER.as_bytes()) {
                 return Ok(true);
             }
-            if fail.find(&line).is_some() {
+            if contains_subslice(&line, GUESTOS_BOOT_FAILURE_MARKER.as_bytes()) {
                 return Ok(false);
             }
         }

@@ -25,13 +25,11 @@ ic-metrics = { path = "../../monitoring/metrics" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 prometheus = { workspace = true }
-slog = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 tower-test = { workspace = true }

@@ -58,7 +58,7 @@ pub(crate) enum OrchestratorError {
     FileDownloadError(FileDownloadError),
 
     /// Failed to exec a new Orchestrator binary
-    ExecError(PathBuf, exec::Error),
+    ExecError(PathBuf, io::Error),
 
     /// The provided configuration file (`ic.json5`) has invalid content.
     InvalidConfigurationError(String),

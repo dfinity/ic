@@ -4,8 +4,8 @@ use dfn_core::{
     api::{self, ic0, trap_with},
     stable,
 };
-use rand::Rng;
-use rand_pcg::Lcg64Xsh32;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::mem;
@@ -42,7 +42,7 @@ struct Operation {
 thread_local! {
     /// A random number generator used to perform writes/reads to/from
     /// memory at random offsets.
-    static RNG: RefCell<Lcg64Xsh32> = RefCell::new(Lcg64Xsh32::new(0xcafe_f00d_d15e_a5e5, 0x0a02_bdbf_7bb3_c0a7));
+    static RNG: RefCell<SmallRng> = RefCell::new(SmallRng::seed_from_u64(0xcafe_f00d_d15e_a5e5));
 
     /// Pages accessed by read/write methods.
     static MEMORY: RefCell<Vec<u64>> = const { RefCell::new(vec![]) };
