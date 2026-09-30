@@ -85,7 +85,8 @@ pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
 /// Number of CanisterHttpResponses to be included in a block.
 ///
 /// Limiting the number of responses can improve performance, as otherwise validation times
-/// could become too large.
+/// could become too large. Timeouts, which are cheap to validate, do not count towards this
+/// limit. Neither do asynchronous receipts, as the response they belong to already did.
 pub const CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK: usize = 500;
 
 /// Maximum number of request bytes for a canister http request.
