@@ -581,7 +581,7 @@ def open_logs_artifacts(df: pd.DataFrame) -> dict[tuple[int, str], "LogsArtifact
         print(
             f"Not downloading the logs of {sum(rows_per_run[run] for run in missing_runs)} of the runs on RBE @ Namespace:"
             f" {len(missing_runs)} of their workflow runs have no <job_name>-logs artifact,"
-            " because GitHub deletes it after 14 days and workflow runs before 2026-09-30 didn't upload one.",
+            " because GitHub deletes it after 14 days, workflow runs before 2026-09-30 didn't upload one, or its upload failed.",
             file=sys.stderr,
         )
     # Print each error once, since a bad token or a rate limit makes all artifacts fail the same way.
@@ -817,8 +817,9 @@ def execute_download_tasks(
         successes = 0
         for processing in processings:
             if processing is not None:
-                successes += 1
-                if processing.exception() is not None:
+                if processing.exception() is None:
+                    successes += 1
+                else:
                     traceback.print_exception(processing.exception())
 
     # Render the error_summaries to human-readable form.
