@@ -2130,10 +2130,11 @@ impl PocketIcSubnets {
             //           };
             //         };
             //       };
+            //       notifications_enabled_origins = null;
             //       archive_config = opt record {
             //         polling_interval_ns = 15_000_000_000 : nat64;
             //         entries_buffer_limit = 10_000 : nat64;
-            //         module_hash = blob "\8b\35\b8\b2\d2\0d\fb\60\5a\86\eb\d9\a9\c9\9b\ce\75\9b\b2\cd\0c\fc\bc\f0\8d\ab\fd\f8\f7\05\74\a2";
+            //         module_hash = blob "\24\ff\2e\51\86\b6\78\7c\27\4f\f8\a6\1e\90\15\0d\9f\db\08\38\15\6e\e4\4f\e3\fa\f8\0d\12\85\2b\b4";
             //         entries_fetch_limit = 1_000 : nat16;
             //       };
             //       canister_creation_cycles_cost = opt (0 : nat64);
@@ -2198,6 +2199,7 @@ impl PocketIcSubnets {
             //       };
             //       mcp_official_url = opt opt "https://mcp.internetcomputer.org/mcp";
             //       dummy_auth = opt null;
+            //       notifications_allow_insecure_sender_list = null;
             //       sso_allow_insecure_discovery = null;
             //       register_rate_limit = opt record {
             //         max_tokens = 25_000 : nat64;
@@ -2245,6 +2247,7 @@ impl PocketIcSubnets {
                 new_flow_origins: None,        // DIFFERENT FROM ICP MAINNET
                 openid_configs: openid_google, // DIFFERENT FROM ICP MAINNET
                 sso_allow_insecure_discovery: None,
+                notifications_allow_insecure_sender_list: None,
                 analytics_config: None, // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
@@ -2255,6 +2258,7 @@ impl PocketIcSubnets {
                 dnssec_config: None,                // DIFFERENT FROM ICP MAINNET
                 doh_config: None,                   // DIFFERENT FROM ICP MAINNET
                 mcp_official_url: None,             // DIFFERENT FROM ICP MAINNET
+                notifications_enabled_origins: None,
             });
             ii_subnet
                 .state_machine
