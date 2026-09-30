@@ -1435,12 +1435,6 @@ fn should_export_the_receipt_fetch_metrics() {
         )
         .assert_contains_metric_matching(
             r#"cketh_minter_receipt_fetch_abandoned_rounds_total\{pipeline="sweeper"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_fetch_stalled_ids_total\{pipeline="withdrawal"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_fetch_stalled_ids_total\{pipeline="sweeper"\} 0 \d+"#,
         );
 }
 

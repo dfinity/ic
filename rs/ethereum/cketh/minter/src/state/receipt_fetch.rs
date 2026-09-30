@@ -24,7 +24,6 @@ pub struct RoundOutcome {
     receipts: u32,
     not_mined: u32,
     failures: u32,
-    stalled_ids: u32,
     abandoned: bool,
 }
 
@@ -39,10 +38,6 @@ impl RoundOutcome {
 
     pub fn record_failure(&mut self) {
         self.failures = self.failures.saturating_add(1);
-    }
-
-    pub fn record_stalled_id(&mut self) {
-        self.stalled_ids = self.stalled_ids.saturating_add(1);
     }
 
     /// A flag rather than a count, so a round with several conflicting ids counts once.
@@ -60,10 +55,6 @@ impl RoundOutcome {
 
     pub fn failures(&self) -> u32 {
         self.failures
-    }
-
-    pub fn stalled_ids(&self) -> u32 {
-        self.stalled_ids
     }
 
     pub fn is_abandoned(&self) -> bool {
@@ -98,7 +89,6 @@ pub struct ReceiptFetchWindow<Id> {
     receipts_total: u64,
     not_mined_total: u64,
     failures_total: u64,
-    stalled_ids_total: u64,
     abandoned_rounds_total: u64,
 }
 
@@ -111,7 +101,6 @@ impl<Id> Default for ReceiptFetchWindow<Id> {
             receipts_total: 0,
             not_mined_total: 0,
             failures_total: 0,
-            stalled_ids_total: 0,
             abandoned_rounds_total: 0,
         }
     }
@@ -175,9 +164,6 @@ impl<Id: Copy + Ord> ReceiptFetchWindow<Id> {
         self.failures_total = self
             .failures_total
             .saturating_add(outcome.failures() as u64);
-        self.stalled_ids_total = self
-            .stalled_ids_total
-            .saturating_add(outcome.stalled_ids() as u64);
         if outcome.is_abandoned() {
             self.abandoned_rounds_total = self.abandoned_rounds_total.saturating_add(1);
         }
@@ -201,7 +187,6 @@ impl<Id: Copy + Ord> ReceiptFetchWindow<Id> {
             receipts: self.receipts_total,
             not_mined: self.not_mined_total,
             failures: self.failures_total,
-            stalled_ids: self.stalled_ids_total,
             abandoned_rounds: self.abandoned_rounds_total,
         }
     }
@@ -213,8 +198,6 @@ pub struct ReceiptFetchCounters {
     pub receipts: u64,
     pub not_mined: u64,
     pub failures: u64,
-    /// Counted once per round, so an id that cannot be finalized keeps adding to it.
-    pub stalled_ids: u64,
     pub abandoned_rounds: u64,
 }
 

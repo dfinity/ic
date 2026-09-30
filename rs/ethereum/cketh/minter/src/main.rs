@@ -1573,15 +1573,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     abandoned_rounds = abandoned_rounds
                         .value(&[("pipeline", pipeline)], counters.abandoned_rounds as f64)?;
                 }
-                let mut stalled_ids = w.counter_vec(
-                    "cketh_minter_receipt_fetch_stalled_ids_total",
-                    "Ids with no receipt though their nonce is finalized. Resets on upgrade.",
-                )?;
-                for (pipeline, counters) in receipt_fetch {
-                    stalled_ids = stalled_ids
-                        .value(&[("pipeline", pipeline)], counters.stalled_ids as f64)?;
-                }
-
                 w.encode_gauge(
                     "cketh_minter_last_max_fee_per_gas",
                     s.last_transaction_price_estimate

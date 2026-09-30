@@ -96,8 +96,7 @@ mod adaptation {
     #[test]
     fn should_accumulate_what_the_lookups_returned() {
         let mut window = window_of(INITIAL_RECEIPT_FETCH_WINDOW);
-        let mut outcome = round(1, 2, 3);
-        outcome.record_stalled_id();
+        let outcome = round(1, 2, 3);
 
         window.record_round(outcome);
         window.record_round(outcome);
@@ -108,7 +107,6 @@ mod adaptation {
                 receipts: 2,
                 not_mined: 4,
                 failures: 6,
-                stalled_ids: 2,
                 abandoned_rounds: 0,
             }
         );

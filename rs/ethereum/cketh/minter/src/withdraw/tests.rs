@@ -23,7 +23,6 @@ mod collect {
 
         assert_eq!(receipts, BTreeMap::new());
         assert_eq!(outcome.lookups(), 0);
-        assert_eq!(outcome.stalled_ids(), 0);
     }
 
     #[test]
@@ -40,11 +39,6 @@ mod collect {
         );
         assert_eq!(outcome.receipts(), 2);
         assert_eq!(outcome.failures(), 1);
-        assert_eq!(
-            outcome.stalled_ids(),
-            0,
-            "an id a provider failed to answer is unanswered, not stalled"
-        );
         assert!(!outcome.is_abandoned());
     }
 
@@ -60,7 +54,6 @@ mod collect {
         assert_eq!(outcome.receipts(), 1);
         assert_eq!(outcome.not_mined(), 1);
         assert_eq!(outcome.failures(), 1);
-        assert_eq!(outcome.stalled_ids(), 0);
     }
 
     #[test]
@@ -74,25 +67,6 @@ mod collect {
         assert_eq!(receipts, BTreeMap::from([(id(2), receipt(hash(3)))]));
         assert_eq!(outcome.not_mined(), 2);
         assert_eq!(outcome.failures(), 0);
-        assert_eq!(outcome.stalled_ids(), 1);
-    }
-
-    #[test]
-    fn should_tell_a_stalled_id_apart_from_one_a_provider_failed_to_answer() {
-        let (receipts, outcome) = collect_in_hash_order(vec![
-            (hash(1), id(1), Ok(None)),
-            (hash(2), id(1), Ok(None)),
-            (hash(3), id(2), Err(failed_lookup())),
-        ]);
-
-        assert_eq!(receipts, BTreeMap::new());
-        assert_eq!(outcome.not_mined(), 2);
-        assert_eq!(outcome.failures(), 1);
-        assert_eq!(
-            outcome.stalled_ids(),
-            1,
-            "only the id every provider answered counts as stalled"
-        );
     }
 
     #[test]
@@ -105,7 +79,6 @@ mod collect {
         assert_eq!(receipts, BTreeMap::new());
         assert_eq!(outcome.failures(), 2);
         assert_eq!(outcome.failures(), outcome.lookups());
-        assert_eq!(outcome.stalled_ids(), 0);
     }
 
     #[test]
@@ -124,11 +97,6 @@ mod collect {
         assert_eq!(outcome.not_mined(), 1);
         assert_eq!(outcome.failures(), 1);
         assert_eq!(outcome.lookups(), 5);
-        assert_eq!(
-            outcome.stalled_ids(),
-            0,
-            "the ids of an abandoned round were answered and thrown away, not left unanswered"
-        );
     }
 }
 
