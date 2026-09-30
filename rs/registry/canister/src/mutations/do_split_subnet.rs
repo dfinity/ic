@@ -152,13 +152,13 @@ impl Registry {
                 initial_ni_dkg_transcript_high_threshold: Some(
                     dkg_response.high_threshold_transcript_record.clone(),
                 ),
+                cup_type: Some(cup_type),
                 height: 0,
                 time: 0,
                 state_hash: vec![],
                 registry_store_uri: None,
                 ecdsa_initializations: vec![],
                 chain_key_initializations: vec![],
-                cup_type: Some(cup_type),
             };
 
         let source_cup_contents = get_cup_contents(
