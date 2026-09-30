@@ -8419,8 +8419,8 @@ fn async_receipts_are_reported_for_the_committee_of_every_replication() {
     }
 }
 
-/// Receipts do not count towards the per-block response limit: a block that already
-/// carries as many responses as it may still carries every receipt.
+/// Receipts do not count towards the per-block response limit: a block that is already
+/// at the response limit still carries every receipt.
 #[test]
 fn async_receipts_do_not_count_towards_the_per_block_limit() {
     // Enough requests awaiting a response to reach the per-block response limit on
