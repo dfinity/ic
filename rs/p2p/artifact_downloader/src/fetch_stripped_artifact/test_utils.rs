@@ -1,4 +1,5 @@
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
+use ic_error_types::RejectCode;
 use ic_interfaces::canister_http::CanisterHttpPool;
 use ic_protobuf::types::v1 as pb;
 use ic_test_utilities_consensus::{
@@ -9,14 +10,15 @@ use ic_types::{
     CountBytes, Height, NodeId, NodeIndex, NumBytes, RegistryVersion,
     artifact::{CanisterHttpResponseId, ConsensusMessageId},
     batch::{
-        BatchPayload, FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
-        IngressPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE, iterator_to_bytes,
+        BatchPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
+        FlexibleCanisterHttpResponses, IngressPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+        iterator_to_bytes,
     },
     canister_http::{
-        CanisterHttpPaymentReceipt, CanisterHttpResponse, CanisterHttpResponseArtifact,
-        CanisterHttpResponseContent, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
-        CanisterHttpResponseReceipt, CanisterHttpResponseShare, CanisterHttpResponseSignature,
-        CanisterHttpResponseWithConsensus,
+        CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpResponse,
+        CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+        CanisterHttpResponseProof, CanisterHttpResponseReceipt, CanisterHttpResponseShare,
+        CanisterHttpResponseSignature, CanisterHttpResponseWithConsensus,
     },
     consensus::{
         Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHash, DataPayload,
@@ -298,6 +300,17 @@ pub(crate) fn fake_canister_http_response(
     }
 }
 
+/// A canister http reject response for the given callback id.
+pub(crate) fn fake_canister_http_reject(callback_id: u64) -> CanisterHttpResponse {
+    CanisterHttpResponse {
+        id: CallbackId::new(callback_id),
+        content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: String::from("rejected"),
+        }),
+    }
+}
+
 pub(crate) fn fake_canister_http_metadata(
     response: &CanisterHttpResponse,
 ) -> CanisterHttpResponseMetadata {
@@ -383,6 +396,28 @@ pub(crate) fn fake_flexible_canister_http_responses_message(
         message_type: Some(
             pb::canister_http_response_message::MessageType::FlexibleResponses(
                 pb::FlexibleCanisterHttpResponses::from(group),
+            ),
+        ),
+    }
+}
+
+/// A `flexible_errors` entry of a canister http payload that delivers the
+/// rejects which made a flexible outcall fail.
+pub(crate) fn fake_flexible_canister_http_too_many_rejects_message(
+    callback_id: u64,
+    rejects: &[(CanisterHttpResponse, NodeId)],
+) -> pb::CanisterHttpResponseMessage {
+    let error = FlexibleCanisterHttpError::TooManyRejects {
+        callback_id: CallbackId::new(callback_id),
+        reject_responses: fake_flexible_responses_with_proof(rejects),
+        extra_shares: vec![],
+        initial_spent: Cycles::new(0),
+    };
+
+    pb::CanisterHttpResponseMessage {
+        message_type: Some(
+            pb::canister_http_response_message::MessageType::FlexibleError(
+                pb::FlexibleCanisterHttpError::from(error),
             ),
         ),
     }

@@ -10,9 +10,9 @@
 //! Every such response is accompanied, in the very same message, by the hash of
 //! its content: the `content_hash` of the metadata that the response's signers
 //! signed over. That hash is all a receiver needs in order to look the content up
-//! in its own canister HTTP pool, or to fetch it from a peer, which is why
-//! stripping a response only ever *removes* bytes from a block, and never has to
-//! add any.
+//! in its own canister HTTP pool, or to fetch it from a peer, so taking a
+//! response's content out of the payload never requires putting anything else in
+//! its place.
 
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
@@ -133,8 +133,9 @@ mod tests {
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
 
     use crate::fetch_stripped_artifact::test_utils::{
-        fake_canister_http_payload, fake_canister_http_response,
+        fake_canister_http_payload, fake_canister_http_reject, fake_canister_http_response,
         fake_canister_http_response_message, fake_flexible_canister_http_responses_message,
+        fake_flexible_canister_http_too_many_rejects_message,
         fake_stripped_canister_http_response_message,
     };
 
@@ -146,28 +147,48 @@ mod tests {
 
     #[test]
     fn find_response_test() {
-        let response = fake_canister_http_response(1, 1024);
         let other = fake_canister_http_response(2, 1024);
 
         // Whichever kind of message delivers a response, its content can be found
-        // by the hash the message carries alongside it.
-        for payload in [
-            fake_canister_http_payload(vec![fake_canister_http_response_message(
-                &response,
-                &[NODE_1],
-            )]),
-            fake_canister_http_payload(vec![fake_canister_http_response_message(
-                &response,
-                &[NODE_1, NODE_2],
-            )]),
-            fake_canister_http_payload(vec![fake_flexible_canister_http_responses_message(
-                1,
-                &[(response.clone(), NODE_1)],
-            )]),
+        // by the hash the message carries alongside it. Note that the rejects of a
+        // failed flexible outcall are delivered too, by a `FlexibleError`.
+        let success = fake_canister_http_response(1, 1024);
+        let reject = fake_canister_http_reject(1);
+        for (response, payload) in [
+            (
+                &success,
+                fake_canister_http_payload(vec![fake_canister_http_response_message(
+                    &success,
+                    &[NODE_1],
+                )]),
+            ),
+            (
+                &success,
+                fake_canister_http_payload(vec![fake_canister_http_response_message(
+                    &success,
+                    &[NODE_1, NODE_2],
+                )]),
+            ),
+            (
+                &success,
+                fake_canister_http_payload(vec![fake_flexible_canister_http_responses_message(
+                    1,
+                    &[(success.clone(), NODE_1)],
+                )]),
+            ),
+            (
+                &reject,
+                fake_canister_http_payload(vec![
+                    fake_flexible_canister_http_too_many_rejects_message(
+                        1,
+                        &[(reject.clone(), NODE_1)],
+                    ),
+                ]),
+            ),
         ] {
             assert_eq!(
-                find_response(&payload, &hash_of(&response)).as_ref(),
-                Some(&response)
+                find_response(&payload, &hash_of(response)).as_ref(),
+                Some(response)
             );
             assert_eq!(find_response(&payload, &hash_of(&other)), None);
         }

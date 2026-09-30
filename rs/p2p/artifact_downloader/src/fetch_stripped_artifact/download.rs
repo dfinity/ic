@@ -552,9 +552,10 @@ mod tests {
     use crate::fetch_stripped_artifact::test_utils::{
         FakeCanisterHttpPool, fake_block_proposal_with_canister_http,
         fake_block_proposal_with_ingresses, fake_block_proposal_with_ingresses_and_idkg,
-        fake_canister_http_payload, fake_canister_http_response,
+        fake_canister_http_payload, fake_canister_http_reject, fake_canister_http_response,
         fake_canister_http_response_message, fake_flexible_canister_http_responses_message,
-        fake_idkg_payload_with_dealing, fake_summary_block_proposal,
+        fake_flexible_canister_http_too_many_rejects_message, fake_idkg_payload_with_dealing,
+        fake_summary_block_proposal,
     };
 
     use super::*;
@@ -1183,18 +1184,30 @@ mod tests {
     /// has to be able to serve it.
     #[tokio::test]
     async fn rpc_get_canister_http_response_from_consensus_pool_test() {
-        for message in [
-            fake_flexible_canister_http_responses_message(
-                7,
-                &[(fake_canister_http_response(7, 1024), NODE_1)],
+        let success = fake_canister_http_response(7, 1024);
+        let reject = fake_canister_http_reject(7);
+        for (response, message) in [
+            (
+                success.clone(),
+                fake_flexible_canister_http_responses_message(7, &[(success.clone(), NODE_1)]),
             ),
-            fake_canister_http_response_message(&fake_canister_http_response(7, 1024), &[NODE_1]),
-            fake_canister_http_response_message(
-                &fake_canister_http_response(7, 1024),
-                &[NODE_1, NODE_2],
+            (
+                success.clone(),
+                fake_canister_http_response_message(&success, &[NODE_1]),
+            ),
+            (
+                success.clone(),
+                fake_canister_http_response_message(&success, &[NODE_1, NODE_2]),
+            ),
+            // The rejects that made a flexible outcall fail are delivered too.
+            (
+                reject.clone(),
+                fake_flexible_canister_http_too_many_rejects_message(
+                    7,
+                    &[(reject.clone(), NODE_1)],
+                ),
             ),
         ] {
-            let response = fake_canister_http_response(7, 1024);
             let block = ConsensusMessage::BlockProposal(fake_block_proposal_with_canister_http(
                 fake_canister_http_payload(vec![message]),
             ));

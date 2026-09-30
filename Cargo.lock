@@ -6365,6 +6365,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-client-sender",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
