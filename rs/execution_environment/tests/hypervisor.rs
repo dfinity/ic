@@ -7228,7 +7228,10 @@ fn cycles_correct_if_update_fails() {
     let execution_cost_before = test.canister_execution_cost(b_id);
     test.execute_message(b_id);
     let execution_cost_after = test.canister_execution_cost(b_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(b_id).real()

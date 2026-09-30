@@ -272,6 +272,7 @@ rust_test(
         "CkSweeperAttested.sol",
         "tests/deposit_from_cex_demo/CkSweeperViaHelper.sol",
         "tests/deposit_from_cex_demo/MockUSDT.sol",
+        "tests/deposit_from_cex_demo/StipendForwarder.sol",
     ],
     env = {
         "ANVIL_BIN": "$(rootpath //:anvil)",
@@ -279,6 +280,7 @@ rust_test(
         "CKSWEEPER_ATTESTED_SOL": "$(rootpath CkSweeperAttested.sol)",
         "CKSWEEPER_VIA_HELPER_SOL": "$(rootpath tests/deposit_from_cex_demo/CkSweeperViaHelper.sol)",
         "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
+        "STIPEND_FORWARDER_SOL": "$(rootpath tests/deposit_from_cex_demo/StipendForwarder.sol)",
         "SOLC_BIN": "$(rootpath //:solc)",
     },
     deps = [

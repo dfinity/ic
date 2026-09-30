@@ -164,8 +164,11 @@ impl std::fmt::Display for OutputConfig {
                 writeln!(f, "{DOUBLE_INDENT}Description: {description}")?;
             }
             if let Some(ref rule_raw) = rule.rule_raw {
-                let decoded_rule = RateLimitRule::from_bytes_json(rule_raw.as_slice()).unwrap();
-                writeln!(f, "{DOUBLE_INDENT}Rate-limit rule:\n{decoded_rule}")?;
+                if let Ok(decoded_rule) = RateLimitRule::from_bytes_json(rule_raw.as_slice()) {
+                    writeln!(f, "{DOUBLE_INDENT}Rate-limit rule:\n{decoded_rule}")?;
+                } else {
+                    writeln!(f, "{DOUBLE_INDENT}Failed to decode rate-limit rule")?;
+                };
             }
         }
         Ok(())
@@ -195,9 +198,13 @@ impl std::fmt::Display for OutputRuleMetadata {
             writeln!(f, "{INDENT}Description: {description}")?;
         }
         if let Some(ref rule_raw) = self.rule_raw {
-            let decoded_rule = RateLimitRule::from_bytes_json(rule_raw.as_slice()).unwrap();
-            writeln!(f, "{INDENT}Rate-limit rule:\n{decoded_rule}")?;
+            if let Ok(decoded_rule) = RateLimitRule::from_bytes_json(rule_raw.as_slice()) {
+                writeln!(f, "{INDENT}Rate-limit rule:\n{decoded_rule}")?;
+            } else {
+                writeln!(f, "{INDENT}Failed to decode rate-limit rule")?;
+            }
         }
+
         Ok(())
     }
 }

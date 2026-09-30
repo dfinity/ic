@@ -28,7 +28,9 @@ use ic_test_utilities_types::ids::subnet_test_id;
 use rcgen::{CertifiedKey, generate_simple_self_signed};
 use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName, UnixTime};
 use std::{
+    backtrace::Backtrace,
     collections::{HashMap, HashSet},
+    io::Write,
     net::SocketAddr,
     str::FromStr,
     sync::{
@@ -48,6 +50,51 @@ use turmoil::start_test_processor;
 pub mod consensus;
 pub mod mocks;
 pub mod turmoil;
+
+/// Installs a panic hook that aborts the process as soon as any thread panics.
+///
+/// This is how a test opts into noticing panics in *detached* tokio tasks, which
+/// tokio otherwise swallows: see <https://github.com/tokio-rs/tokio/issues/4516>.
+///
+/// The diagnostics are written straight to the process' stderr instead of with
+/// `println!`/`eprintln!`. Those macros go through libtest's output capture,
+/// which buffers them in memory and only flushes once the test function
+/// returns. `std::process::abort()` never returns, so anything printed that way
+/// is discarded and the test log ends with no indication of what went wrong.
+/// `std::io::stderr()` writes to file descriptor 2 directly, bypassing the
+/// capture, and Bazel merges the test binary's stderr into the test log.
+///
+/// The name of the panicking thread is included too. What it tells you depends
+/// on which runtime polls the panicking task:
+///
+/// * A panic on a libtest thread carries the name of the test, because libtest
+///   names each test thread after the test it runs. That identifies the
+///   offending test even though the panic aborts the whole binary.
+/// * A detached task on a *multi-threaded* runtime is polled by a worker
+///   thread, and those all share tokio's configured thread name
+///   (`tokio-rt-worker` by default), so there the backtrace rather than the
+///   thread name is what localises the panic.
+/// * A detached task on the *current-thread* runtime that a bare
+///   `#[tokio::test]` builds is polled inside `block_on`, i.e. on the libtest
+///   thread, so the test's name still comes through.
+/// * A panic inside a `spawn_blocking` closure always carries the configured
+///   thread name, under either flavour.
+pub fn abort_process_on_panic() {
+    std::panic::set_hook(Box::new(|info| {
+        let current_thread = std::thread::current();
+        let thread_name = current_thread.name().unwrap_or("<unnamed>");
+        let stacktrace = Backtrace::force_capture();
+
+        let mut stderr = std::io::stderr();
+        let _ = writeln!(
+            stderr,
+            "Got panic. @thread:{thread_name} @info:{info}\n@stackTrace:{stacktrace}"
+        );
+        let _ = stderr.flush();
+
+        std::process::abort();
+    }));
+}
 
 /// Creates a temp crypto component with TLS key and specified node id.
 /// It also adds the tls keys to the registry data provider.

@@ -376,6 +376,20 @@ impl ExecutionTest {
         self.sender_info = None;
     }
 
+    /// Sets whether this subnet is cooling down.
+    pub fn set_cooling_down(&mut self, cooling_down: bool) {
+        let own_subnet_id = self.state().metadata.own_subnet_id;
+        self.state_mut()
+            .metadata
+            .modify_network_topology(|network_topology| {
+                network_topology
+                    .subnets_mut()
+                    .get_mut(&own_subnet_id)
+                    .unwrap()
+                    .cooling_down = cooling_down;
+            });
+    }
+
     pub fn state(&self) -> &ReplicatedState {
         self.state.as_ref().unwrap()
     }
@@ -2188,6 +2202,45 @@ impl ExecutionTest {
                 InputQueueType::RemoteSubnet,
             )
             .unwrap();
+    }
+
+    /// Delivers a consensus response for `callback`, the way the scheduler drains the
+    /// consensus queue: it wraps the callback id and the payload into a `Response`,
+    /// whose other fields `execute_subnet_message()` ignores.
+    pub fn deliver_consensus_response(&mut self, callback: CallbackId, payload: ResponsePayload) {
+        let state = self.state.take().unwrap();
+        let compute_allocation_used = state.total_compute_allocation();
+        let mut round_limits = RoundLimits {
+            instructions: RoundInstructions::from(i64::MAX),
+            subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
+            compute_allocation_used,
+            subnet_memory_reservation: self.subnet_memory_reservation,
+        };
+        let (new_state, _) = self.exec_env.execute_subnet_message(
+            SubnetMessage::Response(
+                Response {
+                    originator: CanisterId::ic_00(),
+                    respondent: CanisterId::ic_00(),
+                    originator_reply_callback: callback,
+                    refund: Cycles::zero(),
+                    response_payload: payload,
+                    deadline: ic_types::messages::NO_DEADLINE,
+                }
+                .into(),
+            ),
+            state,
+            self.install_code_instruction_limits.clone(),
+            &mut mock_random_number_generator(),
+            &self.chain_key_data,
+            &self.replica_version,
+            &self.registry_settings,
+            self.current_round,
+            &mut round_limits,
+        );
+        self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
+        self.state = Some(new_state);
     }
 
     /// Asks the canister if it is willing to accept the ingress message.

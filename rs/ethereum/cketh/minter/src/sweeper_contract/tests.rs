@@ -1,6 +1,6 @@
 use crate::deposit_address::DepositAddress;
 use crate::eth_logs::encode_principal;
-use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch};
+use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch, encode_sweep_eth_batch};
 use crate::tx::TransactionSignature;
 use candid::Principal;
 use ethnum::u256;
@@ -93,6 +93,65 @@ fn should_encode_an_empty_batch() {
     assert_eq!(data.len(), 4 + 64 + 32 + 32);
     assert_eq!(&data[4 + 64..4 + 96], &word(0));
     assert_eq!(&data[4 + 96..], &word(0));
+}
+
+const ETH_SIGNATURE: &str = "sweepEthBatch((address,bytes32,bytes32,bytes32,bytes32,uint8)[])";
+
+#[test]
+fn should_call_the_eth_function_the_delegate_exposes() {
+    let (items, _tokens) = sweep();
+
+    let data = encode_sweep_eth_batch(&items);
+
+    assert_eq!(
+        &data[..4],
+        &ic_sha3::Keccak256::hash(ETH_SIGNATURE.as_bytes())[..4]
+    );
+}
+
+#[test]
+fn should_encode_an_eth_batch_sweep() {
+    use alloy_primitives::{Address, B256};
+    use alloy_sol_types::{SolValue, sol};
+
+    sol! {
+        struct EthSweepItem {
+            address deposit;
+            bytes32 principal;
+            bytes32 subaccount;
+            bytes32 r;
+            bytes32 s;
+            uint8 v;
+        }
+    }
+
+    let (items, _tokens) = sweep();
+
+    let data = encode_sweep_eth_batch(&items);
+
+    let expected_arguments = (items
+        .iter()
+        .map(|item| EthSweepItem {
+            deposit: Address::from(item.deposit.as_address().into_bytes()),
+            principal: B256::from(encode_principal(&item.account.owner)),
+            subaccount: B256::from(item.account.effective_subaccount()),
+            r: B256::from(item.attestation.r.to_be_bytes()),
+            s: B256::from(item.attestation.s.to_be_bytes()),
+            v: 27 + u8::from(item.attestation.signature_y_parity),
+        })
+        .collect::<Vec<_>>(),)
+        .abi_encode_params();
+
+    assert_eq!(&data[4..], expected_arguments.as_slice());
+}
+
+#[test]
+fn should_encode_an_empty_eth_batch() {
+    let data = encode_sweep_eth_batch(&[]);
+
+    assert_eq!(data.len(), 4 + 32 + 32);
+    assert_eq!(&data[4..4 + 32], &word(32));
+    assert_eq!(&data[4 + 32..], &word(0));
 }
 
 fn sweep() -> (Vec<SweepItem>, Vec<Address>) {

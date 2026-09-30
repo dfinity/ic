@@ -1,3 +1,5 @@
+use base64::prelude::*;
+
 /// The maximum number of characters allowed for token symbol.
 pub const MAX_TOKEN_SYMBOL_LENGTH: usize = 10;
 
@@ -100,7 +102,7 @@ pub fn validate_logo(logo: &str, field_name: &str) -> Result<(), String> {
         ));
     }
 
-    let logo_bytes = match base64::decode(&logo[PREFIX.len()..]) {
+    let logo_bytes = match BASE64_STANDARD.decode(&logo[PREFIX.len()..]) {
         Ok(logo_bytes) => logo_bytes,
         Err(err) => return Err(format!("Couldn't decode base64 in {field_name}: {err}")),
     };

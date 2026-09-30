@@ -37,6 +37,7 @@ pub mod do_update_subnet;
 pub mod do_update_subnet_admins;
 pub mod do_update_unassigned_nodes_config;
 pub mod firewall;
+pub mod merge_subnets;
 mod node;
 pub mod node_management;
 pub mod prepare_canister_migration;

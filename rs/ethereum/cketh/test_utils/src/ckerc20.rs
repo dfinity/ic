@@ -4,27 +4,31 @@ use crate::flow::{
     ProcessWithdrawal, encode_principal,
 };
 use crate::mock::{
-    JsonRpcMethod, JsonRpcRequestMatcher, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
+    JsonRpcMethod, JsonRpcRequestMatcher, MatchRequestParams, MockJsonRpcProviders,
+    MockJsonRpcProvidersBuilder,
 };
 use crate::response::{balance_scan_response, block_response, empty_logs, fee_history};
 use crate::{
     CkEthSetup, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
     DEPOSIT_WITH_SUBACCOUNT_HELPER_CONTRACT_ADDRESS, ERC20_HELPER_CONTRACT_ADDRESS,
-    ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, LedgerBalance, MAX_TICKS,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC, assert_reply,
+    ETH_HELPER_CONTRACT_ADDRESS, JsonRpcProvider, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
+    LedgerBalance, MAX_TICKS, RECEIVED_ERC20_EVENT_TOPIC,
+    RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC, assert_reply,
     format_ethereum_address_to_eip_55,
 };
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use evm_rpc_types::Hex32;
 use ic_base_types::PrincipalId;
+use ic_cketh_minter::balance_scan::batcher::{BATCHER_INITCODE, ETH_BATCHER_INITCODE};
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{
-    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositMode, MinterInfo,
+    CkErc20Token, DepositErc20Arg, DepositErc20Error, DepositErc20Response, DepositEthArg,
+    DepositEthError, DepositEthResponse, DepositMode, MinterInfo,
 };
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
 use ic_cketh_minter::{
@@ -41,7 +45,7 @@ use num_traits::ToPrimitive;
 use pocket_ic::common::rest::RawMessageId;
 use pocket_ic::{ErrorCode, PocketIc};
 use serde_json::json;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::convert::identity;
 use std::iter::{once, zip};
 use std::str::FromStr;
@@ -197,19 +201,61 @@ impl CkErc20Setup {
         }
     }
 
-    /// Advance the balance-scan timer and answer the resulting deployless-batcher `eth_call` with
-    /// `balances` — one entry per scanned `(deposit address, supported token)` pair, in scan order
-    /// (i.e. `live-due addresses × supported tokens`). Settles the reply so the per-address scan
-    /// schedule is advanced before returning.
-    pub fn run_balance_scan(&self, balances: &[u128]) {
+    /// Advance the balance-scan timer and answer the tick's single batch — the pending
+    /// `eth_call`'s calldata says which batcher program it runs — with each scanned address'
+    /// balance looked up in `balances` by address (an address absent from `balances` reports 0).
+    /// Settles the reply so the per-address scan schedule is advanced before returning. For a
+    /// tick where both ERC-20 and ETH pairs are due use [`Self::run_balance_scan_with_eth`].
+    pub fn run_balance_scan(&self, balances: &[(&str, u128)]) {
         self.env.advance_time(BALANCE_SCAN_INTERVAL);
+        self.answer_balance_scan_batch(None, balances);
+    }
+
+    /// Like [`Self::run_balance_scan`], but for a tick where both ERC-20 and ETH pairs are
+    /// due: each batch is identified by the batcher program in its calldata and answered from
+    /// its own balances.
+    pub fn run_balance_scan_with_eth(
+        &self,
+        erc20_balances: &[(&str, u128)],
+        eth_balances: &[(&str, u128)],
+    ) {
+        self.answer_erc20_balance_scan(erc20_balances);
+        self.answer_eth_balance_scan(eth_balances);
+    }
+
+    /// Advance the balance-scan timer and answer only the ERC-20 batch of a mixed tick,
+    /// leaving the scanner suspended on its ETH batch until
+    /// [`Self::answer_eth_balance_scan`] runs.
+    pub fn answer_erc20_balance_scan(&self, balances: &[(&str, u128)]) {
+        self.env.advance_time(BALANCE_SCAN_INTERVAL);
+        self.answer_balance_scan_batch(Some(ScanBatchKind::Erc20), balances);
+    }
+
+    /// Answer the ETH batch a mixed tick is suspended on and settle the reply.
+    pub fn answer_eth_balance_scan(&self, balances: &[(&str, u128)]) {
+        self.answer_balance_scan_batch(Some(ScanBatchKind::Eth), balances);
+    }
+
+    fn answer_balance_scan_batch(&self, kind: Option<ScanBatchKind>, balances: &[(&str, u128)]) {
+        let request =
+            JsonRpcRequestMatcher::new(JsonRpcProvider::Provider1, JsonRpcMethod::EthCall)
+                .with_request_params(
+                    kind.map(|kind| EthCallInputStartsWith::batcher(kind).into_filter()),
+                )
+                .find_rpc_call(&self.env)
+                .expect("BUG: no balance-scan eth_call pending");
+        let (kind, holders) = parse_scan_batch(&eth_call_input_bytes(&request));
+        let response: Vec<u128> = holders
+            .iter()
+            .map(|holder| scanned_balance(balances, holder))
+            .collect();
         MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
-            .respond_for_all_with(balance_scan_response(balances))
+            .with_request_params_filter(EthCallInputStartsWith::batcher(kind))
+            .respond_for_all_with(balance_scan_response(&response))
             .build()
             .expect_rpc_calls(self);
-        for _ in 0..MAX_TICKS {
-            self.env.tick();
-        }
+        self.env.tick();
+        self.env.tick();
     }
 
     pub fn check_events(self) -> MinterEventAssert<Self> {
@@ -406,6 +452,29 @@ impl CkErc20Setup {
             )
             .expect("failed to submit withdraw_erc20 call");
         RefreshGasFeeEstimate {
+            setup: self,
+            message_id,
+        }
+    }
+
+    pub fn call_minter_deposit_eth(
+        self,
+        from: Principal,
+        subaccount: Option<[u8; 32]>,
+    ) -> DepositEthFlow {
+        let arg = DepositEthArg {
+            mode: DepositMode::Unsponsored { subaccount },
+        };
+        let message_id = self
+            .env
+            .submit_call(
+                self.cketh.minter_id,
+                from,
+                "deposit_eth",
+                Encode!(&arg).expect("failed to encode deposit_eth args"),
+            )
+            .expect("failed to submit deposit_eth call");
+        DepositEthFlow {
             setup: self,
             message_id,
         }
@@ -1000,12 +1069,15 @@ impl RefreshGasFeeEstimate {
     }
 
     pub fn expect_no_refresh_gas_fee_estimate(self) -> Erc20WithdrawalFlow {
-        assert_eq!(
+        let providers_with_pending_call: Vec<JsonRpcProvider> =
             JsonRpcRequestMatcher::new_for_all_providers(JsonRpcMethod::EthFeeHistory)
-                .iter()
+                .into_iter()
                 .filter(|(_provider, matcher)| matcher.find_rpc_call(&self.setup.env).is_some())
-                .collect::<BTreeMap<_, _>>(),
-            BTreeMap::new(),
+                .map(|(provider, _matcher)| provider)
+                .collect();
+        assert_eq!(
+            providers_with_pending_call,
+            Vec::new(),
             "BUG: unexpected EthFeeHistory RPC call"
         );
 
@@ -1059,6 +1131,29 @@ impl Erc20WithdrawalFlow {
     }
 }
 
+pub struct DepositEthFlow {
+    pub setup: CkErc20Setup,
+    pub message_id: RawMessageId,
+}
+
+impl DepositEthFlow {
+    pub fn expect_trap(self, error_substring: &str) -> CkErc20Setup {
+        let result = self.setup.env.await_call(self.message_id.clone());
+        assert_matches!(result, Err(e) if e.error_code == ErrorCode::CanisterCalledTrap && e.reject_message.contains(error_substring));
+        self.setup
+    }
+
+    pub fn expect_deposit_response(self) -> (CkErc20Setup, DepositEthResponse) {
+        let response = Decode!(
+            &assert_reply(self.setup.env.await_call(self.message_id.clone())),
+            Result<DepositEthResponse, DepositEthError>
+        )
+        .unwrap()
+        .expect("BUG: unexpected error from minter during deposit_eth");
+        (self.setup, response)
+    }
+}
+
 pub struct DepositErc20Flow {
     pub setup: CkErc20Setup,
     pub message_id: RawMessageId,
@@ -1094,6 +1189,99 @@ impl DepositErc20Flow {
         )
         .unwrap()
     }
+}
+
+#[derive(Clone, Copy)]
+enum ScanBatchKind {
+    Erc20,
+    Eth,
+}
+
+impl ScanBatchKind {
+    fn initcode(self) -> &'static [u8] {
+        match self {
+            ScanBatchKind::Erc20 => &BATCHER_INITCODE,
+            ScanBatchKind::Eth => &ETH_BATCHER_INITCODE,
+        }
+    }
+
+    fn words_per_entry(self) -> usize {
+        match self {
+            ScanBatchKind::Erc20 => 2,
+            ScanBatchKind::Eth => 1,
+        }
+    }
+
+    fn holder_word_index(self) -> usize {
+        match self {
+            ScanBatchKind::Erc20 => 1,
+            ScanBatchKind::Eth => 0,
+        }
+    }
+}
+
+/// Matches an `eth_call` whose `input` calldata starts with the given bytes, e.g. one of the
+/// deployless balance-batcher programs.
+#[derive(Debug)]
+struct EthCallInputStartsWith(String);
+
+impl EthCallInputStartsWith {
+    fn batcher(kind: ScanBatchKind) -> Self {
+        Self(format!("0x{}", hex::encode(kind.initcode())))
+    }
+
+    fn into_filter(self) -> Arc<dyn MatchRequestParams> {
+        Arc::new(self)
+    }
+}
+
+impl MatchRequestParams for EthCallInputStartsWith {
+    fn matches(&self, params: &serde_json::Value) -> bool {
+        eth_call_input(params)
+            .map(|input| input.to_lowercase().starts_with(&self.0))
+            .unwrap_or(false)
+    }
+}
+
+fn eth_call_input(params: &serde_json::Value) -> Option<&str> {
+    params.get(0)?.get("input")?.as_str()
+}
+
+fn eth_call_input_bytes(request: &pocket_ic::common::rest::CanisterHttpRequest) -> Vec<u8> {
+    let body: serde_json::Value =
+        serde_json::from_slice(&request.body).expect("BUG: request body is not JSON");
+    let input = eth_call_input(&body["params"]).expect("BUG: eth_call request without input");
+    hex::decode(input.trim_start_matches("0x")).expect("BUG: input is not hex")
+}
+
+fn parse_scan_batch(input: &[u8]) -> (ScanBatchKind, Vec<String>) {
+    let kind = if input.starts_with(&BATCHER_INITCODE) {
+        ScanBatchKind::Erc20
+    } else if input.starts_with(&ETH_BATCHER_INITCODE) {
+        ScanBatchKind::Eth
+    } else {
+        panic!("BUG: eth_call input is not a balance-scan batch");
+    };
+    let args = &input[kind.initcode().len()..];
+    let n = u64::from_be_bytes(args[24..32].try_into().unwrap()) as usize;
+    let holders = (0..n)
+        .map(|i| {
+            let word = 32 * (1 + i * kind.words_per_entry() + kind.holder_word_index());
+            format_ethereum_address_to_eip_55(&format!(
+                "0x{}",
+                hex::encode(&args[word + 12..word + 32])
+            ))
+        })
+        .collect();
+    (kind, holders)
+}
+
+fn scanned_balance(balances: &[(&str, u128)], holder: &str) -> u128 {
+    balances
+        .iter()
+        .find(|(address, _)| address.eq_ignore_ascii_case(holder))
+        .map(|(_, balance)| *balance)
+        .unwrap_or(0)
 }
 
 pub fn erc20_transfer_data(expected_address: &Address, expected_amount: &Erc20Value) -> Vec<u8> {

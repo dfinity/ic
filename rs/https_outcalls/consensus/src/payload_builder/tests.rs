@@ -12,6 +12,7 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+use ic_consensus_utils::build_thread_pool;
 use ic_error_types::RejectCode;
 use ic_https_outcalls_pricing::fees::{
     consensus_fee, flexible_initial_spent, max_usage_fee, min_flexible_consensus_cost,
@@ -21,7 +22,7 @@ use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{
         CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPayloadValidationFailure,
-        InvalidCanisterHttpPayloadReason,
+        InvalidCanisterHttpPayloadReason, ResponseVisibility,
     },
     consensus::{InvalidPayloadReason, PayloadValidationError, PayloadValidationFailure},
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
@@ -87,13 +88,18 @@ const TEST_MAX_PAYLOAD_BYTES: NumBytes = NumBytes::new(2 * MAX_CANISTER_HTTP_PAY
 
 #[test]
 fn default_payload_serializes_to_empty_vec() {
-    assert!(
-        parse::payload_to_bytes(
-            CanisterHttpPayload::default(),
-            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64)
-        )
-        .is_empty()
+    let bytes = parse::payload_to_bytes(
+        CanisterHttpPayload::default(),
+        NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
     );
+    assert!(bytes.is_empty());
+
+    // An empty payload delivers nothing, and reports a zero payload size.
+    let (responses, spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    assert!(responses.is_empty(), "{responses:?}");
+    assert!(spent.initial.is_empty());
+    assert!(spent.asynchronous.is_empty());
+    assert_eq!(stats.payload_bytes, 0);
 }
 
 /// Check that a single well formed request with shares makes it through the block maker
@@ -807,9 +813,7 @@ fn divergence_response_validation_test() {
                         InvalidCanisterHttpPayloadReason::DivergenceProofContainsMultipleCallbackIds,
                     ),
                 )) => (),
-                x => panic!(
-                    "Expected DivergenceProofContainsMultipleCallbackIds, got {x:?}"
-                ),
+                x => panic!("Expected DivergenceProofContainsMultipleCallbackIds, got {x:?}"),
             }
         });
     }
@@ -863,12 +867,10 @@ fn divergence_duplicate_signer_rejected() {
             match validation_result {
                 Err(ValidationError::InvalidArtifact(
                     InvalidPayloadReason::InvalidCanisterHttpPayload(
-                        InvalidCanisterHttpPayloadReason::DivergenceDuplicateSigner {
-                            signer, ..
-                        },
+                        InvalidCanisterHttpPayloadReason::DuplicateShareSigner { signer, .. },
                     ),
                 )) => assert_eq!(signer, node_test_id(0)),
-                x => panic!("Expected DivergenceDuplicateSigner, got {x:?}"),
+                x => panic!("Expected DuplicateShareSigner, got {x:?}"),
             }
         });
     }
@@ -1544,20 +1546,16 @@ fn validate_payload_fails_for_non_replicated_response_with_wrong_signer() {
 
         // ASSERT
         // Validation must fail because the effective committee for this request is just
-        // `[delegated_node_id]`. Since the only signature present is from
-        // `wrong_signer_node_id`, there will be no valid signers and one invalid signer.
+        // `[delegated_node_id]`, so the only signature present is from a non-member.
         match validation_result {
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::SignersNotMembers {
-                        invalid_signers, ..
-                    },
+                    InvalidCanisterHttpPayloadReason::ShareSignerNotInCommittee { signer, .. },
                 ),
             )) => {
-                // The `invalid_signers` list should contain our one wrong signer.
-                assert_eq!(invalid_signers, vec![wrong_signer_node_id]);
+                assert_eq!(signer, wrong_signer_node_id);
             }
-            res => panic!("Expected SignersNotMembers error, but got {res:?}"),
+            res => panic!("Expected ShareSignerNotInCommittee error, but got {res:?}"),
         }
     });
 }
@@ -1793,6 +1791,7 @@ pub(crate) fn add_received_artifacts_to_pool(
 
         pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
             artifact.share,
+            ResponseVisibility::Publish,
         )]);
     }
 }
@@ -1813,6 +1812,7 @@ pub(crate) fn add_received_shares_to_pool(
 
         pool.apply(vec![CanisterHttpChangeAction::MoveToValidated(
             artifact.share,
+            ResponseVisibility::Publish,
         )]);
     }
 }
@@ -1826,6 +1826,7 @@ pub(crate) fn add_own_share_to_pool(
     pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
         share.clone(),
         content.clone(),
+        ResponseVisibility::Withhold,
     )]);
 }
 
@@ -1986,6 +1987,11 @@ pub(crate) fn metadata_to_shares(
         .collect()
 }
 
+/// The number of threads of the thread pool the payload builder under test
+/// verifies signatures on. We use only 1 thread to avoid non-deterministic test
+/// failures.
+const TEST_THREADS: usize = 1;
+
 /// Mock up a test node, which has the feature enabled
 pub(crate) fn test_config_with_http_feature<T>(
     https_feature_flag: bool,
@@ -2025,6 +2031,7 @@ pub(crate) fn test_config_with_http_feature<T>(
             pool.get_cache(),
             crypto,
             state_manager,
+            build_thread_pool(TEST_THREADS),
             subnet_test_id(0),
             registry,
             &MetricsRegistry::new(),
@@ -3175,13 +3182,15 @@ fn flexible_invalid_callback_id_mismatch_in_response() {
             &payload_to_bytes_max_4mb(payload),
             &[],
         );
+        // The signed metadata still carries the group's callback id, so the
+        // mismatch surfaces as the response not matching the metadata.
         assert_matches!(
             result,
             Err(ValidationError::InvalidArtifact(
                 InvalidPayloadReason::InvalidCanisterHttpPayload(
-                    InvalidCanisterHttpPayloadReason::ShareCallbackIdMismatch { callback_id: cb_id, mismatched_id: mm_id }
+                    InvalidCanisterHttpPayloadReason::InvalidMetadata { metadata_id, content_id }
                 )
-            )) if cb_id == callback_id && mm_id == mismatched_id
+            )) if metadata_id == callback_id && content_id == mismatched_id
         );
     });
 }
@@ -3272,6 +3281,7 @@ fn flexible_ok_responses_into_messages_success_round_trip() {
     assert_eq!(payloads[1], payload_b);
     assert_eq!(stats.flexible_ok_responses, 1);
     assert_eq!(stats.flexible_ok_responses_candid_failures, 0);
+    assert_eq!(stats.payload_bytes, bytes.len());
 }
 
 #[test]
@@ -3413,6 +3423,7 @@ fn into_messages_emits_initial_spend_reports() {
     assert!(spent.initial.iter().all(|r| r.callback != timeout_callback));
     assert!(spent.asynchronous.is_empty());
     assert_eq!(stats.out_of_cycles, 1);
+    assert_eq!(stats.payload_bytes, bytes.len());
 
     let signers: BTreeSet<NodeId> = [node_test_id(0), node_test_id(1)].into_iter().collect();
     let report = |callback: CallbackId| {
@@ -7817,10 +7828,10 @@ fn fully_replicated_contexts(
 
 pub(crate) fn request_context(replication: Replication) -> CanisterHttpRequestContext {
     CanisterHttpRequestContext {
-        request: RequestBuilder::default().build(),
+        request: RequestBuilder::default().build_arc(),
         url: "https://example.com".to_string(),
         max_response_bytes: None,
-        headers: vec![],
+        headers: Arc::new(vec![]),
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: None,
@@ -7869,10 +7880,10 @@ fn flexible_request_context_with_allowance(
     per_replica_allowance: Cycles,
 ) -> CanisterHttpRequestContext {
     CanisterHttpRequestContext {
-        request: RequestBuilder::default().build(),
+        request: RequestBuilder::default().build_arc(),
         url: "https://example.com".to_string(),
         max_response_bytes: None,
-        headers: vec![],
+        headers: Arc::new(vec![]),
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: None,

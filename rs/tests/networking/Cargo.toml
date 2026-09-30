@@ -102,6 +102,10 @@ name = "ic-systest-canister-http-time-out"
 path = "canister_http_time_out_test.rs"
 
 [[bin]]
+name = "ic-systest-canister-http-unresponsive-replica"
+path = "canister_http_unresponsive_replica_test.rs"
+
+[[bin]]
 name = "ic-systest-read-state-test"
 path = "read_state_test.rs"
 

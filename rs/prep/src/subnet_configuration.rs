@@ -19,8 +19,8 @@ use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{
         CanisterCyclesCostSchedule, CatchUpPackageContents, ChainKeyConfig, GenesisArgs,
-        InitialNiDkgTranscriptRecord, ResourceLimits as ResourceLimitsPb, SubnetRecord,
-        catch_up_package_contents::CupType,
+        InitialNiDkgTranscriptRecord, RecoveryArgs, ResourceLimits as ResourceLimitsPb,
+        SubnetRecord, catch_up_package_contents::CupType,
     },
 };
 use ic_registry_resource_limits::ResourceLimits;
@@ -402,23 +402,32 @@ impl SubnetConfig {
         let der_pk = threshold_sig_public_key_to_der(pk)?;
         let subnet_id = SubnetId::from(PrincipalId::new_self_authenticating(&der_pk[..]));
 
-        let state_hash = if self.initial_height != 0 {
-            let state_hashes: Vec<_> = initialized_nodes
-                .values()
-                .map(|initialized_node| {
-                    initialized_node.generate_initial_state(subnet_id, self.subnet_type)
-                })
-                .collect();
+        let (cup_type, state_hash) = match self.initial_height {
+            0 => (CupType::Genesis(GenesisArgs {}), vec![]),
+            height => {
+                let state_hashes: Vec<_> = initialized_nodes
+                    .values()
+                    .map(|initialized_node| {
+                        initialized_node.generate_initial_state(subnet_id, self.subnet_type)
+                    })
+                    .collect();
 
-            // Make sure that all states have the same state shash
-            assert_eq!(
-                state_hashes,
-                vec![state_hashes[0].clone(); state_hashes.len()],
-                "Generated initial states do not have the same state hash"
-            );
-            state_hashes[0].clone()
-        } else {
-            vec![]
+                // Make sure that all states have the same state shash
+                assert_eq!(
+                    state_hashes,
+                    vec![state_hashes[0].clone(); state_hashes.len()],
+                    "Generated initial states do not have the same state hash"
+                );
+
+                (
+                    CupType::Recovery(RecoveryArgs {
+                        height,
+                        time: 0,
+                        state_hash: state_hashes[0].clone(),
+                    }),
+                    state_hashes[0].clone(),
+                )
+            }
         };
 
         let subnet_dkg = CatchUpPackageContents {
@@ -434,9 +443,7 @@ impl SubnetConfig {
             registry_store_uri: None,
             ecdsa_initializations: vec![],
             chain_key_initializations: vec![],
-            cup_type: Some(CupType::Genesis(GenesisArgs {
-                height: self.initial_height,
-            })),
+            cup_type: Some(cup_type),
         };
 
         Ok(InitializedSubnet {

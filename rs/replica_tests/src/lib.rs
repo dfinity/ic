@@ -35,7 +35,7 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    CanisterId, Height, NodeId, Time,
+    CanisterId, Height, NodeId, PlatformVersion, Time,
     artifact::UnvalidatedArtifactMutation,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{Query, QuerySource, SignedIngress},
@@ -352,7 +352,10 @@ where
                 config.clone(),
                 temp_node,
                 subnet_id,
-                replica_version,
+                PlatformVersion {
+                    guestos_version: replica_version.clone(),
+                    replica_version,
+                },
                 registry.clone(),
                 crypto,
                 None,
