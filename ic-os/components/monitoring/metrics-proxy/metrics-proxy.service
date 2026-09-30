@@ -1,6 +1,7 @@
 [Unit]
 Description=Prometheus metrics proxy
-After=node_exporter.service
+After=node_exporter.service network-online.target
+Wants=network-online.target
 
 [Service]
 User=metrics-proxy
