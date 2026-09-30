@@ -1651,9 +1651,11 @@ impl SnsMetadata {
         let url = self.url.as_ref().ok_or("SnsMetadata.url must be set")?;
         Self::validate_url(url)?;
 
-        if let Some(logo) = &self.logo {
-            Self::validate_logo(logo)?;
-        }
+        // We don't check the logo here on purpose. This runs on every upgrade (via
+        // ValidGovernanceProto::try_from), so running the PNG check on already-stored
+        // logos would break upgrades for any SNS that set a non-PNG logo before this
+        // change. New logos still get checked: the init payload and the
+        // ManageSnsMetadata proposal both call validate_logo directly.
 
         let name = self.name.as_ref().ok_or("SnsMetadata.name must be set")?;
         Self::validate_name(name)?;

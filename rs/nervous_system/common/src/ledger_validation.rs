@@ -122,6 +122,7 @@ pub fn validate_token_logo(token_logo: &str) -> Result<(), String> {
 mod tests {
     use super::validate_token_logo;
 
+    // A 1x1 image consisting of a single green pixel, the smallest valid PNG.
     const VALID_PNG_LOGO: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
 
     #[test]

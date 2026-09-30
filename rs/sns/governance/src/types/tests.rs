@@ -22,6 +22,9 @@ use maplit::{btreemap, hashset};
 use std::convert::TryInto;
 use test_helpers::NativeEnvironment;
 
+// A 1x1 image consisting of a single green pixel, the smallest valid PNG.
+const VALID_PNG_LOGO: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
+
 #[test]
 fn test_voting_period_parameters() {
     let non_critical_action = Action::Motion(Default::default());
@@ -688,10 +691,6 @@ fn test_sns_metadata_validate() {
             ..default.clone()
         },
         SnsMetadata {
-            logo: Some("X".repeat(MAX_LOGO_LENGTH + 1)),
-            ..default.clone()
-        },
-        SnsMetadata {
             url: None,
             ..default.clone()
         },
@@ -1015,11 +1014,15 @@ fn test_nervous_system_parameters_wont_validate_without_the_required_claimer_per
     }
 }
 
-const VALID_PNG_LOGO: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
-
 #[test]
 fn test_validate_logo_accepts_a_real_png() {
     SnsMetadata::validate_logo(VALID_PNG_LOGO).unwrap();
+}
+
+#[test]
+fn test_validate_logo_rejects_too_long() {
+    let too_long = "X".repeat(MAX_LOGO_LENGTH + 1);
+    SnsMetadata::validate_logo(&too_long).unwrap_err();
 }
 
 #[test]
