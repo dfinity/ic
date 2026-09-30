@@ -238,7 +238,9 @@ runs:
         while read -r label _; do
           rel="${label#//}" # //rs/foo:bar_test -> rs/foo:bar_test
           rel="${rel/:/\/}" # rs/foo:bar_test   -> rs/foo/bar_test
-          rm -rf -- "$dest/$rel"/test.* "$dest/$rel/test_attempts"
+          # All that bazel writes for a test, of each shard and run too, but not the directories
+          # of other tests below it, like the one of //rs/foo:bar_test/baz.
+          rm -rf -- "$dest/$rel"/{test.*,test_attempts,coverage.dat,_coverage,shard_*_of_*,run_*_of_*}
           cached=$((cached + 1))
         done < <(grep -E '^//[^ ]+ +\(cached\) PASSED' "$BAZEL_NAMESPACE_OUT/console.log")
         find "$dest" -mindepth 1 -type d -empty -delete
