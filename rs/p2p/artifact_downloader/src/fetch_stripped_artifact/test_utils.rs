@@ -445,6 +445,18 @@ pub(crate) fn fake_flexible_canister_http_too_many_rejects_message(
     }
 }
 
+/// A `timeouts` entry of a canister http payload, which carries no response and
+/// is thus never stripped.
+pub(crate) fn fake_canister_http_timeout_message(
+    callback_id: u64,
+) -> pb::CanisterHttpResponseMessage {
+    pb::CanisterHttpResponseMessage {
+        message_type: Some(pb::canister_http_response_message::MessageType::Timeout(
+            callback_id,
+        )),
+    }
+}
+
 /// Like [`fake_canister_http_response_message`], but without the response
 /// content: what the payload of a block proposal that was stripped of it looks
 /// like.

@@ -756,9 +756,12 @@ impl BlockProposalAssembler {
 #[cfg(test)]
 mod tests {
     use crate::fetch_stripped_artifact::test_utils::{
-        fake_block_proposal_with_canister_http, fake_block_proposal_with_ingresses,
-        fake_block_proposal_with_ingresses_and_idkg, fake_canister_http_payload,
-        fake_canister_http_response, fake_canister_http_response_message, fake_idkg_dealing,
+        fake_block_proposal, fake_block_proposal_with_canister_http,
+        fake_block_proposal_with_ingresses, fake_block_proposal_with_ingresses_and_idkg,
+        fake_canister_http_payload, fake_canister_http_reject, fake_canister_http_response,
+        fake_canister_http_response_message, fake_canister_http_timeout_message,
+        fake_flexible_canister_http_responses_message,
+        fake_flexible_canister_http_too_many_rejects_message, fake_idkg_dealing,
         fake_idkg_payload_with_dealings, fake_ingress_message, fake_ingress_message_with_arg_size,
         fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages,
         fake_stripped_canister_http_response_message,
@@ -1369,6 +1372,161 @@ mod tests {
             AssemblyError::CanisterHttpPayload(CanisterHttpPayloadError::MissingResponse(hash))
                 if hash == ic_types::crypto::crypto_hash(&response).get()
         );
+    }
+
+    /// A canister http payload with one of every kind of message, together with the
+    /// response contents that a receiver has to come up with to reassemble it.
+    fn canister_http_payload_with_every_kind() -> (Vec<u8>, Vec<CanisterHttpResponse>) {
+        let non_replicated = fake_canister_http_response(1, 1024);
+        let fully_replicated = fake_canister_http_response(2, 1024);
+        let flexible_1 = fake_canister_http_response(3, 1024);
+        let flexible_2 = fake_canister_http_response(3, 2048);
+        let reject = fake_canister_http_reject(4);
+
+        let payload = fake_canister_http_payload(vec![
+            fake_canister_http_response_message(&non_replicated, &[NODE_1]),
+            fake_canister_http_response_message(&fully_replicated, &[NODE_1, NODE_2]),
+            fake_flexible_canister_http_responses_message(
+                3,
+                &[(flexible_1.clone(), NODE_1), (flexible_2.clone(), NODE_2)],
+            ),
+            fake_flexible_canister_http_too_many_rejects_message(4, &[(reject.clone(), NODE_1)]),
+            fake_canister_http_timeout_message(5),
+        ]);
+
+        (
+            payload,
+            vec![
+                non_replicated,
+                fully_replicated,
+                flexible_1,
+                flexible_2,
+                reject,
+            ],
+        )
+    }
+
+    #[tokio::test]
+    async fn roundtrip_test_with_canister_http_responses_from_pool() {
+        let (payload, stripped_responses) = canister_http_payload_with_every_kind();
+        let block_proposal = fake_block_proposal_with_canister_http(payload);
+
+        let assembler =
+            set_up_assembler_with_canister_http_responses(stripped_responses, /*peer=*/ None);
+        let stripped_block_proposal =
+            assembler.disassemble_message(ConsensusMessage::BlockProposal(block_proposal.clone()));
+        let reassembled = assembler
+            .assemble_message(
+                stripped_block_proposal.id(),
+                Some((stripped_block_proposal, NODE_1)),
+                MockPeers(NODE_1),
+            )
+            .await;
+
+        assert_eq!(
+            reassembled,
+            AssembleResult::Done {
+                message: ConsensusMessage::BlockProposal(block_proposal),
+                peer_id: NODE_1
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn roundtrip_test_with_canister_http_response_from_peer() {
+        let response = fake_canister_http_response(1, 1024);
+        let block_proposal =
+            fake_block_proposal_with_canister_http(fake_canister_http_payload(vec![
+                fake_canister_http_response_message(&response, &[NODE_1]),
+            ]));
+
+        // The response is nowhere to be found locally, so it has to come from a peer.
+        let assembler = set_up_assembler_with_canister_http_responses(
+            /*pool=*/ vec![],
+            /*peer=*/ Some(response),
+        );
+        let stripped_block_proposal =
+            assembler.disassemble_message(ConsensusMessage::BlockProposal(block_proposal.clone()));
+        let reassembled = assembler
+            .assemble_message(
+                stripped_block_proposal.id(),
+                Some((stripped_block_proposal, NODE_1)),
+                MockPeers(NODE_1),
+            )
+            .await;
+
+        assert_eq!(
+            reassembled,
+            AssembleResult::Done {
+                message: ConsensusMessage::BlockProposal(block_proposal),
+                peer_id: NODE_1
+            }
+        );
+    }
+
+    /// The whole point of the exercise: the block that goes on the wire must be
+    /// smaller than the one it was stripped from, by the size of the response
+    /// contents it no longer carries.
+    #[test]
+    fn stripping_a_block_removes_the_canister_http_responses() {
+        let (payload, stripped_responses) = canister_http_payload_with_every_kind();
+        let unstripped_size = payload.len();
+        let block_proposal = fake_block_proposal_with_canister_http(payload);
+
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) =
+            ConsensusMessage::BlockProposal(block_proposal).strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+
+        let stripped_size = stripped
+            .pruned_block_proposal_proto
+            .value
+            .as_ref()
+            .unwrap()
+            .canister_http_payload_bytes
+            .len();
+        let removed_size: usize = stripped_responses
+            .iter()
+            .map(|response| response.content.count_bytes())
+            .sum();
+
+        assert!(
+            stripped_size + removed_size <= unstripped_size,
+            "stripped: {stripped_size}, removed: {removed_size}, unstripped: {unstripped_size}"
+        );
+    }
+
+    #[test]
+    fn a_block_without_canister_http_responses_is_left_untouched() {
+        // A payload with nothing to strip, and a block with no payload at all.
+        for payload in [
+            fake_canister_http_payload(vec![fake_canister_http_timeout_message(5)]),
+            Vec::new(),
+        ] {
+            let block_proposal = fake_block_proposal(vec![], None, payload.clone(), false);
+            let MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) =
+                ConsensusMessage::BlockProposal(block_proposal).strip()
+            else {
+                panic!("Didn't properly strip the block proposal");
+            };
+
+            assert_eq!(
+                stripped
+                    .pruned_block_proposal_proto
+                    .value
+                    .as_ref()
+                    .unwrap()
+                    .canister_http_payload_bytes,
+                payload
+            );
+            let assembler = BlockProposalAssembler::new(stripped);
+            assert!(
+                PayloadAssembler::<CanisterHttpResponse>::missing_artifacts(&assembler)
+                    .next()
+                    .is_none()
+            );
+        }
     }
 
     /// A peer set that advertises no peers (so missing stripped messages can never be fetched

@@ -14,14 +14,20 @@ use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{
     FakeCanisterHttpPool, MockBouncerFactory, MockTransport, MockValidatedPoolReader,
 };
+use ic_protobuf::types::v1 as pb;
 use ic_test_utilities_consensus::{
     fake::{Fake, FakeContentSigner},
     make_genesis,
 };
 use ic_types::{
-    Height, NodeId, RegistryVersion,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion,
     artifact::{IdentifiableArtifact, IngressMessageId},
-    batch::{BatchPayload, IngressPayload},
+    batch::{BatchPayload, IngressPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE, iterator_to_bytes},
+    canister_http::{
+        CanisterHttpPaymentReceipt, CanisterHttpResponse, CanisterHttpResponseContent,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseSignature,
+        CanisterHttpResponseWithConsensus,
+    },
     consensus::{
         Block, BlockPayload, BlockProposal, ConsensusMessage, DataPayload, Payload, Rank,
         dkg::{DkgDataPayload, DkgSummary},
@@ -34,10 +40,13 @@ use ic_types::{
             IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
         },
     },
-    messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
+    messages::{
+        Blob, CallbackId, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress,
+    },
     signature::{BasicSignature, BasicSignatureBatch},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_0, node_test_id, test_replica_version};
 use tokio::runtime::{Handle, Runtime};
 
@@ -81,6 +90,7 @@ impl Peers for MockPeers {
 fn set_up_assembler(
     ingress_messages: Vec<SignedIngress>,
     idkg_dealings: Vec<SignedIDkgDealing>,
+    canister_http_responses: Vec<CanisterHttpResponse>,
     handle: Handle,
 ) -> FetchStrippedConsensusArtifact {
     let mock_transport = MockTransport::new();
@@ -97,6 +107,7 @@ fn set_up_assembler(
             .map(|ingress| (IngressMessageId::from(&ingress), ingress))
             .collect(),
     };
+    let canister_http_pool = FakeCanisterHttpPool::new(canister_http_responses);
     let mut mock_bouncer_factory = MockBouncerFactory::default();
     mock_bouncer_factory
         .expect_new_bouncer()
@@ -107,7 +118,7 @@ fn set_up_assembler(
         Arc::new(RwLock::new(consensus_pool)),
         Arc::new(RwLock::new(ingress_pool)),
         Arc::new(RwLock::new(idkg_pool)),
-        Arc::new(RwLock::new(FakeCanisterHttpPool::empty())),
+        Arc::new(RwLock::new(canister_http_pool)),
         Arc::new(mock_bouncer_factory),
         MetricsRegistry::new(),
         NODE_1,
@@ -117,9 +128,11 @@ fn set_up_assembler(
     handler(Arc::new(mock_transport))
 }
 
-fn fake_block_proposal_with_ingresses_and_idkg_dealings(
+fn fake_block_proposal(
     ingress_messages: Vec<SignedIngress>,
     idkg_dealings: Vec<SignedIDkgDealing>,
+    canister_http_responses: Vec<CanisterHttpResponse>,
+    canister_http_signers: usize,
 ) -> ConsensusMessage {
     let parent = make_genesis(DkgSummary::fake()).content.block;
     let block = Block::new(
@@ -129,6 +142,10 @@ fn fake_block_proposal_with_ingresses_and_idkg_dealings(
             BlockPayload::Data(DataPayload {
                 batch: BatchPayload {
                     ingress: IngressPayload::from(ingress_messages),
+                    canister_http: fake_canister_http_payload(
+                        canister_http_responses,
+                        canister_http_signers,
+                    ),
                     ..BatchPayload::default()
                 },
                 dkg: DkgDataPayload::new_empty(Height::from(0)),
@@ -142,6 +159,63 @@ fn fake_block_proposal_with_ingresses_and_idkg_dealings(
     );
 
     ConsensusMessage::BlockProposal(BlockProposal::fake(block, NODE_1))
+}
+
+/// A canister http payload delivering the given responses, one outcall each,
+/// each signed by `signers` replicas.
+///
+/// The signature count is the dimension that dominates the cost of stripping and
+/// reassembling: a non-replicated or flexible response carries a single
+/// signature, while a fully replicated one carries a quorum of `n - f`, all of
+/// which stay behind in the stripped payload. (The flexible shape, which nests
+/// its responses one level deeper, is covered by the unit tests.)
+fn fake_canister_http_payload(responses: Vec<CanisterHttpResponse>, signers: usize) -> Vec<u8> {
+    let messages = responses.into_iter().map(|response| {
+        let with_consensus = CanisterHttpResponseWithConsensus {
+            proof: CanisterHttpResponseProof {
+                metadata: CanisterHttpResponseMetadata {
+                    id: response.id,
+                    content_hash: ic_types::crypto::crypto_hash(&response),
+                    content_size: response.content.count_bytes() as u32,
+                    is_reject: false,
+                    replica_version: test_replica_version(),
+                },
+                signatures: (0..signers as u64)
+                    .map(|signer| {
+                        (
+                            node_test_id(signer),
+                            CanisterHttpResponseSignature {
+                                payment_receipt: CanisterHttpPaymentReceipt::default(),
+                                signature: BasicSigOf::new(BasicSig(vec![2; 64])),
+                            },
+                        )
+                    })
+                    .collect(),
+            },
+            content: response,
+            initial_spent: Cycles::new(0),
+        };
+
+        pb::CanisterHttpResponseMessage {
+            message_type: Some(pb::canister_http_response_message::MessageType::Response(
+                pb::CanisterHttpResponseWithConsensus::from(with_consensus),
+            )),
+        }
+    });
+
+    iterator_to_bytes(
+        messages,
+        NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
+    )
+}
+
+fn fake_canister_http_responses(count: u64, body_size: usize) -> Vec<CanisterHttpResponse> {
+    (0..count)
+        .map(|i| CanisterHttpResponse {
+            id: CallbackId::new(i),
+            content: CanisterHttpResponseContent::Success(vec![42; body_size]),
+        })
+        .collect()
 }
 
 pub(crate) fn fake_idkg_payload(dealings: Vec<SignedIDkgDealing>) -> IDkgPayload {
@@ -251,7 +325,7 @@ fn disassemble_ingress(criterion: &mut Criterion) {
                         )
                     })
                     .collect();
-                bench_disassemble(b, &rt, ingress_messages, vec![]);
+                bench_disassemble(b, &rt, ingress_messages, vec![], vec![], 0);
             },
         );
     }
@@ -275,25 +349,83 @@ fn disassemble_idkg_dealings(criterion: &mut Criterion) {
             format!("transcripts:{transcripts}, dealings_per_transcript:{dealings_per_transcript}, dealing_size:{dealing_size}"),
             |b| {
                 let dealings = fake_idkg_dealings(transcripts, dealings_per_transcript, dealing_size);
-                bench_disassemble(b, &rt, vec![], dealings);
+                bench_disassemble(b, &rt, vec![], dealings, vec![], 0);
             },
         );
     }
 }
+
+fn disassemble_canister_http_responses(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("disassemble_canister_http_responses");
+    let rt = tokio::runtime::Runtime::new().unwrap();
+
+    for (responses_count, response_size, signers) in CANISTER_HTTP_BENCH_CASES {
+        group.bench_function(
+            format!(
+                "response_count:{responses_count}, response_size:{response_size}, \
+                 signers:{signers}"
+            ),
+            |b| {
+                let responses = fake_canister_http_responses(responses_count, response_size);
+                bench_disassemble(b, &rt, vec![], vec![], responses, signers);
+            },
+        );
+    }
+}
+
+fn assemble_canister_http_responses(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("assemble_canister_http_responses");
+    group.measurement_time(Duration::from_secs(15));
+    let rt = tokio::runtime::Runtime::new().unwrap();
+
+    for (responses_count, response_size, signers) in CANISTER_HTTP_BENCH_CASES {
+        group.bench_function(
+            format!(
+                "response_count:{responses_count}, response_size:{response_size}, \
+                 signers:{signers}"
+            ),
+            |b| {
+                let responses = fake_canister_http_responses(responses_count, response_size);
+                bench_assemble(b, &rt, vec![], vec![], responses, signers);
+            },
+        );
+    }
+}
+
+/// `(responses, response size, signatures per response)`. A single signature is a
+/// non-replicated or flexible outcall; 27 is the quorum a fully replicated outcall
+/// carries on a 40-node subnet.
+const CANISTER_HTTP_BENCH_CASES: [(u64, usize, usize); 8] = [
+    (1, 1, 1),
+    (1, 2_000_000, 1),
+    (1, 2_000_000, 27),
+    (100, 16 * 1024, 1),
+    (100, 16 * 1024, 27),
+    (500, 1, 1),
+    (500, 4 * 1024, 1),
+    (500, 4 * 1024, 27),
+];
 
 fn bench_disassemble(
     bencher: &mut Bencher<'_>,
     rt: &Runtime,
     ingress_messages: Vec<SignedIngress>,
     idkg_dealings: Vec<SignedIDkgDealing>,
+    canister_http_responses: Vec<CanisterHttpResponse>,
+    canister_http_signers: usize,
 ) {
     let assembler = set_up_assembler(
         ingress_messages.clone(),
         idkg_dealings.clone(),
+        canister_http_responses.clone(),
         rt.handle().clone(),
     );
-    let block =
-        fake_block_proposal_with_ingresses_and_idkg_dealings(ingress_messages, idkg_dealings);
+    let block = fake_block_proposal(
+        ingress_messages,
+        idkg_dealings,
+        canister_http_responses,
+        canister_http_signers,
+    );
 
     bencher.iter_batched(
         || (assembler.clone(), block.clone()),
@@ -332,7 +464,7 @@ fn assemble_ingress(criterion: &mut Criterion) {
                         )
                     })
                     .collect();
-                bench_assemble(b, &rt, ingress_messages, vec![]);
+                bench_assemble(b, &rt, ingress_messages, vec![], vec![], 0);
             },
         );
     }
@@ -357,7 +489,7 @@ fn assemble_idkg_dealings(criterion: &mut Criterion) {
             format!("transcripts:{transcripts}, dealings_per_transcript:{dealings_per_transcript}, dealing_size:{dealing_size}"),
             |b| {
                 let dealings = fake_idkg_dealings(transcripts, dealings_per_transcript, dealing_size);
-                bench_assemble(b, &rt, vec![], dealings);
+                bench_assemble(b, &rt, vec![], dealings, vec![], 0);
             },
         );
     }
@@ -368,14 +500,21 @@ fn bench_assemble(
     rt: &Runtime,
     ingress_messages: Vec<SignedIngress>,
     idkg_dealings: Vec<SignedIDkgDealing>,
+    canister_http_responses: Vec<CanisterHttpResponse>,
+    canister_http_signers: usize,
 ) {
     let assembler = set_up_assembler(
         ingress_messages.clone(),
         idkg_dealings.clone(),
+        canister_http_responses.clone(),
         rt.handle().clone(),
     );
-    let block =
-        fake_block_proposal_with_ingresses_and_idkg_dealings(ingress_messages, idkg_dealings);
+    let block = fake_block_proposal(
+        ingress_messages,
+        idkg_dealings,
+        canister_http_responses,
+        canister_http_signers,
+    );
 
     let stripped_block = assembler.disassemble_message(block);
     let id = stripped_block.id();
@@ -396,7 +535,9 @@ criterion_group!(
     assemble_ingress,
     disassemble_ingress,
     assemble_idkg_dealings,
-    disassemble_idkg_dealings
+    disassemble_idkg_dealings,
+    assemble_canister_http_responses,
+    disassemble_canister_http_responses
 );
 
 criterion_main!(benches);
