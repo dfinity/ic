@@ -1,10 +1,10 @@
-//! The canister HTTP payload of a block.
+//! Reassembling the canister HTTP payload of a block.
 //!
 //! The canister HTTP payload sits in a block as an opaque byte string: a
 //! sequence of length-delimited [`pb::CanisterHttpResponseMessage`] protos (see
 //! [`ic_types::batch::iterator_to_bytes`]). Some of those messages carry a full
-//! [`CanisterHttpResponse`], and a block does not need to repeat a response that
-//! its own proof shows the peers to be holding already: see
+//! [`CanisterHttpResponse`], and the block does not need to repeat a response
+//! that its own proof shows the peers to be holding already: see
 //! [`for_each_response_slot`] for why that is the case for every one of them.
 //!
 //! Every such response is accompanied, in the very same message, by the hash of
@@ -14,21 +14,60 @@
 //! response's content out of the payload never requires putting anything else in
 //! its place.
 
+use std::collections::BTreeMap;
+
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    batch::slice_to_messages,
+    NumBytes,
+    batch::{MAX_CANISTER_HTTP_PAYLOAD_SIZE, iterator_to_bytes, slice_to_messages},
     canister_http::CanisterHttpResponse,
     crypto::{CryptoHash, CryptoHashOf},
 };
+
 use thiserror::Error;
 
 use super::types::CanisterHttpResponseContentHash;
 
-/// The canister http payload of a block could not be read.
+/// The canister http payload of a block could not be reassembled.
 #[derive(Debug, PartialEq, Error)]
 pub(crate) enum CanisterHttpPayloadError {
     #[error("The canister http payload could not be parsed: {0}")]
     DecodeError(String),
+    #[error("The canister http payload is missing the response with content hash {0:?}")]
+    MissingResponse(CryptoHash),
+}
+
+/// Puts the given response contents back into the payload, in place of the ones
+/// that were stripped from it, and returns the reassembled payload.
+///
+/// Fails if the payload is missing a response whose content was not provided.
+pub(crate) fn reinsert_responses(
+    payload_bytes: &[u8],
+    responses: &BTreeMap<CanisterHttpResponseContentHash, Option<CanisterHttpResponse>>,
+) -> Result<Vec<u8>, CanisterHttpPayloadError> {
+    let mut messages = parse(payload_bytes)?;
+
+    let mut error = None;
+    for_each_response_slot(&mut messages, |content_hash, response| {
+        if response.is_some() {
+            return;
+        }
+        match responses.get(&content_hash) {
+            Some(Some(content)) => {
+                *response = Some(pb::CanisterHttpResponse::from(content.clone()));
+            }
+            Some(None) | None => {
+                error.get_or_insert_with(|| {
+                    CanisterHttpPayloadError::MissingResponse(content_hash.get())
+                });
+            }
+        }
+    });
+
+    match error {
+        Some(error) => Err(error),
+        None => Ok(serialize(messages)),
+    }
 }
 
 /// Returns the response with the given content hash, if the payload delivers it.
@@ -58,11 +97,22 @@ fn parse(
         .map_err(|err| CanisterHttpPayloadError::DecodeError(err.to_string()))
 }
 
+fn serialize(messages: Vec<pb::CanisterHttpResponseMessage>) -> Vec<u8> {
+    // A payload that was reassembled from a block that could pass validation is at
+    // most this big, so the limit truncates nothing. Should a peer send a block
+    // whose payload exceeds it, the truncated payload simply fails the block hash
+    // check in `BlockProposalAssembler::try_assemble` and the block is dropped.
+    iterator_to_bytes(
+        messages.into_iter(),
+        NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
+    )
+}
+
 /// Calls `f` once for every response slot of the payload, passing the hash of the
 /// content that belongs in the slot together with the slot itself.
 ///
-/// Every response a payload delivers may be stripped from it, because in every
-/// case the replicas that signed for it already hold its content:
+/// Every response a payload delivers can be stripped, because in every case the
+/// replicas that signed for it already hold its content:
 ///
 /// * A fully replicated response is proved by a quorum of `n - f` signatures, one
 ///   per replica that ran the outcall itself and signed this very content, so at
@@ -130,6 +180,7 @@ fn for_each_response_with_proof<F>(
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
 
     use crate::fetch_stripped_artifact::test_utils::{
@@ -143,6 +194,93 @@ mod tests {
 
     fn hash_of(response: &CanisterHttpResponse) -> CanisterHttpResponseContentHash {
         ic_types::crypto::crypto_hash(response)
+    }
+
+    /// Reassembling a stripped payload has to reproduce the original byte for
+    /// byte, because that is what the block hash is computed over.
+    #[test]
+    fn reinsert_responses_test() {
+        let non_replicated = fake_canister_http_response(1, 1024);
+        let fully_replicated = fake_canister_http_response(2, 1024);
+        let flexible_1 = fake_canister_http_response(3, 1024);
+        let flexible_2 = fake_canister_http_response(3, 2048);
+        let all = [&non_replicated, &fully_replicated, &flexible_1, &flexible_2];
+
+        let messages = |stripped: bool| {
+            let response_message = if stripped {
+                fake_stripped_canister_http_response_message
+            } else {
+                fake_canister_http_response_message
+            };
+            let mut flexible = fake_flexible_canister_http_responses_message(
+                3,
+                &[(flexible_1.clone(), NODE_1), (flexible_2.clone(), NODE_2)],
+            );
+            if stripped
+                && let Some(pb::canister_http_response_message::MessageType::FlexibleResponses(
+                    group,
+                )) = flexible.message_type.as_mut()
+            {
+                for response in &mut group.responses {
+                    response.response = None;
+                }
+            }
+            vec![
+                response_message(&non_replicated, &[NODE_1]),
+                response_message(&fully_replicated, &[NODE_1, NODE_2]),
+                flexible,
+            ]
+        };
+
+        let unstripped = fake_canister_http_payload(messages(false));
+        let stripped = fake_canister_http_payload(messages(true));
+        assert!(stripped.len() < unstripped.len());
+
+        let responses = all
+            .into_iter()
+            .map(|response| (hash_of(response), Some(response.clone())))
+            .collect();
+
+        assert_eq!(
+            reinsert_responses(&stripped, &responses).unwrap(),
+            unstripped
+        );
+    }
+
+    /// A payload with nothing missing needs no contents to reassemble.
+    #[test]
+    fn reinsert_nothing_test() {
+        let response = fake_canister_http_response(1, 1024);
+        let payload = fake_canister_http_payload(vec![fake_canister_http_response_message(
+            &response,
+            &[NODE_1],
+        )]);
+
+        assert_eq!(
+            reinsert_responses(&payload, &BTreeMap::new()).unwrap(),
+            payload
+        );
+    }
+
+    #[test]
+    fn reinsert_without_the_content_fails_test() {
+        let response = fake_canister_http_response(1, 1024);
+        let stripped =
+            fake_canister_http_payload(vec![fake_stripped_canister_http_response_message(
+                &response,
+                &[NODE_1],
+            )]);
+
+        for responses in [
+            BTreeMap::new(),
+            BTreeMap::from_iter([(hash_of(&response), None)]),
+        ] {
+            assert_matches!(
+                reinsert_responses(&stripped, &responses),
+                Err(CanisterHttpPayloadError::MissingResponse(hash))
+                    if hash == hash_of(&response).get()
+            );
+        }
     }
 
     #[test]
@@ -214,6 +352,10 @@ mod tests {
         assert_eq!(
             find_response(&garbage, &hash_of(&fake_canister_http_response(1, 0))),
             None
+        );
+        assert_matches!(
+            reinsert_responses(&garbage, &BTreeMap::new()),
+            Err(CanisterHttpPayloadError::DecodeError(_))
         );
     }
 }

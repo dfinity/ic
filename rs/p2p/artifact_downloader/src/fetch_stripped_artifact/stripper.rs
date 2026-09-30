@@ -8,7 +8,9 @@ use ic_types::{
     },
 };
 
-use crate::fetch_stripped_artifact::types::stripped::StrippedIDkgDealings;
+use crate::fetch_stripped_artifact::types::stripped::{
+    StrippedCanisterHttpResponses, StrippedIDkgDealings,
+};
 
 use super::types::{
     SignedIngressId,
@@ -66,6 +68,8 @@ impl Strippable for ConsensusMessage {
                     unstripped_consensus_message_id,
                     stripped_ingress_payload,
                     stripped_idkg_dealings,
+                    // Nothing strips canister HTTP responses yet.
+                    stripped_canister_http_responses: StrippedCanisterHttpResponses::default(),
                 })
             }
             msg => MaybeStrippedConsensusMessage::Unstripped(msg),
