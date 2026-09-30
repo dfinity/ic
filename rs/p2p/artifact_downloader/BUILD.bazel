@@ -47,6 +47,7 @@ rust_test(
         "//rs/test_utilities/consensus",
         "//rs/test_utilities/types",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "//rs/types/types_test_utils",
         "@crate_index//:assert_matches",

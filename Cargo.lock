@@ -6374,6 +6374,7 @@ dependencies = [
  "ic-test-utilities-consensus",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-types-cycles",
  "ic-types-test-utils",
  "mockall",
  "prometheus",

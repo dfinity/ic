@@ -5,8 +5,11 @@ use std::{
 };
 use thiserror::Error;
 
-use ic_interfaces::p2p::consensus::{
-    ArtifactAssembler, AssembleResult, BouncerFactory, BouncerValue, Peers, ValidatedPoolReader,
+use ic_interfaces::{
+    canister_http::CanisterHttpPool,
+    p2p::consensus::{
+        ArtifactAssembler, AssembleResult, BouncerFactory, BouncerValue, Peers, ValidatedPoolReader,
+    },
 };
 use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
@@ -120,6 +123,7 @@ impl FetchStrippedConsensusArtifact {
         consensus_pool: Arc<RwLock<Pool>>,
         ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
         idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
+        canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
         bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
@@ -132,6 +136,7 @@ impl FetchStrippedConsensusArtifact {
             consensus_pool: consensus_pool_clone,
             ingress_pool: ingress_pool_clone,
             idkg_pool: idkg_pool_clone,
+            canister_http_pool,
             metrics: StrippedMessageSenderMetrics::new(&metrics_registry),
         });
 
@@ -652,10 +657,10 @@ impl BlockProposalAssembler {
 #[cfg(test)]
 mod tests {
     use crate::fetch_stripped_artifact::test_utils::{
-        fake_block_proposal_with_ingresses, fake_block_proposal_with_ingresses_and_idkg,
-        fake_idkg_dealing, fake_idkg_payload_with_dealings, fake_ingress_message,
-        fake_ingress_message_with_arg_size, fake_ingress_message_with_sig,
-        fake_stripped_block_proposal_with_messages,
+        FakeCanisterHttpPool, fake_block_proposal_with_ingresses,
+        fake_block_proposal_with_ingresses_and_idkg, fake_idkg_dealing,
+        fake_idkg_payload_with_dealings, fake_ingress_message, fake_ingress_message_with_arg_size,
+        fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages,
     };
     use crate::fetch_stripped_artifact::types::rpc::GetIngressMessageInBlockResponse;
     use assert_matches::assert_matches;
@@ -1047,6 +1052,7 @@ mod tests {
             Arc::new(RwLock::new(consensus_pool)),
             Arc::new(RwLock::new(ingress_pool)),
             Arc::new(RwLock::new(idkg_pool)),
+            Arc::new(RwLock::new(FakeCanisterHttpPool::empty())),
             Arc::new(mock_bouncer_factory),
             MetricsRegistry::new(),
             NODE_1,
@@ -1144,6 +1150,7 @@ mod tests {
             Arc::new(RwLock::new(consensus_pool)),
             Arc::new(RwLock::new(ingress_pool)),
             Arc::new(RwLock::new(idkg_pool)),
+            Arc::new(RwLock::new(FakeCanisterHttpPool::empty())),
             Arc::new(mock_bouncer_factory),
             MetricsRegistry::new(),
             NODE_1,
