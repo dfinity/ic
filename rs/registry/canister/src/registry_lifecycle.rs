@@ -450,12 +450,22 @@ fn backfill_cup_type_on_catch_up_package_contents(registry: &Registry) -> Vec<Re
             && cup_contents.state_hash.is_empty()
         {
             CupType::Genesis(GenesisArgs {})
-        } else {
+        } else if cup_contents.height != 0
+            && cup_contents.time != 0
+            && !cup_contents.state_hash.is_empty()
+        {
             CupType::Recovery(RecoveryArgs {
                 height: cup_contents.height,
                 time: cup_contents.time,
                 state_hash: cup_contents.state_hash.clone(),
             })
+        } else {
+            println!(
+                "CatchUpPackageContents for subnet {subnet_id} has inconsistent legacy fields: \
+                 height={}, time={}, state_hash={:?}. Skipping.",
+                cup_contents.height, cup_contents.time, cup_contents.state_hash
+            );
+            continue;
         };
 
         cup_contents.cup_type = Some(cup_type);
