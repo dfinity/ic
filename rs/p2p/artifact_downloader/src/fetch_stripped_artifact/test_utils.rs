@@ -12,7 +12,7 @@ use ic_types::{
     batch::{
         BatchPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, IngressPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
-        iterator_to_bytes,
+        iterator_to_bytes, slice_to_messages,
     },
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpResponse,
@@ -440,13 +440,35 @@ pub(crate) fn fake_stripped_canister_http_response_message(
 }
 
 /// Serializes the given messages the way the canister http payload builder does.
+///
+/// Panics if they do not all fit: `iterator_to_bytes` silently drops the messages
+/// that exceed the limit, which would leave a test quietly working on fewer
+/// messages than it asked for.
 pub(crate) fn fake_canister_http_payload(
     messages: Vec<pb::CanisterHttpResponseMessage>,
 ) -> Vec<u8> {
-    iterator_to_bytes(
+    let expected = messages.len();
+    let bytes = iterator_to_bytes(
         messages.into_iter(),
         NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
-    )
+    );
+    assert_no_messages_dropped(&bytes, expected);
+
+    bytes
+}
+
+/// Fails unless `payload` carries all `expected` messages, i.e. unless every
+/// message given to `iterator_to_bytes` fit into the payload limit.
+pub(crate) fn assert_no_messages_dropped(payload: &[u8], expected: usize) {
+    let encoded = slice_to_messages::<pb::CanisterHttpResponseMessage>(payload)
+        .expect("Should encode a parseable payload")
+        .len();
+
+    assert_eq!(
+        encoded, expected,
+        "only {encoded} of {expected} messages fit into the \
+         {MAX_CANISTER_HTTP_PAYLOAD_SIZE} byte payload limit; use smaller responses"
+    );
 }
 
 /// A canister http pool that serves the given response contents, and nothing else.
