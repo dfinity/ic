@@ -1379,11 +1379,11 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?
                 .value(
                     &[("pipeline", "withdrawal"), ("stage", "unsent")],
-                    s.withdrawal_transactions.unsent_requests_len() as f64,
+                    s.withdrawal_transactions.created_tx_excluding_resubmissions_len() as f64,
                 )?
                 .value(
                     &[("pipeline", "withdrawal"), ("stage", "sent")],
-                    s.withdrawal_transactions.sent_requests_len() as f64,
+                    s.withdrawal_transactions.sent_tx_nonces_len() as f64,
                 )?
                 .value(
                     &[("pipeline", "sweeper"), ("stage", "queued")],
@@ -1391,11 +1391,11 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?
                 .value(
                     &[("pipeline", "sweeper"), ("stage", "unsent")],
-                    s.automatic_deposits.unsent_sweep_requests_len() as f64,
+                    s.automatic_deposits.created_sweep_tx_excluding_resubmissions_len() as f64,
                 )?
                 .value(
                     &[("pipeline", "sweeper"), ("stage", "sent")],
-                    s.automatic_deposits.sent_sweep_requests_len() as f64,
+                    s.automatic_deposits.sent_sweep_tx_nonces_len() as f64,
                 )?;
                 w.gauge_vec(
                     "cketh_minter_unfinalized_transactions",
@@ -1403,11 +1403,11 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?
                 .value(
                     &[("pipeline", "withdrawal")],
-                    s.withdrawal_transactions.sent_transactions_len() as f64,
+                    s.withdrawal_transactions.sent_tx_transactions_len() as f64,
                 )?
                 .value(
                     &[("pipeline", "sweeper")],
-                    s.automatic_deposits.sent_sweep_transactions_len() as f64,
+                    s.automatic_deposits.sent_sweep_tx_transactions_len() as f64,
                 )?;
 
                 w.encode_gauge(

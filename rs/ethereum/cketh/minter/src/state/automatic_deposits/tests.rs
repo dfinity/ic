@@ -1184,9 +1184,9 @@ async fn should_count_the_sweeps_at_each_stage_of_the_sweeper_pipeline() {
     fn counts(deposits: &AutomaticDeposits) -> (usize, usize, usize, usize) {
         (
             deposits.queued_sweep_requests_len(),
-            deposits.unsent_sweep_requests_len(),
-            deposits.sent_sweep_requests_len(),
-            deposits.sent_sweep_transactions_len(),
+            deposits.created_sweep_tx_excluding_resubmissions_len(),
+            deposits.sent_sweep_tx_nonces_len(),
+            deposits.sent_sweep_tx_transactions_len(),
         )
     }
 
@@ -1221,6 +1221,11 @@ async fn should_count_the_sweeps_at_each_stage_of_the_sweeper_pipeline() {
         *signed.transaction().amount(),
     );
     deposits.record_resubmit_sweep_transaction(bumped.clone());
+    assert_eq!(
+        counts(&deposits),
+        (0, 0, 1, 1),
+        "the sweep holds a created transaction again, but its first attempt is already out"
+    );
     let resubmitted = Signed::from((bumped, dummy_signature()));
     deposits.record_signed_sweep_transaction(resubmitted.clone());
     assert_ne!(resubmitted.hash(), signed.hash());

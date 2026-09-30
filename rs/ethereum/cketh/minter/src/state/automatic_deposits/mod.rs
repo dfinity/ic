@@ -180,16 +180,17 @@ impl AutomaticDeposits {
         self.sweeper_transactions.requests_len()
     }
 
-    pub fn unsent_sweep_requests_len(&self) -> usize {
-        self.sweeper_transactions.unsent_requests_len()
+    pub fn created_sweep_tx_excluding_resubmissions_len(&self) -> usize {
+        self.sweeper_transactions
+            .created_tx_excluding_resubmissions_len()
     }
 
-    pub fn sent_sweep_requests_len(&self) -> usize {
-        self.sweeper_transactions.sent_requests_len()
+    pub fn sent_sweep_tx_nonces_len(&self) -> usize {
+        self.sweeper_transactions.sent_tx_nonces_len()
     }
 
-    pub fn sent_sweep_transactions_len(&self) -> usize {
-        self.sweeper_transactions.sent_transactions_len()
+    pub fn sent_sweep_tx_transactions_len(&self) -> usize {
+        self.sweeper_transactions.sent_tx_transactions_len()
     }
 
     pub fn record_sweep_request(&mut self, request: SweepRequest) {
