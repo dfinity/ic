@@ -228,7 +228,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await,
             ReplicaVersionRecord {
-                replica_version_id: Some(replica_version_id.to_string()),
+                replica_version_id: replica_version_id.to_string(),
                 release_package_sha256_hex: MOCK_HASH.into(),
                 release_package_urls: vec![release_package_url.clone()],
                 guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),

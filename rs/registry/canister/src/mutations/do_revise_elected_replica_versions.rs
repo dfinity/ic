@@ -54,7 +54,7 @@ impl Registry {
                     mutation_type: registry_mutation::Type::Insert as i32,
                     key: make_replica_version_key(&version).as_bytes().to_vec(),
                     value: ReplicaVersionRecord {
-                        replica_version_id: Some(version),
+                        replica_version_id: version,
                         release_package_sha256_hex: payload
                             .release_package_sha256_hex
                             .unwrap_or_else(|| {

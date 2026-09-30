@@ -195,11 +195,19 @@ mod tests {
         registry.maybe_apply_mutation_internal(vec![
             insert(
                 make_replica_version_key(OLD_REPLICA_VERSION_ID).as_bytes(),
-                ReplicaVersionRecord::default().encode_to_vec(),
+                ReplicaVersionRecord {
+                    replica_version_id: OLD_REPLICA_VERSION_ID.to_string(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
             ),
             insert(
                 make_replica_version_key(NEW_REPLICA_VERSION_ID).as_bytes(),
-                ReplicaVersionRecord::default().encode_to_vec(),
+                ReplicaVersionRecord {
+                    replica_version_id: NEW_REPLICA_VERSION_ID.to_string(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
             ),
         ]);
         add_guest_launch_measurements_to_replica_version(registry, OLD_REPLICA_VERSION_ID);
