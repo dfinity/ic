@@ -52,5 +52,7 @@ build --remote_download_minimal
 # (--remote_download_minimal) test outputs stay remote, and --test_output=errors can't even echo
 # the failing logs because multi-MB (system-)test logs exceed --experimental_ui_max_stdouterr_bytes
 # (default 1 MiB), leaving only unreachable CAS paths in the console. Downloading them lets the
-# bazel-namespace action stage and upload the logs of the tests that failed, were flaky or timed out.
+# bazel-namespace action upload the logs of the tests that ran (the ones of cached tests are
+# downloaded too, but not uploaded) to GitHub, where they are public: never pass secrets to tests,
+# e.g. with --test_env.
 test --remote_download_regex=.*/testlogs/.*
