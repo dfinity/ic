@@ -421,15 +421,15 @@ fn add_version_id_to_replica_versions(registry: &Registry) -> Vec<RegistryMutati
 /// One-time migration stamping a `cup_type` on every `CatchUpPackageContents` record that
 /// has none.
 ///
-/// `cup_type` did not always exist: records written before it was introduced carry none and
-/// instead describe the CUP through the legacy `height`, `time` and `state_hash` fields.
-/// Replicas will derive the CUP from `cup_type` and treat a record without one as unusable,
-/// so each such record is stamped as what its legacy fields say it is:
+/// Replicas will soon read off `cup_type` and treat a record without one as unusable, so each such
+/// record is stamped as what its legacy fields `height`, `time`, `state_hash` say it is:
 ///
 /// * all of them unset — the record was written at subnet creation: [`CupType::Genesis`],
 ///   matching what `do_create_subnet` writes today;
 /// * any of them set — the record was written by a recovery: [`CupType::Recovery`],
 ///   preserving the legacy values.
+/// * nothing maps to [`CupType::SubnetSplitting`], because the splitting endpoint was introduced
+///   already with `cup_type` in place, so any record written by it already has a `cup_type`.
 ///
 /// The migration is idempotent and self-guarding: a record is only mutated while its
 /// `cup_type` is still unset, so re-running it on a subsequent upgrade produces no
