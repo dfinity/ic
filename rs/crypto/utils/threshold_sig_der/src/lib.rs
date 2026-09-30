@@ -1,7 +1,13 @@
-use simple_asn1::{ASN1Block, oid};
+use ic_crypto_internal_basic_sig_der_utils::{
+    PkixAlgorithmIdentifier, algo_id_and_public_key_bytes_from_der,
+};
+use simple_asn1::{ASN1Block, OID, oid};
 
 /// Byte size of the public key, which is a G2 element.
 pub const PUBLIC_KEY_SIZE: usize = 96;
+
+/// Byte size of the DER encoding of a public key.
+pub const PUBLIC_KEY_DER_SIZE: usize = 133;
 
 /// Converts public key bytes into its DER-encoded form.
 ///
@@ -14,7 +20,13 @@ pub fn public_key_to_der(key: &[u8]) -> Result<Vec<u8>, String> {
     simple_asn1::to_der(&ASN1Block::Sequence(
         2,
         vec![
-            ASN1Block::Sequence(0, vec![bls_algorithm_id(), bls_curve_id()]),
+            ASN1Block::Sequence(
+                0,
+                vec![
+                    ASN1Block::ObjectIdentifier(0, bls_algorithm_oid()),
+                    ASN1Block::ObjectIdentifier(0, bls_curve_oid()),
+                ],
+            ),
             ASN1Block::BitString(0, key.len() * 8, key.to_vec()),
         ],
     ))
@@ -27,57 +39,37 @@ pub fn public_key_to_der(key: &[u8]) -> Result<Vec<u8>, String> {
 /// and [RFC 5480](https://tools.ietf.org/html/rfc5480).
 ///
 /// # Errors
-/// * Returns a string describing the error if the given `bytes` are not valid
-///   ASN.1, or include unexpected ASN.1 structures.
+/// * Returns a string describing the error if the given `bytes` are not
+///   [`PUBLIC_KEY_DER_SIZE`] long, are not valid ASN.1, or include unexpected
+///   ASN.1 structures.
 pub fn public_key_from_der(bytes: &[u8]) -> Result<[u8; PUBLIC_KEY_SIZE], String> {
-    use simple_asn1::{
-        ASN1Block::{BitString, Sequence},
-        from_der,
-    };
-
-    let unexpected_struct_err = |s: &ASN1Block| {
-        format!("unexpected ASN1 structure: {s:?}, wanted: seq(seq(OID, OID), bitstring)")
-    };
-
-    let asn1_values =
-        from_der(bytes).map_err(|e| format!("failed to deserialize DER blocks: {e}"))?;
-
-    match asn1_values[..] {
-        [Sequence(_, ref seq)] => match &seq[..] {
-            [Sequence(_, ids), BitString(_, len, key)] => {
-                if ids.len() != 2 {
-                    return Err(unexpected_struct_err(&asn1_values[0]));
-                }
-
-                if *len != PUBLIC_KEY_SIZE * 8 {
-                    return Err(format!("unexpected key length: {len} bits"));
-                }
-
-                if ids[0] == bls_algorithm_id() && ids[1] == bls_curve_id() {
-                    let mut key_bytes = [0_u8; PUBLIC_KEY_SIZE];
-                    key_bytes.copy_from_slice(key.as_slice());
-                    Ok(key_bytes)
-                } else {
-                    Err(format!(
-                        "unsupported algorithm ({:?}) and/or curve ({:?}) OIDs",
-                        ids[0], ids[1],
-                    ))
-                }
-            }
-            _ => Err(unexpected_struct_err(&asn1_values[0])),
-        },
-        _ => Err(format!(
-            "expected exactly one ASN1 block, got sequence: {asn1_values:?}"
-        )),
+    if bytes.len() != PUBLIC_KEY_DER_SIZE {
+        return Err(format!(
+            "unexpected DER length: {} bytes, expected {PUBLIC_KEY_DER_SIZE}",
+            bytes.len()
+        ));
     }
+
+    let (algo_id, key) =
+        algo_id_and_public_key_bytes_from_der(bytes).map_err(|e| e.internal_error)?;
+    let bls_algo_id =
+        PkixAlgorithmIdentifier::new_with_oid_param(bls_algorithm_oid(), bls_curve_oid());
+    if algo_id != bls_algo_id {
+        return Err(format!(
+            "unsupported algorithm identifier: {algo_id:?}, expected {bls_algo_id:?}"
+        ));
+    }
+
+    key.try_into()
+        .map_err(|key: Vec<u8>| format!("unexpected key length: {} bytes", key.len()))
 }
 
-fn bls_algorithm_id() -> ASN1Block {
-    ASN1Block::ObjectIdentifier(0, oid!(1, 3, 6, 1, 4, 1, 44668, 5, 3, 1, 2, 1))
+fn bls_algorithm_oid() -> OID {
+    oid!(1, 3, 6, 1, 4, 1, 44668, 5, 3, 1, 2, 1)
 }
 
-fn bls_curve_id() -> ASN1Block {
-    ASN1Block::ObjectIdentifier(0, oid!(1, 3, 6, 1, 4, 1, 44668, 5, 3, 2, 1))
+fn bls_curve_oid() -> OID {
+    oid!(1, 3, 6, 1, 4, 1, 44668, 5, 3, 2, 1)
 }
 
 mod conversions;
