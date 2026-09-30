@@ -31,3 +31,13 @@ rust_fuzz_test_binary(
         "@crate_index//:libfuzzer-sys",
     ],
 )
+
+rust_fuzz_test_binary(
+    name = "deserialize_dogecoin_raw_network_message",
+    srcs = ["fuzz_targets/deserialize_dogecoin_raw_network_message.rs"],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:bitcoin_dogecoin",
+        "@crate_index//:libfuzzer-sys",
+    ],
+)
