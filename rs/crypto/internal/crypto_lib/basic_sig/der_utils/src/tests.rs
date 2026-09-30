@@ -1,5 +1,5 @@
 use super::*;
-use simple_asn1::oid;
+use simple_asn1::{BigUint, oid};
 
 #[test]
 fn should_have_compatible_subject_public_key_info_der_encoder_and_decoder() {
@@ -58,20 +58,20 @@ fn should_reject_key_with_der_nesting_above_the_maximum_depth() {
 #[test]
 fn should_accept_der_nesting_up_to_the_maximum_depth() {
     let der = sequences_around_null(MAX_DER_NESTING_DEPTH);
-    assert_eq!(KeyDerParser::check_der_nesting_depth(&der), Ok(()));
+    assert_eq!(KeyDerParser::check_der_limits(&der), Ok(()));
 }
 
 #[test]
 fn should_reject_der_nesting_above_the_maximum_depth() {
     let der = sequences_around_null(MAX_DER_NESTING_DEPTH + 1);
-    assert!(KeyDerParser::check_der_nesting_depth(&der).is_err());
+    assert!(KeyDerParser::check_der_limits(&der).is_err());
 }
 
 #[test]
 fn should_accept_realistic_public_key_der() {
     let oid = oid!(1, 2, 3, 4, 5);
     let der = subject_public_key_info_der(oid, b"subject public key").unwrap();
-    assert_eq!(KeyDerParser::check_der_nesting_depth(&der), Ok(()));
+    assert_eq!(KeyDerParser::check_der_limits(&der), Ok(()));
 }
 
 #[test]
@@ -184,7 +184,7 @@ fn should_terminate_on_malformed_der() {
 
     for input in inputs {
         // The test terminating at all is what is being verified here.
-        let _ = KeyDerParser::check_der_nesting_depth(&input);
+        let _ = KeyDerParser::check_der_limits(&input);
         let _ = algo_id_and_public_key_bytes_from_der(&input);
     }
 }
@@ -214,11 +214,11 @@ fn nested_with_tag(tag: u8, depth: usize) -> Vec<u8> {
 fn should_count_the_depth_of_universal_containers_without_the_constructed_bit() {
     for tag in [0x10_u8, 0x11] {
         assert_eq!(
-            KeyDerParser::check_der_nesting_depth(&nested_with_tag(tag, MAX_DER_NESTING_DEPTH)),
+            KeyDerParser::check_der_limits(&nested_with_tag(tag, MAX_DER_NESTING_DEPTH)),
             Ok(())
         );
         assert!(
-            KeyDerParser::check_der_nesting_depth(&nested_with_tag(tag, MAX_DER_NESTING_DEPTH + 1))
+            KeyDerParser::check_der_limits(&nested_with_tag(tag, MAX_DER_NESTING_DEPTH + 1))
                 .is_err(),
             "nesting with tag {tag:#04x} was not rejected"
         );
@@ -226,14 +226,24 @@ fn should_count_the_depth_of_universal_containers_without_the_constructed_bit() 
     }
 }
 
-/// Elements using the high-tag-number form can carry the SEQUENCE and SET tag
-/// numbers, so their depth is counted as well.
 #[test]
-fn should_count_the_depth_of_elements_using_the_high_tag_number_form() {
-    // The SEQUENCE tag number encoded in the (non-minimal) long form.
-    let der = nested_with_tag_bytes(&[0x1f, 0x90, 0x10], MAX_DER_NESTING_DEPTH + 1);
+fn should_reject_der_using_the_high_tag_number_form() {
+    let high_tag_number_identifiers: [&[u8]; 3] = [
+        // SEQUENCE, in the (non-minimal) high-tag-number form.
+        &[0x3f, 0x10],
+        &[0x1f, 0x80, 0x10],
+        // Context-specific tag number 31, the lowest that needs this form.
+        &[0x9f, 0x1f],
+    ];
 
-    assert!(KeyDerParser::check_der_nesting_depth(&der).is_err());
+    for identifier in high_tag_number_identifiers {
+        assert_eq!(
+            algo_id_and_public_key_bytes_from_der(&nested_with_tag_bytes(identifier, 1))
+                .unwrap_err()
+                .internal_error,
+            "DER uses the high-tag-number form, which is not supported"
+        );
+    }
 }
 
 /// Keys whose headers cannot be walked from start to end are rejected.
@@ -253,10 +263,73 @@ fn should_reject_der_that_cannot_be_scanned_in_full() {
         let mut der = prefix.to_vec();
         der.extend_from_slice(&nested_with_tag(0x30, 100));
         assert!(
-            KeyDerParser::check_der_nesting_depth(&der).is_err(),
+            KeyDerParser::check_der_limits(&der).is_err(),
             "unscannable prefix {prefix:02x?} was accepted"
         );
     }
+}
+
+#[test]
+fn should_reject_der_with_more_than_the_maximum_number_of_elements() {
+    let sequence_of_nulls = |num_nulls: usize| {
+        let content = [0x05_u8, 0x00].repeat(num_nulls);
+        let mut der = vec![0x30_u8];
+        der.extend_from_slice(&der_definite_length(content.len()));
+        der.extend_from_slice(&content);
+        der
+    };
+
+    assert_eq!(
+        KeyDerParser::check_der_limits(&sequence_of_nulls(MAX_DER_ELEMENTS - 1)),
+        Ok(())
+    );
+    assert_eq!(
+        algo_id_and_public_key_bytes_from_der(&sequence_of_nulls(MAX_DER_ELEMENTS))
+            .unwrap_err()
+            .internal_error,
+        format!("DER number of elements exceeds the maximum of {MAX_DER_ELEMENTS}")
+    );
+}
+
+/// Returns an OBJECT IDENTIFIER whose content is `num_octets` long.
+fn oid_with_content_octets(num_octets: usize) -> OID {
+    let mut arcs = vec![BigUint::from(1_u8), BigUint::from(2_u8)];
+    arcs.resize(num_octets + 1, BigUint::from(1_u8));
+    OID::new(arcs)
+}
+
+#[test]
+fn should_accept_oids_up_to_the_maximum_length() {
+    let oid = oid_with_content_octets(MAX_OID_OCTETS);
+    let der = subject_public_key_info_der(oid.clone(), b"subject public key").unwrap();
+
+    let (algo_id, _) = algo_id_and_public_key_bytes_from_der(&der).unwrap();
+
+    assert_eq!(algo_id.oid, oid);
+}
+
+#[test]
+fn should_reject_oids_above_the_maximum_length() {
+    let oid = oid_with_content_octets(MAX_OID_OCTETS + 1);
+    let der = subject_public_key_info_der(oid, b"subject public key").unwrap();
+
+    let error = algo_id_and_public_key_bytes_from_der(&der).unwrap_err();
+
+    assert_eq!(
+        error.internal_error,
+        format!("DER OBJECT IDENTIFIER length exceeds the maximum of {MAX_OID_OCTETS}")
+    );
+}
+
+/// Canister signature public keys embed a seed of unbounded length.
+#[test]
+fn should_accept_long_public_keys() {
+    let pubkey = vec![0xff; 1 << 20];
+    let der = subject_public_key_info_der(oid!(1, 2, 3, 4, 5), &pubkey).unwrap();
+
+    let (_, pubkey_bytes) = algo_id_and_public_key_bytes_from_der(&der).unwrap();
+
+    assert_eq!(pubkey_bytes, pubkey);
 }
 
 /// Builds a DER `NULL` wrapped in `depth` definite-length elements with the
