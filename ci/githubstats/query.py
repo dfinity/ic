@@ -15,6 +15,7 @@ import struct
 import subprocess
 import sys
 import threading
+import traceback
 import urllib.parse
 import zipfile
 import zlib
@@ -762,6 +763,9 @@ def execute_download_tasks(
     with (
         ThreadPoolExecutor(max_workers=10) as download_ic_log_executor,
         ThreadPoolExecutor(max_workers=10) as download_console_log_executor,
+        # Processing a log is CPU-bound, so more threads only contend for the GIL: a thread per log
+        # processed the 2.3 GB of *_local logs of a master run in 41 seconds instead of 23.
+        ThreadPoolExecutor(max_workers=4) as process_log_executor,
     ):
 
         def download_log(task):
@@ -785,25 +789,21 @@ def execute_download_tasks(
                     with open(download_to_path, "wb") as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
-                # Fork a thread to process the log while the other logs are still downloading to speed up the whole process.
-                thread = threading.Thread(
-                    target=process_log,
-                    args=(
-                        row,
-                        attempt_num,
-                        attempt_status,
-                        attempt_dir,
-                        download_to_path,
-                        df,
-                        download_console_logs,
-                        download_ic_logs,
-                        verbose,
-                        download_console_log_executor,
-                        download_ic_log_executor,
-                    ),
+                # Process the log while the other logs are still downloading to speed up the whole process.
+                return process_log_executor.submit(
+                    process_log,
+                    row,
+                    attempt_num,
+                    attempt_status,
+                    attempt_dir,
+                    download_to_path,
+                    df,
+                    download_console_logs,
+                    download_ic_logs,
+                    verbose,
+                    download_console_log_executor,
+                    download_ic_log_executor,
                 )
-                thread.start()
-                return thread
             except Exception as e:
                 print(f"Error downloading {source} -> .../{shortened_path}: {e}", file=sys.stderr)
                 return None
@@ -811,14 +811,15 @@ def execute_download_tasks(
         # Download test logs concurrently.
         # Limit to 10 concurrent downloads to not overwhelm the bazel-remote HTTP server.
         with ThreadPoolExecutor(max_workers=10) as download_test_log_executor:
-            threads = list(download_test_log_executor.map(download_log, download_tasks))
+            processings = list(download_test_log_executor.map(download_log, download_tasks))
 
-        # Wait for all annotation threads to finish.
+        # Wait for the processing of all logs to finish.
         successes = 0
-        for thread in threads:
-            if thread is not None:
+        for processing in processings:
+            if processing is not None:
                 successes += 1
-                thread.join()
+                if processing.exception() is not None:
+                    traceback.print_exception(processing.exception())
 
     # Render the error_summaries to human-readable form.
     df["errors"] = df["error_summaries"].apply(render_error_summaries)
@@ -871,7 +872,9 @@ def process_log(
                 try:
                     # Here we try parsing a timestamp from the first 23 characters of a line
                     # assuming the line looks something like: "2026-02-03 13:55:09.645 INFO..."
-                    last_seen_timestamp = datetime.strptime(line[:TIMESTAMP_LEN], "%Y-%m-%d %H:%M:%S.%f")
+                    # fromisoformat is 10 times faster than strptime, which also takes a lock that threads contend for,
+                    # and *_local system-tests stream millions of lines of node and console logs into their test log.
+                    last_seen_timestamp = datetime.fromisoformat(line[:TIMESTAMP_LEN])
                 except ValueError:
                     continue
 
