@@ -22,7 +22,10 @@ use ic_test_utilities_consensus::{
 use ic_types::{
     CountBytes, Height, NodeId, NumBytes, RegistryVersion,
     artifact::{IdentifiableArtifact, IngressMessageId},
-    batch::{BatchPayload, IngressPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE, iterator_to_bytes},
+    batch::{
+        BatchPayload, IngressPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE, iterator_to_bytes,
+        slice_to_messages,
+    },
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpResponse, CanisterHttpResponseContent,
         CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseSignature,
@@ -170,6 +173,7 @@ fn fake_block_proposal(
 /// which stay behind in the stripped payload. (The flexible shape, which nests
 /// its responses one level deeper, is covered by the unit tests.)
 fn fake_canister_http_payload(responses: Vec<CanisterHttpResponse>, signers: usize) -> Vec<u8> {
+    let responses_len = responses.len();
     let messages = responses.into_iter().map(|response| {
         let with_consensus = CanisterHttpResponseWithConsensus {
             proof: CanisterHttpResponseProof {
@@ -203,10 +207,24 @@ fn fake_canister_http_payload(responses: Vec<CanisterHttpResponse>, signers: usi
         }
     });
 
-    iterator_to_bytes(
+    let expected = responses_len;
+    let bytes = iterator_to_bytes(
         messages,
         NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
-    )
+    );
+
+    // `iterator_to_bytes` silently drops the messages that exceed the limit, which
+    // would leave the benchmark measuring fewer responses than its label claims.
+    let encoded = slice_to_messages::<pb::CanisterHttpResponseMessage>(&bytes)
+        .expect("Should encode a parseable payload")
+        .len();
+    assert_eq!(
+        encoded, expected,
+        "only {encoded} of {expected} responses fit into the \
+         {MAX_CANISTER_HTTP_PAYLOAD_SIZE} byte payload limit; use a smaller body"
+    );
+
+    bytes
 }
 
 fn fake_canister_http_responses(count: u64, body_size: usize) -> Vec<CanisterHttpResponse> {
