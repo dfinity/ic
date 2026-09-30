@@ -359,7 +359,7 @@ FAILED_TEST_LOG = b"running 2 tests\ntest result: FAILED. 1 passed; 1 failed; 0 
 class LastTest(unittest.TestCase):
     """Runs `last` on fake database rows."""
 
-    def last(self, rows: list[tuple], *args: str, artifacts: dict = None, listing_error=None) -> dict:
+    def last(self, rows: list[tuple], *args: str, artifacts: dict = None, listing_error=None, token=TOKEN) -> dict:
         fake = FakeGitHub(artifacts or {}, {BAZEL_REMOTE_URL: FAILED_TEST_LOG})
         fake.listing_error = listing_error
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -368,7 +368,7 @@ class LastTest(unittest.TestCase):
             mock.patch.dict(os.environ, {"BUILD_WORKING_DIRECTORY": cwd}),
             mock.patch.object(sys, "argv", ["query", "last", "--day", *args]),
             mock.patch.object(query, "githubstats_db_cursor", lambda *_: contextlib.nullcontext(FakeCursor(rows))),
-            mock.patch.object(query, "github_token", return_value=TOKEN),
+            mock.patch.object(query, "github_token", return_value=token),
             mock.patch.object(query.requests, "get", side_effect=fake.get),
             mock.patch.object(query.requests, "post") as post,
             mock.patch.object(
@@ -489,6 +489,16 @@ class LastTest(unittest.TestCase):
             ],
         )
         self.assertEqual(list(result["files"]), ["logs/flaky_test_local/<now>/README.md"])
+
+    def test_no_token(self):
+        result = self.last([row("//rs/tests/foo:flaky_test_local", "FLAKY", "b1", 1, RBE_JOB)], token=None)
+        self.assertIn(
+            "Not downloading the logs of 1 of the runs on RBE @ Namespace: they're in GitHub artifacts,"
+            " which need a GitHub token. Log in with"
+            " `gh auth login --hostname github.com --git-protocol ssh --skip-ssh-key --web` or set GH_TOKEN.",
+            result["stderr"],
+        )
+        self.assertEqual(result["fake"].api_calls, [])
 
     def test_no_rows(self):
         result = self.last([])

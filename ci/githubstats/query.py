@@ -556,8 +556,9 @@ def open_logs_artifacts(df: pd.DataFrame) -> dict[tuple[int, str], "LogsArtifact
     token = github_token()
     if token is None:
         print(
-            f"Not downloading the logs of {len(ran)} of the runs on RBE @ Namespace:"
-            " they're in GitHub artifacts, which need a GitHub token. Run `gh auth login` to get one.",
+            f"Not downloading the logs of {len(ran)} of the runs on RBE @ Namespace: they're in GitHub artifacts,"
+            " which need a GitHub token. Log in with"
+            " `gh auth login --hostname github.com --git-protocol ssh --skip-ssh-key --web` or set GH_TOKEN.",
             file=sys.stderr,
         )
         return {}
@@ -1693,7 +1694,8 @@ Mutually exclusive with --day/--week/--month""",
 it was uploaded in, minus that suffix, like 'bazel-test-all-__self_3' for the tests of bazel-test-all in ci-main.yml
 (whose number shifts when steps are added, so match 'bazel-test-all-__self%%') and 'bazel-test-all-rbe-bazel-test-%%'
 for those of bazel-test-all-rbe in ci-rbe-evaluation.yml, which run on RBE @ Namespace. `last` downloads the logs of the latter
-from the '<job>-logs' artifact of their workflow run on GitHub instead of from BuildBuddy, which needs `gh auth login`.
+from the '<job>-logs' artifact of their workflow run on GitHub instead of from BuildBuddy, which needs gh to be logged in
+or GH_TOKEN to be set.
 GitHub deletes these artifacts after 14 days.
 Note that 'bazel-test-all-%%' matches both, and that of these two only the former runs *_farm system-tests, the latter *_local ones""",
     )
