@@ -145,7 +145,7 @@ impl Registry {
         let destination_subnet_id = destination_dkg_response.fresh_subnet_id;
 
         let get_cup_contents =
-            |is_destination: bool, dkg_response: &SetupInitialDKGResponse| CatchUpPackageContents {
+            |dkg_response: &SetupInitialDKGResponse, cup_type: CupType| CatchUpPackageContents {
                 initial_ni_dkg_transcript_low_threshold: Some(
                     dkg_response.low_threshold_transcript_record.clone(),
                 ),
@@ -158,19 +158,17 @@ impl Registry {
                 registry_store_uri: None,
                 ecdsa_initializations: vec![],
                 chain_key_initializations: vec![],
-                cup_type: if is_destination {
-                    Some(CupType::Genesis(GenesisArgs {}))
-                } else {
-                    Some(CupType::SubnetSplitting(SubnetSplittingArgs {
-                        destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
-                    }))
-                },
+                cup_type: Some(cup_type),
             };
 
-        let source_cup_contents =
-            get_cup_contents(/*is_destination=*/ false, &source_dkg_response);
+        let source_cup_contents = get_cup_contents(
+            &source_dkg_response,
+            CupType::SubnetSplitting(SubnetSplittingArgs {
+                destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
+            }),
+        );
         let destination_cup_contents =
-            get_cup_contents(/*is_destination=*/ true, &destination_dkg_response);
+            get_cup_contents(&destination_dkg_response, CupType::Genesis(GenesisArgs {}));
 
         let post_call_registry_version = self.latest_version();
 
