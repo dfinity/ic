@@ -1782,6 +1782,20 @@ pub struct GetIDkgDealingInBlockResponse {
     pub signed_dealing:
         ::core::option::Option<super::super::registry::subnet::v1::IDkgSignedDealingTuple>,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetCanisterHttpResponseInBlockRequest {
+    /// The hash of the stripped `CanisterHttpResponse`, i.e. the `content_hash` that
+    /// the block's own metadata for that response carries.
+    #[prost(bytes = "vec", tag = "1")]
+    pub content_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub block_proposal_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetCanisterHttpResponseInBlockResponse {
+    #[prost(message, optional, tag = "1")]
+    pub response: ::core::option::Option<CanisterHttpResponse>,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StrippedBlockProposal {
     /// The original block proposal proto but all \[`Strippable`\] data is removed.
@@ -1796,6 +1810,11 @@ pub struct StrippedBlockProposal {
     /// The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
     #[prost(message, repeated, tag = "4")]
     pub stripped_idkg_dealings: ::prost::alloc::vec::Vec<StrippedIDkgDealing>,
+    /// The stripped canister HTTP responses, i.e. the hashes of the response contents that were pruned
+    /// from the canister HTTP payload of the block proposal. Deduplicated: two committee members of a
+    /// flexible outcall that produced the very same response share one entry.
+    #[prost(bytes = "vec", repeated, tag = "5")]
+    pub stripped_canister_http_responses: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StrippedIDkgDealing {
