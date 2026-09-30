@@ -268,8 +268,9 @@ pub(crate) fn deliver_canister_http_spent(
             if let Entry::Occupied(entry) = contexts.entry(callback)
                 && unaccounted_replicas(entry.get()) == 0
             {
+                let context = entry.remove();
                 // The refund is final, and every replica's own report covered it.
-                metrics.observe_refunds(STATUS_COMPLETE, &entry.remove().refund_status);
+                metrics.observe_refunds(STATUS_COMPLETE, &context.refund_status);
             }
         }
     }
