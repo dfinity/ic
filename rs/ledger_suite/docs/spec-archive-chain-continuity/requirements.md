@@ -114,7 +114,10 @@ an archive's reported range.
   pruning are separate work.
 - **Making a ledger-only snapshot restore safe.** A ledger restored alone resumes issuing
   indices its archives already hold with different content. Req 9.6 detects it and
-  Req 1 keeps the fork out of the archives; the coherent rollback is the whole suite.
+  Req 1 keeps the fork out of the archives. Once the restored ledger has processed
+  transactions its chain is canonical, so the repair is to bring the archives to it by
+  truncating or replacing them at the fork, never to roll the ledger back again; that
+  operation is break-glass and is not built here.
 - **Verifying the first append into a fresh archive given no Expected_Parent.** It is
   unverifiable in principle and is taken on trust (Req 1.7); refusing would halt every
   un-upgraded ledger at each archive roll-over. Req 1.8 makes the window countable.
@@ -343,16 +346,18 @@ issued to remain retrievable, so that a history I have read never develops a hol
    far as the reported Archive_Position, because a hash chain propagates a divergence
    forward, so a match at index N is evidence about indices at and below N only.
 4. WHEN the Tail_Archive reports an Archive_Range whose start is above the end of the
-   Archived_Prefix, THE Ledger SHALL make no further archiving attempt and SHALL expose a
-   distinct non-zero metric.
+   Archived_Prefix, THE Ledger SHALL leave its record, Archived_Prefix included,
+   unchanged by that reply, make no further archiving attempt, and expose a distinct
+   non-zero metric.
 5. IF an archive reports an Archive_Position that is not above the last index of the
    Published_Range for *that* archive, THEN THE Ledger SHALL make no further archiving
    attempt, SHALL discard no further blocks, and SHALL expose a distinct non-zero metric,
    because a block it is published as holding is then held nowhere.
 6. WHEN an archive reports an Archive_Position above the next block index THE Ledger
-   would itself issue, THE Ledger SHALL make no further archiving attempt and SHALL
-   expose a distinct non-zero metric, because the archive was built from a chain the
-   ledger is no longer on.
+   would itself issue, THE Ledger SHALL leave its record, Archived_Prefix included,
+   unchanged by that reply, make no further archiving attempt, and expose a distinct
+   non-zero metric, because the archive was built from a chain the ledger is no longer
+   on, and a suite in that state is repaired by an operator, not by giving up blocks.
 7. WHEN any archive reports a `block_index_offset` that differs from the start THE Ledger
    has recorded for it, its Published_Range start or, for an archive not yet published,
    one past the end of the previous archive's Published_Range (zero for a ledger's first

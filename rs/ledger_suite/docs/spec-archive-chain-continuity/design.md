@@ -194,8 +194,11 @@ conclusive only because the ledger is the new canister's sole controller until t
 ### D12 — No repair path is built now
 
 A mis-indexed archive is off by one constant everywhere and is repairable by rewriting
-its offset at `post_upgrade` and the ledger's ranges alongside. Both are break-glass and
-the archive cannot validate the value. Build it only if Step 0 finds a divergence.
+its offset at `post_upgrade` and the ledger's ranges alongside; an archive holding a
+suffix from an abandoned timeline is repairable by truncating its log at the fork, and
+must never be rolled back below the ledger's Archived_Prefix, which would leave blocks
+held nowhere. Both are break-glass and the archive cannot validate the value. Build
+either only when Step 0 or a halt shows the need.
 
 ## Implementation
 
@@ -300,7 +303,11 @@ position not past the published end (Req 9.5, tested as `next_index > inclusive_
 the one place the inclusive and exclusive conventions meet), and position above the
 ledger's own chain tip (Req 9.6, the ledger-only snapshot restore). Per D5 the prefix
 advances only on `verified == true`, and only to one past the highest block stored or
-compared; the removal count and the published end are capped the same way.
+compared; the removal count and the published end are capped the same way. A reply that
+trips any of 9.4–9.7 changes nothing at all, even when its compared block matched: no
+prefix advance, no removal, no published range (Req 9.4, 9.6, 9.7), because a suite in
+one of those states is repaired by an operator and the ledger should hand over its
+state whole.
 
 `BelowRange` halts (Req 10.6): its one benign route, a straddling re-send into a full
 archive that compared nothing, is closed by Req 2.5, and what remains is a wrong record
@@ -339,7 +346,7 @@ counters.
 |---|---|---|---|
 | tail start above the Archived_Prefix | Req 9.4 | comes back below range, nothing stored | after a record migration |
 | position not past its published range | Req 9.5 | comes back as a gap, nothing stored | never: blocks are held nowhere |
-| position above the ledger's chain tip | Req 9.6 | re-send compared, refused | after the suite is restored to a common point |
+| position above the ledger's chain tip | Req 9.6 | wholly held re-send: accepted and compared while the ledger's blocks still match, refused once they diverge; nothing advances either way | after the archives are truncated at the fork |
 | offset differs from recorded start | Req 9.7 | may store idempotently; record unchanged | after a record migration |
 | empty archive reports `at_capacity` | Req 8.3 | halts again, or rolls over once the size is raised | by raising `node_max_memory_size_bytes` |
 | refused on chain or position grounds | Req 10.5 | refused again, nothing stored | after the archive is repaired or replaced |
