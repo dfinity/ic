@@ -138,11 +138,12 @@ it sent cannot corrupt the archive by sending it again.
 
 #### Acceptance Criteria
 
-1. THE Archive SHALL store a block if and only if the caller is the ledger it was created
-   by and the block's parent hash is the hash of the block before it: the archive's last
+1. THE Archive SHALL store a block only if the caller is the ledger it was created by
+   and the block's parent hash is the hash of the block before it: the archive's last
    stored block for the first block the append stores, the preceding block of the append
    for every later block, and the Expected_Parent while the archive holds no blocks;
-   otherwise THE Archive SHALL refuse the append, except as 1.4 and 1.7 provide.
+   when that fails THE Archive SHALL refuse the append, except as 1.4 and 1.7 provide,
+   and placement (Req 2) and capacity (Req 4) decide the rest.
 2. WHILE THE Archive holds no blocks and was given an Expected_Parent, THE Archive SHALL
    refuse an append whose first stored block does not carry that hash as its parent.
 3. WHEN a block THE Archive would store, other than the first, does not carry as its
