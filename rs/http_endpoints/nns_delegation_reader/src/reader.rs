@@ -196,12 +196,6 @@ impl NNSDelegationBuilder {
     }
 
     /// Checks whether the delegation is consistent with the given replicated state.
-    ///
-    /// If the state does not know the delegated subnet, this returns
-    /// [`DelegationValidationError::UnknownSubnet`]. `ranges_check` specifies what to
-    /// check the certified canister ranges against (see [`CanisterRangesCheck`]).
-    ///
-    /// See [`is_tree_consistent_with`] for the exact semantics.
     pub fn is_consistent_with(
         &self,
         ranges_check: CanisterRangesCheck,

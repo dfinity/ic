@@ -7,13 +7,12 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 clap = { workspace = true }
-eyre = "0.6.8"
 ic-config = { path = "../../config" }
 ic-embedders = { path = "../../embedders" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
-serde = { workspace = true }
 serde_json = { workspace = true }
 
 [[bin]]
