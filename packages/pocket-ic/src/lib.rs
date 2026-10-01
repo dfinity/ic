@@ -97,8 +97,6 @@ use tempfile::{NamedTempFile, TempDir};
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use tracing::{instrument, warn};
-#[cfg(windows)]
-use wslpath::windows_to_wsl;
 
 pub mod common;
 pub mod nonblocking;
@@ -2194,6 +2192,32 @@ impl From<SubnetBlockmakers> for RawSubnetBlockmakers {
     }
 }
 
+/// Converts an absolute Windows path with a drive prefix (e.g. `C:\Users\x\y`)
+/// to the path under which WSL mounts it (e.g. `/mnt/c/Users/x/y`).
+///
+/// The drive letter is lower-cased and backslashes are replaced by forward slashes.
+/// A verbatim prefix (`\\?\`), as produced by `std::fs::canonicalize` on Windows,
+/// is stripped. Paths without a drive prefix (UNC paths, relative paths, ...) are
+/// rejected.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn windows_to_wsl(path: &str) -> Result<String, String> {
+    let path = path.strip_prefix(r"\\?\").unwrap_or(path);
+    let mut chars = path.chars();
+    let drive = match (chars.next(), chars.next()) {
+        (Some(drive), Some(':')) if drive.is_ascii_alphabetic() => drive.to_ascii_lowercase(),
+        _ => {
+            return Err(format!(
+                "`{path}` does not start with a drive prefix such as `C:`"
+            ));
+        }
+    };
+    let rest = chars.as_str();
+    if !rest.is_empty() && !rest.starts_with(['\\', '/']) {
+        return Err(format!("`{path}` is a drive-relative path"));
+    }
+    Ok(format!("/mnt/{drive}{}", rest.replace('\\', "/")))
+}
+
 #[cfg(windows)]
 fn wsl_path(path: &PathBuf, desc: &str) -> String {
     windows_to_wsl(
@@ -2586,5 +2610,37 @@ mod test {
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );
+    }
+}
+
+#[cfg(test)]
+mod windows_to_wsl_tests {
+    use super::windows_to_wsl;
+
+    #[test]
+    fn converts_absolute_windows_paths() {
+        assert_eq!(windows_to_wsl(r"C:\Users\x\y").unwrap(), "/mnt/c/Users/x/y");
+        assert_eq!(
+            windows_to_wsl(r"d:\pocket-ic\pocket-ic.exe").unwrap(),
+            "/mnt/d/pocket-ic/pocket-ic.exe"
+        );
+        assert_eq!(windows_to_wsl("C:/Users/x/y").unwrap(), "/mnt/c/Users/x/y");
+        assert_eq!(windows_to_wsl(r"C:\").unwrap(), "/mnt/c/");
+        assert_eq!(windows_to_wsl("C:").unwrap(), "/mnt/c");
+        assert_eq!(
+            windows_to_wsl(r"\\?\C:\Users\x\y").unwrap(),
+            "/mnt/c/Users/x/y"
+        );
+    }
+
+    #[test]
+    fn rejects_paths_without_drive_prefix() {
+        assert!(windows_to_wsl("").is_err());
+        assert!(windows_to_wsl(r"Users\x\y").is_err());
+        assert!(windows_to_wsl(r"\Users\x\y").is_err());
+        assert!(windows_to_wsl("/mnt/c/Users/x/y").is_err());
+        assert!(windows_to_wsl(r"\\server\share\x").is_err());
+        assert!(windows_to_wsl(r"1:\x").is_err());
+        assert!(windows_to_wsl(r"C:Users\x").is_err());
     }
 }

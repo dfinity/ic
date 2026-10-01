@@ -66,14 +66,14 @@ jobs:
       - uses: ./.github/actions/netrc
       - *backup-pod-access
       - name: Run NNS Recovery Test with Mainnet State
-        if: false # this test will fail until this PR is merged: https://github.com/dfinity/ic/pull/11203
+        if: false # this test will fail until #11203 reaches mainnet NNS
         uses: ./.github/actions/bazel
         with:
           run: |
             bazel test \
               --config=flaky_retry \
               --config=stamped \
-              //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state_colocate \
+              //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state_farm_colocate \
               --keep_going --test_timeout=7200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Post Slack Notification

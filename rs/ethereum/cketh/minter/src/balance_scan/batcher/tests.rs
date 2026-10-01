@@ -459,6 +459,22 @@ fn decode_wrong_length_is_err() {
     );
 }
 
+#[test]
+fn decode_unrepresentable_length_is_err() {
+    assert_eq!(
+        decode_balance_batch(&[], usize::MAX),
+        Err(BatcherDecodeError::UnrepresentableLength {
+            entries: usize::MAX
+        })
+    );
+    assert_eq!(
+        decode_balance_batch(&[], usize::MAX / WORD + 1),
+        Err(BatcherDecodeError::UnrepresentableLength {
+            entries: usize::MAX / WORD + 1
+        })
+    );
+}
+
 /// A minimal EVM instruction, enough to spell out [`BATCHER_INITCODE`] in [`assemble`].
 enum Op {
     Push1(u8),

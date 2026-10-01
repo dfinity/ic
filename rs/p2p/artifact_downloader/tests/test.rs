@@ -1,9 +1,6 @@
-use std::{
-    backtrace::Backtrace,
-    sync::{
-        Arc, Mutex, RwLock,
-        atomic::{AtomicBool, Ordering},
-    },
+use std::sync::{
+    Arc, Mutex, RwLock,
+    atomic::{AtomicBool, Ordering},
 };
 
 use axum::http::{Response, StatusCode};
@@ -13,6 +10,7 @@ use ic_interfaces::p2p::consensus::{ArtifactAssembler, AssembleResult, BouncerVa
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
+    abort_process_on_panic,
     consensus::U64Artifact,
     mocks::{MockBouncerFactory, MockPeers, MockTransport, MockValidatedPoolReader},
 };
@@ -25,13 +23,7 @@ use tokio::runtime::Handle;
 /// Check that an update with ID for which the bouncer value changes from MaybeWantsLater to Wants is downloaded.
 #[tokio::test]
 async fn priority_from_stash_to_fetch() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
 
     let mut mock_pfn = MockBouncerFactory::new();
     let mut seq = Sequence::new();
@@ -82,13 +74,7 @@ async fn priority_from_stash_to_fetch() {
 
 #[tokio::test]
 async fn fetch_to_stash_to_fetch() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
 
     let return_artifact = Arc::new(AtomicBool::default());
     let return_artifact_clone = return_artifact.clone();
@@ -156,13 +142,7 @@ async fn fetch_to_stash_to_fetch() {
 /// Verify that downloads with AdvertId != ArtifactId are not added to the pool.
 #[tokio::test]
 async fn invalid_artifact_not_accepted() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
     let mut mock_transport = MockTransport::new();
     let mut seq = Sequence::new();
     // Respond with artifact that does not correspond to the advertised ID
@@ -225,13 +205,7 @@ async fn invalid_artifact_not_accepted() {
 /// Verify that advert that transitions from stash to drop is not downloaded.
 #[tokio::test]
 async fn priority_from_stash_to_drop() {
-    // Abort process if a thread panics. This catches detached tokio tasks that panic.
-    // https://github.com/tokio-rs/tokio/issues/4516
-    std::panic::set_hook(Box::new(|info| {
-        let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
-        std::process::abort();
-    }));
+    abort_process_on_panic();
 
     let mut mock_pfn: MockBouncerFactory<U64Artifact> = MockBouncerFactory::new();
     let mut seq = Sequence::new();

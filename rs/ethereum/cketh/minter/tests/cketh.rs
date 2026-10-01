@@ -1367,11 +1367,114 @@ fn should_export_the_sweeper_funding_metrics() {
 }
 
 #[test]
+fn should_export_the_sweep_pipeline_metrics() {
+    let cketh = CkEthSetup::default();
+    cketh.advance_time(Duration::from_secs(90));
+    cketh.env.tick();
+    cketh
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_armed_deposits 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_longest_armed_age_seconds 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_queued_deposits 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeps_finalized_total\{status="success"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeps_finalized_total\{status="failure"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_unfinalized_sweep_age_seconds 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_balance_scan_candidates_total 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="ok"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="eth_call_error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="decode_error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds 90 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="queued"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="unsent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="sent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="sweeper"\} 0 \d+"#,
+        );
+}
+
+#[test]
+fn should_export_the_unfinalized_backlog_metrics() {
+    let cketh = CkEthSetup::default();
+    cketh
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="queued"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="unsent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="sent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="withdrawal"\} 0 \d+"#,
+        );
+
+    let caller: Principal = cketh.caller.into();
+    let cketh = cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .expect_ok(1)
+        .call_minter_withdraw_eth(
+            caller,
+            Nat::from(CKETH_WITHDRAWAL_AMOUNT),
+            DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        )
+        .expect_withdrawal_request_accepted()
+        .wait_and_validate_withdrawal(
+            ProcessWithdrawalParams::default().with_inconsistent_transaction_receipt(),
+        )
+        .expect_status(RetrieveEthStatus::TxSent(EthTransaction {
+            transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+        }))
+        .setup;
+
+    cketh
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="sent"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="withdrawal"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="queued"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="unsent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="sent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="sweeper"\} 0 \d+"#,
+        );
+}
+
+#[test]
 fn should_export_the_stored_attestation_and_authorization_metrics() {
     CkEthSetup::default()
         .check_minter_metrics()
         .assert_contains_metric_matching(r"cketh_minter_stored_attestations 0 \d+")
-        .assert_contains_metric_matching(r"cketh_minter_stored_authorizations 0 \d+");
+        .assert_contains_metric_matching(r"cketh_minter_stored_authorizations 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_delegated_deposit_addresses 0 \d+");
 }
 
 /// Tests with the EVM RPC canister

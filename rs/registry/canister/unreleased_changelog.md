@@ -21,12 +21,30 @@ on the process that this file is part of, see
   `HostosVersion` accept, so until now, it was possible to elect a version that consumers could not read
   back out of the Registry.
 
+* `secp256r1` as a variant of `EcdsaCurve`, so a chain key config may now name a NIST P-256
+  ECDSA key. It is reachable through `create_subnet` and `update_subnet`, and a subnet accepting
+  it still needs the key itself to be generated and enabled by separate proposals.
+
 * `merge_subnets` endpoint, callable through a `MergeSubnets` proposal. It merges a subnet into
   another subnet: in the routing table, reassigns all canister ranges hosted by the source subnet
   to the destination subnet. Only the routing table is updated: neither subnet record is modified
   and the source subnet is not deleted.
 
+* Newly created `CatchUpPackageContents` records with CUP type `CupType::Genesis` will not contain a `height`
+  field anymore. You can (and should) assume that the height for `Genesis` CUPs is always 0.
+
+* Invariant requiring that every subnet's `CatchUpPackageContents` record has a `cup_type` set.
+
+* One-time post-upgrade migration backfilling `cup_type` on every `CatchUpPackageContents` record
+  that has none. A record whose legacy `height`, `time` and `state_hash` fields are all unset is
+  stamped as `CupType::Genesis`. Any other record is stamped as `CupType::Recovery`, which keeps those
+  legacy values.
+
 ## Changed
+
+* `update_subnet` now also lets the engine controller canister set `cooling_down` on a cloud engine
+  subnet. The engine controller's scope is thus `subnet_admins`, `is_halted` and `cooling_down`;
+  every other field remains rejected for that caller.
 
 * `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
   fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward

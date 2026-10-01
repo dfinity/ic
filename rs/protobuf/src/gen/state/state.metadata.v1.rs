@@ -489,6 +489,8 @@ pub struct SubnetMetrics {
     #[prost(message, repeated, tag = "12")]
     pub consumed_cycles_by_use_case_monotonic:
         ::prost::alloc::vec::Vec<super::super::canister_state_bits::v1::ConsumedCyclesByUseCase>,
+    #[prost(uint64, optional, tag = "13")]
+    pub round_instructions_total: ::core::option::Option<u64>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BitcoinGetSuccessorsFollowUpResponses {

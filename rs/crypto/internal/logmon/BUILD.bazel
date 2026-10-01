@@ -31,7 +31,6 @@ rust_test(
     deps = [
         # Keep sorted.
         "//rs/monitoring/metrics",
-        "@crate_index//:convert_case",
         "@crate_index//:prometheus",
         "@crate_index//:strum",
     ],

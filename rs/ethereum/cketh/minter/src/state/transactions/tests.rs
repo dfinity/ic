@@ -1542,12 +1542,17 @@ mod withdrawal_transactions {
                 gas_fee_estimate(),
             );
             let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
-            let maybe_reimburse_request = transactions
-                .maybe_reimburse_requests_iter()
-                .find(|r| r.cketh_ledger_burn_index() == cketh_ledger_burn_index)
-                .expect("maybe reimburse request not found");
-            assert_eq!(maybe_reimburse_request, &withdrawal_request);
-            assert!(!transactions.maybe_reimburse.is_empty());
+            assert!(
+                transactions
+                    .maybe_reimburse
+                    .contains(&cketh_ledger_burn_index)
+            );
+            assert_eq!(
+                transactions
+                    .pipeline
+                    .get_processed_request(&cketh_ledger_burn_index),
+                Some(&withdrawal_request)
+            );
 
             let receipt = transaction_receipt(&signed_tx, TransactionStatus::Success);
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
@@ -1684,11 +1689,17 @@ mod withdrawal_transactions {
                 gas_fee_estimate(),
             );
             let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
-            let maybe_reimburse_request = transactions
-                .maybe_reimburse_requests_iter()
-                .find(|r| r.cketh_ledger_burn_index() == cketh_ledger_burn_index)
-                .expect("maybe reimburse request not found");
-            assert_eq!(maybe_reimburse_request, &withdrawal_request.clone().into());
+            assert!(
+                transactions
+                    .maybe_reimburse
+                    .contains(&cketh_ledger_burn_index)
+            );
+            assert_eq!(
+                transactions
+                    .pipeline
+                    .get_processed_request(&cketh_ledger_burn_index),
+                Some(&withdrawal_request.clone().into())
+            );
 
             let receipt = transaction_receipt(&signed_tx, TransactionStatus::Failure);
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
@@ -2443,6 +2454,18 @@ mod oldest_incomplete_request_timestamp {
     }
 
     #[test]
+    fn should_include_a_sweeper_funding_awaiting_finalization() {
+        let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
+        let mut funding = cketh_withdrawal_request_with_index(LedgerBurnIndex::new(15));
+        funding.created_at = Some(10);
+        let funding = WithdrawalRequest::SweeperFunding(funding);
+        transactions.record_request(funding.clone());
+        create_and_record_transaction(&mut transactions, funding, gas_fee_estimate());
+
+        assert_eq!(transactions.oldest_incomplete_request_timestamp(), Some(10));
+    }
+
+    #[test]
     fn should_ignore_finalized_requests() {
         let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
         let mut rng = reproducible_rng();
@@ -2470,6 +2493,88 @@ mod oldest_incomplete_request_timestamp {
             }
             WithdrawalRequest::CkErc20(request) => request.created_at = created_at,
         }
+    }
+}
+
+mod unfinalized_request_counts {
+    use super::*;
+    use crate::numeric::TransactionCount;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+
+    #[test]
+    fn should_count_the_withdrawals_at_each_stage_of_the_pipeline() {
+        /// The counts the backlog metrics read, in the order `(queued, unsent, sent, transactions)`.
+        fn counts(transactions: &WithdrawalTransactions) -> (usize, usize, usize, usize) {
+            (
+                transactions.requests_len(),
+                transactions.created_tx_excluding_resubmissions_len(),
+                transactions.sent_tx_nonces_len(),
+                transactions.sent_tx_transactions_len(),
+            )
+        }
+
+        let mut transactions = WithdrawalTransactions::new(TransactionNonce::ZERO);
+        assert_eq!(counts(&transactions), (0, 0, 0, 0));
+
+        let mut rng = reproducible_rng();
+        let [first_withdrawal, second_withdrawal] =
+            create_and_record_ck_withdrawal_requests(&mut transactions, &mut rng);
+        let first_id = first_withdrawal.cketh_ledger_burn_index();
+        let second_id = second_withdrawal.cketh_ledger_burn_index();
+        assert_eq!(counts(&transactions), (2, 0, 0, 0));
+
+        let first_tx =
+            create_and_record_transaction(&mut transactions, first_withdrawal, gas_fee_estimate());
+        assert_eq!(counts(&transactions), (1, 1, 0, 0));
+
+        create_and_record_signed_transaction(&mut transactions, first_tx);
+        assert_eq!(counts(&transactions), (1, 0, 1, 1));
+
+        let estimate = gas_fee_estimate();
+        let resubmitted = transactions.create_resubmit_transactions(
+            TransactionCount::ZERO,
+            GasFeeEstimate {
+                base_fee_per_gas: estimate.base_fee_per_gas.checked_mul(2_u8).unwrap(),
+                max_priority_fee_per_gas: estimate
+                    .max_priority_fee_per_gas
+                    .checked_mul(2_u8)
+                    .unwrap(),
+            },
+        );
+        let [Ok((_id, bumped_tx))] = resubmitted.as_slice() else {
+            panic!("BUG: expected exactly one transaction to resubmit, got {resubmitted:?}");
+        };
+        transactions.record_resubmit_transaction(bumped_tx.clone());
+        assert_eq!(
+            counts(&transactions),
+            (1, 0, 1, 1),
+            "the withdrawal holds a created transaction again, but its first attempt is already out"
+        );
+
+        let bumped_sent_tx =
+            create_and_record_signed_transaction(&mut transactions, bumped_tx.clone());
+        assert_eq!(
+            counts(&transactions),
+            (1, 0, 1, 2),
+            "the fee bump is a second transaction for the one withdrawal, not a second withdrawal"
+        );
+
+        let second_tx =
+            create_and_record_transaction(&mut transactions, second_withdrawal, gas_fee_estimate());
+        let second_sent_tx = create_and_record_signed_transaction(&mut transactions, second_tx);
+        assert_eq!(counts(&transactions), (0, 0, 2, 3));
+
+        transactions.record_finalized_transaction(
+            first_id,
+            transaction_receipt(&bumped_sent_tx, TransactionStatus::Success),
+        );
+        assert_eq!(counts(&transactions), (0, 0, 1, 1));
+
+        transactions.record_finalized_transaction(
+            second_id,
+            transaction_receipt(&second_sent_tx, TransactionStatus::Success),
+        );
+        assert_eq!(counts(&transactions), (0, 0, 0, 0));
     }
 }
 
@@ -2968,6 +3073,7 @@ mod sweep_lane {
     use ethnum::u256;
     use ic_ethereum_types::Address;
     use icrc_ledger_types::icrc1::account::Account;
+    use std::slice::from_ref;
 
     const EIP1559_TX_ID: u8 = 2;
     const SET_CODE_TX_ID: u8 = 4;
@@ -3061,7 +3167,9 @@ mod sweep_lane {
         let erc20 = Asset::Erc20(Address::new([0xc0; 20]));
 
         let items_for = |addresses: u8| -> Vec<AuthorizedSweepItem> {
-            (1..=addresses).map(|seed| sweep_item(seed, None)).collect()
+            (1..=addresses)
+                .map(|seed| sweep_item(seed, Some(authorization(seed))))
+                .collect()
         };
 
         assert_eq!(
@@ -3096,7 +3204,32 @@ mod sweep_lane {
         let one_address_ten_times: Vec<_> = (0..10).map(|_| sweep_item(1, None)).collect();
         assert_eq!(
             sweep_gas_limit(erc20, &one_address_ten_times),
-            sweep_gas_limit(erc20, &items_for(1))
+            sweep_gas_limit(erc20, &[sweep_item(1, None)])
+        );
+    }
+
+    #[test]
+    fn should_charge_authorization_gas_only_for_items_carrying_an_authorization() {
+        let erc20 = Asset::Erc20(Address::new([0xc0; 20]));
+        let delegated = sweep_item(1, None);
+        let to_delegate = sweep_item(2, Some(authorization(2)));
+
+        assert_eq!(
+            sweep_gas_limit(erc20, from_ref(&delegated)),
+            GasAmount::new(185_000),
+            "an address swept without an authorization costs its balance check and its transfer only"
+        );
+        assert_eq!(
+            sweep_gas_limit(erc20, &[delegated.clone(), to_delegate.clone()]),
+            GasAmount::new(350_000)
+        );
+        assert_eq!(
+            sweep_gas_limit(Asset::Eth, from_ref(&delegated)),
+            GasAmount::new(100_000)
+        );
+        assert_eq!(
+            sweep_gas_limit(Asset::Eth, &[delegated, to_delegate]),
+            GasAmount::new(180_000)
         );
     }
 

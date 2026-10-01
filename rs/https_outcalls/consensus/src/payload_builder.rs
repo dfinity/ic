@@ -36,7 +36,7 @@ use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::{
     CanisterHttpResponsePayload, FlexibleHttpGlobalError, FlexibleHttpNodeDetail,
     FlexibleHttpNodeError, FlexibleHttpRequestErr, FlexibleHttpRequestResult,
-    HttpRequestResourceReport,
+    HttpRequestResourceReport, decoder_config,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -293,7 +293,7 @@ impl CanisterHttpPayloadBuilderImpl {
                                 continue;
                             }
                         };
-                        if let Some(response) = find_fully_replicated_response(
+                        if let Some(candidate) = find_fully_replicated_response(
                             grouped_shares,
                             threshold,
                             request,
@@ -301,10 +301,10 @@ impl CanisterHttpPayloadBuilderImpl {
                             &self.log,
                             &self.metrics,
                         ) {
-                            let candidate_size = response.count_bytes();
+                            let candidate_size = candidate.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
-                                responses.push(response);
+                                responses.push(candidate.into_response());
                                 responses_included += 1;
                                 accumulated_size += candidate_size;
                             }
@@ -343,7 +343,7 @@ impl CanisterHttpPayloadBuilderImpl {
                         }
                     }
                     Replication::NonReplicated(designated_node_id) => {
-                        if let Some(response) = find_non_replicated_response(
+                        if let Some(candidate) = find_non_replicated_response(
                             grouped_shares,
                             designated_node_id,
                             request,
@@ -351,10 +351,10 @@ impl CanisterHttpPayloadBuilderImpl {
                             &self.log,
                             &self.metrics,
                         ) {
-                            let candidate_size = response.count_bytes();
+                            let candidate_size = candidate.count_bytes();
                             let size = NumBytes::new((accumulated_size + candidate_size) as u64);
                             if size < max_payload_size {
-                                responses.push(response);
+                                responses.push(candidate.into_response());
                                 responses_included += 1;
                                 accumulated_size += candidate_size;
                             }
@@ -412,12 +412,12 @@ impl CanisterHttpPayloadBuilderImpl {
             }
 
             // Collect the asynchronous receipts of the requests that have already
-            // been responded to.
-            for (callback_id, request) in delivered_canister_http_request_contexts {
-                if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-                    // Break early to avoid iterating through all open contexts.
-                    break;
-                }
+            // been responded to. They do not count towards
+            // CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, as the response they belong to
+            // already did, and are only bounded by the payload size.
+            'delivered_contexts: for (callback_id, request) in
+                delivered_canister_http_request_contexts
+            {
                 // Skip contexts that have already timed out.
                 if delivered_context_timed_out(request, validation_context) {
                     continue;
@@ -436,16 +436,15 @@ impl CanisterHttpPayloadBuilderImpl {
                 // according to the certified state or any past payload above it.
                 let already_refunded = RefundedNodes::new(*callback_id, request, &refunded_nodes);
                 for share in find_async_receipts(grouped_shares, &committee, &already_refunded) {
-                    if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-                        break;
-                    }
                     let share_size = share.count_bytes();
                     let size = NumBytes::new((accumulated_size + share_size) as u64);
-                    if size < max_payload_size {
-                        async_receipts.push(share.clone());
-                        responses_included += 1;
-                        accumulated_size += share_size;
+                    if size >= max_payload_size {
+                        // All receipts are of (about) the same size, so once one does not
+                        // fit, stop early to avoid iterating through all delivered contexts.
+                        break 'delivered_contexts;
                     }
+                    async_receipts.push(share.clone());
+                    accumulated_size += share_size;
                 }
             }
         }
@@ -547,10 +546,10 @@ impl CanisterHttpPayloadBuilderImpl {
         }
 
         // Check number of responses
-        if payload.num_non_timeout_responses() > CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+        if payload.num_limited_responses() > CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
             return invalid_artifact(InvalidCanisterHttpPayloadReason::TooManyResponses {
                 expected: CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
-                received: payload.num_non_timeout_responses(),
+                received: payload.num_limited_responses(),
             });
         }
 
@@ -1316,7 +1315,10 @@ impl
         CanisterHttpSpent,
         CanisterHttpBatchStats,
     ) {
-        let mut stats = CanisterHttpBatchStats::default();
+        let mut stats = CanisterHttpBatchStats {
+            payload_bytes: payload.len(),
+            ..Default::default()
+        };
 
         let messages = bytes_to_payload(payload)
             .expect("Failed to parse a payload that was already validated");
@@ -1541,7 +1543,7 @@ fn flexible_ok_responses_into_consensus_response(
         .into_iter()
         .filter_map(|entry| match entry.response.content {
             CanisterHttpResponseContent::Success(data) => {
-                Some(Decode!(&data, CanisterHttpResponsePayload).ok())
+                Some(Decode!([decoder_config()]; &data, CanisterHttpResponsePayload).ok())
             }
             CanisterHttpResponseContent::Reject(_) => {
                 // Unreachable: payload building/validation ensure

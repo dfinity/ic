@@ -61,7 +61,7 @@ pub fn get_deployment_settings(deployment_json: &Path) -> Result<DeploymentSetti
 mod test {
     use super::*;
     use config_types::HostOSDevSettings;
-    use once_cell::sync::Lazy;
+    use std::sync::LazyLock;
 
     const DEPLOYMENT_STR: &str = r#"{
   "deployment": {
@@ -78,7 +78,7 @@ mod test {
   }
 }"#;
 
-    static DEPLOYMENT_STRUCT: Lazy<DeploymentSettings> = Lazy::new(|| DeploymentSettings {
+    static DEPLOYMENT_STRUCT: LazyLock<DeploymentSettings> = LazyLock::new(|| DeploymentSettings {
         deployment: Deployment {
             deployment_environment: DeploymentEnvironment::Mainnet,
             mgmt_mac: None,

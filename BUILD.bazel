@@ -16,7 +16,6 @@ exports_files([
     "clippy.toml",
     "rustfmt.toml",
     "mainnet-canister-revisions.json",
-    "mainnet-icos-images.bzl",
     "mainnet-routing-table.json",
 ])
 
@@ -85,7 +84,7 @@ compile_pip_requirements(
 test_suite(
     name = "single_large_node",  # the "_test" postfix is dropped on purpose since this target is meant for interactive use.
     tags = ["manual"],
-    tests = ["//rs/tests/testnets:single_large_node"],
+    tests = ["//rs/tests/testnets:single_large_node_farm"],
 )
 
 ### Bitcoind

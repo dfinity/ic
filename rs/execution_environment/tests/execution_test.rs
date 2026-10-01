@@ -572,9 +572,9 @@ fn compressed_canisters_support() {
 
     let test_canister_wasm = wat::parse_str(TEST_CANISTER).expect("invalid WAT");
     let compressed_wasm = {
-        let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
         std::io::copy(&mut &test_canister_wasm[..], &mut encoder).unwrap();
-        encoder.finish().into_result().unwrap()
+        encoder.finish().unwrap()
     };
     let compressed_hash = ic_crypto_sha2::Sha256::hash(&compressed_wasm);
 
@@ -2929,7 +2929,7 @@ fn read_subnet_metrics(env: &StateMachine, caller: CanisterId) -> SubnetMetricsR
 /// Covers the semantics of every `subnet_metrics` field on a running subnet:
 /// `block_height` is the height of the block in whose execution the call is
 /// processed (asserted by `read_subnet_metrics` on each read below), while the
-/// four aggregate fields report `SystemMetadata::subnet_metrics`, which is
+/// five aggregate fields report `SystemMetadata::subnet_metrics`, which is
 /// written at the end of a round and hence lags by (at least) one round.
 #[test]
 fn subnet_metrics_reports_the_subnets_metrics() {
@@ -3010,6 +3010,40 @@ fn subnet_metrics_reports_the_subnets_metrics() {
     assert_gt!(
         response.consumed_cycles_total,
         candid::Nat::from(consumed_now.get())
+    );
+
+    // `million_round_instructions_total`: the raw counter in millions, rounded
+    // up. The reported value lags by a round or two, so it is bracketed rather
+    // than pinned; the conversion is pinned exactly by
+    // `subnet_metrics_reports_round_instructions_in_millions_rounded_up`.
+    // Non-zero because installing the caller alone charges tens of millions.
+    //
+    // The equality against `instructions_consumed()` is the load-bearing one: it
+    // guards that every `execute_round` exit which observes the round histogram
+    // also accumulates into the counter. Both read the same measurement scope, so
+    // they can only diverge by a path doing one and not the other -- which is
+    // exactly the bug `heap_delta_limit_still_counts_drained_consensus_queue_messages`
+    // covers for the early-return path. This state machine has by now run canister
+    // creation, install code, subnet messages and checkpoint rounds, so the
+    // equality spans all of those paths at once.
+    let raw_now = env
+        .get_latest_state()
+        .metadata
+        .subnet_metrics
+        .round_instructions_total;
+    assert_eq!(raw_now, env.instructions_consumed() as u64);
+    assert_gt!(
+        response.million_round_instructions_total,
+        candid::Nat::from(0_u64)
+    );
+    assert!(
+        response.million_round_instructions_total
+            >= metrics_before.round_instructions_total.div_ceil(1_000_000)
+    );
+    assert!(
+        response.million_round_instructions_total <= raw_now.div_ceil(1_000_000),
+        "reported {} millions exceeds the {raw_now} instructions the state holds now",
+        response.million_round_instructions_total
     );
 
     // `num_canisters` follows the canister population in both directions.

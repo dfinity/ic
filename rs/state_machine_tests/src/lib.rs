@@ -13,6 +13,7 @@ use ic_config::{
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_cup_utils::make_registry_cup;
+use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilderImpl;
 use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool, crypto::SignVerify};
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
@@ -32,7 +33,7 @@ use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
-    canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
+    canister_http::{CanisterHttpChangeAction, CanisterHttpPool, ResponseVisibility},
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
@@ -86,12 +87,9 @@ use ic_protobuf::{
         routing_table::v1::{
             CanisterMigrations as PbCanisterMigrations, RoutingTable as PbRoutingTable,
         },
-        subnet::v1::CatchUpPackageContents,
+        subnet::v1::{CatchUpPackageContents, GenesisArgs, catch_up_package_contents::CupType},
     },
-    types::{
-        v1 as pb,
-        v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
-    },
+    types::v1::{self as pb, PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
 };
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -186,8 +184,9 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_xnet_payload_builder::{
-    RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
+    RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
     certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
+    testing::XNetPayloadBuilderTesting,
 };
 
 use maplit::btreemap;
@@ -590,6 +589,7 @@ fn add_cup_contents_and_key_record(
     let cup_contents = CatchUpPackageContents {
         initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript.into()),
         initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript.into()),
+        cup_type: Some(CupType::Genesis(GenesisArgs {})),
         ..Default::default()
     };
     registry_data_provider
@@ -863,7 +863,7 @@ impl PocketXNetImpl {
                                 slice,
                                 self.certified_stream_store.as_ref(),
                                 registry_version,
-                                log.clone(),
+                                &log,
                             )
                             .unwrap();
                         } else {
@@ -874,7 +874,7 @@ impl PocketXNetImpl {
                                 slice,
                                 self.certified_stream_store.as_ref(),
                                 registry_version,
-                                log.clone(),
+                                &log,
                             )
                             .unwrap();
                         }
@@ -1285,6 +1285,7 @@ pub struct StateMachine {
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
     local_query_execution_stats: Arc<QueryStatsCollector>,
     chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
+    upgrade_payload_builder: Arc<dyn BatchPayloadBuilder>,
     remove_old_states: bool,
     cycles_account_manager: Arc<CyclesAccountManager>,
 }
@@ -1788,24 +1789,25 @@ impl StateMachineBuilder {
         let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
 
         // Instantiate a `XNetPayloadBuilderImpl`.
-        // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
-        let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
         let certified_stream_store: Arc<dyn CertifiedStreamStore> = sm.state_manager.clone();
-        let certified_slice_pool =
-            Arc::new(Mutex::new(CertifiedSlicePool::new(&sm.metrics_registry)));
-        let xnet_slice_pool_impl = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
-        let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
-        let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new_from_components(
-            sm.state_manager.clone(),
-            sm.state_manager.clone(),
-            sm.registry_client.clone(),
-            rng,
-            None,
-            xnet_slice_pool_impl,
-            refill_task_handle,
-            metrics,
+        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
+            &sm.metrics_registry,
             sm.replica_logger.clone(),
-        ));
+        )));
+        let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
+        let xnet_payload_builder = Arc::new(
+            XNetPayloadBuilderImpl::new_from_components(
+                sm.state_manager.clone(),
+                sm.state_manager.clone(),
+                sm.registry_client.clone(),
+                certified_slice_pool.clone(),
+                refill_task_handle,
+                metrics,
+                sm.replica_logger.clone(),
+            )
+            // We need to use a deterministic PRNG - so we use an arbitrary fixed seed, e.g., 42.
+            .with_deterministic_rng(StdRng::seed_from_u64(42)),
+        );
 
         let adapters_config = AdaptersConfig {
             bitcoin_mainnet_uds_path: None,
@@ -1859,6 +1861,7 @@ impl StateMachineBuilder {
             sm.canister_http_payload_builder.clone(),
             sm.query_stats_payload_builder.clone(),
             sm.chain_key_payload_builder.clone(),
+            sm.upgrade_payload_builder.clone(),
             sm.metrics_registry.clone(),
             sm.replica_logger.clone(),
         ));
@@ -2213,6 +2216,7 @@ impl StateMachine {
         ));
 
         let chain_key_payload_builder = Arc::new(MockBatchPayloadBuilder::new().expect_noop());
+        let upgrade_payload_builder = Arc::new(UpgradePayloadBuilderImpl);
 
         let cancellation_token = tokio_util::sync::CancellationToken::new();
         let cancellation_token_clone = cancellation_token.clone();
@@ -2479,6 +2483,7 @@ impl StateMachine {
             query_stats_payload_builder: pocket_query_stats_payload_builder,
             local_query_execution_stats: execution_services.local_query_execution_stats,
             chain_key_payload_builder,
+            upgrade_payload_builder,
             remove_old_states,
             cycles_account_manager: execution_services.cycles_account_manager,
         }
@@ -2864,7 +2869,11 @@ impl StateMachine {
                 signature,
             };
             self.canister_http_pool.write().unwrap().apply(vec![
-                CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
+                CanisterHttpChangeAction::AddToValidated(
+                    share.clone(),
+                    response.clone(),
+                    ResponseVisibility::Withhold,
+                ),
             ]);
         }
     }
