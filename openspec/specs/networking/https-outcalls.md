@@ -124,6 +124,11 @@ The consensus component manages the agreement on HTTP outcall responses across s
 - **AND** respects the maximum payload size (`MAX_CANISTER_HTTP_PAYLOAD_SIZE`)
 - **AND** limits responses per block to `CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK`
 
+#### Scenario: Asynchronous receipts are not counted against the per-block response limit
+- **WHEN** the payload includes asynchronous receipts -- late spend reports from replicas that contributed to an already-delivered pay-as-you-go response
+- **THEN** those receipts do not count towards `CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK`, since the response they belong to was already counted in the earlier block that delivered it
+- **AND** receipt collection is bounded only by the payload size, stopping once it is full
+
 #### Scenario: Timeout handling
 - **WHEN** a canister HTTP request has been pending longer than `CANISTER_HTTP_TIMEOUT_INTERVAL`
 - **AND** the request is a non-flexible (traditional) request
