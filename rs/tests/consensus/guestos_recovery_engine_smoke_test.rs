@@ -175,12 +175,8 @@ pub fn test(env: TestEnv) {
     let ssh_session = node.block_on_ssh_session().unwrap();
 
     // The recovery engine runs concurrently with this test, so wait for it to finish before
-    // verifying anything. Until then it might not have placed the artifacts yet, and right after
-    // placing them the local store is not readable by the admin user we SSH as: rsync gives it
-    // the archive's owner and group, and the engine's chmod then locks everyone else out until
-    // its final restart of setup-permissions restores the ownership. The unit ends up "failed"
-    // rather than "active" here, even after a successful recovery, because this test runs the
-    // GuestOS without a HostOS, so the engine's final `vsock_guest notify` fails.
+    // verifying anything. Until then it might not have placed the artifacts or setup their
+    // permissions correctly yet.
     retry_with_msg!(
         "wait for guestos-recovery-engine.service to finish",
         log.clone(),
@@ -195,6 +191,9 @@ pub fn test(env: TestEnv) {
             .map_err(|e| anyhow!(e))?;
             let state = state.trim();
             ensure!(
+                // The unit ends up "failed" rather than "active" here, even after a successful recovery,
+                // because this test runs the GuestOS without a HostOS, so the engine's final
+                // `vsock_guest notify` fails.
                 matches!(state, "active" | "failed"),
                 "guestos-recovery-engine.service has not finished yet (ActiveState={state:?})"
             );
