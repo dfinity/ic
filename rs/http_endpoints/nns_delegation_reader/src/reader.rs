@@ -107,18 +107,6 @@ impl NNSDelegationReader {
         })
     }
 
-    /// Returns the most recent NNS delegation known to the replica without verifying it, to be used
-    /// in tests to avoid having to set up a routing table and public key for the delegated subnet.
-    pub fn get_unverified_delegation_for_test(
-        &self,
-        canister_ranges_filter: CanisterRangesFilter,
-    ) -> Option<CertificateDelegation> {
-        self.receiver
-            .borrow()
-            .as_ref()
-            .map(|builder| builder.build_unverified(canister_ranges_filter, &self.logger))
-    }
-
     pub async fn wait_until_updated(&mut self) -> Result<(), watch::error::RecvError> {
         self.receiver.changed().await
     }
