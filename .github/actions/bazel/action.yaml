@@ -159,7 +159,7 @@ runs:
 
         dl_url="https://github.com/dfinity/execlog2csv/releases/download/v$version/$filename.zip"
         echo "downloading '$dl_url'"
-        curl -fSLO "$dl_url"
+        curl -fSLO --retry 7 "$dl_url"
 
         # Verify the download before unpacking or executing any of it.
         if command -v sha256sum >/dev/null; then
