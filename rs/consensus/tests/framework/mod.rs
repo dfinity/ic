@@ -23,10 +23,7 @@ use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId,
 };
-use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, GenesisArgs, InitialNiDkgTranscriptRecord,
-    catch_up_package_contents::CupType,
-};
+use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -186,7 +183,6 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
         initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
             ni_dkg_transcript_high_threshold,
         )),
-        cup_type: Some(CupType::Genesis(GenesisArgs {})),
         ..Default::default()
     };
 
