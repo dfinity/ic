@@ -1,7 +1,7 @@
 //! This module contains functions for constructing CUPs from registry and for
 //! verifying CUPs.
 
-use ic_consensus_dkg::payload_builder::get_dkg_summary_from_cup_contents;
+use ic_consensus_dkg::payload_builder::get_dkg_summary_from_cup_contents_with_subnet_splitting;
 use ic_consensus_idkg::{
     make_bootstrap_summary, make_bootstrap_summary_with_initial_dealings,
     utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
@@ -17,9 +17,9 @@ use ic_types::{
     CryptoHashOfState, Height, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
-        Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes, CatchUpPackage, CupType,
-        HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank, RecoveryArgs,
-        SummaryPayload, idkg,
+        Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes, CatchUpPackage,
+        CatchUpPackageType, CupType, HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent,
+        Rank, RecoveryArgs, SummaryPayload, idkg,
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoError, CryptoHash, Signable, Signed,
@@ -231,12 +231,13 @@ pub fn make_registry_cup_from_cup_contents(
             return None;
         }
     };
-    let dkg_summary = match get_dkg_summary_from_cup_contents(
+    let dkg_summary = match get_dkg_summary_from_cup_contents_with_subnet_splitting(
         cup_contents.clone(),
         cup_height,
         subnet_id,
         registry,
         registry_version,
+        CatchUpPackageType::Normal,
     ) {
         Ok(summary) => summary,
         Err(err) => {
