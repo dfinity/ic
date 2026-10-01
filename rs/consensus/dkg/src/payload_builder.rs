@@ -25,7 +25,7 @@ use ic_types::{
     Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
-        Block, CupType,
+        Block,
         catchup::CatchUpPackageType,
         dkg::{
             DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary, Message,
@@ -613,16 +613,11 @@ fn as_next_transcripts(
 
 pub fn get_dkg_summary_from_cup_contents(
     cup_contents: CatchUpPackageContents,
+    height: Height,
     subnet_id: SubnetId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<DkgSummary, String> {
-    let height = CupType::try_from(cup_contents.cup_type.clone())
-        .map_err(|err| format!("Failed to parse CUP type from CUP contents: {err:?}"))?
-        .into_registry_cup_params()
-        .ok_or_else(|| "No registry CUP params found in CUP contents".to_string())?
-        .0;
-
     get_dkg_summary_from_cup_contents_with_subnet_splitting(
         cup_contents,
         height,
@@ -633,7 +628,7 @@ pub fn get_dkg_summary_from_cup_contents(
     )
 }
 
-pub fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
+fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
     cup_contents: CatchUpPackageContents,
     height: Height,
     subnet_id: SubnetId,
@@ -1470,6 +1465,7 @@ mod tests {
             let registry_cup_version = cup_contents.version;
             let mut genesis_summary = get_dkg_summary_from_cup_contents(
                 cup_contents.value.expect("Missing CUP contents"),
+                Height::from(0),
                 subnet_id,
                 &*registry,
                 registry_cup_version,
@@ -1566,6 +1562,7 @@ mod tests {
                 .expect("Failed to retreive the DKG transcripts from registry");
             let summary = get_dkg_summary_from_cup_contents(
                 cup_contents.value.expect("Missing CUP contents"),
+                Height::from(0),
                 subnet_id,
                 &*registry,
                 cup_contents.version,
@@ -1866,6 +1863,7 @@ mod tests {
                 .expect("Missing CUP contents");
             let genesis_summary = get_dkg_summary_from_cup_contents(
                 cup_contents.clone(),
+                Height::from(0),
                 source_subnet_id,
                 &*registry,
                 last_summary_registry_version,
@@ -2016,6 +2014,7 @@ mod tests {
                 .expect("Failed to retreive the DKG transcripts from registry");
             let genesis_summary = get_dkg_summary_from_cup_contents(
                 cup_contents.value.expect("Missing CUP contents"),
+                Height::from(0),
                 subnet_id,
                 &*registry,
                 cup_contents.version,
