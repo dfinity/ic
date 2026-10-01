@@ -22,7 +22,7 @@ use ic_registry_client_helpers::{
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CryptoHashOfState, Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId, Time,
+    Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
         Block, CupType, RecoveryArgs,
@@ -33,16 +33,12 @@ use ic_types::{
         },
         get_faults_tolerated,
     },
-    crypto::{
-        CryptoHash,
-        threshold_sig::ni_dkg::{
-            NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
-            NiDkgTranscript,
-            config::{NiDkgConfig, NiDkgConfigData, errors::NiDkgConfigValidationError},
-        },
+    crypto::threshold_sig::ni_dkg::{
+        NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+        NiDkgTranscript,
+        config::{NiDkgConfig, NiDkgConfigData, errors::NiDkgConfigValidationError},
     },
     messages::CallbackId,
-    time::UNIX_EPOCH,
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
