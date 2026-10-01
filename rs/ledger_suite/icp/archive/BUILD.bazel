@@ -77,7 +77,6 @@ rust_ic_test(
         "//packages/pocket-ic",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icp:icp_ledger",
-        "//rs/ledger_suite/icp/test_utils",
         "//rs/types/base_types",
         "@crate_index//:candid",
         "@crate_index//:serde_bytes",

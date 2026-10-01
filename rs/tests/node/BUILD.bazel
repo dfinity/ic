@@ -76,9 +76,9 @@ system_test(
     ],
 )
 
-# bazel run //rs/tests/node:launch_single_guest -- --keepalive
+# bazel run //rs/tests/node:launch_single_guest{_local,_farm} -- --keepalive
 # Or, to measure startup time:
-# bazel run //rs/tests/node:launch_single_guest -- --quiet
+# bazel run //rs/tests/node:launch_single_guest{_local,_farm} -- --quiet
 system_test(
     name = "launch_single_guest",
     cpus = MIN_LOCAL_CPUS + 1 * DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
@@ -95,9 +95,9 @@ system_test(
     ],
 )
 
-# bazel run //rs/tests/node:launch_single_host -- --keepalive
+# bazel run //rs/tests/node:launch_single_host{_local,_farm} -- --keepalive
 # Or, to measure startup time:
-# bazel run //rs/tests/node:launch_single_host -- --quiet
+# bazel run //rs/tests/node:launch_single_host{_local,_farm} -- --quiet
 system_test(
     name = "launch_single_host",
     cpus = MIN_LOCAL_CPUS + 1 * 8,  # 1 Nested/HostOS Node VM * 8 vCPUs.

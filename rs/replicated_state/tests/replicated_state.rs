@@ -1788,6 +1788,10 @@ fn consumed_cycles_total_is_the_same_across_a_restart() {
         CyclesUseCase::SchnorrOutcalls,
         NominalCycles::new(4),
     );
+    // As the scheduler does once per round, fold the scalar outcall metrics into
+    // the corresponding `consumed_cycles_by_use_case` entries, which is where
+    // the total reads them from.
+    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
     let subnet_level = metadata.subnet_metrics.consumed_cycles_total();
     assert!(subnet_level > NominalCycles::zero());
 

@@ -30,7 +30,14 @@ on the process that this file is part of, see
   to the destination subnet. Only the routing table is updated: neither subnet record is modified
   and the source subnet is not deleted.
 
+* Newly created `CatchUpPackageContents` records with CUP type `CupType::Genesis` will not contain a `height`
+  field anymore. You can (and should) assume that the height for `Genesis` CUPs is always 0.
+
 ## Changed
+
+* `update_subnet` now also lets the engine controller canister set `cooling_down` on a cloud engine
+  subnet. The engine controller's scope is thus `subnet_admins`, `is_halted` and `cooling_down`;
+  every other field remains rejected for that caller.
 
 * `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
   fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward

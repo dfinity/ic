@@ -17,7 +17,6 @@ path = "src/main.rs"
 candid = { workspace = true }
 clap = { workspace = true }
 ic-agent = { workspace = true }
-ic-certification = { workspace = true }
 ic-identity-hsm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

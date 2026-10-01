@@ -168,6 +168,7 @@ pub struct InternetIdentityInit {
     pub new_flow_origins: Option<Vec<String>>,
     pub openid_configs: Option<Vec<OpenIdConfig>>,
     pub sso_allow_insecure_discovery: Option<bool>,
+    pub notifications_allow_insecure_sender_list: Option<bool>,
     pub analytics_config: Option<Option<AnalyticsConfig>>,
     pub enable_dapps_explorer: Option<bool>,
     pub is_production: Option<bool>,
@@ -178,4 +179,5 @@ pub struct InternetIdentityInit {
     pub dnssec_config: Option<Option<DnssecConfig>>,
     pub doh_config: Option<Option<DohConfig>>,
     pub mcp_official_url: Option<Option<String>>,
+    pub notifications_enabled_origins: Option<Vec<String>>,
 }

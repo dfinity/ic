@@ -126,6 +126,11 @@ if [ $(id -u) != 0 ]; then
     exec sudo "$0" "$@"
 fi
 
+# bash only guarantees the EXIT trap on regular exits; when killed by an
+# untrapped signal it is not reliably run (fails e.g. through sudo).
+# Address it by this explicit trap.
+trap "exit 1" TERM HUP INT
+
 # Parsing options first
 GRUBENV_FILE=/boot/grub/grubenv
 NOCHECK=0
@@ -214,6 +219,8 @@ TARGET_VAR=$(get_partition "${TARGET_ALTERNATIVE}" "var")
 # Execute subsequent action
 case "${ACTION}" in
     upgrade-install)
+        # Remove any leftover temp files if clean up failed on the previous run.
+        rm -rf /tmp/upgrade-image-*
         write_log "${SYSTEM_TYPE} upgrade-install action called - IS_STABLE: ${IS_STABLE}, boot_cycle: ${boot_cycle}, boot_alternative: ${boot_alternative}"
         if [ "${IS_STABLE}" != 1 ]; then
             if [ "${NOCHECK}" == 1 ]; then

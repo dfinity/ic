@@ -7,10 +7,10 @@ source /opt/ic/bin/config.sh
 copy_ssh_keys() {
     local SOURCE_FILE="$1"
     local DEST_FILE="$2"
+    local ACCOUNT="$3"
     if [ -e "${SOURCE_FILE}" ]; then
         echo "Copying SSH keys from ${SOURCE_FILE} to ${DEST_FILE}"
-        cp -L "${SOURCE_FILE}" "${DEST_FILE}"
-        chmod 600 "${DEST_FILE}"
+        runuser -u "${ACCOUNT}" -- sh -c 'umask 077; cat >"$1" && chmod 600 "$1"' sh "${DEST_FILE}" <"${SOURCE_FILE}"
     else
         echo "SSH key source file ${SOURCE_FILE} not found, skipping"
     fi
@@ -30,15 +30,16 @@ for ACCOUNT in backup readonly admin recovery; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
     GROUP=$(id -ng "${ACCOUNT}")
 
-    mkdir -p "${HOMEDIR}/.ssh"
-    chmod 700 "${HOMEDIR}" "${HOMEDIR}/.ssh"
+    chown "${ACCOUNT}:${GROUP}" "${HOMEDIR}"
+    chmod 700 "${HOMEDIR}"
+    runuser -u "${ACCOUNT}" -- sh -c 'umask 077; mkdir -p "$1"' sh "${HOMEDIR}/.ssh"
 
     GUESTOS_AUTHORIZED_SSH_KEYS="/boot/config/accounts_ssh_authorized_keys/${ACCOUNT}"
     AUTHORIZED_KEYS_FILE="${HOMEDIR}/.ssh/authorized_keys"
 
     if [ "$TEE_ENABLED" = 0 ]; then
         echo "SEV/TEE is not active - SSH key copying is enabled"
-        copy_ssh_keys "${GUESTOS_AUTHORIZED_SSH_KEYS}" "${AUTHORIZED_KEYS_FILE}"
+        copy_ssh_keys "${GUESTOS_AUTHORIZED_SSH_KEYS}" "${AUTHORIZED_KEYS_FILE}" "${ACCOUNT}"
     else
         echo "SEV/TEE is active - SSH key copying is disabled"
     fi

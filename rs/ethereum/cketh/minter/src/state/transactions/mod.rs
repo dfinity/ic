@@ -955,6 +955,27 @@ where
         self.pending_requests.len()
     }
 
+    /// Requests whose transaction is created but none of whose transactions is sent yet. A
+    /// transaction sits in one stage only, but a request being resubmitted has its fee-bumped
+    /// transaction in `created_tx` while its earlier attempts stay in `sent_tx`, and counts as sent.
+    pub fn created_tx_excluding_resubmissions_len(&self) -> usize {
+        self.created_tx
+            .alt_keys()
+            .filter(|id| !self.sent_tx.contains_alt(*id))
+            .count()
+    }
+
+    pub fn sent_tx_nonces_len(&self) -> usize {
+        self.sent_tx.len()
+    }
+
+    pub fn sent_tx_transactions_len(&self) -> usize {
+        self.sent_tx
+            .iter()
+            .map(|(_nonce, _id, txs)| txs.len())
+            .sum()
+    }
+
     pub fn transactions_to_sign_iter(
         &self,
     ) -> impl Iterator<Item = (&TransactionNonce, &R::Id, &R::Transaction)> {
@@ -1288,6 +1309,18 @@ impl WithdrawalTransactions {
     ) -> BTreeMap<Hash, LedgerBurnIndex> {
         self.pipeline
             .sent_transactions_to_finalize(finalized_transaction_count)
+    }
+
+    pub fn created_tx_excluding_resubmissions_len(&self) -> usize {
+        self.pipeline.created_tx_excluding_resubmissions_len()
+    }
+
+    pub fn sent_tx_nonces_len(&self) -> usize {
+        self.pipeline.sent_tx_nonces_len()
+    }
+
+    pub fn sent_tx_transactions_len(&self) -> usize {
+        self.pipeline.sent_tx_transactions_len()
     }
 
     pub fn requests_batch(&self, requested_batch_size: usize) -> Vec<WithdrawalRequest> {

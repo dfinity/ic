@@ -238,14 +238,16 @@ pub type CanisterHttpChangeSet = Vec<CanisterHttpChangeAction>;
 /// Artifact pool for the Canister HTTP messages (query interface)
 pub trait CanisterHttpPool: Send + Sync {
     fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
+
     fn get_unvalidated_artifacts(
         &self,
     ) -> Box<dyn Iterator<Item = &CanisterHttpResponseArtifact> + '_>;
+
     fn get_unvalidated_artifact(
         &self,
         share: &CanisterHttpResponseShare,
     ) -> Option<&CanisterHttpResponseArtifact>;
-    // TODO: Likely not needed
+
     fn get_response_content_items(
         &self,
     ) -> Box<dyn Iterator<Item = (&CryptoHashOf<CanisterHttpResponse>, &CanisterHttpResponse)> + '_>;
@@ -253,7 +255,7 @@ pub trait CanisterHttpPool: Send + Sync {
     fn get_response_content_by_hash(
         &self,
         hash: &CryptoHashOf<CanisterHttpResponse>,
-    ) -> Option<CanisterHttpResponse>;
+    ) -> Option<&CanisterHttpResponse>;
 
     fn lookup_validated(
         &self,

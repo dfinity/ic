@@ -13,7 +13,6 @@ dfn_json = { path = "../dfn_json" }
 ic-cdk = { workspace = true }
 on_wire = { path = "../on_wire" }
 rand = { workspace = true }
-rand_pcg = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
