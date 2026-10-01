@@ -322,9 +322,10 @@ full and retry when it was refused memory, so that neither is mistaken for the o
    SHALL offer the remaining blocks to the same archive on a later round.
 3. WHEN the next block to archive is on its own larger than the configured archive size
    or than one inter-canister message, or an archive holding no blocks reports
-   `at_capacity` as true, THE Ledger SHALL make no further archiving attempt and SHALL
-   expose a distinct non-zero metric rather than create another archive, because a new
-   archive with the same limit could not take the block either.
+   `at_capacity` as true while the configured archive size is not larger than that
+   block, THE Ledger SHALL make no further archiving attempt and SHALL expose a distinct
+   non-zero metric rather than create another archive, because a new archive with the
+   same limit could not take the block either.
 
 ### Requirement 9: No Block Index Ever Becomes Unretrievable
 
@@ -355,8 +356,8 @@ issued to remain retrievable, so that a history I have read never develops a hol
 7. WHEN any archive reports a `block_index_offset` that differs from the start THE Ledger
    has recorded for it, its Published_Range start or, for an archive not yet published,
    one past the end of the previous archive's Published_Range (zero for a ledger's first
-   archive), THE Ledger SHALL leave its record unchanged, make no further archiving
-   attempt, and expose a distinct non-zero metric.
+   archive), THE Ledger SHALL leave its record, Archived_Prefix included, unchanged by
+   that reply, make no further archiving attempt, and expose a distinct non-zero metric.
 8. THE ICP Ledger SHALL rely on its own record instead and SHALL NOT be held to 9.1 or
    9.3–9.7.
 
@@ -393,8 +394,10 @@ interval rather than work per transaction.
    immediately rather than observing the spacing of 10.1, except while the state of
    14.1 holds, because an upgrade is how an operator resumes after a halt.
 8. WHILE a halt per 8.3, 9.4–9.7, 10.5, 10.6 or 14.5 holds, THE Ledger SHALL attempt no
-   Archiving_Round until its next upgrade, and SHALL re-establish the halt from the
-   first reply after that upgrade if the cause persists.
+   Archiving_Round sooner than BACKOFF_CAP after the last attempt, and SHALL re-establish
+   the halt from that attempt's reply if the cause persists, because each of these is
+   learned from one reply and an archive an operator has repaired is then picked up
+   without a ledger upgrade, while 10.7 remains the immediate lever.
 
 ### Requirement 11: A Ledger Will Not Archive Against An Archive That Does Not Implement Indexed Appends
 

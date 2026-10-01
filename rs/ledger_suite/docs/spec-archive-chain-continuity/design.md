@@ -145,13 +145,17 @@ Serves Req 10.1, Req 10.7. `BACKOFF_INITIAL` = 30 s, doubling per consecutive fa
 probe per hour. A timestamp check on the transaction path rather than a timer, per the
 every-await-is-a-call constraint.
 
-### D7 — Backoff and halt state are `#[serde(skip)]`; the creation journal persists
+### D7 — A halt is the backoff at its cap; backoff state is `#[serde(skip)]`, the creation journal persists
 
-Serves Req 10.7, Req 10.8, Req 14.1. Every halt but one is learned from one
-archive reply and re-derivable from the next, so forgetting it on upgrade costs one
-attempt, which is exactly the operator's "resume now" lever. The exception is a creation
-whose reply was lost: nothing can re-derive an orphaned canister, so that state is
-persisted with `#[serde(default)]` (Req 14.1).
+Serves Req 10.7, Req 10.8, Req 14.1. Every halt but one is learned from one archive
+reply and re-derivable from the next, so it is not a separate state: it is the backoff
+pinned at `BACKOFF_CAP` with the reason kept for the metric. Retrying costs one call per
+hour and stores nothing, since every such reply refuses or reports; it is what lets a
+repaired archive, or a raised archive size, take effect without a ledger upgrade.
+Forgetting the state on upgrade costs one attempt, which is the operator's "resume now"
+lever. The exception is a creation whose reply was lost: nothing can re-derive an
+orphaned canister and a retry would create another, so that state is persisted with
+`#[serde(default)]` and no timer clears it (Req 14.1).
 
 ### D8 — One seam, `Wasm::INDEXED_APPENDS`; the ICP archive is unchanged
 
@@ -311,38 +315,46 @@ metric; one entry attributed to the wrong node is caught by the first reply inst
 
 ### `ledger_canister_core::archive` — `Archive` state and halts
 
-`#[serde(skip)]` per D7: last-attempt timestamp and consecutive-failure count (Req 10),
-the tail's last reported `at_capacity` (Req 8), and
+`#[serde(skip)]` per D7: last-attempt timestamp, consecutive-failure count and the
+reason for the last failure (Req 10), and the tail's last reported `at_capacity`
+(Req 8). A halt sets the spacing to `BACKOFF_CAP` and the reason; nothing else is
+stored.
 
     #[serde(skip)]
-    halted: Option<Halt>,
+    backoff: Option<Backoff>,            // None: no failure since the last success
 
-    enum Halt { OversizedBlock, StartAhead, PositionShort, PositionAhead, StartMoved,
-                Refused(RefusedGround), BelowRange, ForeignModule(CanisterId) }
-    // Req 8.3, 9.4, 9.5, 9.6, 9.7, 10.5, 10.6, 14.5 respectively
+    struct Backoff { next_attempt: Timestamp, failures: u32, reason: Reason }
+    enum Reason { Failed, Rejected, OversizedBlock, StartAhead, PositionShort,
+                  PositionAhead, StartMoved, Refused(RefusedGround), BelowRange,
+                  ForeignModule(CanisterId) }
+    // 10.3, 11.1, 8.3, 9.4, 9.5, 9.6, 9.7, 10.5, 10.6, 14.5 respectively
 
-`blocks_to_archive` reads it before the guard and it is the source of each halt's metric
-(Req 10.8): one labelled gauge, `ledger_archiving_halted{reason="..."}`, with
-`canister_id` as a second label where a halt names one, so a single alert rule covers
-every case. Failed rounds and unknown outcomes stay counters.
+`blocks_to_archive` reads it before the guard, and it is the source of the metric
+(Req 10.8): one labelled gauge, `ledger_archiving_halted{reason="..."}`, `1` while the
+reason is one of the halts, with `canister_id` as a second label where a halt names one,
+so a single alert rule covers every case. Failed rounds and unknown outcomes stay
+counters.
 
-| condition | criterion | clears |
-|---|---|---|
-| tail start above the Archived_Prefix | Req 9.4 | operator only: wrong record |
-| position not past its published range | Req 9.5 | never: blocks are held nowhere |
-| position above the ledger's chain tip | Req 9.6 | operator only: restore the whole suite |
-| offset differs from recorded start | Req 9.7 | operator only |
-| empty archive reports `at_capacity` | Req 8.3 | operator: raise `node_max_memory_size_bytes` |
-| refused on chain or position grounds | Req 10.5 | operator only; archive counters say which |
-| blocks offered below the archive's range | Req 10.6 | operator only |
-| created canister carries a foreign module | Req 14.5 | operator only; unreachable while the ledger is sole controller |
-| tail rejects `append_blocks_at` | Req 11.1 | **itself**, on the first attempt after the archive upgrade (Req 11.2); a backoff, not a `Halt` |
-| creation begun, no identity recorded | Req 14.1 | operator only; persisted, survives upgrade |
+| condition | criterion | what a retry does | clears |
+|---|---|---|---|
+| tail start above the Archived_Prefix | Req 9.4 | comes back below range, nothing stored | after a record migration |
+| position not past its published range | Req 9.5 | comes back as a gap, nothing stored | never: blocks are held nowhere |
+| position above the ledger's chain tip | Req 9.6 | re-send compared, refused | after the suite is restored to a common point |
+| offset differs from recorded start | Req 9.7 | may store idempotently; record unchanged | after a record migration |
+| empty archive reports `at_capacity` | Req 8.3 | halts again, or rolls over once the size is raised | by raising `node_max_memory_size_bytes` |
+| refused on chain or position grounds | Req 10.5 | refused again, nothing stored | after the archive is repaired or replaced |
+| blocks offered below the archive's range | Req 10.6 | nothing stored | after a record migration |
+| created canister carries a foreign module | Req 14.5 | same `canister_status` answer | unreachable while the ledger is sole controller |
+| tail rejects `append_blocks_at` | Req 11.1 | rejected again, nothing stored | after the archive upgrade (Req 11.2) |
+| creation begun, no identity recorded | Req 14.1 | **would create another canister**: no retry | a ledger build that clears it; persisted |
 
-**Skip versus act.** A skip before the guard is right for a wait or an operator-only halt
-and wrong for a state that needs the ledger to *do* something: `Created` (Req 14.4)
-must finish the creation. A rejected indexed append (Req 11.1) is an ordinary backoff:
-the next permitted round simply tries `append_blocks_at` again.
+Every row but the last is one call per hour that stores nothing and re-derives the
+same answer until the cause is gone, at which point archiving resumes on its own. The
+upgrade reset of Req 10.7 is the immediate lever when the operator has already fixed
+the cause.
+
+**Skip versus act.** A skip before the guard is right for a wait and wrong for a state
+that needs the ledger to *do* something: `Created` (Req 14.4) must finish the creation.
 
 ### `ledger_canister_core::archive` — `node_and_capacity`
 
@@ -356,10 +368,12 @@ ledger simply appends to the tail, and a full tail answers `StoredPartial` with
 cold start, and the ledger never calls anything but an append on an archive (Req 12.1).
 
 An empty archive reporting `at_capacity` (`next_index == block_index_offset`) halts
-instead of rolling over (Req 8.3); so does a first block larger than the configured
-archive size, decided locally, and one that exceeds one message so the byte cap selects
-nothing. Creating a node sets `block_index_offset` from the previous node's reported
-`next_index` (Req 7.1, not `+ 1`) and supplies the Expected_Parent (Req 7.2).
+instead of rolling over (Req 8.3), unless the configured archive size has since been
+raised above the block, in which case the roll-over is the fix taking effect; so does a
+first block larger than the configured archive size, decided locally, and one that
+exceeds one message so the byte cap selects nothing. Creating a node sets
+`block_index_offset` from the previous node's reported `next_index` (Req 7.1, not `+ 1`)
+and supplies the Expected_Parent (Req 7.2).
 
 The Expected_Parent is the decoded `parent_hash()` of the round's first block: under
 D11 a creation round sends no blocks and the next append starts at the selection front,
@@ -383,8 +397,8 @@ A short stop with `at_capacity` false counts as a failed round for spacing and t
 failure metric while the reported progress is kept (Req 10.4); a stop at the archive's
 own limit does not. The failure count and last-attempt timestamp are written before the
 append's await or in the cleanup callback, so a round that traps still backs off.
-`blocks_to_archive` carries the skip conditions: the backoff, the operator-only halts
-above, and `Started` (Req 14.1), all before the guard.
+`blocks_to_archive` carries the skip conditions: the backoff, halts included, and
+`Started` (Req 14.1), both before the guard.
 
 ### `ledger_canister_core::runtime` — `Runtime::call`
 
@@ -477,7 +491,7 @@ controllable, Req 4.2's `false` rests on review of the branch that sets the flag
 | 25 | integration | full tail: next round creates an archive; short stop with `at_capacity` false: same archive retried, rounds spaced and counted as failures | 8.1, 8.2, 10.4 |
 | 26 | integration | oversized block on all three paths (the reply from an empty tail, the local size check, the byte cap): halt, own metric, no archive created; an ordinary full tail still rolls over, and a cold start against a full tail costs one wasted append and no other call | 8.3, 8.1, 12.1 |
 | 27 | integration | archive stopped: attempts spaced per backoff, resume on restart with no intervention; a failed round then a ledger upgrade: next transaction archives immediately | 10.1–10.3, 10.7 |
-| 28 | integration | refusal per 1.1, 2.2, 2.5, 6.3 in turn: halt with distinct metric, no append while halted; upgrade with archive unchanged: one append, halt re-established; fix and upgrade: resumes | 10.5, 10.8 |
+| 28 | integration | refusal per 1.1, 2.2, 2.5, 6.3 in turn: halt with distinct metric, no append sooner than `BACKOFF_CAP`, then one that re-establishes the halt; upgrade with archive unchanged: one immediate append, halt re-established; repair the archive without touching the ledger: resumes at the next cap-spaced attempt; empty tail at capacity: halts, then rolls over once the configured size is raised | 10.5, 10.7, 10.8, 8.3 |
 | 29 | integration | old archive wasm as tail: `append_blocks_at` rejected on every attempt, attempts spaced per backoff, nothing archived, no `append_blocks` call made; upgrade the archive: resumes without a ledger upgrade; ICP ledger archives normally through `append_blocks` and counts | 11.1–11.4, 10.1 |
 | 30 | integration | tail does not answer: round ends within `ARCHIVE_CALL_TIMEOUT`, retried, nothing stored twice; ledger stoppable and upgradable with a call in flight | 13.1, 13.2, 13.5 |
 | 31 | integration | multi-chunk configuration: one append call per round, moving `min(num_blocks_to_archive, one message)` blocks; a round that fills the tail with blocks left over creates no archive, the next eligible round begins exactly one creation, and no round creates two | 12.1, 12.2, 12.3, 8.1 |
@@ -533,8 +547,8 @@ halts on it, retrying per transaction: survivable, but keep the window short.
 
 **Ledger release — PRs 2–4, stacked and shipped in one ledger upgrade.** Each PR
 compiles and passes its tests alone, but none is released alone: PR 3 without PR 4
-retries a rejected append on every transaction for want of a backoff and has no creation
-journal; PR 2 alone hides archiving traps while the fresh-archive window is open. The
+has no geometric backoff for ordinary failures and no creation journal; PR 2 alone hides
+archiving traps while the fresh-archive window is open. The
 upgrade should follow the archive release so archiving does not pause; if it does not,
 the ledger backs off on rejected appends and resumes once the archives are upgraded.
 DEFI-1565 (#11418), which exposes the archiving settings as metrics, should land before
@@ -546,11 +560,12 @@ this release, since the design relies on it for the effective per-round count.
   removed and byte-based selection, so the Expected_Parent needs no per-position
   scaffolding and reconciliation and removal share a message; reconciliation from the
   reported extent, the range checks, offset derivation, the Expected_Parent, the
-  rejected-append handling and seam, and the `halted` field with its pre-guard skip and labelled
-  gauge, holding the variants its own checks raise (`StartAhead`, `PositionShort`,
-  `PositionAhead`, `StartMoved`). *Acceptance:* Req 7, Req 9, Req 11, Req 12.
-- **PR 4 — retries and creation** (DEFI-3017, DEFI-3018). The backoff, the remaining
-  `Halt` variants, bounded calls, the creation journal, adoption and handover.
+  rejected-append handling and seam, and the backoff state with its pre-guard skip and
+  labelled gauge, carrying the reasons its own checks raise (`StartAhead`,
+  `PositionShort`, `PositionAhead`, `StartMoved`, `Rejected`), pinned at the cap since
+  the spacing itself lands in PR 4. *Acceptance:* Req 7, Req 9, Req 11, Req 12.
+- **PR 4 — retries and creation** (DEFI-3017, DEFI-3018). The geometric backoff, the
+  remaining reasons, bounded calls, the creation journal, adoption and handover.
   *Acceptance:* Req 8, Req 10, Req 13, Req 14.
 
 Safety is reached at this release; expect the backlog to drain at one message per
