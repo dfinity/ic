@@ -560,9 +560,11 @@ deployed chain fusion and ICP suite: a Rosetta sync from genesis, and each archi
 extent against what the ledger publishes for it (`log_length` equals the published
 range's length on ICRC; offset-and-count pairs tile up to `first_block_index` on ICP),
 and the ledger's `ledger_num_archives` against the number of archives it publishes
-ranges for, since a tail whose first append landed before the callback has no range,
-is omitted by `archives()`, and must be found this way and have a `log_length` of zero.
-An archive holding more than published is a duplicate suffix D12 does not repair. Both
+ranges for, since a tail whose first append landed before the callback has no range and
+is omitted by `archives()`. Blocks an archive holds beyond its published range are
+compared with the ledger's own blocks at the same indices: equal means a lost callback,
+which the first indexed re-send reconciles; anything else is a duplicate or divergent
+suffix that D12 does not repair. Both
 checks passed on every DeFi-owned suite on 2026-09-24 and need repeating if the archive
 release lands much later.
 
