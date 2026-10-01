@@ -181,13 +181,10 @@ pub fn test(env: TestEnv) {
     // its final restart of setup-permissions restores the ownership. The unit ends up "failed"
     // rather than "active" here, even after a successful recovery, because this test runs the
     // GuestOS without a HostOS, so the engine's final `vsock_guest notify` fails.
-    //
-    // Be generous with the timeout: on a busy host, extracting and syncing the 500 MB dummy local
-    // store can take the engine more than a minute.
     retry_with_msg!(
         "wait for guestos-recovery-engine.service to finish",
         log.clone(),
-        secs(300),
+        secs(60),
         secs(5),
         || {
             let state = execute_bash_command(
