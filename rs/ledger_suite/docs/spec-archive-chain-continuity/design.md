@@ -414,7 +414,10 @@ choice is per call (D10):
 | `update_settings` | unbounded | resolved by retrying; once per fill |
 
 An unknown outcome on a bounded call is a failure (Req 13.1, 13.2), counted distinctly
-so the timeout can be revisited.
+so the timeout can be revisited. `Runtime::call` today folds insufficient cycles, a
+failed `call_perform` and a Candid decode failure of a successful reply into one `-1`
+sentinel; the decode failure becomes its own variant, because the creation journal must
+treat a reply it could not read as a canister that exists.
 
 ### `ledger_canister_core::archive` — the creation journal
 
@@ -425,8 +428,10 @@ so the timeout can be revisited.
 
 `Started` before `create_canister`; `Created { id, module_hash: None }` as soon as it
 returns, **and the round ends** (Req 14.3), because today's code next encodes the
-multi-megabyte `install_code` argument in the same message. Return to `Idle` on failure
-only where `create_canister` itself returned `Err` (Req 14.2). Both non-`Idle` states are
+multi-megabyte `install_code` argument in the same message. Return to `Idle` only on a
+reject of `create_canister`, which for the management canister means nothing was
+created; a reply that fails to decode means a canister exists whose id is lost, so the
+state stays `Started` (Req 14.2). Both non-`Idle` states are
 exposed with the id where there is one (Req 14.1, 14.4): `Started` is a halt, `Created`
 is "finish this first". A round finding `Created` asks `canister_status` for the module
 hash. Absent: write the embedded wasm's hash into `module_hash`, then await
@@ -498,7 +503,7 @@ controllable, Req 4.2's `false` rests on review of the branch that sets the flag
 | 32 | integration | every index served before a round is retrievable after it; the ledger stopped serving only indices an archive reports covering | 9.1, 9.2 |
 | 33 | integration | ICP ledger creates archives and discards blocks with no reported extent | 7.5, 9.8 |
 | 34 | integration | non-genesis archive: first append accepted; ledger patched to omit the hash: unverifiable counter rises; patched to a wrong hash: refused | 7.2, 1.2, 1.8 |
-| 35 | integration | `create_canister` reply lost: `Started`, exposed, not self-clearing, survives upgrade; `create_canister` itself fails: no halt | 14.1, 14.2 |
+| 35 | integration | `create_canister` reply lost, or received but undecodable: `Started`, exposed, not self-clearing, survives upgrade; `create_canister` rejected: no halt | 14.1, 14.2 |
 | 36 | integration | `install_code` outcome lost after the id was recorded, or a trap at the start of the round after `Created`: resolved via `canister_status`, creation finished, same canister adopted; the ledger upgraded to a build embedding a different archive wasm between the committed install and reconciliation: the recorded hash matches, the canister is adopted, no halt; a module matching neither: halt with id exposed | 14.3–14.5, 14.9 |
 | 37 | integration | `update_settings` outcome lost or callback trapped after controllers changed: archive adopted and serving, archiving continues, entry retried and cleared on the unauthorized reject | 14.6–14.8 |
 | 38 | integration | one handover keeps failing until a second archive is adopted: first still retried and counted, second completes (rotation); pending handover survives a ledger upgrade; ten configured controllers with a repeat: one de-duplicated `update_settings` accepted | 14.7 |
