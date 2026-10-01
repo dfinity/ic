@@ -155,6 +155,9 @@ system_test_nns(
     name = "canister_http_correctness_test",
     cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM + 1 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs (1 system + 4 app) + 1 UVM (httpbin), 6 vCPUs each.
     enable_uvm = True,
+    tags = [
+        "long_test",  # The P90 duration was over 6 minutes in the month up to 2026-09-17.
+    ],
     runtime_deps = CANISTER_HTTP_RUNTIME_DEPS | {
         "PROXY_WASM_PATH": "//rs/rust_canisters/proxy_canister:proxy_canister",
     },

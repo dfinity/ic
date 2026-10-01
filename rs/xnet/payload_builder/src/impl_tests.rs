@@ -2,6 +2,7 @@
 
 use super::test_fixtures::*;
 use super::*;
+use crate::testing::XNetPayloadBuilderTesting;
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces_certified_stream_store::DecodeStreamError;
@@ -62,6 +63,7 @@ async fn expected_stream_indices() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
+            already_closed_receiver(),
             &MetricsRegistry::new(),
             log,
         );
@@ -106,6 +108,7 @@ async fn expected_stream_indices_includes_engine_subnets() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
+            already_closed_receiver(),
             &MetricsRegistry::new(),
             log,
         );
@@ -179,6 +182,7 @@ async fn expected_stream_indices_excludes_deleted_subnet() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
+            already_closed_receiver(),
             &MetricsRegistry::new(),
             log,
         );
@@ -532,6 +536,7 @@ async fn validate_slice_invalid_signature() {
             tokio::runtime::Handle::current(),
             LOCAL_NODE,
             LOCAL_SUBNET,
+            already_closed_receiver(),
             &MetricsRegistry::new(),
             log,
         );
@@ -883,6 +888,7 @@ fn get_xnet_payload_builder_for_test(
         tokio::runtime::Handle::current(),
         LOCAL_NODE,
         LOCAL_SUBNET,
+        already_closed_receiver(),
         &MetricsRegistry::new(),
         log,
     )

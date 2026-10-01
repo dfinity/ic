@@ -251,6 +251,8 @@ pub struct WasmtimeEmbedder {
     // and remove it. So memories will only be in this map for the time between module
     // instantiation and creation of the corresponding `DeterministicMemoryTracker`.
     created_memories: Arc<Mutex<HashMap<MemoryStart, MemoryPageSize>>>,
+    // Whether to compile for the optional CPU features of the host.
+    host_cpu_features: bool,
 }
 
 impl WasmtimeEmbedder {
@@ -259,6 +261,21 @@ impl WasmtimeEmbedder {
             log,
             config,
             created_memories: Arc::new(Mutex::new(HashMap::new())),
+            host_cpu_features: true,
+        }
+    }
+
+    /// Like [`Self::new`], but compiles without the optional CPU features of
+    /// the host, see [`Self::disable_host_cpu_features`].
+    ///
+    /// Only public for tools that produce compiled modules shared across
+    /// machines, like the precompiled universal canister. The replica keeps
+    /// compiling for the host.
+    #[doc(hidden)]
+    pub fn new_without_host_cpu_features(config: EmbeddersConfig, log: ReplicaLogger) -> Self {
+        WasmtimeEmbedder {
+            host_cpu_features: false,
+            ..Self::new(config, log)
         }
     }
 
@@ -274,8 +291,25 @@ impl WasmtimeEmbedder {
         config
     }
 
+    /// Makes `config` compile for the host's architecture and OS without any
+    /// of the optional CPU features (e.g. AVX2 on x86_64 or i8mm on aarch64)
+    /// that Wasmtime otherwise detects on the host and compiles for. The
+    /// compiled code then doesn't depend on the machine that compiled it and
+    /// loads on every host of the same architecture and OS.
+    #[doc(hidden)]
+    pub fn disable_host_cpu_features(config: &mut wasmtime::Config) {
+        // Wasmtime only detects the host's CPU features when no target is
+        // configured, so configure the host itself as the target.
+        config
+            .target(&target_lexicon::HOST.to_string())
+            .expect("The host must be a valid Wasmtime target");
+    }
+
     fn create_engine(&self) -> HypervisorResult<Engine> {
         let mut config = Self::wasmtime_execution_config(&self.config);
+        if !self.host_cpu_features {
+            Self::disable_host_cpu_features(&mut config);
+        }
         let mem_creator = Arc::new(WasmtimeMemoryCreator::new(Arc::clone(
             &self.created_memories,
         )));

@@ -13,20 +13,22 @@ description: |
   run and coverage command its own Build Event Protocol (BEP) file and execution profile.
 
   Afterwards, also when `run` failed or ran out of timeout-minutes, but not when the job was
-  cancelled, the logs of the tests that FAILED, were FLAKY or hit a TIMEOUT are staged and two
-  artifacts are uploaded to Namespace Artifact Storage:
-    <artifact-name>-bep:  the BEP files and profiles;
-    <artifact-name>-logs: the console output of `run` and the staged test logs.
-  Retrieve them with namespace-actions/download-artifact or `nsc artifact`.
+  cancelled, these artifacts are uploaded to GitHub, where any signed-in user can download them,
+  e.g. with `gh run download <run-id> -n <name>`:
+    <artifact-name>-bep:  the profiles and, if GPG_PASSPHRASE is set, the BEP files encrypted with
+                          it, which github-stats (dfinity-ops/k8s) ingests into the database of
+                          ci/githubstats;
+    <artifact-name>-logs: the logs of the tests that `run` ran, laid out like bazel-testlogs:
+                          <package>/<name>/test.log, <package>/<name>/test_attempts/attempt_<n>.log
+                          and so on. Tests whose passing result came from the remote cache are
+                          left out. Only uploaded when there are any.
 
   Before using this action the job must:
     * run namespacelabs/nscloud-setup and
       `nsc bazel setup --command=common --enable_remote_asset_api --bazelrc=/tmp/bazel-rbe.bazelrc`
       (job-wide settings like `common --repository_cache=...` can be appended to that file);
     * check out the repository;
-    * in a container job: mount /var/run/nsc/ and forward NSC_TOKEN_FILE and
-      NAMESPACE_ACTIONS_{RESULTS_URL,RESULTS_SERVICE,DIRECT_ZIP_UPLOAD} via container.env for the
-      uploads, see https://namespace.so/docs/reference/github-actions/upload-artifact.
+    * in a container job: mount /var/run/nsc/, where nscloud-setup finds the Namespace token.
   Give the calling step an `id:` (for stable artifact names) and set both the timeout-minutes
   input and, as a backstop, a higher timeout-minutes on the calling step (see the input).
 
@@ -54,7 +56,15 @@ inputs:
     default: ${{ github.job }}-${{ github.action }}-${{ github.run_attempt }}
     description: |
       Prefix of the names of the uploaded artifacts, which must be unique in the workflow run.
-      Pass one explicitly in matrix jobs.
+      Pass one explicitly in matrix jobs. It is also the job name (at most 100 characters) under
+      which github-stats stores the bazel invocations of the <artifact-name>-bep artifact.
+  GPG_PASSPHRASE:
+    required: false
+    default: ''
+    description: |
+      Passphrase to encrypt the BEP files with for the public <artifact-name>-bep artifact on
+      GitHub: pass secrets.GPG_PASSPHRASE, with which github-stats decrypts them. BEP files contain
+      the options and environment of the bazel client, so they are only uploaded encrypted.
 
 runs:
   using: composite
@@ -90,6 +100,10 @@ runs:
           export BAZEL_NAMESPACE_DEADLINE=$(($(date +%s) + TIMEOUT_MINUTES * 60))
         fi
 
+        # For the staging step: test logs older than this are left in the job's bazel output base
+        # by the bazel commands of earlier steps.
+        touch "$BAZEL_NAMESPACE_OUT/run-started"
+
         # Save the output of `run` for the staging step. `run` goes in a subshell with its own
         # `set -e` (a `||` here would disable it), so its `exit` doesn't skip the lines below.
         # tee -i: an interrupt must not break bazel's stdout (bazel then exits with 36, not 8).
@@ -107,25 +121,87 @@ runs:
         fi
         exit "$status"
 
-    - name: Stage the logs of failed, flaky and timed out tests
+    - name: Encrypt the BEP files
+      # For the GitHub artifact below. The passphrase is only in the env of this step, not in the
+      # one of `run`, whose environment the BEP files record. A BEP file that can't be encrypted
+      # isn't uploaded; that must not fail the calling step.
+      if: ${{ !cancelled() && inputs.GPG_PASSPHRASE != '' }}
+      continue-on-error: true
+      shell: bash
+      env:
+        BAZEL_NAMESPACE_OUT: ${{ steps.out.outputs.dir }}
+        GPG_PASSPHRASE: ${{ inputs.GPG_PASSPHRASE }}
+      run: |
+        # Not -e: one BEP file that can't be encrypted mustn't stop the others.
+        set +e -uo pipefail
+        shopt -s nullglob
+
+        beps=("$BAZEL_NAMESPACE_OUT"/bazel-bep-*.pb)
+        if [ "${#beps[@]}" -eq 0 ]; then
+          echo "No BEP files; nothing to encrypt."
+          exit 0
+        fi
+        if ! command -v gpg >/dev/null; then
+          echo "::error::gpg is not installed, so the BEP files are not uploaded."
+          exit 1
+        fi
+
+        # Keep the passphrase out of the environment of gpg and of the gpg-agent it starts, which
+        # outlives this step, and out of argv: gpg reads it from stdin, printf being a builtin.
+        passphrase="$GPG_PASSPHRASE"
+        unset GPG_PASSPHRASE
+        case "$passphrase" in *$'\n'*)
+          echo "::error::GPG_PASSPHRASE contains a newline, which --passphrase-fd would drop, so the BEP files are not uploaded."
+          exit 1
+          ;;
+        esac
+
+        status=0
+        for bep in "${beps[@]}"; do
+          # Plain AES256 without AEAD: github-stats decrypts with the GnuPG 2.2 of Debian bookworm.
+          if printf '%s' "$passphrase" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --no-symkey-cache --symmetric --cipher-algo AES256 --output "$bep.gpg" "$bep"; then
+            rm -f "$bep"
+          else
+            # github-stats would skip the whole artifact, profiles included, for a broken .gpg file.
+            rm -f "$bep.gpg"
+            echo "::warning::Could not encrypt $bep, so it is not uploaded."
+            status=1
+          fi
+        done
+        exit "$status"
+
+    - name: Upload the profiles and the encrypted BEP files to GitHub
+      # github-stats (dfinity-ops/k8s) reads the root of the archive, pairs profile-<id>.json with
+      # bazel-bep-<id>.pb.gpg and stores them in the database of ci/githubstats. The artifacts of
+      # dfinity/ic are public: never upload unencrypted BEP files.
+      if: ${{ !cancelled() }}
+      continue-on-error: true
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      with:
+        name: ${{ inputs.artifact-name }}-bep
+        path: |
+          ${{ steps.out.outputs.dir }}/profile-*.json
+          ${{ steps.out.outputs.dir }}/bazel-bep-*.pb.gpg
+        if-no-files-found: ignore
+        retention-days: 14
+        compression-level: 9
+
+    - name: Stage the logs of the tests that ran
       if: ${{ !cancelled() }}
       continue-on-error: true
       shell: bash
       env:
         BAZEL_NAMESPACE_OUT: ${{ steps.out.outputs.dir }}
       run: |
-        # Not -e: one test's logs that can't be copied mustn't stop the others.
+        # Not -e: one test log that can't be copied mustn't stop the others.
         set +e -uo pipefail
+        shopt -s nullglob
 
-        # Bazel's end-of-run test summary prints one line per test target, like
-        #   //rs/foo:bar_test    FAILED in 3 out of 3 in 12.3s
-        #   //rs/foo:baz_test    FLAKY, failed in 1 out of 2 in 4.5s
-        #   //rs/foo:qux_test    TIMEOUT in 300.0s
-        # The failed attempts of a flaky test live under test_attempts/ in its testlogs
-        # directory, which is copied wholesale.
-        mapfile -t labels < <(grep -oE '^//[^ ]+ +(FAILED|FLAKY|TIMEOUT)' "$BAZEL_NAMESPACE_OUT/console.log" 2>/dev/null | awk '{print $1}' | sort -u)
-        if [ "${#labels[@]}" -eq 0 ]; then
-          echo "No failed, flaky or timed out tests; nothing to stage."
+        # Only bazel test and coverage run tests. bin/bazel names their profiles after the command.
+        profiles=("$BAZEL_NAMESPACE_OUT"/profile-{test,coverage}-*.json)
+        if [ "${#profiles[@]}" -eq 0 ]; then
+          echo "No bazel test or coverage command ran; no test logs to stage."
           exit 0
         fi
 
@@ -144,44 +220,54 @@ runs:
           exit 0
         fi
 
+        # Copy the regular files of the tree (-type f skips symlinks) that the bazel commands of
+        # `run` wrote, i.e. not the ones of earlier steps of the job:
+        #   <package>/<name>/test.log                       the last attempt
+        #   <package>/<name>/test_attempts/attempt_<n>.log  the failed attempts before it
+        # Of a test that several test commands of `run` ran, the logs of the last run remain.
+        # upload-artifact fails the whole artifact for a path with one of " : < > | * ? CR LF.
+        # --no-preserve=mode: bazel makes some directories read-only, like test.outputs.
         dest="$BAZEL_NAMESPACE_OUT/test-logs"
-        echo "Staging the logs of ${#labels[@]} test(s) from $testlogs:"
-        for label in "${labels[@]}"; do
-          echo "  $label"
-          rel="${label#//}" # //rs/tests/nns:foo_test -> rs/tests/nns:foo_test
-          rel="${rel/:/\/}" # rs/tests/nns:foo_test   -> rs/tests/nns/foo_test
-          if [ -d "$testlogs/$rel" ]; then
-            # -L dereferences symlinks so that the actual log content is copied.
-            mkdir -p "$dest/$rel" && cp -RL "$testlogs/$rel/." "$dest/$rel/" \
-              || echo "    WARNING: could not copy all of $testlogs/$rel"
-          else
-            echo "    WARNING: test log directory not found: $testlogs/$rel"
-          fi
-        done
+        mkdir -p "$dest"
+        cd "$testlogs" || exit 0
+        new=(-newer "$BAZEL_NAMESPACE_OUT/run-started")
+        bad=(-path '*[":<>|*?]*' -o -path $'*[\r\n]*')
+        find . -type f "${new[@]}" \( "${bad[@]}" \) -printf '::warning::Not staging %p: upload-artifact rejects a character in its path.\n'
+        find . -type f "${new[@]}" ! \( "${bad[@]}" \) -print0 | xargs -0 -r cp --parents --no-preserve=mode -t "$dest" -- \
+          || echo "::warning::Could not stage all test logs of $testlogs."
 
-    - name: Upload the BEP files and profiles to Namespace Artifact Storage
-      # Analyze the profiles with e.g. `bazel analyze-profile` or
-      # https://github.com/EngFlow/bazel_invocation_analyzer. A failed upload must not fail the
-      # calling step, which would skip the workflow steps after it.
+        # Leave out the tests whose passing result came from the remote cache: their logs are those
+        # of the earlier invocation that ran them. Bazel's end-of-run test summary lists them like
+        #   //rs/foo:bar_test    (cached) PASSED in 0.4s
+        # and the tests that ran with their status, e.g. PASSED, right after the label. A test that
+        # a later test command of `run` found cached is kept. Without a summary, e.g. when bazel was
+        # interrupted, no test is left out.
+        console="$BAZEL_NAMESPACE_OUT/console.log"
+        declare -A ran=()
+        while read -r label _; do ran[$label]=1; done < <(grep -E '^//[^ ]+ +[A-Z]' "$console")
+        cached=0
+        while read -r label _; do
+          [ -z "${ran[$label]:-}" ] || continue
+          rel="${label#//}" # //rs/foo:bar_test -> rs/foo:bar_test
+          rel="${rel/:/\/}" # rs/foo:bar_test   -> rs/foo/bar_test
+          # All that bazel writes for a test, of each shard and run too, but not the directories
+          # of other tests below it, like the one of //rs/foo:bar_test/baz.
+          rm -rf -- "$dest/$rel"/{test.*,test_attempts,coverage.dat,_coverage,shard_*_of_*,run_*_of_*}
+          cached=$((cached + 1))
+        done < <(grep -E '^//[^ ]+ +\(cached\) PASSED' "$console")
+        find "$dest" -mindepth 1 -type d -empty -delete
+
+        echo "Staged the logs of $(find "$dest" -name test.log | wc -l) tests ($(find "$dest" -type f | wc -l) files, $(du -sh "$dest" | cut -f1)) from $testlogs, leaving out $cached cached tests."
+
+    - name: Upload the test logs to GitHub
+      # Public, like all artifacts of dfinity/ic: any signed-in GitHub user can download them, so no
+      # secret may reach the environment of the tests. Being a zip, the logs of a single test can
+      # be read from it with HTTP range requests. A failed upload must not fail the calling step.
       if: ${{ !cancelled() }}
       continue-on-error: true
-      uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
-      with:
-        name: ${{ inputs.artifact-name }}-bep
-        path: |
-          ${{ steps.out.outputs.dir }}/bazel-bep-*.pb
-          ${{ steps.out.outputs.dir }}/profile-*.json.gz
-        if-no-files-found: ignore
-        retention-days: 14
-
-    - name: Upload the console output and the staged test logs to Namespace Artifact Storage
-      if: ${{ !cancelled() }}
-      continue-on-error: true
-      uses: namespace-actions/upload-artifact@f6ccaacc655aec41b93af180d1d7eef21af862d2 # v1
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: ${{ inputs.artifact-name }}-logs
-        path: |
-          ${{ steps.out.outputs.dir }}/console.log
-          ${{ steps.out.outputs.dir }}/test-logs/**
+        path: ${{ steps.out.outputs.dir }}/test-logs/
         if-no-files-found: ignore
         retention-days: 14

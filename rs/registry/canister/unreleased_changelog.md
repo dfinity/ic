@@ -33,7 +33,18 @@ on the process that this file is part of, see
 * Newly created `CatchUpPackageContents` records with CUP type `CupType::Genesis` will not contain a `height`
   field anymore. You can (and should) assume that the height for `Genesis` CUPs is always 0.
 
+* Invariant requiring that every subnet's `CatchUpPackageContents` record has a `cup_type` set.
+
+* One-time post-upgrade migration backfilling `cup_type` on every `CatchUpPackageContents` record
+  that has none. A record whose legacy `height`, `time` and `state_hash` fields are all unset is
+  stamped as `CupType::Genesis`. Any other record is stamped as `CupType::Recovery`, which keeps those
+  legacy values.
+
 ## Changed
+
+* `update_subnet` now also lets the engine controller canister set `cooling_down` on a cloud engine
+  subnet. The engine controller's scope is thus `subnet_admins`, `is_halted` and `cooling_down`;
+  every other field remains rejected for that caller.
 
 * `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
   fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward

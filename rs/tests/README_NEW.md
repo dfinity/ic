@@ -28,7 +28,7 @@ this container provides all the necessary environment setup for building and run
 ### Via native Bazel commands
 Within the docker execute:
 ```
-devenv-container$ bazel test --test_output=streamed //rs/tests/idx:basic_health_test
+devenv-container$ bazel test --test_output=streamed //rs/tests/idx:basic_health_test_local
 ```
 You can provide additional [flags](https://bazel.build/reference/command-line-reference#test) to the Bazel [test](https://bazel.build/reference/command-line-reference#test) command. For example, *--test_tmpdir* would be useful, if you want to keep test artifacts (logs, ssh keys, etc.) after the test execution has finished.
 
@@ -52,13 +52,13 @@ If you omit *--include-pattern*, the whole `hourly` test suite will be executed.
 # How do I get Grafana dashboards on a testnet?
 System tests and testnets declared with `enable_metrics = True` spawn a Prometheus VM that also runs Grafana. To additionally provision the IC's Grafana dashboards (maintained in the [dfinity-ops/k8s](https://github.com/dfinity-ops/k8s) repository under `bases/apps/ic-dashboards`), set the `IC_DASHBOARDS_BRANCH` environment variable to the k8s branch you want to sync the dashboards from:
 ```
-devenv-container$ IC_DASHBOARDS_BRANCH=main bazel run //rs/tests/testnets:small -- --keepalive
+devenv-container$ IC_DASHBOARDS_BRANCH=main bazel run //rs/tests/testnets:small_farm -- --keepalive
 ```
 The dashboards are checked out by [run_systest.sh](https://github.com/dfinity/ic/blob/master/rs/tests/run_systest.sh) (which requires SSH access to the k8s repository) and exposed to the test driver via the `IC_DASHBOARDS_DIR` environment variable. For colocated tests the checked out directory is forwarded to the colocated test-driver VM automatically.
 
 If you already have a local clone of the dashboards, point `IC_DASHBOARDS_DIR` at it directly to skip the checkout:
 ```
-devenv-container$ IC_DASHBOARDS_DIR=~/k8s/bases/apps/ic-dashboards bazel run //rs/tests/testnets:small
+devenv-container$ IC_DASHBOARDS_DIR=~/k8s/bases/apps/ic-dashboards bazel run //rs/tests/testnets:small_farm
 ```
 
 # Where do I get test logs and logs of the IC nodes?

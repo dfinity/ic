@@ -23,6 +23,5 @@ hex = { workspace = true }
 ic-crypto-node-key-validation = { path = "../../../node_key_validation" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../test_utils/reproducible_rng" }
 ic-protobuf = { path = "../../../../protobuf" }
-rand_chacha = { workspace = true }
 serde_cbor = { workspace = true }
 x509-parser = { workspace = true }
