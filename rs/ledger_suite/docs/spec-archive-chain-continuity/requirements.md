@@ -289,8 +289,11 @@ index space without gaps or overlaps, so that reading a range needs no special c
    ends, THE Ledger SHALL store no further blocks in it and SHALL expose a distinct
    non-zero metric.
 5. THE ICP Ledger SHALL derive a new archive's `block_index_offset` from its own record
-   and SHALL NOT be held to 7.1–7.4, because its archives report no range and its
+   and SHALL NOT be held to 7.1–7.4 or 7.6, because its archives report no range and its
    `archives()` carries none.
+6. THE ICRC Ledger SHALL NOT publish a range for an archive that extends past the end of
+   the Archived_Prefix, because a reader routed to the archive for a block the ledger
+   still serves may receive a block from a chain the ledger has refused.
 
 ### Requirement 8: A Ledger Acts On A Reported Capacity Stop
 

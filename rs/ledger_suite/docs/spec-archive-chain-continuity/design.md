@@ -281,19 +281,22 @@ reconcile, return a count for `archive_blocks` to remove. Giving this function l
 access is not worth redrawing the module boundary: the round *reports* and
 `archive_blocks` removes, and with one append per round both land in the same message.
 
-Reconcile `nodes_block_ranges` from the reply's `block_index_offset` and `next_index`,
-never from the batch length (Req 7.1, 9.1): today's `push((0, chunk_len - 1))` underflows
-on an empty append. A node's entry is inserted when its first reply shows
-`next_index > block_index_offset`, as `(offset, next_index - 1)` (Req 7.3). The reported
-start must equal the recorded one for every archive (Req 9.7); for the entry-less tail
-the recorded start is one past the previous entry's end, zero for a first node.
+The tail's entry in `nodes_block_ranges` follows the Archived_Prefix, never the reply
+(Req 7.3, 7.6, 9.1): when the prefix advances to `N`, the entry becomes
+`(offset, N - 1)`, inserted the first time `N` exceeds the offset. Refusals, below-range
+reports and empty appends leave the record untouched, so a halt never publishes a range
+the ledger has not given up. Today's `push((0, chunk_len - 1))` from the batch length
+goes. The reply's `block_index_offset` and `next_index` serve the checks below and
+Req 7.1; the reported start must equal the recorded one for every archive (Req 9.7), and
+for the entry-less tail the recorded start is one past the previous entry's end, zero for
+a first node.
 
 The three range checks live here and report upward: start above the prefix (Req 9.4),
 position not past the published end (Req 9.5, tested as `next_index > inclusive_end`,
 the one place the inclusive and exclusive conventions meet), and position above the
 ledger's own chain tip (Req 9.6, the ledger-only snapshot restore). Per D5 the prefix
 advances only on `verified == true`, and only to one past the highest block stored or
-compared; the removal count is capped the same way.
+compared; the removal count and the published end are capped the same way.
 
 `BelowRange` halts (Req 10.6): its one benign route, a straddling re-send into a full
 archive that compared nothing, is closed by Req 2.5, and what remains is a wrong record
@@ -464,11 +467,11 @@ controllable, Req 4.2's `false` rests on review of the branch that sets the flag
 | 16 | archive | growth refused by a route that returns control (wasm stable maximum or subnet cap): `at_capacity` false, prefix readable; a low `reserved_cycles_limit`: call rejected, nothing stored | 4.2, 4.5 |
 | 17 | unit, archive | pre-change `ArchiveConfig` CBOR decodes with the new field absent | D4 |
 | 18 | unit, core | tail start above the prefix end; position not past the published range (`100` passes, `99` halts for `[0, 99]`; a non-tail archive below the aggregate prefix but matching its own range passes); position above the chain tip; offset differing from the recorded start, including a first archive reporting non-zero: each halts on its own metric, record unchanged | 9.4–9.7, 7.3 |
-| 19 | unit, core | an empty append's range never advances the prefix; a verifying append advances to one past the highest block verified; 1000 held, first 100 re-sent: prefix 100, not 1000 | 9.3, 3.4 |
+| 19 | unit, core | an empty append's range never advances the prefix; a verifying append advances to one past the highest block verified; 1000 held, first 100 re-sent: prefix 100, not 1000, and the published end is 99, not 999 | 9.3, 3.4, 7.6 |
 | 20 | unit, core | after a reply of `next_index = N`, the new offset is `N`; `archives()` tiles; a node whose range starts elsewhere takes no blocks and raises the metric; an empty append's reply with `next_index == block_index_offset` inserts no entry and nothing underflows | 7.1, 7.3, 7.4, 3.5 |
 | 21 | unit, core | batch just under the message limit in raw bytes: trimmed so the encoded argument fits | 12.3 |
 | 22 | upgrade | pre-change `Archive` with one entry-less trailing node upgrades cleanly; with two, halts on Req 9.7's metric; new fields read `Idle` and empty | 9.7, D7, D11 |
-| 23 | integration | `BelowRange`, `Gap`, and a first-block-too-large `StoredPartial`: prefix does not advance; a wholly held re-send: it does; `BelowRange` also halts on its own metric, distinct from 10.5's, with no further append | 9.3, 10.6 |
+| 23 | integration | `BelowRange`, `Gap`, `ChainMismatch` and a first-block-too-large `StoredPartial`: neither the prefix nor the published range changes; a wholly held re-send: both advance; `BelowRange` also halts on its own metric, distinct from 10.5's, with no further append | 9.3, 7.6, 10.6 |
 | 24 | integration | tail without Expected_Parent, first append capacity-shortened: `at_capacity` true, `verified` false, **no** archive created; re-send compared, prefix advances, then the next archive is created; no `BelowRange` ever | 8.1, 9.3, 2.5 |
 | 25 | integration | full tail: next round creates an archive; short stop with `at_capacity` false: same archive retried, rounds spaced and counted as failures | 8.1, 8.2, 10.4 |
 | 26 | integration | oversized block on all three paths (reply, cold-start pre-check, byte cap): halt, own metric, no archive created; an ordinary full tail still rolls over | 8.3 |
