@@ -163,7 +163,7 @@ Serves Req 7.5, Req 8.4, Req 9.8, Req 11.4, Req 13.4. `ArchiveCanisterWasm` gain
 `const INDEXED_APPENDS: bool`, which selects the method: `append_blocks_at` for
 `ic-icrc1-archive`, the legacy `append_blocks` for `ic-icp-archive`, whose empty reply
 carries no range and which rejects a batch that does not fit, so the ICP path also keeps
-the `remaining_capacity` query that decides its roll-over. Everything else is shared and
+the `remaining_capacity` call that decides its roll-over. Everything else is shared and
 fixes both ledgers.
 
 ### D9 — No capability state; a rejected indexed append is a failed round
@@ -378,7 +378,7 @@ to read, the ledger simply appends to the tail, and a full tail answers `StoredP
 with `at_capacity` and its range, which is what Req 7.1 and 8.1 need. One wasted append
 per cold start, and the ICRC ledger never calls anything but an append on an archive.
 The ICP path keeps the pre-call (Req 8.4), since its archive reports nothing and rejects
-a batch that does not fit; it is a query, so Req 12.1's one append per round holds.
+a batch that does not fit; it is a read-only update, not an append, so Req 12.1 holds.
 
 An empty archive reporting `at_capacity` (`next_index == block_index_offset`) halts
 instead of rolling over (Req 8.3), unless the configured archive size has since been
@@ -442,10 +442,11 @@ treat a reply it could not read as a canister that exists.
 
 `Started` before `create_canister`; `Created { id, module_hash: None }` as soon as it
 returns, **and the round ends** (Req 14.3), because today's code next encodes the
-multi-megabyte `install_code` argument in the same message. Return to `Idle` only on a
+multi-megabyte `install_code` argument in the same message. Return to `Idle` on a
 reject of `create_canister`, which for the management canister means nothing was
-created; a reply that fails to decode means a canister exists whose id is lost, so the
-state stays `Started` (Req 14.2). Both non-`Idle` states are
+created, and on a failure to dispatch the call at all (insufficient cycles, a failed
+`call_perform`); only a reply that fails to decode means a canister exists whose id is
+lost, and that alone keeps `Started` (Req 14.2). Both non-`Idle` states are
 exposed with the id where there is one (Req 14.1, 14.4): `Started` is a halt, `Created`
 is "finish this first". A round finding `Created` asks `canister_status` for the module
 hash. Absent: write the embedded wasm's hash into `module_hash`, then await
@@ -515,7 +516,7 @@ controllable, Req 4.2's `false` rests on review of the branch that sets the flag
 | 30 | integration | tail does not answer: round ends within `ARCHIVE_CALL_TIMEOUT`, retried, nothing stored twice; ledger stoppable and upgradable with a call in flight | 13.1, 13.2, 13.5 |
 | 31 | integration | multi-chunk configuration: one append call per round, moving `min(num_blocks_to_archive, one message)` blocks; a round that fills the tail with blocks left over creates no archive, the next eligible round begins exactly one creation, and no round creates two | 12.1, 12.2, 12.3, 8.1 |
 | 32 | integration | every index served before a round is retrievable after it; the ledger stopped serving only indices an archive reports covering | 9.1, 9.2 |
-| 33 | integration | ICP ledger creates archives and discards blocks with no reported extent, rolling over from the `remaining_capacity` query when the tail is full | 7.5, 8.4, 9.8 |
+| 33 | integration | ICP ledger creates archives and discards blocks with no reported extent, rolling over from the `remaining_capacity` call when the tail is full | 7.5, 8.4, 9.8 |
 | 34 | integration | non-genesis archive: first append accepted; ledger patched to omit the hash: unverifiable counter rises; patched to a wrong hash: refused | 7.2, 1.2, 1.8 |
 | 35 | integration | `create_canister` reply lost, or received but undecodable: `Started`, exposed, not self-clearing, survives upgrade; `create_canister` rejected: no halt | 14.1, 14.2 |
 | 36 | integration | `install_code` outcome lost after the id was recorded, or a trap at the start of the round after `Created`: resolved via `canister_status`, creation finished, same canister adopted; the ledger upgraded to a build embedding a different archive wasm between the committed install and reconciliation: the recorded hash matches, the canister is adopted, no halt; a module matching neither: halt with id exposed | 14.3–14.5, 14.9 |

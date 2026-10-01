@@ -462,7 +462,7 @@ calls needed to restart it.
    upgrade that is the operator's lever for every other halt.
 6. WHEN THE ICP Ledger asks an archive for its remaining capacity, THE ICP Ledger SHALL
    stop waiting after at most ARCHIVE_CALL_TIMEOUT and SHALL treat the round as failed
-   per Req 10, because the query is read-only and is resolved by asking again.
+   per Req 10, because the call is read-only and is resolved by asking again.
 
 ### Requirement 14: An Unaccounted Archive Creation Halts Archiving
 
