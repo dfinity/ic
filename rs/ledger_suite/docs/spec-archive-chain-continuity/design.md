@@ -61,6 +61,7 @@ sequenceDiagram
     Note over L: Creating := Created(B), round ends (Req 14.3)
     Note over L: round N+2
     L->>M: canister_status(B): no module
+    Note over L: record B's module hash (Req 14.9)
     L->>M: install_code(B, offset 2300, Expected_Parent = hash(2299))
     Note over L: adopt B, pending_handovers += B, Creating := Idle, round ends
     Note over L: round N+3
@@ -179,9 +180,10 @@ Management-canister calls run once per archive fill, so they stay unbounded (Req
 
 ### D11 — Creation is journaled across three rounds, and adoption precedes handover
 
-Serves Req 14. `create_canister` → record `Created(id)` → **end the round**; the next
-round installs, adopts, and ends; the round after that hands over. Each cut is a
-durability point before a heavy encode or a controller change. The handover is one
+Serves Req 14. `create_canister` → record `Created { id }` → **end the round**; the next
+round records the module hash, installs, adopts, and ends; the round after that hands
+over. Each cut is a durability point before a heavy encode or a controller change, and
+the recorded hash is what a later ledger version reconciles against (Req 14.9). The handover is one
 `update_settings` retried until it lands or comes back unauthorized (Req 14.8), which is
 conclusive only because the ledger is the new canister's sole controller until then.
 
@@ -330,12 +332,12 @@ every case. Failed rounds and unknown outcomes stay counters.
 | empty archive reports `at_capacity` | Req 8.3 | operator: raise `node_max_memory_size_bytes` |
 | refused on chain or position grounds | Req 10.5 | operator only; archive counters say which |
 | blocks offered below the archive's range | Req 10.6 | operator only |
-| created canister carries a foreign module | Req 14.5 | operator: reinstall, adopt or delete |
+| created canister carries a foreign module | Req 14.5 | operator only; unreachable while the ledger is sole controller |
 | tail rejects `append_blocks_at` | Req 11.1 | **itself**, on the first attempt after the archive upgrade (Req 11.2); a backoff, not a `Halt` |
 | creation begun, no identity recorded | Req 14.1 | operator only; persisted, survives upgrade |
 
 **Skip versus act.** A skip before the guard is right for a wait or an operator-only halt
-and wrong for a state that needs the ledger to *do* something: `Created(id)` (Req 14.4)
+and wrong for a state that needs the ledger to *do* something: `Created` (Req 14.4)
 must finish the creation. A rejected indexed append (Req 11.1) is an ordinary backoff:
 the next permitted round simply tries `append_blocks_at` again.
 
@@ -366,10 +368,11 @@ it full before any append. Legacy non-tail nodes are never re-queried.
 Cap the selection at `min(num_blocks_to_archive, one message)` in bytes in
 `Blockchain::get_blocks_for_archiving` (Req 12.3). "In bytes" means the Candid-encoded
 `(vec blob, nat64)`, not the sum of payloads: either measure the encoded argument or
-subtract a bound covering the framing (a fixed header plus ten bytes per block). Expose
-the effective per-round count (Req 12.4). On multi-chunk suites this makes
-`num_blocks_to_archive` a per-round cap: the trigger is re-checked each round, so
-retention settles between `trigger_threshold` minus one message and `trigger_threshold`.
+subtract a bound covering the framing (a fixed header plus ten bytes per block). On
+multi-chunk suites this makes `num_blocks_to_archive` a per-round cap: the trigger is
+re-checked each round, so retention settles between `trigger_threshold` minus one
+message and `trigger_threshold`. The effective per-round count follows from the
+configured settings, which DEFI-1565 (#11418) exposes as metrics; no further metric.
 
 A short stop with `at_capacity` false counts as a failed round for spacing and the
 failure metric while the reported progress is kept (Req 10.4); a stop at the archive's
@@ -400,15 +403,20 @@ so the timeout can be revisited.
     #[serde(default)] creating: Creating,                 // Idle is Default
     #[serde(default)] pending_handovers: Vec<CanisterId>,
 
-    enum Creating { Idle, Started, Created(CanisterId) }
+    enum Creating { Idle, Started, Created { id: CanisterId, module_hash: Option<[u8; 32]> } }
 
-`Started` before `create_canister`; `Created(id)` as soon as it returns, **and the round
-ends** (Req 14.3), because today's code next encodes the multi-megabyte `install_code`
-argument in the same message. Return to `Idle` on failure only where `create_canister`
-itself returned `Err` (Req 14.2). Both non-`Idle` states are exposed with the id where
-there is one (Req 14.1, 14.4): `Started` is a halt, `Created(id)` is "finish this first".
-A round finding `Created(id)` asks `canister_status` for `module_hash`: absent means
-install; matching means adopt; anything else halts as `ForeignModule` (Req 14.5).
+`Started` before `create_canister`; `Created { id, module_hash: None }` as soon as it
+returns, **and the round ends** (Req 14.3), because today's code next encodes the
+multi-megabyte `install_code` argument in the same message. Return to `Idle` on failure
+only where `create_canister` itself returned `Err` (Req 14.2). Both non-`Idle` states are
+exposed with the id where there is one (Req 14.1, 14.4): `Started` is a halt, `Created`
+is "finish this first". A round finding `Created` asks `canister_status` for the module
+hash. Absent: write the embedded wasm's hash into `module_hash`, then await
+`install_code`, so the await commits the record before the install can land (Req 14.9).
+Equal to the recorded hash: adopt, even if the ledger has since been upgraded and now
+embeds a different wasm; the archive is upgraded with its siblings later. Anything else
+halts as `ForeignModule` (Req 14.5), which the ledger being sole controller makes
+unreachable in practice; it stays as a guard.
 
 Adoption (`nodes.push`, the `pending_handovers` entry, `Creating` back to `Idle`) ends
 the round (Req 14.7); the handover starts on the next. `pending_handovers` is a
@@ -468,12 +476,12 @@ controllable, Req 4.2's `false` rests on review of the branch that sets the flag
 | 28 | integration | refusal per 1.1, 2.2, 2.5, 6.3 in turn: halt with distinct metric, no append while halted; upgrade with archive unchanged: one append, halt re-established; fix and upgrade: resumes | 10.5, 10.8 |
 | 29 | integration | old archive wasm as tail: `append_blocks_at` rejected on every attempt, attempts spaced per backoff, nothing archived, no `append_blocks` call made; upgrade the archive: resumes without a ledger upgrade; ICP ledger archives normally through `append_blocks` and counts | 11.1–11.4, 10.1 |
 | 30 | integration | tail does not answer: round ends within `ARCHIVE_CALL_TIMEOUT`, retried, nothing stored twice; ledger stoppable and upgradable with a call in flight | 13.1, 13.2, 13.5 |
-| 31 | integration | multi-chunk configuration: one append call per round, effective count metric matches; a round that fills the tail with blocks left over creates no archive, the next eligible round begins exactly one creation, and no round creates two | 12.1, 12.2, 12.4, 8.1 |
+| 31 | integration | multi-chunk configuration: one append call per round, moving `min(num_blocks_to_archive, one message)` blocks; a round that fills the tail with blocks left over creates no archive, the next eligible round begins exactly one creation, and no round creates two | 12.1, 12.2, 12.3, 8.1 |
 | 32 | integration | every index served before a round is retrievable after it; the ledger stopped serving only indices an archive reports covering | 9.1, 9.2 |
 | 33 | integration | ICP ledger creates archives and discards blocks with no reported extent | 7.5, 9.8 |
 | 34 | integration | non-genesis archive: first append accepted; ledger patched to omit the hash: unverifiable counter rises; patched to a wrong hash: refused | 7.2, 1.2, 1.8 |
 | 35 | integration | `create_canister` reply lost: `Started`, exposed, not self-clearing, survives upgrade; `create_canister` itself fails: no halt | 14.1, 14.2 |
-| 36 | integration | `install_code` outcome lost after the id was recorded, or a trap at the start of the round after `Created(id)`: resolved via `canister_status`, creation finished, same canister adopted; created canister carries a different module: halt with id exposed | 14.3–14.5 |
+| 36 | integration | `install_code` outcome lost after the id was recorded, or a trap at the start of the round after `Created`: resolved via `canister_status`, creation finished, same canister adopted; the ledger upgraded to a build embedding a different archive wasm between the committed install and reconciliation: the recorded hash matches, the canister is adopted, no halt; a module matching neither: halt with id exposed | 14.3–14.5, 14.9 |
 | 37 | integration | `update_settings` outcome lost or callback trapped after controllers changed: archive adopted and serving, archiving continues, entry retried and cleared on the unauthorized reject | 14.6–14.8 |
 | 38 | integration | one handover keeps failing until a second archive is adopted: first still retried and counted, second completes (rotation); pending handover survives a ledger upgrade; ten configured controllers with a repeat: one de-duplicated `update_settings` accepted | 14.7 |
 | 39 | measurement | ledger memory across an archive-creation round stays below a bound | D11 |
@@ -525,6 +533,8 @@ retries a rejected append on every transaction for want of a backoff and has no 
 journal; PR 2 alone hides archiving traps while the fresh-archive window is open. The
 upgrade should follow the archive release so archiving does not pause; if it does not,
 the ledger backs off on rejected appends and resumes once the archives are upgraded.
+DEFI-1565 (#11418), which exposes the archiving settings as metrics, should land before
+this release, since the design relies on it for the effective per-round count.
 
 - **PR 2 — the ledger's archiving-reply change** (separate specification). Delivers the
   reply half of Req 10.3.

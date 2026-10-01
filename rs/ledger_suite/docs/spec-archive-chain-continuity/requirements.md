@@ -414,7 +414,6 @@ to a single archive, so that there is one question about whether it landed.
 2. THE Ledger SHALL create at most one archive per Archiving_Round.
 3. THE Ledger SHALL choose a round's blocks so that the encoded call fits one
    inter-canister message, measured in bytes rather than counted in blocks.
-4. THE Ledger SHALL expose the number of blocks a round is permitted to carry.
 
 ### Requirement 13: A Ledger Does Not Wait Indefinitely For An Archive
 
@@ -460,9 +459,10 @@ canister does not become a series of them.
    THE Ledger SHALL expose the identity and a metric distinct from 14.1's, and SHALL
    finish that creation before moving further blocks, determining what remains to be
    done by asking the created canister.
-5. WHEN a canister THE Ledger created carries a module it did not install, THE Ledger
-   SHALL make no further archiving attempt and SHALL expose a distinct non-zero metric
-   with the identity, rather than reinstall, adopt or delete it.
+5. WHEN a canister THE Ledger created carries a module whose hash matches neither an
+   absent install nor the hash recorded per 14.9, THE Ledger SHALL make no further
+   archiving attempt and SHALL expose a distinct non-zero metric with the identity,
+   rather than reinstall, adopt or delete it.
 6. THE Ledger SHALL adopt a created archive before handing its control to the configured
    controllers, and SHALL treat a handover failure as blocking neither adoption nor
    archiving.
@@ -473,3 +473,8 @@ canister does not become a series of them.
 8. WHEN a handover retry is refused because THE Ledger is no longer a controller, THE
    Ledger SHALL treat that handover as complete, because the ledger can have lost that
    authority only by the earlier call having succeeded.
+9. WHEN THE Ledger installs a module on a canister it created, THE Ledger SHALL record
+   that module's hash durably before issuing the install and SHALL judge 14.5 against
+   that record rather than against the module it currently embeds, because a ledger
+   upgraded between a lost install and its reconciliation would otherwise mistake its
+   own install for a foreign one.
