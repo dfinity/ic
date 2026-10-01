@@ -302,6 +302,14 @@ fn execute_remote_command(session: &Session, command: &str) -> Result<(), Deploy
         .read_to_string(&mut err)
         .map_err(|e| DeploymentError::Other(e.into()))?;
 
+    // The server may send the exit status after its EOF but always before closing the channel.
+    // Wait for the close, as otherwise exit_status() may return its default of 0.
+    channel.wait_close().map_err(|e| {
+        DeploymentError::Other(anyhow::anyhow!(
+            "Failed to wait for the channel to close: {e}\nOutput: {out}\nError: {err}"
+        ))
+    })?;
+
     if channel
         .exit_status()
         .map_err(|e| DeploymentError::Other(e.into()))?

@@ -1679,6 +1679,13 @@ pub fn execute_bash_script_from_session(session: &Session, script: &str) -> Resu
     channel.read_to_string(&mut out)?;
     let mut err = String::new();
     channel.stderr().read_to_string(&mut err)?;
+    // The server may send the exit status after its EOF but always before closing the channel.
+    // Wait for the close, as otherwise exit_status() may return its default of 0.
+    channel.wait_close().map_err(|e| {
+        anyhow!(
+            "block_on_bash_script: failed to wait for the channel to close: {e}. Output: {out} Err: {err}"
+        )
+    })?;
     let exit_status = channel.exit_status()?;
     if exit_status != 0 {
         bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
