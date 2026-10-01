@@ -25,7 +25,7 @@ use ic_types::{
     Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
-        Block, CupType, RecoveryArgs,
+        Block, CupType,
         catchup::CatchUpPackageType,
         dkg::{
             DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary, Message,
@@ -617,18 +617,11 @@ pub fn get_dkg_summary_from_cup_contents(
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<DkgSummary, String> {
-    let height = match CupType::try_from(cup_contents.cup_type.clone()) {
-        Ok(CupType::Genesis) => Height::new(0),
-        Ok(CupType::Recovery(RecoveryArgs { height, .. })) => height,
-        Ok(CupType::SubnetSplitting(..)) => {
-            return Err("Cannot create DKG summary from a subnet splitting CUP".to_string());
-        }
-        Err(err) => {
-            return Err(format!(
-                "Failed to parse CUP type from CUP contents: {err:?}"
-            ));
-        }
-    };
+    let height = CupType::try_from(cup_contents.cup_type.clone())
+        .map_err(|err| format!("Failed to parse CUP type from CUP contents: {err:?}"))?
+        .into_registry_cup_params()
+        .ok_or_else(|| "No registry CUP params found in CUP contents".to_string())?
+        .0;
 
     get_dkg_summary_from_cup_contents_with_subnet_splitting(
         cup_contents,
