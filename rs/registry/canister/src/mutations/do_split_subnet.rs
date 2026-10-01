@@ -76,7 +76,7 @@ impl Registry {
             .map_err(|err| format!("Failed to validate the payload: {err}"))?;
 
         // Remove the migrated nodes from the source subnet
-        let source_nodes: Vec<NodeId> = source_subnet_record
+        let post_split_source_nodes: Vec<NodeId> = source_subnet_record
             .membership
             .iter()
             .map(|bytes| {
@@ -84,8 +84,10 @@ impl Registry {
             })
             .filter(|node_id| !payload.destination_node_ids.contains(node_id))
             .collect();
-        source_subnet_record.membership =
-            source_nodes.iter().map(|id| id.get().into_vec()).collect();
+        source_subnet_record.membership = post_split_source_nodes
+            .iter()
+            .map(|id| id.get().into_vec())
+            .collect();
         let destination_subnet_record = SubnetRecord {
             membership: payload
                 .destination_node_ids
@@ -139,7 +141,7 @@ impl Registry {
         };
 
         let (source_dkg_response, destination_dkg_response) = futures::join!(
-            setup_initial_dkg(source_nodes),
+            setup_initial_dkg(post_split_source_nodes),
             setup_initial_dkg(payload.destination_node_ids),
         );
         let destination_subnet_id = destination_dkg_response.fresh_subnet_id;
