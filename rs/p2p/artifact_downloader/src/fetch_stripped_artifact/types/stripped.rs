@@ -140,7 +140,7 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
                 stripped_responses: value
                     .stripped_canister_http_responses
                     .into_iter()
-                    .map(|content_hash| CryptoHashOf::new(CryptoHash(content_hash)))
+                    .map(|response| CryptoHashOf::new(CryptoHash(response.content_hash)))
                     .collect(),
             },
         })
@@ -174,7 +174,9 @@ impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
                 .stripped_canister_http_responses
                 .stripped_responses
                 .into_iter()
-                .map(|content_hash| content_hash.get().0)
+                .map(|content_hash| pb::StrippedCanisterHttpResponse {
+                    content_hash: content_hash.get().0,
+                })
                 .collect(),
         }
     }
