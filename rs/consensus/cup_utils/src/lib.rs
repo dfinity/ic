@@ -14,12 +14,12 @@ use ic_protobuf::{
 };
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    CryptoHashOfState, Height, RegistryVersion, SubnetId,
+    Height, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes, CatchUpPackage,
         CatchUpPackageType, CupType, HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent,
-        Rank, RecoveryArgs, SummaryPayload, idkg,
+        Rank, SummaryPayload, idkg,
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoError, CryptoHash, Signable, Signed,
@@ -27,7 +27,6 @@ use ic_types::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag},
     },
     signature::ThresholdSignature,
-    time::UNIX_EPOCH,
 };
 use phantom_newtype::Id;
 use std::fmt;
@@ -194,30 +193,15 @@ pub fn make_registry_cup_from_cup_contents(
     registry_version: RegistryVersion,
     logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
-    let (cup_height, time, state_hash) = match CupType::try_from(cup_contents.cup_type.clone()) {
-        Ok(CupType::Genesis) => (
-            Height::new(0),
-            UNIX_EPOCH,
-            CryptoHashOfState::from(CryptoHash(Vec::new())),
-        ),
-        Ok(CupType::Recovery(RecoveryArgs {
-            height,
-            time,
-            state_hash,
-        })) => (height, time, state_hash),
-        // If the CUP we are about to build is a subnet splitting CUP, return early. It makes no sense
-        // to build a registry CUP out of subnet splitting CUP contents because the transcripts here are
-        // used directly by consensus to build the CUP themselves, i.e. nodes threshold-sign it, instead
-        // of blindly taking it from the registry here.
-        Ok(CupType::SubnetSplitting(..)) => return None,
-        Err(err) => {
+    let (cup_height, time, state_hash) = CupType::try_from(cup_contents.cup_type.clone())
+        .inspect_err(|err| {
             warn!(
                 logger,
                 "Failed to get the CUP type from the registry CUP contents: {}", err
             );
-            return None;
-        }
-    };
+        })
+        .ok()?
+        .into_registry_cup_params()?;
 
     let replica_version = match registry.get_replica_version(subnet_id, registry_version) {
         Ok(Some(replica_version)) => replica_version,
