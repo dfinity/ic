@@ -249,6 +249,7 @@ The ic-replay tool replays past finalized blocks to reconstruct state at any hei
 #### Scenario: Registry local store update
 - **WHEN** the `UpdateRegistryLocalStore` subcommand is used
 - **THEN** after replay, the registry local store is updated to match the registry canister state
+- **AND** `get_changes_since` is called repeatedly, since the registry canister caps how many deltas a single call returns, until the local store actually reaches the latest registry version
 
 #### Scenario: Recovery CUP generation
 - **WHEN** the `GetRecoveryCup` subcommand is used
