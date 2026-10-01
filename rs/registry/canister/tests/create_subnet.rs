@@ -28,8 +28,9 @@ use ic_nns_test_utils::{
     registry::{INITIAL_MUTATION_ID, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
-    SubnetListRecord as SubnetListRecordPb, SubnetRecord as SubnetRecordPb,
+    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, GenesisArgs,
+    KeyConfig as KeyConfigPb, SubnetListRecord as SubnetListRecordPb,
+    SubnetRecord as SubnetRecordPb, catch_up_package_contents::CupType,
 };
 use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_registry_keys::{
@@ -235,6 +236,10 @@ async fn create_subnet_succeeds_when_called_by(caller: PrincipalId) {
         cup_contents
             .initial_ni_dkg_transcript_high_threshold
             .is_some()
+    );
+    assert_eq!(
+        cup_contents.cup_type,
+        Some(CupType::Genesis(GenesisArgs {}))
     );
 }
 
