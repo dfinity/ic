@@ -28,6 +28,7 @@ prometheus = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+tokio-io-timeout = { workspace = true }
 tokio-rustls = { workspace = true }
 tower = { workspace = true }
 url = { workspace = true }

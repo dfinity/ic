@@ -33,6 +33,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{Notify, Semaphore};
 use tokio::time::error::Elapsed;
 use tokio::{runtime, select};
+use tokio_io_timeout::TimeoutStream;
 use tower::Service;
 use url::Url;
 
@@ -80,6 +81,20 @@ const ADVERT_RATE_LIMIT_BURST: f64 = 10.0;
 /// Number of nodes above which the rate limiter drops the buckets that have
 /// refilled completely, as they are equivalent to absent ones.
 const ADVERT_RATE_LIMIT_MAX_BUCKETS: usize = 1024;
+
+/// How long a connection may go without sending anything, whatever the stage:
+/// TLS handshake, request or idle. XNet clients send HTTP/2 keep-alive pings
+/// every 10 seconds.
+#[cfg(not(test))]
+const CONNECTION_READ_TIMEOUT: Duration = Duration::from_secs(30);
+/// Shorter in tests, but longer than `ADVERT_BODY_TIMEOUT`, so that it fires first.
+#[cfg(test)]
+const CONNECTION_READ_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// How long to wait for a TLS handshake to complete. XNet clients give up on a
+/// request, handshake included, after 5 seconds anyway.
+#[cfg(not(test))]
+const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// How long to wait for an advert's body once its headers have arrived. At most
 /// `ADVERT_MAX_BODY_BYTES`, it takes a small fraction of this to transfer.
@@ -295,6 +310,10 @@ fn start_server(
                     let registry_client = registry_client.clone();
                     let tls = tls.clone();
                     tokio::spawn(async move {
+                        let mut stream = TimeoutStream::new(stream);
+                        stream.set_read_timeout(Some(CONNECTION_READ_TIMEOUT));
+                        let stream = Box::pin(stream);
+
                         #[cfg(test)]
                         {
                             // TLS is not used in tests.
@@ -328,7 +347,11 @@ fn start_server(
 
                             let tls_acceptor =
                                 tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
-                            match tls_acceptor.accept(stream).await {
+                            let tls_stream =
+                                tokio::time::timeout(TLS_HANDSHAKE_TIMEOUT, tls_acceptor.accept(stream))
+                                    .await
+                                    .unwrap_or_else(|elapsed| Err(elapsed.into()));
+                            match tls_stream {
                                 Ok(tls_stream) => {
                                     let peer_node_id = match peer_node_id(&tls_stream) {
                                         Ok(peer_node_id) => peer_node_id,

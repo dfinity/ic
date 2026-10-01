@@ -949,6 +949,7 @@ tikv-jemalloc-ctl = { version = "0.7", features = ["stats"] }
 tikv-jemallocator = "0.7"
 time = { version = "0.3.36", features = ["formatting"] }
 tokio = { version = "1.42.0", features = ["full"] }
+tokio-io-timeout = "1.2.0"
 tokio-metrics = "0.4.0"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "aws-lc-rs",
