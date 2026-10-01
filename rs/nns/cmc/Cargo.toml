@@ -13,7 +13,6 @@ async-trait = { workspace = true }
 candid = { workspace = true }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
@@ -39,7 +38,6 @@ ic-xrc-types = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
-yansi = "0.5.0"
 
 [dev-dependencies]
 candid_parser = { workspace = true }

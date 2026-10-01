@@ -618,11 +618,9 @@ alloy-sol-types = "1.6.0"
 anyhow = "1.0.93"
 arbitrary = { version = "1.3.2", features = ["derive"] }
 arc-swap = "^1.7.1"
-arrayvec = "0.7.4"
 askama = { version = "0.15", features = ["serde_json"] }
 assert_cmd = "2.0.16"
 assert_matches = "1.5.0"
-async-recursion = "1.0.5"
 async-stream = "0.3.6"
 async-trait = "0.1.89"
 axum = { version = "0.8.4", features = ["ws"] }
@@ -644,13 +642,12 @@ bitcoin = { package = "bitcoin-dogecoin", version = "0.32.7-doge.0", features = 
 bs58 = "^0.5.0"
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "27ba16a68aa312de66f2ebd0f16665f1429eee36" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "27ba16a68aa312de66f2ebd0f16665f1429eee36", default-features = false }
-by_address = "^1.1.0"
 byteorder = "^1.3.4"
 bytes = "1.9.0"
 canbench-rs = "0.7.0"
 candid = { version = "0.10.36" }
 candid_parser = { version = "0.1.2" }
-cargo_metadata = "^0.14.2"
+cargo_metadata = "0.23"
 chrono = { version = "0.4.42", default-features = false, features = [
     "alloc",
     "clock",
@@ -664,6 +661,7 @@ colored = "^2.0.0"
 comparable = { git = "https://github.com/dfinity/comparable", rev = "8338f595496454f9e770389e2edc0d96e137a4e9", features = [
     "derive",
 ] }
+configparser = "3.3.0"
 crc32fast = "^1.2.0"
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.15"
@@ -673,11 +671,11 @@ curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",
 ] }
-cvt = "^0.1.1"
 darling = "^0.20.11"
 der = { version = "0.7", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
 devicemapper = "0.34"
+duration-string = { version = "0.5.3", features = ["serde"] }
 ed25519-dalek = { version = "2.2.0", features = [
     "std",
     "zeroize",
@@ -687,9 +685,7 @@ ed25519-dalek = { version = "2.2.0", features = [
     "pem",
     "hazmat",
 ] }
-duration-string = { version = "0.3.0", features = ["serde"] }
 escargot = "0.5.7"
-exitcode = "1.1.2"
 ethnum = { version = "1.5.3", features = ["serde"] }
 evm_rpc_client = "0.4.0"
 evm_rpc_types = "3.1.0"
@@ -697,12 +693,10 @@ flate2 = "1.0.31"
 fs_extra = "1.2.0"
 futures = "0.3.31"
 futures-util = "0.3.31"
-getifs = "0.4.0"
 getrandom = { version = "0.2", features = ["custom"] }
-goldenfile = "1.8.0"
 gpt = "4.1"
 hex = { version = "0.4.3", features = ["serde"] }
-hex-literal = "^0.4.1"
+hex-literal = "1.1"
 hickory-resolver = "0.26.1"
 hkdf = "^0.12"
 hmac = "^0.12"
@@ -710,7 +704,6 @@ http = "1.3.1"
 http-body = "1.0.1"
 http-body-util = "0.1.3"
 humantime = "2.2"
-humantime-serde = "1.1.1"
 hyper = { version = "1.6.0", features = ["full"] }
 hyper-rustls = { version = "0.27.5", default-features = false, features = [
     "http1",
@@ -746,10 +739,8 @@ ic-doge-interface = "0.3.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", tag = "v0.6.12", features = [
     "acme",
 ] }
-ic-http-certification = "3.0.3"
 ic-identity-hsm = { version = "0.49.1" }
 ic-management-canister-types = "0.8.0"
-ic-response-verification = "3.1.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.49.1" }
@@ -788,24 +779,18 @@ k256 = { version = "0.13.4", default-features = false, features = [
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 libc = "0.2.158"
-log = "0.4"
 libcryptsetup-rs = "0.15"
-libflate = "2.3.1"
 libfuzzer-sys = "0.4.7"
 libnss = "0.5.0"
 libsystemd = "0.7.2"
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
 lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f" }
-local-ip-address = "0.6.13"
 loopdev-3 = "0.5"
 lru = { version = "0.12", default-features = false }
-lzma-sys = { version = "0.1.20", features = ["static"] }
 macaddr = "1.0"
 maplit = "^1.0.2"
-memchr = "2.7"
 memmap2 = "0.9.5"
 minicbor = { version = "0.22.0", features = ["alloc", "derive"] }
-minicbor-derive = "0.14.0"
 mockall = "0.15.0"
 mockito = { version = "1.6.1", default-features = false }
 more-asserts = "0.3.1"
@@ -825,7 +810,6 @@ nix = { version = "0.31.3", features = [
 ] }
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
-num_cpus = "1.16.0"
 object = "0.37.3"
 once_cell = "^1.8"
 opentelemetry = { version = "0.32.0", features = ["metrics", "trace"] }
@@ -857,7 +841,6 @@ pprof = { git = "https://github.com/dfinity/pprof-rs", rev = "9159b45ecc3540d7fc
 ] }
 predicates = { version = "3.1.2", default-features = false }
 pretty_assertions = "1.4.0"
-priority-queue = "2.7.0"
 proc-macro2 = "1.0.89"
 procfs = { version = "^0.17", default-features = false }
 prometheus = { version = "0.14.0", features = ["process"] }
@@ -879,7 +862,6 @@ quote = "1.0.37"
 rand = { version = "0.8.6", features = ["small_rng"] }
 rand_chacha = "0.3.1"
 rand_distr = "^0.4"
-rand_pcg = "^0.3.1"
 ratatui = "0.29"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["x509-parser", "zeroize"] }
@@ -901,7 +883,6 @@ rolling-file = "0.2.0"
 rsa = { version = "0.9.6", features = ["sha2", "getrandom"] }
 rstest = "0.19.0"
 rusqlite = "0.37.0"
-rust-ini = "0.21.1"
 rust_decimal = { version = "^1.42", default-features = false, features = [
     "serde",
 ] }
@@ -921,7 +902,6 @@ scoped_threadpool = "^0.1.9"
 scopeguard = "1.2.0"
 scraper = { version = "^0.24.0", default-features = false }
 secp256k1 = { version = "0.29", features = ["global-context", "rand", "std"] }
-securefmt = "0.1.5"
 semver = { version = "1.0.9", features = ["serde"] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
@@ -936,10 +916,8 @@ sev = { version = "7.1", default-features = false, features = [
 ] }
 sha2 = "0.10.9"
 sha3 = "0.10.8"
-shell-escape = { version = "^0.1.5" }
 signature = "2.2.0"
 simple_asn1 = "0.6.2"
-simple_logger = "4.3.0"
 slog = { version = "2.7.0", features = [
     "max_level_trace",
     "nested-values",
@@ -958,7 +936,6 @@ strum_macros = "0.26.4"
 subtle = "2.6.1"
 syn = { version = "2.0.110", features = ["fold", "full"] }
 sys-mount = "3.0"
-sysinfo = "0.37"
 tar = "0.4.39"
 target-lexicon = "0.13.5"
 tempfile = "3.20"
@@ -976,11 +953,9 @@ tokio-metrics = "0.4.0"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "aws-lc-rs",
 ] }
-tokio-stream = "0.1.17"
 tokio-test = "0.4.4"
 tokio-util = { version = "0.7.13", features = ["full"] }
 tonic = "0.14.5"
-tonic-build = "0.14.5"
 tonic-prost = "0.14.5"
 tonic-prost-build = "0.14.5"
 tower = { version = "0.5.2", features = ["full"] }
@@ -1032,12 +1007,10 @@ wasmtime = { version = "48.0.1", default-features = false, features = [
 wast = "254.0.0"
 wat = "~1.254.0"
 webpki-roots = "1.0.6"
-which = "6.0.3"
 wirm = { version = "4.0.4", features = ["parallel"] }
 wycheproof = { version = "0.6", default-features = false }
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.18.1" }
-xz2 = { version = "0.1.7", features = ["static"] }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
 zstd = "0.13.2"
 
