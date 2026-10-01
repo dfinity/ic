@@ -421,9 +421,10 @@ enum MessageCertificateLookup {
     DelegationUnverified(HttpError),
 }
 
-/// Reads the certificate for the given message from the latest certified state, together
-/// with the NNS delegation to attach to it, verified (according to `delegation_check`) to be
-/// consistent with that certified state, and looks up the message's status in it.
+/// Reads the certificate for the given message from the latest certified state, looks up the
+/// message's status in it, and returns the certificate (including the verified delegation according
+/// to `delegation_check`) and the message's status if it is known. If the message's status is not
+/// known, returns the height of the certified state.
 async fn lookup_message_certificate(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     message_id: &MessageId,
@@ -445,23 +446,24 @@ async fn lookup_message_certificate(
         return MessageCertificateLookup::CertifiedStateUnavailable;
     };
 
+    let ParsedMessageStatus::Known(status) = parsed_message_status(&tree, message_id) else {
+        return MessageCertificateLookup::StatusUnknown {
+            height: certification.height,
+        };
+    };
+
     let delegation =
         match verified_delegation_source.get_delegation(delegation_check, &certified_state) {
             Ok(delegation) => delegation,
             Err(err) => return MessageCertificateLookup::DelegationUnverified(err),
         };
 
-    match parsed_message_status(&tree, message_id) {
-        ParsedMessageStatus::Known(status) => MessageCertificateLookup::StatusKnown {
-            certificate: Certificate {
-                tree,
-                signature: Blob(certification.signed.signature.signature.get().0),
-                delegation,
-            },
-            status,
+    MessageCertificateLookup::StatusKnown {
+        certificate: Certificate {
+            tree,
+            signature: Blob(certification.signed.signature.signature.get().0),
+            delegation,
         },
-        ParsedMessageStatus::Unknown => MessageCertificateLookup::StatusUnknown {
-            height: certification.height,
-        },
+        status,
     }
 }
