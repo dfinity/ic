@@ -52,6 +52,13 @@ The XNet endpoint serves certified stream slices over HTTPS to other subnets for
 - **AND** an advert that brings nothing new is answered with our own certified header, so the sender can observe that we have consumed its stream
 - **AND** an actionable advert is classified and counted, but for now simply dropped, since there is no schedule yet to enqueue it on
 
+#### Scenario: Send an advert
+- **WHEN** a new height is certified
+- **THEN** our certified header is posted to every subnet we owe an advert to: one whose stream to us still holds messages, or that has not yet seen our latest signals as far as the peer header on record tells
+- **AND** each such subnet receives the advert at `ceil(3 * n_d / n_s)` of its nodes, clamped to `[1, n_d]` (`n_d` our destination subnet's size, `n_s` our own), sampled uniformly without replacement from its healthy nodes
+- **AND** our header is encoded once per subnet and posted to all its targets concurrently
+- **AND** failures to pick targets are counted in `xnet_builder_adverts_sent_total`, under the error's label
+
 #### Scenario: Invalid subnet ID in URL
 - **WHEN** the subnet ID in the URL cannot be parsed as a `PrincipalId`
 - **THEN** HTTP 400 Bad Request is returned with "Invalid subnet ID" message
