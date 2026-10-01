@@ -274,10 +274,15 @@ message StrippedBlockProposal {
   ConsensusMessageId unstripped_consensus_message_id = 3;
   // The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
   repeated StrippedIDkgDealing stripped_idkg_dealings = 4;
-  // The stripped canister HTTP responses, i.e. the hashes of the response contents that were pruned
-  // from the canister HTTP payload of the block proposal. Deduplicated: two committee members of a
-  // flexible outcall that produced the very same response share one entry.
-  repeated bytes stripped_canister_http_responses = 5;
+  // The stripped canister HTTP responses, i.e. the response contents that were pruned from the
+  // canister HTTP payload of the block proposal. Deduplicated: two committee members of a flexible
+  // outcall that produced the very same response share one entry.
+  repeated StrippedCanisterHttpResponse stripped_canister_http_responses = 5;
+}
+
+message StrippedCanisterHttpResponse {
+  // The hash of the response content that was pruned from the canister HTTP payload.
+  bytes content_hash = 1;
 }
 
 message StrippedIDkgDealing {

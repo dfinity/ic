@@ -1810,11 +1810,17 @@ pub struct StrippedBlockProposal {
     /// The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
     #[prost(message, repeated, tag = "4")]
     pub stripped_idkg_dealings: ::prost::alloc::vec::Vec<StrippedIDkgDealing>,
-    /// The stripped canister HTTP responses, i.e. the hashes of the response contents that were pruned
-    /// from the canister HTTP payload of the block proposal. Deduplicated: two committee members of a
-    /// flexible outcall that produced the very same response share one entry.
-    #[prost(bytes = "vec", repeated, tag = "5")]
-    pub stripped_canister_http_responses: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    /// The stripped canister HTTP responses, i.e. the response contents that were pruned from the
+    /// canister HTTP payload of the block proposal. Deduplicated: two committee members of a flexible
+    /// outcall that produced the very same response share one entry.
+    #[prost(message, repeated, tag = "5")]
+    pub stripped_canister_http_responses: ::prost::alloc::vec::Vec<StrippedCanisterHttpResponse>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StrippedCanisterHttpResponse {
+    /// The hash of the response content that was pruned from the canister HTTP payload.
+    #[prost(bytes = "vec", tag = "1")]
+    pub content_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StrippedIDkgDealing {
