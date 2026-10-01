@@ -54,6 +54,10 @@ on the process that this file is part of, see
 
 ## Removed
 
+* The deprecated `height`, `time` and `state_hash` fields of `CatchUpPackageContents`. Where
+  applicable, their equivalents are now found in `cup_type`: a `CupType::Recovery` record carries
+  them in its `RecoveryArgs`, and the height of a `CupType::Genesis` CUP is always 0.
+
 ## Fixed
 
 ## Security
