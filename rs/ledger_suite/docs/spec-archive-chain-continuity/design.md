@@ -174,7 +174,8 @@ downgrade exposure. The reject is counted, backed off (Req 10.1) and retried, ne
 followed by a fall-back to `append_blocks` (Req 11.3), and archiving resumes when the
 archive is upgraded (Req 11.2). An old archive and a trapping one both arrive as a
 canister-error reject and are not told apart: one counter covers both, since the
-ledger's response is the same, and the archive's own metrics say which it was.
+ledger's response is the same. Telling them apart is the operator's job, from the reject
+message or the archive's canister log, since a trap discards the archive's own counters.
 
 ### D10 — `ARCHIVE_CALL_TIMEOUT` is 300 s, and management-canister calls stay unbounded
 
@@ -239,8 +240,9 @@ Order of work:
 2. `append_blocks_at` with an empty batch: reply per Req 3.1 and stop. No placement, no
    chain check, no counter (Req 3.5, Req 6.4). An empty `append_blocks` must **not**
    take this path (Req 5.1).
-3. `append_blocks` skips steps 4 and 5 only, with `k = 0`. Steps 6 onward apply, and any
-   refusal fails the call (Req 5.2).
+3. `append_blocks` with an empty batch stores nothing and replies `()` here (Req 5.1).
+   Otherwise `append_blocks` skips steps 4 and 5 only, with `k = 0`; steps 6 onward
+   apply, and any refusal fails the call (Req 5.2).
 4. Place the index against `block_index_offset` and `block_index_offset + log_length`
    (Req 2.1, 2.2, 2.6), returning without appending in the refusing cases.
 5. Compute `k` per D2. If `k > 0`, compare `blocks[k-1]` against the stored block at that
