@@ -301,9 +301,10 @@ index space without gaps or overlaps, so that reading a range needs no special c
 3. THE ICRC Ledger SHALL publish through `archives()` and `icrc3_get_archives` the same
    Published_Range for each archive holding at least one block, contiguous and
    non-overlapping across archives, and SHALL omit an archive holding no blocks.
-4. WHILE an archive's reported Archive_Range does not begin where the previous archive's
-   ends, THE Ledger SHALL store no further blocks in it and SHALL expose a distinct
-   non-zero metric.
+4. WHEN an archive reports an Archive_Range that does not begin where the previous
+   archive's ends, THE Ledger SHALL store no further blocks in it after that reply and
+   SHALL expose a distinct non-zero metric; the batch that reply answered may have been
+   stored, which is harmless because a re-send of it is idempotent per 2.4.
 5. THE ICP Ledger SHALL derive a new archive's `block_index_offset` from its own record
    and SHALL NOT be held to 7.1–7.4 or 7.6, because its archives report no range and its
    `archives()` carries none.

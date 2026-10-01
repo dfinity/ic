@@ -379,6 +379,9 @@ have the next archive created above blocks the ledger still serves. The
 to read, the ledger simply appends to the tail, and a full tail answers `StoredPartial`
 with `at_capacity` and its range, which is what Req 7.1 and 8.1 need. One wasted append
 per cold start, and the ICRC ledger never calls anything but an append on an archive.
+On a legacy tail that first append may land before its reply reveals a range or offset
+mismatch (Req 7.4, 9.7); the batch sits at the indices the ledger declared and the
+ledger stores nothing further, which is what Req 7.4's "further" means.
 The ICP path keeps the pre-call (Req 8.4), since its archive reports nothing and rejects
 a batch that does not fit; it is a read-only update, not an append, so Req 12.1 holds.
 
