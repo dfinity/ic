@@ -149,7 +149,9 @@ every-await-is-a-call constraint.
 
 Serves Req 10.7, Req 10.8, Req 14.1. Every halt but one is learned from one archive
 reply and re-derivable from the next, so it is not a separate state: it is the backoff
-pinned at `BACKOFF_CAP` with the reason kept for the metric. Retrying costs one call per
+pinned at `BACKOFF_CAP` with the reason kept for the metric; for a range halt the retry is
+an empty `append_blocks_at` (Req 3.5, 10.9), so nothing is stored while the record is in
+doubt. Retrying costs one call per
 hour and stores nothing, since every such reply refuses or reports; it is what lets a
 repaired archive, or a raised archive size, take effect without a ledger upgrade.
 Forgetting the state on upgrade costs one attempt, which is the operator's "resume now"
@@ -348,10 +350,10 @@ counters.
 
 | condition | criterion | what a retry does | clears |
 |---|---|---|---|
-| tail start above the Archived_Prefix | Req 9.4 | comes back below range, nothing stored | after a record migration |
-| position not past its published range | Req 9.5 | comes back as a gap, nothing stored | never: blocks are held nowhere |
-| position above the ledger's chain tip | Req 9.6 | wholly held re-send: accepted and compared while the ledger's blocks still match, refused once they diverge; nothing advances either way | after the archives are truncated at the fork |
-| offset differs from recorded start | Req 9.7 | may store idempotently; record unchanged | after a record migration |
+| tail start above the Archived_Prefix | Req 9.4 | empty append re-checks the range; blocks follow only once it passes | after a record migration |
+| position not past its published range | Req 9.5 | empty append re-checks the range; blocks follow only once it passes | never: blocks are held nowhere |
+| position above the ledger's chain tip | Req 9.6 | empty append re-checks the position; nothing is sent or advanced until it is at or below the tip | after the archives are truncated at the fork |
+| offset differs from recorded start | Req 9.7 | empty append re-checks the offset; blocks follow only once it matches the record | after a record migration |
 | empty archive reports `at_capacity` | Req 8.3 | halts again, or rolls over once the size is raised | by raising `node_max_memory_size_bytes` |
 | refused on chain or position grounds | Req 10.5 | refused again, nothing stored | after the archive is repaired or replaced |
 | blocks offered below the archive's range | Req 10.6 | nothing stored | after a record migration |
@@ -360,9 +362,11 @@ counters.
 | creation begun, no identity recorded | Req 14.1 | **would create another canister**: no retry | a ledger build that clears it; persisted |
 
 Every halt row is one call per hour that stores nothing and re-derives the same answer
-until the cause is gone, at which point archiving resumes on its own; the rejected
-`append_blocks_at` row is not a halt and follows the geometric backoff of Req 10.1, so
-an archive upgrade is picked up within a minute, and the last row never retries. The
+until the cause is gone, at which point archiving resumes on its own: for the four range
+halts that call is an empty `append_blocks_at` (Req 10.9), for the others the ordinary
+round, which the archive refuses or the local check stops. The rejected `append_blocks_at`
+row is not a halt and follows the geometric backoff of Req 10.1, so an archive upgrade is
+picked up at the next spaced attempt, within the cap. The last row never retries. The
 upgrade reset of Req 10.7 is the immediate lever when the operator has already fixed
 the cause.
 
@@ -506,7 +510,7 @@ controllable, Req 4.2's `false` rests on review of the branch that sets the flag
 | 15 | archive | each counter in Req 6.1 moves for its own cause, `Undecodable` included, and is readable after; the same refusals index-less fail the call and move nothing | 6.1–6.3 |
 | 16 | archive | growth refused by a route that returns control (wasm stable maximum or subnet cap): `at_capacity` false, prefix readable; a low `reserved_cycles_limit`: call rejected, nothing stored | 4.2, 4.5 |
 | 17 | unit, archive | pre-change `ArchiveConfig` CBOR decodes with the new field absent | D4 |
-| 18 | unit, core | tail start above the prefix end; position not past the published range (`100` passes, `99` halts for `[0, 99]`; a non-tail archive below the aggregate prefix but matching its own range passes); position above the chain tip; offset differing from the recorded start, including a first archive reporting non-zero: each halts on its own metric, record unchanged | 9.4–9.7, 7.3 |
+| 18 | unit, core | tail start above the prefix end; position not past the published range (`100` passes, `99` halts for `[0, 99]`; a non-tail archive below the aggregate prefix but matching its own range passes); position above the chain tip; offset differing from the recorded start, including a first archive reporting non-zero: each halts on its own metric, record unchanged; the cap-spaced re-check is an empty `append_blocks_at`, and after a first reply of `StoredPartial` no block-carrying append follows until a re-check passes | 9.4–9.7, 10.9, 7.3 |
 | 19 | unit, core | an empty append's range never advances the prefix; a verifying append advances to one past the highest block verified; 1000 held, first 100 re-sent: prefix 100, not 1000, and the published end is 99, not 999 | 9.3, 3.4, 7.6 |
 | 20 | unit, core | after a reply of `next_index = N`, the new offset is `N`; `archives()` tiles; a node whose range starts elsewhere takes no blocks and raises the metric; an empty append's reply with `next_index == block_index_offset` inserts no entry and nothing underflows | 7.1, 7.3, 7.4, 3.5 |
 | 21 | unit, core | batch just under the message limit in raw bytes: trimmed so the encoded argument fits | 12.3 |

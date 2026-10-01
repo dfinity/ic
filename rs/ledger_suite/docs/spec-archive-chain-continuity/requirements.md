@@ -329,7 +329,7 @@ full and retry when it was refused memory, so that neither is mistaken for the o
 3. WHEN the next block to archive is on its own larger than the configured archive size
    or than one inter-canister message, or an archive holding no blocks reports
    `at_capacity` as true while the configured archive size is not larger than that
-   block, THE Ledger SHALL make no further archiving attempt and SHALL expose a distinct
+   block, THE Ledger SHALL make no further archiving attempt except as 10.8 permits and SHALL expose a distinct
    non-zero metric rather than create another archive, because a new archive with the
    same limit could not take the block either.
 4. THE ICP Ledger SHALL decide a roll-over from the archive's remaining capacity, asked
@@ -353,7 +353,7 @@ issued to remain retrievable, so that a history I have read never develops a hol
    forward, so a match at index N is evidence about indices at and below N only.
 4. WHEN the Tail_Archive reports an Archive_Range whose start is above the end of the
    Archived_Prefix, THE Ledger SHALL leave its record, Archived_Prefix included,
-   unchanged by that reply, make no further archiving attempt, and expose a distinct
+   unchanged by that reply, make no further archiving attempt except as 10.8 permits, and expose a distinct
    non-zero metric.
 5. IF an archive reports an Archive_Position that is not above the last index of the
    Published_Range for *that* archive, THEN THE Ledger SHALL make no further archiving
@@ -361,14 +361,14 @@ issued to remain retrievable, so that a history I have read never develops a hol
    because a block it is published as holding is then held nowhere.
 6. WHEN an archive reports an Archive_Position above the next block index THE Ledger
    would itself issue, THE Ledger SHALL leave its record, Archived_Prefix included,
-   unchanged by that reply, make no further archiving attempt, and expose a distinct
+   unchanged by that reply, make no further archiving attempt except as 10.8 permits, and expose a distinct
    non-zero metric, because the archive was built from a chain the ledger is no longer
    on, and a suite in that state is repaired by an operator, not by giving up blocks.
 7. WHEN any archive reports a `block_index_offset` that differs from the start THE Ledger
    has recorded for it, its Published_Range start or, for an archive not yet published,
    one past the end of the previous archive's Published_Range (zero for a ledger's first
    archive), THE Ledger SHALL leave its record, Archived_Prefix included, unchanged by
-   that reply, make no further archiving attempt, and expose a distinct non-zero metric.
+   that reply, make no further archiving attempt except as 10.8 permits, and expose a distinct non-zero metric.
 8. THE ICP Ledger SHALL rely on its own record instead and SHALL NOT be held to 9.1 or
    9.3–9.7.
 
@@ -394,12 +394,12 @@ interval rather than work per transaction.
    the round as failed for 10.1 and 10.3 while keeping the reported progress, because the
    refused growth would otherwise be provoked again by every transaction.
 5. WHEN an archive refuses an append per 1.1–1.4, 2.2, 2.5 or 6.3, THE
-   ICRC Ledger SHALL make no further archiving attempt and SHALL expose a distinct
+   ICRC Ledger SHALL make no further archiving attempt except as 10.8 permits and SHALL expose a distinct
    non-zero metric rather than back off, because no retry resolves a chain or position
    mismatch; THE ICP Ledger, whose archive can only reject, SHALL treat every reject as a
    failure under 10.1.
 6. WHEN an archive reports per 2.6 that the blocks offered fall below its range, THE
-   Ledger SHALL make no further archiving attempt and SHALL expose a distinct non-zero
+   Ledger SHALL make no further archiving attempt except as 10.8 permits and SHALL expose a distinct non-zero
    metric separate from 10.5's, because only a wrong ledger record reaches this.
 7. WHEN THE Ledger is upgraded, THE Ledger SHALL permit the next Archiving_Round
    immediately rather than observing the spacing of 10.1, except while the state of
@@ -409,6 +409,10 @@ interval rather than work per transaction.
    the halt from that attempt's reply if the cause persists, because each of these is
    learned from one reply and an archive an operator has repaired is then picked up
    without a ledger upgrade, while 10.7 remains the immediate lever.
+9. WHILE a halt per 9.4–9.7 holds, THE ICRC Ledger SHALL make the attempt of 10.8 as an
+   Indexed_Append carrying no blocks, and SHALL send blocks again only after a reply that
+   trips none of 9.4–9.7, because a block-carrying retry may store a suffix the earlier
+   reply left unstored, which 7.4 forbids while the record is in doubt.
 
 ### Requirement 11: A Ledger Will Not Archive Against An Archive That Does Not Implement Indexed Appends
 
