@@ -40,10 +40,16 @@ pub(crate) enum CanisterHttpPayloadError {
     MissingResponse(CryptoHash),
 }
 
-/// Returns the payload with the content of all of its responses removed, together
-/// with the hashes of the contents that were removed, or `None` if there was
-/// nothing to strip (or the payload could not be parsed, in which case the block
-/// is left untouched and will fail validation later on).
+/// Returns the payload with the content of every response worth stripping removed,
+/// together with the hashes of the contents that were removed, or `None` if there
+/// was nothing worth stripping (or the payload could not be parsed, in which case
+/// the block is left untouched and will fail validation later on).
+///
+/// Note that a payload this returns is *not* free of response content: anything
+/// smaller than [`MIN_STRIPPED_CONTENT_BYTES`] is deliberately left where it is,
+/// because removing it would make the block proposal bigger. The returned hashes
+/// are exactly the contents that were taken out, so they, rather than the payload's
+/// empty slots, are what a receiver has to find.
 ///
 /// The hashes are deduplicated: two committee members of a flexible outcall that
 /// produced the very same response occupy two slots of the payload, but there is
