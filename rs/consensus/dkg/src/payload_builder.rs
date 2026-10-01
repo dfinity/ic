@@ -640,7 +640,7 @@ pub fn get_dkg_summary_from_cup_contents(
     )
 }
 
-fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
+pub fn get_dkg_summary_from_cup_contents_with_subnet_splitting(
     cup_contents: CatchUpPackageContents,
     height: Height,
     subnet_id: SubnetId,
