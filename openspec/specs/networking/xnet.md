@@ -14,6 +14,12 @@ The XNet endpoint serves certified stream slices over HTTPS to other subnets for
 - **AND** TLS is configured to accept connections from all nodes (`SomeOrAllNodes::All`)
 - **AND** ALPN protocols `h2` and `http/1.1` are advertised
 
+#### Scenario: Connection timeouts
+- **WHEN** a connection is accepted by the XNet endpoint
+- **THEN** the TLS handshake must complete within 5 seconds
+- **AND** the connection is closed if it goes 30 seconds without sending anything, at any stage (TLS handshake, request, or idle)
+- **AND** a healthy connection is unaffected, since XNet clients send HTTP/2 keep-alive pings every 10 seconds
+
 #### Scenario: List available streams
 - **WHEN** a request is received at `/api/v1/streams`
 - **THEN** a JSON array of subnet IDs with available certified streams is returned
