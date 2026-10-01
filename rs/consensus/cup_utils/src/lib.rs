@@ -1,7 +1,7 @@
 //! This module contains functions for constructing CUPs from registry and for
 //! verifying CUPs.
 
-use ic_consensus_dkg::payload_builder::get_dkg_summary_from_cup_contents_with_subnet_splitting;
+use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
 use ic_consensus_idkg::{
     make_bootstrap_summary, make_bootstrap_summary_with_initial_dealings,
     utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
@@ -14,12 +14,12 @@ use ic_protobuf::{
 };
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    Height, RegistryVersion, SubnetId,
+    CryptoHashOfState, Height, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
-        Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes, CatchUpPackage,
-        CatchUpPackageType, CupType, HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent,
-        Rank, SummaryPayload, idkg,
+        Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes, CatchUpPackage, CupType,
+        HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank, RecoveryArgs,
+        SummaryPayload, idkg,
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoError, CryptoHash, Signable, Signed,
@@ -27,6 +27,7 @@ use ic_types::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag},
     },
     signature::ThresholdSignature,
+    time::UNIX_EPOCH,
 };
 use phantom_newtype::Id;
 use std::fmt;
@@ -193,15 +194,30 @@ pub fn make_registry_cup_from_cup_contents(
     registry_version: RegistryVersion,
     logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
-    let (cup_height, time, state_hash) = CupType::try_from(cup_contents.cup_type.clone())
-        .inspect_err(|err| {
+    let (cup_height, time, state_hash) = match CupType::try_from(cup_contents.cup_type.clone()) {
+        Ok(CupType::Genesis) => (
+            Height::new(0),
+            UNIX_EPOCH,
+            CryptoHashOfState::from(CryptoHash(Vec::new())),
+        ),
+        Ok(CupType::Recovery(RecoveryArgs {
+            height,
+            time,
+            state_hash,
+        })) => (height, time, state_hash),
+        // If the CUP we are about to build is a subnet splitting CUP, return early. It makes no sense
+        // to build a registry CUP out of subnet splitting CUP contents because the transcripts here are
+        // used directly by consensus to build the CUP themselves, i.e. nodes threshold-sign it, instead
+        // of blindly taking it from the registry here.
+        Ok(CupType::SubnetSplitting(..)) => return None,
+        Err(err) => {
             warn!(
                 logger,
                 "Failed to get the CUP type from the registry CUP contents: {}", err
             );
-        })
-        .ok()?
-        .into_registry_cup_params()?;
+            return None;
+        }
+    };
 
     let replica_version = match registry.get_replica_version(subnet_id, registry_version) {
         Ok(Some(replica_version)) => replica_version,
@@ -215,13 +231,12 @@ pub fn make_registry_cup_from_cup_contents(
             return None;
         }
     };
-    let dkg_summary = match get_dkg_summary_from_cup_contents_with_subnet_splitting(
+    let dkg_summary = match get_dkg_summary_from_cup_contents(
         cup_contents.clone(),
         cup_height,
         subnet_id,
         registry,
         registry_version,
-        CatchUpPackageType::Normal,
     ) {
         Ok(summary) => summary,
         Err(err) => {

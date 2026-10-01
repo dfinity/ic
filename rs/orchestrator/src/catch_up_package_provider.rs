@@ -652,7 +652,10 @@ pub(crate) mod tests {
     use ic_logger::no_op_logger;
     use ic_protobuf::registry::{
         node::v1::ConnectionEndpoint,
-        subnet::v1::{CatchUpPackageContents, RecoveryArgs, SubnetSplittingArgs},
+        subnet::v1::{
+            CatchUpPackageContents, RecoveryArgs, SubnetSplittingArgs,
+            catch_up_package_contents::CupType,
+        },
     };
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{make_catch_up_package_contents_key, make_node_record_key};

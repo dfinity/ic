@@ -9,7 +9,6 @@ use crate::{
     },
     crypto::*,
     node_id_into_protobuf, node_id_try_from_option,
-    time::UNIX_EPOCH,
 };
 use ic_base_types::{SubnetId, subnet_id_try_from_option};
 use ic_protobuf::{
@@ -429,27 +428,6 @@ pub enum CupType {
     Recovery(RecoveryArgs),
     /// A CUP used indicate a subnet to split into two.
     SubnetSplitting(SubnetSplittingArgs),
-}
-
-impl CupType {
-    pub fn into_registry_cup_params(self) -> Option<(Height, Time, CryptoHashOfState)> {
-        match self {
-            CupType::Genesis => Some((
-                Height::new(0),
-                UNIX_EPOCH,
-                CryptoHashOfState::from(CryptoHash(Vec::new())),
-            )),
-            CupType::Recovery(RecoveryArgs {
-                height,
-                time,
-                state_hash,
-            }) => Some((height, time, state_hash)),
-            // A CUP Contents with type Subnet Splitting is not meant to be used as a registry CUP.
-            // The transcripts are used directly by consensus to build the CUP themselves, i.e.
-            // nodes threshold-sign it, instead of blindly taking it from the registry here.
-            CupType::SubnetSplitting(_) => None,
-        }
-    }
 }
 
 impl TryFrom<Option<subnet_pb::catch_up_package_contents::CupType>> for CupType {
