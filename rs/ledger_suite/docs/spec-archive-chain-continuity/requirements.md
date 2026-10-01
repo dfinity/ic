@@ -273,11 +273,14 @@ capacity problem without access to canister logs.
 #### Acceptance Criteria
 
 1. THE Archive SHALL expose, over its metrics endpoint, a separate count of
-   Indexed_Appends for each of: 1.1, 1.2, 1.3, each half of 1.4, a covered-range
-   mismatch per 2.5, a gap per 2.2, blocks below its range per 2.6, a stop at its own
-   limit per 4.1, a platform-refused growth per 4.2 and an undecodable block per 6.3,
-   and a count of every append, indexed or not, stored under 1.7, because the
-   unverifiable window is open mostly to index-less callers.
+   Indexed_Appends for each of these mutually exclusive grounds: a first stored block
+   that does not continue the archive's tip, one that does not match the
+   Expected_Parent (1.2), a later block that does not continue its predecessor (1.3),
+   each half of 1.4, a covered-range mismatch per 2.5, a gap per 2.2, blocks below its
+   range per 2.6, a stop at its own limit per 4.1, a platform-refused growth per 4.2 and
+   an undecodable block per 6.3; and a count of every append, indexed or not, stored
+   under 1.7, because the unverifiable window is open mostly to index-less callers. A
+   refusal per 1.9 fails the call and is counted nowhere.
 2. THE Archive SHALL NOT fail the call for any outcome counted under 6.1 when the append
    carried a Declared_Index, because failing the call discards the count.
 3. WHEN THE Archive cannot decode a block it would otherwise store, THE Archive SHALL
@@ -357,7 +360,8 @@ issued to remain retrievable, so that a history I have read never develops a hol
    non-zero metric.
 5. IF an archive reports an Archive_Position that is not above the last index of the
    Published_Range for *that* archive, THEN THE Ledger SHALL make no further archiving
-   attempt, SHALL discard no further blocks, and SHALL expose a distinct non-zero metric,
+   attempt except as 10.8 permits, SHALL discard no further blocks, and SHALL expose a
+   distinct non-zero metric,
    because a block it is published as holding is then held nowhere.
 6. WHEN an archive reports an Archive_Position above the next block index THE Ledger
    would itself issue, THE Ledger SHALL leave its record, Archived_Prefix included,
@@ -406,7 +410,8 @@ interval rather than work per transaction.
    14.1 holds, because an upgrade is how an operator resumes after a halt.
 8. WHILE a halt per 8.3, 9.4–9.7, 10.5, 10.6 or 14.5 holds, THE Ledger SHALL attempt no
    Archiving_Round sooner than BACKOFF_CAP after the last attempt, and SHALL re-establish
-   the halt from that attempt's reply if the cause persists, because each of these is
+   the halt from that attempt's reply, or from the local size check of 8.3, if the cause
+   persists, because each of these is
    learned from one reply and an archive an operator has repaired is then picked up
    without a ledger upgrade, while 10.7 remains the immediate lever.
 9. WHILE a halt per 9.4–9.7 holds, THE ICRC Ledger SHALL make the attempt of 10.8 as an
@@ -495,8 +500,8 @@ canister does not become a series of them.
    done by asking the created canister.
 5. WHEN a canister THE Ledger created carries a module whose hash matches neither an
    absent install nor the hash recorded per 14.9, THE Ledger SHALL make no further
-   archiving attempt and SHALL expose a distinct non-zero metric with the identity,
-   rather than reinstall, adopt or delete it.
+   archiving attempt except as 10.8 permits and SHALL expose a distinct non-zero metric
+   with the identity, rather than reinstall, adopt or delete it.
 6. THE Ledger SHALL adopt a created archive before handing its control to the configured
    controllers, and SHALL treat a handover failure as blocking neither adoption nor
    archiving.
