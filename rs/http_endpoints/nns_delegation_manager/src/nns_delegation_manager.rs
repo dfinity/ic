@@ -770,7 +770,6 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::RwLock;
 
-    use crate::CanisterRangesFilter;
     use assert_matches::assert_matches;
     use axum::response::IntoResponse;
     use axum_server::tls_rustls::RustlsConfig;
@@ -1491,12 +1490,13 @@ mod tests {
             (APP_SUBNET_ID, SubnetType::Application),
             (VERIFIED_APP_SUBNET_ID, SubnetType::VerifiedApplication),
         ] {
-            let (registry_client, tls_config, _, _) = set_up_nns_delegation_dependencies(
-                rt_handle.clone(),
-                Arc::new(RwLock::new(None)),
-                /*delay=*/ None,
-                subnet_id,
-            );
+            let (registry_client, tls_config, _, mutable_state) =
+                set_up_nns_delegation_dependencies(
+                    rt_handle.clone(),
+                    Arc::new(RwLock::new(None)),
+                    /*delay=*/ None,
+                    subnet_id,
+                );
 
             let builder = load_root_delegation(
                 &Config::default(),
@@ -1514,7 +1514,12 @@ mod tests {
             let builder = builder.expect("Should return Some delegation on non NNS subnet");
             let parsed_delegation: Certificate = serde_cbor::from_slice(
                 &builder
-                    .build_unverified(CanisterRangesFilter::Flat, &no_op_logger())
+                    .build_verified(
+                        CanisterRangesCheck::AllSubnetRanges,
+                        &*mutable_state.read().unwrap(),
+                        &no_op_logger(),
+                    )
+                    .expect("Delegation should be valid")
                     .certificate,
             )
             .expect("Should return a certificate which can be deserialized");

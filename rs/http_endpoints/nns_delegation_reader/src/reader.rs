@@ -206,7 +206,7 @@ impl NNSDelegationBuilder {
     /// If for some reasons the delegation cannot be built, it returns the full delegation
     /// as received from the NNS. This means the returned delegation might contain
     /// both formats of the canister ranges.
-    pub fn build_unverified(
+    fn build_unverified(
         &self,
         canister_ranges_filter: CanisterRangesFilter,
         logger: &ReplicaLogger,
