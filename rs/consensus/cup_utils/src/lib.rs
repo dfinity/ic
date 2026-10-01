@@ -473,11 +473,6 @@ mod tests {
                         initial_ni_dkg_transcript_high_threshold: Some(
                             dummy_initial_dkg_transcript(committee, NiDkgTag::HighThreshold),
                         ),
-                        // `height`, `time` and `state_hash` purposely contradict the `cup_type` to
-                        // make sure that they are ignored.
-                        height: 7,
-                        time: 8,
-                        state_hash: vec![9],
                         registry_store_uri: registry_store_uri.clone(),
                         ecdsa_initializations: vec![],
                         chain_key_initializations: vec![],
