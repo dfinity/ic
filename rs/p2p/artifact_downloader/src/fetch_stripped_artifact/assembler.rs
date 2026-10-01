@@ -657,10 +657,10 @@ impl BlockProposalAssembler {
 #[cfg(test)]
 mod tests {
     use crate::fetch_stripped_artifact::test_utils::{
-        FakeCanisterHttpPool, fake_block_proposal_with_ingresses,
-        fake_block_proposal_with_ingresses_and_idkg, fake_idkg_dealing,
-        fake_idkg_payload_with_dealings, fake_ingress_message, fake_ingress_message_with_arg_size,
-        fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages,
+        fake_block_proposal_with_ingresses, fake_block_proposal_with_ingresses_and_idkg,
+        fake_idkg_dealing, fake_idkg_payload_with_dealings, fake_ingress_message,
+        fake_ingress_message_with_arg_size, fake_ingress_message_with_sig,
+        fake_stripped_block_proposal_with_messages,
     };
     use crate::fetch_stripped_artifact::types::rpc::GetIngressMessageInBlockResponse;
     use assert_matches::assert_matches;
@@ -668,6 +668,7 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_interfaces::p2p::consensus::BouncerValue;
     use ic_logger::no_op_logger;
+    use ic_p2p_test_utils::mocks::FakeCanisterHttpPool;
     use ic_p2p_test_utils::mocks::MockBouncerFactory;
     use ic_p2p_test_utils::mocks::MockTransport;
     use ic_p2p_test_utils::mocks::MockValidatedPoolReader;

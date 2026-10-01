@@ -550,9 +550,9 @@ fn parse_dealing_response(body: Bytes) -> Result<SignedIDkgDealing, ParseRespons
 #[cfg(test)]
 mod tests {
     use crate::fetch_stripped_artifact::test_utils::{
-        FakeCanisterHttpPool, fake_block_proposal_with_canister_http,
-        fake_block_proposal_with_ingresses, fake_block_proposal_with_ingresses_and_idkg,
-        fake_canister_http_payload, fake_canister_http_reject, fake_canister_http_response,
+        fake_block_proposal_with_canister_http, fake_block_proposal_with_ingresses,
+        fake_block_proposal_with_ingresses_and_idkg, fake_canister_http_payload,
+        fake_canister_http_reject, fake_canister_http_response,
         fake_canister_http_response_message, fake_flexible_canister_http_responses_message,
         fake_flexible_canister_http_too_many_rejects_message, fake_idkg_payload_with_dealing,
         fake_summary_block_proposal,
@@ -565,7 +565,9 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_p2p_test_utils::mocks::{MockPeers, MockTransport, MockValidatedPoolReader};
+    use ic_p2p_test_utils::mocks::{
+        FakeCanisterHttpPool, MockPeers, MockTransport, MockValidatedPoolReader,
+    };
     use ic_test_utilities_consensus::fake::{FakeContent, FakeContentSigner};
     use ic_test_utilities_types::ids::test_replica_version;
     use ic_test_utilities_types::messages::SignedIngressBuilder;

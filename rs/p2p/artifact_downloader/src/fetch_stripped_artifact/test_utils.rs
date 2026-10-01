@@ -1,6 +1,5 @@
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
 use ic_error_types::RejectCode;
-use ic_interfaces::canister_http::CanisterHttpPool;
 use ic_protobuf::types::v1 as pb;
 use ic_test_utilities_consensus::{
     fake::{Fake, FakeContentSigner},
@@ -8,7 +7,7 @@ use ic_test_utilities_consensus::{
 };
 use ic_types::{
     CountBytes, Height, NodeId, NodeIndex, NumBytes, RegistryVersion,
-    artifact::{CanisterHttpResponseId, ConsensusMessageId},
+    artifact::ConsensusMessageId,
     batch::{
         BatchPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
         FlexibleCanisterHttpResponses, IngressPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
@@ -16,9 +15,9 @@ use ic_types::{
     },
     canister_http::{
         CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpResponse,
-        CanisterHttpResponseArtifact, CanisterHttpResponseContent, CanisterHttpResponseMetadata,
-        CanisterHttpResponseProof, CanisterHttpResponseReceipt, CanisterHttpResponseShare,
-        CanisterHttpResponseSignature, CanisterHttpResponseWithConsensus,
+        CanisterHttpResponseContent, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
+        CanisterHttpResponseReceipt, CanisterHttpResponseSignature,
+        CanisterHttpResponseWithConsensus,
     },
     consensus::{
         Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHash, DataPayload,
@@ -469,64 +468,4 @@ pub(crate) fn assert_no_messages_dropped(payload: &[u8], expected: usize) {
         "only {encoded} of {expected} messages fit into the \
          {MAX_CANISTER_HTTP_PAYLOAD_SIZE} byte payload limit; use smaller responses"
     );
-}
-
-/// A canister http pool that serves the given response contents, and nothing else.
-pub(crate) struct FakeCanisterHttpPool {
-    contents: BTreeMap<CryptoHashOf<CanisterHttpResponse>, CanisterHttpResponse>,
-}
-
-impl FakeCanisterHttpPool {
-    pub(crate) fn new(responses: impl IntoIterator<Item = CanisterHttpResponse>) -> Self {
-        Self {
-            contents: responses
-                .into_iter()
-                .map(|response| (ic_types::crypto::crypto_hash(&response), response))
-                .collect(),
-        }
-    }
-
-    pub(crate) fn empty() -> Self {
-        Self::new(std::iter::empty())
-    }
-}
-
-impl CanisterHttpPool for FakeCanisterHttpPool {
-    fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_> {
-        Box::new(std::iter::empty())
-    }
-
-    fn get_unvalidated_artifacts(
-        &self,
-    ) -> Box<dyn Iterator<Item = &CanisterHttpResponseArtifact> + '_> {
-        Box::new(std::iter::empty())
-    }
-
-    fn get_unvalidated_artifact(
-        &self,
-        _share: &CanisterHttpResponseShare,
-    ) -> Option<&CanisterHttpResponseArtifact> {
-        None
-    }
-
-    fn get_response_content_items(
-        &self,
-    ) -> Box<dyn Iterator<Item = (&CryptoHashOf<CanisterHttpResponse>, &CanisterHttpResponse)> + '_>
-    {
-        Box::new(self.contents.iter())
-    }
-
-    fn get_response_content_by_hash(
-        &self,
-        hash: &CryptoHashOf<CanisterHttpResponse>,
-    ) -> Option<&CanisterHttpResponse> {
-        self.contents.get(hash)
-    }
-
-    fn lookup_validated(
-        &self,
-        _msg_id: &CanisterHttpResponseId,
-    ) -> Option<CanisterHttpResponseShare> {
-        None
-    }
 }

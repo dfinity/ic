@@ -8,31 +8,27 @@ use std::{
 use criterion::{BatchSize, Bencher, Criterion, black_box, criterion_group, criterion_main};
 use ic_artifact_downloader::FetchStrippedConsensusArtifact;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
-use ic_interfaces::{
-    canister_http::CanisterHttpPool,
-    p2p::consensus::{ArtifactAssembler, BouncerValue, Peers, ValidatedPoolReader},
-};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, BouncerValue, Peers, ValidatedPoolReader};
 use ic_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_p2p_test_utils::mocks::{MockBouncerFactory, MockTransport, MockValidatedPoolReader};
+use ic_p2p_test_utils::mocks::{
+    FakeCanisterHttpPool, MockBouncerFactory, MockTransport, MockValidatedPoolReader,
+};
 use ic_test_utilities_consensus::{
     fake::{Fake, FakeContentSigner},
     make_genesis,
 };
 use ic_types::{
     Height, NodeId, RegistryVersion,
-    artifact::{CanisterHttpResponseId, IdentifiableArtifact, IngressMessageId},
+    artifact::{IdentifiableArtifact, IngressMessageId},
     batch::{BatchPayload, IngressPayload},
-    canister_http::{
-        CanisterHttpResponse, CanisterHttpResponseArtifact, CanisterHttpResponseShare,
-    },
     consensus::{
         Block, BlockPayload, BlockProposal, ConsensusMessage, DataPayload, Payload, Rank,
         dkg::{DkgDataPayload, DkgSummary},
         idkg::{IDkgArtifactId, IDkgMessage, IDkgObject, IDkgPayload},
     },
     crypto::{
-        AlgorithmId, BasicSig, BasicSigOf, CryptoHashOf, Signed,
+        AlgorithmId, BasicSig, BasicSigOf, Signed,
         canister_threshold_sig::idkg::{
             IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptType,
             IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
@@ -70,52 +66,6 @@ impl ValidatedPoolReader<IDkgMessage> for FakeIDkgPool {
 
     fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = IDkgMessage> + '_> {
         unimplemented!()
-    }
-}
-
-/// The canister http pool the assembler reads response contents from. The
-/// benchmarks below strip no canister http responses, so it stays empty.
-struct FakeCanisterHttpPool {
-    contents: BTreeMap<CryptoHashOf<CanisterHttpResponse>, CanisterHttpResponse>,
-}
-
-impl CanisterHttpPool for FakeCanisterHttpPool {
-    fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_> {
-        Box::new(std::iter::empty())
-    }
-
-    fn get_unvalidated_artifacts(
-        &self,
-    ) -> Box<dyn Iterator<Item = &CanisterHttpResponseArtifact> + '_> {
-        Box::new(std::iter::empty())
-    }
-
-    fn get_unvalidated_artifact(
-        &self,
-        _share: &CanisterHttpResponseShare,
-    ) -> Option<&CanisterHttpResponseArtifact> {
-        None
-    }
-
-    fn get_response_content_items(
-        &self,
-    ) -> Box<dyn Iterator<Item = (&CryptoHashOf<CanisterHttpResponse>, &CanisterHttpResponse)> + '_>
-    {
-        Box::new(self.contents.iter())
-    }
-
-    fn get_response_content_by_hash(
-        &self,
-        hash: &CryptoHashOf<CanisterHttpResponse>,
-    ) -> Option<&CanisterHttpResponse> {
-        self.contents.get(hash)
-    }
-
-    fn lookup_validated(
-        &self,
-        _msg_id: &CanisterHttpResponseId,
-    ) -> Option<CanisterHttpResponseShare> {
-        None
     }
 }
 
@@ -157,9 +107,7 @@ fn set_up_assembler(
         Arc::new(RwLock::new(consensus_pool)),
         Arc::new(RwLock::new(ingress_pool)),
         Arc::new(RwLock::new(idkg_pool)),
-        Arc::new(RwLock::new(FakeCanisterHttpPool {
-            contents: BTreeMap::new(),
-        })),
+        Arc::new(RwLock::new(FakeCanisterHttpPool::empty())),
         Arc::new(mock_bouncer_factory),
         MetricsRegistry::new(),
         NODE_1,
