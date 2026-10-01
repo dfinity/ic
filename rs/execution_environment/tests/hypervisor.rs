@@ -5840,9 +5840,9 @@ fn install_gzip_compressed_module() {
 
     let binary = {
         let wasm = wat::parse_str(wat).unwrap();
-        let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
         std::io::copy(&mut &wasm[..], &mut encoder).unwrap();
-        encoder.finish().into_result().unwrap()
+        encoder.finish().unwrap()
     };
 
     let canister_id = test.canister_from_binary(binary).unwrap();
