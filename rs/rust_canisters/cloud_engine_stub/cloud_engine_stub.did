@@ -1,4 +1,4 @@
-// A mock for the cloud engine canisters that a cloud engine node reads. One wasm
+// A stub for the cloud engine canisters that a cloud engine node reads. One wasm
 // covers both roles (engine management canister and engine operator canister), so
 // a test installs it twice.
 //
@@ -50,7 +50,7 @@ service : {
 	set_engine_operator : (principal, principal) -> ();
 	set_config : (GetHttpGatewayConfigResult) -> ();
 	set_acme_credentials : (GetHttpGatewayAcmeCredentialsResult) -> ();
-	// While set, both reads answer `err Unauthorized`, the way an operator
-	// that has not read its subnet's node list yet does.
-	set_unauthorized : (bool) -> ();
+	// While unset, both reads answer `err Unauthorized`, the way an operator
+	// that has not read its subnet's node list yet does. Set by default.
+	set_authorized : (bool) -> ();
 };

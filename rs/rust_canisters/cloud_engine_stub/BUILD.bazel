@@ -3,11 +3,11 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 rust_canister(
-    name = "cloud_engine_mock_canister",
+    name = "cloud_engine_stub_canister",
     testonly = True,
     srcs = ["src/main.rs"],
-    crate_name = "cloud_engine_mock_canister",
-    service_file = "cloud_engine_mock.did",
+    crate_name = "cloud_engine_stub_canister",
+    service_file = "cloud_engine_stub.did",
     deps = [
         # Keep sorted.
         "@crate_index//:candid",

@@ -3,7 +3,7 @@
 //! canisters (engine management canister and operator canister).
 //!
 //! The engine management canister and the operator are both
-//! `//rs/rust_canisters/cloud_engine_mock` on PocketIC, and `ic-gateway` is a
+//! `//rs/rust_canisters/cloud_engine_stub` on PocketIC, and `ic-gateway` is a
 //! stub that dumps its environment, so the assertions are on what a real
 //! process was handed.
 //!
@@ -105,10 +105,10 @@ struct Fixture {
 async fn setup() -> Option<Fixture> {
     let (Some(_), Some(operator_wasm)) = (
         std::env::var("POCKET_IC_BIN").ok(),
-        std::env::var("CLOUD_ENGINE_MOCK_WASM").ok(),
+        std::env::var("CLOUD_ENGINE_STUB_WASM").ok(),
     ) else {
         eprintln!(
-            "skipped: PocketIC and the mock operator wasm need to be provided as ENV variables"
+            "skipped: PocketIC and the stub operator wasm need to be provided as ENV variables"
         );
         return None;
     };
@@ -310,8 +310,8 @@ impl Fixture {
             .await;
     }
 
-    async fn set_unauthorized(&self, unauthorized: bool) {
-        self.call_operator("set_unauthorized", Encode!(&unauthorized).unwrap())
+    async fn set_authorized(&self, authorized: bool) {
+        self.call_operator("set_authorized", Encode!(&authorized).unwrap())
             .await;
     }
 
@@ -522,7 +522,7 @@ async fn an_operator_that_does_not_recognize_this_node_is_not_ready() {
         return;
     };
     fixture.configure_engine().await;
-    fixture.set_unauthorized(true).await;
+    fixture.set_authorized(false).await;
 
     let err = fixture
         .manager
@@ -540,7 +540,7 @@ async fn an_operator_that_stays_unauthorized_is_resolved_again() {
         return;
     };
     fixture.configure_engine().await;
-    fixture.set_unauthorized(true).await;
+    fixture.set_authorized(false).await;
 
     fixture.manager.check().await;
 
@@ -563,7 +563,7 @@ async fn an_operator_that_stays_unauthorized_is_resolved_again() {
         MAX_CONSECUTIVE_NOT_READY as u64
     );
 
-    fixture.set_unauthorized(false).await;
+    fixture.set_authorized(true).await;
     fixture.manager.check().await;
 
     // Resolving a second time got us back to the same operator, which now

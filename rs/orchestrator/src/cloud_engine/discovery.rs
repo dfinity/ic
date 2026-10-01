@@ -195,8 +195,10 @@ mod tests {
 
     #[test]
     fn invalidate_forgets_the_resolved_id() {
+        let operator = CanisterId::from_u64(3);
         let mut discovery = discovery_for_test();
-        discovery.remember(CanisterId::from_u64(3));
+        discovery.remember(operator);
+        assert_eq!(discovery.remembered(), Some(operator));
 
         discovery.invalidate();
 

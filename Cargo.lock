@@ -2826,7 +2826,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cloud-engine-mock"
+name = "cloud-engine-stub"
 version = "0.9.0"
 dependencies = [
  "candid",

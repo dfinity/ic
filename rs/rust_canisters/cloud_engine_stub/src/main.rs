@@ -1,8 +1,8 @@
-//! A mock for the cloud engine canisters that a cloud engine node relies on.
+//! A stub for the cloud engine canisters that a cloud engine node relies on.
 //!
-//! It serves both roles: engine management canister and engine operator canister.
-//! It serves all three endpoints the orchestrator reads and nothing else.
-//! The records mirror the real interfaces field for field.
+//! It serves both roles: engine management canister and engine operator
+//! canister. It serves all three endpoints the orchestrator reads and nothing
+//! else. The records mirror the real interfaces field for field.
 //!
 //! The `set_*` updates decide what the next read answers, so a test can drive
 //! the complete, incomplete and not-yet-authorized cases.
@@ -52,14 +52,25 @@ enum Response<T> {
     Err(Error),
 }
 
-#[derive(Default)]
 struct State {
     config: HttpGatewayConfig,
     acme: AcmeCredentials,
-    unauthorized: bool,
+    /// Whether the operator recognizes the calling node.
+    authorized: bool,
     /// The one (subnet, operator) pair this canister knows, when acting as
     /// the engine management canister.
     engine_operator: Option<(Principal, Principal)>,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            config: HttpGatewayConfig::default(),
+            acme: AcmeCredentials::default(),
+            authorized: true,
+            engine_operator: None,
+        }
+    }
 }
 
 thread_local! {
@@ -69,10 +80,10 @@ thread_local! {
 #[query(name = "getHttpGatewayConfig")]
 fn get_http_gateway_config() -> Response<HttpGatewayConfig> {
     STATE.with_borrow(|state| {
-        if state.unauthorized {
-            Response::Err(Error::Unauthorized)
-        } else {
+        if state.authorized {
             Response::Ok(state.config.clone())
+        } else {
+            Response::Err(Error::Unauthorized)
         }
     })
 }
@@ -80,10 +91,10 @@ fn get_http_gateway_config() -> Response<HttpGatewayConfig> {
 #[query(name = "getHttpGatewayAcmeCredentials")]
 fn get_http_gateway_acme_credentials() -> Response<AcmeCredentials> {
     STATE.with_borrow(|state| {
-        if state.unauthorized {
-            Response::Err(Error::Unauthorized)
-        } else {
+        if state.authorized {
             Response::Ok(state.acme.clone())
+        } else {
+            Response::Err(Error::Unauthorized)
         }
     })
 }
@@ -118,8 +129,8 @@ fn set_acme_credentials(acme: AcmeCredentials) {
 }
 
 #[update]
-fn set_unauthorized(unauthorized: bool) {
-    STATE.with_borrow_mut(|state| state.unauthorized = unauthorized);
+fn set_authorized(authorized: bool) {
+    STATE.with_borrow_mut(|state| state.authorized = authorized);
 }
 
 fn main() {}
