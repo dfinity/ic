@@ -12,7 +12,7 @@ use ic_registry_keys::{
     make_replica_version_key, make_subnet_list_record_key,
 };
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
-use ic_types::{NodeId, SubnetId};
+use ic_types::NodeId;
 use maplit::btreemap;
 use prost::Message;
 use std::str::FromStr;
