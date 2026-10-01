@@ -7,7 +7,8 @@ use dfn_core::call;
 use ic_base_types::SubnetId;
 use ic_management_canister_types_private::{SetupInitialDKGArgs, SetupInitialDKGResponse};
 use ic_protobuf::registry::subnet::v1::{
-    self as pb, CanisterCyclesCostSchedule, CatchUpPackageContents, SubnetRecord,
+    CanisterCyclesCostSchedule, CatchUpPackageContents, GenesisArgs, SubnetRecord,
+    SubnetSplittingArgs, catch_up_package_contents::CupType,
 };
 use ic_registry_keys::{
     make_canister_migrations_record_key, make_catch_up_package_contents_key,
@@ -75,7 +76,7 @@ impl Registry {
             .map_err(|err| format!("Failed to validate the payload: {err}"))?;
 
         // Remove the migrated nodes from the source subnet
-        let source_nodes: Vec<NodeId> = source_subnet_record
+        let post_split_source_nodes: Vec<NodeId> = source_subnet_record
             .membership
             .iter()
             .map(|bytes| {
@@ -83,8 +84,10 @@ impl Registry {
             })
             .filter(|node_id| !payload.destination_node_ids.contains(node_id))
             .collect();
-        source_subnet_record.membership =
-            source_nodes.iter().map(|id| id.get().into_vec()).collect();
+        source_subnet_record.membership = post_split_source_nodes
+            .iter()
+            .map(|id| id.get().into_vec())
+            .collect();
         let destination_subnet_record = SubnetRecord {
             membership: payload
                 .destination_node_ids
@@ -119,7 +122,7 @@ impl Registry {
             chain_key_config: None,
         };
 
-        let create_cup_contents = |nodes| async {
+        let setup_initial_dkg = |nodes| async {
             let request = SetupInitialDKGArgs::new(
                 nodes,
                 RegistryVersion::new(pre_call_registry_version),
@@ -134,28 +137,42 @@ impl Registry {
             .await
             .unwrap();
 
-            let dkg_response = SetupInitialDKGResponse::decode(&raw_response).unwrap();
+            SetupInitialDKGResponse::decode(&raw_response).unwrap()
+        };
 
-            let cup_contents = CatchUpPackageContents {
+        let (source_dkg_response, destination_dkg_response) = futures::join!(
+            setup_initial_dkg(post_split_source_nodes),
+            setup_initial_dkg(payload.destination_node_ids),
+        );
+        let destination_subnet_id = destination_dkg_response.fresh_subnet_id;
+
+        let get_cup_contents =
+            |dkg_response: &SetupInitialDKGResponse, cup_type: CupType| CatchUpPackageContents {
                 initial_ni_dkg_transcript_low_threshold: Some(
                     dkg_response.low_threshold_transcript_record.clone(),
                 ),
                 initial_ni_dkg_transcript_high_threshold: Some(
                     dkg_response.high_threshold_transcript_record.clone(),
                 ),
-                ..CatchUpPackageContents::default()
+                cup_type: Some(cup_type),
+
+                height: 0,
+                time: 0,
+                state_hash: vec![],
+                registry_store_uri: None,
+                ecdsa_initializations: vec![],
+                chain_key_initializations: vec![],
             };
 
-            (cup_contents, dkg_response)
-        };
-
-        let (
-            (destination_cup_contents, destination_dkg_response),
-            (mut source_cup_contents, source_dkg_response),
-        ) = futures::join!(
-            create_cup_contents(payload.destination_node_ids.clone()),
-            create_cup_contents(source_nodes)
+        let source_cup_contents = get_cup_contents(
+            &source_dkg_response,
+            CupType::SubnetSplitting(SubnetSplittingArgs {
+                destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
+            }),
         );
+        let destination_cup_contents =
+            get_cup_contents(&destination_dkg_response, CupType::Genesis(GenesisArgs {}));
+
         let post_call_registry_version = self.latest_version();
 
         self.check_if_registry_changed_across_versions(
@@ -166,13 +183,6 @@ impl Registry {
         .map_err(|err| {
             format!("The registry was updated during the `setup_initial_dkg` calls: {err}")
         })?;
-
-        let destination_subnet_id = destination_dkg_response.fresh_subnet_id;
-        source_cup_contents.cup_type = Some(
-            pb::catch_up_package_contents::CupType::SubnetSplitting(pb::SubnetSplittingArgs {
-                destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
-            }),
-        );
 
         let mut subnet_list_record = self.get_subnet_list_record();
 
