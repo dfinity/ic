@@ -100,6 +100,11 @@ Before any mutation is applied, the registry validates that the resulting state 
 - **WHEN** the registry state is validated
 - **THEN** subnet records are well-formed and consistent
 
+#### Scenario: CatchUpPackageContents must carry a cup_type
+- **WHEN** the registry state is validated
+- **THEN** every `catch_up_package_contents_<subnet_id>` record must have its `cup_type` field set (`Genesis`, `Recovery`, or `SubnetSplitting`)
+- **AND** a record predating the introduction of `cup_type` is backfilled: `Genesis` if its `height`, `time`, and `state_hash` are `0`, `0`, and empty, `Recovery` otherwise
+
 #### Scenario: Free cycles cost schedule restriction
 - **WHEN** a subnet's canister cycles cost schedule is set to "Free"
 - **THEN** the subnet type must be either Application or CloudEngine
