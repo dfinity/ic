@@ -558,8 +558,11 @@ archive rolled back beneath its ledger.
 **Step 0 — verify the live suites** (DEFI-3019). Nothing here repairs a diverged suite. On each
 deployed chain fusion and ICP suite: a Rosetta sync from genesis, and each archive's own
 extent against what the ledger publishes for it (`log_length` equals the published
-range's length on ICRC; offset-and-count pairs tile up to `first_block_index` on ICP). An
-archive holding more than published is a duplicate suffix D12 does not repair. Both
+range's length on ICRC; offset-and-count pairs tile up to `first_block_index` on ICP),
+and the ledger's `ledger_num_archives` against the number of archives it publishes
+ranges for, since a tail whose first append landed before the callback has no range,
+is omitted by `archives()`, and must be found this way and have a `log_length` of zero.
+An archive holding more than published is a duplicate suffix D12 does not repair. Both
 checks passed on every DeFi-owned suite on 2026-09-24 and need repeating if the archive
 release lands much later.
 
@@ -597,7 +600,9 @@ this release, since the design relies on it for the effective per-round count.
   remaining reasons, bounded calls, the creation journal, adoption and handover.
   *Acceptance:* Req 8, Req 10, Req 13, Req 14.
 
-Safety is reached at this release; expect the backlog to drain at one message per
+Safety is reached at this release for the ICRC suites; the ICP ledger keeps the
+non-idempotent `append_blocks` until the archive port (DEFI-3021), so a re-send after a
+lost callback remains possible there. Expect the backlog to drain at one message per
 transaction.
 
 **After — re-enable archiving** (DEFI-3020). Lower `trigger_threshold` on the chain
