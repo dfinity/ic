@@ -447,7 +447,10 @@ impl CatchUpPackageProvider {
                     error: format!("Failed to decode the CUP type: {err}"),
                 })
             })?;
-            let CupType::SubnetSplitting(splitting_args) = cup_type else {
+            let CupType::SubnetSplitting(SubnetSplittingArgs {
+                destination_subnet_id,
+            }) = cup_type
+            else {
                 continue;
             };
 
