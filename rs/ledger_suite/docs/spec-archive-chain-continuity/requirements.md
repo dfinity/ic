@@ -329,6 +329,9 @@ full and retry when it was refused memory, so that neither is mistaken for the o
    block, THE Ledger SHALL make no further archiving attempt and SHALL expose a distinct
    non-zero metric rather than create another archive, because a new archive with the
    same limit could not take the block either.
+4. THE ICP Ledger SHALL decide a roll-over from the archive's remaining capacity, asked
+   before the append, because its archives report no `at_capacity` and reject an append
+   that does not fit.
 
 ### Requirement 9: No Block Index Ever Becomes Unretrievable
 
@@ -457,6 +460,9 @@ calls needed to restart it.
 5. WHILE an archive is not answering a call, THE ICRC Ledger SHALL become stoppable
    within ARCHIVE_CALL_TIMEOUT, because an outstanding callback otherwise prevents the
    upgrade that is the operator's lever for every other halt.
+6. WHEN THE ICP Ledger asks an archive for its remaining capacity, THE ICP Ledger SHALL
+   stop waiting after at most ARCHIVE_CALL_TIMEOUT and SHALL treat the round as failed
+   per Req 10, because the query is read-only and is resolved by asking again.
 
 ### Requirement 14: An Unaccounted Archive Creation Halts Archiving
 

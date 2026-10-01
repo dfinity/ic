@@ -159,10 +159,12 @@ orphaned canister and a retry would create another, so that state is persisted w
 
 ### D8 — One seam, `Wasm::INDEXED_APPENDS`; the ICP archive is unchanged
 
-Serves Req 7.5, Req 9.8, Req 11.4, Req 13.4. `ArchiveCanisterWasm` gains
+Serves Req 7.5, Req 8.4, Req 9.8, Req 11.4, Req 13.4. `ArchiveCanisterWasm` gains
 `const INDEXED_APPENDS: bool`, which selects the method: `append_blocks_at` for
 `ic-icrc1-archive`, the legacy `append_blocks` for `ic-icp-archive`, whose empty reply
-carries no range. Everything else is shared and fixes both ledgers.
+carries no range and which rejects a batch that does not fit, so the ICP path also keeps
+the `remaining_capacity` query that decides its roll-over. Everything else is shared and
+fixes both ledgers.
 
 ### D9 — No capability state; a rejected indexed append is a failed round
 
@@ -352,11 +354,13 @@ counters.
 | refused on chain or position grounds | Req 10.5 | refused again, nothing stored | after the archive is repaired or replaced |
 | blocks offered below the archive's range | Req 10.6 | nothing stored | after a record migration |
 | created canister carries a foreign module | Req 14.5 | same `canister_status` answer | unreachable while the ledger is sole controller |
-| tail rejects `append_blocks_at` | Req 11.1 | rejected again, nothing stored | after the archive upgrade (Req 11.2) |
+| tail rejects `append_blocks_at` | Req 11.1 | rejected again, nothing stored; geometric backoff per Req 10.1, not pinned | after the archive upgrade (Req 11.2) |
 | creation begun, no identity recorded | Req 14.1 | **would create another canister**: no retry | a ledger build that clears it; persisted |
 
-Every row but the last is one call per hour that stores nothing and re-derives the
-same answer until the cause is gone, at which point archiving resumes on its own. The
+Every halt row is one call per hour that stores nothing and re-derives the same answer
+until the cause is gone, at which point archiving resumes on its own; the rejected
+`append_blocks_at` row is not a halt and follows the geometric backoff of Req 10.1, so
+an archive upgrade is picked up within a minute, and the last row never retries. The
 upgrade reset of Req 10.7 is the immediate lever when the operator has already fixed
 the cause.
 
@@ -369,10 +373,12 @@ The roll-over test is restated in terms of the last reply's `at_capacity` (Req 8
 8.2), and gated on the Archived_Prefix having reached the tail's reported position
 (Req 8.1): otherwise an inherited tail that stored an unverified prefix and filled would
 have the next archive created above blocks the ledger still serves. The
-`remaining_capacity` pre-call goes: on a cold start, with no last reply to read, the
-ledger simply appends to the tail, and a full tail answers `StoredPartial` with
-`at_capacity` and its range, which is what Req 7.1 and 8.1 need. One wasted append per
-cold start, and the ledger never calls anything but an append on an archive (Req 12.1).
+`remaining_capacity` pre-call goes on the ICRC path: on a cold start, with no last reply
+to read, the ledger simply appends to the tail, and a full tail answers `StoredPartial`
+with `at_capacity` and its range, which is what Req 7.1 and 8.1 need. One wasted append
+per cold start, and the ICRC ledger never calls anything but an append on an archive.
+The ICP path keeps the pre-call (Req 8.4), since its archive reports nothing and rejects
+a batch that does not fit; it is a query, so Req 12.1's one append per round holds.
 
 An empty archive reporting `at_capacity` (`next_index == block_index_offset`) halts
 instead of rolling over (Req 8.3), unless the configured archive size has since been
@@ -416,6 +422,7 @@ choice is per call (D10):
 |---|---|---|
 | `append_blocks_at` | bounded | idempotent under Req 2.4 |
 | `append_blocks` (ICP) | unbounded | a retry would store twice, Req 13.4 |
+| `remaining_capacity` (ICP) | bounded | read-only, resolved by asking again, Req 13.6 |
 | `create_canister` | unbounded | unresolvable: an unknown outcome is Req 14.1 |
 | `install_code` | unbounded | resolved by `canister_status`; once per fill |
 | `update_settings` | unbounded | resolved by retrying; once per fill |
@@ -508,7 +515,7 @@ controllable, Req 4.2's `false` rests on review of the branch that sets the flag
 | 30 | integration | tail does not answer: round ends within `ARCHIVE_CALL_TIMEOUT`, retried, nothing stored twice; ledger stoppable and upgradable with a call in flight | 13.1, 13.2, 13.5 |
 | 31 | integration | multi-chunk configuration: one append call per round, moving `min(num_blocks_to_archive, one message)` blocks; a round that fills the tail with blocks left over creates no archive, the next eligible round begins exactly one creation, and no round creates two | 12.1, 12.2, 12.3, 8.1 |
 | 32 | integration | every index served before a round is retrievable after it; the ledger stopped serving only indices an archive reports covering | 9.1, 9.2 |
-| 33 | integration | ICP ledger creates archives and discards blocks with no reported extent | 7.5, 9.8 |
+| 33 | integration | ICP ledger creates archives and discards blocks with no reported extent, rolling over from the `remaining_capacity` query when the tail is full | 7.5, 8.4, 9.8 |
 | 34 | integration | non-genesis archive: first append accepted; ledger patched to omit the hash: unverifiable counter rises; patched to a wrong hash: refused | 7.2, 1.2, 1.8 |
 | 35 | integration | `create_canister` reply lost, or received but undecodable: `Started`, exposed, not self-clearing, survives upgrade; `create_canister` rejected: no halt | 14.1, 14.2 |
 | 36 | integration | `install_code` outcome lost after the id was recorded, or a trap at the start of the round after `Created`: resolved via `canister_status`, creation finished, same canister adopted; the ledger upgraded to a build embedding a different archive wasm between the committed install and reconciliation: the recorded hash matches, the canister is adopted, no halt; a module matching neither: halt with id exposed | 14.3–14.5, 14.9 |
