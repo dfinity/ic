@@ -46,10 +46,11 @@ use ssh2::Session;
 
 fn verify_content(ssh_session: &Session, remote_file_path: &str, expected_b64: &str) -> Result<()> {
     // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
-    // we read their base64 encoding and compare those.
+    // we read their base64 encoding and compare those. Without pipefail the pipeline would exit
+    // with tr's status, so a file that can't be read would look like an empty one.
     let actual_b64 = execute_bash_command(
         ssh_session,
-        format!("base64 {remote_file_path} | tr -d '\\n'"),
+        format!("set -euo pipefail; base64 {remote_file_path} | tr -d '\\n'"),
     )
     .map_err(|e| anyhow!(e))?;
     ensure!(
