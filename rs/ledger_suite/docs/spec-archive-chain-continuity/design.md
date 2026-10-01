@@ -11,13 +11,15 @@ handed. Criteria are cited (`Req 5`, `Req 5.1`), never restated.*
 
 ## Overview
 
-The design **addresses appends**: `append_blocks` gains an optional expected start
-index and returns an optional result carrying the archive's own extent, an explicit
-outcome, and whether it verified anything. The archive can then place an incoming batch
-exactly (continuation, already held, straddling, below its range, or a gap) and the
-ledger stops inferring what an archive holds and starts being told (Req 2, Req 3).
-Idempotency follows: a re-send is recognised and discarded, so a lost acknowledgement
-costs one round trip.
+The design **addresses appends**: a new `append_blocks_at` takes the global index its
+batch starts at and returns the archive's own extent, an explicit outcome, and whether
+it verified anything; the existing `append_blocks` keeps its signature and gains only
+the chain check. The archive can then place an incoming batch exactly (continuation,
+already held, straddling, below its range, or a gap) and the ledger stops inferring what
+an archive holds and starts being told (Req 2, Req 3). Idempotency follows: a re-send is
+recognised and discarded, so a lost acknowledgement costs one round trip. An archive
+that lacks the new method rejects the call before storing anything, so a ledger ahead of
+its archives, or an archive rolled back beneath its ledger, is safe by construction.
 
 Around that, capacity becomes a reported position plus a flag instead of a failure
 (Req 4); a backoff bounds the per-transaction retries a failing archive provokes
@@ -25,6 +27,47 @@ Around that, capacity becomes a reported position plus a flag instead of a failu
 journaled so a lost reply leaves a canister the ledger can still name (Req 14).
 `ic-icrc1-archive` and the shared code in `ledger_canister_core` change; the ICP archive
 does not.
+
+Three rounds, against an archive at offset 1000 holding 1000–1499:
+
+```mermaid
+sequenceDiagram
+    participant L as Ledger
+    participant A as Archive A (offset 1000)
+    participant M as Management canister
+    participant B as Archive B (offset 2300)
+
+    Note over L,A: Routine round (Req 2.1, 3.1, 9.3)
+    L->>A: append_blocks_at(1500..1799, index 1500)
+    A-->>L: Stored, next_index 1800, verified
+    Note over L: prefix := 1800, remove 1500..1799
+
+    Note over L,A: Lost callback, idempotent re-send (Req 2.4, 2.5)
+    L->>A: append_blocks_at(1800..2099, index 1800)
+    A-->>L: Stored, next_index 2100
+    Note over L: callback traps, ledger state rolled back
+    L->>A: next round: append_blocks_at(1800..2099, index 1800)
+    Note over A: all held, compare block 2099
+    A-->>L: Stored, next_index 2100, verified
+    Note over L: prefix := 2100, nothing stored twice
+
+    Note over L,B: Capacity stop and creation (Req 4.1, 8.1, 14, D11)
+    L->>A: append_blocks_at(2100..2399, index 2100)
+    A-->>L: StoredPartial, next_index 2300, at_capacity
+    Note over L: prefix := 2300 (has reached A's position)
+    Note over L: round N+1: Creating := Started
+    L->>M: create_canister
+    M-->>L: id B
+    Note over L: Creating := Created(B), round ends (Req 14.3)
+    Note over L: round N+2
+    L->>M: canister_status(B): no module
+    L->>M: install_code(B, offset 2300, Expected_Parent = hash(2299))
+    Note over L: adopt B, pending_handovers += B, Creating := Idle, round ends
+    Note over L: round N+3
+    L->>B: append_blocks_at(2300..2599, index 2300)
+    B-->>L: Stored, next_index 2600, verified
+    L->>M: update_settings(B, controllers), retried until it lands (Req 14.7)
+```
 
 ## Constraints
 
@@ -48,21 +91,21 @@ does not.
 - **The reply buffer is an irreducible allocation.** ic-cdk materialises response bytes
   into its own `Vec`, so every call can trap with earlier messages already committed.
   Cleanup callbacks survive such a trap and are limited to a bool and a `u64`.
-- **Candid tolerates a surplus trailing value.** A hand-decoded `Vec<EncodedBlock>` (the
-  ICP archive) accepts an extra `opt nat64`, and an old ledger decoding the reply as `()`
-  accepts a surplus absent `opt`. This is the premise the archive-only release rests on
-  and is pinned by a unit test rather than trusted.
+- **A call to a method a canister does not export is rejected by the replica** before
+  any of the canister's code runs, with a canister-error reject; nothing is stored.
 - **Every SNS ledger suite runs `ic-icrc1-archive` with archiving on**, at a 128 kB
   chunk, so rounds are multi-chunk there and (by builder default, unconfirmed on
   mainnet) on ICP; only the chain fusion suites are single-chunk.
 
 ## Design Decisions
 
-### D1 — `append_blocks` gains an optional index and returns an optional record
+### D1 — A new `append_blocks_at` beside the unchanged `append_blocks`
 
-Serves Req 2, Req 3, Req 5. Both additions are `opt`, so the archive is releasable
-alone. The reply is a record with the outcome as a field, not a variant, because Req 3.1
-requires the range on every answer. `at_capacity` answers only "why did it stop" (Req 4).
+Serves Req 2, Req 3, Req 5, Req 11. The old method keeps its signature, so an old ledger
+needs nothing; the new one is rejected by an archive that lacks it, so a new ledger
+against an old or rolled-back archive stores nothing and needs no probe. The reply is a
+record with the outcome as a field, not a variant, because Req 3.1 requires the range on
+every answer. `at_capacity` answers only "why did it stop" (Req 4).
 
 ### D2 — Placement is decided before the chain is checked, and the skip is clamped
 
@@ -87,8 +130,8 @@ corruption, a snapshot restore between the two), not a ledger that had already f
 
 ### D5 — Only an append that verified a block may advance the Archived_Prefix
 
-Serves Req 9.3, Req 3.4. A probe, a gap, a below-range report and the unverifiable first
-append all report a range but verified nothing. The gate is the reply's `verified` flag,
+Serves Req 9.3, Req 3.4. An empty append, a gap, a below-range report and the
+unverifiable first append all report a range but verified nothing. The gate is the reply's `verified` flag,
 which the ledger cannot reconstruct: whether an inherited tail was ever given an
 Expected_Parent is state only the archive has. The ceiling is one past the highest block
 stored or compared, never `next_index`: an archive holding 1000 blocks offered the first
@@ -101,9 +144,9 @@ Serves Req 10.1, Req 10.7. `BACKOFF_INITIAL` = 30 s, doubling per consecutive fa
 probe per hour. A timestamp check on the transaction path rather than a timer, per the
 every-await-is-a-call constraint.
 
-### D7 — Backoff, probe and halt state are `#[serde(skip)]`; the creation journal persists
+### D7 — Backoff and halt state are `#[serde(skip)]`; the creation journal persists
 
-Serves Req 10.7, Req 10.8, Req 11.3, Req 14.1. Every halt but one is learned from one
+Serves Req 10.7, Req 10.8, Req 14.1. Every halt but one is learned from one
 archive reply and re-derivable from the next, so forgetting it on upgrade costs one
 attempt, which is exactly the operator's "resume now" lever. The exception is a creation
 whose reply was lost: nothing can re-derive an orphaned canister, so that state is
@@ -111,17 +154,20 @@ persisted with `#[serde(default)]` (Req 14.1).
 
 ### D8 — One seam, `Wasm::INDEXED_APPENDS`; the ICP archive is unchanged
 
-Serves Req 7.5, Req 9.8, Req 11.4, Req 13.4. Shared code always sends the index, which
-Candid tolerance makes safe against `ic-icp-archive`. What it cannot infer is whether an
-absent reply is a misconfiguration or the expected state, so `ArchiveCanisterWasm` gains
-`const INDEXED_APPENDS: bool`. Everything else is shared and fixes both ledgers.
+Serves Req 7.5, Req 9.8, Req 11.4, Req 13.4. `ArchiveCanisterWasm` gains
+`const INDEXED_APPENDS: bool`, which selects the method: `append_blocks_at` for
+`ic-icrc1-archive`, the legacy `append_blocks` for `ic-icp-archive`, whose empty reply
+carries no range. Everything else is shared and fixes both ledgers.
 
-### D9 — Only a positive capability answer is cached
+### D9 — No capability state; a rejected indexed append is a failed round
 
-Serves Req 11.2, Req 11.3. Caching "the tail cannot answer" would strand a ledger whose
-archive is later upgraded alone, so an absent answer is re-probed under the backoff and
-a positive one cached in skipped state. Assumes no archive downgrade while a ledger is
-sending indices (Delivery).
+Serves Req 11. Every `append_blocks_at` is self-checking: an archive without the method
+rejects it and stores nothing, so there is nothing to probe, cache or persist, and no
+downgrade exposure. The reject is counted, backed off (Req 10.1) and retried, never
+followed by a fall-back to `append_blocks` (Req 11.3), and archiving resumes when the
+archive is upgraded (Req 11.2). An old archive and a trapping one both arrive as a
+canister-error reject and are not told apart: one counter covers both, since the
+ledger's response is the same, and the archive's own metrics say which it was.
 
 ### D10 — `ARCHIVE_CALL_TIMEOUT` is 300 s, and management-canister calls stay unbounded
 
@@ -147,7 +193,7 @@ the archive cannot validate the value. Build it only if Step 0 finds a divergenc
 
 ## Implementation
 
-### `ic-icrc1-archive` — `append_blocks`
+### `ic-icrc1-archive` — `append_blocks_at` and `append_blocks`
 
     type append_outcome = variant {
       Stored;                                       // Req 2.1, 2.3, 2.4, 3.3, 3.5
@@ -166,8 +212,10 @@ the archive cannot validate the value. Build it only if Step 0 finds a divergenc
       outcome            : append_outcome;
     };
 
-    append_blocks : (vec blob, opt nat64) -> (opt append_result);
+    append_blocks_at : (vec blob, nat64) -> (append_result);
+    append_blocks    : (vec blob) -> ();          // unchanged signature, Req 5
 
+Both methods run the same internal function; the legacy one enters it with no index.
 `Stored` is a post-condition, not a count: *every block offered that was not already
 held is now held*. `StoredPartial` is the one outcome that breaks it, and covers the
 zero-stored case where the first new block did not fit (Req 3.3, Req 8.3). One
@@ -176,12 +224,12 @@ Req 10.5) while Req 6.1's counters give the operator the distinction.
 
 Order of work:
 
-1. Caller check, unchanged.
-2. If the batch is empty **and carries an index**: reply per Req 3.1 and stop. No
-   placement, no chain check, no counter (Req 3.5, Req 6.4). An index-less empty batch
-   must **not** take this path (Req 5.1).
-3. If the index is absent, skip steps 4 and 5 only, with `k = 0`. Steps 6 onward apply,
-   and any refusal fails the call (Req 5.2).
+1. Caller check, unchanged (Req 1.9).
+2. `append_blocks_at` with an empty batch: reply per Req 3.1 and stop. No placement, no
+   chain check, no counter (Req 3.5, Req 6.4). An empty `append_blocks` must **not**
+   take this path (Req 5.1).
+3. `append_blocks` skips steps 4 and 5 only, with `k = 0`. Steps 6 onward apply, and any
+   refusal fails the call (Req 5.2).
 4. Place the index against `block_index_offset` and `block_index_offset + log_length`
    (Req 2.1, 2.2, 2.6), returning without appending in the refusing cases.
 5. Compute `k` per D2. If `k > 0`, compare `blocks[k-1]` against the stored block at that
@@ -196,7 +244,7 @@ Order of work:
 7. Append the suffix. Indexed: stop short where it must and set `at_capacity` (Req 4).
    Index-less: all-or-nothing, failing the call if the batch does not fit (Req 5.3).
    `StableLog::append` returns a `Result`, so both `trap("no space left")` sites go.
-8. Re-read `log_length` and reply (Req 3.1), or reply `None` on the index-less path.
+8. Re-read `log_length` and reply (Req 3.1), or reply `()` on the legacy path.
 
 Step 7 is a restructuring: today the check is whole-batch and traps; Req 4.1 needs a
 fitting prefix, appended while the next block still fits, and `at_capacity` is whichever
@@ -233,7 +281,7 @@ access is not worth redrawing the module boundary: the round *reports* and
 
 Reconcile `nodes_block_ranges` from the reply's `block_index_offset` and `next_index`,
 never from the batch length (Req 7.1, 9.1): today's `push((0, chunk_len - 1))` underflows
-on an empty probe. A node's entry is inserted when its first reply shows
+on an empty append. A node's entry is inserted when its first reply shows
 `next_index > block_index_offset`, as `(offset, next_index - 1)` (Req 7.3). The reported
 start must equal the recorded one for every archive (Req 9.7); for the entry-less tail
 the recorded start is one past the previous entry's end, zero for a first node.
@@ -247,18 +295,19 @@ compared; the removal count is capped the same way.
 
 `BelowRange` halts (Req 10.6): its one benign route, a straddling re-send into a full
 archive that compared nothing, is closed by Req 2.5, and what remains is a wrong record
-no ledger action can repair. An absent reply routes by `Wasm::INDEXED_APPENDS` (D8):
-halt and count for ICRC (Req 11.1), incremental path and count for ICP (Req 11.4). The
-probe of Req 11.3 is the empty indexed append, issued here.
+no ledger action can repair. A rejected `append_blocks_at` is a failed round (D9):
+counted (Req 11.1), backed off, and never followed by `append_blocks` (Req 11.3). The
+ICP path (D8) calls `append_blocks`, whose empty reply carries no range, and counts it
+(Req 11.4).
 
 `post_upgrade` checks `nodes.len()` against `nodes_block_ranges.len()`: more than one
 entry-less node (today's oversized-block loop can leave several) halts on Req 9.7's
-metric; one entry attributed to the wrong node is caught by the first probe instead.
+metric; one entry attributed to the wrong node is caught by the first reply instead.
 
 ### `ledger_canister_core::archive` — `Archive` state and halts
 
 `#[serde(skip)]` per D7: last-attempt timestamp and consecutive-failure count (Req 10),
-the tail's last reported `at_capacity` (Req 8), the cached capability answer (D9), and
+the tail's last reported `at_capacity` (Req 8), and
 
     #[serde(skip)]
     halted: Option<Halt>,
@@ -282,13 +331,13 @@ every case. Failed rounds and unknown outcomes stay counters.
 | refused on chain or position grounds | Req 10.5 | operator only; archive counters say which |
 | blocks offered below the archive's range | Req 10.6 | operator only |
 | created canister carries a foreign module | Req 14.5 | operator: reinstall, adopt or delete |
-| tail reports no range | Req 11.1 | **itself**, on the next probe (Req 11.2) |
+| tail rejects `append_blocks_at` | Req 11.1 | **itself**, on the first attempt after the archive upgrade (Req 11.2); a backoff, not a `Halt` |
 | creation begun, no identity recorded | Req 14.1 | operator only; persisted, survives upgrade |
 
 **Skip versus act.** A skip before the guard is right for a wait or an operator-only halt
 and wrong for a state that needs the ledger to *do* something: `Created(id)` (Req 14.4)
-must finish the creation, and the no-range state (Req 11.1) must enter a probe-only
-round once the backoff permits, or upgrading only the archive would never resume.
+must finish the creation. A rejected indexed append (Req 11.1) is an ordinary backoff:
+the next permitted round simply tries `append_blocks_at` again.
 
 ### `ledger_canister_core::archive` — `node_and_capacity`
 
@@ -308,14 +357,15 @@ The Expected_Parent is the decoded `parent_hash()` of the round's first block: u
 D11 a creation round sends no blocks and the next append starts at the selection front,
 so no other position is ever a node's first. It is read in `archive_blocks<LA>`, where
 the block type is known, and threaded down beside the blocks. For a legacy suite the
-first probe's reply is where Req 7.1 gets its value; legacy non-tail nodes are never
-re-queried.
+tail's first reply is where Req 7.1 gets its value: a partial append if the tail is
+already full, or an empty `append_blocks_at` (Req 3.5) when the cold-start pre-call finds
+it full before any append. Legacy non-tail nodes are never re-queried.
 
 ### `ledger_canister_core::ledger` and `::blockchain` — round selection
 
 Cap the selection at `min(num_blocks_to_archive, one message)` in bytes in
 `Blockchain::get_blocks_for_archiving` (Req 12.3). "In bytes" means the Candid-encoded
-`(vec blob, opt nat64)`, not the sum of payloads: either measure the encoded argument or
+`(vec blob, nat64)`, not the sum of payloads: either measure the encoded argument or
 subtract a bound covering the framing (a fixed header plus ten bytes per block). Expose
 the effective per-round count (Req 12.4). On multi-chunk suites this makes
 `num_blocks_to_archive` a per-round cap: the trigger is re-checked each round, so
@@ -335,7 +385,8 @@ choice is per call (D10):
 
 | call | wait | why |
 |---|---|---|
-| `append_blocks` | bounded, ICRC only | idempotent under Req 2.4; ICP exempt per Req 13.4 |
+| `append_blocks_at` | bounded | idempotent under Req 2.4 |
+| `append_blocks` (ICP) | unbounded | a retry would store twice, Req 13.4 |
 | `remaining_capacity` | bounded | read-only, resolved by asking again |
 | `create_canister` | unbounded | unresolvable: an unknown outcome is Req 14.1 |
 | `install_code` | unbounded | resolved by `canister_status`; once per fill |
@@ -395,18 +446,18 @@ controllable, Req 4.2's `false` rests on review of the branch that sets the flag
 | 6 | archive | append at an index above the position: `Gap`, nothing stored | 2.2 |
 | 7 | archive | over-large batch with an index: short `next_index`, `at_capacity` true, prefix readable; without an index: call fails, nothing stored; second block exceeds the limit and does not chain or decode: first block stored, not refused, not counted; limit below one block: nothing stored, `at_capacity` true, `next_index == block_index_offset` | 4.1, 4.4, 5.3, 1.6, 8.3 |
 | 8 | archive | complete and partial appends are distinguishable from the outcome alone; `at_capacity` false on a full store and on a wholly held re-send | 3.2, 3.3, 4.3 |
-| 9 | archive | indexed empty append reports the extent, stores nothing, is not counted, even above the position; both index-less empty shapes reply empty | 3.5, 5.1, 6.4 |
+| 9 | archive | empty `append_blocks_at` reports the extent, stores nothing, is not counted, even above the position; empty `append_blocks` replies empty and stores nothing | 3.5, 5.1, 6.4 |
 | 10 | archive | genesis at offset 0; parentless block refused at non-zero offset and into a non-empty archive; parented block refused at index 0; parentless block declared at 5 refused | 1.4, 2.2 |
-| 11 | archive | no Expected_Parent: first indexed append stored, unverifiable counter rises, `verified` false; the same first append **index-less**: stored, empty reply, counter rises (the only shape PR 1 sees in production); with Expected_Parent: mismatching first batch refused, matching one stored and not counted | 1.2, 1.7, 1.8, 3.4, 6.1 |
-| 12 | archive | one-argument call against the new archive: stored, empty reply, a mismatch traps | 5.1, 5.2, 5.4 |
-| 13 | unit, candid | `test_old_ledger_decodes_new_archive_reply_as_unit`: `(None::<append_result>,)` decodes as `()` the way the old ledger does; undeclared trailing bytes still fail. **Release gate**, already written and landing with this specification | 5.1 |
-| 14 | archive | `should_ignore_an_extra_optional_start_index` (ICP archive): extra argument tolerated. **Release gate**, already written and landing with this specification | D8 |
+| 11 | archive | no Expected_Parent: first indexed append stored, unverifiable counter rises, `verified` false; the same first append through `append_blocks`: stored, empty reply, counter rises (the only call PR 1 sees in production); with Expected_Parent: mismatching first batch refused, matching one stored and not counted | 1.2, 1.7, 1.8, 3.4, 6.1 |
+| 12 | archive | `append_blocks` against the new archive: stored, the reply unchanged, a mismatch traps; a call from a principal other than the ledger is refused with nothing stored | 5.1, 5.2, 5.4, 1.9 |
+| 13 | candid | `archive.did`'s `append_blocks` is unchanged against the current `.did` (the `didc` check), so an old ledger needs no change | 5.4 |
+| 14 | integration | the current archive wasm as tail: the ledger's `append_blocks_at` is rejected, nothing is stored, the count rises, and no `append_blocks` call is ever made | 11.1, 11.3 |
 | 15 | archive | each counter in Req 6.1 moves for its own cause, `Undecodable` included, and is readable after; the same refusals index-less fail the call and move nothing | 6.1–6.3 |
 | 16 | archive | growth refused by a route that returns control (wasm stable maximum or subnet cap): `at_capacity` false, prefix readable; a low `reserved_cycles_limit`: call rejected, nothing stored | 4.2, 4.5 |
 | 17 | unit, archive | pre-change `ArchiveConfig` CBOR decodes with the new field absent | D4 |
 | 18 | unit, core | tail start above the prefix end; position not past the published range (`100` passes, `99` halts for `[0, 99]`; a non-tail archive below the aggregate prefix but matching its own range passes); position above the chain tip; offset differing from the recorded start, including a first archive reporting non-zero: each halts on its own metric, record unchanged | 9.4–9.7, 7.3 |
-| 19 | unit, core | a probe's range never advances the prefix; a verifying append advances to one past the highest block verified; 1000 held, first 100 re-sent: prefix 100, not 1000 | 9.3, 3.4 |
-| 20 | unit, core | after a reply of `next_index = N`, the new offset is `N`; `archives()` tiles; a node whose range starts elsewhere takes no blocks and raises the metric; a probe reply with `next_index == block_index_offset` inserts no entry and nothing underflows | 7.1, 7.3, 7.4, 3.5 |
+| 19 | unit, core | an empty append's range never advances the prefix; a verifying append advances to one past the highest block verified; 1000 held, first 100 re-sent: prefix 100, not 1000 | 9.3, 3.4 |
+| 20 | unit, core | after a reply of `next_index = N`, the new offset is `N`; `archives()` tiles; a node whose range starts elsewhere takes no blocks and raises the metric; an empty append's reply with `next_index == block_index_offset` inserts no entry and nothing underflows | 7.1, 7.3, 7.4, 3.5 |
 | 21 | unit, core | batch just under the message limit in raw bytes: trimmed so the encoded argument fits | 12.3 |
 | 22 | upgrade | pre-change `Archive` with one entry-less trailing node upgrades cleanly; with two, halts on Req 9.7's metric; new fields read `Idle` and empty | 9.7, D7, D11 |
 | 23 | integration | `BelowRange`, `Gap`, and a first-block-too-large `StoredPartial`: prefix does not advance; a wholly held re-send: it does; `BelowRange` also halts on its own metric, distinct from 10.5's, with no further append | 9.3, 10.6 |
@@ -415,9 +466,9 @@ controllable, Req 4.2's `false` rests on review of the branch that sets the flag
 | 26 | integration | oversized block on all three paths (reply, cold-start pre-check, byte cap): halt, own metric, no archive created; an ordinary full tail still rolls over | 8.3 |
 | 27 | integration | archive stopped: attempts spaced per backoff, resume on restart with no intervention; a failed round then a ledger upgrade: next transaction archives immediately | 10.1–10.3, 10.7 |
 | 28 | integration | refusal per 1.1, 2.2, 2.5, 6.3 in turn: halt with distinct metric, no append while halted; upgrade with archive unchanged: one append, halt re-established; fix and upgrade: resumes | 10.5, 10.8 |
-| 29 | integration | old archive wasm as tail: nothing archived, metric rises, probe re-issued once the backoff permits; upgrade the archive: resumes without a ledger upgrade; probe stores nothing, is not repeated once answered, at most one per round; ICP ledger archives normally and counts | 11.1–11.4, 12.1 |
+| 29 | integration | old archive wasm as tail: `append_blocks_at` rejected on every attempt, attempts spaced per backoff, nothing archived, no `append_blocks` call made; upgrade the archive: resumes without a ledger upgrade; ICP ledger archives normally through `append_blocks` and counts | 11.1–11.4, 10.1 |
 | 30 | integration | tail does not answer: round ends within `ARCHIVE_CALL_TIMEOUT`, retried, nothing stored twice; ledger stoppable and upgradable with a call in flight | 13.1, 13.2, 13.5 |
-| 31 | integration | multi-chunk configuration: one `append_blocks` per round, effective count metric matches; a round that fills the tail with blocks left over creates no archive, the next eligible round begins exactly one creation, and no round creates two | 12.1, 12.2, 12.4, 8.1 |
+| 31 | integration | multi-chunk configuration: one append call per round, effective count metric matches; a round that fills the tail with blocks left over creates no archive, the next eligible round begins exactly one creation, and no round creates two | 12.1, 12.2, 12.4, 8.1 |
 | 32 | integration | every index served before a round is retrievable after it; the ledger stopped serving only indices an archive reports covering | 9.1, 9.2 |
 | 33 | integration | ICP ledger creates archives and discards blocks with no reported extent | 7.5, 9.8 |
 | 34 | integration | non-genesis archive: first append accepted; ledger patched to omit the hash: unverifiable counter rises; patched to a wrong hash: refused | 7.2, 1.2, 1.8 |
@@ -444,8 +495,10 @@ Verification:
 
 The suite upgrades in the order index, ledger, archives, so a new ledger meets old
 archives unless the work is split. It ships as **two releases in a fixed order, the
-archive first, the ledger second**. **Never roll the archive back beneath the append
-protocol while a ledger is sending indices** (D9): revert the ledger first.
+archive first, the ledger second**, so that the ledger release finds archives that
+implement `append_blocks_at` and archiving never pauses. The order is not a safety rule:
+a new ledger against an old archive is rejected and stores nothing (D9), and so is an
+archive rolled back beneath its ledger.
 
 **Step 0 — verify the live suites** (DEFI-3019). Nothing here repairs a diverged suite. On each
 deployed chain fusion and ICP suite: a Rosetta sync from genesis, and each archive's own
@@ -455,21 +508,23 @@ archive holding more than published is a duplicate suffix D12 does not repair. B
 checks passed on every DeFi-owned suite on 2026-09-24 and need repeating if the archive
 release lands much later.
 
-**Archive release — PR 1** (DEFI-3016). `append_blocks`'s new argument and result,
-placement, the clamp, the chain check on every stored block, the Expected_Parent at
-`init`, capacity reporting, the counters, the `.did`. The release-gate tests of rows 13
-and 14 land with this specification and must pass before it. Retires
-`test_append_blocks_ignores_an_extra_optional_start_index`, whose `Option<u64>` decode
-stops describing the archive. Until the ledger release, a re-send
-after a lost callback is refused and the old ledger halts on it, retrying per
-transaction: survivable, but keep the window short. *Acceptance:* Req 1–6.
+**Archive release — PR 1** (DEFI-3016). `append_blocks_at`, placement, the clamp, the
+chain check on every stored block through both methods, the Expected_Parent at `init`,
+capacity reporting, the counters, the `.did`. The compatibility tests written for the
+optional-argument design (`test_append_blocks_ignores_an_extra_optional_start_index`,
+`test_old_ledger_decodes_new_archive_reply_as_unit`, and the ICP archive's
+`should_ignore_an_extra_optional_start_index`) lock premises this design no longer
+makes and are dropped; `test_empty_append_blocks_is_accepted_and_stores_nothing` stays.
+Until the ledger release, a re-send after a lost callback is refused and the old ledger
+halts on it, retrying per transaction: survivable, but keep the window short.
+*Acceptance:* Req 1–6.
 
 **Ledger release — PRs 2–4, stacked and shipped in one ledger upgrade.** Each PR
-compiles and passes its tests alone, but none is released alone: PR 3 without PR 4 has
-a probe that re-fires on every transaction for want of a backoff and no creation
+compiles and passes its tests alone, but none is released alone: PR 3 without PR 4
+retries a rejected append on every transaction for want of a backoff and has no creation
 journal; PR 2 alone hides archiving traps while the fresh-archive window is open. The
-upgrade must follow the archive release, since an old archive treats an indexed append
-as an ordinary one.
+upgrade should follow the archive release so archiving does not pause; if it does not,
+the ledger backs off on rejected appends and resumes once the archives are upgraded.
 
 - **PR 2 — the ledger's archiving-reply change** (separate specification). Delivers the
   reply half of Req 10.3.
@@ -477,7 +532,7 @@ as an ordinary one.
   removed and byte-based selection, so the Expected_Parent needs no per-position
   scaffolding and reconciliation and removal share a message; reconciliation from the
   reported extent, the range checks, offset derivation, the Expected_Parent, the
-  capability probe and seam, and the `halted` field with its pre-guard skip and labelled
+  rejected-append handling and seam, and the `halted` field with its pre-guard skip and labelled
   gauge, holding the variants its own checks raise (`StartAhead`, `PositionShort`,
   `PositionAhead`, `StartMoved`). *Acceptance:* Req 7, Req 9, Req 11, Req 12.
 - **PR 4 — retries and creation** (DEFI-3017, DEFI-3018). The backoff, the remaining
@@ -493,9 +548,15 @@ suffix an operator has not removed.
 
 ## Discussed Alternatives
 
-- **A typed error return with no index.** Subsumed: `opt append_result` is that return
+- **An optional index argument on the existing `append_blocks`.** One entry point, but an
+  archive that ignores the argument stores an indexed batch blindly, which makes the
+  release order a safety rule, leaves a rollback exposed, and needs a capability probe, a
+  positive-only cache and two Candid tolerances as release gates. A separate method is
+  rejected by an archive that lacks it before anything is stored.
+- **A typed error return with no index.** Subsumed: `append_result` is that return
   value; it would not have delivered Req 2 or Req 3.
 - **String-matching the reject message.** Depends on replica formatting and CDK version.
+  This is also why an old archive and a trapping one are not told apart (D9).
 - **Idempotency without a reported position.** Leaves the ledger counting what it sent,
   so it over-advances after a lost batch; Req 3 is what makes idempotency sufficient.
 - **Reconciling from `log_length` by polling.** Superseded by reporting on every append;
@@ -508,8 +569,8 @@ suffix an operator has not removed.
   becomes irrelevant instead.
 - **Letting the archive pull.** Dissolves the commit-point problem but inherits the
   index's timer-fragility problem.
-- **A separate range endpoint.** The empty indexed append answers the same question on
-  every append and with no round to run, which is why it doubles as the capability probe.
+- **A separate range endpoint.** The reply to every indexed append answers the same
+  question, and an empty `append_blocks_at` answers it when there is no round to run.
 - **Redirecting a `BelowRange` batch to an older archive.** Every piece of that path
   generated failure modes of its own; Req 2.5 removes the benign route, and a halt is
   right for the rest.

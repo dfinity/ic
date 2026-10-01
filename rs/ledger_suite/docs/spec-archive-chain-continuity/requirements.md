@@ -60,9 +60,10 @@ an archive's reported range.
 - **Archived_Prefix**: the blocks a ledger has stopped serving itself because an archive
   confirmed holding them. Its end is exclusive: the lowest index the ledger still serves.
 - **Declared_Index**: the global index an append states its first block belongs at,
-  carried as the optional second argument to `append_blocks`.
-- **Indexed_Append** / **Index_Less_Append**: a call to `append_blocks` with / without a
-  Declared_Index. The latter is the only shape a ledger built before this change sends.
+  carried as the second argument of `append_blocks_at`.
+- **Indexed_Append** / **Index_Less_Append**: a call to `append_blocks_at` / to the
+  unchanged `append_blocks`. The latter is the only call a ledger built before this
+  change makes.
 - **Expected_Parent**: the hash an archive is told at `init` to expect as the parent of
   the first block it stores, i.e. the hash of the block at `block_index_offset - 1`.
   Absent for an archive whose offset is zero, and for one created by a ledger that does
@@ -106,9 +107,6 @@ an archive's reported range.
 - **Verifying the first append into a fresh archive given no Expected_Parent.** It is
   unverifiable in principle and is taken on trust (Req 1.7); refusing would halt every
   un-upgraded ledger at each archive roll-over. Req 1.8 makes the window countable.
-- **Defending against an archive downgraded beneath its ledger.** A ledger that has
-  cached a positive capability answer sends blocks without probing; Delivery states the
-  release-order rule instead.
 - **Validating the archive controller configuration.** The platform allows ten
   controllers and `ArchiveOptions` puts no bound on the list. Enforcing it in the
   ledger's `init` and `post_upgrade` is a separate, minimal change (DEFI-3015).
@@ -126,8 +124,11 @@ it sent cannot corrupt the archive by sending it again.
 
 #### Acceptance Criteria
 
-1. WHEN the first block THE Archive would store does not carry as its parent the hash
-   of the archive's last stored block, THE Archive SHALL refuse the append.
+1. THE Archive SHALL store a block if and only if the caller is the ledger it was created
+   by and the block's parent hash is the hash of the block before it: the archive's last
+   stored block for the first block the append stores, the preceding block of the append
+   for every later block, and the Expected_Parent while the archive holds no blocks;
+   otherwise THE Archive SHALL refuse the append, except as 1.4 and 1.7 provide.
 2. WHILE THE Archive holds no blocks and was given an Expected_Parent, THE Archive SHALL
    refuse an append whose first stored block does not carry that hash as its parent.
 3. WHEN a block THE Archive would store, other than the first, does not carry as its
@@ -146,6 +147,8 @@ it sent cannot corrupt the archive by sending it again.
    against and refusing would halt every un-upgraded ledger at each archive roll-over.
 8. WHEN THE Archive stores blocks under 1.7, THE Archive SHALL count that append
    distinctly, because it is the one append whose content it cannot verify.
+9. WHEN the caller of an append is not the ledger THE Archive was created by, THE Archive
+   SHALL refuse the append and store nothing, whatever the append contains.
 
 ### Requirement 2: An Indexed Append Is Placed By Its Declared Index
 
@@ -234,17 +237,16 @@ be released on its own.
 #### Acceptance Criteria
 
 1. WHEN THE Archive receives an Index_Less_Append it can store, THE Archive SHALL store
-   its blocks and SHALL return no result, an absent optional that the caller reads as an
-   empty reply.
+   its blocks and SHALL return the empty reply it returns today.
 2. WHEN THE Archive refuses an Index_Less_Append on any ground, THE Archive SHALL fail
    the call rather than return a description of the refusal, because such a caller cannot
    read one and would otherwise stop serving the blocks itself.
 3. IF THE Archive cannot store every block of an Index_Less_Append, THEN THE Archive
    SHALL store none of them and SHALL fail the call, because such a caller accounts for
    the whole batch on success.
-4. THE Archive SHALL accept an Index_Less_Append encoded with a trailing absent optional
-   argument and one with no second argument at all, and SHALL NOT require a
-   Declared_Index.
+4. THE Archive SHALL keep `append_blocks` with its current signature and SHALL NOT
+   require a ledger to use `append_blocks_at`, because a ledger built before this change
+   knows no other call.
 
 ### Requirement 6: Every Refusal And Short Stop Is Counted
 
@@ -380,7 +382,7 @@ interval rather than work per transaction.
    Archiving_Round until its next upgrade, and SHALL re-establish the halt from the
    first reply after that upgrade if the cause persists.
 
-### Requirement 11: A Ledger Will Not Archive Against An Archive That Cannot Report Its Range
+### Requirement 11: A Ledger Will Not Archive Against An Archive That Does Not Implement Indexed Appends
 
 **User Story:** As an operator of a third-party ledger suite, I want a ledger upgraded
 ahead of its archives to stop archiving rather than continue unprotected, so that I find
@@ -388,16 +390,16 @@ out from a metric instead of from a corrupted archive.
 
 #### Acceptance Criteria
 
-1. WHILE the Tail_Archive does not report an Archive_Range when asked per 3.5, THE ICRC
-   Ledger SHALL move no blocks to any archive and SHALL expose a distinct non-zero
-   metric.
-2. WHEN the Tail_Archive begins reporting an Archive_Range, THE ICRC Ledger SHALL resume
+1. WHILE the Tail_Archive rejects Indexed_Appends, THE ICRC Ledger SHALL move no blocks
+   to any archive and SHALL count each rejected append in a metric, because an archive
+   that does not implement `append_blocks_at` rejects the call before storing anything.
+2. WHEN the Tail_Archive begins accepting Indexed_Appends, THE ICRC Ledger SHALL resume
    archiving without operator action and without being upgraded.
-3. THE ICRC Ledger SHALL make the determination in 11.1 without storing any blocks, and
-   SHALL NOT repeat it on every round once an archive has reported its range, except
-   once after an upgrade.
-4. THE ICP Ledger SHALL continue archiving against an archive that reports no
-   Archive_Range, and SHALL expose a distinct count of how often it does so.
+3. THE ICRC Ledger SHALL NOT fall back to `append_blocks` when an Indexed_Append is
+   rejected, because an archive that does not implement `append_blocks_at` would store
+   the batch without placing it.
+4. THE ICP Ledger SHALL continue archiving through `append_blocks`, whose reply carries
+   no Archive_Range, and SHALL expose a distinct count of appends made without one.
 
 ### Requirement 12: An Archiving Round Makes One Append
 
@@ -406,8 +408,9 @@ to a single archive, so that there is one question about whether it landed.
 
 #### Acceptance Criteria
 
-1. THE Ledger SHALL send at most one block-carrying `append_blocks` per Archiving_Round,
-   and at most one carrying no blocks.
+1. THE Ledger SHALL make at most one append call carrying blocks per Archiving_Round,
+   `append_blocks_at` or, on the ICP ledger, `append_blocks`, and at most one carrying
+   none, so that each round poses one question about whether a batch landed.
 2. THE Ledger SHALL create at most one archive per Archiving_Round.
 3. THE Ledger SHALL choose a round's blocks so that the encoded call fits one
    inter-canister message, measured in bytes rather than counted in blocks.
