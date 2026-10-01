@@ -242,11 +242,13 @@ under storage pressure instead of repeating work it cannot finish.
 5. THE Archive SHALL NOT be held to 4.2 or 4.4 for a storage refusal that terminates its
    execution rather than returning control to it.
 
-### Requirement 5: An Index-Less Append Behaves As It Does Today
+### Requirement 5: The Legacy `append_blocks` Keeps Its Interface
 
 **User Story:** As an operator upgrading a ledger suite, I want an archive upgraded ahead
-of its ledger to behave towards that ledger exactly as before, so that the archive can
-be released on its own.
+of its ledger to keep accepting the calls that ledger already makes and to answer them
+in the same shape, so that the archive can be released on its own. The chain check of
+Req 1 applies to those calls too, so a re-send the old archive would have appended is
+now refused; what is preserved is the interface, not every outcome.
 
 #### Acceptance Criteria
 
