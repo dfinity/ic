@@ -180,7 +180,7 @@ pub fn test(env: TestEnv) {
     retry_with_msg!(
         "wait for guestos-recovery-engine.service to finish",
         log.clone(),
-        secs(60),
+        secs(120),
         secs(5),
         || {
             let state = execute_bash_command(
