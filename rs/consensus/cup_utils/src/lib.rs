@@ -468,9 +468,6 @@ mod tests {
                         initial_ni_dkg_transcript_high_threshold: Some(
                             dummy_initial_dkg_transcript(committee, NiDkgTag::HighThreshold),
                         ),
-                        height: 54321,
-                        time: 1,
-                        state_hash: vec![1, 2, 3, 4, 5],
                         registry_store_uri: registry_store_uri.clone(),
                         ecdsa_initializations: vec![],
                         chain_key_initializations: vec![],
