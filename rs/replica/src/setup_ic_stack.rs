@@ -245,6 +245,7 @@ pub fn construct_ic_stack(
         rt_handle_xnet.clone(),
         node_id,
         subnet_id,
+        max_certified_height_rx.clone(),
         metrics_registry,
         log.clone(),
     ));

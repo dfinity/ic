@@ -437,7 +437,7 @@ pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
 
 /// Generates a `RegistryClient` with a local node record and subnet records
 /// for `SUBNET_1` through `SUBNET_4` (all as `Application`), plus a cloud engine
-/// `SUBNET_6` which should be ignored by the payload builder.
+/// `SUBNET_6`.
 pub fn get_simple_registry_for_test() -> Arc<dyn RegistryClient> {
     let (registry, _) = get_registry_and_urls_for_test_with_subnet_types(
         0,
@@ -495,14 +495,14 @@ fn add_subnet_record(
         .expect("Could not add subnet record.");
 }
 
-/// Creates a registry to be used with the `xnet_endpoint_url` tests. The setup
-/// is as follows:
+/// Creates a registry for node selection tests (proximity, advert targets and
+/// endpoint URLs). The setup is as follows:
 /// * `LOCAL_SUBNET` consisting of `LOCAL_NODE_1_OPERATOR_1` (operated by
-///   `OPERATOR_1`); and
+///   `OPERATOR_1`) plus 5 other nodes; and
 /// * `REMOTE_SUBNET` consisting of 3 nodes: `REMOTE_NODE_1_OPERATOR_1` and
 ///   `REMOTE_NODE_2_OPERATOR_1` (both operated by `OPERATOR_1`) and
 ///   `REMOTE_NODE_3_OPERATOR_2` (operated by `OPERATOR_2`).
-pub(crate) fn create_xnet_endpoint_url_test_fixture() -> Arc<FakeRegistryClient> {
+pub(crate) fn get_node_selection_registry_for_test() -> Arc<FakeRegistryClient> {
     let data_provider = ProtoRegistryDataProvider::new();
 
     add_node_record_with_node_operator_id(
@@ -511,7 +511,11 @@ pub(crate) fn create_xnet_endpoint_url_test_fixture() -> Arc<FakeRegistryClient>
         "192.168.0.1".to_string(),
         OPERATOR_1,
     );
-    add_subnet_record(&data_provider, LOCAL_SUBNET, vec![LOCAL_NODE_1_OPERATOR_1]);
+    let local_nodes = [LOCAL_NODE_1_OPERATOR_1]
+        .into_iter()
+        .chain((101..106).map(node_test_id))
+        .collect();
+    add_subnet_record(&data_provider, LOCAL_SUBNET, local_nodes);
 
     add_node_record_with_node_operator_id(
         &data_provider,
@@ -567,4 +571,10 @@ fn mock_gen_range(numerator: u64, denominator: u64, offset: u64) -> GenRangeFn {
 
         low + (high - low) / denominator * numerator - offset
     })
+}
+
+/// A `max_certified_height` receiver whose sender is already dropped, so the
+/// advert task started by `XNetPayloadBuilderImpl::new()` ends right away.
+pub(crate) fn already_closed_receiver() -> watch::Receiver<Height> {
+    watch::channel(Height::new(0)).1
 }
