@@ -30,6 +30,17 @@ A second failure compounds the first: a ledger whose archiving keeps failing ret
 every transaction with no spacing, so one persistent cause becomes continuous wasted
 work while the blocks it could not archive accumulate.
 
+Why a ledger archives at all: an archive is created on the ledger's own subnet, and a
+single canister can hold only a fraction of a subnet's storage, so a ledger that kept
+every block would be capped at that fraction. Archives let one suite use the subnet's
+storage, and with canister migration a full archive, which receives no more writes and
+is read by canister id, can move to another subnet, so a chain can outgrow one subnet at
+the cost of one archive per subnet. The index canister, which keeps a copy of every
+block, is then the remaining bound; sharding it, or having it redirect readers to the
+ledger and archives, is separate work and a breaking change. Archiving also confines a
+ledger bug or a bad upgrade to the blocks still in the ledger, since full archives hold
+the rest in a separate, rarely changed canister.
+
 This specification makes archiving robust. An archive must be told where a batch belongs
 and refuse one that does not fit; it must report its own extent, so a ledger never infers
 it; a ledger must not stop serving a block until an archive has confirmed holding it; and
@@ -370,7 +381,7 @@ interval rather than work per transaction.
 4. WHEN an archive stops short and reports `at_capacity` as false, THE Ledger SHALL treat
    the round as failed for 10.1 and 10.3 while keeping the reported progress, because the
    refused growth would otherwise be provoked again by every transaction.
-5. WHEN an archive refuses an append on any ground in Req 1, or per 2.2, 2.5 or 6.3, THE
+5. WHEN an archive refuses an append per 1.1–1.4, 2.2, 2.5 or 6.3, THE
    ICRC Ledger SHALL make no further archiving attempt and SHALL expose a distinct
    non-zero metric rather than back off, because no retry resolves a chain or position
    mismatch; THE ICP Ledger, whose archive can only reject, SHALL treat every reject as a
@@ -411,9 +422,9 @@ to a single archive, so that there is one question about whether it landed.
 
 #### Acceptance Criteria
 
-1. THE Ledger SHALL make at most one append call carrying blocks per Archiving_Round,
-   `append_blocks_at` or, on the ICP ledger, `append_blocks`, and at most one carrying
-   none, so that each round poses one question about whether a batch landed.
+1. THE Ledger SHALL make at most one append call per Archiving_Round, with or without
+   blocks, `append_blocks_at` or, on the ICP ledger, `append_blocks`, so that each round
+   poses one question about whether a batch landed.
 2. THE Ledger SHALL create at most one archive per Archiving_Round.
 3. THE Ledger SHALL choose a round's blocks so that the encoded call fits one
    inter-canister message, measured in bytes rather than counted in blocks.
@@ -426,9 +437,8 @@ calls needed to restart it.
 
 #### Acceptance Criteria
 
-1. WHEN THE ICRC Ledger sends an Indexed_Append, or THE Ledger asks an archive for its
-   remaining capacity, THE Ledger SHALL stop waiting after at most ARCHIVE_CALL_TIMEOUT
-   and SHALL treat the round as failed per Req 10.
+1. WHEN THE ICRC Ledger sends an Indexed_Append, THE ICRC Ledger SHALL stop waiting
+   after at most ARCHIVE_CALL_TIMEOUT and SHALL treat the round as failed per Req 10.
 2. THE ICRC Ledger SHALL NOT treat a response it stopped waiting for as evidence that
    the archive stored nothing, and SHALL converge on the archive's reported extent on a
    later round without any block being stored twice.

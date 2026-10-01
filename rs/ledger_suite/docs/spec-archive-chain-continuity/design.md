@@ -347,14 +347,17 @@ the next permitted round simply tries `append_blocks_at` again.
 ### `ledger_canister_core::archive` — `node_and_capacity`
 
 The roll-over test is restated in terms of the last reply's `at_capacity` (Req 8.1,
-8.2), with the `remaining_capacity` pre-call kept for a cold start or a fresh node, and
-gated on the Archived_Prefix having reached the tail's reported position (Req 8.1):
-otherwise an inherited tail that stored an unverified prefix and filled would have the
-next archive created above blocks the ledger still serves.
+8.2), and gated on the Archived_Prefix having reached the tail's reported position
+(Req 8.1): otherwise an inherited tail that stored an unverified prefix and filled would
+have the next archive created above blocks the ledger still serves. The
+`remaining_capacity` pre-call goes: on a cold start, with no last reply to read, the
+ledger simply appends to the tail, and a full tail answers `StoredPartial` with
+`at_capacity` and its range, which is what Req 7.1 and 8.1 need. One wasted append per
+cold start, and the ledger never calls anything but an append on an archive (Req 12.1).
 
 An empty archive reporting `at_capacity` (`next_index == block_index_offset`) halts
-instead of rolling over (Req 8.3); so does a cold-start pre-check that finds an empty
-tail too small, and a first block that exceeds one message so the byte cap selects
+instead of rolling over (Req 8.3); so does a first block larger than the configured
+archive size, decided locally, and one that exceeds one message so the byte cap selects
 nothing. Creating a node sets `block_index_offset` from the previous node's reported
 `next_index` (Req 7.1, not `+ 1`) and supplies the Expected_Parent (Req 7.2).
 
@@ -362,9 +365,8 @@ The Expected_Parent is the decoded `parent_hash()` of the round's first block: u
 D11 a creation round sends no blocks and the next append starts at the selection front,
 so no other position is ever a node's first. It is read in `archive_blocks<LA>`, where
 the block type is known, and threaded down beside the blocks. For a legacy suite the
-tail's first reply is where Req 7.1 gets its value: a partial append if the tail is
-already full, or an empty `append_blocks_at` (Req 3.5) when the cold-start pre-call finds
-it full before any append. Legacy non-tail nodes are never re-queried.
+tail's first reply is where Req 7.1 gets its value, a partial one if the tail is already
+full. Legacy non-tail nodes are never re-queried.
 
 ### `ledger_canister_core::ledger` and `::blockchain` — round selection
 
@@ -393,7 +395,6 @@ choice is per call (D10):
 |---|---|---|
 | `append_blocks_at` | bounded | idempotent under Req 2.4 |
 | `append_blocks` (ICP) | unbounded | a retry would store twice, Req 13.4 |
-| `remaining_capacity` | bounded | read-only, resolved by asking again |
 | `create_canister` | unbounded | unresolvable: an unknown outcome is Req 14.1 |
 | `install_code` | unbounded | resolved by `canister_status`; once per fill |
 | `update_settings` | unbounded | resolved by retrying; once per fill |
@@ -474,7 +475,7 @@ controllable, Req 4.2's `false` rests on review of the branch that sets the flag
 | 23 | integration | `BelowRange`, `Gap`, `ChainMismatch` and a first-block-too-large `StoredPartial`: neither the prefix nor the published range changes; a wholly held re-send: both advance; `BelowRange` also halts on its own metric, distinct from 10.5's, with no further append | 9.3, 7.6, 10.6 |
 | 24 | integration | tail without Expected_Parent, first append capacity-shortened: `at_capacity` true, `verified` false, **no** archive created; re-send compared, prefix advances, then the next archive is created; no `BelowRange` ever | 8.1, 9.3, 2.5 |
 | 25 | integration | full tail: next round creates an archive; short stop with `at_capacity` false: same archive retried, rounds spaced and counted as failures | 8.1, 8.2, 10.4 |
-| 26 | integration | oversized block on all three paths (reply, cold-start pre-check, byte cap): halt, own metric, no archive created; an ordinary full tail still rolls over | 8.3 |
+| 26 | integration | oversized block on all three paths (the reply from an empty tail, the local size check, the byte cap): halt, own metric, no archive created; an ordinary full tail still rolls over, and a cold start against a full tail costs one wasted append and no other call | 8.3, 8.1, 12.1 |
 | 27 | integration | archive stopped: attempts spaced per backoff, resume on restart with no intervention; a failed round then a ledger upgrade: next transaction archives immediately | 10.1–10.3, 10.7 |
 | 28 | integration | refusal per 1.1, 2.2, 2.5, 6.3 in turn: halt with distinct metric, no append while halted; upgrade with archive unchanged: one append, halt re-established; fix and upgrade: resumes | 10.5, 10.8 |
 | 29 | integration | old archive wasm as tail: `append_blocks_at` rejected on every attempt, attempts spaced per backoff, nothing archived, no `append_blocks` call made; upgrade the archive: resumes without a ledger upgrade; ICP ledger archives normally through `append_blocks` and counts | 11.1–11.4, 10.1 |
