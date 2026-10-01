@@ -10,9 +10,12 @@
 //! Every such response is accompanied, in the very same message, by the hash of
 //! its content: the `content_hash` of the metadata that the response's signers
 //! signed over. That hash is all a receiver needs in order to look the content up
-//! in its own canister HTTP pool, or to fetch it from a peer, so taking a
-//! response's content out of the payload never requires putting anything else in
-//! its place.
+//! in its own canister HTTP pool, or to fetch it from a peer.
+//!
+//! Replacing a response with its hash costs 34 bytes in the stripped block
+//! proposal, so a response is only stripped when its content is larger than that
+//! (see [`MIN_STRIPPED_CONTENT_BYTES`]). Stripping therefore never makes a block
+//! proposal bigger than the one it was stripped from.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -56,12 +59,52 @@ pub(crate) fn strip_responses(
 
     let mut stripped = BTreeSet::new();
     for_each_response_slot(&mut messages, |content_hash, response| {
+        if response
+            .as_ref()
+            .is_none_or(|response| content_size(response) < MIN_STRIPPED_CONTENT_BYTES)
+        {
+            return;
+        }
+
         if response.take().is_some() {
             stripped.insert(content_hash);
         }
     });
 
     (!stripped.is_empty()).then(|| (serialize(messages), stripped))
+}
+
+/// The smallest response content that is worth stripping.
+///
+/// A stripped response is replaced by its content hash in
+/// [`pb::StrippedBlockProposal::stripped_canister_http_responses`], which costs 34
+/// encoded bytes: the 32 byte hash, a tag and a length. Removing less content than
+/// that would make the block proposal *bigger*, so the break-even point is where
+/// this threshold belongs, with only enough slack above it to cover the framing
+/// that the 34 bytes does not count.
+///
+/// It deliberately sits no higher. The declaration and the content it replaces are
+/// both sent to every peer, so the comparison is 34 bytes against the content size
+/// however large the subnet is, and anything above break-even is spending bandwidth
+/// to save the per-response cost of reassembly. A block can carry up to
+/// [`ic_types::canister_http::CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK`] responses, so
+/// every byte of slack here is multiplied by five hundred.
+///
+/// In practice this keeps the replica's own terse rejects in the block, which are
+/// the ones that cost more to strip than they save: "Deadline Exceeded",
+/// "Insufficient cycles" and "Adapter returned empty result" are all under 32 bytes.
+const MIN_STRIPPED_CONTENT_BYTES: usize = 64;
+
+/// The size of a response's content, the quantity its metadata reports as
+/// `content_size`.
+fn content_size(response: &pb::CanisterHttpResponse) -> usize {
+    use pb::canister_http_response_content::Status;
+
+    match response.content.as_ref().and_then(|c| c.status.as_ref()) {
+        Some(Status::Success(payload)) => payload.len(),
+        Some(Status::Reject(reject)) => std::mem::size_of::<i32>() + reject.message.len(),
+        None => 0,
+    }
 }
 
 /// Puts the given response contents back into the payload, in place of the ones
@@ -314,6 +357,29 @@ mod tests {
             .map(|response| (hash_of(response), Some(response.clone())))
             .collect();
         assert_eq!(reinsert_responses(&stripped, &responses).unwrap(), payload);
+    }
+
+    /// A response whose content is smaller than the hash that would replace it is
+    /// left in the block, because removing it would make the proposal bigger.
+    #[test]
+    fn tiny_responses_are_not_stripped_test() {
+        let tiny = fake_canister_http_response(1, MIN_STRIPPED_CONTENT_BYTES - 1);
+        let big = fake_canister_http_response(2, MIN_STRIPPED_CONTENT_BYTES);
+
+        // On its own there is nothing worth stripping, so the payload is untouched.
+        let only_tiny =
+            fake_canister_http_payload(vec![fake_canister_http_response_message(&tiny, &[NODE_1])]);
+        assert_eq!(strip_responses(&only_tiny), None);
+
+        // Alongside one that is worth it, only the larger one goes.
+        let both = fake_canister_http_payload(vec![
+            fake_canister_http_response_message(&tiny, &[NODE_1]),
+            fake_canister_http_response_message(&big, &[NODE_1]),
+        ]);
+        let (stripped, hashes) = strip_responses(&both).expect("Should strip the larger one");
+
+        assert_eq!(hashes, BTreeSet::from_iter([hash_of(&big)]));
+        assert_eq!(responses_left_in_payload(&stripped), vec![tiny]);
     }
 
     #[test]

@@ -328,7 +328,9 @@ pub(crate) fn fake_canister_http_reject(callback_id: u64) -> CanisterHttpRespons
         id: CallbackId::new(callback_id),
         content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
             reject_code: RejectCode::SysTransient,
-            message: String::from("rejected"),
+            // Comfortably above `MIN_STRIPPED_CONTENT_BYTES`, so that the tests
+            // which expect a reject to be stripped still do.
+            message: "rejected because the remote end did something regrettable".repeat(2),
         }),
     }
 }

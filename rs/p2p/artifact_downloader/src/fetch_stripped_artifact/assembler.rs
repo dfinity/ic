@@ -1470,8 +1470,8 @@ mod tests {
     ///
     /// Measured over the whole encoded proposal, not just its canister http
     /// payload, because declaring a stripped content hash costs about 34 bytes
-    /// there. That is dwarfed by any response worth stripping, but it does mean a
-    /// response of only a handful of bytes would not pay for itself.
+    /// there. A response smaller than that is left in the block, so the proposal
+    /// that goes out is never the bigger of the two.
     #[test]
     fn stripping_a_block_removes_the_canister_http_responses() {
         let (payload, stripped_responses) = canister_http_payload_with_every_kind();
@@ -1496,18 +1496,16 @@ mod tests {
             .iter()
             .map(|response| response.content.count_bytes())
             .sum();
-        // The declared hashes are the only thing stripping adds back.
-        let declaration_overhead = 34 * stripped_responses.len();
-
-        assert!(
-            stripped_size + removed_size <= unstripped_size + declaration_overhead,
-            "stripped: {stripped_size}, removed: {removed_size}, \
-             unstripped: {unstripped_size}, overhead: {declaration_overhead}"
-        );
         assert!(
             stripped_size < unstripped_size,
             "the stripped proposal ({stripped_size} B) is not smaller than the \
              unstripped one ({unstripped_size} B)"
+        );
+        // Every response was worth stripping, so the only thing left behind is the
+        // declared hash of each.
+        assert!(
+            stripped_size + removed_size <= unstripped_size + 34 * stripped_responses.len(),
+            "stripped: {stripped_size}, removed: {removed_size}, unstripped: {unstripped_size}"
         );
     }
 
