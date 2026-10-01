@@ -153,6 +153,8 @@ impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
                     dealing_id: Some(dealing_id.into()),
                 })
                 .collect(),
+            // Nothing strips canister HTTP responses yet.
+            stripped_canister_http_responses: Vec::new(),
         }
     }
 }
