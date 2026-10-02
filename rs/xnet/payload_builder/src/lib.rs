@@ -2103,7 +2103,7 @@ impl PoolRefillTask {
                 }
 
                 // A suffix is appended to the pooled slice; a complete slice replaces it.
-                let pool_slice = if is_suffix {
+                let put_or_append = if is_suffix {
                     CertifiedSlicePool::append
                 } else {
                     CertifiedSlicePool::put
@@ -2111,7 +2111,7 @@ impl PoolRefillTask {
                 // Validation verifies a threshold signature.
                 let task = Arc::clone(&self);
                 match tokio::task::spawn_blocking(move || {
-                    pool_slice(
+                    put_or_append(
                         &task.pool,
                         subnet_id,
                         slice,
