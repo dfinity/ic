@@ -268,7 +268,7 @@ system_test_nns(
     enable_metrics = True,
     tags = [
         "colocate",
-        "long_test",  # since it takes longer than 5 minutes.
+        "system_test_large",
     ],
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS | COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
