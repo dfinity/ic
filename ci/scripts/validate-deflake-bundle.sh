@@ -43,6 +43,20 @@ raw="$(git diff --no-renames --raw "$BASE_SHA" "$fix")"
 if awk '$2 == "120000" || $2 == "160000" {bad = 1} END {exit !bad}' <<<"$raw"; then
     die "the fix adds a symlink or submodule"
 fi
+# Dependencies may only be added or removed as `name = { workspace = true }`, whose versions and features come
+# from the root Cargo.toml, which the fix can't change.
+manifests="$(git diff --no-renames --unified=0 "$BASE_SHA" "$fix" -- '*Cargo.toml')"
+if awk '
+    /^(\+\+\+|---) / { next }
+    /^[+-]/ {
+        line = substr($0, 2)
+        if (line !~ /^[ \t]*$/ && line !~ /^[ \t]*\[[A-Za-z0-9_.-]+\][ \t]*$/ \
+            && line !~ /^[ \t]*[A-Za-z0-9_-]+[ \t]*=[ \t]*\{[ \t]*workspace[ \t]*=[ \t]*true[ \t]*\}[ \t]*$/ \
+            && line !~ /^[ \t]*[A-Za-z0-9_-]+\.workspace[ \t]*=[ \t]*true[ \t]*$/) bad = 1
+    }
+    END { exit !bad }' <<<"$manifests"; then
+    die "the fix changes a Cargo.toml beyond adding or removing workspace dependencies"
+fi
 lock="$(git diff "$BASE_SHA" "$fix" -- Cargo.lock)"
 if grep -qE '^\+[[:space:]]*(\[\[[[:space:]]*package[[:space:]]*\]\]|(name|version|source|checksum)[[:space:]]*=)' <<<"$lock"; then
     die "the fix changes the dependencies in Cargo.lock"
