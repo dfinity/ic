@@ -60,7 +60,7 @@ pub async fn scrape(
     h: reqwest::header::HeaderMap,
 ) -> Result<ScrapeResult, ScrapeError> {
     let url = c.url.to_string();
-    let reqbuilder = client.get(url).headers(h).timeout(c.timeout.into());
+    let reqbuilder = client.get(url).headers(h).timeout(c.timeout);
     let response = reqbuilder.send().await?;
     let status = response.status();
     let headers = response.headers().clone();

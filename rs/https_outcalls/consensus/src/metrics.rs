@@ -6,6 +6,7 @@ use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge};
 /// The label whose value names the kind of event or error that was counted.
 const LABEL_TYPE: &str = "type";
 
+#[derive(Clone)]
 pub struct CanisterHttpPoolManagerMetrics {
     /// Records the time it took to perform an operation
     pub op_duration: HistogramVec,

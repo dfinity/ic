@@ -5,20 +5,15 @@ use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_registry_client_helpers::{
-    node::{NodeRecord, NodeRegistry},
-    subnet::SubnetRegistry,
-};
+use ic_registry_client_helpers::node::NodeRecord;
 use prometheus::{GaugeVec, IntCounter, IntGauge, Opts};
 use rand::{Rng, thread_rng};
-use std::{
-    collections::BTreeMap,
-    convert::TryFrom,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::collections::BTreeMap;
+use std::convert::TryFrom;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-use super::{Error, get_node_operator_id};
+use super::{Error, get_node_operator_id, get_node_record, get_subnet_nodes};
 
 /// Function that generates a random value in the range [`low`, `high`), i.e.
 /// inclusive of `low` and exclusive of `high`
@@ -29,7 +24,7 @@ const NANOS_PER_SEC: u64 = 1_000_000_000;
 /// How long a node is considered unhealthy after a failed request. It may be
 /// tried again after this long, so a node that stays down costs one failed
 /// request per TTL.
-pub const UNHEALTHY_NODE_TTL: Duration = Duration::from_secs(10);
+const UNHEALTHY_NODE_TTL: Duration = Duration::from_secs(10);
 
 const METRIC_RTT_EMA: &str = "xnet_builder_rtt_ema_seconds";
 const METRIC_UNKNOWN_DCOP: &str = "xnet_builder_unknown_dcop_total";
@@ -40,8 +35,8 @@ const LABEL_TO: &str = "to";
 
 const OPERATOR_UNKNOWN: &str = "unknown";
 
-/// Helper for probabilistically selecting a healthy node on a given subnet,
-/// weighted by proximity.
+/// Helper for probabilistically selecting healthy nodes on a given subnet:
+/// weighted by proximity, when pulling; or uniformly, when advertising.
 ///
 /// Proximity is modeled as the exponential moving average (EMA) of roundtrip
 /// time (RTT) per datacenter operator (under the assumption that all nodes
@@ -49,8 +44,8 @@ const OPERATOR_UNKNOWN: &str = "unknown";
 /// specific node on a given subnet being selected is inversely proportional to
 /// the RTT EMA of its operator.
 ///
-/// Node health is sourced from a shared `UnhealthyNodes` instance, and is based
-/// on recent XNet query outcomes.
+/// Node health is based on the outcomes of recent XNet requests, as reported by
+/// `XNetClient` via `observe_success()` and `observe_failure()`.
 pub struct ProximityMap {
     /// Exponential moving averages (EMA) of roundtrip times by datacenter
     /// operator.
@@ -59,11 +54,11 @@ pub struct ProximityMap {
     /// Used for retrieving subnet node lists and node transport info.
     registry: Arc<dyn RegistryClient>,
 
-    /// Tracks recently unhealthy nodes, based on recent XNet query outcomes.
-    unhealthy_nodes: Arc<UnhealthyNodes>,
+    /// Tracks recently unhealthy nodes, based on recent XNet request outcomes.
+    unhealthy_nodes: UnhealthyNodes,
 
     /// Generates a random value in the range [`low`, `high`), i.e. inclusive of
-    /// `low` and exclusive of `high`, to use for picking a replica.
+    /// `low` and exclusive of `high`, to use for picking replicas.
     gen_range: GenRangeFn,
 
     /// Exported `roundtrip_ema_nanos` values.
@@ -80,7 +75,6 @@ impl ProximityMap {
     pub fn new(
         node: NodeId,
         registry: Arc<dyn RegistryClient>,
-        unhealthy_nodes: Arc<UnhealthyNodes>,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> ProximityMap {
@@ -92,19 +86,16 @@ impl ProximityMap {
             Box::new(thread_rng_gen_range),
             node,
             registry,
-            unhealthy_nodes,
             metrics_registry,
             log,
         )
     }
 
-    /// Creates a new `ProximityMap` for `node` using the provided `gen_range`
-    /// RNG.
+    /// Creates a new `ProximityMap` for `node` using the provided `gen_range` RNG.
     pub fn with_rng(
         gen_range: GenRangeFn,
         node: NodeId,
         registry: Arc<dyn RegistryClient>,
-        unhealthy_nodes: Arc<UnhealthyNodes>,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> ProximityMap {
@@ -125,7 +116,7 @@ impl ProximityMap {
         Self {
             roundtrip_ema_nanos: Default::default(),
             registry,
-            unhealthy_nodes,
+            unhealthy_nodes: UnhealthyNodes::new(UNHEALTHY_NODE_TTL, metrics_registry),
             gen_range,
             metric_rtt_ema,
             metric_unknown_dcop,
@@ -153,12 +144,7 @@ impl ProximityMap {
         version: RegistryVersion,
     ) -> Result<(NodeId, NodeRecord), Error> {
         // Retrieve `subnet`'s nodes, minus the unhealthy ones.
-        let mut nodes = self
-            .registry
-            .get_node_ids_on_subnet(subnet, version)
-            .map_err(|e| Error::RegistryGetSubnetInfoFailed(subnet, e))?
-            .filter(|nodes| !nodes.is_empty())
-            .ok_or(Error::MissingSubnet(subnet))?;
+        let mut nodes = get_subnet_nodes(self.registry.as_ref(), subnet, version)?;
         self.unhealthy_nodes.filter_at_least(1, &mut nodes);
 
         // Compute the individual and total weight of all nodes with explicit weights
@@ -197,15 +183,35 @@ impl ProximityMap {
             .unwrap_or_else(|e| e);
 
         let node = nodes[node_index];
-        let node_record = self
-            .registry
-            .get_node_record(node, version)
-            .map_err(|e| Error::RegistryGetNodeInfoFailed(node, e))?;
+        Ok((
+            node,
+            get_node_record(self.registry.as_ref(), node, version)?,
+        ))
+    }
 
-        match node_record {
-            Some(node_record) => Ok((node, node_record)),
-            None => Err(Error::MissingXNetEndpoint(node)),
+    /// Samples `count` `nodes` uniformly at random, without replacement. Only
+    /// healthy nodes are sampled, unless fewer than `count` are healthy.
+    pub fn uniform_sample(&self, count: usize, mut nodes: Vec<NodeId>) -> Vec<NodeId> {
+        self.unhealthy_nodes.filter_at_least(count, &mut nodes);
+
+        // A partial Fisher-Yates shuffle, driven by `gen_range` so tests can mock it.
+        let count = count.min(nodes.len());
+        for i in 0..count {
+            let j = (self.gen_range)(i as u64, nodes.len() as u64) as usize;
+            nodes.swap(i, j);
         }
+        nodes.truncate(count);
+        nodes
+    }
+
+    /// Records a request to `node` that it served.
+    pub fn observe_success(&self, node: NodeId) {
+        self.unhealthy_nodes.observe_success(node);
+    }
+
+    /// Records a request to `node` that it failed to serve.
+    pub fn observe_failure(&self, node: NodeId) {
+        self.unhealthy_nodes.observe_failure(node);
     }
 
     /// Updates the RTT EMA for the node operator of `node` with the newly
@@ -253,15 +259,12 @@ impl ProximityMap {
 }
 
 /// The set of nodes whose last request failed, with entries expiring after a
-/// TTL.
-///
-/// Populated by `XNetClient`; consulted by whoever selects such nodes, so that
-/// a node that is not serving requests is skipped instead of being picked again
-/// and again.
+/// TTL, so that a node that is not serving requests is skipped instead of being
+/// picked again and again.
 ///
 /// Entries are keyed by `NodeId` alone; the per-subnet semantics of
 /// `filter_at_least()` come from the node list it is given.
-pub struct UnhealthyNodes {
+struct UnhealthyNodes {
     /// Expiry times of the entries.
     nodes: Mutex<BTreeMap<NodeId, Instant>>,
 
@@ -273,7 +276,7 @@ pub struct UnhealthyNodes {
 }
 
 impl UnhealthyNodes {
-    pub fn new(ttl: Duration, metrics_registry: &MetricsRegistry) -> Self {
+    fn new(ttl: Duration, metrics_registry: &MetricsRegistry) -> Self {
         Self {
             nodes: Default::default(),
             ttl,
@@ -285,14 +288,14 @@ impl UnhealthyNodes {
     }
 
     /// Records a failed request to `node`.
-    pub fn observe_failure(&self, node: NodeId) {
+    fn observe_failure(&self, node: NodeId) {
         let mut nodes = self.nodes.lock().unwrap();
         nodes.insert(node, Instant::now() + self.ttl);
         self.prune(&mut nodes);
     }
 
     /// Records a successful request to `node`.
-    pub fn observe_success(&self, node: NodeId) {
+    fn observe_success(&self, node: NodeId) {
         let mut nodes = self.nodes.lock().unwrap();
         nodes.remove(&node);
         self.prune(&mut nodes);
@@ -302,7 +305,7 @@ impl UnhealthyNodes {
     /// remain; else leaves `nodes` as it is. So that a subnet-wide endpoint
     /// problem or a local network fault cannot leave the caller with too few
     /// nodes to choose from -- or none at all.
-    pub fn filter_at_least(&self, minimum: usize, nodes: &mut Vec<NodeId>) {
+    fn filter_at_least(&self, minimum: usize, nodes: &mut Vec<NodeId>) {
         let mut unhealthy = self.nodes.lock().unwrap();
         self.prune(&mut unhealthy);
 

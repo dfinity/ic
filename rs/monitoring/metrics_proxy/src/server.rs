@@ -16,7 +16,6 @@ use hyper::body::Bytes;
 use hyper::body::Incoming;
 use hyper_util::rt::TokioExecutor;
 use hyper_util::server::conn::auto;
-use log::{debug, error};
 use prometheus::{Encoder, Registry, TextEncoder};
 use rustls;
 use std::fmt;
@@ -27,6 +26,7 @@ use tokio::net::TcpListener;
 use tokio_rustls::{TlsAcceptor, rustls::ServerConfig};
 use tower::Service;
 use tower_http;
+use tracing::{debug, error};
 
 #[derive(Debug)]
 pub enum ServeErrorKind {
@@ -173,9 +173,9 @@ impl Server {
                     let mut method_router = get(handle_with_proxy)
                         .with_state(state)
                         .layer(tower::ServiceBuilder::new().layer(bodytimeout.clone()));
-                    if Duration::from(cache_duration) > Duration::new(0, 0) {
-                        method_router = method_router
-                            .layer(crate::cache::CacheLayer::new(cache_duration.into()));
+                    if cache_duration > Duration::ZERO {
+                        method_router =
+                            method_router.layer(crate::cache::CacheLayer::new(cache_duration));
                     }
                     router = router.route(path.as_str(), method_router);
                 }
