@@ -14,6 +14,10 @@ on the process that this file is part of, see
 
 ## Changed
 
+Logo validation now checks that the decoded bytes start with the PNG magic bytes
+(signature), instead of accepting any base64 that carries the `data:image/png;base64,`
+prefix.
+
 ## Deprecated
 
 ## Removed

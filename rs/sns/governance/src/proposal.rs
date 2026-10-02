@@ -5198,7 +5198,7 @@ Version {
 
     #[test]
     fn test_validate_and_render_manage_ledger_parameters_token_logo() {
-        let new_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+        let new_logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC".to_string();
         let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
             token_logo: Some(new_logo.clone()),
             ..ManageLedgerParameters::default()
@@ -5215,7 +5215,7 @@ Version {
         let new_fee = 751;
         let new_symbol = "COOL".to_string();
         let new_name = "coolcoin".to_string();
-        let new_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+        let new_logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC".to_string();
         let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
             transfer_fee: Some(new_fee),
             token_symbol: Some(new_symbol.clone()),
