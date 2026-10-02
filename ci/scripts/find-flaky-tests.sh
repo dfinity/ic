@@ -34,17 +34,28 @@ if [ -n "$labels" ]; then
     long="$(bazel query --keep_going "attr(tags, long_test, $query)")" || [ $? -eq 3 ]
 
     # All open PRs, since the title of a PR on a deflake branch may have been edited.
-    prs="$(gh pr list --repo dfinity/ic --state open --limit 1000 --json title,headRefName,isCrossRepository)"
+    prs="$(gh pr list --repo dfinity/ic --state open --limit 1000 --json title,headRefName,isCrossRepository,author)"
     if [ "$(jq length <<<"$prs")" -ge 1000 ]; then
         echo "Too many open PRs to check." >&2
         exit 1
     fi
+    # Anyone who can read the repository can open a PR from one of its branches, so only the deflake PRs of
+    # claude[bot] and of authors with write access count.
+    trusted="$(jq -r '.[] | select((.title | test("deflake"; "i")) or (.headRefName | startswith("ai/deflake-"))) | .author.login' <<<"$prs" \
+        | sort -u | while read -r login; do
+            permission="$(gh api "repos/dfinity/ic/collaborators/$login/permission" --jq .permission 2>/dev/null || true)"
+            if [[ "$login" == app/claude || "$permission" == admin || "$permission" == write ]]; then
+                echo "$login"
+            fi
+        done | jq -R . | jq -s -c .)"
+    echo "Trusted the deflake PRs of: $(jq -r 'join(", ")' <<<"$trusted")" >&2
 
     groups="$(jq -n -c \
         --arg labels "$labels" \
         --arg existing "$existing" \
         --arg long "$long" \
         --argjson prs "$prs" \
+        --argjson trusted "$trusted" \
         --arg patterns "${SKIP_PATTERNS:-}" '
         def lines: gsub("\r"; "") | split("\n") | map(select(length > 0));
         # Variants of a system-test, like _local and _head_nns_farm_colocate (a bare _head_nns is a legacy
@@ -52,7 +63,11 @@ if [ -n "$labels" ]; then
         def base:
             (if startswith("//rs/tests/") then sub("(_head_nns)?(_local|_farm|_farm_colocate|_colocate)?$"; "") else . end)
             | sub("_test_binary$"; "_test");
-        def slug: ltrimstr("//") | gsub("[^A-Za-z0-9._-]"; "-") | .[:100];
+        # Slugs replace the characters that branch and artifact names cannot have and are truncated, so they end in
+        # a hash of the label to keep different labels apart.
+        def hash: reduce explode[] as $c (0; . * 33 + $c | . - (. / 4294967296 | floor) * 4294967296);
+        def hex: [limit(8; recurse(. / 16 | floor)) | . - (. / 16 | floor) * 16] | reverse | map("0123456789abcdef"[.:. + 1]) | add;
+        def slug: (ltrimstr("//") | gsub("[^A-Za-z0-9._-]"; "-") | .[:90]) + "-" + (hash | hex);
         # The branches of open-deflake-pr.sh end in the date, so that one of //foo:bar-baz does not count for //foo:bar.
         def deflake_branch($slug):
             ("ai/deflake-" + $slug + "-") as $prefix
@@ -61,7 +76,7 @@ if [ -n "$labels" ]; then
         ($existing | lines) as $existing
         | ($long | lines) as $long
         | ($patterns | lines) as $patterns
-        | [$prs[] | select(.isCrossRepository | not)] as $prs
+        | [$prs[] | select((.isCrossRepository | not) and (.author.login | IN($trusted[])))] as $prs
         | [$prs[].title | capture("deflake `?(?<label>//[^ `,]+)"; "i").label | base] as $pr_bases
         | [$prs[].headRefName] as $pr_heads
         | $labels | lines
