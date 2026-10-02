@@ -73,6 +73,16 @@ def names(manifest):
     return {name for table in tables(manifest) for kind in kinds for name in table.get(kind, {})}
 
 
+def inherited(manifest):
+    return {
+        name
+        for table in tables(manifest)
+        for kind in kinds
+        for name, dep in table.get(kind, {}).items()
+        if isinstance(dep, dict) and dep.get("workspace") is True
+    }
+
+
 # The workspace dependencies, which can rename their packages.
 workspace = load(base, "Cargo.toml").get("workspace", {}).get("dependencies", {})
 
@@ -93,7 +103,7 @@ def without_workspace_dependencies(manifest):
     return manifest
 
 
-# The crates of the changed manifests and the dependencies each crate adds and removes.
+# The crates of the changed manifests, and the dependencies each crate adds, removes and inherits from the workspace.
 crates, changes = {}, {}
 for path in open(manifests).read().split("\0"):
     if path:
@@ -102,7 +112,7 @@ for path in open(manifests).read().split("\0"):
         if unknown := added - set(workspace):
             sys.exit(f"{path} adds dependencies the root Cargo.toml doesn't have: {', '.join(sorted(unknown))}")
         crates[path] = new.get("package", {}).get("name")
-        changes[crates[path]] = (added, removed)
+        changes[crates[path]] = (added, removed, inherited(new))
         if without_workspace_dependencies(old) != without_workspace_dependencies(new):
             sys.exit(f"{path} changes beyond adding or removing workspace dependencies")
 
@@ -160,12 +170,17 @@ def reference(key):
 
 for (name, version, source), old in old_packages.items():
     new = new_packages[(name, version, source)]
-    old_deps, new_deps = set(old.pop("dependencies", [])), set(new.pop("dependencies", []))
+    old_list, new_list = old.pop("dependencies", []), new.pop("dependencies", [])
+    if len(set(new_list)) != len(new_list):
+        sys.exit(f"Cargo.lock lists a dependency of {name} {version} twice")
+    old_deps, new_deps = set(old_list), set(new_list)
     # Only the crates of the workspace, which have no source, can have changed manifests.
-    added, removed = changes.get(name, (set(), set())) if source is None else (set(), set())
-    added, removed = set(map(reference, added)), set(map(reference, removed))
-    if old != new or not new_deps - old_deps <= added or not old_deps - new_deps <= removed:
-        sys.exit(f"Cargo.lock changes {name} {version} beyond adding or removing its workspace dependencies")
+    added, removed, inherits = changes.get(name, (set(), set(), set())) if source is None else (set(), set(), set())
+    # Cargo.lock keeps a dependency while another workspace dependency still selects its package.
+    kept = {reference(k) for k in inherits if package(k) in set(map(package, removed))}
+    added, removed = set(map(reference, added)) - old_deps, (set(map(reference, removed)) - kept) & old_deps
+    if old != new or new_deps - old_deps != added or old_deps - new_deps != removed:
+        sys.exit(f"Cargo.lock doesn't match the dependency changes of {name} {version}")
 EOF
 numstat="$(git diff --no-renames --numstat "$BASE_SHA" "$fix")"
 if grep -q $'^-\t-\t' <<<"$numstat"; then
