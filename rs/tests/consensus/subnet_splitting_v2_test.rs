@@ -150,13 +150,9 @@ fn subnet_splitting_test(env: TestEnv) {
 }
 
 async fn prepare_canisters(env: &TestEnv) -> TestParams {
-    let (
-        (source_subnet_chatting_canister_ids, third_subnet_chatting_canister_ids),
-        source_subnet_counting_canister_ids,
-    ) = tokio::join!(
-        install_chatting_canisters(env),
-        install_counting_canisters(env)
-    );
+    let source_subnet_counting_canister_ids = install_counting_canisters(env).await;
+    let (source_subnet_chatting_canister_ids, third_subnet_chatting_canister_ids) =
+        install_chatting_canisters(env).await;
 
     TestParams::new(
         source_subnet_counting_canister_ids,
