@@ -32,7 +32,11 @@ git diff --no-renames --name-only -z "$BASE_SHA" "$fix" >"$RUNNER_TEMP/deflake-p
 disallowed=()
 while IFS= read -r -d '' path; do
     case "$path" in
-        *.bzl | MODULE.bazel | *.MODULE.bazel | *.bazelrc | .gitattributes | */.gitattributes | .gitmodules | */Cargo.lock | rs/ic_os/config/types/*)
+        # The files that define Bazel modules and repositories, wherever they are.
+        MODULE.bazel | */MODULE.bazel | *.MODULE.bazel | *MODULE.bazel.lock | REPO.bazel | */REPO.bazel | WORKSPACE | */WORKSPACE | *WORKSPACE.bazel)
+            disallowed+=("$path")
+            ;;
+        *.bzl | *.bazelrc | .gitattributes | */.gitattributes | .gitmodules | */Cargo.lock | rs/ic_os/config/types/*)
             disallowed+=("$path")
             ;;
         rs/* | packages/* | Cargo.lock) ;;
