@@ -132,7 +132,7 @@ pub struct XNetPayloadBuilderMetrics {
     /// would have scheduled them; and whether they pooled anything.
     ///
     /// Not fully independent of the sweep: pulled headers are recorded too, so a
-    /// pull continuing a byte-limited one counts as scheduled even without an
+    /// pull extending an already pooled prefix counts as scheduled even without an
     /// advert. Unscheduled pulls that pool something point to missed adverts.
     pub shadow_pulls: IntCounterVec,
     /// Critical error: failed `count_bytes()` on valid slice.
