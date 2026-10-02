@@ -32,6 +32,12 @@ clippy_args=(
 
     # Allow format!("{}", x) instead of format!("{x}").
     --allow clippy::uninlined_format_args
+
+    # Clippy 0.1.99 false positives in macro-generated code: the methods of every
+    # #[async_trait] trait (fixed by rust-lang/rust-clippy#17547) and the
+    # thiserror and derive-new derives (rust-lang/rust-clippy#17525).
+    --allow clippy::double_must_use
+    --allow clippy::redundant_field_names
 )
 if ! cargo clippy "${clippy_args[@]}"; then
     # Don't just explode: provide a solution. Our job is to provide

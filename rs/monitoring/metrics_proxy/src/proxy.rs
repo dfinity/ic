@@ -11,7 +11,6 @@ use prometheus_parse::{self, Sample, Value};
 use rand::Rng;
 use reqwest::Client;
 use std::collections::HashMap;
-use std::f64;
 use std::iter::zip;
 use std::sync::{Arc, Mutex};
 use tracing::error;

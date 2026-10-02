@@ -1004,11 +1004,9 @@ impl ExtendedSubnetConfigSet {
             }
         }
         // canisters on the SNS subnet
-        for (flag, icp_feature_str) in [(sns, "sns")] {
-            if flag.is_some() {
-                check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
-                self.sns = Some(self.sns.unwrap_or_default());
-            }
+        if sns.is_some() {
+            check_empty_subnet(&self.sns, "SNS", "sns")?;
+            self.sns = Some(self.sns.unwrap_or_default());
         }
         // canisters on the Bitcoin subnet
         for (flag, icp_feature_str) in [(bitcoin, "bitcoin"), (dogecoin, "dogecoin")] {
