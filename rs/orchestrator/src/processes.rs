@@ -322,13 +322,15 @@ impl<P: Process> ProcessManager<P> {
     /// Ensures that a process is running with the given arguments: starts one if none is
     /// running, or restarts the running one if its [`Process::restart_decision`] requires it.
     pub(crate) fn ensure_running(&mut self, args: P::Args<'_>) -> OrchestratorResult<()> {
-        match self.process_runner.restart_decision(&args) {
-            // Not running
-            None => {}
-            Some(RestartDecision::KeepRunning) => return Ok(()),
-            Some(RestartDecision::Restart { reason }) => {
-                info!(self.logger, "Restarting {} process: {}", P::NAME, reason);
-                self.stop()?;
+        if let Some(process) = self.process_runner.get_process() {
+            match process.restart_decision(&args) {
+                RestartDecision::KeepRunning => return Ok(()),
+                RestartDecision::Restart { reason } => {
+                    info!(self.logger, "Restarting {} process: {}", P::NAME, reason);
+                    self.stop()?;
+
+                    // Fall through to start a new process with the new arguments.
+                }
             }
         }
 

@@ -33,7 +33,9 @@ const KILL_TIMEOUT: Duration = Duration::from_secs(10);
 /// A running [`Process`] together with its `Pid`.
 struct Running<P> {
     pid: Pid,
-    process: P,
+    /// Shared, such that it can be handed out by [`ProcessRunner::get_process`] without holding
+    /// the lock.
+    process: Arc<P>,
 }
 
 /// The running process (if any), shared between a [`SingleProcessRunner`] and
@@ -117,9 +119,9 @@ pub(crate) trait ProcessRunner<P: Process>: Send + Sync {
     /// process is running.
     fn get_pid(&self) -> Option<Pid>;
 
-    /// Asks the currently running process whether it must be restarted to run
-    /// with the given arguments; or returns `None` if no process is running.
-    fn restart_decision(&self, args: &P::Args<'_>) -> Option<RestartDecision>;
+    /// Returns the currently running process; or `None` if no process is
+    /// running.
+    fn get_process(&self) -> Option<Arc<P>>;
 }
 
 /// A [`SingleProcessRunner`] manages running a single versioned [`Process`]
@@ -148,6 +150,7 @@ impl<P: Process> SingleProcessRunner<P> {
     /// If a running process is already set, this function will panic.
     fn set_running(&self, pid: Pid, process: P) {
         let mut running = self.running_cell.running.lock().unwrap();
+        let process = Arc::new(process);
         if running.replace(Running { pid, process }).is_some() {
             panic!("Process is still running!");
         }
@@ -300,13 +303,13 @@ impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
             .map(|running| running.pid)
     }
 
-    fn restart_decision(&self, args: &P::Args<'_>) -> Option<RestartDecision> {
+    fn get_process(&self) -> Option<Arc<P>> {
         self.running_cell
             .running
             .lock()
             .unwrap()
             .as_ref()
-            .map(|running| running.process.restart_decision(args))
+            .map(|running| Arc::clone(&running.process))
     }
 }
 
@@ -338,7 +341,7 @@ pub(crate) mod fake {
     /// the managed process was started/stopped, and with which arguments.
     pub(crate) struct FakeRunnerLog<P> {
         /// The currently "running" process, if any.
-        pub(crate) process: Option<P>,
+        pub(crate) process: Option<Arc<P>>,
         pub(crate) starts: usize,
         pub(crate) stops: usize,
     }
@@ -367,7 +370,7 @@ pub(crate) mod fake {
     impl<P: Process> ProcessRunner<P> for FakeProcessRunner<P> {
         fn start(&mut self, process: P) -> Result<()> {
             let mut log = self.log.lock().unwrap();
-            log.process = Some(process);
+            log.process = Some(Arc::new(process));
             log.starts += 1;
             Ok(())
         }
@@ -389,13 +392,8 @@ pub(crate) mod fake {
             self.is_running().then_some(Pid::from_raw(12345))
         }
 
-        fn restart_decision(&self, args: &P::Args<'_>) -> Option<RestartDecision> {
-            self.log
-                .lock()
-                .unwrap()
-                .process
-                .as_ref()
-                .map(|process| process.restart_decision(args))
+        fn get_process(&self) -> Option<Arc<P>> {
+            self.log.lock().unwrap().process.clone()
         }
     }
 }
