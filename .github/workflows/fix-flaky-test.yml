@@ -139,8 +139,9 @@ jobs:
               gh pr list --repo "$GITHUB_REPOSITORY" --state closed --limit 500 --search "$search" --json "$fields"
             done
           } | jq -s 'add | unique_by(.number) | map(select(.isCrossRepository | not))')"
-          # authorAssociation hides private org membership from this token, so commenters are trusted by permission.
-          trusted="$(jq -r '[.[] | (.reviews + .comments)[].author.login] | unique[]' <<<"$prs" | while read -r login; do
+          # authorAssociation hides private org membership from this token, so authors are trusted by permission:
+          # anyone who can read the repository can open a PR from one of its branches.
+          trusted="$(jq -r '[.[] | .author, (.reviews + .comments)[].author | .login] | unique[]' <<<"$prs" | while read -r login; do
             permission="$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$login/permission" --jq .permission 2>/dev/null || true)"
             if [[ "$permission" == admin || "$permission" == write || "$login" == copilot-pull-request-reviewer ]]; then
               echo "$login"
@@ -149,15 +150,16 @@ jobs:
           jq --argjson trusted "$trusted" '
             def trusted: .author.login | IN($trusted[]);
             map(
-              .author = .author.login
-              # What an earlier Claude run wrote is not passed on to the next one.
-              | if .author == "app/claude" then del(.body) else . end
+              # The files of untrusted PRs are kept to avoid conflicts. claude[bot] opens PRs for people with write
+              # access, but what an earlier Claude run wrote is not passed on to the next one.
+              (if trusted then . elif .author.login == "app/claude" then del(.body) else del(.title, .body) end)
+              | .author = .author.login
               | .files |= map(.path)
               | .reviews |= map(select(trusted) | {author: .author.login, state, body})
               | .comments |= map(select(trusted) | {author: .author.login, body})
             )' <<<"$prs" > "$RUNNER_TEMP/deflake-context.json"
-          jq -r '.[] | "#\(.number) \(.state) \(.title)"' "$RUNNER_TEMP/deflake-context.json"
-          echo "Kept the reviews and comments of: $(jq -r 'join(", ")' <<<"$trusted")"
+          jq -r '.[] | "#\(.number) \(.state) \(.title // "(untrusted author)")"' "$RUNNER_TEMP/deflake-context.json"
+          echo "Trusted the PRs, reviews and comments of: $(jq -r 'join(", ")' <<<"$trusted")"
 
       # With sudo Claude would be root in this privileged container on a shared runner.
       - name: Drop sudo
