@@ -66,9 +66,9 @@ pub(crate) trait Process: Send + Sync + 'static {
 
     /// Version type of the process
     ///
+    /// Used for logging.
     /// Different processes might be using different versioning schemes.
-    /// We only impose that we can check that versions are equal and have
-    /// a debug representation
+    /// We only impose that they have a debug representation
     type Version: Debug;
     /// Static configuration of the process, such as the path to the binary
     /// and static arguments.
