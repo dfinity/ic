@@ -659,7 +659,7 @@ fn get_xnet_payload_byte_limit_too_small(
     with_test_replica_logger(|log| {
         let mut state_manager = StateManagerFixture::local(log.clone());
 
-        // Create a matching outgoing stream within `state_manager` for each slice.
+        // Create a matching outgoing stream within `state_manager`.
         state_manager =
             state_manager.with_stream(REMOTE_SUBNET, out_stream(stream.signals_end(), from));
 
@@ -1158,7 +1158,7 @@ fn refill_pool_empty(
         ));
         let byte_limit = adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX);
         let url = endpoint_resolver
-            .xnet_endpoint_url(REMOTE_SUBNET, from, from, byte_limit)
+            .xnet_stream_url(REMOTE_SUBNET, from, from, byte_limit)
             .unwrap()
             .url
             .to_string();
@@ -1295,7 +1295,7 @@ fn refill_pool_append(
             (POOL_BYTE_SIZE_SOFT_CAP - prefix_size_bytes) / POOLED_SLICE_BYTE_SIZE_DIVISOR;
         let byte_limit = adjusted_byte_limit(slice_byte_size_max - prefix_size_bytes);
         let url = endpoint_resolver
-            .xnet_endpoint_url(REMOTE_SUBNET, stream_begin, from, byte_limit)
+            .xnet_stream_url(REMOTE_SUBNET, stream_begin, from, byte_limit)
             .unwrap()
             .url
             .to_string();
@@ -1397,7 +1397,7 @@ fn refill_pool_put_invalid_slice(
         ));
         let byte_limit = adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX);
         let url = endpoint_resolver
-            .xnet_endpoint_url(REMOTE_SUBNET, from, from, byte_limit)
+            .xnet_stream_url(REMOTE_SUBNET, from, from, byte_limit)
             .unwrap()
             .url
             .to_string();
@@ -1534,7 +1534,7 @@ fn refill_pool_append_invalid_slice(
             (POOL_BYTE_SIZE_SOFT_CAP - prefix_size_bytes) / POOLED_SLICE_BYTE_SIZE_DIVISOR;
         let byte_limit = adjusted_byte_limit(slice_byte_size_max - prefix_size_bytes);
         let url = endpoint_resolver
-            .xnet_endpoint_url(REMOTE_SUBNET, stream_begin, from, byte_limit)
+            .xnet_stream_url(REMOTE_SUBNET, stream_begin, from, byte_limit)
             .unwrap()
             .url
             .to_string();
