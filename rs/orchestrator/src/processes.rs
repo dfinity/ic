@@ -325,7 +325,7 @@ impl<P: Process> ProcessManager<P> {
     pub(crate) fn ensure_running(&mut self, args: P::Args<'_>) -> OrchestratorResult<()> {
         if let Some(process) = self.process_runner.get_process() {
             match process.restart_decision(&args) {
-                RestartDecision::KeepRunning => return Ok(()),
+                RestartDecision::KeepRunning => return Ok(()), // Nothing to do.
                 RestartDecision::Restart { reason } => {
                     info!(self.logger, "Restarting {} process: {}", P::NAME, reason);
                     self.stop()?;
