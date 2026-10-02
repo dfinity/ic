@@ -43,11 +43,11 @@ if [ -n "$labels" ]; then
     # claude[bot] and of authors with write access count.
     trusted="$(jq -r '.[] | select((.title | test("deflake"; "i")) or (.headRefName | startswith("ai/deflake-"))) | .author.login' <<<"$prs" \
         | sort -u | while read -r login; do
-            permission="$(gh api "repos/dfinity/ic/collaborators/$login/permission" --jq .permission 2>/dev/null || true)"
-            if [[ "$login" == app/claude || "$permission" == admin || "$permission" == write ]]; then
-                echo "$login"
-            fi
-        done | jq -R . | jq -s -c .)"
+        permission="$(gh api "repos/dfinity/ic/collaborators/$login/permission" --jq .permission 2>/dev/null || true)"
+        if [[ "$login" == app/claude || "$permission" == admin || "$permission" == write ]]; then
+            echo "$login"
+        fi
+    done | jq -R . | jq -s -c .)"
     echo "Trusted the deflake PRs of: $(jq -r 'join(", ")' <<<"$trusted")" >&2
 
     groups="$(jq -n -c \
