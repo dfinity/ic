@@ -113,11 +113,19 @@ execute_command() {
             ;;
         "guestos-console-logs")
             echo "=== GuestOS Serial Console Logs ==="
-            env -i \
-                TERM="$TERM" \
-                LESSSECURE=1 \
-                PATH="$RESTRICTED_PATH" \
-                /usr/bin/less -f /var/log/libvirt/qemu/guestos-serial.log
+            # qemu writes the serial log as root, so read the copy
+            # export-guestos-serial-logs.sh forwards into the journal instead.
+            if journalctl -t guestos-serial -n 1 -q --no-pager | grep -q .; then
+                journalctl -t guestos-serial --no-pager \
+                    | env -i \
+                        TERM="$TERM" \
+                        LESSSECURE=1 \
+                        PATH="$RESTRICTED_PATH" \
+                        /usr/bin/less -f
+            else
+                echo "No serial console output in the journal."
+                echo "Check: service-status export-guestos-serial-logs"
+            fi
             ;;
         "network-config-settings")
             echo "=== Network Settings from Config ==="
@@ -160,7 +168,7 @@ execute_command() {
         "guestos-alternative")
             case "${2:-}" in
                 "show")
-                    /opt/ic/bin/hostos_tool guestos-alternative show
+                    sudo /opt/ic/bin/hostos_tool guestos-alternative show
                     ;;
                 "swap")
                     sudo /opt/ic/bin/hostos_tool guestos-alternative swap ${3:+"$3"}
