@@ -245,12 +245,16 @@ pub fn verify(
         match client.get_cup_contents(subnet_id, version) {
             Ok(contents) => {
                 if let Some(cup_contents) = contents.value
-                    && let Ok(CupType::Recovery(RecoveryArgs {
+                    && contents.version == version
+                    && let CupType::Recovery(RecoveryArgs {
                         height,
                         time,
                         state_hash,
-                    })) = CupType::try_from(cup_contents.cup_type)
-                    && contents.version == version
+                    }) = CupType::try_from(cup_contents.cup_type).map_err(|e| {
+                        format!(
+                            "Cannot verify recovery history at registry version {version}: {err}"
+                        )
+                    })?
                 {
                     println!("Found Recovery proposal at version {version}:");
                     println!("{:>20}: {}", "TIME", time.as_nanos_since_unix_epoch());
