@@ -33,10 +33,10 @@ if [ -n "$labels" ]; then
     existing="$(bazel query --keep_going "$query")" || [ $? -eq 3 ]
     long="$(bazel query --keep_going "attr(tags, long_test, $query)")" || [ $? -eq 3 ]
 
-    prs="$(gh pr list --repo dfinity/ic --state open --search 'deflake in:title' --limit 1000 \
-        --json title,headRefName,isCrossRepository)"
+    # All open PRs, since the title of a PR on a deflake branch may have been edited.
+    prs="$(gh pr list --repo dfinity/ic --state open --limit 1000 --json title,headRefName,isCrossRepository)"
     if [ "$(jq length <<<"$prs")" -ge 1000 ]; then
-        echo "Too many open deflake PRs to check." >&2
+        echo "Too many open PRs to check." >&2
         exit 1
     fi
 
