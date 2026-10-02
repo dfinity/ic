@@ -448,6 +448,8 @@ pub(crate) struct PayloadBuilderTestFixture {
     pub validation_context: ValidationContext,
     pub metrics: MetricsRegistry,
     pub payloads: Vec<XNetPayload>,
+    /// The expected message and signal indices after `payloads`.
+    pub expected_indices: BTreeMap<SubnetId, ExpectedIndices>,
 }
 
 impl PayloadBuilderTestFixture {
@@ -468,7 +470,7 @@ impl PayloadBuilderTestFixture {
         let state_manager = Arc::new(FakeStateManager::new());
         let tls_handshake = Arc::new(MockTlsConfig::new());
 
-        let (payloads, _) =
+        let (payloads, expected_indices) =
             get_xnet_state_for_testing_with_own_subnet_type(&state_manager, own_subnet_type);
         let mut all_subnet_types = btreemap![
             SUBNET_1 => SubnetType::Application,
@@ -486,6 +488,7 @@ impl PayloadBuilderTestFixture {
             validation_context: get_validation_context_for_test(),
             metrics: MetricsRegistry::new(),
             payloads,
+            expected_indices,
         }
     }
 
@@ -755,6 +758,53 @@ async fn validate_rejects_slice_from_unknown_subnet() {
     });
 }
 
+/// Building and validating payloads both schedule a pull from every peer whose
+/// recorded header offers more than the past payloads and the pool cover.
+#[tokio::test]
+async fn garbage_collection_schedules_pending_pulls() {
+    with_test_replica_logger(|log| {
+        let fixture = PayloadBuilderTestFixture::with_xnet_state();
+        let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
+
+        // Recorded headers one message past what past payloads cover, for `SUBNET_1`;
+        // and exactly what they cover, for `SUBNET_2`.
+        {
+            let mut pool = xnet_payload_builder.slice_pool.lock().unwrap();
+            for (subnet_id, extra_messages) in [(SUBNET_1, 1), (SUBNET_2, 0)] {
+                let expected = &fixture.expected_indices[&subnet_id];
+                let header = generate_stream(&StreamConfig {
+                    message_begin: expected.message_index.get(),
+                    message_end: expected.message_index.get() + extra_messages,
+                    signal_end: expected.signal_index.get(),
+                })
+                .header();
+                pool.record_peer_header(subnet_id, &header);
+            }
+        }
+
+        let unschedule_pull = |subnet_id| {
+            let mut pool = xnet_payload_builder.slice_pool.lock().unwrap();
+            pool.unschedule_pull(subnet_id)
+        };
+
+        xnet_payload_builder.get_xnet_payload(
+            &fixture.validation_context,
+            &fixture.past_payloads(),
+            PAYLOAD_BYTES_LIMIT,
+        );
+        assert!(unschedule_pull(SUBNET_1));
+        assert!(!unschedule_pull(SUBNET_2));
+
+        let payloads = fixture.past_payloads();
+        let (payload, past_payloads) = payloads.split_first().unwrap();
+        xnet_payload_builder
+            .validate_xnet_payload(payload, &fixture.validation_context, past_payloads)
+            .unwrap();
+        assert!(unschedule_pull(SUBNET_1));
+        assert!(!unschedule_pull(SUBNET_2));
+    });
+}
+
 /// An Application subnet with a registered CloudEngine peer must track its
 /// stream indices.
 #[tokio::test]
@@ -882,8 +932,13 @@ fn recorded_peer_header(pool: &Mutex<CertifiedSlicePool>) -> Option<Arc<StreamHe
     pool.lock().unwrap().peer_header(REMOTE_SUBNET).cloned()
 }
 
-/// An advert offering messages we have not inducted is actionable, and its
-/// header is recorded.
+/// Unschedules the pull from `REMOTE_SUBNET`. Returns whether it was scheduled.
+fn unschedule_pull(pool: &Mutex<CertifiedSlicePool>) -> bool {
+    pool.lock().unwrap().unschedule_pull(REMOTE_SUBNET)
+}
+
+/// An advert offering messages we have not inducted is actionable: its header is
+/// recorded and a pull scheduled.
 #[tokio::test]
 async fn handle_advert_actionable() {
     with_test_replica_logger(|log| {
@@ -897,15 +952,18 @@ async fn handle_advert_actionable() {
             Ok(XNetAdvertOutcome::Actionable)
         );
         assert_eq!(Some(Arc::new(header)), recorded_peer_header(&pool));
+        assert!(unschedule_pull(&pool));
 
         // Redundant copies of the same advert are classified as duplicates
-        // and not verified again.
+        // and not verified again; but they reschedule one pull.
         for _ in 0..2 {
             assert_matches!(
                 advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
                 Ok(XNetAdvertOutcome::Duplicate)
             );
         }
+        assert!(unschedule_pull(&pool));
+        assert!(!unschedule_pull(&pool));
     });
 }
 
@@ -931,8 +989,9 @@ async fn handle_advert_in_payload() {
             advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
             Ok(XNetAdvertOutcome::InPayload)
         );
-        // The advertised header was not (verified and) recorded.
+        // The advertised header was not (verified and) recorded; nor a pull scheduled.
         assert_eq!(None, recorded_peer_header(&pool));
+        assert!(!unschedule_pull(&pool));
     });
 }
 
@@ -967,11 +1026,13 @@ async fn handle_advert_new_signals() {
             Ok(XNetAdvertOutcome::Actionable)
         );
         assert_eq!(Some(Arc::new(header)), recorded_peer_header(&pool));
+        assert!(unschedule_pull(&pool));
     });
 }
 
 /// An advert whose content we have already recorded is classified as a
-/// duplicate without being verified.
+/// duplicate without being verified; and a pull is scheduled, in case the
+/// earlier one failed.
 #[tokio::test]
 async fn handle_advert_duplicate_content() {
     with_test_replica_logger(|log| {
@@ -988,6 +1049,7 @@ async fn handle_advert_duplicate_content() {
             advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
             Ok(XNetAdvertOutcome::Duplicate)
         );
+        assert!(unschedule_pull(&pool));
     });
 }
 
@@ -1040,6 +1102,8 @@ async fn handle_advert_nothing_new() {
                 advert_handler.certified_header(REMOTE_SUBNET)
             );
         }
+        // Nothing to pull.
+        assert!(!unschedule_pull(&pool));
     });
 }
 
@@ -1133,6 +1197,7 @@ async fn handle_advert_invalid_signature() {
             Err(XNetAdvertError::InvalidSignature)
         );
         assert_eq!(None, recorded_peer_header(&pool));
+        assert!(!unschedule_pull(&pool));
     });
 }
 

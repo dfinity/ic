@@ -128,6 +128,13 @@ pub struct XNetPayloadBuilderMetrics {
     pub outstanding_queries: IntGauge,
     /// Count of pulled slices larger than the requested size.
     pub pull_size_too_large: IntCounter,
+    /// Temporary: completed pulls, by remote subnet; whether advert-driven pulling
+    /// would have scheduled them; and whether they pooled anything.
+    ///
+    /// Not fully independent of the sweep: pulled headers are recorded too, so a
+    /// pull extending an already pooled prefix counts as scheduled even without an
+    /// advert. Unscheduled pulls that pool something point to missed adverts.
+    pub shadow_pulls: IntCounterVec,
     /// Critical error: failed `count_bytes()` on valid slice.
     pub critical_error_slice_count_bytes_failed: IntCounter,
     /// Critical error: mismatch between the byte sizes computed by `take_slice()`,
@@ -146,6 +153,7 @@ pub const METRIC_OUTSTANDING_XNET_QUERIES: &str = "xnet_builder_outstanding_quer
 pub const METRIC_ADVERTS_SENT: &str = "xnet_builder_adverts_sent_total";
 pub const METRIC_SEND_ADVERT_DURATION: &str = "xnet_builder_advert_send_duration_seconds";
 pub const METRIC_OUTSTANDING_ADVERTS: &str = "xnet_builder_outstanding_adverts";
+pub const METRIC_SHADOW_PULLS: &str = "xnet_builder_shadow_pulls_total";
 
 pub const CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED: &str = "xnet_slice_count_bytes_failed";
 pub const CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES: &str = "xnet_slice_count_bytes_invalid";
@@ -153,6 +161,8 @@ pub const CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES: &str = "xnet_slice_count_byt
 pub const LABEL_STATUS: &str = "status";
 pub const LABEL_PROXIMITY: &str = "proximity";
 pub const LABEL_REMOTE: &str = "remote";
+pub const LABEL_SCHEDULED: &str = "scheduled";
+pub const LABEL_POOLED: &str = "pooled";
 
 pub const STATUS_SUCCESS: &str = "success";
 pub const STATUS_DECODE_ERROR: &str = "ProxyDecodeError";
@@ -211,6 +221,11 @@ impl XNetPayloadBuilderMetrics {
                 "xnet_builder_pull_size_too_large_count",
                 "Count of pulled slices larger than the requested size",
             ),
+            shadow_pulls: metrics_registry.int_counter_vec(
+                METRIC_SHADOW_PULLS,
+                "Completed pulls, by remote subnet; whether advert-driven pulling would have scheduled them; and whether they pooled anything.",
+                &[LABEL_REMOTE, LABEL_SCHEDULED, LABEL_POOLED],
+            ),
             critical_error_slice_count_bytes_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED),
             critical_error_slice_count_bytes_invalid: metrics_registry
@@ -242,6 +257,17 @@ impl XNetPayloadBuilderMetrics {
         self.validate_payload_duration
             .with_label_values(&[status])
             .observe(since.elapsed().as_secs_f64());
+    }
+
+    /// Records a completed pull from `subnet_id`.
+    fn observe_shadow_pull(&self, subnet_id: SubnetId, scheduled: bool, pooled: bool) {
+        self.shadow_pulls
+            .with_label_values(&[
+                &subnet_id.to_string(),
+                &scheduled.to_string(),
+                &pooled.to_string(),
+            ])
+            .inc();
     }
 }
 
@@ -921,6 +947,7 @@ impl XNetPayloadBuilderImpl {
 
             // Trim off messages in the state or past payloads.
             slice_pool.garbage_collect(stream_positions);
+            slice_pool.schedule_pending_pulls(state.streams());
         }
 
         {
@@ -1394,6 +1421,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                     },
                 );
             }
+            slice_pool.schedule_pending_pulls(state.streams());
         }
         // And trigger a pool refill.
         self.refill_task_handle
@@ -1453,31 +1481,22 @@ impl XNetAdvertHandlerImpl {
             .as_ref()
             .and_then(|state| state.get_ref().streams().get(&source_subnet));
 
-        // Whether we hold a reject signal in `[from, to)`; none, without a certified
-        // state.
-        let have_reject_signal_between = |from, to| {
-            own_stream
-                .and_then(|stream| stream.next_reject_signal_index(from))
-                .is_some_and(|index| index < to)
-        };
-
         if let Some(stream) = own_stream {
             // `NothingNew` if our certified stream has signals for all advertised messages;
             // no messages before the advertised `signals_end`; and no reject signals before
             // the advertised `begin`.
             if header.end() <= stream.signals_end()
                 && header.signals_end() <= stream.messages_begin()
-                && !have_reject_signal_between(StreamIndex::from(0), header.begin())
+                && !stream.has_reject_signal_between(StreamIndex::from(0), header.begin())
             {
                 return XNetAdvertOutcome::NothingNew;
             }
         }
 
-        self.slice_pool.lock().unwrap().classify_advert(
-            source_subnet,
-            header,
-            &have_reject_signal_between,
-        )
+        self.slice_pool
+            .lock()
+            .unwrap()
+            .classify_advert(source_subnet, header, own_stream)
     }
 
     /// Returns the certified headers for every subnet we owe an advert to.
@@ -1529,9 +1548,12 @@ impl XNetAdvertHandler for XNetAdvertHandlerImpl {
             // Valid or not, there is nothing for us to see here.
             XNetAdvertOutcome::InPayload | XNetAdvertOutcome::Pooled => return Ok(outcome),
 
-            // A duplicate of a previously recorded header, re-enqueue _the recorded header_
-            // for a pull if we tried and failed before.
-            XNetAdvertOutcome::Duplicate => return Ok(outcome),
+            // A duplicate of a previously recorded header: re-enqueue _the recorded header_
+            // for a pull, in case we tried and failed before.
+            XNetAdvertOutcome::Duplicate => {
+                self.slice_pool.lock().unwrap().schedule_pull(source_subnet);
+                return Ok(outcome);
+            }
 
             // Verify that the header is signed by `source_subnet` before recording the
             // header or replying to it.
@@ -1551,13 +1573,17 @@ impl XNetAdvertHandler for XNetAdvertHandlerImpl {
             })?;
         debug_assert_eq!(slice.header(), &claimed, "Inconsistent slice decoding");
 
-        // Record every verified header: the recorded header shows how far the peer has
-        // garbage collected its messages, which is what tells us whether we still owe
-        // it an advert.
-        self.slice_pool
-            .lock()
-            .unwrap()
-            .record_peer_header(source_subnet, slice.header());
+        {
+            let mut slice_pool = self.slice_pool.lock().unwrap();
+            if outcome == XNetAdvertOutcome::Actionable {
+                slice_pool.schedule_pull(source_subnet);
+            }
+
+            // Record every verified header: the recorded header shows how far the peer has
+            // garbage collected its messages, which is what tells us whether we still owe
+            // it an advert.
+            slice_pool.record_peer_header(source_subnet, slice.header());
+        }
 
         Ok(outcome)
     }
@@ -1681,75 +1707,66 @@ pub fn adjusted_byte_limit(slice_byte_size: usize) -> usize {
 }
 
 /// Computes `RefillStreamSliceIndices` for every subnet with a cached stream
-/// position in the given certified slice pool, maintained by a replica of the
-/// given subnet.
+/// position in `pool`, except `own_subnet_id`.
 pub fn refill_stream_slice_indices(
-    pool_lock: Arc<Mutex<CertifiedSlicePool>>,
+    pool: &CertifiedSlicePool,
     own_subnet_id: SubnetId,
-) -> impl Iterator<Item = (SubnetId, RefillStreamSliceIndices)> {
-    let mut result: BTreeMap<SubnetId, RefillStreamSliceIndices> = BTreeMap::new();
+) -> Vec<(SubnetId, RefillStreamSliceIndices)> {
+    pool.peers()
+        // Skip our own subnet, the loopback stream is routed separately.
+        .filter(|&&subnet_id| subnet_id != own_subnet_id)
+        .filter_map(|&subnet_id| Some((subnet_id, pull_indices(pool, subnet_id)?)))
+        .collect()
+}
 
-    let (pool_bytes_left, pool_slice_stats) = {
-        let pool = pool_lock.lock().unwrap();
-
-        (
-            POOL_BYTE_SIZE_SOFT_CAP.saturating_sub(pool.byte_size()),
-            pool.peers()
-                // Skip our own subnet, the loopback stream is routed separately.
-                .filter(|&&subnet_id| subnet_id != own_subnet_id)
-                .map(|&subnet_id| (subnet_id, pool.slice_stats(subnet_id)))
-                .collect::<BTreeMap<_, _>>(),
-        )
+/// Computes the `RefillStreamSliceIndices` for pulling a slice from `subnet_id`
+/// into `pool`; or `None` if `pool` has no cached stream position for it.
+//
+// TODO(DSM-148): Once pulls are advert-driven, make this a `CertifiedSlicePool`
+// method; and move the pool sizing constants and `adjusted_byte_limit()` with
+// it.
+pub fn pull_indices(
+    pool: &CertifiedSlicePool,
+    subnet_id: SubnetId,
+) -> Option<RefillStreamSliceIndices> {
+    // No cached stream position, no pooling / refill necessary.
+    let (Some(stream_position), messages_begin, msg_count, byte_size) = pool.slice_stats(subnet_id)
+    else {
+        return None;
     };
 
     // Maximum byte size of any one pooled slice, applied uniformly across slices:
     // as the pool fills up, we aim to fill what is left of it with (more, but)
     // smaller slices.
-    let slice_byte_size_max = pool_bytes_left / POOLED_SLICE_BYTE_SIZE_DIVISOR;
+    let slice_byte_size_max =
+        POOL_BYTE_SIZE_SOFT_CAP.saturating_sub(pool.byte_size()) / POOLED_SLICE_BYTE_SIZE_DIVISOR;
 
-    for (subnet_id, slice_stats) in pool_slice_stats {
-        let (stream_position, messages_begin, msg_count, byte_size) = match slice_stats {
-            // Have a cached stream position.
-            (Some(stream_position), messages_begin, msg_count, byte_size) => {
-                (stream_position, messages_begin, msg_count, byte_size)
-            }
+    let (witness_begin, msg_begin, slice_byte_limit) = match messages_begin {
+        // Existing pooled stream, pull partial slice and append.
+        Some(messages_begin) if messages_begin == stream_position.message_index => (
+            stream_position.message_index,
+            stream_position.message_index + (msg_count as u64).into(),
+            slice_byte_size_max.saturating_sub(byte_size),
+        ),
 
-            // No cached stream position, no pooling / refill necessary.
-            (None, _, _, _) => continue,
-        };
+        // No pooled stream, or pooled stream does not begin at cached stream position, pull
+        // complete slice from cached stream position.
+        _ => (
+            stream_position.message_index,
+            stream_position.message_index,
+            slice_byte_size_max,
+        ),
+    };
 
-        let (witness_begin, msg_begin, slice_byte_limit) = match messages_begin {
-            // Existing pooled stream, pull partial slice and append.
-            Some(messages_begin) if messages_begin == stream_position.message_index => (
-                stream_position.message_index,
-                stream_position.message_index + (msg_count as u64).into(),
-                slice_byte_size_max.saturating_sub(byte_size),
-            ),
-
-            // No pooled stream, or pooled stream does not begin at cached stream position, pull
-            // complete slice from cached stream position.
-            _ => (
-                stream_position.message_index,
-                stream_position.message_index,
-                slice_byte_size_max,
-            ),
-        };
-
-        // Poll every subnet regardless of how low `slice_byte_limit` is:
-        //  * A header-only suffix may usefully replace the pooled slice's.
-        //  * A complete slice will always include the first message, if any. We rely on
-        //    this to avoid stalling streams indefinitely behind large messages.
-        result.insert(
-            subnet_id,
-            RefillStreamSliceIndices {
-                witness_begin,
-                msg_begin,
-                byte_limit: adjusted_byte_limit(slice_byte_limit),
-            },
-        );
-    }
-
-    result.into_iter()
+    // Pull regardless of how low `slice_byte_limit` is:
+    //  * A header-only suffix may usefully replace the pooled slice's.
+    //  * A complete slice will always include the first message, if any. We rely on
+    //    this to avoid stalling streams indefinitely behind large messages.
+    Some(RefillStreamSliceIndices {
+        witness_begin,
+        msg_begin,
+        byte_limit: adjusted_byte_limit(slice_byte_limit),
+    })
 }
 
 /// Expected number of copies of an advert that each node of the destination
@@ -2026,7 +2043,7 @@ impl PoolRefillTask {
         log: ReplicaLogger,
     ) -> RefillTaskHandle {
         let (refill_trigger, mut refill_receiver) = mpsc::channel(1);
-        let task = Self {
+        let task = Arc::new(Self {
             pool,
             endpoint_resolver,
             xnet_client,
@@ -2034,11 +2051,11 @@ impl PoolRefillTask {
             runtime_handle: runtime_handle.clone(),
             metrics,
             log,
-        };
+        });
 
         runtime_handle.spawn(async move {
             while let Some(registry_version) = refill_receiver.recv().await {
-                task.refill_pool(registry_version).await;
+                task.refill_pool(registry_version);
             }
         });
 
@@ -2047,121 +2064,143 @@ impl PoolRefillTask {
 
     /// Queries all subnets for new slices and puts / appends them to the pool after
     /// validation against the given registry version.
-    async fn refill_pool(&self, registry_version: RegistryVersion) {
-        let refill_stream_slice_indices =
-            refill_stream_slice_indices(self.pool.clone(), self.endpoint_resolver.subnet_id);
+    ///
+    /// Also unschedules every subnet it pulls from, as advert-driven pulling
+    /// would; and records whether it was scheduled and whether the pull pooled
+    /// anything.
+    fn refill_pool(self: &Arc<Self>, registry_version: RegistryVersion) {
+        let pulls: Vec<_> = {
+            let mut pool = self.pool.lock().unwrap();
+            refill_stream_slice_indices(&pool, self.endpoint_resolver.subnet_id)
+                .into_iter()
+                .map(|(subnet_id, indices)| (subnet_id, indices, pool.unschedule_pull(subnet_id)))
+                .collect()
+        };
 
-        for (subnet_id, indices) in refill_stream_slice_indices {
-            // `XNetEndpoint` URL of a node on `subnet_id`.
-            let endpoint = match self.endpoint_resolver.xnet_stream_url(
-                subnet_id,
-                indices.witness_begin,
-                indices.msg_begin,
-                indices.byte_limit,
-            ) {
-                Ok(endpoint) => endpoint,
-                Err(e) => {
-                    log!(self.log, e.log_level(), "{}", e);
-                    self.metrics.observe_pull_attempt(e.to_label_value());
-                    continue;
-                }
-            };
-
-            // Spawn an async task to query the `XNetEndpoint` on `subnet_id`.
-            let xnet_client = self.xnet_client.clone();
-            let metrics = Arc::clone(&self.metrics);
-            let pool = Arc::clone(&self.pool);
-            let certified_stream_store = Arc::clone(&self.certified_stream_store);
-            let log = self.log.clone();
+        for (subnet_id, indices, scheduled) in pulls {
+            let task = Arc::clone(self);
             self.runtime_handle.spawn(async move {
-                let since = Instant::now();
-                metrics.outstanding_queries.inc();
-                let query_result = xnet_client.query(&endpoint).await;
-                metrics.outstanding_queries.dec();
-                let proximity = endpoint.proximity.into();
-
-                match query_result {
-                    Ok(slice) => {
-                        let logger = log.clone();
-                        let pull_size_too_large = metrics.pull_size_too_large.clone();
-                        let res = tokio::task::spawn_blocking(move || {
-                            // Helper to log and instrument pulled slices above the requested byte limit.
-                            // For now, only track such occurrences. In the future, we may drop them.
-                            let observe_pull_size_too_large = |limit: usize, actual: usize| {
-                                warn!(
-                                    log,
-                                    "Stream from {subnet_id}: pulled payload size ({actual}) exceeds byte limit ({limit})",
-                                );
-                                pull_size_too_large.inc();
-                            };
-
-                            if indices.witness_begin != indices.msg_begin {
-                                // Slice suffix, append to pooled slice.
-
-                                if slice.payload.len() > indices.byte_limit * 11 / 10 + 1024 {
-                                    // Payload is larger than what we requested, only bump an error metric for now.
-                                    observe_pull_size_too_large(indices.byte_limit, slice.payload.len());
-                                }
-
-                                CertifiedSlicePool::append(
-                                    &pool,
-                                    subnet_id,
-                                    slice,
-                                    certified_stream_store.as_ref(),
-                                    registry_version,
-                                    &log,
-                                )
-                            } else {
-                                // Complete slice, put it into the pool.
-
-                                let byte_limit = indices.byte_limit.max(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get() as usize);
-                                if slice.payload.len() > byte_limit * 11 / 10 + 1024 {
-                                    // Payload is larger than what we requested, only bump an error metric for now.
-                                    observe_pull_size_too_large(byte_limit, slice.payload.len());
-                                }
-
-                                CertifiedSlicePool::put(
-                                    &pool,
-                                    subnet_id,
-                                    slice,
-                                    certified_stream_store.as_ref(),
-                                    registry_version,
-                                    &log,
-                                )
-                            }
-                        })
-                        .await;
-                        match res {
-                            Ok(res) => {
-                                let status = match res {
-                                    Ok(()) => STATUS_SUCCESS,
-                                    Err(e) => e.to_label_value(),
-                                };
-
-                                metrics.observe_query_slice_duration(status, proximity, since);
-                                metrics.observe_pull_attempt(status);
-                            }
-                            Err(err) => warn!(
-                                logger,
-                                "Failed to join pool refill blocking thread: {err}"
-                            ),
-                        };
-                    }
-
-                    Err(e) => {
-                        metrics.observe_query_slice_duration(&e.to_label_value(), proximity, since);
-                        metrics.observe_pull_attempt(&e.to_label_value());
-                        if let XNetClientError::NoContent = e {
-                        } else if pass_log_sampling() {
-                            info!(
-                                log,
-                                "Failed to query stream slice for subnet {subnet_id} from node {}: {e}",
-                                endpoint.node_id,
-                            );
-                        }
-                    }
+                if let Ok(pooled) = task.pull(subnet_id, indices, registry_version).await {
+                    task.metrics
+                        .observe_shadow_pull(subnet_id, scheduled, pooled);
                 }
             });
+        }
+    }
+
+    /// Queries a node of `subnet_id` for the slice described by `indices`; and
+    /// puts / appends it to the pool after validation against `registry_version`.
+    ///
+    /// Returns whether the pulled slice was pooled (`false` if there is no stream);
+    /// or `Err(())` if the pull failed (already logged and recorded).
+    async fn pull(
+        self: &Arc<Self>,
+        subnet_id: SubnetId,
+        indices: RefillStreamSliceIndices,
+        registry_version: RegistryVersion,
+    ) -> Result<bool, ()> {
+        // `XNetEndpoint` URL of a node on `subnet_id`.
+        let endpoint = match self.endpoint_resolver.xnet_stream_url(
+            subnet_id,
+            indices.witness_begin,
+            indices.msg_begin,
+            indices.byte_limit,
+        ) {
+            Ok(endpoint) => endpoint,
+            Err(e) => {
+                log!(self.log, e.log_level(), "{}", e);
+                self.metrics.observe_pull_attempt(e.to_label_value());
+                return Err(());
+            }
+        };
+
+        let since = Instant::now();
+        self.metrics.outstanding_queries.inc();
+        let query_result = self.xnet_client.query(&endpoint).await;
+        self.metrics.outstanding_queries.dec();
+        let proximity = endpoint.proximity.into();
+
+        match query_result {
+            Ok(slice) => {
+                let is_suffix = indices.witness_begin != indices.msg_begin;
+
+                // Log and instrument pulled slices above the requested byte limit. In the
+                // future, we may drop such slices.
+                let byte_limit = if is_suffix {
+                    indices.byte_limit
+                } else {
+                    // A complete slice always includes the first message, regardless of byte limit.
+                    indices
+                        .byte_limit
+                        .max(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get() as usize)
+                };
+                if slice.payload.len() > byte_limit * 11 / 10 + 1024 {
+                    warn!(
+                        self.log,
+                        "Stream from {subnet_id}: pulled payload size ({}) exceeds byte limit ({byte_limit})",
+                        slice.payload.len()
+                    );
+                    self.metrics.pull_size_too_large.inc();
+                }
+
+                // A suffix is appended to the pooled slice; a complete slice replaces it.
+                let put_or_append = if is_suffix {
+                    CertifiedSlicePool::append
+                } else {
+                    CertifiedSlicePool::put
+                };
+                // Blocking because validation verifies the threshold signature.
+                let task = Arc::clone(self);
+                match tokio::task::spawn_blocking(move || {
+                    put_or_append(
+                        &task.pool,
+                        subnet_id,
+                        slice,
+                        task.certified_stream_store.as_ref(),
+                        registry_version,
+                        &task.log,
+                    )
+                })
+                .await
+                {
+                    Ok(res) => {
+                        let status = match &res {
+                            Ok(_) => STATUS_SUCCESS,
+                            Err(e) => e.to_label_value(),
+                        };
+
+                        self.metrics
+                            .observe_query_slice_duration(status, proximity, since);
+                        self.metrics.observe_pull_attempt(status);
+                        res.map_err(|_| ())
+                    }
+
+                    Err(err) => {
+                        warn!(
+                            self.log,
+                            "Failed to join pool refill blocking thread: {err}"
+                        );
+                        Err(())
+                    }
+                }
+            }
+
+            Err(e) => {
+                self.metrics
+                    .observe_query_slice_duration(&e.to_label_value(), proximity, since);
+                self.metrics.observe_pull_attempt(&e.to_label_value());
+                if let XNetClientError::NoContent = e {
+                    return Ok(false);
+                }
+                if pass_log_sampling() {
+                    info!(
+                        self.log,
+                        "Failed to query stream slice for subnet {subnet_id} from node {}: {e}",
+                        endpoint.node_id,
+                    );
+                }
+                Err(())
+            }
         }
     }
 }
