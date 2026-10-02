@@ -24,6 +24,7 @@ fix=refs/deflake/fix
 git -c transfer.fsckObjects=true fetch --quiet "$bundle" "+refs/heads/deflake:$fix" || die "the bundle can't be fetched"
 git merge-base --is-ancestor "$BASE_SHA" "$fix" || die "the fix isn't on top of $BASE_SHA"
 [ "$(git rev-list --count "$BASE_SHA..$fix")" -le 10 ] || die "the fix has more than 10 commits"
+! git diff --quiet "$BASE_SHA" "$fix" || die "the fix doesn't change anything"
 
 # The diffs are captured before checking them so that a failing git diff aborts the script, and a grep
 # exiting early can't SIGPIPE git into a pipeline failure that reads as "no match".
@@ -45,20 +46,15 @@ if awk '$1 ~ /^:(120000|160000)$/ || $2 == "120000" || $2 == "160000" {bad = 1} 
 fi
 # Dependencies may only be added or removed as `name = { workspace = true }`, whose versions and features come
 # from the root Cargo.toml, which the fix can't change: apart from those, each changed Cargo.toml must parse to
-# the same as before, and Cargo.lock may only add or remove their names in the dependencies of crates.
+# the same as before, and Cargo.lock may only add or remove their names in the dependencies of those crates.
 git diff --no-renames --name-only -z "$BASE_SHA" "$fix" -- '*Cargo.toml' >"$RUNNER_TEMP/deflake-manifests"
 python3 - "$BASE_SHA" "$fix" "$RUNNER_TEMP/deflake-manifests" <<'EOF' || die "the fix changes dependencies beyond adding or removing workspace dependencies"
-import re
 import subprocess
 import sys
 import tomllib
 
 base, fix, manifests = sys.argv[1:]
 kinds = ["dependencies", "dev-dependencies", "build-dependencies"]
-
-
-def git(*args):
-    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
 
 
 def load(rev, path):
@@ -87,20 +83,30 @@ def without_workspace_dependencies(manifest):
     return manifest
 
 
-added, removed = set(), set()
+# The names of the dependencies each crate adds and removes.
+changes = {}
 for path in open(manifests).read().split("\0"):
     if path:
         old, new = load(base, path), load(fix, path)
-        added |= names(new) - names(old)
-        removed |= names(old) - names(new)
+        changes[new.get("package", {}).get("name")] = (names(new) - names(old), names(old) - names(new))
         if without_workspace_dependencies(old) != without_workspace_dependencies(new):
             sys.exit(f"{path} changes beyond adding or removing workspace dependencies")
 
-for line in git("diff", "--unified=0", base, fix, "--", "Cargo.lock").splitlines():
-    if line.startswith(("+", "-")) and not line.startswith(("+++ ", "--- ")):
-        entry = re.fullmatch(r'[+-] "([A-Za-z0-9_-]+)",', line)
-        if not entry or entry[1] not in (added if line[0] == "+" else removed):
-            sys.exit(f"Cargo.lock changes beyond adding or removing workspace dependencies: {line}")
+
+def packages(rev):
+    return {(p.get("name"), p.get("version"), p.get("source")): p for p in load(rev, "Cargo.lock").get("package", [])}
+
+
+old_packages, new_packages = packages(base), packages(fix)
+if old_packages.keys() != new_packages.keys():
+    sys.exit("Cargo.lock adds or removes packages")
+for (name, version, source), old in old_packages.items():
+    new = new_packages[(name, version, source)]
+    old_deps, new_deps = set(old.pop("dependencies", [])), set(new.pop("dependencies", []))
+    # Only the crates of the workspace, which have no source, can have changed manifests.
+    added, removed = changes.get(name, (set(), set())) if source is None else (set(), set())
+    if old != new or not new_deps - old_deps <= added or not old_deps - new_deps <= removed:
+        sys.exit(f"Cargo.lock changes {name} {version} beyond adding or removing its workspace dependencies")
 EOF
 numstat="$(git diff --no-renames --numstat "$BASE_SHA" "$fix")"
 if grep -q $'^-\t-\t' <<<"$numstat"; then
