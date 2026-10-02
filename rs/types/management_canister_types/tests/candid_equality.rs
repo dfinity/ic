@@ -36,6 +36,7 @@ type ListCanisterSnapshotsResult = Vec<CanisterSnapshotResponse>;
 type FetchCanisterLogsArgs = FetchCanisterLogsRequest;
 type FetchCanisterLogsResult = FetchCanisterLogsResponse;
 type ListCanistersResult = ListCanistersResponse;
+type FlexibleHttpRequestArgs = FlexibleCanisterHttpRequestArgs;
 
 #[candid_method(update)]
 fn create_canister(_: CreateCanisterArgs) -> CreateCanisterResult {
@@ -87,8 +88,13 @@ fn stop_canister(_: StopCanisterArgs) {
     unreachable!()
 }
 
-#[candid_method(update)]
+#[candid_method(query)]
 fn canister_status(_: CanisterStatusArgs) -> CanisterStatusResult {
+    unreachable!()
+}
+
+#[candid_method(query)]
+fn canister_metrics(_: CanisterMetricsArgs) -> CanisterMetricsResult {
     unreachable!()
 }
 
@@ -128,6 +134,11 @@ fn http_request(_: HttpRequestArgs) -> HttpRequestResult {
 }
 
 #[candid_method(update)]
+fn flexible_http_request(_: FlexibleHttpRequestArgs) -> FlexibleHttpRequestResult {
+    unreachable!()
+}
+
+#[candid_method(update)]
 fn ecdsa_public_key(_: EcdsaPublicKeyArgs) -> EcdsaPublicKeyResult {
     unreachable!()
 }
@@ -144,6 +155,16 @@ fn schnorr_public_key(_: SchnorrPublicKeyArgs) -> SchnorrPublicKeyResult {
 
 #[candid_method(update)]
 fn sign_with_schnorr(_: SignWithSchnorrArgs) -> SignWithSchnorrResult {
+    unreachable!()
+}
+
+#[candid_method(update)]
+fn vetkd_public_key(_: VetKdPublicKeyArgs) -> VetKdPublicKeyResult {
+    unreachable!()
+}
+
+#[candid_method(update)]
+fn vetkd_derive_key(_: VetKdDeriveKeyArgs) -> VetKdDeriveKeyResult {
     unreachable!()
 }
 
@@ -242,7 +263,13 @@ mod test {
             std::env::var("IC_DID").expect("Failed to read IC_DID environment variable");
         let declared_interface_str =
             std::fs::read_to_string(ic_did_path).expect("Failed to read ic.did file");
-        let declared_interface = CandidSource::Text(&declared_interface_str);
+        let filtered_interface_str = declared_interface_str
+            .lines()
+            // Bitcoin APIs are deprecated from the management canister, so we filter them out.
+            .filter(|line| !line.trim_start().starts_with("bitcoin_"))
+            .collect::<Vec<&str>>()
+            .join("\n");
+        let declared_interface = CandidSource::Text(&filtered_interface_str);
 
         candid::export_service!();
         let implemented_interface_str = __export_service();
