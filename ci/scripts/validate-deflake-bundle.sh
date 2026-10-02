@@ -44,19 +44,39 @@ if awk '$2 == "120000" || $2 == "160000" {bad = 1} END {exit !bad}' <<<"$raw"; t
     die "the fix adds a symlink or submodule"
 fi
 # Dependencies may only be added or removed as `name = { workspace = true }`, whose versions and features come
-# from the root Cargo.toml, which the fix can't change.
-manifests="$(git diff --no-renames --unified=0 "$BASE_SHA" "$fix" -- '*Cargo.toml')"
-if awk '
-    /^(\+\+\+|---) / { next }
-    /^[+-]/ {
-        line = substr($0, 2)
-        if (line !~ /^[ \t]*$/ && line !~ /^[ \t]*\[[A-Za-z0-9_.-]+\][ \t]*$/ \
-            && line !~ /^[ \t]*[A-Za-z0-9_-]+[ \t]*=[ \t]*\{[ \t]*workspace[ \t]*=[ \t]*true[ \t]*\}[ \t]*$/ \
-            && line !~ /^[ \t]*[A-Za-z0-9_-]+\.workspace[ \t]*=[ \t]*true[ \t]*$/) bad = 1
-    }
-    END { exit !bad }' <<<"$manifests"; then
-    die "the fix changes a Cargo.toml beyond adding or removing workspace dependencies"
-fi
+# from the root Cargo.toml, which the fix can't change: apart from those, each changed Cargo.toml must parse to
+# the same as before.
+git diff --no-renames --name-only -z "$BASE_SHA" "$fix" -- '*Cargo.toml' >"$RUNNER_TEMP/deflake-manifests"
+python3 - "$BASE_SHA" "$fix" "$RUNNER_TEMP/deflake-manifests" <<'EOF' || die "the fix changes a Cargo.toml beyond adding or removing workspace dependencies"
+import subprocess
+import sys
+import tomllib
+
+base, fix, manifests = sys.argv[1:]
+
+
+def load(rev, path):
+    show = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True, text=True)
+    if show.returncode != 0:
+        sys.exit(f"{path} is added or deleted")
+    return tomllib.loads(show.stdout)
+
+
+def without_workspace_dependencies(manifest):
+    for table in [manifest, *manifest.get("target", {}).values()]:
+        for kind in ["dependencies", "dev-dependencies", "build-dependencies"]:
+            dependencies = {name: dep for name, dep in table.get(kind, {}).items() if dep != {"workspace": True}}
+            if dependencies:
+                table[kind] = dependencies
+            else:
+                table.pop(kind, None)
+    return manifest
+
+
+for path in open(manifests).read().split("\0"):
+    if path and without_workspace_dependencies(load(base, path)) != without_workspace_dependencies(load(fix, path)):
+        sys.exit(f"{path} changes beyond adding or removing workspace dependencies")
+EOF
 lock="$(git diff "$BASE_SHA" "$fix" -- Cargo.lock)"
 if grep -qE '^\+[[:space:]]*(\[\[[[:space:]]*package[[:space:]]*\]\]|(name|version|source|checksum)[[:space:]]*=)' <<<"$lock"; then
     die "the fix changes the dependencies in Cargo.lock"
