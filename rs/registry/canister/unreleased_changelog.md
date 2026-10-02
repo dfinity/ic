@@ -42,6 +42,10 @@ on the process that this file is part of, see
 
 ## Changed
 
+* The maximum size of a single atomic registry mutation (`MAX_CHUNKABLE_ATOMIC_MUTATION_LEN`) is raised from
+  10 MiB to 13 MiB. This is needed for the `cup_type` backfill post-upgrade migration, whose single mutation
+  is about 12 MB on mainnet state.
+
 * `update_subnet` now also lets the engine controller canister set `cooling_down` on a cloud engine
   subnet. The engine controller's scope is thus `subnet_admins`, `is_halted` and `cooling_down`;
   every other field remains rejected for that caller.

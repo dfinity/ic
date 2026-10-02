@@ -32,7 +32,12 @@ const ELEVATED_NODE_OPERATOR_RATE_LIMITER_MEMORY_ID: MemoryId = MemoryId::new(5)
 /// because if it were only a little bit larger, we are hardly enhancing our
 /// capabilities. At the same time, a higher limit is not needed (yet).
 /// Therefore, 5x the message size limit seems appropriate (for now).
-pub(crate) const MAX_CHUNKABLE_ATOMIC_MUTATION_LEN: usize = 10 * (1024 * 1024);
+///
+/// Update: raised from 10 MiB to 13 MiB, because the one-time post-upgrade
+/// migration that backfills `cup_type` on every `CatchUpPackageContents` record
+/// produces a single atomic mutation of about 12 MB on mainnet-like state,
+/// which exceeded the previous limit and made the Registry upgrade trap.
+pub(crate) const MAX_CHUNKABLE_ATOMIC_MUTATION_LEN: usize = 13 * (1024 * 1024);
 
 /// The value of this is slightly less than MAX_REGISTRY_DELTAS to minimize when
 /// chunking is performed.
