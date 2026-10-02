@@ -128,6 +128,13 @@ pub struct XNetPayloadBuilderMetrics {
     pub outstanding_queries: IntGauge,
     /// Count of pulled slices larger than the requested size.
     pub pull_size_too_large: IntCounter,
+    /// Temporary: completed pulls, by remote subnet; whether advert-driven pulling
+    /// would have scheduled them; and whether they pooled anything.
+    ///
+    /// Not fully independent of the sweep: pulled headers are recorded too, so a
+    /// pull extending an already pooled prefix counts as scheduled even without an
+    /// advert. Unscheduled pulls that pool something point to missed adverts.
+    pub shadow_pulls: IntCounterVec,
     /// Critical error: failed `count_bytes()` on valid slice.
     pub critical_error_slice_count_bytes_failed: IntCounter,
     /// Critical error: mismatch between the byte sizes computed by `take_slice()`,
@@ -146,6 +153,7 @@ pub const METRIC_OUTSTANDING_XNET_QUERIES: &str = "xnet_builder_outstanding_quer
 pub const METRIC_ADVERTS_SENT: &str = "xnet_builder_adverts_sent_total";
 pub const METRIC_SEND_ADVERT_DURATION: &str = "xnet_builder_advert_send_duration_seconds";
 pub const METRIC_OUTSTANDING_ADVERTS: &str = "xnet_builder_outstanding_adverts";
+pub const METRIC_SHADOW_PULLS: &str = "xnet_builder_shadow_pulls_total";
 
 pub const CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED: &str = "xnet_slice_count_bytes_failed";
 pub const CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES: &str = "xnet_slice_count_bytes_invalid";
@@ -153,6 +161,8 @@ pub const CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES: &str = "xnet_slice_count_byt
 pub const LABEL_STATUS: &str = "status";
 pub const LABEL_PROXIMITY: &str = "proximity";
 pub const LABEL_REMOTE: &str = "remote";
+pub const LABEL_SCHEDULED: &str = "scheduled";
+pub const LABEL_POOLED: &str = "pooled";
 
 pub const STATUS_SUCCESS: &str = "success";
 pub const STATUS_DECODE_ERROR: &str = "ProxyDecodeError";
@@ -211,6 +221,11 @@ impl XNetPayloadBuilderMetrics {
                 "xnet_builder_pull_size_too_large_count",
                 "Count of pulled slices larger than the requested size",
             ),
+            shadow_pulls: metrics_registry.int_counter_vec(
+                METRIC_SHADOW_PULLS,
+                "Completed pulls, by remote subnet; whether advert-driven pulling would have scheduled them; and whether they pooled anything.",
+                &[LABEL_REMOTE, LABEL_SCHEDULED, LABEL_POOLED],
+            ),
             critical_error_slice_count_bytes_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED),
             critical_error_slice_count_bytes_invalid: metrics_registry
@@ -242,6 +257,17 @@ impl XNetPayloadBuilderMetrics {
         self.validate_payload_duration
             .with_label_values(&[status])
             .observe(since.elapsed().as_secs_f64());
+    }
+
+    /// Records a completed pull from `subnet_id`.
+    fn observe_shadow_pull(&self, subnet_id: SubnetId, scheduled: bool, pooled: bool) {
+        self.shadow_pulls
+            .with_label_values(&[
+                &subnet_id.to_string(),
+                &scheduled.to_string(),
+                &pooled.to_string(),
+            ])
+            .inc();
     }
 }
 
@@ -921,6 +947,7 @@ impl XNetPayloadBuilderImpl {
 
             // Trim off messages in the state or past payloads.
             slice_pool.garbage_collect(stream_positions);
+            slice_pool.schedule_pending_pulls(state.streams());
         }
 
         {
@@ -1394,6 +1421,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                     },
                 );
             }
+            slice_pool.schedule_pending_pulls(state.streams());
         }
         // And trigger a pool refill.
         self.refill_task_handle
@@ -1453,31 +1481,22 @@ impl XNetAdvertHandlerImpl {
             .as_ref()
             .and_then(|state| state.get_ref().streams().get(&source_subnet));
 
-        // Whether we hold a reject signal in `[from, to)`; none, without a certified
-        // state.
-        let have_reject_signal_between = |from, to| {
-            own_stream
-                .and_then(|stream| stream.next_reject_signal_index(from))
-                .is_some_and(|index| index < to)
-        };
-
         if let Some(stream) = own_stream {
             // `NothingNew` if our certified stream has signals for all advertised messages;
             // no messages before the advertised `signals_end`; and no reject signals before
             // the advertised `begin`.
             if header.end() <= stream.signals_end()
                 && header.signals_end() <= stream.messages_begin()
-                && !have_reject_signal_between(StreamIndex::from(0), header.begin())
+                && !stream.has_reject_signal_between(StreamIndex::from(0), header.begin())
             {
                 return XNetAdvertOutcome::NothingNew;
             }
         }
 
-        self.slice_pool.lock().unwrap().classify_advert(
-            source_subnet,
-            header,
-            &have_reject_signal_between,
-        )
+        self.slice_pool
+            .lock()
+            .unwrap()
+            .classify_advert(source_subnet, header, own_stream)
     }
 
     /// Returns the certified headers for every subnet we owe an advert to.
@@ -1529,9 +1548,12 @@ impl XNetAdvertHandler for XNetAdvertHandlerImpl {
             // Valid or not, there is nothing for us to see here.
             XNetAdvertOutcome::InPayload | XNetAdvertOutcome::Pooled => return Ok(outcome),
 
-            // A duplicate of a previously recorded header, re-enqueue _the recorded header_
-            // for a pull if we tried and failed before.
-            XNetAdvertOutcome::Duplicate => return Ok(outcome),
+            // A duplicate of a previously recorded header: re-enqueue _the recorded header_
+            // for a pull, in case we tried and failed before.
+            XNetAdvertOutcome::Duplicate => {
+                self.slice_pool.lock().unwrap().schedule_pull(source_subnet);
+                return Ok(outcome);
+            }
 
             // Verify that the header is signed by `source_subnet` before recording the
             // header or replying to it.
@@ -1551,13 +1573,17 @@ impl XNetAdvertHandler for XNetAdvertHandlerImpl {
             })?;
         debug_assert_eq!(slice.header(), &claimed, "Inconsistent slice decoding");
 
-        // Record every verified header: the recorded header shows how far the peer has
-        // garbage collected its messages, which is what tells us whether we still owe
-        // it an advert.
-        self.slice_pool
-            .lock()
-            .unwrap()
-            .record_peer_header(source_subnet, slice.header());
+        {
+            let mut slice_pool = self.slice_pool.lock().unwrap();
+            if outcome == XNetAdvertOutcome::Actionable {
+                slice_pool.schedule_pull(source_subnet);
+            }
+
+            // Record every verified header: the recorded header shows how far the peer has
+            // garbage collected its messages, which is what tells us whether we still owe
+            // it an advert.
+            slice_pool.record_peer_header(source_subnet, slice.header());
+        }
 
         Ok(outcome)
     }
@@ -2038,26 +2064,41 @@ impl PoolRefillTask {
 
     /// Queries all subnets for new slices and puts / appends them to the pool after
     /// validation against the given registry version.
+    ///
+    /// Also unschedules every subnet it pulls from, as advert-driven pulling
+    /// would; and records whether it was scheduled and whether the pull pooled
+    /// anything.
     fn refill_pool(self: &Arc<Self>, registry_version: RegistryVersion) {
-        let refill_stream_slice_indices = refill_stream_slice_indices(
-            &self.pool.lock().unwrap(),
-            self.endpoint_resolver.subnet_id,
-        );
+        let pulls: Vec<_> = {
+            let mut pool = self.pool.lock().unwrap();
+            refill_stream_slice_indices(&pool, self.endpoint_resolver.subnet_id)
+                .into_iter()
+                .map(|(subnet_id, indices)| (subnet_id, indices, pool.unschedule_pull(subnet_id)))
+                .collect()
+        };
 
-        for (subnet_id, indices) in refill_stream_slice_indices {
-            self.runtime_handle
-                .spawn(Arc::clone(self).pull(subnet_id, indices, registry_version));
+        for (subnet_id, indices, scheduled) in pulls {
+            let task = Arc::clone(self);
+            self.runtime_handle.spawn(async move {
+                if let Ok(pooled) = task.pull(subnet_id, indices, registry_version).await {
+                    task.metrics
+                        .observe_shadow_pull(subnet_id, scheduled, pooled);
+                }
+            });
         }
     }
 
     /// Queries a node of `subnet_id` for the slice described by `indices`; and
     /// puts / appends it to the pool after validation against `registry_version`.
+    ///
+    /// Returns whether the pulled slice was pooled (`false` if there is no stream);
+    /// or `Err(())` if the pull failed (already logged and recorded).
     async fn pull(
-        self: Arc<Self>,
+        self: &Arc<Self>,
         subnet_id: SubnetId,
         indices: RefillStreamSliceIndices,
         registry_version: RegistryVersion,
-    ) {
+    ) -> Result<bool, ()> {
         // `XNetEndpoint` URL of a node on `subnet_id`.
         let endpoint = match self.endpoint_resolver.xnet_stream_url(
             subnet_id,
@@ -2069,7 +2110,7 @@ impl PoolRefillTask {
             Err(e) => {
                 log!(self.log, e.log_level(), "{}", e);
                 self.metrics.observe_pull_attempt(e.to_label_value());
-                return;
+                return Err(());
             }
         };
 
@@ -2108,8 +2149,8 @@ impl PoolRefillTask {
                 } else {
                     CertifiedSlicePool::put
                 };
-                // Validation verifies a threshold signature.
-                let task = Arc::clone(&self);
+                // Blocking because validation verifies the threshold signature.
+                let task = Arc::clone(self);
                 match tokio::task::spawn_blocking(move || {
                     put_or_append(
                         &task.pool,
@@ -2123,21 +2164,25 @@ impl PoolRefillTask {
                 .await
                 {
                     Ok(res) => {
-                        let status = match res {
-                            Ok(()) => STATUS_SUCCESS,
+                        let status = match &res {
+                            Ok(_) => STATUS_SUCCESS,
                             Err(e) => e.to_label_value(),
                         };
 
                         self.metrics
                             .observe_query_slice_duration(status, proximity, since);
                         self.metrics.observe_pull_attempt(status);
+                        res.map_err(|_| ())
                     }
 
-                    Err(err) => warn!(
-                        self.log,
-                        "Failed to join pool refill blocking thread: {err}"
-                    ),
-                };
+                    Err(err) => {
+                        warn!(
+                            self.log,
+                            "Failed to join pool refill blocking thread: {err}"
+                        );
+                        Err(())
+                    }
+                }
             }
 
             Err(e) => {
@@ -2145,13 +2190,16 @@ impl PoolRefillTask {
                     .observe_query_slice_duration(&e.to_label_value(), proximity, since);
                 self.metrics.observe_pull_attempt(&e.to_label_value());
                 if let XNetClientError::NoContent = e {
-                } else if pass_log_sampling() {
+                    return Ok(false);
+                }
+                if pass_log_sampling() {
                     info!(
                         self.log,
                         "Failed to query stream slice for subnet {subnet_id} from node {}: {e}",
                         endpoint.node_id,
                     );
                 }
+                Err(())
             }
         }
     }
