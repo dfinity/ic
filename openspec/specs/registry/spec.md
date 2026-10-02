@@ -674,12 +674,12 @@ The registry supports storing large values by chunking them into smaller pieces 
 - **THEN** the mutation is stored as-is without chunking
 
 #### Scenario: Large mutations are chunked
-- **WHEN** a mutation's encoded size exceeds MIN_CHUNKABLE_ATOMIC_MUTATION_LEN but is under MAX_CHUNKABLE_ATOMIC_MUTATION_LEN (10 MB)
+- **WHEN** a mutation's encoded size exceeds MIN_CHUNKABLE_ATOMIC_MUTATION_LEN but is under MAX_CHUNKABLE_ATOMIC_MUTATION_LEN (13 MiB)
 - **THEN** large blob values are stored in the CHUNKS stable memory
 - **AND** the mutation references chunk keys instead of inline values
 
 #### Scenario: Excessively large mutations are rejected
-- **WHEN** a mutation's encoded size exceeds MAX_CHUNKABLE_ATOMIC_MUTATION_LEN (10 MB)
+- **WHEN** a mutation's encoded size exceeds MAX_CHUNKABLE_ATOMIC_MUTATION_LEN (13 MiB)
 - **THEN** the operation panics with "Mutation too large"
 
 #### Scenario: Response size limiting
