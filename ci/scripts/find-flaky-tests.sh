@@ -57,7 +57,7 @@ if [ -n "$labels" ]; then
         | ($long | lines) as $long
         | ($patterns | lines) as $patterns
         | [$prs[] | select(.isCrossRepository | not)] as $prs
-        | [$prs[].title | capture("deflake `?(?<label>//[^ `,]+)").label | base] as $pr_bases
+        | [$prs[].title | capture("deflake `?(?<label>//[^ `,]+)"; "i").label | base] as $pr_bases
         | [$prs[].headRefName] as $pr_heads
         | $labels | lines
         | to_entries
