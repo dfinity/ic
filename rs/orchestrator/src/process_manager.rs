@@ -140,10 +140,6 @@ pub(crate) trait ProcessRunner<P: Process>: Send + Sync {
     /// Returns true only if the process is running.
     fn is_running(&self) -> bool;
 
-    /// Returns the `Pid` of the currently running process; or `None` if no
-    /// process is running.
-    fn get_pid(&self) -> Option<Pid>;
-
     /// Returns the currently running process; or `None` if no process is
     /// running.
     fn get_process(&self) -> Option<Arc<P>>;
@@ -287,7 +283,7 @@ impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
     /// Note that this blocks the calling thread for up to the grace period plus
     /// the kill timeout.
     fn stop(&mut self) -> Result<()> {
-        if self.get_pid().is_none() {
+        if !self.is_running() {
             return Ok(());
         }
 
@@ -319,11 +315,7 @@ impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
     }
 
     fn is_running(&self) -> bool {
-        self.get_pid().is_some()
-    }
-
-    fn get_pid(&self) -> Option<Pid> {
-        self.running_cell.get_pid()
+        self.running_cell.get_pid().is_some()
     }
 
     fn get_process(&self) -> Option<Arc<P>> {
@@ -411,11 +403,7 @@ pub(crate) mod fake {
         }
 
         fn is_running(&self) -> bool {
-            self.get_pid().is_some()
-        }
-
-        fn get_pid(&self) -> Option<Pid> {
-            self.log.get_pid()
+            self.log.get_pid().is_some()
         }
 
         fn get_process(&self) -> Option<Arc<P>> {
@@ -490,16 +478,17 @@ mod tests {
     #[test]
     fn stop_waits_for_exit() {
         let mut runner = SingleProcessRunner::new(no_op_logger());
+        let observer = runner.observer();
         runner.start(shell(LONG_RUNNING)).unwrap();
         assert!(runner.is_running());
-        assert!(runner.get_pid().is_some());
+        assert!(observer.get_pid().is_some());
 
         assert!(!runner.wait_for_exit(Duration::from_secs(1)));
         assert!(runner.is_running());
 
         runner.stop().unwrap();
         assert!(!runner.is_running());
-        assert_eq!(runner.get_pid(), None);
+        assert_eq!(observer.get_pid(), None);
     }
 
     #[test]
@@ -520,25 +509,22 @@ mod tests {
     }
 
     #[test]
-    fn start_while_running_restarts_process_and_observer_follows() {
+    fn start_while_running_restarts_process() {
         let mut runner = SingleProcessRunner::new(no_op_logger());
         let observer = runner.observer();
         assert_eq!(observer.name(), ShellProcess::NAME);
         assert_eq!(observer.get_pid(), None);
 
         runner.start(shell(LONG_RUNNING)).unwrap();
-        let old_pid = runner.get_pid().unwrap();
-        assert_eq!(observer.get_pid(), Some(old_pid));
+        let old_pid = observer.get_pid().unwrap();
 
         runner.start(shell(LONG_RUNNING)).unwrap();
 
-        let new_pid = runner.get_pid().expect("a new process should be running");
-        assert_ne!(old_pid, new_pid);
         // The observer obtained before the restart follows the new process.
-        assert_eq!(observer.get_pid(), Some(new_pid));
+        let new_pid = observer.get_pid().expect("a new process should be running");
+        assert_ne!(old_pid, new_pid);
 
         runner.stop().unwrap();
-        assert_eq!(runner.get_pid(), None);
         assert_eq!(observer.get_pid(), None);
     }
 
