@@ -93,15 +93,16 @@ def without_workspace_dependencies(manifest):
     return manifest
 
 
-# The dependencies each crate adds and removes.
-changes = {}
+# The crates of the changed manifests and the dependencies each crate adds and removes.
+crates, changes = {}, {}
 for path in open(manifests).read().split("\0"):
     if path:
         old, new = load(base, path), load(fix, path)
         added, removed = names(new) - names(old), names(old) - names(new)
         if unknown := added - set(workspace):
             sys.exit(f"{path} adds dependencies the root Cargo.toml doesn't have: {', '.join(sorted(unknown))}")
-        changes[new.get("package", {}).get("name")] = (added, removed)
+        crates[path] = new.get("package", {}).get("name")
+        changes[crates[path]] = (added, removed)
         if without_workspace_dependencies(old) != without_workspace_dependencies(new):
             sys.exit(f"{path} changes beyond adding or removing workspace dependencies")
 
@@ -118,6 +119,11 @@ def lockfile(rev):
 (old_metadata, old_packages), (new_metadata, new_packages) = lockfile(base), lockfile(fix)
 if old_metadata != new_metadata or old_packages.keys() != new_packages.keys():
     sys.exit("Cargo.lock adds or removes packages or changes its metadata")
+# The nested workspaces have lockfiles of their own, which the fix can't change, so only the manifests of the crates
+# of the root workspace, which have no source in Cargo.lock, may change.
+members = {name for name, _, source in old_packages if source is None}
+if outside := [path for path, crate in crates.items() if crate not in members]:
+    sys.exit(f"the fix changes manifests outside the root workspace: {', '.join(outside)}")
 
 CRATES_IO = "registry+https://github.com/rust-lang/crates.io-index"
 
