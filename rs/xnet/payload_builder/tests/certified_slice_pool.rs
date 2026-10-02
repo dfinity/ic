@@ -620,7 +620,7 @@ fn put(
     slice: CertifiedStreamSlice,
     certified_stream_store: &dyn CertifiedStreamStore,
     log: &ReplicaLogger,
-) -> CertifiedSliceResult<()> {
+) -> CertifiedSliceResult<bool> {
     CertifiedSlicePool::put(
         pool,
         subnet_id,
@@ -637,7 +637,7 @@ fn append(
     partial: CertifiedStreamSlice,
     certified_stream_store: &dyn CertifiedStreamStore,
     log: &ReplicaLogger,
-) -> CertifiedSliceResult<()> {
+) -> CertifiedSliceResult<bool> {
     CertifiedSlicePool::append(
         pool,
         subnet_id,
@@ -660,20 +660,30 @@ fn classify_advert(
     subnet_id: SubnetId,
     header: &StreamHeader,
 ) -> XNetAdvertOutcome {
-    classify_advert_with(pool, subnet_id, header, &|_, _| false)
+    pool.lock()
+        .unwrap()
+        .classify_advert(subnet_id, header, None)
 }
 
-/// `classify_advert()` against reject signals of ours, as reported by
-/// `have_reject_signal_between`.
+/// `classify_advert()` given our stream to `subnet_id`.
 fn classify_advert_with(
     pool: &Mutex<CertifiedSlicePool>,
     subnet_id: SubnetId,
     header: &StreamHeader,
-    have_reject_signal_between: &dyn Fn(StreamIndex, StreamIndex) -> bool,
+    own_stream: &Stream,
 ) -> XNetAdvertOutcome {
     pool.lock()
         .unwrap()
-        .classify_advert(subnet_id, header, have_reject_signal_between)
+        .classify_advert(subnet_id, header, Some(own_stream))
+}
+
+/// Stream holding nothing but a reject signal at `index`.
+fn stream_with_reject_signal_at(index: StreamIndex) -> Stream {
+    Stream::with_signals(
+        StreamIndexedQueue::with_begin(StreamIndex::new(0)),
+        index.increment(),
+        vec![RejectSignal::new(RejectReason::CanisterMigrating, index)].into(),
+    )
 }
 
 fn peer_header(pool: &Mutex<CertifiedSlicePool>, subnet_id: SubnetId) -> Option<StreamHeader> {
@@ -1705,7 +1715,7 @@ fn pool_append_concurrent_put(
         });
 
         // Appending the second message produces a 2 message slice.
-        append(&pool, SRC_SUBNET, second_slice, &*store, &log).unwrap();
+        assert!(!append(&pool, SRC_SUBNET, second_slice, &*store, &log).unwrap());
 
         // The concurrently pooled slice is more useful and is not displaced by the
         // shorter, appended one.
@@ -1726,7 +1736,8 @@ fn pool_append_concurrent_put(
 }
 
 /// Tests that a pooled slice is only ever replaced by a more useful one: one
-/// with more messages; or, failing that, with more signals.
+/// with more messages; or, failing that, with more signals. And that `put()`
+/// reports whether it pooled the slice.
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn pool_put_more_useful_slice_only(
     #[strategy(arb_stream_slice(
@@ -1759,19 +1770,19 @@ fn pool_put_more_useful_slice_only(
         let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log.clone()));
 
         // Pool a single message slice, then replace it with the full slice.
-        put(&pool, SRC_SUBNET, prefix_slice.clone(), &store, &log).unwrap();
+        assert!(put(&pool, SRC_SUBNET, prefix_slice.clone(), &store, &log).unwrap());
         assert_matches!(slice_stats(&pool, SRC_SUBNET), (_, _, 1, _));
-        put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap();
+        assert!(put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap());
         assert_matches!(slice_stats(&pool, SRC_SUBNET), (_, _, count, _) if count == msg_count);
 
         // Putting the single message slice again is a no-op: it has fewer messages.
-        put(&pool, SRC_SUBNET, prefix_slice.clone(), &store, &log).unwrap();
+        assert!(!put(&pool, SRC_SUBNET, prefix_slice.clone(), &store, &log).unwrap());
         assert_matches!(slice_stats(&pool, SRC_SUBNET), (_, _, count, _) if count == msg_count);
 
         // But the same messages plus an extra signal do replace it...
-        put(&pool, SRC_SUBNET, more_signals_slice.clone(), &store, &log).unwrap();
+        assert!(put(&pool, SRC_SUBNET, more_signals_slice.clone(), &store, &log).unwrap());
         // ...while the slice with fewer signals does not.
-        put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap();
+        assert!(!put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap());
         assert_opt_slices_eq(
             Some(more_signals_slice),
             take_slice(&pool, SRC_SUBNET, None, None, None),
@@ -1784,6 +1795,59 @@ fn pool_put_more_useful_slice_only(
             ]),
             fixture.fetch_pool_put_count()
         );
+    });
+}
+
+/// Tests that `schedule_pending_pulls()` schedules a pull from a peer iff its
+/// recorded header offers something not covered by the cached stream position
+/// (or pooled slice); and only once.
+#[test]
+fn pool_schedule_pending_pulls() {
+    with_test_replica_logger(|log| {
+        let mut pool = CertifiedSlicePool::new(&MetricsRegistry::new(), log);
+        let header = StreamHeaderBuilder::new()
+            .begin(2.into())
+            .end(5.into())
+            .signals_end(3.into())
+            .build();
+        let no_reject_signals = btreemap![];
+
+        // Nothing scheduled for a peer we have heard nothing from.
+        pool.schedule_pending_pulls(&no_reject_signals);
+        assert!(!pool.unschedule_pull(SRC_SUBNET));
+
+        // With nothing pooled and no stream position, the recorded header has
+        // something to pull. Scheduled only once.
+        pool.record_peer_header(SRC_SUBNET, &header);
+        pool.schedule_pending_pulls(&no_reject_signals);
+        pool.schedule_pending_pulls(&no_reject_signals);
+        assert!(pool.unschedule_pull(SRC_SUBNET));
+        assert!(!pool.unschedule_pull(SRC_SUBNET));
+
+        // Nothing to pull once past payloads cover the recorded header...
+        pool.garbage_collect(btreemap! {
+            SRC_SUBNET => ExpectedIndices {
+                message_index: header.end(),
+                signal_index: header.signals_end(),
+                max_no_gc_header_begin: header.begin(),
+            }
+        });
+        pool.schedule_pending_pulls(&no_reject_signals);
+        assert!(!pool.unschedule_pull(SRC_SUBNET));
+
+        // ...unless the recorded header's `begin` would garbage collect a reject
+        // signal of ours that the stream position's would not.
+        pool.garbage_collect(btreemap! {
+            SRC_SUBNET => ExpectedIndices {
+                message_index: header.end(),
+                signal_index: header.signals_end(),
+                max_no_gc_header_begin: 0.into(),
+            }
+        });
+        pool.schedule_pending_pulls(&btreemap! {
+            SRC_SUBNET => stream_with_reject_signal_at(0.into())
+        });
+        assert!(pool.unschedule_pull(SRC_SUBNET));
     });
 }
 
@@ -2133,7 +2197,7 @@ fn pool_classify_advert_accumulates_reference_points(
             .end(stream.messages_end())
             .signals_end(stream.signals_end().increment())
             .build();
-        let reject_signal_at_begin = |from, to| from <= messages_begin && messages_begin < to;
+        let reject_signal_at_begin = stream_with_reject_signal_at(messages_begin);
         let pool = pool_at(ExpectedIndices {
             message_index: messages_begin,
             signal_index: stream.signals_end().increment(),
@@ -2152,8 +2216,7 @@ fn pool_classify_advert_accumulates_reference_points(
             .end(stream.messages_end())
             .signals_end(stream.signals_end())
             .build();
-        let reject_signal_before_begin =
-            |from, to| from <= messages_begin.decrement() && messages_begin.decrement() < to;
+        let reject_signal_before_begin = stream_with_reject_signal_at(messages_begin.decrement());
         let pool = pool_at(ExpectedIndices {
             message_index: stream.messages_end(),
             signal_index: stream.signals_end(),
@@ -2262,13 +2325,12 @@ fn pool_classify_advert_collecting_reject_signal(
             .signals_end(stream.signals_end())
             .build();
 
-        // A reject signal at `messages_begin`, i.e. one only the advertised header,
-        // which begins past it, collects.
-        let reject_signal_at_begin = |from, to| from <= messages_begin && messages_begin < to;
-        // A reject signal before `messages_begin`, i.e. one every reference header has
-        // already collected.
-        let reject_signal_before_begin =
-            |from, to| from <= messages_begin.decrement() && messages_begin.decrement() < to;
+        // Stream with a reject signal at `messages_begin`, i.e. one only the advertised
+        // header, which begins past it, collects.
+        let reject_signal_at_begin = stream_with_reject_signal_at(messages_begin);
+        // Stream with a reject signal before `messages_begin`, i.e. one every reference
+        // header has already collected.
+        let reject_signal_before_begin = stream_with_reject_signal_at(messages_begin.decrement());
 
         // A stream position accounting for all of the advertised signals, with the
         // given `message_index` and `max_no_gc_header_begin`.

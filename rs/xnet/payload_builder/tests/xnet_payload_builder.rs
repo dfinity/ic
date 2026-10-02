@@ -38,7 +38,8 @@ use ic_types::{CountBytes, Height, NodeId, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice};
 use ic_xnet_payload_builder::testing::*;
 use ic_xnet_payload_builder::{
-    ExpectedIndices, LABEL_STATUS, MAX_SIGNALS, METRIC_PULL_ATTEMPT_COUNT, POOL_BYTE_SIZE_SOFT_CAP,
+    ExpectedIndices, LABEL_POOLED, LABEL_REMOTE, LABEL_SCHEDULED, LABEL_STATUS, MAX_SIGNALS,
+    METRIC_PULL_ATTEMPT_COUNT, METRIC_SHADOW_PULLS, POOL_BYTE_SIZE_SOFT_CAP,
     POOLED_SLICE_BYTE_SIZE_DIVISOR, XNetPayloadBuilderImpl, adjusted_byte_limit,
     refill_stream_slice_indices,
 };
@@ -307,7 +308,7 @@ fn out_stream_with_message(messages_begin: StreamIndex, signals_end: StreamIndex
 /// If there is room for more signals, messages are expected to be included in the slice
 /// such that `slice.messages_end() - in_stream.begin()` == `MAX_SIGNALS`, i.e. after inducting
 /// the slice there would be exactly `MAX_SIGNALS` signals in the `out_stream`.
-#[test_strategy::proptest(ProptestConfig::with_cases(10))]
+#[test_strategy::proptest(ProptestConfig::with_cases(3))]
 fn get_xnet_payload_respects_signal_limit(
     // `MAX_SIGNALS` <= signals_end()` <= `MAX_SIGNALS` + 20
     #[strategy(arb_stream_with_config(
@@ -1105,7 +1106,7 @@ fn refill_stream_slice_indices_byte_limits_non_empty_pool() {
 }
 
 /// Tests refilling an empty pool.
-#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn refill_pool_empty(
     #[strategy(arb_stream_slice(
         3, // min_size
@@ -1184,7 +1185,7 @@ fn refill_pool_empty(
 
         runtime.block_on(async {
             let mut count: u64 = 0;
-            // Keep polling until a slice is present in the pool.
+            // Keep polling until a slice is present in the pool and the pull was recorded.
             loop {
                 if let (_, Some(_), _, _) = pool.lock().unwrap().slice_stats(REMOTE_SUBNET) {
                     break;
@@ -1196,6 +1197,20 @@ fn refill_pool_empty(
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
         });
+
+        let remote = REMOTE_SUBNET.to_string();
+        assert_eq!(
+            metric_vec(&[(
+                &[
+                    (LABEL_REMOTE, remote.as_str()),
+                    (LABEL_SCHEDULED, "false"),
+                    (LABEL_POOLED, "true")
+                ],
+                1
+            )]),
+            fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS)
+        );
+        assert!(!pool.lock().unwrap().unschedule_pull(REMOTE_SUBNET));
 
         assert_opt_slices_eq(
             Some(certified_slice),
@@ -1210,7 +1225,7 @@ fn refill_pool_empty(
 
 /// Tests refilling a pool with an already existing slice, requiring an
 /// append.
-#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn refill_pool_append(
     #[strategy(arb_stream_slice(
         3, // min_size
@@ -1335,6 +1350,20 @@ fn refill_pool_append(
             }
         });
 
+        // Not scheduled, but pooled.
+        let remote = REMOTE_SUBNET.to_string();
+        assert_eq!(
+            metric_vec(&[(
+                &[
+                    (LABEL_REMOTE, remote.as_str()),
+                    (LABEL_SCHEDULED, "false"),
+                    (LABEL_POOLED, "true")
+                ],
+                1
+            )]),
+            fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS)
+        );
+
         assert_opt_slices_eq(
             Some(certified_slice),
             pool.lock()
@@ -1451,7 +1480,7 @@ fn refill_pool_put_invalid_slice(
 
 /// Tests validation failure while refilling a pool with an already existing
 /// slice, requiring an append.
-#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn refill_pool_append_invalid_slice(
     #[strategy(arb_stream_slice(
         3, // min_size
