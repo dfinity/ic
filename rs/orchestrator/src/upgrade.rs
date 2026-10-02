@@ -23,7 +23,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
-    Height, NodeId, PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId,
+    NodeId, PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::{CatchUpPackage, HasHeight},
     crypto::{
         canister_threshold_sig::MasterPublicKey,
@@ -278,7 +278,6 @@ impl Upgrade {
         // When we arrived here, we are an assigned node.
         *self.subnet_assignment.write().unwrap() = SubnetAssignment::Assigned(subnet_id);
 
-        let old_cup_height = maybe_local_cup.as_ref().map(HasHeight::height);
         let old_subnet_id = subnet_id;
 
         // Get the latest available CUP from the disk, peers or registry and
@@ -403,17 +402,9 @@ impl Upgrade {
         }
 
         // If we arrive here, we are on the newest replica version.
-        // Now we check if a subnet recovery or a subnet split is in progress.
-        // If it is, we restart to pass the new DKG material to consensus.
-        self.stop_replica_if_recovery_cup_or_subnet_changed(
-            &latest_cup,
-            old_cup_height,
-            subnet_id,
-            old_subnet_id,
-        );
 
         // This will start new child processes if any of them is not running
-        self.ensure_children_are_running(subnet_id, latest_registry_version)?;
+        self.ensure_children_are_running(subnet_id, &latest_cup, latest_registry_version)?;
 
         // This will trigger an image download if one is already scheduled but we did
         // not arrive at the corresponding CUP yet.
@@ -616,74 +607,23 @@ impl Upgrade {
         Ok(())
     }
 
-    /// Stop the replica if the given CUP is unsigned.
-    /// Without restart, consensus would reject the unsigned artifact.
-    /// Also stop the replica if our new subnet ID has changed compared to what we had before.
-    /// This is also necessary because the subnet ID is passed as a CLI argument and kept constant
-    /// throughout the lifetime of the replica.
-    /// In any case, the replica is restarted only if the given CUP is strictly higher than the
-    /// previous CUP height. This is to avoid restarting the replica multiple times for the same
-    /// CUP.
-    /// If stopping the replica fails, restart the current process instead.
-    fn stop_replica_if_recovery_cup_or_subnet_changed(
-        &self,
-        cup: &CatchUpPackage,
-        old_cup_height: Option<Height>,
-        subnet_id: SubnetId,
-        old_subnet_id: SubnetId,
-    ) {
-        let Some(old_cup_height) = old_cup_height else {
-            return;
-        };
-        if cup.content.height() <= old_cup_height {
-            return;
-        }
-
-        let mut should_restart = false;
-        if !cup.is_signed() {
-            info!(
-                self.logger,
-                "Found higher unsigned CUP, restarting replica for subnet recovery..."
-            );
-            should_restart = true;
-        }
-        if subnet_id != old_subnet_id {
-            info!(
-                self.logger,
-                "Subnet ID changed from {old_subnet_id} to {subnet_id}, evidence of \
-                a destination node of a subnet split, restarting replica...",
-            );
-            should_restart = true;
-        }
-
-        if should_restart {
-            // Restarting the replica is enough to pass the CUP/subnet ID forward.
-            // Stopping waits until the replica has exited, so the subsequent
-            // `ensure_children_are_running` starts it again in the same iteration.
-            // Note: if any other process depends on the CUP and/or subnet ID, they should be
-            // stopped here as well.
-            // If we fail, restart the current process instead.
-            if let Err(e) = self.processes_manager.write().unwrap().stop_replica() {
-                warn!(self.logger, "Failed to stop replica with error {:?}", e);
-                reexec_current_process(&self.logger);
-            }
-        }
-    }
-
     /// Stop all child processes, including the replica, and wait until they have exited.
     pub fn stop_children(&self) -> OrchestratorResult<()> {
         self.processes_manager.write().unwrap().stop_all()
     }
 
-    /// Start all child processes appropriate for this node.
+    /// Start all child processes appropriate for this node, restarting them if needed.
+    /// `cup` must be the latest CUP, i.e. the one persisted to disk.
     fn ensure_children_are_running(
         &self,
         subnet_id: SubnetId,
+        cup: &CatchUpPackage,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
         self.processes_manager.write().unwrap().start_all(
             self.platform_version.clone(),
             subnet_id,
+            cup,
             registry_version,
         )
     }
@@ -1192,9 +1132,9 @@ mod tests {
         make_pre_split_source_cup, make_splitting_cup_for_test, mock_tls_config,
         node_record_serving, start_cup_server,
     };
-    use crate::process_manager::{Process, ProcessRunner};
+    use crate::process_manager::{Process, ProcessRunner, fake::FakeProcessRunner};
     use crate::processes::{
-        IcGatewayProcess, IcGatewayProcessConfig, ProcessManager, ReplicaProcess,
+        IcGatewayProcess, IcGatewayProcessConfig, ProcessManager, ReplicaArgs, ReplicaProcess,
         ReplicaProcessConfig,
     };
 
@@ -1240,7 +1180,7 @@ mod tests {
     };
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
     use ic_types::{
-        PrincipalId, Time,
+        Height, PrincipalId, Time,
         batch::ValidationContext,
         consensus::{
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
@@ -1257,7 +1197,6 @@ mod tests {
         time::UNIX_EPOCH,
     };
     use mockall::mock;
-    use nix::unistd::Pid;
     use prost::Message;
     use rand::RngCore;
     use rstest::rstest;
@@ -1304,37 +1243,6 @@ mod tests {
                 .cup_provider
                 .with_crypto(Arc::new(SubnetAwareThresholdSigVerifier));
             self
-        }
-    }
-
-    /// Fake runner that tracks running state without spawning a real process.
-    /// Used as a drop-in for `SingleProcessRunner<P>` inside process managers.
-    pub(crate) struct FakeProcessRunner {
-        running: bool,
-    }
-    impl FakeProcessRunner {
-        pub(crate) fn new() -> Self {
-            Self { running: false }
-        }
-    }
-    impl<P: Process> ProcessRunner<P> for FakeProcessRunner {
-        fn start(&mut self, _process: P) -> std::io::Result<()> {
-            self.running = true;
-            Ok(())
-        }
-
-        fn stop(&mut self) -> std::io::Result<()> {
-            self.running = false;
-            Ok(())
-        }
-
-        fn is_running(&self) -> bool {
-            self.running
-        }
-
-        fn get_pid(&self) -> Option<Pid> {
-            // Return a dummy PID if the process is running.
-            self.running.then_some(Pid::from_raw(12345))
         }
     }
 
@@ -1618,15 +1526,16 @@ mod tests {
         let cup_dir = dir.join("cups");
         let cup_path = cup_dir.join("cup.types.v1.CatchUpPackage.pb");
         std::fs::create_dir_all(&cup_dir).unwrap();
-        if let Some(local_cup) = has_local_cup {
+        let cup_and_subnet_id = has_local_cup.map(|local_cup| {
             let cup = make_local_cup(
                 local_cup.height,
                 local_cup.subnet_id,
                 local_cup.registry_version,
             );
-            let cup_proto = pb::CatchUpPackage::from(cup);
+            let cup_proto = pb::CatchUpPackage::from(cup.clone());
             std::fs::write(&cup_path, cup_proto.encode_to_vec()).unwrap();
-        }
+            (cup, local_cup.subnet_id)
+        });
         let cup_provider = CatchUpPackageProvider::new(
             registry.clone(),
             LocalCUPReader::new(cup_dir, logger.clone()),
@@ -1655,11 +1564,17 @@ mod tests {
         };
         // Start the child processes if the test scenario indicates so
         if test_scenario.were_child_processes_started_previously() {
+            let (local_cup, subnet_id) = cup_and_subnet_id
+                .expect("child processes are only started previously with a local CUP");
             replica_runner
                 .start(
                     ReplicaProcess::build(
                         &replica_process_config,
-                        (platform_version.clone(), SUBNET_1),
+                        ReplicaArgs {
+                            platform_version: platform_version.clone(),
+                            subnet_id,
+                            cup: &local_cup,
+                        },
                     )
                     .unwrap(),
                 )
@@ -3713,6 +3628,73 @@ mod tests {
                 &Level::Warning,
                 "Failed to verify CUP from peer",
             );
+    }
+
+    /// If a previous iteration persisted a recovery CUP but failed before restarting the replica,
+    /// the next iteration must still restart it, even though the local CUP is not newer than the
+    /// latest CUP anymore.
+    #[tokio::test]
+    async fn test_replica_restarted_if_recovery_cup_persisted_without_restart() {
+        let local_cup_height = Height::from(100);
+        let test_scenario = UpgradeTestScenario {
+            node_id: NODE_1,
+            subnet_type: SubnetType::Application,
+            current_replica_version: ReplicaVersion::from_str("replica_version_0.1").unwrap(),
+            guestos_version: None,
+            // The (unsigned) recovery CUP, already persisted by the previous iteration.
+            has_local_cup: Some(CUPScenario {
+                height: local_cup_height,
+                subnet_id: SUBNET_1,
+                registry_version: RegistryVersion::from(10),
+            }),
+            has_registry_cup: None,
+            initial_subnet_assignment: SubnetAssignment::Assigned(SUBNET_1),
+            is_leaving: None,
+            upgrade_to: None,
+        };
+        let data_provider = test_scenario.setup_registry();
+
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let logger = InMemoryReplicaLogger::new();
+        let mut upgrade_loop = create_upgrade_for_test(
+            tmp_path,
+            ReplicaLogger::from(&logger),
+            test_scenario.clone(),
+            data_provider,
+        )
+        .await;
+
+        // The replica is still running with the CUP from before the recovery.
+        {
+            let mut processes_manager = upgrade_loop.processes_manager.write().unwrap();
+            processes_manager.stop_all().unwrap();
+            processes_manager
+                .start_all(
+                    test_scenario.platform_version(),
+                    SUBNET_1,
+                    &make_local_cup(Height::from(50), SUBNET_1, RegistryVersion::from(10)),
+                    RegistryVersion::from(10),
+                )
+                .unwrap();
+        }
+
+        assert_eq!(
+            upgrade_loop.check().await.unwrap(),
+            OrchestratorControlFlow::Assigned(SUBNET_1)
+        );
+
+        assert!(upgrade_loop.is_replica_running());
+        assert_eq!(read_local_cup(tmp_path).height(), local_cup_height);
+        LogEntriesAssert::assert_that(logger.drain_logs())
+            .has_only_one_message_containing(
+                &Level::Info,
+                "Restarting replica process: Found higher unsigned CUP (height 100 > 50)",
+            )
+            // One stop and start each from simulating the old replica above, and one each from
+            // the restart.
+            .has_exactly_n_messages_containing(2, &Level::Info, "Stopping replica process")
+            .has_exactly_n_messages_containing(2, &Level::Info, "Starting new replica process");
     }
 
     #[tokio::test]

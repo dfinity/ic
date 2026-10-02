@@ -30,20 +30,33 @@ const STOP_GRACE_PERIOD: Duration = if !cfg!(test) {
 /// sending `SIGKILL`, before giving up and returning an error.
 const KILL_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// The `Pid` of the running process (if any), shared between a
-/// [`SingleProcessRunner`] and the thread waiting for the process to exit.
-/// The condition variable is notified when the process exits and the `Pid` is
-/// cleared.
-#[derive(Default)]
-struct PidState {
-    pid: Mutex<Option<Pid>>,
+/// A running [`Process`] together with its `Pid`.
+struct Running<P> {
+    pid: Pid,
+    process: P,
+}
+
+/// The running process (if any), shared between a [`SingleProcessRunner`] and
+/// the thread waiting for the process to exit. The condition variable is
+/// notified when the process exits and is cleared.
+struct RunningState<P> {
+    running: Mutex<Option<Running<P>>>,
     exited: Condvar,
 }
 
-type PIDCell = Arc<PidState>;
+type RunningCell<P> = Arc<RunningState<P>>;
+
+/// Whether a running [`Process`] can keep running with new arguments.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum RestartDecision {
+    /// The running process is compatible with the new arguments.
+    KeepRunning,
+    /// The running process must be restarted, for the given reason (used for logging).
+    Restart { reason: String },
+}
 
 /// Captures a process that should be run by a [`ProcessRunner`]
-pub(crate) trait Process {
+pub(crate) trait Process: Send + Sync + 'static {
     /// Name of the type of process
     ///
     /// Used for logging and metrics
@@ -60,13 +73,17 @@ pub(crate) trait Process {
     type Config;
     /// Dynamic arguments of the process, such as the subnet ID for the replica
     /// (which could change across the orchestrator's lifetime).
-    type Args;
+    type Args<'a>;
 
     /// Build a new instance of the process with the given configuration and
     /// arguments.
-    fn build(config: &Self::Config, args: Self::Args) -> OrchestratorResult<Self>
+    fn build(config: &Self::Config, args: Self::Args<'_>) -> OrchestratorResult<Self>
     where
         Self: Sized;
+
+    /// Decides whether this running process must be restarted to run with the
+    /// given arguments.
+    fn restart_decision(&self, args: &Self::Args<'_>) -> RestartDecision;
 
     /// Return the version of the [`Process`]
     fn get_version(&self) -> &Self::Version;
@@ -82,7 +99,7 @@ pub(crate) trait Process {
 }
 
 /// Trait for running a single versioned [`Process`]
-pub(crate) trait ProcessRunner<P: Process>: Send {
+pub(crate) trait ProcessRunner<P: Process>: Send + Sync {
     /// Start the given process.
     ///
     /// If a process is already running, it is first stopped as in [`Self::stop`], and the given
@@ -99,12 +116,15 @@ pub(crate) trait ProcessRunner<P: Process>: Send {
     /// Returns the `Pid` of the currently running process; or `None` if no
     /// process is running.
     fn get_pid(&self) -> Option<Pid>;
+
+    /// Asks the currently running process whether it must be restarted to run
+    /// with the given arguments; or returns `None` if no process is running.
+    fn restart_decision(&self, args: &P::Args<'_>) -> Option<RestartDecision>;
 }
 
 /// A [`SingleProcessRunner`] manages running a single versioned [`Process`]
 pub(crate) struct SingleProcessRunner<P: Process> {
-    process: Option<P>,
-    pid_cell: PIDCell,
+    running_cell: RunningCell<P>,
     log: ReplicaLogger,
     join_handle: Option<std::thread::JoinHandle<()>>,
 }
@@ -112,21 +132,23 @@ pub(crate) struct SingleProcessRunner<P: Process> {
 impl<P: Process> SingleProcessRunner<P> {
     pub(crate) fn new(logger: ReplicaLogger) -> Self {
         Self {
-            process: None,
-            pid_cell: Default::default(),
+            running_cell: Arc::new(RunningState {
+                running: Mutex::new(None),
+                exited: Condvar::new(),
+            }),
             log: logger,
             join_handle: None,
         }
     }
 
-    /// Sets the pid for the running process.
+    /// Sets the running process and its pid.
     ///
     /// # Panics
     ///
-    /// If the pid is already set, this function will panic.
-    fn set_pid(&self, pid: Pid) {
-        let mut pid_lock = self.pid_cell.pid.lock().unwrap();
-        if pid_lock.replace(pid).is_some() {
+    /// If a running process is already set, this function will panic.
+    fn set_running(&self, pid: Pid, process: P) {
+        let mut running = self.running_cell.running.lock().unwrap();
+        if running.replace(Running { pid, process }).is_some() {
             panic!("Process is still running!");
         }
     }
@@ -152,8 +174,8 @@ impl<P: Process> SingleProcessRunner<P> {
     /// as the orchestrator has no way of adopting or even knowing the
     /// processes in question, cf. https://linux.die.net/man/2/waitpid.
     fn signal_group(&self, signal: Signal) -> Result<()> {
-        let pid = self.pid_cell.pid.lock().unwrap();
-        if let Some(pid) = *pid {
+        let running = self.running_cell.running.lock().unwrap();
+        if let Some(Running { pid, .. }) = *running {
             let mut gpid = pid;
             // We want to signal the whole process group.
             if gpid > Pid::from_raw(0) {
@@ -178,17 +200,17 @@ impl<P: Process> SingleProcessRunner<P> {
     /// Waits up to `timeout` for the currently running process to exit.
     /// Returns true if no process is running anymore.
     fn wait_for_exit(&self, timeout: Duration) -> bool {
-        let pid = self.pid_cell.pid.lock().unwrap();
-        let (pid, _) = self
-            .pid_cell
+        let running = self.running_cell.running.lock().unwrap();
+        let (running, _) = self
+            .running_cell
             .exited
-            .wait_timeout_while(pid, timeout, |pid| pid.is_some())
+            .wait_timeout_while(running, timeout, |running| running.is_some())
             .unwrap();
-        pid.is_none()
+        running.is_none()
     }
 }
 
-impl<P: Process + Send> ProcessRunner<P> for SingleProcessRunner<P> {
+impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
     fn start(&mut self, process: P) -> Result<()> {
         // If there is a currently running process, stop it and wait for it to exit before starting
         // the new one.
@@ -215,16 +237,15 @@ impl<P: Process + Send> ProcessRunner<P> for SingleProcessRunner<P> {
             .process_group(0)
             .spawn()?;
         debug!(self.log, "Process started. Pid: {}", child.id());
-        self.set_pid(Pid::from_raw(child.id() as i32));
+        self.set_running(Pid::from_raw(child.id() as i32), process);
 
         self.join_handle = Some(std::thread::spawn(wait_on_exit(
             P::NAME,
             self.log.clone(),
             child,
-            self.pid_cell.clone(),
+            self.running_cell.clone(),
         )));
 
-        self.process = Some(process);
         Ok(())
     }
 
@@ -262,7 +283,7 @@ impl<P: Process + Send> ProcessRunner<P> for SingleProcessRunner<P> {
         {
             warn!(self.log, "Thread waiting on {} process panicked", P::NAME);
         }
-        self.process = None;
+
         Ok(())
     }
 
@@ -271,16 +292,30 @@ impl<P: Process + Send> ProcessRunner<P> for SingleProcessRunner<P> {
     }
 
     fn get_pid(&self) -> Option<Pid> {
-        *self.pid_cell.pid.lock().unwrap()
+        self.running_cell
+            .running
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|running| running.pid)
+    }
+
+    fn restart_decision(&self, args: &P::Args<'_>) -> Option<RestartDecision> {
+        self.running_cell
+            .running
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|running| running.process.restart_decision(args))
     }
 }
 
 /// Wait for the child process to return, log the exit status and send.
-fn wait_on_exit(
+fn wait_on_exit<P>(
     name: &'static str,
     log: ReplicaLogger,
     mut process: std::process::Child,
-    pid_cell: PIDCell,
+    running_cell: RunningCell<P>,
 ) -> impl FnOnce() {
     move || {
         let exit_status = process.wait();
@@ -289,8 +324,79 @@ fn wait_on_exit(
         } else {
             info!(log, "{} exited. Exit Status: {:?}", name, exit_status);
         }
-        let _pid = pid_cell.pid.lock().unwrap().take();
-        pid_cell.exited.notify_all();
+        let _running = running_cell.running.lock().unwrap().take();
+        running_cell.exited.notify_all();
+    }
+}
+
+/// A fake [`ProcessRunner`] for tests.
+#[cfg(test)]
+pub(crate) mod fake {
+    use super::*;
+
+    /// What a [`FakeProcessRunner`] was asked to do, so tests can assert whether (and how often)
+    /// the managed process was started/stopped, and with which arguments.
+    pub(crate) struct FakeRunnerLog<P> {
+        /// The currently "running" process, if any.
+        pub(crate) process: Option<P>,
+        pub(crate) starts: usize,
+        pub(crate) stops: usize,
+    }
+
+    /// A [`ProcessRunner`] that records start/stop calls instead of spawning processes.
+    pub(crate) struct FakeProcessRunner<P> {
+        log: Arc<Mutex<FakeRunnerLog<P>>>,
+    }
+
+    impl<P> FakeProcessRunner<P> {
+        pub(crate) fn new() -> Self {
+            Self {
+                log: Arc::new(Mutex::new(FakeRunnerLog {
+                    process: None,
+                    starts: 0,
+                    stops: 0,
+                })),
+            }
+        }
+
+        pub(crate) fn log(&self) -> Arc<Mutex<FakeRunnerLog<P>>> {
+            self.log.clone()
+        }
+    }
+
+    impl<P: Process> ProcessRunner<P> for FakeProcessRunner<P> {
+        fn start(&mut self, process: P) -> Result<()> {
+            let mut log = self.log.lock().unwrap();
+            log.process = Some(process);
+            log.starts += 1;
+            Ok(())
+        }
+
+        fn stop(&mut self) -> Result<()> {
+            let mut log = self.log.lock().unwrap();
+            if log.process.take().is_some() {
+                log.stops += 1;
+            }
+            Ok(())
+        }
+
+        fn is_running(&self) -> bool {
+            self.log.lock().unwrap().process.is_some()
+        }
+
+        fn get_pid(&self) -> Option<Pid> {
+            // Return a dummy PID if the process is running.
+            self.is_running().then_some(Pid::from_raw(12345))
+        }
+
+        fn restart_decision(&self, args: &P::Args<'_>) -> Option<RestartDecision> {
+            self.log
+                .lock()
+                .unwrap()
+                .process
+                .as_ref()
+                .map(|process| process.restart_decision(args))
+        }
     }
 }
 
@@ -310,10 +416,13 @@ mod tests {
         const NAME: &'static str = "shell";
         type Version = ();
         type Config = ();
-        type Args = String;
+        type Args<'a> = String;
 
-        fn build(_config: &Self::Config, script: Self::Args) -> OrchestratorResult<Self> {
+        fn build(_config: &Self::Config, script: Self::Args<'_>) -> OrchestratorResult<Self> {
             Ok(Self { script })
+        }
+        fn restart_decision(&self, _args: &Self::Args<'_>) -> RestartDecision {
+            RestartDecision::KeepRunning
         }
         fn get_version(&self) -> &Self::Version {
             &()

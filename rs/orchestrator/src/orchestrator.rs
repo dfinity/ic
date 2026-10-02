@@ -8,8 +8,8 @@ use crate::{
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
     processes::{
-        IcBoundaryManager, IcBoundaryProcessConfig, IcGatewayProcessConfig,
-        MultipleProcessesManager, ReplicaProcessConfig,
+        IcBoundaryProcessConfig, IcGatewayProcessConfig, MultipleProcessesManager, ProcessManager,
+        ReplicaProcessConfig,
     },
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
@@ -352,9 +352,8 @@ impl Orchestrator {
             ic_boundary_env_file: args.ic_boundary_env_file.clone(),
             crypto_config: config.crypto.clone(),
         };
-        let ic_boundary_manager = IcBoundaryManager::new(
+        let ic_boundary_manager = ProcessManager::new(
             ic_boundary_process_config,
-            Arc::clone(&registry),
             Arc::clone(&metrics),
             logger.clone(),
         );
