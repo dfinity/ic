@@ -46,9 +46,10 @@ if awk '$1 ~ /^:(120000|160000)$/ || $2 == "120000" || $2 == "160000" {bad = 1} 
 fi
 # Dependencies may only be added or removed as `name = { workspace = true }`, whose versions and features come
 # from the root Cargo.toml, which the fix can't change: apart from those, each changed Cargo.toml must parse to
-# the same as before, and Cargo.lock may only add or remove their packages in the dependencies of those crates.
+# the same as before, and Cargo.lock may only add or remove the packages they select in those crates' dependencies.
 git diff --no-renames --name-only -z "$BASE_SHA" "$fix" -- '*Cargo.toml' >"$RUNNER_TEMP/deflake-manifests"
 python3 - "$BASE_SHA" "$fix" "$RUNNER_TEMP/deflake-manifests" <<'EOF' || die "the fix changes dependencies beyond adding or removing workspace dependencies"
+import re
 import subprocess
 import sys
 import tomllib
@@ -72,7 +73,7 @@ def names(manifest):
     return {name for table in tables(manifest) for kind in kinds for name in table.get(kind, {})}
 
 
-# Cargo.lock names the packages of dependencies, which the root Cargo.toml can rename.
+# The workspace dependencies, which can rename their packages.
 workspace = load(base, "Cargo.toml").get("workspace", {}).get("dependencies", {})
 
 
@@ -92,7 +93,7 @@ def without_workspace_dependencies(manifest):
     return manifest
 
 
-# The packages of the dependencies each crate adds and removes.
+# The dependencies each crate adds and removes.
 changes = {}
 for path in open(manifests).read().split("\0"):
     if path:
@@ -100,7 +101,7 @@ for path in open(manifests).read().split("\0"):
         added, removed = names(new) - names(old), names(old) - names(new)
         if unknown := added - set(workspace):
             sys.exit(f"{path} adds dependencies the root Cargo.toml doesn't have: {', '.join(sorted(unknown))}")
-        changes[new.get("package", {}).get("name")] = ({package(n) for n in added}, {package(n) for n in removed})
+        changes[new.get("package", {}).get("name")] = (added, removed)
         if without_workspace_dependencies(old) != without_workspace_dependencies(new):
             sys.exit(f"{path} changes beyond adding or removing workspace dependencies")
 
@@ -114,20 +115,50 @@ def lockfile(rev):
     return lock, dict(zip(keys, entries))
 
 
-def packages(dependencies):
-    # A dependency is the name of a package, followed by its version and source where that is ambiguous.
-    return {dependency.split(" ")[0] for dependency in dependencies}
-
-
 (old_metadata, old_packages), (new_metadata, new_packages) = lockfile(base), lockfile(fix)
 if old_metadata != new_metadata or old_packages.keys() != new_packages.keys():
     sys.exit("Cargo.lock adds or removes packages or changes its metadata")
+
+CRATES_IO = "registry+https://github.com/rust-lang/crates.io-index"
+
+
+def matches(requirement, version):
+    # A bare version and ^ keep the leftmost non-zero component, ~ the minor version and = all given components.
+    req = re.fullmatch(r"([~=^]?)([0-9]+(?:\.[0-9]+){0,2})", requirement.replace(" ", ""))
+    ver = re.fullmatch(r"([0-9]+)\.([0-9]+)\.([0-9]+)", version)
+    if not req or not ver:
+        sys.exit(f"can't tell whether {version} satisfies {requirement}")
+    parts, actual = [int(p) for p in req[2].split(".")], tuple(int(p) for p in ver.groups())
+    leftmost = next((i + 1 for i, p in enumerate(parts) if p), len(parts))
+    same = {"=": len(parts), "~": min(len(parts), 2)}.get(req[1], leftmost)
+    return actual >= tuple(parts + [0] * (3 - len(parts))) and actual[:same] == tuple(parts[:same])
+
+
+def reference(key):
+    # How Cargo.lock refers to the package that a workspace dependency selects: by its name if that's unique,
+    # else also by its version, and also by its source if that's still ambiguous.
+    name, dependency = package(key), workspace.get(key)
+    versions = [version for n, version, _ in old_packages if n == name]
+    if len(versions) == 1:
+        return name
+    if isinstance(dependency, str):
+        dependency = {"version": dependency}
+    if not isinstance(dependency, dict) or dependency.keys() & {"git", "path", "registry"} or "version" not in dependency:
+        sys.exit(f"can't tell which {name} in Cargo.lock {key} selects")
+    selected = [v for n, v, source in old_packages if n == name and source == CRATES_IO and matches(dependency["version"], v)]
+    if len(selected) != 1:
+        sys.exit(f"can't tell which {name} in Cargo.lock {key} selects")
+    version = selected[0]
+    return f"{name} {version}" if versions.count(version) == 1 else f"{name} {version} ({CRATES_IO})"
+
+
 for (name, version, source), old in old_packages.items():
     new = new_packages[(name, version, source)]
     old_deps, new_deps = set(old.pop("dependencies", [])), set(new.pop("dependencies", []))
     # Only the crates of the workspace, which have no source, can have changed manifests.
     added, removed = changes.get(name, (set(), set())) if source is None else (set(), set())
-    if old != new or not packages(new_deps - old_deps) <= added or not packages(old_deps - new_deps) <= removed:
+    added, removed = set(map(reference, added)), set(map(reference, removed))
+    if old != new or not new_deps - old_deps <= added or not old_deps - new_deps <= removed:
         sys.exit(f"Cargo.lock changes {name} {version} beyond adding or removing its workspace dependencies")
 EOF
 numstat="$(git diff --no-renames --numstat "$BASE_SHA" "$fix")"
