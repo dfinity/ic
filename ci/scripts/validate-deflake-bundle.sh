@@ -207,9 +207,10 @@ body_file="$RUNNER_TEMP/pr-body.md"
     done
     echo
     # Drop what could hide text from reviewers: HTML comments (also unterminated ones), link reference
-    # definitions (which also serve as comments) and invisible, private-use or unassigned characters.
+    # definitions (which also serve as comments), the tags of collapsed sections and invisible, private-use or
+    # unassigned characters.
     head -c 60000 "$RUNNER_TEMP/deflake/body.md" \
-        | perl -0777 -CSD -pe '1 while s/<!--.*?(?:-->|\z)//s; s/^ {0,3}\[[^\]\n]*\]:.*\n?//mg; s/[\p{Cf}\p{Co}\p{Cn}\x{FE00}-\x{FE0F}\x{E0100}-\x{E01EF}]//g'
+        | perl -0777 -CSD -pe '1 while s/<!--.*?(?:-->|\z)//s; s/^ {0,3}\[[^\]\n]*\]:.*\n?//mg; s{</?(?:details|summary)\b[^>]*>}{}gi; s/[\p{Cf}\p{Co}\p{Cn}\x{FE00}-\x{FE0F}\x{E0100}-\x{E01EF}]//g'
 } >"$body_file"
 
 {
