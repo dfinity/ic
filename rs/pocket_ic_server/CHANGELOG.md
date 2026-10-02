@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- Threshold ECDSA keys over the curve secp256r1: the II and fiduciary subnets hold such a key with name `key_1`
+  and the test threshold keys subnet holds such keys with names `test_key_1` and `dfx_test_key`.
+
 
 
 ## 16.0.0 - 2026-09-01
