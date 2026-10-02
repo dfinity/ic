@@ -840,7 +840,7 @@ impl PocketXNetImpl {
 
     fn refill(&self, registry_version: RegistryVersion, log: ReplicaLogger) {
         let refill_stream_slice_indices =
-            refill_stream_slice_indices(self.pool.clone(), self.own_subnet_id);
+            refill_stream_slice_indices(&self.pool.lock().unwrap(), self.own_subnet_id);
 
         for (subnet_id, indices) in refill_stream_slice_indices {
             // When restoring a PocketIC instance from its state,
