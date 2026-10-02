@@ -96,7 +96,7 @@ pub fn generate_guestos_config(
     Ok(guestos_config)
 }
 
-fn node_ipv6_address(
+pub(crate) fn node_ipv6_address(
     slot: VmSlot,
     node_type: NodeType,
     hostos_config: &HostOSConfig,

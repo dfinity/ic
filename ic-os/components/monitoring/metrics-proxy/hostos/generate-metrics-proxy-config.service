@@ -1,0 +1,15 @@
+[Unit]
+Description=Generate metrics-proxy Configuration
+RequiresMountsFor=/boot/config
+After=update-config.service
+Before=metrics-proxy.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ic/bin/config_tool generate-metrics-proxy-config
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

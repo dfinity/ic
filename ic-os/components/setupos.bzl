@@ -40,6 +40,7 @@ component_files = {
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("misc/config/config-setupos.sh"): "/opt/ic/bin/config.sh",
+    Label("misc/guestos-vm-count.sh"): "/opt/ic/bin/guestos-vm-count.sh",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/serial-getty@/setupos/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",

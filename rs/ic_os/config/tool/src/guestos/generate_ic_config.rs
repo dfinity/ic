@@ -1,6 +1,8 @@
 use anyhow::{Context, Result, bail, ensure};
 use askama::Template;
-use config_types::{GuestOSConfig, Ipv6Config};
+use config_types::{GuestOSConfig, Ipv6Config, VmSlot};
+use deterministic_ips::node_type::NodeType;
+use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use ipnet::Ipv6Net;
 use serde_json;
 use std::fs::write;
@@ -34,6 +36,8 @@ pub struct IcConfigTemplate {
     /// IPv6 address of the peer Guest VM (the Upgrade VM inside the Default VM
     /// and vice versa).
     pub peer_guest_vm_address: Option<Ipv6Addr>,
+    /// IPv6 address of the HostOS this Guest VM runs on.
+    pub hostos_address: Ipv6Addr,
 }
 
 /// Generate IC configuration from template and guestos config
@@ -107,6 +111,23 @@ fn configure_ipv6(guestos_config: &GuestOSConfig) -> Result<(String, String)> {
     }
 }
 
+// Derived the way the HostOS derives its own address, rather than by resolving
+// `hostos`: nss_icos substitutes 0x6800 into the *local* address, which on a
+// multi-VM node yields an address nothing owns, because the slot number sits
+// where a single GuestOS carries the first hash byte.
+fn hostos_address(guestos_config: &GuestOSConfig, ipv6_address: Ipv6Addr) -> Result<Ipv6Addr> {
+    let mac = calculate_deterministic_mac(
+        &guestos_config.icos_settings.mgmt_mac,
+        guestos_config.icos_settings.deployment_environment,
+        NodeType::HostOS,
+        VmSlot::Plain,
+    );
+    let prefix = Ipv6Net::new_assert(ipv6_address, 64).trunc().addr();
+
+    mac.calculate_slaac(&prefix.to_string())
+        .context("Failed to derive the HostOS IPv6 address")
+}
+
 fn configure_ipv4(guestos_config: &GuestOSConfig) -> (String, String) {
     match &guestos_config.network_settings.ipv4_config {
         Some(ipv4_config) => {
@@ -119,7 +140,13 @@ fn configure_ipv4(guestos_config: &GuestOSConfig) -> (String, String) {
 }
 
 fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
-    let (_, ipv6_prefix) = configure_ipv6(guestos_config)?;
+    let (ipv6_address, ipv6_prefix) = configure_ipv6(guestos_config)?;
+    let hostos_address = hostos_address(
+        guestos_config,
+        ipv6_address
+            .parse()
+            .context("Failed to parse the GuestOS IPv6 address")?,
+    )?;
     let (ipv4_address, ipv4_gateway) = configure_ipv4(guestos_config);
 
     // Helper function to set default value if empty
@@ -218,6 +245,7 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         malicious_behavior: with_default(malicious_behavior, "null"),
         extra_api_boundary_node_trust_anchors_pem,
         peer_guest_vm_address: guestos_config.upgrade_config.peer_guest_vm_address,
+        hostos_address,
     })
 }
 
@@ -348,6 +376,7 @@ mod tests {
         assert!(!output_content.contains("{{ node_reward_type }}"));
         assert!(!output_content.contains("{{ jaeger_addr }}"));
         assert!(!output_content.contains("{{ peer_guest_vm_address }}"));
+        assert!(!output_content.contains("{{ hostos_address }}"));
 
         // Without a peer Guest VM address in the config, the disk encryption
         // key exchange port rule is omitted entirely, leaving the port closed.
@@ -407,6 +436,21 @@ mod tests {
         assert!(output_content.contains(
             "ip6 saddr { 2001:db8::6802:94ff:feef:2978 } ct state { new } tcp dport { 19522 } accept"
         ));
+    }
+
+    #[test]
+    fn test_hostos_address_does_not_depend_on_the_guest_slot() {
+        let plain = create_test_guestos_config();
+        let mut slotted = create_test_guestos_config();
+        slotted.network_settings.ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
+            address: "2001:db8::7801:7ff:fe00:1/64".to_string(),
+            gateway: "2001:db8::1".parse().unwrap(),
+        });
+
+        assert_eq!(
+            get_config_vars(&plain).unwrap().hostos_address,
+            get_config_vars(&slotted).unwrap().hostos_address
+        );
     }
 
     fn create_test_guestos_config() -> GuestOSConfig {
