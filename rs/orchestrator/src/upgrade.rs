@@ -658,6 +658,8 @@ impl Upgrade {
 
         if should_restart {
             // Restarting the replica is enough to pass the CUP/subnet ID forward.
+            // Stopping waits until the replica has exited, so the subsequent
+            // `ensure_children_are_running` starts it again in the same iteration.
             // Note: if any other process depends on the CUP and/or subnet ID, they should be
             // stopped here as well.
             // If we fail, restart the current process instead.
@@ -668,7 +670,7 @@ impl Upgrade {
         }
     }
 
-    /// Stop all child processes, including the replica.
+    /// Stop all child processes, including the replica, and wait until they have exited.
     pub fn stop_children(&self) -> OrchestratorResult<()> {
         self.processes_manager.write().unwrap().stop_all()
     }

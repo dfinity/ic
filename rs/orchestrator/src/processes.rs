@@ -349,7 +349,8 @@ impl IcBoundaryManager {
             Err(err) => return Err(err),
         };
 
-        // stop ic-boundary when the domain name changes and start it again.
+        // stop ic-boundary when the domain name changes and start it again. Stopping waits
+        // until the process has exited, so the call below restarts it right away.
         if Some(&domain_name) != self.current_domain_name.as_ref() {
             self.inner.stop()?;
         }
@@ -490,12 +491,12 @@ impl MultipleProcessesManager {
         result
     }
 
-    /// Stop the replica process.
+    /// Stop the replica process and wait until it has exited.
     pub(crate) fn stop_replica(&mut self) -> OrchestratorResult<()> {
         self.replica_manager.stop()
     }
 
-    /// Stop every managed process in reverse order of startup
+    /// Stop every managed process in reverse order of startup, waiting for each to exit.
     /// If a process fails to stop, continue stopping the others and return the first error.
     pub(crate) fn stop_all(&mut self) -> OrchestratorResult<()> {
         let mut result = Ok(());
