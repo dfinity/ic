@@ -151,7 +151,8 @@ jobs:
           path: results
           merge-multiple: true
 
-      # The results were written next to Claude, so only their status and an escaped reason are shown.
+      # The results were written next to Claude, so only their status and an escaped reason are shown. The links find
+      # the PRs of a test by the start of their branch, which is what `head:` matches.
       - name: Summarize
         env:
           TESTS: ${{ needs.find.outputs.tests }}
