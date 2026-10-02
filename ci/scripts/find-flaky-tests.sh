@@ -53,6 +53,10 @@ if [ -n "$labels" ]; then
             (if startswith("//rs/tests/") then sub("(_head_nns)?(_local|_farm|_farm_colocate|_colocate)?$"; "") else . end)
             | sub("_test_binary$"; "_test");
         def slug: ltrimstr("//") | gsub("[^A-Za-z0-9._-]"; "-") | .[:100];
+        # The branches of open-deflake-pr.sh end in the date, so that one of //foo:bar-baz does not count for //foo:bar.
+        def deflake_branch($slug):
+            ("ai/deflake-" + $slug + "-") as $prefix
+            | startswith($prefix) and (ltrimstr($prefix) | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}(-[0-9]+)?$"));
 
         ($existing | lines) as $existing
         | ($long | lines) as $long
@@ -79,7 +83,7 @@ if [ -n "$labels" ]; then
                 missing: (.labels - $present),
                 drop: (
                     if $present == [] then "missing at HEAD"
-                    elif ($base | IN($pr_bases[])) or any($pr_heads[]; startswith("ai/deflake-" + $slug + "-"))
+                    elif ($base | IN($pr_bases[])) or any($pr_heads[]; deflake_branch($slug))
                     then "has an open deflake PR"
                     elif any($patterns[]; . as $p | any($base, $present[]; test($p)))
                     then "matches FIX_FLAKY_TESTS_SKIP_PATTERNS"
