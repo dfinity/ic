@@ -293,10 +293,13 @@ jobs:
               || [ "$(git rev-list --count "$BASE_SHA..refs/heads/deflake")" -gt 10 ]; then
               status=failed
               reason="the fix isn't 1 to 10 commits on branch deflake on top of $BASE_SHA"
+            elif ! jq -e '.pr_body | strings | test("\\S")' <<<"$RESULT" >/dev/null; then
+              status=failed
+              reason="Claude fixed the test but returned no PR description"
             elif [ "$DRY_RUN" != true ]; then
               mkdir -p ~/deflake
               git bundle create ~/deflake/deflake.bundle refs/heads/deflake ^"$BASE_SHA"
-              jq -r '.pr_body // ""' <<<"$RESULT" > ~/deflake/body.md
+              jq -r .pr_body <<<"$RESULT" > ~/deflake/body.md
             fi
           fi
           mkdir -p ~/deflake-result
