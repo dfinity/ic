@@ -31,7 +31,7 @@ git diff --no-renames --name-only -z "$BASE_SHA" "$fix" >"$RUNNER_TEMP/deflake-p
 disallowed=()
 while IFS= read -r -d '' path; do
     case "$path" in
-        *.bzl | MODULE.bazel | *.MODULE.bazel | *.bazelrc | .gitattributes | */.gitattributes | .gitmodules | rs/ic_os/config/types/*)
+        *.bzl | MODULE.bazel | *.MODULE.bazel | *.bazelrc | .gitattributes | */.gitattributes | .gitmodules | */Cargo.lock | rs/ic_os/config/types/*)
             disallowed+=("$path")
             ;;
         rs/* | packages/* | Cargo.lock) ;;
@@ -40,19 +40,25 @@ while IFS= read -r -d '' path; do
 done <"$RUNNER_TEMP/deflake-paths"
 [ ${#disallowed[@]} -eq 0 ] || die "the fix changes disallowed files: ${disallowed[*]}"
 raw="$(git diff --no-renames --raw "$BASE_SHA" "$fix")"
-if awk '$2 == "120000" || $2 == "160000" {bad = 1} END {exit !bad}' <<<"$raw"; then
-    die "the fix adds a symlink or submodule"
+if awk '$1 ~ /^:(120000|160000)$/ || $2 == "120000" || $2 == "160000" {bad = 1} END {exit !bad}' <<<"$raw"; then
+    die "the fix changes a symlink or submodule"
 fi
 # Dependencies may only be added or removed as `name = { workspace = true }`, whose versions and features come
 # from the root Cargo.toml, which the fix can't change: apart from those, each changed Cargo.toml must parse to
-# the same as before.
+# the same as before, and Cargo.lock may only add or remove their names in the dependencies of crates.
 git diff --no-renames --name-only -z "$BASE_SHA" "$fix" -- '*Cargo.toml' >"$RUNNER_TEMP/deflake-manifests"
-python3 - "$BASE_SHA" "$fix" "$RUNNER_TEMP/deflake-manifests" <<'EOF' || die "the fix changes a Cargo.toml beyond adding or removing workspace dependencies"
+python3 - "$BASE_SHA" "$fix" "$RUNNER_TEMP/deflake-manifests" <<'EOF' || die "the fix changes dependencies beyond adding or removing workspace dependencies"
+import re
 import subprocess
 import sys
 import tomllib
 
 base, fix, manifests = sys.argv[1:]
+kinds = ["dependencies", "dev-dependencies", "build-dependencies"]
+
+
+def git(*args):
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
 
 
 def load(rev, path):
@@ -62,9 +68,17 @@ def load(rev, path):
     return tomllib.loads(show.stdout)
 
 
+def tables(manifest):
+    return [manifest, *manifest.get("target", {}).values()]
+
+
+def names(manifest):
+    return {name for table in tables(manifest) for kind in kinds for name in table.get(kind, {})}
+
+
 def without_workspace_dependencies(manifest):
-    for table in [manifest, *manifest.get("target", {}).values()]:
-        for kind in ["dependencies", "dev-dependencies", "build-dependencies"]:
+    for table in tables(manifest):
+        for kind in kinds:
             dependencies = {name: dep for name, dep in table.get(kind, {}).items() if dep != {"workspace": True}}
             if dependencies:
                 table[kind] = dependencies
@@ -73,14 +87,21 @@ def without_workspace_dependencies(manifest):
     return manifest
 
 
+added, removed = set(), set()
 for path in open(manifests).read().split("\0"):
-    if path and without_workspace_dependencies(load(base, path)) != without_workspace_dependencies(load(fix, path)):
-        sys.exit(f"{path} changes beyond adding or removing workspace dependencies")
+    if path:
+        old, new = load(base, path), load(fix, path)
+        added |= names(new) - names(old)
+        removed |= names(old) - names(new)
+        if without_workspace_dependencies(old) != without_workspace_dependencies(new):
+            sys.exit(f"{path} changes beyond adding or removing workspace dependencies")
+
+for line in git("diff", "--unified=0", base, fix, "--", "Cargo.lock").splitlines():
+    if line.startswith(("+", "-")) and not line.startswith(("+++ ", "--- ")):
+        entry = re.fullmatch(r'[+-] "([A-Za-z0-9_-]+)",', line)
+        if not entry or entry[1] not in (added if line[0] == "+" else removed):
+            sys.exit(f"Cargo.lock changes beyond adding or removing workspace dependencies: {line}")
 EOF
-lock="$(git diff "$BASE_SHA" "$fix" -- Cargo.lock)"
-if grep -qE '^\+[[:space:]]*(\[\[[[:space:]]*package[[:space:]]*\]\]|(name|version|source|checksum)[[:space:]]*=)' <<<"$lock"; then
-    die "the fix changes the dependencies in Cargo.lock"
-fi
 numstat="$(git diff --no-renames --numstat "$BASE_SHA" "$fix")"
 if grep -q $'^-\t-\t' <<<"$numstat"; then
     die "the fix changes binary files"

@@ -129,13 +129,13 @@ jobs:
           # Open PRs about the test or touching its package, and closed deflake PRs: those of this test at any age,
           # so that a rejected fix isn't proposed again.
           prs="$({
-            for search in "deflake in:title" "$words in:title" "head:ai/deflake-$SLUG"; do
+            for search in "deflake in:title" "$words in:title" "head:ai/deflake-$SLUG-"; do
               gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 500 --search "$search" --json "$fields"
             done
             for number in $touching; do
               gh pr view "$number" --repo "$GITHUB_REPOSITORY" --json "$fields" --jq '[.]'
             done
-            for search in "deflake in:title closed:>=$since" "$words deflake in:title" "head:ai/deflake-$SLUG"; do
+            for search in "deflake in:title closed:>=$since" "$words deflake in:title" "head:ai/deflake-$SLUG-"; do
               gh pr list --repo "$GITHUB_REPOSITORY" --state closed --limit 500 --search "$search" --json "$fields"
             done
           } | jq -s 'add | unique_by(.number) | map(select(.isCrossRepository | not))')"
@@ -238,7 +238,7 @@ jobs:
               .claude/CLAUDE.md: only build the other system-tests its rdeps query returns.
             - Only change files under rs/ or packages/, but no *.bzl files, nothing under rs/ic_os/config/types/,
               no symlinks or binary files, and at most 1000 changed lines in at most 10 commits. In Cargo.toml files
-              only add or remove dependencies as `name = { workspace = true }`, and change Cargo.lock only
+              only add or remove dependencies as `name = { workspace = true }`, and change the root Cargo.lock only
               accordingly. If the fix needs anything else, stop with status "needs_human" and explain why.
             - In step 7 commit the fix on a local branch named `deflake`. Don't push and don't open a PR: a later
               workflow does that. Instead return the PR description as pr_body: the root cause analysis, the

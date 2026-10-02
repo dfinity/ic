@@ -168,7 +168,7 @@ jobs:
                   (.reason | tostring | gsub("[`|\r\n]"; " ") | .[:300]) as $reason
                   | (.status | if IN("fixed", "skipped", "no_logs", "not_reproducible", "needs_human", "failed") then . else "invalid" end) as $status
                   | if $status == "fixed" and $dry_run != "true"
-                    then "| `\($base)` | [fixed](https://github.com/dfinity/ic/pulls?q=is%3Apr+head%3Aai%2Fdeflake-\($slug)) | `\($reason)` |"
+                    then "| `\($base)` | [fixed](https://github.com/dfinity/ic/pulls?q=is%3Apr+head%3Aai%2Fdeflake-\($slug)-) | `\($reason)` |"
                     elif $status == "fixed" then "| `\($base)` | fixed (dry run) | `\($reason)` |"
                     else "| `\($base)` | \($status) | `\($reason)` |"
                     end' "results/result-$slug.json"
