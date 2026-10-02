@@ -251,9 +251,7 @@ pub fn verify(
                         time,
                         state_hash,
                     }) = CupType::try_from(cup_contents.cup_type).map_err(|e| {
-                        format!(
-                            "Cannot verify recovery history at registry version {version}: {err}"
-                        )
+                        format!("Cannot verify recovery history at registry version {version}: {e}")
                     })?
                 {
                     println!("Found Recovery proposal at version {version}:");
