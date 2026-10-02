@@ -121,11 +121,19 @@ jobs:
           name="${BASE##*:}"
           fields=number,title,state,isDraft,isCrossRepository,author,headRefName,updatedAt,closedAt,mergedAt,url,body,files,reviews,comments
           words="\"${name//_/ }\""
-          # Open PRs that may touch the test, and closed deflake PRs: those of this test at any age, so that a
-          # rejected fix isn't proposed again.
+          package="${BASE#//}"
+          package="${package%%:*}/"
+          touching="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 1000 --json number,isCrossRepository,updatedAt,files \
+            | jq -r --arg package "$package" --arg since "$since" \
+              '.[] | select((.isCrossRepository | not) and .updatedAt >= $since and any(.files[].path; startswith($package))) | .number')"
+          # Open PRs about the test or touching its package, and closed deflake PRs: those of this test at any age,
+          # so that a rejected fix isn't proposed again.
           prs="$({
             for search in "deflake in:title" "$words in:title" "head:ai/deflake-$SLUG"; do
               gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 500 --search "$search" --json "$fields"
+            done
+            for number in $touching; do
+              gh pr view "$number" --repo "$GITHUB_REPOSITORY" --json "$fields" --jq '[.]'
             done
             for search in "deflake in:title closed:>=$since" "$words deflake in:title" "head:ai/deflake-$SLUG"; do
               gh pr list --repo "$GITHUB_REPOSITORY" --state closed --limit 500 --search "$search" --json "$fields"
@@ -204,7 +212,8 @@ jobs:
             First check whether the test is already fixed or being fixed, like step 1.2 of the skill, but unlike
             step 1.2 a mere mention is not enough. Stop with status "skipped", naming the PR or commit, if:
             - $RUNNER_TEMP/deflake-context.json lists an open PR that fixes the flakiness of this test, or an open
-              PR that modifies its source files and was updated in the last 30 days (to avoid conflicts).
+              PR updated in the last 30 days that modifies its source files (to avoid conflicts; the file has all
+              such PRs that touch its package).
             - A commit of the last week fixed it (find it with
               `git log --since='1 week ago' -i -E --grep '<test name with _ replaced by [_. ]>'` and
               `git log --since='1 week ago' -- <the source files of the test>`) and
