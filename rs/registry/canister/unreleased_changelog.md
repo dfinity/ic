@@ -40,6 +40,10 @@ on the process that this file is part of, see
   stamped as `CupType::Genesis`. Any other record is stamped as `CupType::Recovery`, which keeps those
   legacy values.
 
+* The `cup_type` backfill migration is now applied in several atomic batches of bounded size (invariants are
+  still checked once, on the whole migration), instead of as one single mutation, so that a large migration
+  cannot exceed the limit on the size of an atomic mutation.
+
 ## Changed
 
 * `update_subnet` now also lets the engine controller canister set `cooling_down` on a cloud engine

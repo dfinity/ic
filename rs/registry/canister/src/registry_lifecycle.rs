@@ -1,7 +1,10 @@
 use crate::certification::recertify_registry;
 use crate::common::key_family::get_key_family_iter;
 use crate::mutations::node_management::common::find_subnet_for_node;
-use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
+use crate::{
+    pb::v1::RegistryCanisterStableStorage, registry::Registry,
+    storage::MAX_CHUNKABLE_ATOMIC_MUTATION_LEN,
+};
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
@@ -44,8 +47,14 @@ pub fn canister_post_upgrade(
         // records without a `cup_type` — exactly what this migration backfills.
         let mutations = backfill_cup_type_on_catch_up_package_contents(registry);
         if !mutations.is_empty() {
-            registry.maybe_apply_mutation_internal(mutations);
-            total_batches += 1;
+            // On mainnet, ~40 records of ~300 KB each need to be backfilled, i.e. ~12 MB in
+            // total, which is more than `MAX_CHUNKABLE_ATOMIC_MUTATION_LEN`. Therefore, apply
+            // them in several size-bounded batches (invariants are still checked once, on the
+            // full set of mutations).
+            total_batches += registry.maybe_apply_mutation_internal_in_batches(
+                mutations,
+                MAX_CHUNKABLE_ATOMIC_MUTATION_LEN / 2,
+            );
         }
 
         let mutations = fix_node_operators_corrupted(registry);
@@ -965,6 +974,88 @@ mod test {
         // Step 3.5: Idempotency: a second run produces no further mutations.
         assert_eq!(
             backfill_cup_type_on_catch_up_package_contents(&registry),
+            vec![]
+        );
+    }
+
+    // Backfilling ~40 `CatchUpPackageContents` records of ~300 KB each in one atomic mutation
+    // (~12 MB) would exceed `MAX_CHUNKABLE_ATOMIC_MUTATION_LEN` and make the post-upgrade trap.
+    #[test]
+    fn post_upgrade_backfills_cup_type_in_several_batches_when_records_are_large() {
+        // Step 1: Prepare the world: a registry with many large legacy (no `cup_type`) records.
+        let mut registry = invariant_compliant_registry(0);
+
+        const NUM_RECORDS: u64 = 40;
+        // The backfilled record carries this payload twice (in `state_hash` and in the
+        // `Recovery` args), i.e. ~300 KB per record, and ~12 MB for all of them.
+        const RECORD_PAYLOAD_LEN: usize = 150_000;
+        let subnet_ids = (0..NUM_RECORDS)
+            .map(|i| subnet_test_id(2000 + i))
+            .collect::<Vec<_>>();
+        // Seed in small batches, since seeding is subject to the size limit too.
+        for chunk in subnet_ids.chunks(5) {
+            registry.apply_mutations_for_test(
+                chunk
+                    .iter()
+                    .map(|subnet_id| {
+                        let legacy_recovery_record = CatchUpPackageContents {
+                            cup_type: None,
+                            height: 42,
+                            time: 7,
+                            // Makes the record large.
+                            state_hash: vec![1; RECORD_PAYLOAD_LEN],
+                            ..CatchUpPackageContents::default()
+                        };
+                        insert(
+                            make_catch_up_package_contents_key(*subnet_id),
+                            legacy_recovery_record.encode_to_vec(),
+                        )
+                    })
+                    .collect(),
+            );
+        }
+        let pre_upgrade_version = registry.latest_version();
+
+        // Step 2: Run the code under test.
+        let stable_storage_bytes = stable_storage_from_registry(&registry, None);
+        let registry_storage =
+            RegistryCanisterStableStorage::decode(stable_storage_bytes.as_slice())
+                .expect("Error decoding from stable.");
+        let mut new_registry = Registry::new();
+        // Must not panic with "Mutation too large".
+        canister_post_upgrade(&mut new_registry, registry_storage);
+
+        // Step 3: Verify result(s).
+
+        // Step 3.1: More than one batch was needed.
+        let num_batches = new_registry.latest_version() - pre_upgrade_version;
+        assert!(num_batches > 1, "num_batches = {num_batches}");
+
+        // Step 3.2: All records got a `cup_type` (and are otherwise unchanged).
+        for subnet_id in subnet_ids {
+            let bytes = new_registry
+                .get(
+                    make_catch_up_package_contents_key(subnet_id).as_bytes(),
+                    new_registry.latest_version(),
+                )
+                .expect("CUP contents record must exist")
+                .value;
+            let record = CatchUpPackageContents::decode(bytes.as_slice())
+                .expect("Failed to decode CatchUpPackageContents");
+            assert_eq!(
+                record.cup_type,
+                Some(CupType::Recovery(RecoveryArgs {
+                    height: 42,
+                    time: 7,
+                    state_hash: record.state_hash.clone(),
+                }))
+            );
+            assert_eq!(record.state_hash.len(), RECORD_PAYLOAD_LEN);
+        }
+
+        // Step 3.3: Idempotency: nothing is left to backfill.
+        assert_eq!(
+            backfill_cup_type_on_catch_up_package_contents(&new_registry),
             vec![]
         );
     }
