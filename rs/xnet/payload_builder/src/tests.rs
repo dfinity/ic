@@ -40,9 +40,9 @@ use mockall::predicate::eq;
 use std::sync::{Arc, Mutex};
 
 #[tokio::test]
-async fn build_payload_no_subnets() {
+async fn build_payload_empty_pool() {
     with_test_replica_logger(|log| {
-        let fixture = PayloadBuilderTestFixture::with_xnet_state(0);
+        let fixture = PayloadBuilderTestFixture::with_xnet_state();
 
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
@@ -72,14 +72,14 @@ async fn build_payload_no_subnets() {
 }
 
 /// Creates an `XNetEndpointResolver` around a `ProximityMap` that resolves to
-/// the remote node of the given index; and calls `xnet_endpoint_url()` on it.
-fn resolve_xnet_endpoint(remote_node_index: u64, log: ReplicaLogger) -> EndpointLocator {
+/// the remote node of the given index; and calls `xnet_stream_url()` on it.
+fn resolve_xnet_stream_endpoint(remote_node_index: u64, log: ReplicaLogger) -> EndpointLocator {
     let registry = get_node_selection_registry_for_test();
     let metrics = MetricsRegistry::new();
 
     let proximity_map = Arc::new(ProximityMap::with_rng(
         mock_gen_range_low(remote_node_index, 3),
-        LOCAL_NODE,
+        LOCAL_NODE_1_OPERATOR_1,
         registry.clone(),
         &metrics,
         log.clone(),
@@ -93,12 +93,12 @@ fn resolve_xnet_endpoint(remote_node_index: u64, log: ReplicaLogger) -> Endpoint
     );
 
     endpoint_resolver
-        .xnet_endpoint_url(REMOTE_SUBNET, 1.into(), 2.into(), 1000)
+        .xnet_stream_url(REMOTE_SUBNET, 1.into(), 2.into(), 1000)
         .unwrap()
 }
 
 #[tokio::test]
-async fn xnet_endpoint_url_node_same_operator() {
+async fn xnet_stream_url_node_same_operator() {
     with_test_replica_logger(|log| {
         assert_eq!(
             EndpointLocator {
@@ -108,13 +108,13 @@ async fn xnet_endpoint_url_node_same_operator() {
                     .unwrap(),
                 proximity: PeerLocation::Local
             },
-            resolve_xnet_endpoint(0, log)
+            resolve_xnet_stream_endpoint(0, log)
         );
     });
 }
 
 #[tokio::test]
-async fn xnet_endpoint_url_node_other_operator() {
+async fn xnet_stream_url_node_other_operator() {
     with_test_replica_logger(|log| {
         assert_eq!(
             EndpointLocator {
@@ -124,7 +124,7 @@ async fn xnet_endpoint_url_node_other_operator() {
                     .unwrap(),
                 proximity: PeerLocation::Remote
             },
-            resolve_xnet_endpoint(2, log)
+            resolve_xnet_stream_endpoint(2, log)
         );
     });
 }
@@ -132,7 +132,7 @@ async fn xnet_endpoint_url_node_other_operator() {
 #[tokio::test]
 async fn validate_empty_payload() {
     with_test_replica_logger(|log| {
-        let fixture = PayloadBuilderTestFixture::with_xnet_state(0);
+        let fixture = PayloadBuilderTestFixture::with_xnet_state();
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
         let payload = XNetPayload {
@@ -161,11 +161,10 @@ async fn validate_empty_payload() {
     });
 }
 
-// tokio runtime is required to use timeout & threads in xnet payload builder.
 #[tokio::test]
 async fn validate_valid_payload() {
     with_test_replica_logger(|log| {
-        let fixture = PayloadBuilderTestFixture::with_xnet_state(0);
+        let fixture = PayloadBuilderTestFixture::with_xnet_state();
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
         // Validate newest `XNetPayload` in `payloads` against previous ones + state.
@@ -184,9 +183,9 @@ async fn validate_valid_payload() {
 #[tokio::test]
 async fn validate_valid_payload_against_state_only() {
     with_test_replica_logger(|log| {
-        let fixture = PayloadBuilderTestFixture::with_xnet_state(0);
+        let fixture = PayloadBuilderTestFixture::with_xnet_state();
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
-        let payload = fixture.payloads.last().unwrap();
+        let payload = fixture.oldest_payload();
 
         // Validate oldest payload against state and no intermediate payloads.
         assert_eq!(
@@ -201,14 +200,14 @@ async fn validate_valid_payload_against_state_only() {
 #[tokio::test]
 async fn validate_duplicate_messages() {
     with_test_replica_logger(|log| {
-        let fixture = PayloadBuilderTestFixture::with_xnet_state(0);
+        let fixture = PayloadBuilderTestFixture::with_xnet_state();
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
-        // Simulate duplicate messages by validating the last `XNetPayload` on top of
+        // Simulate duplicate messages by validating the newest `XNetPayload` on top of
         // itself.
         assert_matches!(
             xnet_payload_builder.validate_xnet_payload(
-                fixture.payloads.last().unwrap(),
+                fixture.newest_payload(),
                 &fixture.validation_context,
                 &fixture.past_payloads(),
             ),
@@ -282,20 +281,19 @@ async fn validate_duplicate_messages_against_state_only() {
 #[tokio::test]
 async fn validate_missing_messages() {
     with_test_replica_logger(|log| {
-        let fixture = PayloadBuilderTestFixture::with_xnet_state(0);
+        let fixture = PayloadBuilderTestFixture::with_xnet_state();
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
-        // Split `payloads` into `past_payloads` and `payload`.
-        let mut past_payloads: Vec<&XNetPayload> = fixture.past_payloads();
-        let payload = past_payloads.pop().unwrap();
+        // Most recent payload.
+        let payload = fixture.newest_payload();
+        let past_payloads = fixture.past_payloads();
 
-        // Simulate missing messages by removing the last `XNetPayload` in `payloads`.
-        past_payloads.pop().unwrap();
         assert_matches!(
             xnet_payload_builder.validate_xnet_payload(
                 payload,
                 &fixture.validation_context,
-                &past_payloads,
+                // Simulate missing messages by skipping the oldest payload.
+                &past_payloads[1..2],
             ),
             Err(ValidationError::InvalidArtifact(
                 InvalidXNetPayload::InvalidSlice(_)
@@ -307,7 +305,7 @@ async fn validate_missing_messages() {
 #[tokio::test]
 async fn validate_missing_messages_against_state_only() {
     with_test_replica_logger(|log| {
-        let fixture = PayloadBuilderTestFixture::with_xnet_state(0);
+        let fixture = PayloadBuilderTestFixture::with_xnet_state();
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
         // Validate the second `XNetPayload` against `state` only.
@@ -411,7 +409,7 @@ async fn validate_state_not_yet_committed() {
 #[tokio::test]
 async fn validate_broken_count_bytes_fn() {
     with_test_replica_logger(|log| {
-        let fixture = PayloadBuilderTestFixture::with_xnet_state(0);
+        let fixture = PayloadBuilderTestFixture::with_xnet_state();
         let xnet_payload_builder = fixture
             .new_xnet_payload_builder_impl(log)
             .with_count_bytes_fn(|_| {
@@ -449,32 +447,29 @@ pub(crate) struct PayloadBuilderTestFixture {
     pub registry: Arc<dyn RegistryClient>,
     pub validation_context: ValidationContext,
     pub metrics: MetricsRegistry,
-
     pub payloads: Vec<XNetPayload>,
 }
 
 impl PayloadBuilderTestFixture {
     /// Creates a fixture with state provided by `get_xnet_state_for_testing()`,
-    /// and registry entries plus matching URLs for the given number of subnets.
-    pub fn with_xnet_state(subnet_count: u8) -> Self {
-        Self::with_xnet_state_and_subnet_types(subnet_count, btreemap![], None)
+    /// and registry entries for the subnets in its payloads (`SUBNET_1` through
+    /// `SUBNET_4`, as `Application`).
+    pub fn with_xnet_state() -> Self {
+        Self::with_xnet_state_and_subnet_types(btreemap![], None)
     }
 
-    /// Like `with_xnet_state`, but with configurable subnet types. Subnets not
-    /// present in `subnet_types` default to `SubnetType::Application`.
-    /// `own_subnet_type` overrides the own subnet type in the replicated state.
+    /// Like `with_xnet_state`, but with `subnet_types` overriding the types of
+    /// (or adding to) the registered subnets. `own_subnet_type` overrides the own
+    /// subnet type in the replicated state.
     pub fn with_xnet_state_and_subnet_types(
-        subnet_count: u8,
         subnet_types: BTreeMap<SubnetId, SubnetType>,
         own_subnet_type: Option<SubnetType>,
     ) -> Self {
         let state_manager = Arc::new(FakeStateManager::new());
         let tls_handshake = Arc::new(MockTlsConfig::new());
 
-        let (payloads, expected_indices) =
-            get_xnet_state_for_testing_with_subnet_type(&state_manager, own_subnet_type);
-        // Register subnet types for all subnets used in payloads (SUBNET_1
-        // through SUBNET_4) as Application by default.
+        let (payloads, _) =
+            get_xnet_state_for_testing_with_own_subnet_type(&state_manager, own_subnet_type);
         let mut all_subnet_types = btreemap![
             SUBNET_1 => SubnetType::Application,
             SUBNET_2 => SubnetType::Application,
@@ -482,11 +477,7 @@ impl PayloadBuilderTestFixture {
             SUBNET_4 => SubnetType::Application,
         ];
         all_subnet_types.extend(subnet_types);
-        let (registry, _) = get_registry_and_urls_for_test_with_subnet_types(
-            subnet_count,
-            expected_indices,
-            all_subnet_types,
-        );
+        let registry = get_registry_for_test_with_subnet_types(all_subnet_types);
 
         PayloadBuilderTestFixture {
             state_manager,
@@ -494,7 +485,6 @@ impl PayloadBuilderTestFixture {
             registry,
             validation_context: get_validation_context_for_test(),
             metrics: MetricsRegistry::new(),
-
             payloads,
         }
     }
@@ -523,6 +513,16 @@ impl PayloadBuilderTestFixture {
         self.payloads.iter().collect()
     }
 
+    /// Returns the newest payload in `self.payloads`.
+    pub fn newest_payload(&self) -> &XNetPayload {
+        self.payloads.first().unwrap()
+    }
+
+    /// Returns the oldest payload in `self.payloads`.
+    pub fn oldest_payload(&self) -> &XNetPayload {
+        self.payloads.last().unwrap()
+    }
+
     /// Fetches the values of the `METRIC_BUILD_PAYLOAD_DURATION` histograms'
     /// `_count` fields for all label value combinations.
     pub fn build_payload_counts(&self) -> MetricVec<u64> {
@@ -535,7 +535,7 @@ impl PayloadBuilderTestFixture {
         fetch_int_counter_vec(&self.metrics, METRIC_PULL_ATTEMPT_COUNT)
     }
 
-    /// Fetches the values of the `METRIC_PULL_SLICE_DURATION` histograms'
+    /// Fetches the values of the `METRIC_QUERY_SLICE_DURATION` histograms'
     /// `_count` fields for all label value combinations.
     pub fn query_slice_counts(&self) -> MetricVec<u64> {
         fetch_histogram_vec_count(&self.metrics, METRIC_QUERY_SLICE_DURATION)
@@ -580,7 +580,7 @@ async fn validate_xnet_payload_rejects_slice_from_deleted_subnet() {
         );
 
         // Registry with only SUBNET_1; SUBNET_2 is absent (deleted).
-        let (registry, _) = get_registry_and_urls_for_test(1, btreemap![]);
+        let registry = get_registry_for_test(&[SUBNET_1]);
         let state_manager = Arc::new(state_manager);
         let xnet_payload_builder = XNetPayloadBuilderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
@@ -598,8 +598,7 @@ async fn validate_xnet_payload_rejects_slice_from_deleted_subnet() {
 
         let validation_context = get_validation_context_for_test();
 
-        // Payload with SUBNET_2's certified slice: messages 3..5 still to deliver
-        // (it GCed 0..3 after A sent signals), signals_end = 3.
+        // Payload with SUBNET_2's (matching) certified slice.
         let payload = XNetPayload {
             stream_slices: btreemap! {
                 SUBNET_2 => make_certified_stream_slice(
@@ -622,18 +621,17 @@ async fn validate_xnet_payload_rejects_slice_from_deleted_subnet() {
     });
 }
 
-/// CloudEngine subnets now participate in XNet. At the unit level this checks
+/// CloudEngine subnets participate in XNet. At the unit level this checks
 /// that `expected_stream_indices` returns entries for an engine's Application
 /// peers (no filter excluding them), so the engine will attempt to pull from
 /// them. The end-to-end behavior — that a CloudEngine subnet actually builds and
 /// validates XNet payloads and completes a best-effort cross-subnet call (which
-/// requires `get_xnet_payload`/`validate_xnet_payload` to no longer short-circuit
+/// requires `get_xnet_payload`/`validate_xnet_payload` to not short-circuit
 /// for engines) — is covered by `xnet_cloud_engine_isolation_test`.
 #[tokio::test]
-async fn cloud_engine_get_xnet_payload_participates() {
+async fn cloud_engine_expected_stream_indices_populated() {
     with_test_replica_logger(|log| {
         let fixture = PayloadBuilderTestFixture::with_xnet_state_and_subnet_types(
-            4,
             btreemap![],
             Some(SubnetType::CloudEngine),
         );
@@ -670,7 +668,6 @@ async fn cloud_engine_get_xnet_payload_participates() {
 async fn cloud_engine_validate_accepts_non_empty_payload() {
     with_test_replica_logger(|log| {
         let fixture = PayloadBuilderTestFixture::with_xnet_state_and_subnet_types(
-            0,
             btreemap![],
             Some(SubnetType::CloudEngine),
         );
@@ -678,7 +675,7 @@ async fn cloud_engine_validate_accepts_non_empty_payload() {
 
         // Use a pre-built payload from the fixture — indices are consistent with
         // the state, so validation passes for any subnet type including CloudEngine.
-        let payload = fixture.payloads.last().unwrap();
+        let payload = fixture.oldest_payload();
         assert!(
             !payload.stream_slices.is_empty(),
             "fixture payload must be non-empty for this test to be meaningful"
@@ -699,7 +696,6 @@ async fn validate_accepts_slice_from_cloud_engine_subnet() {
     with_test_replica_logger(|log| {
         let cloud_engine_subnet = SUBNET_1;
         let fixture = PayloadBuilderTestFixture::with_xnet_state_and_subnet_types(
-            0,
             btreemap![cloud_engine_subnet => SubnetType::CloudEngine],
             None,
         );
@@ -708,8 +704,8 @@ async fn validate_accepts_slice_from_cloud_engine_subnet() {
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
         // Use a pre-built payload from the fixture. SUBNET_1 is the CloudEngine
-        // subnet; a slice from it must now be accepted by a non-engine subnet.
-        let payload = fixture.payloads.last().unwrap();
+        // subnet; a slice from it must be accepted by a non-engine subnet.
+        let payload = fixture.oldest_payload();
         assert!(
             payload.stream_slices.contains_key(&cloud_engine_subnet),
             "fixture payload must contain a slice from the CloudEngine subnet"
@@ -730,7 +726,7 @@ async fn validate_rejects_slice_from_unknown_subnet() {
     with_test_replica_logger(|log| {
         let unknown_subnet = SUBNET_5;
         // SUBNET_5 is not registered in the registry (only SUBNET_1-4 are).
-        let fixture = PayloadBuilderTestFixture::with_xnet_state(0);
+        let fixture = PayloadBuilderTestFixture::with_xnet_state();
 
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
@@ -759,14 +755,14 @@ async fn validate_rejects_slice_from_unknown_subnet() {
     });
 }
 
-/// An Application subnet with a registered CloudEngine peer must pull from it.
+/// An Application subnet with a registered CloudEngine peer must track its
+/// stream indices.
 #[tokio::test]
-async fn build_payload_includes_cloud_engine_subnet() {
+async fn expected_stream_indices_includes_cloud_engine_subnet() {
     with_test_replica_logger(|log| {
-        // Register 2 subnets: SUBNET_1 as CloudEngine, SUBNET_2 as Application.
+        // Override `SUBNET_1` as `CloudEngine`.
         let fixture = PayloadBuilderTestFixture::with_xnet_state_and_subnet_types(
-            2,
-            btreemap![SUBNET_1 => SubnetType::CloudEngine, SUBNET_2 => SubnetType::Application],
+            btreemap![SUBNET_1 => SubnetType::CloudEngine],
             None,
         );
 
@@ -810,9 +806,18 @@ fn own_stream_for_advert_tests() -> Stream {
     })
 }
 
+/// `REMOTE_SUBNET`'s stream to us, as advertised in the advert tests, having
+/// both new messages and new signals.
+fn peer_stream_for_advert_tests() -> Stream {
+    generate_stream(&StreamConfig {
+        message_begin: OWN_SIGNALS_END,
+        message_end: OWN_SIGNALS_END + 4,
+        signal_end: OWN_MESSAGES_END,
+    })
+}
+
 /// Builds an `XNetAdvertHandlerImpl` around `certified_stream_store`, with a
-/// registry that only knows `REMOTE_SUBNET` and a pool that actually records
-/// peer headers.
+/// registry that only knows `REMOTE_SUBNET` and a pool that records headers.
 fn advert_handler_and_pool(
     certified_stream_store: MockCertifiedStreamStore,
     log: ReplicaLogger,
@@ -842,7 +847,7 @@ fn advert_handler_and_pool_for(
             signature: ThresholdSignature::fake(),
         },
     });
-    let (registry, _) = get_registry_and_urls_for_test(1, btreemap![]);
+    let registry = get_registry_for_test(&[REMOTE_SUBNET]);
 
     let pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
         &MetricsRegistry::new(),
@@ -872,7 +877,7 @@ fn store_expecting_decodes(advertised: &Stream, count: usize) -> MockCertifiedSt
     store
 }
 
-/// The peer header on record for `REMOTE_SUBNET`, if any.
+/// The recorded header for `REMOTE_SUBNET`, if any.
 fn recorded_peer_header(pool: &Mutex<CertifiedSlicePool>) -> Option<Arc<StreamHeader>> {
     pool.lock().unwrap().peer_header(REMOTE_SUBNET).cloned()
 }
@@ -882,11 +887,7 @@ fn recorded_peer_header(pool: &Mutex<CertifiedSlicePool>) -> Option<Arc<StreamHe
 #[tokio::test]
 async fn handle_advert_actionable() {
     with_test_replica_logger(|log| {
-        let advertised = generate_stream(&StreamConfig {
-            message_begin: OWN_SIGNALS_END,
-            message_end: OWN_SIGNALS_END + 4,
-            signal_end: OWN_MESSAGES_BEGIN,
-        });
+        let advertised = peer_stream_for_advert_tests();
         let header = advertised.header();
         let (advert_handler, pool) =
             advert_handler_and_pool(store_expecting_decodes(&advertised, 1), log);
@@ -908,24 +909,20 @@ async fn handle_advert_actionable() {
     });
 }
 
-/// An advert offering only messages already accounted for by the cached stream
+/// An advert offering only content already accounted for by the cached stream
 /// position, i.e. included into blocks, is dropped without being verified.
 #[tokio::test]
 async fn handle_advert_in_payload() {
     with_test_replica_logger(|log| {
-        let advertised = generate_stream(&StreamConfig {
-            message_begin: OWN_SIGNALS_END,
-            message_end: OWN_SIGNALS_END + 4,
-            signal_end: OWN_MESSAGES_BEGIN,
-        });
+        let advertised = peer_stream_for_advert_tests();
         let (advert_handler, pool) =
             advert_handler_and_pool(store_expecting_decodes(&advertised, 0), log);
 
         // A past payload already covers all of it.
         pool.lock().unwrap().garbage_collect(btreemap! {
             REMOTE_SUBNET => ExpectedIndices {
-                message_index: (OWN_SIGNALS_END + 4).into(),
-                signal_index: OWN_MESSAGES_BEGIN.into(),
+                message_index: advertised.messages_end(),
+                signal_index: advertised.signals_end(),
                 ..Default::default()
             }
         });
@@ -955,7 +952,7 @@ async fn handle_advert_new_signals() {
         let (advert_handler, pool) =
             advert_handler_and_pool(store_expecting_decodes(&advertised, 1), log);
 
-        // A header on record covering everything except the new signals.
+        // A recorded header covering everything except the new signals.
         let recorded = generate_stream(&StreamConfig {
             message_begin: 0,
             message_end: OWN_SIGNALS_END,
@@ -978,11 +975,7 @@ async fn handle_advert_new_signals() {
 #[tokio::test]
 async fn handle_advert_duplicate_content() {
     with_test_replica_logger(|log| {
-        let advertised = generate_stream(&StreamConfig {
-            message_begin: OWN_SIGNALS_END,
-            message_end: OWN_SIGNALS_END + 4,
-            signal_end: OWN_MESSAGES_BEGIN,
-        });
+        let advertised = peer_stream_for_advert_tests();
         let header = advertised.header();
         let (advert_handler, pool) =
             advert_handler_and_pool(store_expecting_decodes(&advertised, 0), log);
@@ -1111,7 +1104,7 @@ async fn handle_advert_decode_error() {
 
         let advert = CertifiedStreamSlice {
             payload: b"garbage".to_vec(),
-            ..make_advert(&own_stream_for_advert_tests())
+            ..make_advert(&peer_stream_for_advert_tests())
         };
 
         assert_matches!(
@@ -1127,11 +1120,7 @@ async fn handle_advert_decode_error() {
 #[tokio::test]
 async fn handle_advert_invalid_signature() {
     with_test_replica_logger(|log| {
-        let advertised = generate_stream(&StreamConfig {
-            message_begin: OWN_SIGNALS_END,
-            message_end: OWN_SIGNALS_END + 4,
-            signal_end: OWN_MESSAGES_BEGIN,
-        });
+        let advertised = peer_stream_for_advert_tests();
         let mut store = MockCertifiedStreamStore::new();
         store
             .expect_decode_certified_stream_slice()
@@ -1235,7 +1224,7 @@ fn advert_task(
 
 /// Our certified header, as advertised: that of `own_stream_for_advert_tests()`.
 fn own_advert() -> CertifiedStreamSlice {
-    make_advert(&own_stream_for_advert_tests())
+    make_advert_for(LOCAL_SUBNET, REMOTE_SUBNET, &own_stream_for_advert_tests())
 }
 
 /// Makes `store` encode `own_advert()` as our certified header.
@@ -1270,7 +1259,7 @@ fn assert_one_advert_sent(metrics: &MetricsRegistry, status: &str) {
 }
 
 /// An advert the peer accepted but did not reply to leaves us with no recorded
-/// peer header.
+/// header.
 #[tokio::test]
 async fn advertise_to_without_reply() {
     with_test_replica_logger(|log| async {

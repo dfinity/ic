@@ -109,12 +109,12 @@ impl Default for ExpectedIndices {
 pub struct XNetPayloadBuilderMetrics {
     /// Records the time it took to build the payload, by status.
     pub build_payload_duration: HistogramVec,
-    /// Records pull attempts, by status. Orthogonal to to slice queries, as some
+    /// Records pull attempts, by status. Orthogonal to slice queries, as some
     /// attempts may fail before querying (e.g. due to registry errors) and
     /// some successful queries may produce invalid slices.
     pub pull_attempt_count: IntCounterVec,
     /// Records the time it took to query a slice to be included into the
-    /// payload, by status. Orthogonal to to pull attempts, as some attempts may
+    /// payload, by status. Orthogonal to pull attempts, as some attempts may
     /// fail before querying (e.g. due to registry errors) and some successful
     /// queries may produce invalid slices.
     pub query_slice_duration: HistogramVec,
@@ -259,8 +259,9 @@ impl XNetPayloadBuilderMetrics {
 /// diverge too far.
 pub const MAX_SIGNALS: usize = MAX_STREAM_MESSAGES;
 
-/// Implementation of `XNetPayloadBuilder` that uses a `StateManager`,
-/// `RegistryClient` and `XNetClient` to build and validate `XNetPayloads`.
+/// Implementation of `XNetPayloadBuilder` that uses a `StateManager`;
+/// `RegistryClient`; and a slice pool populated by background tasks; to build
+/// and validate `XNetPayloads`.
 pub struct XNetPayloadBuilderImpl {
     /// Used for retrieving the execution state, for both payload building and
     /// validation.
@@ -269,9 +270,7 @@ pub struct XNetPayloadBuilderImpl {
     /// Used for decoding certified streams.
     certified_stream_store: Arc<dyn CertifiedStreamStore>,
 
-    /// Used for retrieving a subnet's nodes, in order to poll their
-    /// `XNetEndpoints` for `CertifiedStreamSlices` to be included into
-    /// `XNetPayloads`.
+    /// Used for retrieving the registered subnets and their types.
     registry: Arc<dyn RegistryClient>,
 
     /// A pool of slices, filled in the background by an async task.
@@ -337,10 +336,10 @@ pub struct EndpointLocator {
 
 impl XNetPayloadBuilderImpl {
     /// Creates a new `XNetPayloadBuilderImpl` for a node on `subnet_id`, using
-    /// the given `StateManager`, `CertifiedStreamStore` and`RegistryClient`.
+    /// the given `StateManager`, `CertifiedStreamStore` and `RegistryClient`.
     ///
-    /// Also starts the advert task, advertising on every certified height
-    /// received from `max_certified_height_rx`.
+    /// Also starts the refill task; and the advert task, advertising on every
+    /// certified height received from `max_certified_height_rx`.
     ///
     /// # Panics
     ///
@@ -350,7 +349,7 @@ impl XNetPayloadBuilderImpl {
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        tls_handshake: Arc<dyn TlsConfig>,
+        tls_config: Arc<dyn TlsConfig>,
         registry: Arc<dyn RegistryClient>,
         runtime_handle: runtime::Handle,
         node_id: NodeId,
@@ -367,7 +366,7 @@ impl XNetPayloadBuilderImpl {
         ));
         let xnet_client: Arc<dyn XNetClient> = Arc::new(XNetClientImpl::new(
             metrics_registry,
-            tls_handshake,
+            tls_config,
             proximity_map.clone(),
         ));
 
@@ -518,8 +517,7 @@ impl XNetPayloadBuilderImpl {
         }
     }
 
-    /// Computes the expected message and signal indices for every known subnet
-    /// except cloud engines.
+    /// Computes the expected message and signal indices for every known subnet.
     fn expected_stream_indices(
         &self,
         validation_context: &ValidationContext,
@@ -556,10 +554,9 @@ impl XNetPayloadBuilderImpl {
     ///  2. signals must only refer to past and current messages, i.e.
     ///     `signals_end <= stream.messages_end()`;
     ///
-    ///  3. `signals_end - reject_signals[0] <= MAX_STREAM_MESSAGES`; and
+    ///  3. `signals_end - reject_signals[0] <= 2 * MAX_SIGNALS`; and
     ///
     ///  4. `concat(reject_signals, [signals_end])` must be strictly increasing.
-    ///     and
     ///
     /// Because this code is used both for validating slices before inclusion into a
     /// payload; and for validating proposed payloads; validation errors are logged
@@ -573,7 +570,7 @@ impl XNetPayloadBuilderImpl {
         state: &ReplicatedState,
         log_level: slog::Level,
     ) -> SignalsValidationResult {
-        // `messages_end()` of the outgoing stream.
+        // `messages_begin()` and `messages_end()` of the outgoing stream.
         let (self_messages_begin, self_messages_end) = state
             .streams()
             .get(&subnet_id)
@@ -1117,13 +1114,14 @@ pub struct XNetEndpointResolver {
     /// `XNetPayloads`.
     registry: Arc<dyn RegistryClient>,
 
-    // This node's subnet ID.
+    /// This node's subnet ID.
     subnet_id: SubnetId,
 
-    // This node's operator ID.
+    /// This node's operator ID.
     node_operator_id: Vec<u8>,
 
-    /// Proximity map to use for probabilistically selecting nearby replicas.
+    /// Used for probabilistically selecting uniformly random or proximity-weighted
+    /// healthy replicas.
     proximity_map: Arc<ProximityMap>,
 }
 
@@ -1155,16 +1153,16 @@ impl XNetEndpointResolver {
         }
     }
 
-    /// Returns the `/api/v1/stream` `XNetEndpoint` URL of a slice of at most
-    /// `byte_limit` bytes beginning at `msg_begin`, with a witness beginning at
-    /// `witness_begin`, for an arbitrary node on `subnet_id`.
+    /// Returns the `/api/v1/stream` `XNetEndpoint` URL of a random
+    /// proximity-weighted node on `subnet_id`, for a slice of at most `byte_limit`
+    /// bytes beginning at `msg_begin`, with a witness beginning at `witness_begin`.
     ///
     /// # Errors
     ///
     /// Returns an error if retrieving the node registry entry fails; if the
     /// requested subnet is missing or has no nodes; or if the node address
     /// is invalid.
-    pub fn xnet_endpoint_url(
+    pub fn xnet_stream_url(
         &self,
         subnet_id: SubnetId,
         witness_begin: StreamIndex,
@@ -1188,8 +1186,7 @@ impl XNetEndpointResolver {
     }
 
     /// Returns the `/api/v1/advert` `XNetEndpoint` URL of the given node, for
-    /// posting our own certified header to it. Which node to advertise to is the
-    /// caller's choice, unlike with `xnet_endpoint_url()`.
+    /// advertising our certified header to.
     ///
     /// # Errors
     ///
@@ -1197,7 +1194,7 @@ impl XNetEndpointResolver {
     /// node address is invalid.
     pub fn xnet_advert_url(&self, node: NodeId) -> Result<EndpointLocator, Error> {
         let version = self.registry.get_latest_version();
-        let node_record = get_node_record(self.registry.as_ref(), node, version)?;
+        let node_record = get_node_record(node, self.registry.as_ref(), version)?;
 
         self.endpoint_locator(
             node,
@@ -1264,8 +1261,8 @@ impl XNetEndpointResolver {
         // No `ValidationContext` here, so go with the latest.
         let version = self.registry.get_latest_version();
         let own_subnet_size =
-            get_subnet_nodes(self.registry.as_ref(), self.subnet_id, version)?.len();
-        let nodes = get_subnet_nodes(self.registry.as_ref(), subnet_id, version)?;
+            get_subnet_nodes(self.subnet_id, self.registry.as_ref(), version)?.len();
+        let nodes = get_subnet_nodes(subnet_id, self.registry.as_ref(), version)?;
 
         let count = advert_target_count(own_subnet_size, nodes.len());
         Ok(self.proximity_map.uniform_sample(count, nodes))
@@ -1423,7 +1420,7 @@ struct XNetAdvertHandlerImpl {
     registry: Arc<dyn RegistryClient>,
 
     /// Classifies adverts against the pooled slices and stream positions; and
-    /// holds the peer headers.
+    /// holds the recorded headers.
     slice_pool: Arc<Mutex<CertifiedSlicePool>>,
 
     log: ReplicaLogger,
@@ -1493,7 +1490,7 @@ impl XNetAdvertHandlerImpl {
 
     /// Returns the subnets we owe an advert to, as of our latest certified state:
     /// those whose stream holds messages; and those that we have signals for,
-    /// relative to the peer header on record.
+    /// relative to the recorded header.
     fn subnets_owed_adverts(&self) -> Vec<SubnetId> {
         let Some(state) = self.state_manager.get_latest_certified_state() else {
             return Vec::new();
@@ -1554,7 +1551,7 @@ impl XNetAdvertHandler for XNetAdvertHandlerImpl {
             })?;
         debug_assert_eq!(slice.header(), &claimed, "Inconsistent slice decoding");
 
-        // Record every verified peer header: it is our record of how far the peer has
+        // Record every verified header: the recorded header shows how far the peer has
         // garbage collected its messages, which is what tells us whether we still owe
         // it an advert.
         self.slice_pool
@@ -1595,18 +1592,15 @@ impl XNetAdvertHandler for XNetAdvertHandlerImpl {
 /// Returns `None` if the node record does not exist or the registry read
 /// failed.
 fn get_node_operator_id(
-    node_id: &NodeId,
+    node: &NodeId,
     registry: &dyn RegistryClient,
     registry_version: &RegistryVersion,
     log: &ReplicaLogger,
 ) -> Option<Vec<u8>> {
     registry
-        .get_node_record(*node_id, *registry_version)
+        .get_node_record(*node, *registry_version)
         .unwrap_or_else(|_| {
-            info!(
-                log,
-                "Failed to retrieve registry record for node {}", node_id
-            );
+            info!(log, "Failed to retrieve registry record for node {node}");
             None
         })
         .map(|r| r.node_operator_id)
@@ -1614,8 +1608,8 @@ fn get_node_operator_id(
 
 /// Retrieves the given node's `NodeRecord` at the given registry version.
 fn get_node_record(
-    registry: &dyn RegistryClient,
     node: NodeId,
+    registry: &dyn RegistryClient,
     version: RegistryVersion,
 ) -> Result<NodeRecord, Error> {
     registry
@@ -1628,8 +1622,8 @@ fn get_node_record(
 ///
 /// Returns an error if the subnet is missing or has no nodes.
 fn get_subnet_nodes(
-    registry: &dyn RegistryClient,
     subnet: SubnetId,
+    registry: &dyn RegistryClient,
     version: RegistryVersion,
 ) -> Result<Vec<NodeId>, Error> {
     registry
@@ -1639,7 +1633,7 @@ fn get_subnet_nodes(
         .ok_or(Error::MissingSubnet(subnet))
 }
 
-/// Maps `StateManagerErrors` to their `XNetPayloadError` namesakes.
+/// Maps `StateManagerErrors` to the equivalent `XNetPayloadValidationError`.
 fn from_state_manager_error(e: StateManagerError) -> XNetPayloadValidationError {
     match e {
         StateManagerError::StateRemoved(height) => {
@@ -1687,7 +1681,8 @@ pub fn adjusted_byte_limit(slice_byte_size: usize) -> usize {
 }
 
 /// Computes `RefillStreamSliceIndices` for every subnet with a cached stream
-/// position in the given certified slice pool owned by the given subnet.
+/// position in the given certified slice pool, maintained by a replica of the
+/// given subnet.
 pub fn refill_stream_slice_indices(
     pool_lock: Arc<Mutex<CertifiedSlicePool>>,
     own_subnet_id: SubnetId,
@@ -1862,10 +1857,8 @@ impl AdvertTask {
             .collect()
     }
 
-    /// Advertises our stream for `subnet_id` to the given `node`: posts `advert`,
-    /// our own certified header, and feeds back any reply to the advert handler, a
-    /// reply being the reverse stream's certified header, proving that the peer has
-    /// already fully consumed our stream.
+    /// Calls `post_advert()`, to send `advert` and handle any response; and
+    /// records the outcome.
     async fn advertise_to(&self, subnet_id: SubnetId, node: NodeId, advert: CertifiedStreamSlice) {
         let since = Instant::now();
         let status = match self.post_advert(subnet_id, node, advert).await {
@@ -2002,7 +1995,7 @@ impl AdvertError {
 
 /// An async task that refills the slice pool.
 pub struct PoolRefillTask {
-    /// A pool of slices, filled in the background by an async task.
+    /// The slice pool that this task is refilling.
     pool: Arc<Mutex<CertifiedSlicePool>>,
 
     endpoint_resolver: Arc<XNetEndpointResolver>,
@@ -2060,13 +2053,13 @@ impl PoolRefillTask {
 
         for (subnet_id, indices) in refill_stream_slice_indices {
             // `XNetEndpoint` URL of a node on `subnet_id`.
-            let endpoint_locator = match self.endpoint_resolver.xnet_endpoint_url(
+            let endpoint = match self.endpoint_resolver.xnet_stream_url(
                 subnet_id,
                 indices.witness_begin,
                 indices.msg_begin,
                 indices.byte_limit,
             ) {
-                Ok(endpoint_locator) => endpoint_locator,
+                Ok(endpoint) => endpoint,
                 Err(e) => {
                     log!(self.log, e.log_level(), "{}", e);
                     self.metrics.observe_pull_attempt(e.to_label_value());
@@ -2083,9 +2076,9 @@ impl PoolRefillTask {
             self.runtime_handle.spawn(async move {
                 let since = Instant::now();
                 metrics.outstanding_queries.inc();
-                let query_result = xnet_client.query(&endpoint_locator).await;
+                let query_result = xnet_client.query(&endpoint).await;
                 metrics.outstanding_queries.dec();
-                let proximity = endpoint_locator.proximity.into();
+                let proximity = endpoint.proximity.into();
 
                 match query_result {
                     Ok(slice) => {
@@ -2150,7 +2143,7 @@ impl PoolRefillTask {
                             }
                             Err(err) => warn!(
                                 logger,
-                                "Failed to join pool refill blocking thread: {}", err
+                                "Failed to join pool refill blocking thread: {err}"
                             ),
                         };
                     }
@@ -2162,10 +2155,8 @@ impl PoolRefillTask {
                         } else if pass_log_sampling() {
                             info!(
                                 log,
-                                "Failed to query stream slice for subnet {} from node {}: {}",
-                                subnet_id,
-                                endpoint_locator.node_id,
-                                e
+                                "Failed to query stream slice for subnet {subnet_id} from node {}: {e}",
+                                endpoint.node_id,
                             );
                         }
                     }
@@ -2177,14 +2168,14 @@ impl PoolRefillTask {
 
 fn pass_log_sampling() -> bool {
     /// The fraction of INFO logs related to stream pulls and adverts that XNet
-    /// payload builder displays.  The logs become very polluted if we don't
+    /// payload builder displays. The logs become very polluted if we don't
     /// sample them.
     const LOG_PASS_THROUGH_RATE: f64 = 0.05;
 
     thread_rng().gen_bool(LOG_PASS_THROUGH_RATE)
 }
 
-/// A handle for a `PoolRefillTask`to be used for triggering pool refills and
+/// A handle for a `PoolRefillTask` to be used for triggering pool refills and
 /// terminating the task (by dropping the handle).
 pub struct RefillTaskHandle(pub Mutex<mpsc::Sender<RegistryVersion>>);
 
@@ -2222,20 +2213,6 @@ enum SliceValidationResult {
     Transient(String),
     /// Slice is empty.
     Empty,
-}
-
-impl SliceValidationResult {
-    /// Maps a `SliceValidationResult` to a value for the `pull_attempt_count`
-    /// metric's `status` label.
-    #[allow(dead_code)]
-    fn to_label_value(&self) -> &'static str {
-        match self {
-            SliceValidationResult::Valid { .. } => "Valid",
-            SliceValidationResult::Invalid(_) => "Invalid",
-            SliceValidationResult::Transient(_) => "Transient",
-            SliceValidationResult::Empty => "Empty",
-        }
-    }
 }
 
 /// Internal error type, to simplify error handling.
@@ -2284,7 +2261,7 @@ impl Error {
 /// An async `XNetEndpoint` client.
 ///
 /// The `async_trait` attribute is necessary both here and on every
-/// implementation because Rust does not have support for `async fn` in traits.
+/// implementation because we use `dyn XNetClient`.
 #[async_trait]
 pub trait XNetClient: Sync + Send {
     /// Queries the given `XNetEndpoint` for a `CertifiedStreamSlice`.
@@ -2312,7 +2289,7 @@ type XNetRequestBody = http_body_util::Full<hyper::body::Bytes>;
 /// The default `XNetClient` implementation, wrapping an HTTP client (for both
 /// configuration and connection pooling).
 struct XNetClientImpl {
-    /// An HTTP client to be used for querying.
+    /// HTTP client for querying and advertising.
     http_client: Client<TlsConnector, XNetRequestBody>,
 
     /// Response body (encoded slice) size.

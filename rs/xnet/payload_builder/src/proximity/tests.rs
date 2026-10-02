@@ -9,7 +9,7 @@ use ic_test_utilities_metrics::{
 /// `gen_range()` values in the `[low + numerator_low * (high - low) /
 /// denominator, low + numerator_high * (high - low) / denominator)` range (i.e.
 /// dividing the range into `denominator` equal chunks, any random value in
-/// chunks `nominator_low` through `nominator_high` will result in
+/// chunks `numerator_low` through `numerator_high` will result in
 /// `expected_node` being selected).
 fn assert_pick_node(
     expected_node: NodeId,
@@ -73,8 +73,8 @@ async fn pick_node_some_roundtrip_times() {
 
         // A proximity map with a recorded roundtrip time to operator 1. Should result
         // in all nodes being selected with the same probability (as operator 2
-        // should be assigned the mean priority of all weighted operators, i.e. the same
-        // priority as operator 1).
+        // should be assigned the mean weight of all weighted operators, i.e. the same
+        // weight as operator 1).
         let mut proximity_map = ProximityMap::with_rng(
             mock_gen_range_low(0, 0),
             LOCAL_NODE,

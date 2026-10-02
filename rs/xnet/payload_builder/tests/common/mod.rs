@@ -85,8 +85,7 @@ impl StateManagerFixture {
         }
     }
 
-    /// Adds a stream to the wrapped state, creates a new checkpoint and
-    /// certifies it.
+    /// Adds a stream to the wrapped state and certifies it.
     pub fn with_stream(mut self, destination_subnet: SubnetId, stream: Stream) -> Self {
         let (mut height, mut state) = self.state_manager.take_tip();
 

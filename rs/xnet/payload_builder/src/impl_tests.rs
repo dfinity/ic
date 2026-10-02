@@ -12,13 +12,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::ReplicatedStateTesting;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_types::ids::{
-    SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5, SUBNET_6, SUBNET_42,
-};
+use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5, SUBNET_6};
 use ic_types::xnet::RejectReason;
 use maplit::btreemap;
-
-const OWN_SUBNET_ID: SubnetId = SUBNET_42;
 
 #[tokio::test]
 async fn expected_indices_for_stream() {
@@ -52,7 +48,7 @@ async fn expected_stream_indices() {
         let (payloads, expected_indices) = get_xnet_state_for_testing(&state_manager);
 
         // A registry that has entries for `SUBNET_1` through `SUBNET_5`.
-        let (registry, _urls) = get_registry_and_urls_for_test(5, expected_indices.clone());
+        let registry = get_registry_for_test(&[SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5]);
         let tls_handshake = Arc::new(MockTlsConfig::new());
         let state_manager = Arc::new(state_manager);
         let xnet_payload_builder = XNetPayloadBuilderImpl::new(
@@ -87,10 +83,10 @@ async fn expected_stream_indices() {
     });
 }
 
-/// `expected_stream_indices` should not include `SUBNET_6`
+/// `expected_stream_indices` should also include `SUBNET_6`
 /// (registered as `CloudEngine` in `get_simple_registry_for_test`).
 #[tokio::test]
-async fn expected_stream_indices_includes_engine_subnets() {
+async fn expected_stream_indices_includes_cloud_engines() {
     with_test_replica_logger(|log| {
         let state_manager = FakeStateManager::new();
         let (payloads, _expected_indices) = get_xnet_state_for_testing(&state_manager);
@@ -129,7 +125,7 @@ async fn expected_stream_indices_includes_engine_subnets() {
             )
             .unwrap();
 
-        // SUBNET_6 is a CloudEngine and must now be included.
+        // SUBNET_6 is a CloudEngine and must be included.
         assert!(
             computed_indices.contains_key(&SUBNET_6),
             "CloudEngine subnet SUBNET_6 should be included in expected stream indices"
@@ -171,7 +167,7 @@ async fn expected_stream_indices_excludes_deleted_subnet() {
         );
 
         // Registry with only SUBNET_1 through SUBNET_4; SUBNET_5 is absent (deleted).
-        let (registry, _urls) = get_registry_and_urls_for_test(4, btreemap![]);
+        let registry = get_registry_for_test(&[SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4]);
         let tls_handshake = Arc::new(ic_crypto_tls_interfaces_mocks::MockTlsConfig::new());
         let state_manager = Arc::new(state_manager);
         let xnet_payload_builder = XNetPayloadBuilderImpl::new(
@@ -216,10 +212,10 @@ async fn validate_signals() {
         let state_manager = FakeStateManager::new();
         let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
 
-        // Shortcut for `xnet_payload_builder.validate_signals(SUBNET_1, _, _, _)`.
+        // Shortcut for `xnet_payload_builder.validate_signals(REMOTE_SUBNET, _, _, _)`.
         let validate_signals = |signals_end, expected, state| {
             xnet_payload_builder.validate_signals(
-                SUBNET_1,
+                REMOTE_SUBNET,
                 StreamIndex::new(signals_end),
                 &Default::default(),
                 StreamIndex::new(expected),
@@ -228,18 +224,18 @@ async fn validate_signals() {
             )
         };
 
-        // Empty state (no stream for `SUBNET_1`).
-        let empty_state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
+        // Empty state (no stream for `REMOTE_SUBNET`).
+        let empty_state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
 
         // With no stream present, only default signals are valid.
         assert_eq!(Valid, validate_signals(0, 0, &empty_state));
         // Signal for non-existent message.
         assert_eq!(Invalid, validate_signals(1, 0, &empty_state));
 
-        // State with `messages.end() == 7` for `SUBNET_1`.
-        let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
+        // State with `messages.end() == 7` for `REMOTE_SUBNET`.
+        let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
         state.with_streams(btreemap! {
-            SUBNET_1 => generate_stream(&StreamConfig {
+            REMOTE_SUBNET => generate_stream(&StreamConfig {
                 message_begin: 4,
                 message_end: 7,
                 signal_end: 107,
@@ -267,10 +263,10 @@ async fn validate_signals_expected_before_messages_begin() {
         let state_manager = FakeStateManager::new();
         let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
 
-        // State with `messages.end() == 7` for `SUBNET_1`.
-        let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
+        // State with `messages.end() == 7` for `REMOTE_SUBNET`.
+        let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
         state.with_streams(btreemap! {
-            SUBNET_1 => generate_stream(&StreamConfig {
+            REMOTE_SUBNET => generate_stream(&StreamConfig {
                 message_begin: 4,
                 message_end: 7,
                 signal_end: 107,
@@ -281,7 +277,7 @@ async fn validate_signals_expected_before_messages_begin() {
 
         let expected = StreamIndex::new(2);
         xnet_payload_builder.validate_signals(
-            SUBNET_1,
+            REMOTE_SUBNET,
             signals_end,
             &Default::default(),
             expected,
@@ -293,19 +289,19 @@ async fn validate_signals_expected_before_messages_begin() {
 
 #[tokio::test]
 #[should_panic(expected = "Subnet yndj2-3ybaa-aaaaa-aaaap-yai: invalid expected signal")]
-async fn validate_signals_expected_after_messages_begin() {
+async fn validate_signals_expected_after_messages_end() {
     with_test_replica_logger(|log| {
         let state_manager = FakeStateManager::new();
         let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
 
-        // Empty state (no stream for `SUBNET_1`).
-        let state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
+        // Empty state (no stream for `REMOTE_SUBNET`).
+        let state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
         // Valid `signals_end`.
         let signals_end = StreamIndex::new(0);
 
         let expected = StreamIndex::new(2);
         xnet_payload_builder.validate_signals(
-            SUBNET_1,
+            REMOTE_SUBNET,
             signals_end,
             &Default::default(),
             expected,
@@ -323,10 +319,10 @@ async fn validate_signals_invalid_reject_signals() {
         let state_manager = FakeStateManager::new();
         let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
 
-        // State with `messages.end() == 77` for `SUBNET_1`.
-        let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
+        // State with `messages.end() == 77` for `REMOTE_SUBNET`.
+        let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
         state.with_streams(btreemap! {
-            SUBNET_1 => generate_stream(&StreamConfig {
+            REMOTE_SUBNET => generate_stream(&StreamConfig {
                 message_begin: 4,
                 message_end: 77,
                 signal_end: 107,
@@ -337,7 +333,7 @@ async fn validate_signals_invalid_reject_signals() {
         assert_eq!(
             Invalid,
             xnet_payload_builder.validate_signals(
-                SUBNET_1,
+                REMOTE_SUBNET,
                 70.into(), // Signals end of incoming stream slice.
                 &vec![
                     RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
@@ -355,7 +351,7 @@ async fn validate_signals_invalid_reject_signals() {
         assert_eq!(
             Invalid,
             xnet_payload_builder.validate_signals(
-                SUBNET_1,
+                REMOTE_SUBNET,
                 70.into(), // Signals end of incoming stream slice.
                 &vec![
                     RejectSignal::new(RejectReason::CanisterStopping, 10.into()),
@@ -372,7 +368,7 @@ async fn validate_signals_invalid_reject_signals() {
         assert_eq!(
             Invalid,
             xnet_payload_builder.validate_signals(
-                SUBNET_1,
+                REMOTE_SUBNET,
                 80.into(), // Signals end of incoming stream slice.
                 &vec![
                     RejectSignal::new(RejectReason::OutOfMemory, 10.into()),
@@ -387,18 +383,18 @@ async fn validate_signals_invalid_reject_signals() {
             )
         );
 
-        // Number of signals above 2 * `MAX_STREAM_MESSAGES` are invalid (dishonest subnet guard).
-        const MAX_SIGNALS: u64 = 2 * MAX_STREAM_MESSAGES as u64;
+        // Number of signals above 2 * `MAX_SIGNALS` are invalid (dishonest subnet guard).
+        const SIGNALS_LIMIT: u64 = 2 * MAX_SIGNALS as u64;
         assert_eq!(
             Invalid,
             xnet_payload_builder.validate_signals(
-                SUBNET_1,
-                (MAX_SIGNALS + 42).into(),
+                REMOTE_SUBNET,
+                (SIGNALS_LIMIT + 42).into(),
                 &vec![
                     RejectSignal::new(RejectReason::CanisterStopped, 10.into()),
-                    RejectSignal::new(RejectReason::Unknown, (MAX_SIGNALS / 2 + 123).into()),
-                    RejectSignal::new(RejectReason::QueueFull, MAX_SIGNALS.into()),
-                    RejectSignal::new(RejectReason::OutOfMemory, ((MAX_SIGNALS * 3) / 2).into()),
+                    RejectSignal::new(RejectReason::Unknown, (SIGNALS_LIMIT / 2 + 123).into()),
+                    RejectSignal::new(RejectReason::QueueFull, SIGNALS_LIMIT.into()),
+                    RejectSignal::new(RejectReason::OutOfMemory, ((SIGNALS_LIMIT * 3) / 2).into()),
                 ]
                 .into(),
                 5.into(), // Expected signal index.
@@ -416,33 +412,33 @@ async fn validate_slice() {
         let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
         let validation_context = get_validation_context_for_test();
 
-        // Message and slice begin and end indices for stream to `SUBNET_1`.
+        // Message and slice begin and end indices for stream to `REMOTE_SUBNET`.
         const MESSAGE_BEGIN: StreamIndex = StreamIndex::new(4);
         const MESSAGE_END: StreamIndex = StreamIndex::new(7);
         const SIGNAL_END: StreamIndex = StreamIndex::new(107);
 
-        // Expected indices for messages and signals from `SUBNET_1`.
+        // Expected indices for messages and signals from `REMOTE_SUBNET`.
         const EXPECTED: ExpectedIndices = ExpectedIndices {
             message_index: SIGNAL_END,                // Assume no intervening payloads.
             signal_index: MESSAGE_BEGIN,              // Assume we no signals for existing messages.
             max_no_gc_header_begin: STREAM_INDEX_MAX, // Assume we hold no reject signals.
         };
 
-        // State with stream for `SUBNET_1`.
-        let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
+        // State with stream for `REMOTE_SUBNET`.
+        let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
         state.with_streams(btreemap! {
-            SUBNET_1 => generate_stream(&StreamConfig {
+            REMOTE_SUBNET => generate_stream(&StreamConfig {
                 message_begin: MESSAGE_BEGIN.get(),
                 message_end: MESSAGE_END.get(),
                 signal_end: SIGNAL_END.get(),
             }),
         });
 
-        // Helper for generating a slice from `SUBNET_1` with valid signals; and with
+        // Helper for generating a slice from `REMOTE_SUBNET` with valid signals; and with
         // messages between the given indices; and validating it.
         let validate_slice_with_messages = |message_begin, message_end| {
             let certified_slice = make_certified_stream_slice(
-                SUBNET_1,
+                REMOTE_SUBNET,
                 StreamConfig {
                     message_begin,
                     message_end,
@@ -450,7 +446,7 @@ async fn validate_slice() {
                 },
             );
             xnet_payload_builder.validate_slice(
-                SUBNET_1,
+                REMOTE_SUBNET,
                 &certified_slice,
                 &EXPECTED,
                 &validation_context,
@@ -492,7 +488,7 @@ async fn validate_slice() {
         // Validate a slice with invalid signals (signals end before expected index).
         // Detailed signal validation is done by the `validate_signals` tests.
         let certified_slice = make_certified_stream_slice(
-            SUBNET_1,
+            REMOTE_SUBNET,
             StreamConfig {
                 message_begin: expected_message,
                 message_end: expected_message + 1,
@@ -501,7 +497,7 @@ async fn validate_slice() {
         );
         assert_matches!(
             xnet_payload_builder.validate_slice(
-                SUBNET_1,
+                REMOTE_SUBNET,
                 &certified_slice,
                 &EXPECTED,
                 &validation_context,
@@ -520,7 +516,7 @@ async fn validate_slice_invalid_signature() {
         let mut certified_stream_store = MockCertifiedStreamStore::new();
         certified_stream_store
             .expect_decode_certified_stream_slice()
-            .returning(|_, _, _| Err(DecodeStreamError::InvalidSignature(SUBNET_1)));
+            .returning(|_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
 
         let certified_stream_store = Arc::new(certified_stream_store);
 
@@ -542,16 +538,16 @@ async fn validate_slice_invalid_signature() {
         );
 
         // A valid combination of state, certified slice and expected indices.
-        let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
+        let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
         state.with_streams(btreemap! {
-            SUBNET_1 => generate_stream(&StreamConfig {
+            REMOTE_SUBNET => generate_stream(&StreamConfig {
                 message_begin: 3,
                 message_end: 4,
                 signal_end: 1,
             }),
         });
         let certified_slice = make_certified_stream_slice(
-            SUBNET_1,
+            REMOTE_SUBNET,
             StreamConfig {
                 message_begin: 1,
                 message_end: 2,
@@ -568,7 +564,7 @@ async fn validate_slice_invalid_signature() {
 
         assert_matches!(
             xnet_payload_builder.validate_slice(
-                SUBNET_1,
+                REMOTE_SUBNET,
                 &certified_slice,
                 &expected,
                 &validation_context,
@@ -587,35 +583,35 @@ async fn validate_slice_above_msg_limit() {
         let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
         let validation_context = get_validation_context_for_test();
 
-        // Message and slice begin and end indices for outgoing stream to `SUBNET_1`.
+        // Message and slice begin and end indices for outgoing stream to `REMOTE_SUBNET`.
         // Output stream has exactly `SYSTEM_SUBNET_STREAM_MSG_LIMIT` messages, which
         // should prevent any new messages from being included into blocks.
         const MESSAGE_BEGIN: u64 = 13;
         const MESSAGE_END: u64 = MESSAGE_BEGIN + SYSTEM_SUBNET_STREAM_MSG_LIMIT as u64;
         const SIGNAL_END: u64 = 107;
 
-        // Expected indices for messages and signals from `SUBNET_1`.
+        // Expected indices for messages and signals from `REMOTE_SUBNET`.
         const EXPECTED: ExpectedIndices = ExpectedIndices {
             message_index: StreamIndex::new(SIGNAL_END), // Assume no intervening payloads.
             signal_index: StreamIndex::new(MESSAGE_BEGIN), // Assume no signals for existing msgs.
             max_no_gc_header_begin: STREAM_INDEX_MAX,    // Assume no reject signals.
         };
 
-        // State of a `System` subnet with a stream for `SUBNET_1`.
-        let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::System);
+        // State of a `System` subnet with a stream for `REMOTE_SUBNET`.
+        let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::System);
         state.with_streams(btreemap! {
-            SUBNET_1 => generate_stream(&StreamConfig {
+            REMOTE_SUBNET => generate_stream(&StreamConfig {
                 message_begin: MESSAGE_BEGIN,
                 message_end: MESSAGE_END,
                 signal_end: SIGNAL_END,
             }),
         });
 
-        // Helper for validating a generated slice from `SUBNET_1` with messages between
+        // Helper for validating a generated slice from `REMOTE_SUBNET` with messages between
         // the given indices and the given `signals_end` index.
         let validate_slice = |message_begin, message_end, signal_end, state| {
             let certified_slice = make_certified_stream_slice(
-                SUBNET_1,
+                REMOTE_SUBNET,
                 StreamConfig {
                     message_begin,
                     message_end,
@@ -623,7 +619,7 @@ async fn validate_slice_above_msg_limit() {
                 },
             );
             xnet_payload_builder.validate_slice(
-                SUBNET_1,
+                REMOTE_SUBNET,
                 &certified_slice,
                 &EXPECTED,
                 &validation_context,
@@ -695,10 +691,10 @@ async fn validate_slice_above_signal_limit() {
         // `begin` of `messages` in the stream slice.
         const MESSAGE_BEGIN: u64 = STREAM_BEGIN + 30;
 
-        // State of an `Application` subnet with a stream for `SUBNET_1`.
-        let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
+        // State of an `Application` subnet with a stream for `REMOTE_SUBNET`.
+        let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
         state.with_streams(btreemap! {
-            SUBNET_1 => generate_stream(&StreamConfig {
+            REMOTE_SUBNET => generate_stream(&StreamConfig {
                 message_begin: REVERSE_STREAM_BEGIN,
                 message_end: REVERSE_STREAM_END,
                 signal_end: MESSAGE_BEGIN,
@@ -712,13 +708,13 @@ async fn validate_slice_above_signal_limit() {
             signal_end: SIGNALS_END,
         });
 
-        // Helper for validating a generated slice from `SUBNET_1` taken from `stream`
+        // Helper for validating a generated slice from `REMOTE_SUBNET` taken from `stream`
         // with messages starting end ending at the given indices.
         let validate_slice = |slice_begin: u64, slice_end: u64, state| {
             let slice = stream.slice(slice_begin.into(), Some((slice_end - slice_begin) as usize));
             let certified_stream_slice = encode_certified_stream_slice(slice, 1.into());
             xnet_payload_builder.validate_slice(
-                SUBNET_1,
+                REMOTE_SUBNET,
                 &certified_stream_slice,
                 &ExpectedIndices {
                     message_index: slice_begin.into(),
@@ -792,9 +788,9 @@ async fn validate_slice_loopback_stream() {
         };
 
         // State with loopback stream.
-        let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
+        let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
         state.with_streams(btreemap! {
-            OWN_SUBNET_ID => generate_stream(&StreamConfig {
+            LOCAL_SUBNET => generate_stream(&StreamConfig {
                 message_begin: MESSAGE_BEGIN.get(),
                 message_end: MESSAGE_END.get(),
                 signal_end: SIGNAL_END.get(),
@@ -805,7 +801,7 @@ async fn validate_slice_loopback_stream() {
         // messages between the given indices; and validating it.
         let validate_slice_with_messages = |message_begin, message_end| {
             let certified_slice = make_certified_stream_slice(
-                OWN_SUBNET_ID,
+                LOCAL_SUBNET,
                 StreamConfig {
                     message_begin,
                     message_end,
@@ -813,7 +809,7 @@ async fn validate_slice_loopback_stream() {
                 },
             );
             xnet_payload_builder.validate_slice(
-                OWN_SUBNET_ID,
+                LOCAL_SUBNET,
                 &certified_slice,
                 &EXPECTED,
                 &validation_context,
@@ -850,7 +846,7 @@ async fn validate_slice_loopback_stream() {
 
         // A slice with invalid signals (signals end before expected index).
         let certified_slice = make_certified_stream_slice(
-            OWN_SUBNET_ID,
+            LOCAL_SUBNET,
             StreamConfig {
                 message_begin: expected_message,
                 message_end: expected_message + 1,
@@ -860,7 +856,7 @@ async fn validate_slice_loopback_stream() {
         assert_eq!(
             SliceValidationResult::Invalid("Loopback stream is inducted separately".to_string()),
             xnet_payload_builder.validate_slice(
-                OWN_SUBNET_ID,
+                LOCAL_SUBNET,
                 &certified_slice,
                 &EXPECTED,
                 &validation_context,
@@ -871,8 +867,8 @@ async fn validate_slice_loopback_stream() {
     });
 }
 
-/// Constructs an `XNetPayloadBuilder` around `state_manager`, `log` and an
-/// empty registry.
+/// Constructs an `XNetPayloadBuilder` around `state_manager`, `log` and the
+/// registry from `get_simple_registry_for_test()`.
 fn get_xnet_payload_builder_for_test(
     state_manager: FakeStateManager,
     log: ReplicaLogger,
@@ -901,7 +897,7 @@ const FIRST_REJECT_SIGNAL: u64 = 5;
 const SECOND_REJECT_SIGNAL: u64 = 9;
 const FIXTURE_SIGNALS_END: u64 = 12;
 
-/// Creates a `FakeStateManager` holding a state with a stream to `SUBNET_1`,
+/// Creates a `FakeStateManager` holding a state with a stream to `REMOTE_SUBNET`,
 /// with reject signals at `FIRST_REJECT_SIGNAL` and `SECOND_REJECT_SIGNAL` and
 /// `signals_end` at `FIXTURE_SIGNALS_END`.
 fn state_manager_with_reject_signals_fixture() -> FakeStateManager {
@@ -926,21 +922,21 @@ fn state_manager_with_reject_signals_fixture() -> FakeStateManager {
     );
 
     let state_manager = FakeStateManager::new();
-    put_replicated_state_for_testing(&state_manager, btreemap![SUBNET_1 => stream]);
+    put_replicated_state_for_testing(&state_manager, btreemap![REMOTE_SUBNET => stream]);
     state_manager
 }
 
-/// A message-less slice from `SUBNET_1`, with the given `header.begin()`.
+/// A message-less slice from `REMOTE_SUBNET`, with the given `header.begin()`.
 fn messageless_slice_with_begin(begin: u64) -> CertifiedStreamSlice {
     messageless_slice(begin, begin)
 }
 
-/// A message-less slice from `SUBNET_1`, with the given header bounds. The
-/// messages within those bounds are all still held by `SUBNET_1`, none of them
+/// A message-less slice from `REMOTE_SUBNET`, with the given header bounds. The
+/// messages within those bounds are all still held by `REMOTE_SUBNET`, none of them
 /// included into the slice.
 fn messageless_slice(begin: u64, end: u64) -> CertifiedStreamSlice {
     make_certified_stream_slice_with_msg_limit(
-        SUBNET_1,
+        REMOTE_SUBNET,
         StreamConfig {
             message_begin: begin,
             message_end: end,
@@ -963,11 +959,11 @@ async fn expected_indices_for_stream_reject_signal_gc() {
 
         let max_no_gc_header_begin = |payloads: &[&XNetPayload]| {
             xnet_payload_builder
-                .expected_indices_for_stream(SUBNET_1, &state, payloads)
+                .expected_indices_for_stream(REMOTE_SUBNET, &state, payloads)
                 .max_no_gc_header_begin
         };
         let payload = |begin: u64| XNetPayload {
-            stream_slices: btreemap![SUBNET_1 => messageless_slice_with_begin(begin)],
+            stream_slices: btreemap![REMOTE_SUBNET => messageless_slice_with_begin(begin)],
         };
 
         // With no past payloads, the first reject signal we hold.
@@ -1024,9 +1020,9 @@ async fn validate_slice_reject_signal_gc() {
         let slice = messageless_slice_with_begin(FIXTURE_SIGNALS_END);
         let validate = |slice: &CertifiedStreamSlice, payloads: &[&XNetPayload]| {
             let expected =
-                xnet_payload_builder.expected_indices_for_stream(SUBNET_1, &state, payloads);
+                xnet_payload_builder.expected_indices_for_stream(REMOTE_SUBNET, &state, payloads);
             xnet_payload_builder.validate_slice(
-                SUBNET_1,
+                REMOTE_SUBNET,
                 slice,
                 &expected,
                 &validation_context,
@@ -1050,7 +1046,7 @@ async fn validate_slice_reject_signal_gc() {
         // Same with a past payload that garbage collects only the first reject signal:
         // the slice still garbage collects the second.
         let payload_with_begin = |begin: u64| XNetPayload {
-            stream_slices: btreemap![SUBNET_1 => messageless_slice_with_begin(begin)],
+            stream_slices: btreemap![REMOTE_SUBNET => messageless_slice_with_begin(begin)],
         };
         assert_eq!(
             valid,
@@ -1065,7 +1061,7 @@ async fn validate_slice_reject_signal_gc() {
         );
 
         // Same for a slice beginning exactly at the reject signal we still hold: only a
-        // `begin` past it means `SUBNET_1` has seen the signal.
+        // `begin` past it means `REMOTE_SUBNET` has seen the signal.
         assert_eq!(
             SliceValidationResult::Empty,
             validate(

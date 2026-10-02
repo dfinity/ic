@@ -22,7 +22,7 @@ use ic_test_utilities_types::ids::SUBNET_6;
 use ic_types::{SubnetId, xnet::CertifiedStreamSlice};
 use std::{net::SocketAddr, sync::Arc};
 
-const DST_SUBNET: SubnetId = SUBNET_6;
+const SRC_SUBNET: SubnetId = SUBNET_6;
 
 const STREAM_BEGIN: u64 = 7;
 const STREAM_END: u64 = 10;
@@ -430,7 +430,7 @@ async fn advert_too_large() {
 }
 
 /// Returns the result of invoking `xnet_client.query()` against an HTTP server
-/// in a spawned thread that processes a single request using `handle_request`.
+/// using `method_router`.
 async fn do_xnet_client_query(
     xnet_client: &XNetClientImpl,
     method_router: MethodRouter,
@@ -444,8 +444,7 @@ async fn do_xnet_client_query(
     do_async_query(xnet_client, uri).await
 }
 
-/// Helper for synchronously calling `query()` on the given `XNetClientImpl`,
-/// with the given URL.
+/// Calls `query()` on the given `XNetClientImpl`, with the given URL.
 async fn do_async_query(
     xnet_client: &XNetClientImpl,
     url: Uri,
@@ -492,10 +491,10 @@ async fn start_server(router: Router) -> SocketAddr {
     socket
 }
 
-/// Generates a stream slice from `DST_SUBNET`.
+/// Generates a stream slice from `SRC_SUBNET`.
 fn get_stream_slice_for_testing() -> CertifiedStreamSlice {
     make_certified_stream_slice(
-        DST_SUBNET,
+        SRC_SUBNET,
         StreamConfig {
             message_begin: STREAM_BEGIN,
             message_end: STREAM_END,
