@@ -10911,7 +10911,7 @@ dependencies = [
 
 [[package]]
 name = "ic-management-canister-types"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "candid",
  "candid_parser",
