@@ -13,10 +13,11 @@ cd "$(git rev-parse --show-toplevel)"
 if [ -n "${LABEL:-}" ]; then
     labels="$LABEL"
 else
-    labels="$(bazel run //ci/githubstats:query -- top 100 flaky% --gt 0 --week --columns=label | tail -n+4 | awk '{print $4}')"
+    # The bottom border of the table yields an empty last line. Other empty lines mean that the table format
+    # changed, so they fail the check below instead of silently dropping their tests.
+    labels="$(bazel run //ci/githubstats:query -- top 100 flaky% --gt 0 --week --columns=label | tail -n+4 | awk '{print $4}' \
+        | sed '$d; s/^$/(no label)/')"
 fi
-# The bottom border of the table yields an empty line.
-labels="$(sed '/^$/d' <<<"$labels")"
 
 tests='[]'
 summary="No test flaked in the last week."
