@@ -98,6 +98,8 @@ for path in open(manifests).read().split("\0"):
     if path:
         old, new = load(base, path), load(fix, path)
         added, removed = names(new) - names(old), names(old) - names(new)
+        if unknown := added - set(workspace):
+            sys.exit(f"{path} adds dependencies the root Cargo.toml doesn't have: {', '.join(sorted(unknown))}")
         changes[new.get("package", {}).get("name")] = ({package(n) for n in added}, {package(n) for n in removed})
         if without_workspace_dependencies(old) != without_workspace_dependencies(new):
             sys.exit(f"{path} changes beyond adding or removing workspace dependencies")
