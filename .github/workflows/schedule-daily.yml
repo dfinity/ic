@@ -91,7 +91,7 @@ jobs:
     name: Bazel Test NNS Nightly
     runs-on: *dind-large-setup
     container: *container-setup
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment: Nightly Tests
     steps:
       - *checkout
