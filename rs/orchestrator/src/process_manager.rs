@@ -100,6 +100,31 @@ pub(crate) trait Process: Send + Sync + 'static {
     fn get_env(&self) -> HashMap<OsString, OsString>;
 }
 
+/// A read-only view of the process managed by a [`ProcessRunner`], e.g. for
+/// observability.
+pub(crate) trait ProcessObserver: Send + Sync {
+    /// Name of the type of process.
+    fn name(&self) -> &'static str;
+
+    /// Returns the `Pid` of the currently running process; or `None` if no
+    /// process is running.
+    fn get_pid(&self) -> Option<Pid>;
+}
+
+impl<P: Process> ProcessObserver for RunningState<P> {
+    fn name(&self) -> &'static str {
+        P::NAME
+    }
+
+    fn get_pid(&self) -> Option<Pid> {
+        self.running
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|running| running.pid)
+    }
+}
+
 /// Trait for running a single versioned [`Process`]
 pub(crate) trait ProcessRunner<P: Process>: Send + Sync {
     /// Start the given process.
@@ -122,6 +147,9 @@ pub(crate) trait ProcessRunner<P: Process>: Send + Sync {
     /// Returns the currently running process; or `None` if no process is
     /// running.
     fn get_process(&self) -> Option<Arc<P>>;
+
+    /// Returns a read-only view of the managed process.
+    fn observer(&self) -> Arc<dyn ProcessObserver>;
 }
 
 /// A [`SingleProcessRunner`] manages running a single versioned [`Process`]
@@ -295,12 +323,7 @@ impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
     }
 
     fn get_pid(&self) -> Option<Pid> {
-        self.running_cell
-            .running
-            .lock()
-            .unwrap()
-            .as_ref()
-            .map(|running| running.pid)
+        self.running_cell.get_pid()
     }
 
     fn get_process(&self) -> Option<Arc<P>> {
@@ -310,6 +333,10 @@ impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
             .unwrap()
             .as_ref()
             .map(|running| Arc::clone(&running.process))
+    }
+
+    fn observer(&self) -> Arc<dyn ProcessObserver> {
+        self.running_cell.clone()
     }
 }
 
@@ -384,16 +411,34 @@ pub(crate) mod fake {
         }
 
         fn is_running(&self) -> bool {
-            self.log.lock().unwrap().process.is_some()
+            self.get_pid().is_some()
         }
 
         fn get_pid(&self) -> Option<Pid> {
-            // Return a dummy PID if the process is running.
-            self.is_running().then_some(Pid::from_raw(12345))
+            self.log.get_pid()
         }
 
         fn get_process(&self) -> Option<Arc<P>> {
             self.log.lock().unwrap().process.clone()
+        }
+
+        fn observer(&self) -> Arc<dyn ProcessObserver> {
+            self.log.clone()
+        }
+    }
+
+    impl<P: Process> ProcessObserver for Mutex<FakeRunnerLog<P>> {
+        fn name(&self) -> &'static str {
+            P::NAME
+        }
+
+        fn get_pid(&self) -> Option<Pid> {
+            // Return a dummy PID if the process is running.
+            self.lock()
+                .unwrap()
+                .process
+                .is_some()
+                .then_some(Pid::from_raw(12345))
         }
     }
 }
@@ -475,16 +520,26 @@ mod tests {
     }
 
     #[test]
-    fn start_while_running_restarts_process() {
+    fn start_while_running_restarts_process_and_observer_follows() {
         let mut runner = SingleProcessRunner::new(no_op_logger());
+        let observer = runner.observer();
+        assert_eq!(observer.name(), ShellProcess::NAME);
+        assert_eq!(observer.get_pid(), None);
+
         runner.start(shell(LONG_RUNNING)).unwrap();
         let old_pid = runner.get_pid().unwrap();
+        assert_eq!(observer.get_pid(), Some(old_pid));
 
         runner.start(shell(LONG_RUNNING)).unwrap();
 
         let new_pid = runner.get_pid().expect("a new process should be running");
         assert_ne!(old_pid, new_pid);
+        // The observer obtained before the restart follows the new process.
+        assert_eq!(observer.get_pid(), Some(new_pid));
+
         runner.stop().unwrap();
+        assert_eq!(runner.get_pid(), None);
+        assert_eq!(observer.get_pid(), None);
     }
 
     #[test]

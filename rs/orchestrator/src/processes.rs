@@ -1,7 +1,9 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
-    process_manager::{Process, ProcessRunner, RestartDecision, SingleProcessRunner},
+    process_manager::{
+        Process, ProcessObserver, ProcessRunner, RestartDecision, SingleProcessRunner,
+    },
     registry_helper::RegistryHelper,
 };
 use ic_config::crypto::CryptoConfig;
@@ -11,7 +13,6 @@ use ic_types::{
     Height, PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::{CatchUpPackage, HasHeight},
 };
-use nix::unistd::Pid;
 use std::{collections::HashMap, ffi::OsString, path::PathBuf, sync::Arc};
 
 // ---------------------------------------------------------------------------
@@ -365,6 +366,11 @@ impl<P: Process> ProcessManager<P> {
             )
         })
     }
+
+    /// Returns a read-only view of the managed process
+    pub(crate) fn observer(&self) -> Arc<dyn ProcessObserver> {
+        self.process_runner.observer()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -439,12 +445,12 @@ impl MultipleProcessesManager {
         self.ic_gateway_manager.process_runner.is_running()
     }
 
-    pub(crate) fn get_replica_pid(&self) -> Option<Pid> {
-        self.replica_manager.process_runner.get_pid()
-    }
-
-    pub(crate) fn get_ic_gateway_pid(&self) -> Option<Pid> {
-        self.ic_gateway_manager.process_runner.get_pid()
+    /// Returns read-only views of all managed processes.
+    pub(crate) fn observers(&self) -> Vec<Arc<dyn ProcessObserver>> {
+        vec![
+            self.replica_manager.observer(),
+            self.ic_gateway_manager.observer(),
+        ]
     }
 
     /// Start all processes appropriate for this node.

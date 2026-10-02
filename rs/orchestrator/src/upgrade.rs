@@ -91,7 +91,7 @@ impl RegistryReplicatorForUpgrade for RegistryReplicator {
 pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
-    processes_manager: Arc<RwLock<MultipleProcessesManager>>,
+    processes_manager: MultipleProcessesManager,
     manageboot_runner: Box<dyn ManagebootRunner>,
     cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
@@ -113,7 +113,7 @@ impl Upgrade {
     pub(crate) async fn new(
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
-        processes_manager: Arc<RwLock<MultipleProcessesManager>>,
+        processes_manager: MultipleProcessesManager,
         manageboot_runner: Box<dyn ManagebootRunner>,
         cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
@@ -424,7 +424,7 @@ impl Upgrade {
     // will not perpetually hit this case, and thus it is not important to
     // check the height.
     async fn download_registry_and_restart_if_nns_subnet_recovery(
-        &self,
+        &mut self,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
@@ -608,19 +608,19 @@ impl Upgrade {
     }
 
     /// Stop all child processes, including the replica, and wait until they have exited.
-    pub fn stop_children(&self) -> OrchestratorResult<()> {
-        self.processes_manager.write().unwrap().stop_all()
+    pub fn stop_children(&mut self) -> OrchestratorResult<()> {
+        self.processes_manager.stop_all()
     }
 
     /// Start all child processes appropriate for this node, restarting them if needed.
     /// `cup` must be the latest CUP, i.e. the one persisted to disk.
     fn ensure_children_are_running(
-        &self,
+        &mut self,
         subnet_id: SubnetId,
         cup: &CatchUpPackage,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        self.processes_manager.write().unwrap().start_all(
+        self.processes_manager.start_all(
             self.platform_version.clone(),
             subnet_id,
             cup,
@@ -1217,14 +1217,11 @@ mod tests {
         }
 
         pub fn is_replica_running(&self) -> bool {
-            self.processes_manager.read().unwrap().is_replica_running()
+            self.processes_manager.is_replica_running()
         }
 
         pub fn is_ic_gateway_running(&self) -> bool {
-            self.processes_manager
-                .read()
-                .unwrap()
-                .is_ic_gateway_running()
+            self.processes_manager.is_ic_gateway_running()
         }
 
         pub fn with_registry_replicator(
@@ -1591,7 +1588,7 @@ mod tests {
                     .unwrap();
             }
         }
-        let processes_manager = Arc::new(RwLock::new(MultipleProcessesManager::new_for_test(
+        let processes_manager = MultipleProcessesManager::new_for_test(
             ProcessManager::new_for_test(
                 replica_runner,
                 replica_process_config,
@@ -1606,7 +1603,7 @@ mod tests {
             ),
             Arc::clone(&registry),
             /* ic_gateway_launch_enabled */ true,
-        )));
+        );
 
         let manageboot_runner = Box::new(FakeManagebootRunner);
 
@@ -3666,18 +3663,16 @@ mod tests {
         .await;
 
         // The replica is still running with the CUP from before the recovery.
-        {
-            let mut processes_manager = upgrade_loop.processes_manager.write().unwrap();
-            processes_manager.stop_all().unwrap();
-            processes_manager
-                .start_all(
-                    test_scenario.platform_version(),
-                    SUBNET_1,
-                    &make_local_cup(Height::from(50), SUBNET_1, RegistryVersion::from(10)),
-                    RegistryVersion::from(10),
-                )
-                .unwrap();
-        }
+        upgrade_loop.processes_manager.stop_all().unwrap();
+        upgrade_loop
+            .processes_manager
+            .start_all(
+                test_scenario.platform_version(),
+                SUBNET_1,
+                &make_local_cup(Height::from(50), SUBNET_1, RegistryVersion::from(10)),
+                RegistryVersion::from(10),
+            )
+            .unwrap();
 
         assert_eq!(
             upgrade_loop.check().await.unwrap(),
