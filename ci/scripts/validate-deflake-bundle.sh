@@ -93,13 +93,18 @@ for path in open(manifests).read().split("\0"):
             sys.exit(f"{path} changes beyond adding or removing workspace dependencies")
 
 
-def packages(rev):
-    return {(p.get("name"), p.get("version"), p.get("source")): p for p in load(rev, "Cargo.lock").get("package", [])}
+def lockfile(rev):
+    lock = load(rev, "Cargo.lock")
+    packages = lock.pop("package", [])
+    keys = [(p.get("name"), p.get("version"), p.get("source")) for p in packages]
+    if len(set(keys)) != len(keys):
+        sys.exit("Cargo.lock has duplicate packages")
+    return lock, dict(zip(keys, packages))
 
 
-old_packages, new_packages = packages(base), packages(fix)
-if old_packages.keys() != new_packages.keys():
-    sys.exit("Cargo.lock adds or removes packages")
+(old_metadata, old_packages), (new_metadata, new_packages) = lockfile(base), lockfile(fix)
+if old_metadata != new_metadata or old_packages.keys() != new_packages.keys():
+    sys.exit("Cargo.lock adds or removes packages or changes its metadata")
 for (name, version, source), old in old_packages.items():
     new = new_packages[(name, version, source)]
     old_deps, new_deps = set(old.pop("dependencies", [])), set(new.pop("dependencies", []))
