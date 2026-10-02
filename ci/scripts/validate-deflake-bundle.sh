@@ -192,6 +192,9 @@ if grep -q $'^-\t-\t' <<<"$numstat"; then
 fi
 changed="$(awk '{n += $1 + $2} END {print n + 0}' <<<"$numstat")"
 [ "$changed" -le 1000 ] || die "the fix changes $changed lines"
+# Lines can be arbitrarily long.
+bytes="$(git diff --no-renames "$BASE_SHA" "$fix" | wc -c)"
+[ "$bytes" -le 1000000 ] || die "the diff of the fix has $bytes bytes"
 
 author='claude[bot]'
 email='209825114+claude[bot]@users.noreply.github.com'
