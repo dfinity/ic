@@ -74,8 +74,11 @@ jobs:
           done
           [[ "$SLUG" =~ ^[A-Za-z0-9._-]+$ ]]
           [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '"\(.path) \(.head_branch) \(.head_repository.full_name) \(.event)"')"
-          [[ "$run" =~ ^\.github/workflows/schedule-fix-flaky-tests\.yml\ master\ $GITHUB_REPOSITORY\ (schedule|workflow_dispatch)$ ]]
+          run="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '"\(.path) \(.head_branch) \(.head_repository.full_name) \(.event) \(.created_at)"')"
+          [[ "$run" =~ ^\.github/workflows/schedule-fix-flaky-tests\.yml\ master\ $GITHUB_REPOSITORY\ (schedule|workflow_dispatch)\ ([0-9]{4}-[0-9]{2}-[0-9]{2})T ]]
+          # The date of the run that fixed the test names the branch, so that dispatching this again on a later
+          # day still finds the branch and PR of an earlier attempt.
+          echo "RUN_DATE=${BASH_REMATCH[2]}" >> "$GITHUB_ENV"
           status="$(gh api "repos/$GITHUB_REPOSITORY/compare/$BASE_SHA...master" --jq .status)"
           [[ "$status" == identical || "$status" == ahead ]]
 

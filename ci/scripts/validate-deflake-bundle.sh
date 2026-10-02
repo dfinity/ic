@@ -2,8 +2,8 @@
 # Validates the fix that .github/workflows/fix-flaky-test.yml bundled in $RUNNER_TEMP/deflake and
 # prepares its PR for ci/scripts/open-deflake-pr.sh: the fix is squashed into one commit on top of
 # $BASE_SHA and only its tree and PR body come from the bundle. The branch, title and labels are
-# derived from the trusted $SLUG, $LABEL and $LABELS. Exports BRANCH, NEW, TITLE and BODY_FILE to
-# $GITHUB_ENV.
+# derived from the trusted $SLUG, $RUN_DATE, $LABEL and $LABELS. Exports BRANCH, NEW, TITLE and
+# BODY_FILE to $GITHUB_ENV.
 
 set -euo pipefail
 
@@ -217,7 +217,7 @@ body_file="$RUNNER_TEMP/pr-body.md"
 } >"$body_file"
 
 {
-    echo "BRANCH=ai/deflake-$SLUG-$(date -u +%F)"
+    echo "BRANCH=ai/deflake-$SLUG-$RUN_DATE"
     echo "NEW=$new"
     echo "TITLE=$title"
     echo "BODY_FILE=$body_file"
