@@ -1042,7 +1042,8 @@ fn refill_stream_slice_indices_byte_limits_empty_pool() {
                 .collect(),
         );
 
-        let byte_limits = refill_stream_slice_indices(Arc::clone(&pool), OWN_SUBNET)
+        let byte_limits = refill_stream_slice_indices(&pool.lock().unwrap(), OWN_SUBNET)
+            .into_iter()
             .map(|(_, indices)| indices.byte_limit)
             .collect::<Vec<_>>();
 
@@ -1089,7 +1090,8 @@ fn refill_stream_slice_indices_byte_limits_non_empty_pool() {
         );
         let pooled_byte_size = pool.lock().unwrap().byte_size();
 
-        let byte_limits = refill_stream_slice_indices(Arc::clone(&pool), OWN_SUBNET)
+        let byte_limits = refill_stream_slice_indices(&pool.lock().unwrap(), OWN_SUBNET)
+            .into_iter()
             .map(|(_, indices)| indices.byte_limit)
             .collect::<Vec<_>>();
 
