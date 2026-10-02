@@ -242,6 +242,10 @@ A dedicated background thread handles checkpoint operations, manifest computatio
 - **AND** the result is stored in states metadata
 - **AND** metadata is persisted to disk
 
+#### Scenario: Checkpoint deleted before its manifest is published
+- **WHEN** the checkpoint a manifest was computed for is deleted before that manifest is published (e.g. it was superseded)
+- **THEN** publishing is skipped rather than crashing
+
 #### Scenario: Validating replicated state
 - **WHEN** a `ValidateReplicatedStateAndFinalize` request is sent
 - **THEN** the checkpoint is loaded and compared against the reference in-memory state
