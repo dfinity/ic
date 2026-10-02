@@ -426,7 +426,7 @@ pub enum CupType {
     Genesis,
     /// A CUP used to recover a subnet.
     Recovery(RecoveryArgs),
-    /// A CUP used indicate a subnet to split into two.
+    /// A CUP used to indicate a subnet to split into two.
     SubnetSplitting(SubnetSplittingArgs),
 }
 
