@@ -79,6 +79,14 @@ impl Setup {
             .unwrap()
     }
 
+    fn remaining_capacity(&self) -> u64 {
+        let res = self
+            .state_machine
+            .query(self.archive_id, "remaining_capacity", Encode!().unwrap())
+            .unwrap();
+        Decode!(&res.bytes(), u64).unwrap()
+    }
+
     fn icrc3_get_blocks(&self, arg: Vec<GetBlocksRequest>) -> GetBlocksResult {
         let payload = Encode!(&arg).unwrap();
         let res = self
@@ -87,12 +95,45 @@ impl Setup {
             .unwrap();
         Decode!(&res.bytes(), GetBlocksResult).unwrap()
     }
+
+    fn log_length(&self) -> u64 {
+        self.icrc3_get_blocks(vec![GetBlocksRequest {
+            start: Nat::from(0_u64),
+            length: Nat::from(0_u64),
+        }])
+        .log_length
+        .0
+        .try_into()
+        .unwrap()
+    }
 }
 
 impl Default for Setup {
     fn default() -> Self {
         Self::new(&Principal::anonymous(), &0_u64, &None, &None)
     }
+}
+
+/// An empty `append_blocks` must be accepted, store nothing, consume no capacity
+/// and reply with the empty tuple the ledger decodes today. The archive
+/// chain-continuity design keeps `append_blocks` with exactly this behaviour next
+/// to the new `append_blocks_at`, so this pins the legacy half of that contract.
+#[test]
+fn test_empty_append_blocks_is_accepted_and_stores_nothing() {
+    let setup = Setup::default();
+
+    let capacity_before = setup.remaining_capacity();
+
+    let reply = setup.append_blocks(vec![]);
+    assert_eq!(setup.log_length(), 0, "an empty append must store nothing");
+    assert_eq!(
+        setup.remaining_capacity(),
+        capacity_before,
+        "an empty append must not consume capacity"
+    );
+    // The reply is what the ledger decodes: an empty tuple, nothing more.
+    candid::decode_args::<()>(&reply.bytes())
+        .expect("an empty append must reply with an empty tuple");
 }
 
 #[test]
