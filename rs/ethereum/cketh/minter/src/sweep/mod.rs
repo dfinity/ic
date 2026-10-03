@@ -5,9 +5,9 @@
 //! It drives the sweeper [`TransactionPipeline`] through the same
 //! create → sign → send → resubmit → finalize state machine as user withdrawals
 //! ([`crate::withdraw`]), reusing that module's sender-agnostic RPC helpers
-//! (`latest_transaction_count`, `finalized_transaction_count`, `send_signed_transactions`,
-//! `fetch_finalized_receipts`), but signing with the sweeper derivation path (`[3]`) and reading
-//! the sweeper address' own transaction count.
+//! (`latest_transaction_count`, `send_signed_transactions`, `fetch_receipts_for_round`), but
+//! signing with the sweeper derivation path (`[3]`) and reading the sweeper address' own
+//! transaction count.
 
 #[cfg(test)]
 mod tests;
@@ -40,10 +40,7 @@ use crate::{
     },
     time::TimeProvider,
     tx::{AuthorizationRequest, GasFeeEstimate, lazy_refresh_gas_fee_estimate, sign_digest},
-    withdraw::{
-        fetch_finalized_receipts, finalized_transaction_count, latest_transaction_count,
-        send_signed_transactions,
-    },
+    withdraw::{fetch_receipts_for_round, latest_transaction_count, send_signed_transactions},
 };
 use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
 use futures::future::join_all;
@@ -561,36 +558,26 @@ async fn send_transactions_batch(
     send_signed_transactions(sender, &transactions_to_send).await;
 }
 
-async fn finalize_transactions_batch<T: TimeProvider>(sender: Address, time_provider: &T) {
+async fn finalize_transactions_batch<R: CanisterRuntime>(sender: Address, runtime: &R) {
     if read_state(|s| s.automatic_deposits.is_sent_sweep_tx_empty()) {
         return;
     }
-    match finalized_transaction_count(sender).await {
-        Ok(finalized_tx_count) => {
-            let txs_to_finalize = read_state(|s| {
-                s.automatic_deposits
-                    .sent_sweep_transactions_to_finalize(&finalized_tx_count)
-            });
-            if let Some(receipts) = fetch_finalized_receipts(txs_to_finalize).await {
-                for (sweep_id, transaction_receipt) in receipts {
-                    mutate_state(|s| {
-                        process_event(
-                            s,
-                            EventType::FinalizedSweeperTransaction {
-                                sweep_id,
-                                transaction_receipt: transaction_receipt.into(),
-                            },
-                            time_provider,
-                        );
-                    });
-                }
-            }
-        }
-        Err(e) => {
-            log!(
-                INFO,
-                "[process_sweeper_transactions]: failed to get finalized transaction count: {e:?}"
+
+    let receipts = fetch_receipts_for_round(sender, runtime, |s| {
+        s.automatic_deposits.sweeper_pipeline_mut()
+    })
+    .await;
+
+    for (sweep_id, transaction_receipt) in receipts {
+        mutate_state(|s| {
+            process_event(
+                s,
+                EventType::FinalizedSweeperTransaction {
+                    sweep_id,
+                    transaction_receipt: transaction_receipt.into(),
+                },
+                runtime,
             );
-        }
+        });
     }
 }
