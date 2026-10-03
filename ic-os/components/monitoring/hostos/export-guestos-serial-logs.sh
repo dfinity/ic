@@ -5,6 +5,7 @@ set -euo pipefail
 # Strip ANSI color/escape codes from serial console output before forwarding to journald
 
 source /opt/ic/bin/config.sh
+source /opt/ic/bin/logging.sh
 
 node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
 
@@ -26,7 +27,7 @@ for i in $(seq 0 "$((COUNT - 1))"); do
         s=$i
     fi
 
-    tail -F "/var/log/libvirt/qemu/guestos-serial$s.log" | sed --unbuffered 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\[[0-9]\+;[0-9;]*m//g' | systemd-cat -t "guestos-serial$s" -p info &
+    tail -F "/var/log/libvirt/qemu/guestos-serial$s.log" | sanitize_output | systemd-cat -t "guestos-serial$s" -p info &
 done
 
 # And the upgrade VMs
@@ -38,7 +39,7 @@ for i in $(seq 0 "$((COUNT - 1))"); do
         s=$i
     fi
 
-    tail -F "/var/log/libvirt/qemu/upgrade-guestos-serial$s.log" | sed --unbuffered 's/\x1b\[[0-9;]*[a-zA-Z]//g; s/\[[0-9]\+;[0-9;]*m//g' | systemd-cat -t "upgrade-guestos-serial$s" -p info &
+    tail -F "/var/log/libvirt/qemu/upgrade-guestos-serial$s.log" | sanitize_output | systemd-cat -t "upgrade-guestos-serial$s" -p info &
 done
 
 wait
