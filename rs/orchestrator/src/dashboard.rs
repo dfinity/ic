@@ -1,6 +1,6 @@
 use crate::{
     catch_up_package_provider::LocalCUPReader, orchestrator::SubnetAssignment,
-    processes::MultipleProcessesManager, registry_helper::RegistryHelper,
+    process_manager::ProcessObserver, registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessParameters,
 };
 pub use ic_dashboard::Dashboard;
@@ -24,7 +24,7 @@ pub(crate) struct OrchestratorDashboard {
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
     last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
     last_poll_certified_time: Arc<RwLock<Time>>,
-    processes_manager: Arc<RwLock<MultipleProcessesManager>>,
+    processes: Vec<Arc<dyn ProcessObserver>>,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     platform_version: PlatformVersion,
     hostos_version: Option<HostosVersion>,
@@ -44,8 +44,7 @@ impl Dashboard for OrchestratorDashboard {
              last registry version: {}\n\
              last poll's certified time: {}\n\
              subnet id: {}\n\
-             replica process id: {}\n\
-             ic-gateway process id: {}\n\
+             {}\n\
              replica version: {}\n\
              guest os version: {}\n\
              host os version: {}\n\
@@ -62,8 +61,7 @@ impl Dashboard for OrchestratorDashboard {
             self.registry.get_latest_version().get(),
             self.get_last_poll_certified_time(),
             self.get_subnet_id(),
-            self.get_replica_pid(),
-            self.get_ic_gateway_pid(),
+            self.display_process_ids(),
             self.platform_version.replica_version,
             self.platform_version.guestos_version,
             self.hostos_version
@@ -94,7 +92,7 @@ impl OrchestratorDashboard {
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
         last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
         last_poll_certified_time: Arc<RwLock<Time>>,
-        processes_manager: Arc<RwLock<MultipleProcessesManager>>,
+        processes: Vec<Arc<dyn ProcessObserver>>,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         platform_version: PlatformVersion,
         hostos_version: Option<HostosVersion>,
@@ -108,7 +106,7 @@ impl OrchestratorDashboard {
             last_applied_firewall_version,
             last_applied_ipv4_config_version,
             last_poll_certified_time,
-            processes_manager,
+            processes,
             subnet_assignment,
             platform_version,
             hostos_version,
@@ -138,18 +136,18 @@ impl OrchestratorDashboard {
         )
     }
 
-    fn get_replica_pid(&self) -> String {
-        match self.processes_manager.read().unwrap().get_replica_pid() {
-            Some(pid) => pid.to_string(),
-            None => "None".to_string(),
-        }
-    }
-
-    fn get_ic_gateway_pid(&self) -> String {
-        match self.processes_manager.read().unwrap().get_ic_gateway_pid() {
-            Some(pid) => pid.to_string(),
-            None => "None".to_string(),
-        }
+    fn display_process_ids(&self) -> String {
+        self.processes
+            .iter()
+            .map(|process| {
+                let pid = match process.get_pid() {
+                    Some(pid) => pid.to_string(),
+                    None => "None".to_string(),
+                };
+                format!("{} process id: {}", process.name(), pid)
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     fn get_subnet_id(&self) -> String {

@@ -1,14 +1,18 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,
-    process_manager::{Process, ProcessRunner, SingleProcessRunner},
+    process_manager::{
+        Process, ProcessObserver, ProcessRunner, RestartDecision, SingleProcessRunner,
+    },
     registry_helper::RegistryHelper,
 };
 use ic_config::crypto::CryptoConfig;
 use ic_logger::{ReplicaLogger, info};
 use ic_protobuf::registry::subnet::v1::SubnetType;
-use ic_types::{PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId};
-use nix::unistd::Pid;
+use ic_types::{
+    Height, PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId,
+    consensus::{CatchUpPackage, HasHeight},
+};
 use std::{collections::HashMap, ffi::OsString, path::PathBuf, sync::Arc};
 
 // ---------------------------------------------------------------------------
@@ -22,31 +26,71 @@ pub(crate) struct ReplicaProcessConfig {
     pub replica_config_file: PathBuf,
 }
 
+/// Dynamic arguments of the replica.
+pub(crate) struct ReplicaArgs<'a> {
+    pub platform_version: PlatformVersion,
+    pub subnet_id: SubnetId,
+    /// The latest CUP, which a newly started replica picks up.
+    pub cup: &'a CatchUpPackage,
+}
+
 pub(crate) struct ReplicaProcess {
     ic_binary_dir: PathBuf,
     platform_version: PlatformVersion,
     cup_path: PathBuf,
     replica_config_file: PathBuf,
     subnet_id: SubnetId,
+    /// Height of the CUP the replica was started with.
+    cup_height: Height,
 }
 
 impl Process for ReplicaProcess {
     const NAME: &'static str = "replica";
     type Version = ReplicaVersion;
     type Config = ReplicaProcessConfig;
-    type Args = (PlatformVersion, SubnetId);
+    type Args<'a> = ReplicaArgs<'a>;
 
-    fn build(
-        config: &Self::Config,
-        (platform_version, subnet_id): Self::Args,
-    ) -> OrchestratorResult<Self> {
+    fn build(config: &Self::Config, args: Self::Args<'_>) -> OrchestratorResult<Self> {
         Ok(Self {
             ic_binary_dir: config.ic_binary_dir.clone(),
-            platform_version,
+            platform_version: args.platform_version,
             cup_path: config.cup_path.clone(),
             replica_config_file: config.replica_config_file.clone(),
-            subnet_id,
+            subnet_id: args.subnet_id,
+            cup_height: args.cup.height(),
         })
+    }
+
+    /// The replica must be restarted:
+    /// - if the subnet ID changed, which happens on destination nodes of a subnet split, because
+    ///   the subnet ID is passed as a CLI argument and kept constant throughout the lifetime of the
+    ///   replica;
+    /// - if the latest CUP is an unsigned (i.e. recovery) CUP higher than the CUP the replica was
+    ///   started with, because consensus would reject the unsigned artifact.
+    fn restart_decision(&self, args: &Self::Args<'_>) -> RestartDecision {
+        let mut reasons = vec![];
+
+        if args.subnet_id != self.subnet_id {
+            reasons.push(format!(
+                "Subnet ID changed from {} to {}, evidence of a destination node of a subnet split",
+                self.subnet_id, args.subnet_id
+            ));
+        }
+        if !args.cup.is_signed() && args.cup.height() > self.cup_height {
+            reasons.push(format!(
+                "Found higher unsigned CUP (height {} > {}), evidence of a subnet recovery",
+                args.cup.height(),
+                self.cup_height
+            ));
+        }
+
+        if reasons.is_empty() {
+            RestartDecision::KeepRunning
+        } else {
+            RestartDecision::Restart {
+                reason: reasons.join("; "),
+            }
+        }
     }
 
     fn get_version(&self) -> &Self::Version {
@@ -93,15 +137,23 @@ pub(crate) struct IcBoundaryProcess {
     env: HashMap<OsString, OsString>,
 }
 
+impl IcBoundaryProcess {
+    // Used in tests to assert which domain ic-boundary was started with.
+    #[cfg(test)]
+    pub(crate) fn domain_name(&self) -> &str {
+        &self.domain_name
+    }
+}
+
 impl Process for IcBoundaryProcess {
     const NAME: &'static str = "ic-boundary";
     type Version = ReplicaVersion;
     type Config = IcBoundaryProcessConfig;
-    type Args = (ReplicaVersion, String);
+    type Args<'a> = (ReplicaVersion, String);
 
     fn build(
         config: &Self::Config,
-        (replica_version, domain_name): Self::Args,
+        (replica_version, domain_name): Self::Args<'_>,
     ) -> OrchestratorResult<Self> {
         let env = match crate::env_file::read_file(&config.ic_boundary_env_file) {
             Ok(env) => env
@@ -125,6 +177,20 @@ impl Process for IcBoundaryProcess {
             crypto_config,
             env,
         })
+    }
+
+    /// ic-boundary must be restarted if the node's domain name changed.
+    fn restart_decision(&self, (_, domain_name): &Self::Args<'_>) -> RestartDecision {
+        if *domain_name != self.domain_name {
+            RestartDecision::Restart {
+                reason: format!(
+                    "Domain name changed from {} to {}",
+                    self.domain_name, domain_name
+                ),
+            }
+        } else {
+            RestartDecision::KeepRunning
+        }
     }
 
     fn get_version(&self) -> &Self::Version {
@@ -166,9 +232,9 @@ impl Process for IcGatewayProcess {
     const NAME: &'static str = "ic-gateway";
     type Version = ReplicaVersion;
     type Config = IcGatewayProcessConfig;
-    type Args = ReplicaVersion;
+    type Args<'a> = ReplicaVersion;
 
-    fn build(config: &Self::Config, replica_version: Self::Args) -> OrchestratorResult<Self> {
+    fn build(config: &Self::Config, replica_version: Self::Args<'_>) -> OrchestratorResult<Self> {
         let env = match crate::env_file::read_file(&config.ic_gateway_env_file) {
             Ok(env) => env
                 .into_iter()
@@ -189,6 +255,10 @@ impl Process for IcGatewayProcess {
         })
     }
 
+    fn restart_decision(&self, _args: &Self::Args<'_>) -> RestartDecision {
+        RestartDecision::KeepRunning
+    }
+
     fn get_version(&self) -> &Self::Version {
         &self.replica_version
     }
@@ -207,22 +277,23 @@ impl Process for IcGatewayProcess {
 // ProcessManager<P>
 //
 // This struct offers common boilerplate functionality logic to ensure a process
-// is running and to stop it, converting errors to [`OrchestratorError`], logging
-// them, and updating metrics.
+// is running (restarting it if required by the process' `restart_decision`) and
+// to stop it, converting errors to [`OrchestratorError`], logging them, and
+// updating metrics.
 // ---------------------------------------------------------------------------
 
 pub(crate) struct ProcessManager<P: Process> {
-    process_runner: Box<dyn ProcessRunner<P> + Sync>,
+    process_runner: Box<dyn ProcessRunner<P>>,
     process_config: P::Config,
     metrics: Arc<OrchestratorMetrics>,
     logger: ReplicaLogger,
 }
 
-impl<P: Process + Send + Sync + 'static> ProcessManager<P> {
+impl<P: Process> ProcessManager<P> {
     /// Used in tests to inject a mock ProcessRunner.
     #[cfg(test)]
     pub(crate) fn new_for_test(
-        process_runner: Box<dyn ProcessRunner<P> + Sync>,
+        process_runner: Box<dyn ProcessRunner<P>>,
         process_config: P::Config,
         metrics: Arc<OrchestratorMetrics>,
         logger: ReplicaLogger,
@@ -249,9 +320,19 @@ impl<P: Process + Send + Sync + 'static> ProcessManager<P> {
         }
     }
 
-    pub(crate) fn ensure_running(&mut self, args: P::Args) -> OrchestratorResult<()> {
-        if self.process_runner.is_running() {
-            return Ok(());
+    /// Ensures that a process is running with the given arguments: starts one if none is
+    /// running, or restarts the running one if its [`Process::restart_decision`] requires it.
+    pub(crate) fn ensure_running(&mut self, args: P::Args<'_>) -> OrchestratorResult<()> {
+        if let Some(process) = self.process_runner.get_process() {
+            match process.restart_decision(&args) {
+                RestartDecision::KeepRunning => return Ok(()), // Nothing to do.
+                RestartDecision::Restart { reason } => {
+                    info!(self.logger, "Restarting {} process: {}", P::NAME, reason);
+                    self.stop()?;
+
+                    // Fall through to start a new process with the new arguments.
+                }
+            }
         }
 
         let process = P::build(&self.process_config, args)?;
@@ -285,87 +366,10 @@ impl<P: Process + Send + Sync + 'static> ProcessManager<P> {
             )
         })
     }
-}
 
-// ---------------------------------------------------------------------------
-// IcBoundaryManager
-//
-// Wrapper around ProcessManager<IcBoundaryProcess> which contains additional
-// logic to stop and restart the process when the node's domain name changes
-// in the registry.
-// ---------------------------------------------------------------------------
-
-pub(crate) struct IcBoundaryManager {
-    inner: ProcessManager<IcBoundaryProcess>,
-    registry: Arc<RegistryHelper>,
-    current_domain_name: Option<String>,
-}
-
-impl IcBoundaryManager {
-    pub(crate) fn new(
-        config: <IcBoundaryProcess as Process>::Config,
-        registry: Arc<RegistryHelper>,
-        metrics: Arc<OrchestratorMetrics>,
-        logger: ReplicaLogger,
-    ) -> Self {
-        let inner = ProcessManager::new(config, metrics, logger);
-        Self {
-            inner,
-            registry,
-            current_domain_name: None,
-        }
-    }
-
-    // Used in tests to inject a mock ProcessManager.
-    #[cfg(test)]
-    pub(crate) fn new_for_test(
-        inner: ProcessManager<IcBoundaryProcess>,
-        registry: Arc<RegistryHelper>,
-    ) -> Self {
-        Self {
-            inner,
-            registry,
-            current_domain_name: None,
-        }
-    }
-
-    pub(crate) fn ensure_ic_boundary_running_and_restarted_on_domain_change(
-        &mut self,
-        replica_version: ReplicaVersion,
-        registry_version: RegistryVersion,
-    ) -> OrchestratorResult<()> {
-        let domain_name = match self.registry.get_node_domain_name(registry_version) {
-            Ok(domain_name) => domain_name,
-            Err(err @ OrchestratorError::DomainNameMissingError(_, _)) => {
-                // ic-boundary should not start when the node doesn't have a domain name
-                self.inner.stop()?;
-
-                // Only clear the current domain name if we successfully stopped ic-boundary, so
-                // that we correctly detect we should first retry to stop it in case we get a new
-                // domain name in a next call.
-                self.current_domain_name = None;
-                return Err(err);
-            }
-            Err(err) => return Err(err),
-        };
-
-        // stop ic-boundary when the domain name changes and start it again.
-        if Some(&domain_name) != self.current_domain_name.as_ref() {
-            self.inner.stop()?;
-        }
-
-        // make sure ic-boundary is running
-        self.inner
-            .ensure_running((replica_version, domain_name.clone()))?;
-
-        // Only update the current domain name if we performed the operations above successfully,
-        // so that we can retry on the next call if not.
-        self.current_domain_name = Some(domain_name);
-        Ok(())
-    }
-
-    pub(crate) fn stop(&mut self) -> OrchestratorResult<()> {
-        self.inner.stop()
+    /// Returns a read-only view of the managed process
+    pub(crate) fn observer(&self) -> Arc<dyn ProcessObserver> {
+        self.process_runner.observer()
     }
 }
 
@@ -441,12 +445,12 @@ impl MultipleProcessesManager {
         self.ic_gateway_manager.process_runner.is_running()
     }
 
-    pub(crate) fn get_replica_pid(&self) -> Option<Pid> {
-        self.replica_manager.process_runner.get_pid()
-    }
-
-    pub(crate) fn get_ic_gateway_pid(&self) -> Option<Pid> {
-        self.ic_gateway_manager.process_runner.get_pid()
+    /// Returns read-only views of all managed processes.
+    pub(crate) fn observers(&self) -> Vec<Arc<dyn ProcessObserver>> {
+        vec![
+            self.replica_manager.observer(),
+            self.ic_gateway_manager.observer(),
+        ]
     }
 
     /// Start all processes appropriate for this node.
@@ -458,13 +462,15 @@ impl MultipleProcessesManager {
         &mut self,
         platform_version: PlatformVersion,
         subnet_id: SubnetId,
+        cup: &CatchUpPackage,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
         let mut result = Ok(());
-        result = result.and(
-            self.replica_manager
-                .ensure_running((platform_version.clone(), subnet_id)),
-        );
+        result = result.and(self.replica_manager.ensure_running(ReplicaArgs {
+            platform_version: platform_version.clone(),
+            subnet_id,
+            cup,
+        }));
 
         // Cloud-engine nodes run ic-gateway as a sidecar, but only once the
         // launch is enabled (see `IC_GATEWAY_LAUNCH_ENABLED`). Until then,
@@ -490,12 +496,7 @@ impl MultipleProcessesManager {
         result
     }
 
-    /// Stop the replica process.
-    pub(crate) fn stop_replica(&mut self) -> OrchestratorResult<()> {
-        self.replica_manager.stop()
-    }
-
-    /// Stop every managed process in reverse order of startup
+    /// Stop every managed process in reverse order of startup, waiting for each to exit.
     /// If a process fails to stop, continue stopping the others and return the first error.
     pub(crate) fn stop_all(&mut self) -> OrchestratorResult<()> {
         let mut result = Ok(());
@@ -511,213 +512,98 @@ impl MultipleProcessesManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use assert_matches::assert_matches;
+    use crate::process_manager::fake::{FakeProcessRunner, FakeRunnerLog};
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_registry_client_fake::FakeRegistryClient;
-    use ic_registry_client_helpers::node_operator::NodeRecord;
-    use ic_registry_keys::make_node_record_key;
-    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities_types::ids::NODE_1;
-    use std::{path::Path, sync::Mutex};
-    use tempfile::tempdir;
+    use ic_test_utilities_consensus::{fake::Fake, make_genesis};
+    use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2};
+    use ic_types::{
+        consensus::dkg::DkgSummary,
+        crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
+    };
+    use std::sync::Mutex;
 
-    const REPLICA_VERSION: &str = "replica_version_0.1";
-
-    /// Counters recorded by [`RecordingRunner`], so tests can assert whether
-    /// (and how often) the managed process was started/stopped.
-    #[derive(Default)]
-    struct RunnerLog {
-        running: bool,
-        starts: usize,
-        stops: usize,
+    fn make_cup(height: u64, signed: bool) -> CatchUpPackage {
+        let mut summary = DkgSummary::fake();
+        summary.height = Height::from(height);
+        let mut cup = make_genesis(summary);
+        if signed {
+            cup.signature.signature = CombinedThresholdSigOf::new(CombinedThresholdSig(vec![1]));
+        }
+        cup
     }
 
-    /// A `ProcessRunner` fake that records start/stop calls instead of spawning.
-    struct RecordingRunner {
-        log: Arc<Mutex<RunnerLog>>,
-    }
-
-    impl<P: Process> ProcessRunner<P> for RecordingRunner {
-        fn start(&mut self, _process: P) -> std::io::Result<()> {
-            let mut log = self.log.lock().unwrap();
-            log.running = true;
-            log.starts += 1;
-            Ok(())
-        }
-
-        fn stop(&mut self) -> std::io::Result<()> {
-            let mut log = self.log.lock().unwrap();
-            log.running = false;
-            log.stops += 1;
-            Ok(())
-        }
-
-        fn is_running(&self) -> bool {
-            self.log.lock().unwrap().running
-        }
-
-        fn get_pid(&self) -> Option<Pid> {
-            self.log
-                .lock()
-                .unwrap()
-                .running
-                .then_some(Pid::from_raw(12345))
+    fn platform_version() -> PlatformVersion {
+        PlatformVersion {
+            guestos_version: ReplicaVersion::try_from("guestos_version").unwrap(),
+            replica_version: ReplicaVersion::try_from("replica_version").unwrap(),
         }
     }
 
-    /// Builds a registry whose node record for `NODE_1` carries the given domain
-    /// at each listed registry version (`None` means "no domain").
-    fn registry_with_node_domains(domains: &[(u64, Option<&str>)]) -> Arc<RegistryHelper> {
-        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        for &(version, domain) in domains {
-            data_provider
-                .add(
-                    &make_node_record_key(NODE_1),
-                    RegistryVersion::from(version),
-                    Some(NodeRecord {
-                        domain: domain.map(str::to_string),
-                        ..Default::default()
-                    }),
-                )
-                .unwrap();
-        }
-        let registry_client = Arc::new(FakeRegistryClient::new(data_provider));
-        registry_client.update_to_latest_version();
-        Arc::new(RegistryHelper::new(NODE_1, registry_client, no_op_logger()))
-    }
-
-    /// Builds an [`IcBoundaryManager`] backed by a [`RecordingRunner`], returning
-    /// the manager and a handle to the runner's log.
-    fn ic_boundary_manager_for_test(
-        registry: Arc<RegistryHelper>,
-        dir: &Path,
-    ) -> (IcBoundaryManager, Arc<Mutex<RunnerLog>>) {
-        let log = Arc::new(Mutex::new(RunnerLog::default()));
-        let runner = Box::new(RecordingRunner { log: log.clone() });
-        let env_file = dir.join("ic-boundary.env");
-        std::fs::write(&env_file, b"TEST_KEY=TEST_VALUE").unwrap();
-        let config = IcBoundaryProcessConfig {
-            ic_binary_dir: dir.to_path_buf(),
-            ic_boundary_env_file: env_file,
-            crypto_config: CryptoConfig::default(),
+    fn replica_manager_for_test() -> (
+        ProcessManager<ReplicaProcess>,
+        Arc<Mutex<FakeRunnerLog<ReplicaProcess>>>,
+    ) {
+        let runner = FakeProcessRunner::new();
+        let log = runner.log();
+        let config = ReplicaProcessConfig {
+            ic_binary_dir: PathBuf::from("/ic_binary"),
+            cup_path: PathBuf::from("/cup"),
+            replica_config_file: PathBuf::from("/ic.json5"),
         };
-        let inner = ProcessManager::new_for_test(
-            runner,
+        let manager = ProcessManager::new_for_test(
+            Box::new(runner),
             config,
             Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new())),
             no_op_logger(),
         );
-        let manager = IcBoundaryManager::new_for_test(inner, registry);
         (manager, log)
     }
 
-    fn ensure(manager: &mut IcBoundaryManager, registry_version: u64) -> OrchestratorResult<()> {
-        manager.ensure_ic_boundary_running_and_restarted_on_domain_change(
-            ReplicaVersion::try_from(REPLICA_VERSION).unwrap(),
-            RegistryVersion::from(registry_version),
-        )
+    #[test]
+    fn replica_restarted_only_when_needed() {
+        let (mut manager, log) = replica_manager_for_test();
+        let mut ensure = |subnet_id, cup: &CatchUpPackage| {
+            manager
+                .ensure_running(ReplicaArgs {
+                    platform_version: platform_version(),
+                    subnet_id,
+                    cup,
+                })
+                .unwrap();
+            let log = log.lock().unwrap();
+            (log.starts, log.stops)
+        };
+
+        // Not running yet: started.
+        assert_eq!(ensure(SUBNET_1, &make_cup(10, true)), (1, 0));
+        // Higher signed CUP: regular progress, keep running.
+        assert_eq!(ensure(SUBNET_1, &make_cup(20, true)), (1, 0));
+        // Higher unsigned CUP than the one it was started with: subnet recovery, restarted.
+        assert_eq!(ensure(SUBNET_1, &make_cup(30, false)), (2, 1));
+        // Same unsigned CUP as the one it was started with: keep running.
+        assert_eq!(ensure(SUBNET_1, &make_cup(30, false)), (2, 1));
+        // Different subnet ID: subnet split, restarted.
+        assert_eq!(ensure(SUBNET_2, &make_cup(40, true)), (3, 2));
+        assert_eq!(ensure(SUBNET_2, &make_cup(40, true)), (3, 2));
     }
 
     #[test]
-    fn ic_boundary_not_started_when_node_has_no_domain() {
-        let dir = tempdir().unwrap();
-        let registry = registry_with_node_domains(&[(1, None)]);
-        let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
+    fn replica_started_again_after_crash() {
+        let (mut manager, log) = replica_manager_for_test();
+        let cup = make_cup(10, true);
+        let args = || ReplicaArgs {
+            platform_version: platform_version(),
+            subnet_id: SUBNET_1,
+            cup: &cup,
+        };
 
-        assert_matches!(
-            ensure(&mut manager, 1),
-            Err(OrchestratorError::DomainNameMissingError(_, _))
-        );
-
-        let log = log.lock().unwrap();
-        assert!(!log.running);
-        assert_eq!(log.starts, 0);
-        assert_eq!(log.stops, 0);
-        assert_eq!(manager.current_domain_name, None);
-    }
-
-    #[test]
-    fn ic_boundary_starts_when_node_has_domain() {
-        let dir = tempdir().unwrap();
-        let registry = registry_with_node_domains(&[(1, Some("api1.example.com"))]);
-        let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
-
-        ensure(&mut manager, 1).expect("ic-boundary should have started successfully");
+        manager.ensure_running(args()).unwrap();
+        // Simulate the replica exiting on its own.
+        log.lock().unwrap().process = None;
+        manager.ensure_running(args()).unwrap();
 
         let log = log.lock().unwrap();
-        assert!(log.running);
-        assert_eq!(log.starts, 1);
-        assert_eq!(log.stops, 0);
-        assert_eq!(
-            manager.current_domain_name.as_deref(),
-            Some("api1.example.com")
-        );
-    }
-
-    #[test]
-    fn ic_boundary_not_restarted_when_domain_unchanged() {
-        let dir = tempdir().unwrap();
-        let registry = registry_with_node_domains(&[(1, Some("api1.example.com"))]);
-        let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
-
-        ensure(&mut manager, 1).expect("ic-boundary should have started successfully");
-        ensure(&mut manager, 1).expect("ic-boundary should have started successfully");
-
-        let log = log.lock().unwrap();
-        assert!(log.running);
-        // Started once on the first call; the second call must not restart it.
-        assert_eq!(log.starts, 1);
-        assert_eq!(log.stops, 0);
-        assert_eq!(
-            manager.current_domain_name.as_deref(),
-            Some("api1.example.com")
-        );
-    }
-
-    #[test]
-    fn ic_boundary_restarted_when_domain_changes() {
-        let dir = tempdir().unwrap();
-        let registry = registry_with_node_domains(&[
-            (1, Some("api1.example.com")),
-            (2, Some("api2.example.com")),
-        ]);
-        let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
-
-        ensure(&mut manager, 1).expect("ic-boundary should have started successfully");
-        ensure(&mut manager, 2).expect("ic-boundary should have started successfully");
-
-        let log = log.lock().unwrap();
-        assert!(log.running);
-        // Restart on domain change: stopped once, started twice.
-        assert_eq!(log.starts, 2);
-        assert_eq!(log.stops, 1);
-        assert_eq!(
-            manager.current_domain_name.as_deref(),
-            Some("api2.example.com")
-        );
-    }
-
-    #[test]
-    fn ic_boundary_stopped_when_domain_is_deleted() {
-        let dir = tempdir().unwrap();
-        let registry = registry_with_node_domains(&[(1, Some("api1.example.com")), (2, None)]);
-        let (mut manager, log) = ic_boundary_manager_for_test(registry, dir.path());
-
-        // Running with a domain ...
-        ensure(&mut manager, 1).expect("ic-boundary should have started successfully");
-        assert!(log.lock().unwrap().running);
-
-        // ... then the domain is removed: ic-boundary must be stopped.
-        assert_matches!(
-            ensure(&mut manager, 2),
-            Err(OrchestratorError::DomainNameMissingError(_, _))
-        );
-
-        let log = log.lock().unwrap();
-        assert!(!log.running);
-        assert_eq!(log.starts, 1);
-        assert_eq!(log.stops, 1);
-        assert_eq!(manager.current_domain_name, None);
+        assert_eq!((log.starts, log.stops), (2, 0));
     }
 }
