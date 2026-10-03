@@ -91,6 +91,9 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
     # Optional path to a hidden_endpoints.conf for `ic-wasm check-endpoints`.
     hidden_endpoints = kwargs.pop("hidden_endpoints", None)
 
+    # See finalize_wasm.
+    max_compression = kwargs.pop("max_compression", False)
+
     # Sanity checking (no '.' in name)
     if name.count(".") > 0:
         fail("name '{}' should not include dots".format(name))
@@ -130,6 +133,7 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
         visibility = visibility,
         testonly = testonly,
         keep_name_section = keep_name_section,
+        max_compression = max_compression,
     )
 
     if hidden_endpoints != None:
@@ -194,13 +198,20 @@ def motoko_canister(name, entry, deps, **kwargs):
         actual = final_name,
     )
 
-def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly, visibility = ["//visibility:public"], keep_name_section = False):
+def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly, visibility = ["//visibility:public"], keep_name_section = False, max_compression = False):
     """Generates an output file name `name + '.wasm.gz'`.
 
     The input file is shrunk, annotated with metadata, and gzipped. The canister
     metadata consists of:
         'icp:public git_commit_id': version used in the build
         'icp:public candid:service': the canister's candid service description
+
+    If max_compression is True, gzip uses pigz's highest level (-11, i.e. zopfli).
+    The output is still standard gzip, and still deterministic, but about 4-5%
+    smaller than with the default level. The cost is build time: several seconds
+    (and tens of CPU-seconds) per canister, rather than well under a second. Use
+    this for canisters whose size is close to a limit, such as the 2 MiB maximum
+    inter-canister message size.
     """
     native.genrule(
         name = "_" + name + "_finalize",
@@ -214,9 +225,16 @@ def finalize_wasm(*, name, src_wasm, service_file = None, version_file, testonly
             "{ic_wasm} {input_wasm} -o $@.shrunk shrink {keep_name_section}",
             "{ic_wasm} $@.shrunk -o $@.meta metadata candid:service {keep_name_section} --visibility public --file " + "$(location {})".format(service_file) if not (service_file == None) else "cp $@.shrunk $@.meta",  # if service_file is None, don't include a service file
             "{ic_wasm} $@.meta -o $@.ver metadata git_commit_id {keep_name_section} --visibility public --file {version_file}",
-            "{pigz} --processes 16 --no-name $@.ver --stdout > $@",
+            "{pigz} --processes 16 --no-name $@.ver --stdout {compression_level} > $@",
         ])
-            .format(input_wasm = "$(location {})".format(src_wasm), ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)", version_file = "$(location {})".format(version_file), pigz = "$(location @pigz)", keep_name_section = "--keep-name-section" if keep_name_section else ""),
+            .format(
+            input_wasm = "$(location {})".format(src_wasm),
+            ic_wasm = "$(location @crate_index//:ic-wasm__ic-wasm)",
+            version_file = "$(location {})".format(version_file),
+            pigz = "$(location @pigz)",
+            keep_name_section = "--keep-name-section" if keep_name_section else "",
+            compression_level = "-11" if max_compression else "",
+        ),
     )
 
 def _check_endpoints_test(name, wasm, hidden_endpoints, testonly, visibility):
