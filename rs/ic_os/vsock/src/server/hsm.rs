@@ -1,7 +1,9 @@
-use super::command_utilities::handle_command_output;
-use crate::protocol::Response;
+use std::io::Write;
+
+use super::VsockServerError;
+use crate::protocol::Payload;
+
 use rusb::{Context, Device, UsbContext};
-use std::io::{Error, Write};
 use tempfile::NamedTempFile;
 
 // nitrokey:
@@ -27,15 +29,15 @@ impl std::fmt::Display for HSMInfo {
     }
 }
 
-pub fn attach_hsm() -> Response {
+pub(crate) fn attach_hsm() -> Result<Payload, VsockServerError> {
     hsm_helper("attach-device")
 }
 
-pub fn detach_hsm() -> Response {
+pub(crate) fn detach_hsm() -> Result<Payload, VsockServerError> {
     hsm_helper("detach-device")
 }
 
-fn hsm_helper(command: &str) -> Response {
+fn hsm_helper(command: &str) -> Result<Payload, VsockServerError> {
     let hsm_xml_file = create_hsm_xml_file()?;
 
     println!("Sending virsh command: {command}");
@@ -44,45 +46,41 @@ fn hsm_helper(command: &str) -> Response {
         .arg(DOMAIN_NAME)
         .arg("--file")
         .arg(hsm_xml_file.path())
-        .output();
+        .output()
+        .map_err(VsockServerError::io(format!(
+            "running command 'virsh {command}'"
+        )))?;
 
-    handle_command_output(command_output)
+    if command_output.status.success() {
+        Ok(Payload::NoPayload)
+    } else {
+        Err(VsockServerError::CommandFailed {
+            command: format!("virsh {command}"),
+            stderr: String::from_utf8_lossy(&command_output.stderr).into_owned(),
+        })
+    }
 }
 
-fn create_hsm_xml_file() -> Result<NamedTempFile, String> {
-    let hsm_info = get_hsm_info().map_err(|err| format!("Could not get hsm info: {err}"))?;
+fn create_hsm_xml_file() -> Result<NamedTempFile, VsockServerError> {
+    let hsm_info = get_hsm_info()?;
 
     println!("HSM found: {hsm_info}");
 
     let xml: String = get_hsm_xml_string(&hsm_info);
 
-    write_to_temp_file(&xml).map_err(|err| format!("Could not write to temp file: {err}"))
+    let mut file = NamedTempFile::with_prefix("hsm").map_err(VsockServerError::io(
+        "opening temp hsm xml file".to_string(),
+    ))?;
+    file.write_all(xml.as_bytes())
+        .map_err(VsockServerError::io(
+            "writing temp hsm xml file".to_string(),
+        ))?;
+
+    Ok(file)
 }
 
-fn get_hsm_info() -> Result<HSMInfo, Error> {
-    let context = Context::new().map_err(Error::other)?;
-
-    let usb_devices = context.devices().map_err(Error::other)?;
-
-    fn is_hsm_device(device: &Device<Context>) -> bool {
-        match device.device_descriptor() {
-            Ok(device_descriptor) => {
-                println!(
-                    "Bus {:03} Device {:03} ID {:04x}:{:04x}",
-                    device.bus_number(),
-                    device.address(),
-                    device_descriptor.vendor_id(),
-                    device_descriptor.product_id()
-                );
-                device_descriptor.vendor_id() == HSM_VENDOR
-                    && device_descriptor.product_id() == HSM_PRODUCT
-            }
-            Err(_) => {
-                println!("Error: device.device_descriptor() returned error");
-                false
-            }
-        }
-    }
+fn get_hsm_info() -> Result<HSMInfo, VsockServerError> {
+    let usb_devices = rusb::Context::new()?.devices()?;
 
     println!("Iterating over attached devices to find HSM");
     // return the first usb device that satisfies the is_hsm_device filter
@@ -93,7 +91,29 @@ fn get_hsm_info() -> Result<HSMInfo, Error> {
             hsm_bus_num: hsm_device.bus_number(),
             hsm_address: hsm_device.address(),
         })
-        .ok_or_else(|| Error::other("No HSM device found"))
+        .ok_or_else(|| VsockServerError::HsmNotFound)
+}
+
+fn is_hsm_device(device: &Device<Context>) -> bool {
+    match device.device_descriptor() {
+        Ok(device_descriptor) => {
+            println!(
+                "Bus {:03} Device {:03} ID {:04x}:{:04x}",
+                device.bus_number(),
+                device.address(),
+                device_descriptor.vendor_id(),
+                device_descriptor.product_id()
+            );
+
+            device_descriptor.vendor_id() == HSM_VENDOR
+                && device_descriptor.product_id() == HSM_PRODUCT
+        }
+        Err(_) => {
+            println!("Error: device.device_descriptor() returned error");
+
+            false
+        }
+    }
 }
 
 // HSM_VENDOR and HSM_PRODUCT must be converted to hexadecimal for the attach/detach hsm virsh commands
@@ -113,13 +133,8 @@ fn get_hsm_xml_string(hsm_info: &HSMInfo) -> String {
     )
 }
 
-fn write_to_temp_file(content: &str) -> Result<NamedTempFile, Error> {
-    let mut file: NamedTempFile = NamedTempFile::with_prefix("hsm")?;
-    file.write_all(content.as_bytes())?;
-    Ok(file)
-}
-
-pub mod tests {
+#[cfg(test)]
+mod tests {
     #[test]
     fn get_hsm_xml_string() {
         use super::*;

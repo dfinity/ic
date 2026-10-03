@@ -61,8 +61,8 @@ See the **run-in-dev-container** skill for how to invoke `container-run.sh`
 ./ci/container/container-run.sh ./hunt --build-options='--config=local' //my:target
 
 # to *diagnose* (step 3 needs the two builds' outputs to survive the container),
-# point --root at a bind-mounted path under /ic so the artifacts persist on the host:
-./ci/container/container-run.sh ./hunt --root /ic/,hunt --build-options='--config=local' //my:target
+# point --root at a path inside the checkout (mounted at its host path) so the artifacts persist on the host:
+./ci/container/container-run.sh ./hunt --root "$PWD/,hunt" --build-options='--config=local' //my:target
 ```
 
 Gotchas:
@@ -70,7 +70,7 @@ Gotchas:
   current branch) for a hunt run to pick it up. Iterate: commit → hunt → repeat.
 - With the default tempdir, the checkouts/output bases live in the container's
   `/tmp` and vanish when the container exits — fine for a verdict, but use
-  `--root` under `/ic` when you need to inspect artifacts.
+  `--root` inside the checkout when you need to inspect artifacts.
 - Bazel marks its output trees read-only. To clean the hunt root between runs:
   `chmod -R u+w <root> && rm -rf <root>`.
 - Point `--root` at a path on the same filesystem as the repo for faster
@@ -193,7 +193,6 @@ Gotchas:
 | Dependency | Kind | Cause | Fix | Commit |
 | --- | --- | --- | --- | --- |
 | **askama** (`bazel/askama.patch`) | crate (derive macro) | `Path::canonicalize()` resolved the sandbox symlink to the repo's real path; the resulting relative path's `..`-count depended on the sandbox path *depth*, so the rlib changed across output-base/nest depths. | Skip `canonicalize()` so both paths stay anchored to the sandbox. | `0d9c593299` (#10167) |
-| **rustix** (`bazel/rustix.patch`) | crate (`build.rs`) | The `can_compile()` probe left a `rustix_test_can_compile` artifact in `OUT_DIR`, which rules_rust captures as a cacheable output; it embeds non-deterministic compiler-internal metadata. | Delete the probe artifact after use (upstream PR 1628). | `9f0476004b` (#10353) |
 | **libssh2-sys** (`bazel/libssh2-sys.patch`) | crate (`build.rs`) | `build.rs` generated a pkgconfig file containing absolute build paths. | Disable that generation. | `737666659c` (#3197) |
 | **e2fsprogs / mke2fs** (`third_party/e2fsprogs_no_external_config.patch`) | `http_archive` (rules_foreign_cc) | `configure`'s `--prefix` is the per-build `$BUILD_TMPDIR`, so the compiled-in `mke2fs.conf` path (`ROOT_SYSCONFDIR`) landed in the binary's `.rodata`. | Empty `config_fn` (use the built-in default profile) + trim the unused, also-non-reproducible extra tools from the install tree. | `cf7fe5147b` |
 

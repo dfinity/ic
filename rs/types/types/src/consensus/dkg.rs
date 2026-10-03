@@ -4,7 +4,6 @@ use super::*;
 use crate::{
     ReplicaVersion,
     artifact::PbArtifact,
-    backwards_compatibility::BackwardsCompatible,
     crypto::threshold_sig::ni_dkg::{
         NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
         config::NiDkgConfig,
@@ -42,15 +41,26 @@ impl PbArtifact for Message {
 /// Identifier of a DKG message.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct DkgMessageId {
-    pub hash: CryptoHashOf<Message>,
     pub height: Height,
+    pub hash: CryptoHashOf<Message>,
+}
+
+impl DkgMessageId {
+    /// Returns the lexicographically-smallest DkgMessageId at the given height.
+    pub fn smallest_at_height(height: Height) -> Self {
+        Self {
+            height,
+            // The lexicographically-smallest possible hash is an empty vector
+            hash: CryptoHashOf::from(CryptoHash(vec![])),
+        }
+    }
 }
 
 impl From<&Message> for DkgMessageId {
     fn from(msg: &Message) -> Self {
         Self {
-            hash: crypto_hash(msg),
             height: msg.content.dkg_id.start_block_height,
+            hash: crypto_hash(msg),
         }
     }
 }
@@ -58,8 +68,8 @@ impl From<&Message> for DkgMessageId {
 impl From<DkgMessageId> for pb::DkgMessageId {
     fn from(id: DkgMessageId) -> Self {
         Self {
-            hash: id.hash.clone().get().0,
             height: id.height.get(),
+            hash: id.hash.clone().get().0,
         }
     }
 }
@@ -69,8 +79,8 @@ impl TryFrom<pb::DkgMessageId> for DkgMessageId {
 
     fn try_from(id: pb::DkgMessageId) -> Result<Self, Self::Error> {
         Ok(Self {
-            hash: CryptoHash(id.hash.clone()).into(),
             height: Height::from(id.height),
+            hash: CryptoHash(id.hash.clone()).into(),
         })
     }
 }
@@ -267,8 +277,6 @@ pub struct DkgSummary {
     /// corresponding to this tag.
     #[serde_as(as = "Vec<(_, _)>")]
     next_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
-    /// Transcripts that are computed for remote subnets.
-    pub transcripts_for_remote_subnets: BackwardsCompatible<Vec<RemoteTranscriptResult>, true>,
     /// The length of the current interval in rounds (following the start
     /// block).
     pub interval_length: Height,
@@ -302,7 +310,6 @@ impl DkgSummary {
                 .collect(),
             current_transcripts,
             next_transcripts,
-            transcripts_for_remote_subnets: BackwardsCompatible::new(vec![]),
             registry_version,
             interval_length,
             next_interval_length,
@@ -451,21 +458,12 @@ impl From<&DkgSummary> for pb::Summary {
             interval_length: summary.interval_length.get(),
             next_interval_length: summary.next_interval_length.get(),
             height: summary.height.get(),
-            transcripts_for_remote_subnets: summary
-                .transcripts_for_remote_subnets
-                .as_ref()
-                .map(|t| build_callback_ided_transcripts_vec(t.as_slice()))
-                // `None` -> empty vector
-                .unwrap_or_default(),
-            // Relay the marker instead of only ever setting it for our own summaries: `prost`
-            // drops unknown fields, so a replica version that decodes a summary coming from a
-            // version which no longer maintains the field and re-encodes it would otherwise strip
-            // the marker, turning `None` back into `Some(vec![])` downstream and thereby changing
-            // the hash of that summary.
-            transcripts_for_remote_subnets_removed: summary
-                .transcripts_for_remote_subnets
-                .as_ref()
-                .is_none(),
+            // The marker must keep being set even though this replica version no longer reads it:
+            // replica versions that still carry the field derive it from this marker, and would
+            // otherwise decode the empty repeated field above into `Some(vec![])` and hash its
+            // length prefix, where this version hashes nothing. It may only stop being set once no
+            // replica version that reads it is deployed any more.
+            transcripts_for_remote_subnets_removed: true,
             remote_dkg_attempts: build_remote_dkg_attempts_vec(&summary.remote_dkg_attempts),
             subnet_splitting_status: Some(pb::summary::SubnetSplittingStatus::from(
                 summary.subnet_splitting_status,
@@ -623,16 +621,6 @@ impl TryFrom<pb::Summary> for DkgSummary {
             interval_length: Height::from(summary.interval_length),
             next_interval_length: Height::from(summary.next_interval_length),
             height: Height::from(summary.height),
-            transcripts_for_remote_subnets: BackwardsCompatible::try_from_proto_with(
-                // A set marker means the summary was produced by a replica version that no longer
-                // maintains the field, in which case the repeated field must be ignored entirely,
-                // including for hashing. Without the marker the repeated field is authoritative,
-                // even when empty: an empty vector still contributes its length prefix to the hash
-                // preimage, exactly as it did before the field became `BackwardsCompatible`.
-                (!summary.transcripts_for_remote_subnets_removed)
-                    .then_some(summary.transcripts_for_remote_subnets),
-                |t| build_transcripts_vec_from_pb(t).map_err(ProxyDecodeError::Other),
-            )?,
             remote_dkg_attempts: build_remote_dkg_attempts_map(&summary.remote_dkg_attempts),
             subnet_splitting_status: try_from_option_field(
                 summary.subnet_splitting_status,
@@ -929,5 +917,49 @@ mod tests {
         assert_eq!(get_faults_tolerated(7), 2);
         assert_eq!(get_faults_tolerated(28), 9);
         assert_eq!(get_faults_tolerated(64), 21);
+    }
+
+    #[test]
+    fn test_dkg_message_id_less_than_height() {
+        const TEST_HASHES: [&[u8]; 4] = [&[], &[0], &[42; 32], &[u8::MAX; 32]];
+
+        fn message_id(height: u64, hash: &[u8]) -> DkgMessageId {
+            DkgMessageId {
+                height: Height::from(height),
+                hash: CryptoHashOf::from(CryptoHash(hash.to_vec())),
+            }
+        }
+
+        let smallest_at_height = DkgMessageId::smallest_at_height(Height::from(10));
+        for height in [0, 1, 9] {
+            for hash in TEST_HASHES {
+                let id = message_id(height, hash);
+                assert!(
+                    id < smallest_at_height,
+                    "expected {id:?} to be less than smallest_at_height"
+                );
+            }
+        }
+        for height in [10, 11, u64::MAX] {
+            for hash in TEST_HASHES {
+                let id = message_id(height, hash);
+                assert!(
+                    smallest_at_height <= id,
+                    "expected {id:?} to be greater than or equal to smallest_at_height"
+                );
+            }
+        }
+
+        // Edge-case: height is 0
+        let smallest_at_height = DkgMessageId::smallest_at_height(Height::from(0));
+        for height in [0, 1, u64::MAX] {
+            for hash in TEST_HASHES {
+                let id = message_id(height, hash);
+                assert!(
+                    smallest_at_height <= id,
+                    "expected {id:?} to be greater than or equal to smallest_at_height"
+                );
+            }
+        }
     }
 }

@@ -30,7 +30,7 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    CryptoHashOfState, Height, batch::BatchContent, crypto::CryptoHash,
+    CryptoHashOfState, Height, PlatformVersion, batch::BatchContent, crypto::CryptoHash,
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
 };
 use std::{
@@ -65,6 +65,9 @@ fn consensus_produces_expected_batches() {
 
         let chain_key_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
         let chain_key_payload_builder = Arc::new(chain_key_payload_builder);
+
+        let upgrade_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let upgrade_payload_builder = Arc::new(upgrade_payload_builder);
 
         let mut state_manager = MockStateManager::new();
         state_manager.expect_remove_states_below().return_const(());
@@ -110,7 +113,10 @@ fn consensus_produces_expected_batches() {
         let replica_config = ReplicaConfig {
             node_id,
             subnet_id,
-            replica_version,
+            platform_version: PlatformVersion {
+                guestos_version: replica_version.clone(),
+                replica_version,
+            },
         };
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
@@ -130,7 +136,7 @@ fn consensus_produces_expected_batches() {
                 1,
                 SubnetRecordBuilder::from(&[node_id])
                     .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
-                    .with_replica_version(replica_config.replica_version.as_ref())
+                    .with_replica_version(replica_config.replica_version().as_ref())
                     .build(),
             )],
         );
@@ -152,7 +158,7 @@ fn consensus_produces_expected_batches() {
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            &replica_config.replica_version,
+            replica_config.replica_version(),
             make_genesis(summary).into(),
             pool_config.clone(),
             MetricsRegistry::new(),
@@ -180,6 +186,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&canister_http_payload_builder) as Arc<_>,
             query_stats_payload_builder,
             chain_key_payload_builder,
+            upgrade_payload_builder,
             Arc::clone(&dkg_pool) as Arc<_>,
             Arc::clone(&idkg_pool) as Arc<_>,
             dkg_key_manager.clone(),

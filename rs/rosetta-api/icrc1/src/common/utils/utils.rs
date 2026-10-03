@@ -537,7 +537,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 operations.push(rosetta_core::objects::Operation::new(
                     1,
                     OperationType::Fee.to_string(),
-                    Some(to.into()), // Mint fees are payed by the receiving account.
+                    Some(to.into()), // Mint fees are paid by the receiving account.
                     Some(Amount::new(
                         BigInt::from_biguint(num_bigint::Sign::Minus, fee_paid.0),
                         currency,

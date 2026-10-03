@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-#   targets.py [-h] [--skip_long_tests] [--base BASE] [--head HEAD] {build,test,check}
+#   targets.py [-h] [--skip_long_tests] [--exclude_tags TAG]... [--base BASE] [--head HEAD] {build,test,check}
 #
 # This script determines which Bazel targets should be built or tested and writes them separated by newlines to stdout.
 #
@@ -11,6 +11,9 @@
 #
 # However, long_tests of which a direct source file has been modified will be included.
 #
+# bazel is looked up on PATH, so CI can put a wrapper in front of it that adds startup options, like
+# .github/actions/bazel-namespace/bin/bazel does.
+#
 # Finally ./PULL_REQUEST_BAZEL_TARGETS is taken into account to explicitly return targets based on modified files
 # even though they're not an explicit dependency of a bazel target or are tagged as `long_test`.
 #
@@ -18,7 +21,7 @@
 #
 # The script will print the bazel query to stderr which is useful for debugging:
 #   ci/scripts/targets.py --skip_long_tests --base=master test
-#   bazel query --keep_going '((((kind(".*_test", rdeps(//..., set("ci/scripts/targets.py")))) except attr(tags, long_test, //...)) + attr(tags, long_test, rdeps(//..., set("ci/scripts/targets.py"), 2))) + set(//pre-commit:ruff-lint)) except attr(tags, "manual|system_test_large|system_test_benchmark|fuzz_test|fi_tests_nightly|nns_tests_nightly|pocketic_tests_nightly", //...)'
+#   bazel query --keep_going 'filter("^//", ((((kind(".*_test", rdeps(//..., set("ci/scripts/targets.py")))) except attr(tags, long_test, //...)) + attr(tags, long_test, rdeps(//..., set("ci/scripts/targets.py"), 2))) + set(//pre-commit:ruff-lint)) except attr(tags, "manual|system_test_large|system_test_benchmark|fuzz_test|fi_tests_nightly|nns_tests_nightly|pocketic_tests_nightly", //...))'
 
 import argparse
 import fnmatch
@@ -199,14 +202,22 @@ def targets(
     excluded_tags_regex = "|".join(EXCLUDED_TAGS + exclude_tags)
     query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
 
+    # rdeps over //... can also return targets of external repositories (e.g. the
+    # @mainnet_*_images//:guest-img genrules via //rs/ic_os/build_tools/partition_tools)
+    # and the tag exclusions above only cover //.... CI never intends to build external
+    # targets, so keep only main-repository labels:
+    query = f'filter("^//", {query})'
+
     args = ["bazel", "query", "--keep_going", query]
     log(shlex.join(args))
-    result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # bazel's stderr is passed through so that its warnings (e.g. remote downloader fallbacks),
+    # the files ignored by --keep_going and the "Starting local Bazel server" line end up in our log.
+    result = subprocess.run(args, stdout=subprocess.PIPE, text=True)
 
     # As described above, when the query contains files not tracked by bazel,
     # --keep_going will ignore them but will return the special exit code 3 which we ignore:
     if result.returncode not in (0, 3):
-        log(f"Error running `bazel query --keep_going '{query}'`:\n" + result.stderr)
+        log(f"`{shlex.join(args)}` failed with exit code {result.returncode}!")
         sys.exit(result.returncode)
 
     result_targets = result.stdout.splitlines()

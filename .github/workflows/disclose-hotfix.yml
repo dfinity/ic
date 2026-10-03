@@ -28,9 +28,10 @@ run-name: "Disclose ${{ inputs.branch }} @ ${{ inputs.commit }} (confirm=${{ inp
 #     rebuild differs from the CDN bytes that were deployed — an incident
 #     signal for the infra team. Never retry around it and never
 #     delete/overwrite CDN objects to make it pass.
-#   - Do not push further commits to the branch until its attest-uploads job
-#     is green: Release Testing cancels in-flight runs per ref, and a new tip
-#     would attest a different sha.
+#   - Do not push further commits to the branch until both Attest steps of its
+#     Release Testing run (CI Main jobs `Bazel Test All` and `Upload external
+#     artifacts`) are green: Release Testing cancels in-flight runs per ref, and
+#     a new tip would attest a different sha.
 #
 # The DISCLOSE_HOTFIX environment gates the "Push to RC Branch" app
 # credentials: required reviewers (DRE / Infra) approve each run, and the environment's
@@ -189,10 +190,15 @@ jobs:
             exit 1
           fi
 
-          # Match the top-level job key at the jobs indent level so a comment,
-          # a needs: reference or a commented-out job doesn't count.
-          if ! git show "$COMMIT:.github/workflows/release-testing.yml" 2>/dev/null | grep -qE '^  attest-uploads:'; then
-            echo "::warning::the tree of $COMMIT has no attest-uploads job in release-testing.yml: the triggered run cannot mint an attestation"
+          # The attestation is minted by the Attest steps of ci-main.yml's upload
+          # jobs, which need `attestations: write` on release-testing.yml's
+          # `ci-main` job. Check the disclosed tree for both halves; match at the
+          # step/key indent so a comment or a commented-out block doesn't count.
+          if ! git show "$COMMIT:.github/workflows/ci-main.yml" 2>/dev/null | grep -qE '^ +uses: actions/attest@'; then
+            echo "::warning::the tree of $COMMIT has no actions/attest step in ci-main.yml: the triggered run cannot mint an attestation"
+          fi
+          if ! git show "$COMMIT:.github/workflows/release-testing.yml" 2>/dev/null | grep -qE '^ +attestations: write'; then
+            echo "::warning::the tree of $COMMIT does not grant attestations: write in release-testing.yml: the triggered run cannot mint an attestation"
           fi
 
           # --force-with-lease with an explicitly EMPTY expected value means
@@ -271,5 +277,5 @@ jobs:
             echo "differs from the deployed CDN bytes — an incident signal for the"
             echo "infra team; never retry around it and never delete or"
             echo "overwrite CDN objects. Do not push further commits to the branch"
-            echo "until its attest-uploads job is green."
+            echo "until both Attest steps of its CI Main jobs are green."
           } >>"$GITHUB_STEP_SUMMARY"

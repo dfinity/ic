@@ -1,7 +1,8 @@
 use crate::address::ecdsa_public_key_to_address;
+use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
-use crate::deposit_address::{DepositAddressSchema, deposit_address, sweeper_address};
-use crate::endpoints::{CandidBlockTag, DepositErc20Error};
+use crate::deposit_address::{DepositAddress, deposit_address, sweeper_address};
+use crate::endpoints::CandidBlockTag;
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -13,14 +14,14 @@ use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
 use crate::runtime::CanisterRuntime;
-use crate::state::automatic_deposits::{AutomaticDeposits, ScanProgress};
+use crate::state::automatic_deposits::{AutomaticDeposits, RegisterDepositError, ScanProgress};
 use crate::state::eth_logs_scraping::{LogScrapingId, LogScrapings};
+use crate::state::sweep_observations::SweepObservations;
 use crate::state::sweeper_funding::{SweeperFundingAccounting, SweeperFundingConfig};
 use crate::state::transactions::{
     Erc20WithdrawalRequest, SweepRequest, TransactionCallData, WithdrawalRequest,
 };
 use crate::timed_sized_map::{Entry, Timestamp};
-use crate::tx::AuthorizationRequest;
 use crate::tx::GasFeeEstimate;
 use crate::tx::TransactionSignature;
 use candid::Principal;
@@ -39,6 +40,7 @@ pub mod audit;
 pub mod automatic_deposits;
 pub mod eth_logs_scraping;
 pub mod event;
+pub mod sweep_observations;
 pub mod sweeper_funding;
 pub mod transactions;
 
@@ -97,7 +99,7 @@ pub struct State {
     /// Per-principal lock for pending withdrawals
     pub pending_withdrawal_principals: BTreeSet<Principal>,
 
-    /// Per-principal lock for in-flight `deposit_erc20` calls
+    /// Per-principal lock for in-flight deposit registrations (`deposit_erc20`, `deposit_eth`)
     pub pending_deposit_principals: BTreeSet<Principal>,
 
     /// Locks preventing concurrent execution timer tasks
@@ -133,6 +135,10 @@ pub struct State {
 
     /// Burn-first accounting for sweeper fee funding.
     pub sweeper_funding: SweeperFundingAccounting,
+
+    /// What the sweep pipeline's chain reads looked like since the last upgrade. Not event-sourced,
+    /// so it is deliberately left out of [`Self::is_equivalent_to`].
+    pub sweep_observations: SweepObservations,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -262,6 +268,21 @@ impl State {
         Some(sweeper_address(&master_public_key, &chain_code))
     }
 
+    /// The deposit address derived for `account`, shared by ETH and ckERC20 deposits, or `None`
+    /// while the master public key is still unknown.
+    pub fn deposit_address(&self, account: &Account) -> Option<DepositAddress> {
+        let (master_public_key, chain_code) = self.public_key_and_chain_code()?;
+        Some(deposit_address(&master_public_key, &chain_code, account))
+    }
+
+    /// The subaccount-aware deposit helper every attestation this minter signs names, `None` while
+    /// none is configured. Without it no deposit address can be attested, hence no sweep built.
+    pub fn deposit_helper_contract(&self) -> Option<Address> {
+        self.log_scrapings
+            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)
+            .copied()
+    }
+
     /// What a ckERC20 deposit address must attest to in order to be swept: the account it credits,
     /// bound to the chain and the subaccount-aware deposit helper this minter runs against.
     /// `None` while that helper is unknown.
@@ -269,9 +290,7 @@ impl State {
     /// The only place an [`AttestationRequest`] is built outside its own module, so a caller cannot
     /// attest under a chain or a helper the minter does not use.
     pub fn attestation_request(&self, account: Account) -> Option<AttestationRequest> {
-        let deposit_helper = *self
-            .log_scrapings
-            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)?;
+        let deposit_helper = self.deposit_helper_contract()?;
         Some(AttestationRequest::new(
             self.ethereum_network.chain_id(),
             deposit_helper,
@@ -283,9 +302,7 @@ impl State {
         &self,
         accounts: &[T],
     ) -> Option<Vec<AttestationRequest>> {
-        let deposit_helper = *self
-            .log_scrapings
-            .contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount)?;
+        let deposit_helper = self.deposit_helper_contract()?;
         Some(
             accounts
                 .iter()
@@ -294,36 +311,6 @@ impl State {
                         self.ethereum_network.chain_id(),
                         deposit_helper,
                         *account.as_ref(),
-                    )
-                })
-                .collect(),
-        )
-    }
-
-    /// What every deposit address in `accounts` authorizes to let the configured sweeper contract
-    /// sweep it: the tuple naming this minter's chain, that contract, and nonce zero. `None` while
-    /// no sweeper contract is configured.
-    ///
-    /// The nonce is always zero, whatever the address actually holds. A deposit address is at
-    /// nonce zero exactly while it has never been delegated — applying an authorization spends it
-    /// — so the tuple either installs the delegation or is skipped, and both are correct in any
-    /// order the sweeps carrying them land. That is what lets a sweep authorize every address it
-    /// touches without tracking which ones are already delegated, at the price of the intrinsic
-    /// gas a skipped tuple still costs.
-    pub fn authorization_requests<T: AsRef<Account>>(
-        &self,
-        accounts: &[T],
-    ) -> Option<Vec<AuthorizationRequest>> {
-        let delegate = self.sweeper_contract_address?;
-        Some(
-            accounts
-                .iter()
-                .map(|account| {
-                    AuthorizationRequest::new(
-                        *account.as_ref(),
-                        self.ethereum_network.chain_id(),
-                        delegate,
-                        TransactionNonce::ZERO,
                     )
                 })
                 .collect(),
@@ -834,32 +821,24 @@ impl State {
         })
     }
 
-    /// Derive the ckERC20 deposit address for `account` from the minter's master
-    /// threshold-ECDSA public key and add it to the watchlist of automatic deposits.
+    /// Derive the deposit address for `account` from the minter's master threshold-ECDSA
+    /// public key and add the `(account, asset)` pair to the watchlist of automatic deposits.
     ///
     /// Returns the deposit address together with the timestamp until which a
     /// deposit to it is guaranteed to be noticed. Fails with
-    /// [`DepositErc20Error::TemporarilyUnavailable`] if the minter's public key
+    /// [`RegisterDepositError::KeyNotInitialized`] if the minter's public key
     /// has not been fetched yet.
     pub fn register_deposit_address(
         &mut self,
         now: Timestamp,
         account: Account,
-        token: Address,
-    ) -> Result<Entry<ScanProgress>, DepositErc20Error> {
-        let (master_public_key, chain_code) =
-            self.public_key_and_chain_code()
-                .ok_or(DepositErc20Error::TemporarilyUnavailable(
-                    "Minter's ECDSA public key not yet initialized".to_string(),
-                ))?;
-        let address = deposit_address(
-            &master_public_key,
-            &chain_code,
-            DepositAddressSchema::CkErc20,
-            &account,
-        );
+        asset: Asset,
+    ) -> Result<Entry<ScanProgress>, RegisterDepositError> {
+        let address = self
+            .deposit_address(&account)
+            .ok_or(RegisterDepositError::KeyNotInitialized)?;
         self.automatic_deposits
-            .watch_deposit(now, account, token, address)
+            .watch_deposit(now, account, asset, address)
     }
 }
 

@@ -1,13 +1,12 @@
 //! ReplicaVersion can be converted to/from string representation.
-use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
-pub static REPLICA_BINARY_HASH: OnceCell<String> = OnceCell::new();
+pub static REPLICA_BINARY_HASH: OnceLock<String> = OnceLock::new();
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ReplicaVersion {
@@ -101,4 +100,19 @@ mod test {
         assert!(ReplicaVersion::from_str("8aefz17q_1").is_ok());
         assert!(ReplicaVersion::from_str("?+").is_err());
     }
+}
+
+/// The node's platform versions: the GuestOS version the node booted from and
+/// the replica binary version.
+///
+/// Under normal conditions the two are the same. During a GuestOS fast
+/// upgrade, binaries from the target (new) GuestOS are hot-swapped in the
+/// running (old) GuestOS, so the replica version is ahead of the GuestOS
+/// version until the node reboots into the target GuestOS.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct PlatformVersion {
+    /// The GuestOS version the node booted from.
+    pub guestos_version: ReplicaVersion,
+    /// The replica binary version, possibly hot-swapped by a fast upgrade.
+    pub replica_version: ReplicaVersion,
 }

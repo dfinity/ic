@@ -15,6 +15,9 @@ zip
 # rules_foreign_cc source builds, e.g. jemalloc's autogen.sh runs autoconf.
 libtool
 
+# Needed by the AFLplusplus build
+zlib1g-dev
+
 # RUST
 pkg-config
 libclang-dev

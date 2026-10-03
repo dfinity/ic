@@ -7,10 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-02
+
+### Added
+
+- Added the `million_round_instructions_total` field to `SubnetMetricsResult`, reporting the instructions the subnet accounted for across the execution phases of all rounds, in millions rounded up.
+- Added the `Secp256r1` variant to the `EcdsaCurve` enum, selecting threshold ECDSA on the NIST P-256 curve. It maps to `1` in the `u32` conversion used by the `ic0.cost_sign_with_ecdsa` system API. No key of this curve is available yet; enabling one is a separate registry and governance step.
+
+### Changed
+
+- Doc: the `CyclesConsumed` amounts cover everything a canister consumed since April 2023, except `http_outcalls`, which covers only the outcalls made since May 2026.
+
+## [0.10.0] - 2026-09-10
+
 ### Added
 
 - Types for `subnet_metrics`:
   - Added the types `SubnetMetricsArgs` and `SubnetMetricsResult`.
+- Added the `pricing_version` field to `HttpRequestArgs`, selecting the pricing mechanism for a canister HTTPS outcall: `1` ("legacy", the default, deprecated) or `2` ("pay-as-you-go").
+- Types for `flexible_http_request`, a variant of `http_request` in which a committee of nodes return their individual HTTP responses instead of the subnet reaching consensus on one:
+  - Added the types `FlexibleHttpRequestArgs`, `ReplicationCounts`, `FlexibleHttpRequestResult`, `FlexibleHttpRequestErr`, `FlexibleHttpGlobalError`, `FlexibleHttpNodeDetail`, `HttpRequestResourceReport`, `ResourceUsage` and `FlexibleHttpNodeError`.
 
 ## [0.9.0] - 2026-08-13
 

@@ -80,9 +80,6 @@ impl ManagedCanistersAssert {
     }
 
     pub fn trigger_creation_of_archive(self) -> Self {
-        // The productive value for `trigger_threshold` is `2_000`,
-        // which would require `2_000` transfers to trigger the creation of an archive.
-        // We set this value to an artificially low number to speed up the test.
         self.upgrade_ledger_to_change_archive_options(ChangeArchiveOptions {
             trigger_threshold: Some(ARCHIVE_TRIGGER_THRESHOLD),
             ..Default::default()

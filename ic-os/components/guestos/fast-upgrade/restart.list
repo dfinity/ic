@@ -1,0 +1,7 @@
+ic-replica.service
+ic-crypto-csp.service
+ic-btc-mainnet-adapter.service
+ic-btc-testnet-adapter.service
+ic-doge-mainnet-adapter.service
+ic-doge-testnet-adapter.service
+ic-https-outcalls-adapter.service

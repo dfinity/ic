@@ -15,9 +15,9 @@ rust_library(
         # Keep sorted.
         "//rs/nervous_system/clients",
         "//rs/nervous_system/root",
+        "//rs/nervous_system/runtime",
         "//rs/nns/constants",
         "//rs/types/base_types",
-        "//rs/types/management_canister_types",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
@@ -35,9 +35,9 @@ rust_test(
         # Keep sorted.
         "//rs/nervous_system/clients",
         "//rs/nervous_system/root",
+        "//rs/nervous_system/runtime",
         "//rs/nns/constants",
         "//rs/types/base_types",
-        "//rs/types/management_canister_types",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",

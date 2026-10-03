@@ -130,7 +130,7 @@ impl RandomTapeMaker {
         height: Height,
         pool: &PoolReader<'_>,
     ) -> Option<RandomTapeShare> {
-        let content = RandomTapeContent::new(height, self.replica_config.replica_version.clone());
+        let content = RandomTapeContent::new(height, self.replica_config.replica_version().clone());
 
         if let Some(dkg_id) = active_low_threshold_nidkg_id(pool.as_cache(), height) {
             match self

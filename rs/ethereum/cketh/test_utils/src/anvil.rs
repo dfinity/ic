@@ -138,7 +138,7 @@ impl Anvil {
     }
 
     /// Places `code` as the runtime bytecode at `address` (foundry's `anvil_setCode` cheatcode).
-    pub(crate) fn set_code(&self, address: &Address, code: &[u8]) {
+    pub fn set_code(&self, address: &Address, code: &[u8]) {
         self.rpc(
             "anvil_setCode",
             serde_json::json!([to_hex(address.as_ref()), to_hex(code)]),
@@ -241,6 +241,12 @@ impl Anvil {
 
     fn send_transaction(&self, from: &Address, to: Option<&Address>, data: &[u8]) -> String {
         self.send_transaction_with_value(from, to, data, 0)
+    }
+
+    /// A plain ETH transfer of `value` wei, mined before returning.
+    pub fn send_eth(&self, from: &Address, to: &Address, value: u128) {
+        let tx = self.send_transaction_with_value(from, Some(to), &[], value);
+        assert!(status_ok(&self.await_receipt(&tx)), "ETH transfer failed");
     }
 
     fn send_transaction_with_value(
@@ -379,15 +385,19 @@ impl Anvil {
             .unwrap_or_else(|e| panic!("not a u64 transaction count {count}: {e}"))
     }
 
+    /// The nonces of the EIP-7702 authorizations `tx_hash` carries, in the order it lists them.
+    /// Empty for a transaction carrying no authorization list at all, which is what a sweep of
+    /// addresses that are all delegated already is.
     pub fn authorization_nonces(&self, tx_hash: &str) -> Vec<u64> {
         let transaction = self.rpc("eth_getTransactionByHash", serde_json::json!([tx_hash]));
         assert!(
             !transaction.is_null(),
             "no transaction {tx_hash} on the chain"
         );
-        transaction["authorizationList"]
-            .as_array()
-            .unwrap_or_else(|| panic!("transaction {tx_hash} carries no authorization list"))
+        let Some(authorizations) = transaction["authorizationList"].as_array() else {
+            return Vec::new();
+        };
+        authorizations
             .iter()
             .map(|tuple| {
                 let nonce = tuple["nonce"].as_str().unwrap_or_else(|| {
@@ -626,14 +636,23 @@ pub fn deploy_sweep_contracts(anvil: &Anvil, minter: &Address) -> SweepContracts
         minter,
         "the helper should pay out to the minter's main address"
     );
-    let delegate = anvil.deploy(
-        &deployer,
+    SweepContracts {
+        helper,
+        delegate: deploy_sweeper_delegate(anvil, &helper),
+    }
+}
+
+/// Compiles and deploys the attested sweeper delegate, wired to `helper` as the deposit helper its
+/// sweeps transfer through. Deploying it a second time yields a distinct delegate of the very code
+/// the minter already runs against, which is what a test rotating the sweeper contract needs.
+pub fn deploy_sweeper_delegate(anvil: &Anvil, helper: &Address) -> Address {
+    anvil.deploy(
+        &address_from_hex(DEV_ACCOUNT),
         &deploy_code(
             &compile("CKSWEEPER_ATTESTED_SOL", "CkSweeperAttested"),
-            &alloy_address(&helper).abi_encode(),
+            &alloy_address(helper).abi_encode(),
         ),
-    );
-    SweepContracts { helper, delegate }
+    )
 }
 
 fn decode_address(data: &[u8]) -> Address {

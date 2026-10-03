@@ -16,7 +16,6 @@ exports_files([
     "clippy.toml",
     "rustfmt.toml",
     "mainnet-canister-revisions.json",
-    "mainnet-icos-images.bzl",
     "mainnet-routing-table.json",
 ])
 
@@ -85,7 +84,7 @@ compile_pip_requirements(
 test_suite(
     name = "single_large_node",  # the "_test" postfix is dropped on purpose since this target is meant for interactive use.
     tags = ["manual"],
-    tests = ["//rs/tests/testnets:single_large_node"],
+    tests = ["//rs/tests/testnets:single_large_node_farm"],
 )
 
 ### Bitcoind
@@ -330,6 +329,7 @@ upload_artifacts(
         "//conditions:default": [
             "//publish/binaries:bundle-legacy",  # avoid overwriting legacy artifacts
             "//publish/canisters:bundle",
+            "//ic-os/guestos/envs/prod:bundle-disk",  # used by dfinity/open-cloud
             "//ic-os/guestos/envs/prod:bundle-update",
             "//ic-os/guestos/envs/dev:bundle-update",  # used by nested tests
             "//ic-os/hostos/envs/prod:bundle-update",

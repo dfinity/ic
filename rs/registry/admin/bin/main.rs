@@ -2,6 +2,7 @@
 use crate::helpers::*;
 use anyhow::anyhow;
 use async_trait::async_trait;
+use base64::prelude::*;
 use candid::{CandidType, Decode, Encode, Principal};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, ValueEnum};
 use create_subnet::ProposeToCreateSubnetCmd;
@@ -88,6 +89,7 @@ use ic_protobuf::registry::{
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::ReplicaVersionRecord,
     routing_table::v1::CanisterMigrations,
+    standard_engine_replica_version::v1::StandardEngineReplicaVersionRecord,
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
@@ -107,8 +109,8 @@ use ic_registry_keys::{
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
-    make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
-    make_unassigned_nodes_config_record_key,
+    make_replica_version_key, make_standard_engine_replica_version_record_key,
+    make_subnet_list_record_key, make_subnet_record_key, make_unassigned_nodes_config_record_key,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -148,6 +150,7 @@ use registry_canister::mutations::{
     do_set_subnet_operational_level::{
         NodeSshAccess, SetSubnetOperationalLevelPayload, operational_level,
     },
+    do_split_subnet::SplitSubnetPayload,
     do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
     do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
     do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
@@ -159,6 +162,7 @@ use registry_canister::mutations::{
         add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
         remove_firewall_rules_compute_entries, update_firewall_rules_compute_entries,
     },
+    merge_subnets::MergeSubnetsPayload,
     node_management::do_remove_nodes::RemoveNodesPayload,
     prepare_canister_migration::PrepareCanisterMigrationPayload,
     reroute_canister_ranges::RerouteCanisterRangesPayload,
@@ -368,6 +372,9 @@ enum SubCommand {
     /// Get the latest routing table.
     GetRoutingTable(GetRoutingTableCmd),
 
+    /// Get the replica version(s) that Cloud Engines run by default.
+    GetStandardEngineReplicaVersion,
+
     /// Get the last version of a subnet from the registry.
     GetSubnet(GetSubnetCmd),
 
@@ -471,8 +478,16 @@ enum SubCommand {
     /// Submits a proposal to uninstall and install root to a particular version
     ProposeToHardResetNnsRootToVersion(ProposeToHardResetNnsRootToVersionCmd),
 
-    // Submits a proposal to add custom upgrade path entries
+    /// Submits a proposal to add custom upgrade path entries
     ProposeToInsertSnsWasmUpgradePathEntries(ProposeToInsertSnsWasmUpgradePathEntriesCmd),
+
+    /// Submits a proposal to split a subnet, i.e. to move some of its nodes and
+    /// canister ID ranges to a newly created subnet.
+    ProposeToSplitSubnet(ProposeToSplitSubnetCmd),
+
+    /// Submits a proposal to merge a subnet into another one, i.e. to reroute
+    /// the canister ID ranges of the source subnet to the destination subnet.
+    ProposeToMergeSubnets(ProposeToMergeSubnetsCmd),
 
     /// Propose additions or updates to `canister_migrations`. Step 1 of canister migration.
     ProposeToPrepareCanisterMigration(ProposeToPrepareCanisterMigrationCmd),
@@ -1116,6 +1131,100 @@ impl ProposalPayload<DeleteSubnetPayload> for ProposeToDeleteSubnetCmd {
     async fn payload(&self, _: &Agent) -> DeleteSubnetPayload {
         DeleteSubnetPayload {
             subnet_id: Principal::from(self.subnet_id),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to split a subnet.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToSplitSubnetCmd {
+    /// The subnet to split. It keeps the nodes and canister ID ranges that are
+    /// not moved to the destination subnet. Must have an even number of nodes.
+    #[clap(long)]
+    pub source_subnet: PrincipalId,
+
+    /// The nodes of the source subnet that form the newly created destination
+    /// subnet. They must make up half of the source subnet.
+    #[clap(long, num_args(1..), required = true)]
+    pub destination_node_ids: Vec<PrincipalId>,
+
+    /// The canister ID ranges of the source subnet that are rerouted to the
+    /// newly created destination subnet.
+    #[clap(long, num_args(1..), required = true)]
+    pub destination_canister_id_ranges: Vec<CanisterIdRange>,
+
+    /// The subnet that handles the initial DKG of the destination subnet. If
+    /// not set, the NNS subnet handles it. It must not be the source subnet.
+    #[clap(long)]
+    pub initial_dkg_subnet: Option<PrincipalId>,
+}
+
+impl ProposalTitle for ProposeToSplitSubnetCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Split subnet {} ({} nodes moved out)",
+                shortened_pid_string(&self.source_subnet),
+                self.destination_node_ids.len(),
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<SplitSubnetPayload> for ProposeToSplitSubnetCmd {
+    async fn payload(&self, _: &Agent) -> SplitSubnetPayload {
+        SplitSubnetPayload {
+            destination_canister_ranges: self.destination_canister_id_ranges.clone(),
+            destination_node_ids: self
+                .destination_node_ids
+                .iter()
+                .copied()
+                .map(NodeId::from)
+                .collect(),
+            source_subnet_id: SubnetId::from(self.source_subnet),
+            initial_dkg_subnet_id: self.initial_dkg_subnet.map(SubnetId::from),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to merge a subnet into another one.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToMergeSubnetsCmd {
+    /// The subnet whose canister ID ranges are merged into those of the
+    /// destination subnet. It hosts no canister ID range after the merge and is
+    /// expected to be deleted afterwards.
+    #[clap(long)]
+    pub source_subnet: PrincipalId,
+
+    /// The subnet that hosts the canister ID ranges of the source subnet after
+    /// the merge.
+    #[clap(long)]
+    pub destination_subnet: PrincipalId,
+}
+
+impl ProposalTitle for ProposeToMergeSubnetsCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Merge subnet {} into subnet {}",
+                shortened_pid_string(&self.source_subnet),
+                shortened_pid_string(&self.destination_subnet),
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<MergeSubnetsPayload> for ProposeToMergeSubnetsCmd {
+    async fn payload(&self, _: &Agent) -> MergeSubnetsPayload {
+        MergeSubnetsPayload {
+            source_subnet: SubnetId::from(self.source_subnet),
+            destination_subnet: SubnetId::from(self.destination_subnet),
         }
     }
 }
@@ -4746,6 +4855,7 @@ async fn main() {
             SubCommand::ProposeToDeployHostosToSomeNodes(_) => (),
             SubCommand::ProposeToHardResetNnsRootToVersion(_) => (),
             SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(_) => (),
+            SubCommand::ProposeToMergeSubnets(_) => (),
             SubCommand::ProposeToPrepareCanisterMigration(_) => (),
             SubCommand::ProposeToRemoveApiBoundaryNodes(_) => (),
             SubCommand::ProposeToRemoveFirewallRules(_) => (),
@@ -4759,6 +4869,7 @@ async fn main() {
             SubCommand::ProposeToSetAuthorizedSubnetworks(_) => (),
             SubCommand::ProposeToSetBitcoinConfig(_) => (),
             SubCommand::ProposeToSetFirewallConfig(_) => (),
+            SubCommand::ProposeToSplitSubnet(_) => (),
             SubCommand::ProposeToStartCanister(_) => (),
             SubCommand::ProposeToStopCanister(_) => (),
             SubCommand::ProposeToTakeCanisterSnapshot(_) => (),
@@ -4956,6 +5067,31 @@ async fn main() {
                 .map(|id_vec| format!("{:?}", PrincipalId::try_from(id_vec).unwrap()))
                 .collect();
             println!("{}", serde_json::to_string_pretty(&value).unwrap());
+        }
+        SubCommand::GetStandardEngineReplicaVersion => {
+            let key = make_standard_engine_replica_version_record_key();
+            match registry_canister
+                .get_value_with_update(key.as_bytes().to_vec(), None)
+                .await
+            {
+                Ok((bytes, version)) => {
+                    let record = StandardEngineReplicaVersionRecord::decode(&bytes[..])
+                        .expect("Error decoding value from registry.");
+                    print_value(&key, version, record, opts.json);
+                }
+                Err(Error::KeyNotPresent(_)) if opts.json => {
+                    // Same shape as `print_value`, with nulls for the absent record.
+                    let entry = serde_json::json!({ "key": key, "version": null, "value": null });
+                    println!("{}", serde_json::to_string_pretty(&entry).unwrap());
+                }
+                Err(Error::KeyNotPresent(_)) => {
+                    println!(
+                        "There is no {key} record in the registry: no standard engine \
+                         replica version has been set yet."
+                    );
+                }
+                Err(error) => panic!("Error getting value from registry: {error:?}"),
+            }
         }
         SubCommand::GetGuestOSVersion(get_guestos_version_cmd) => {
             let key = make_replica_version_key(&get_guestos_version_cmd.guestos_version_id)
@@ -5161,6 +5297,36 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::DeleteSubnet,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToMergeSubnets(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::MergeSubnets,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToSplitSubnet(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::SplitSubnet,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -7259,7 +7425,8 @@ fn parse_nns_public_key(
         let nns_key = if let Some(path) = nns_public_key_pem_file {
             parse_threshold_sig_key_from_pem_file(&path).expect("Failed to parse PEM file.")
         } else {
-            let decoded_nns_mainnet_key = base64::decode(IC_ROOT_PUBLIC_KEY_BASE64)
+            let decoded_nns_mainnet_key = BASE64_STANDARD
+                .decode(IC_ROOT_PUBLIC_KEY_BASE64)
                 .expect("Failed to decode mainnet public key from base64.");
             parse_threshold_sig_key_from_der(&decoded_nns_mainnet_key)
                 .expect("Failed to decode mainnet public key.")

@@ -2134,6 +2134,23 @@ mod validate_upgrade_arg {
     }
 }
 
+mod icrc1_archive_options {
+    use crate::scheduler::icrc1_archive_options;
+    use candid::Nat;
+    use ic_base_types::PrincipalId;
+
+    #[test]
+    fn should_disable_archiving_for_new_ledger_suites() {
+        let archive_options = icrc1_archive_options(
+            PrincipalId::new_user_test_id(1),
+            vec![PrincipalId::new_user_test_id(2)],
+            Nat::from(100_000_000_000_000_u64),
+        );
+
+        assert_eq!(archive_options.trigger_threshold, 4_200_000_000);
+    }
+}
+
 mod schema_upgrades {
     use crate::scheduler::test_fixtures::usdc_token_id;
     use crate::scheduler::{UpgradeLedgerSuite, UpgradeLedgerSuiteSubtask};
