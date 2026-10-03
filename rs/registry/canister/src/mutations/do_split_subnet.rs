@@ -156,9 +156,6 @@ impl Registry {
                 ),
                 cup_type: Some(cup_type),
 
-                height: 0,
-                time: 0,
-                state_hash: vec![],
                 registry_store_uri: None,
                 ecdsa_initializations: vec![],
                 chain_key_initializations: vec![],
