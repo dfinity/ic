@@ -1480,3 +1480,27 @@ fn test_64bit_heap_existing_memory_limit_too_large() {
         10 * GB / WASM_PAGE_SIZE_IN_BYTES as u64
     ))
 }
+
+#[test]
+fn wasm_with_many_locals_costs_more() {
+    let run = |num_locals| {
+        let wat = format!(
+            r#"
+          (module
+            (func $f (export "canister_update f") 
+              (local {})
+            )
+          )"#,
+            "i32 ".repeat(num_locals)
+        );
+
+        let mut instance = new_instance(&wat, 1_000_000_000_000);
+        let _res = instance.run(func_ref("f")).unwrap();
+        instr_used(&mut instance)
+    };
+    const I32_SIZE: usize = 4;
+    let num_locals_for_charge = 2 * PAGE_SIZE / I32_SIZE;
+    let low = run(num_locals_for_charge - 1);
+    let high = run(num_locals_for_charge + 1);
+    assert!(high - low >= 2 * PAGE_SIZE as u64);
+}
