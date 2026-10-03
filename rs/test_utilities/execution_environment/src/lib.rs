@@ -455,6 +455,29 @@ impl ExecutionTest {
         self.registry_settings.subnet_size
     }
 
+    /// Resizes this test's own subnet, i.e. simulates a registry change that adds
+    /// nodes to it or removes nodes from it between two rounds. The fees scaled by
+    /// the subnet size follow immediately, since they are derived from the network
+    /// topology in the replicated state.
+    pub fn set_own_subnet_size(&mut self, subnet_size: usize) {
+        let node_ids = (0..subnet_size)
+            .map(|i| node_test_id(i as u64))
+            .collect::<BTreeSet<_>>();
+        self.registry_settings.subnet_size = subnet_size;
+        self.registry_settings.node_ids = node_ids.clone();
+        let own_subnet_id = self.state().metadata.own_subnet_id;
+        self.state_mut()
+            .metadata
+            .modify_network_topology(|network_topology| {
+                network_topology
+                    .subnets_mut()
+                    .get_mut(&own_subnet_id)
+                    .unwrap()
+                    .nodes = node_ids;
+            });
+        debug_assert_eq!(self.get_own_subnet_cycles_config().subnet_size, subnet_size);
+    }
+
     pub fn cost_schedule(&self) -> CanisterCyclesCostSchedule {
         self.state.as_ref().unwrap().get_own_cost_schedule()
     }

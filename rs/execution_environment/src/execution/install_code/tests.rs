@@ -15,6 +15,7 @@ use ic_replicated_state::{
         NextExecution, execution_state::WasmExecutionMode, system_state::wasm_chunk_store,
     },
     metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
+    testing::SystemStateTesting,
 };
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, get_reply,
@@ -434,6 +435,116 @@ fn dts_abort_works_in_install_code() {
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap();
     assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+}
+
+/// Starts an `install_code` that runs with DTS, executes one slice so that it
+/// pauses, and aborts it. Returns the message id and the cycles it prepaid.
+fn dts_install_code_and_abort(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    instruction_limit: u64,
+) -> (MessageId, CompoundCycles<Instructions>) {
+    let prepaid = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.get_own_subnet_cycles_config(),
+        WASM_EXECUTION_MODE,
+    );
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        arg: vec![],
+        sender_canister_version: None,
+    };
+    let message_id = test.dts_install_code(payload);
+    test.execute_slice(canister_id);
+    test.abort_all_paused_executions();
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    (message_id, prepaid)
+}
+
+/// An aborted `install_code` that is restarted after its subnet grew is charged
+/// for the instructions it uses at the subnet size in effect when it is restarted,
+/// i.e. the counterpart of
+/// `dts_aborted_execution_is_charged_at_the_subnet_size_at_the_restart` for the
+/// `install_code` call site.
+#[test]
+fn dts_aborted_install_code_is_charged_at_the_subnet_size_at_the_restart() {
+    const INSTRUCTION_LIMIT: u64 = 50_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
+        .with_install_code_slice_instruction_limit(132_000)
+        .with_create_execution_state_base_cost(0)
+        .with_manual_execution()
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let execution_cost_before = test.canister_execution_cost(canister_id);
+    let (ingress_id, _) = dts_install_code_and_abort(&mut test, canister_id, INSTRUCTION_LIMIT);
+
+    // The subnet doubles in size before the aborted install_code is restarted, so
+    // the restarted one costs twice what the aborted one prepaid.
+    test.set_own_subnet_size(2 * test.get_own_subnet_cycles_config().subnet_size);
+
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
+        test.execute_slice(canister_id);
+    }
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+    let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+    assert_eq!(result, WasmResult::Reply(EmptyBlob.encode()));
+
+    let charged = test.canister_execution_cost(canister_id) - execution_cost_before;
+    assert_gt!(charged.real(), Cycles::zero());
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        balance_before - charged.real(),
+    );
+}
+
+/// An aborted `install_code` whose restart costs more than the canister can cover
+/// fails as out of cycles, and the prepayment that the aborted execution carried
+/// over is refunded in full, so the canister pays nothing for the installation
+/// that never ran.
+#[test]
+fn dts_aborted_install_code_that_cannot_cover_the_shortfall_fails() {
+    const INSTRUCTION_LIMIT: u64 = 50_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
+        .with_install_code_slice_instruction_limit(132_000)
+        .with_create_execution_state_base_cost(0)
+        .with_manual_execution()
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+
+    let (ingress_id, prepaid) =
+        dts_install_code_and_abort(&mut test, canister_id, INSTRUCTION_LIMIT);
+
+    // The subnet doubles in size before the aborted install_code is restarted, and
+    // the canister is left without the cycles to cover the difference.
+    test.set_own_subnet_size(2 * test.get_own_subnet_cycles_config().subnet_size);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .set_balance(Cycles::zero());
+
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        prepaid.real(),
+    );
 }
 
 #[test]
