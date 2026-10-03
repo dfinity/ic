@@ -280,14 +280,15 @@ fn instr_used(instance: &mut WasmtimeInstance) -> u64 {
         .get()
 }
 
-/// Returns the instruction overhead charged in-band by the deterministic memory
-/// tracker for the first access to Wasm pages.
+/// Returns the number of *OS pages* the deterministic memory tracker charges
+/// for in-band when the given Wasm pages are first written. Multiply by
+/// `page_overhead` to get instructions.
 ///
-/// - `n_heap_wasm_pages`: pages first *written* on the heap.
-///   Each triggers `mark_wasm_page_accessed` + `mark_wasm_page_dirty`:
-///   2 × (WASM_PAGE_SIZE / OS_PAGE_SIZE) = 2 × 16 = 32 instructions.
-/// - `n_stable_wasm_pages`: same as for heap: 32 instructions per page.
-fn deterministic_tracker_overhead(n_heap_wasm_pages: u64, n_stable_wasm_pages: u64) -> u64 {
+/// A first write to a Wasm page triggers both `mark_wasm_page_accessed` and
+/// `mark_wasm_page_dirty`, i.e. every OS page it covers is charged twice. The
+/// number of OS pages per Wasm page varies by platform (16 for 4 KiB pages on
+/// Linux, 4 for 16 KiB pages on arm64-darwin).
+fn dmt_write_charged_os_pages(n_heap_wasm_pages: u64, n_stable_wasm_pages: u64) -> u64 {
     let os_pages_per_wasm_page = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64;
     n_heap_wasm_pages * 2 * os_pages_per_wasm_page
         + n_stable_wasm_pages * 2 * os_pages_per_wasm_page
@@ -742,7 +743,7 @@ fn metering_loop() {
     );
 }
 
-fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
+fn run_charge_for_heap_pages(wasm_memory_type: WasmMemoryType) {
     let memory = match wasm_memory_type {
         WasmMemoryType::Wasm32 => r#"(memory (export "memory") 10)"#,
         WasmMemoryType::Wasm64 => r#"(memory (export "memory") i64 10)"#,
@@ -804,32 +805,32 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
 
     // Both stores target Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
     // so only one heap page-first-write event occurs.
-    let overhead = deterministic_tracker_overhead(1, 0);
+    let dmt_pages = dmt_write_charged_os_pages(1, 0);
 
     let instructions_used = instr_used(&mut instance);
     // Function is 1 instruction.
     assert_eq!(
         instructions_used,
-        1 + 5 * cc + cg + 2 * cs + cl + overhead * cd
+        1 + 5 * cc + cg + 2 * cs + cl + dmt_pages * cd
     );
-    // Now run the same with insufficient instructions
-    // We should still succeed (to avoid potentially failing pre-upgrades
-    // of canisters that did not adjust their code to new metering)
+    // Now run the same with insufficient instructions. We should still succeed
+    // (to avoid potentially failing pre-upgrades of canisters that did not
+    // adjust their code to new metering)
     let mut instance = new_instance(&wat, 100);
     instance.run(func_ref("test")).unwrap();
 }
 
 #[test]
-fn charge_for_dirty_heap() {
-    run_charge_for_dirty_heap(WasmMemoryType::Wasm32);
+fn charge_for_heap_pages() {
+    run_charge_for_heap_pages(WasmMemoryType::Wasm32);
 }
 
 #[test]
-fn charge_for_dirty_heap_wasm64() {
-    run_charge_for_dirty_heap(WasmMemoryType::Wasm64);
+fn charge_for_heap_pages_wasm64() {
+    run_charge_for_heap_pages(WasmMemoryType::Wasm64);
 }
 
-fn run_charge_for_dirty_stable64_test() {
+fn run_charge_for_stable64_pages_test() {
     let wat = r#"
         (module
             (import "ic0" "stable64_grow"
@@ -911,23 +912,23 @@ fn run_charge_for_dirty_stable64_test() {
 
     // Both i64.stores hit heap Wasm page 0; the first stable64_write hits stable
     // Wasm page 0 (bytes 0 and 4096 are both within the 64KB page).
-    let overhead = deterministic_tracker_overhead(1, 1);
+    let dmt_pages = dmt_write_charged_os_pages(1, 1);
 
     let instructions_used = instr_used(&mut instance);
-    // 2 dirty stable pages and one heap
+    // One heap and one stable Wasm page, each accessed and dirtied.
     assert_eq!(
         instructions_used,
         // Function is 1 instruction.
-        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + csw * 2 + csr + cl + cg + overhead * cd
+        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + csw * 2 + csr + cl + cg + dmt_pages * cd
     );
 }
 
 #[test]
-fn charge_for_dirty_stable64_native() {
-    run_charge_for_dirty_stable64_test();
+fn charge_for_stable64_pages_native() {
+    run_charge_for_stable64_pages_test();
 }
 
-fn run_charge_for_dirty_stable_test() {
+fn run_charge_for_stable_pages_test() {
     let wat = r#"
         (module
             (import "ic0" "stable_grow"
@@ -1009,20 +1010,20 @@ fn run_charge_for_dirty_stable_test() {
 
     // Both i32.stores hit heap Wasm page 0; the first stable_write hits stable
     // Wasm page 0 (bytes 0 and 4096 are both within the 64KB page).
-    let overhead = deterministic_tracker_overhead(1, 1);
+    let dmt_pages = dmt_write_charged_os_pages(1, 1);
 
     let instructions_used = instr_used(&mut instance);
-    // 2 dirty stable pages and one heap
+    // One heap and one stable Wasm page, each accessed and dirtied.
     assert_eq!(
         instructions_used,
         // Function is 1 instruction.
-        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + csw * 2 + csr + cl + cg + overhead * cd
+        1 + cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + csw * 2 + csr + cl + cg + dmt_pages * cd
     );
 }
 
 #[test]
-fn charge_for_dirty_stable_native() {
-    run_charge_for_dirty_stable_test();
+fn charge_for_stable_pages_native() {
+    run_charge_for_stable_pages_test();
 }
 
 /// Helper method to generate a wasm module with tables in both
@@ -1164,7 +1165,7 @@ fn metering_wasm64_load_store_canister() {
     let drop = instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm64);
     // Both stores hit Wasm page 0 (bytes 0 and 4096 are within the 64KB page),
     // so only one heap page-first-write event occurs.
-    let overhead = deterministic_tracker_overhead(1, 0);
+    let dmt_pages = dmt_write_charged_os_pages(1, 0);
     let total_cost = 1
         + 2 * const_0
         + const_17
@@ -1173,7 +1174,7 @@ fn metering_wasm64_load_store_canister() {
         + 2 * store
         + load
         + drop
-        + overhead * page_overhead.get();
+        + dmt_pages * page_overhead.get();
     assert_eq!(instr_used_wasm64, total_cost);
 
     // Compute cost in Wasm32 mode and compare.
@@ -1243,7 +1244,7 @@ fn metering_wasm64_load_store_canister() {
         + 2 * store_wasm32
         + load_wasm32
         + drop_wasm32
-        + overhead * page_overhead.get();
+        + dmt_pages * page_overhead.get();
     assert_eq!(wasm_32_instructions, total_cost_wasm32);
 
     // Check that the cost in Wasm64 mode is higher than in Wasm32 mode.
