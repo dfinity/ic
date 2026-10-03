@@ -446,6 +446,19 @@ pub(crate) async fn download_stripped_message<P: Peers>(
                 .body(bytes)
                 .unwrap()
         }
+        StrippedMessageId::CanisterHttpResponse(content_hash) => {
+            let request = GetCanisterHttpResponseInBlockRequest {
+                content_hash: content_hash.clone(),
+                block_proposal_id,
+            };
+            let bytes = Bytes::from(pb::GetCanisterHttpResponseInBlockRequest::proxy_encode(
+                request,
+            ));
+            Request::builder()
+                .uri(CANISTER_HTTP_RESPONSE_URI)
+                .body(bytes)
+                .unwrap()
+        }
     };
 
     loop {
@@ -522,6 +535,16 @@ fn parse_response(
                 ));
             }
         }
+        StrippedMessageId::CanisterHttpResponse(content_hash) => {
+            let response = parse_canister_http_response(body)?;
+            let derived_content_hash = ic_types::crypto::crypto_hash(&response);
+            if derived_content_hash == *content_hash {
+                return Ok(StrippedMessage::CanisterHttpResponse(
+                    derived_content_hash,
+                    response,
+                ));
+            }
+        }
     }
     Err(ParseResponseError::MessageIdMismatch)
 }
@@ -535,6 +558,16 @@ fn parse_ingress_response(body: Bytes) -> Result<SignedIngress, ParseResponseErr
 
     SignedIngress::try_from(response.serialized_ingress_message)
         .map_err(|_| ParseResponseError::ParsingError("ingress_deserialization_failed"))
+}
+
+fn parse_canister_http_response(body: Bytes) -> Result<CanisterHttpResponse, ParseResponseError> {
+    let response = pb::GetCanisterHttpResponseInBlockResponse::proxy_decode(&body)
+        .and_then(|proto: pb::GetCanisterHttpResponseInBlockResponse| {
+            GetCanisterHttpResponseInBlockResponse::try_from(proto)
+        })
+        .map_err(|_| ParseResponseError::ParsingError("canister_http_response_decoding_failed"))?;
+
+    Ok(response.response)
 }
 
 fn parse_dealing_response(body: Bytes) -> Result<SignedIDkgDealing, ParseResponseError> {
@@ -1388,6 +1421,11 @@ mod tests {
                     pb::GetIDkgDealingInBlockResponse::proxy_encode(GetIDkgDealingInBlockResponse {
                         signed_dealing: dealing,
                     })
+                }
+                StrippedMessage::CanisterHttpResponse(_, response) => {
+                    pb::GetCanisterHttpResponseInBlockResponse::proxy_encode(
+                        GetCanisterHttpResponseInBlockResponse { response },
+                    )
                 }
             }))
             .unwrap()

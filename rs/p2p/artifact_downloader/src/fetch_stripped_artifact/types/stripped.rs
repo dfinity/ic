@@ -6,9 +6,10 @@ use ic_types::{
     NodeIndex,
     artifact::{ConsensusMessageId, IdentifiableArtifact, PbArtifact},
     consensus::{ConsensusMessage, ConsensusMessageHash, idkg::IDkgArtifactId},
+    crypto::{CryptoHash, CryptoHashOf},
 };
 
-use super::SignedIngressId;
+use super::{CanisterHttpResponseContentHash, SignedIngressId};
 
 /// Stripped version of the [`IngressPayload`].
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -22,6 +23,12 @@ pub(crate) struct StrippedIDkgDealings {
     pub(crate) stripped_dealings: Vec<(NodeIndex, IDkgArtifactId)>,
 }
 
+/// Stripped version of the canister HTTP payload.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct StrippedCanisterHttpResponses {
+    pub(crate) stripped_responses: Vec<CanisterHttpResponseContentHash>,
+}
+
 /// Stripped version of the [`BlockProposal`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct StrippedBlockProposal {
@@ -33,6 +40,9 @@ pub struct StrippedBlockProposal {
     pub(crate) stripped_ingress_payload: StrippedIngressPayload,
     /// The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
     pub(crate) stripped_idkg_dealings: StrippedIDkgDealings,
+    /// The stripped canister HTTP responses, i.e. the content hashes of the responses that were
+    /// pruned from the canister HTTP payload of the block proposal.
+    pub(crate) stripped_canister_http_responses: StrippedCanisterHttpResponses,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -126,6 +136,13 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
                     })
                     .collect::<Result<Vec<_>, ProxyDecodeError>>()?,
             },
+            stripped_canister_http_responses: StrippedCanisterHttpResponses {
+                stripped_responses: value
+                    .stripped_canister_http_responses
+                    .into_iter()
+                    .map(|response| CryptoHashOf::new(CryptoHash(response.content_hash)))
+                    .collect(),
+            },
         })
     }
 }
@@ -153,8 +170,14 @@ impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
                     dealing_id: Some(dealing_id.into()),
                 })
                 .collect(),
-            // Nothing strips canister HTTP responses yet.
-            stripped_canister_http_responses: Vec::new(),
+            stripped_canister_http_responses: value
+                .stripped_canister_http_responses
+                .stripped_responses
+                .into_iter()
+                .map(|content_hash| pb::StrippedCanisterHttpResponse {
+                    content_hash: content_hash.get().0,
+                })
+                .collect(),
         }
     }
 }
@@ -238,8 +261,8 @@ mod tests {
 
     use crate::fetch_stripped_artifact::{
         test_utils::{
-            fake_finalization_consensus_message_id, fake_idkg_dealing,
-            fake_idkg_dealing_support_artifact_id, fake_ingress_message,
+            fake_canister_http_response_message_id, fake_finalization_consensus_message_id,
+            fake_idkg_dealing, fake_idkg_dealing_support_artifact_id, fake_ingress_message,
             fake_stripped_block_proposal_with_messages,
         },
         types::StrippedMessageId,
@@ -269,11 +292,15 @@ mod tests {
         let ingress_2_id = fake_ingress_message("fake_2").id();
         let idkg_dealing_1_id = fake_idkg_dealing(NODE_1, 1).id();
         let idkg_dealing_2_id = fake_idkg_dealing(NODE_2, 2).id();
+        let canister_http_1_id = fake_canister_http_response_message_id(1);
+        let canister_http_2_id = fake_canister_http_response_message_id(2);
         let stripped_block_proposal = fake_stripped_block_proposal_with_messages(vec![
             ingress_1_id,
             ingress_2_id,
             idkg_dealing_1_id,
             idkg_dealing_2_id,
+            canister_http_1_id,
+            canister_http_2_id,
         ]);
         let original_consensus_message =
             MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal);
