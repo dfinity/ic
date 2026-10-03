@@ -40,6 +40,10 @@ on the process that this file is part of, see
   stamped as `CupType::Genesis`. Any other record is stamped as `CupType::Recovery`, which keeps those
   legacy values.
 
+* The `cup_type` backfill migration is now applied in several atomic batches of bounded size (invariants are
+  still checked once, on the whole migration), instead of as one single mutation, so that a large migration
+  cannot exceed the limit on the size of an atomic mutation.
+
 ## Changed
 
 * The maximum size of a single atomic registry mutation (`MAX_CHUNKABLE_ATOMIC_MUTATION_LEN`) is raised from

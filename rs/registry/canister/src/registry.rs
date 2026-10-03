@@ -367,6 +367,56 @@ impl Registry {
         self.apply_mutations(mutations);
     }
 
+    /// Like `maybe_apply_mutation_internal`, but for (migration) mutations whose total size
+    /// may exceed `MAX_CHUNKABLE_ATOMIC_MUTATION_LEN`.
+    ///
+    /// Invariants are checked once, against the state that results from applying *all* the
+    /// mutations. The mutations are then applied in several atomic batches, each of which
+    /// encodes to at most `max_batch_len` bytes (unless a single mutation is larger than that,
+    /// in which case it forms a batch of its own).
+    ///
+    /// Intermediate states are never observable by other canisters, since this is meant to be
+    /// called from `canister_post_upgrade`, which either completes entirely or traps (and then
+    /// rolls back everything).
+    ///
+    /// Returns the number of batches applied, i.e. by how much `latest_version` increased.
+    pub(crate) fn maybe_apply_mutation_internal_in_batches(
+        &mut self,
+        mutations: Vec<RegistryMutation>,
+        max_batch_len: usize,
+    ) -> u64 {
+        println!(
+            "{}Received a mutate call containing a list of {} mutations, \
+             to be applied in batches of at most {} bytes",
+            LOG_PREFIX,
+            mutations.len(),
+            max_batch_len
+        );
+        self.verify_mutations_internal(&mutations);
+
+        let mut batches: Vec<Vec<RegistryMutation>> = vec![];
+        let mut current_batch: Vec<RegistryMutation> = vec![];
+        let mut current_batch_len = 0;
+        for mutation in mutations {
+            let mutation_len = mutation.encoded_len();
+            if !current_batch.is_empty() && current_batch_len + mutation_len > max_batch_len {
+                batches.push(std::mem::take(&mut current_batch));
+                current_batch_len = 0;
+            }
+            current_batch_len += mutation_len;
+            current_batch.push(mutation);
+        }
+        if !current_batch.is_empty() {
+            batches.push(current_batch);
+        }
+
+        let num_batches = batches.len() as u64;
+        for batch in batches {
+            self.apply_mutations(batch);
+        }
+        num_batches
+    }
+
     #[cfg(any(test, feature = "canbench-rs"))]
     pub fn apply_mutations_for_test(&mut self, mutations: Vec<RegistryMutation>) {
         self.apply_mutations(mutations);
