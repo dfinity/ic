@@ -111,3 +111,7 @@ To isolate everything, including the install base, repository cache and cargo ta
 ```bash
 ./ci/container/container-run.sh -c ~/.cache2
 ```
+
+### Testing `container-run.sh`
+
+`./ci/container/test-container-run.sh` starts a few containers from the current checkout and from a temporary linked worktree next to it and checks the mount layout, git, bazel's per-checkout output base (including that the main checkout's bazel server survives a bazel run from another checkout) and `build-ic.sh`. CI runs it once per container runtime; locally run it as is (podman) or with `CONTAINER_RUNTIME=docker`. It works on a dirty tree, uses a throwaway cache directory so it never touches your real output bases or running bazel servers, and cleans up after itself (a SIGKILL can leave a `<checkout>-test-wt.XXXXXX` directory behind).
