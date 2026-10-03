@@ -1079,12 +1079,9 @@ pub struct ProposalData {
     pub action_auxiliary: Option<proposal_data::ActionAuxiliary>,
     /// This proposal's topic.
     pub topic: Option<topics::Topic>,
-    /// The raw reply bytes returned by the target canister when this
-    /// proposal's action was an ExecuteGenericNervousSystemFunction call that
-    /// completed successfully at the IC call level. SNS does not know this
-    /// reply's Candid schema, so it is stored as-is (opaque), truncated to at
-    /// most MAX_SCALAR_FIELD_LEN_BYTES to bound stable memory usage against a
-    /// misbehaving target canister.
+    /// The raw reply bytes returned by the target canister for a successful
+    /// ExecuteGenericNervousSystemFunction call, truncated to at most
+    /// MAX_SCALAR_FIELD_LEN_BYTES.
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub execution_reply: Option<Vec<u8>>,
 }

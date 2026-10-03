@@ -1763,18 +1763,20 @@ impl Governance {
         }
     }
 
-    /// Records the raw reply bytes from a successfully executed
-    /// ExecuteGenericNervousSystemFunction proposal, for transparency/auditability.
-    ///
-    /// The SNS cannot decode this reply (its Candid schema is unknown), so
-    /// the bytes are stored as-is, truncated to at most
-    /// `MAX_SCALAR_FIELD_LEN_BYTES` bytes to bound governance's stable memory
-    /// usage against a misbehaving or malicious target canister.
+    /// Saves a generic function call's reply on its proposal, keeping at most
+    /// `MAX_SCALAR_FIELD_LEN_BYTES` bytes.
     fn set_proposal_execution_reply(&mut self, pid: u64, mut execution_reply: Vec<u8>) {
         execution_reply.truncate(MAX_SCALAR_FIELD_LEN_BYTES);
-        if let Some(proposal) = self.proto.proposals.get_mut(&pid) {
-            proposal.execution_reply = Some(execution_reply);
-        }
+        let Some(proposal) = self.proto.proposals.get_mut(&pid) else {
+            log!(
+                ERROR,
+                "Tried to record reply after executing proposal {}, but unable to find the proposal.",
+                pid,
+            );
+            return;
+        };
+
+        proposal.execution_reply = Some(execution_reply);
     }
 
     /// Returns the latest reward event.
@@ -2185,12 +2187,10 @@ impl Governance {
                     Err(e) => Err(e),
                 }
             }
-            Action::ExecuteGenericNervousSystemFunction(call) => self
-                .perform_execute_generic_nervous_system_function(call)
-                .await
-                .map(|execution_reply| {
-                    self.set_proposal_execution_reply(proposal_id, execution_reply);
-                }),
+            Action::ExecuteGenericNervousSystemFunction(call) => {
+                self.perform_execute_generic_nervous_system_function(proposal_id, call)
+                    .await
+            }
             Action::ExecuteExtensionOperation(execute_extension_operation) => {
                 self.perform_execute_extension_operation(execute_extension_operation)
                     .await
@@ -2545,33 +2545,37 @@ impl Governance {
         Ok(())
     }
 
-    /// Executes a (non-native) nervous system function as a result of an adopted proposal.
-    /// On success, returns the raw reply bytes from the target canister.
+    /// Executes a (non-native) nervous system function for an adopted proposal.
+    /// On success, saves the target canister's reply on the proposal.
     async fn perform_execute_generic_nervous_system_function(
-        &self,
+        &mut self,
+        proposal_id: u64,
         call: ExecuteGenericNervousSystemFunction,
-    ) -> Result<Vec<u8>, GovernanceError> {
-        match self
+    ) -> Result<(), GovernanceError> {
+        let function = match self
             .proto
             .id_to_nervous_system_functions
             .get(&call.function_id)
         {
-            None => Err(GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                format!(
-                    "There is no generic NervousSystemFunction with id: {}",
-                    call.function_id
-                ),
-            )),
-            Some(function) => {
-                perform_execute_generic_nervous_system_function_call(
-                    &*self.env,
-                    function.clone(),
-                    call,
-                )
-                .await
+            None => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    format!(
+                        "There is no generic NervousSystemFunction with id: {}",
+                        call.function_id
+                    ),
+                ));
             }
-        }
+            Some(function) => function.clone(),
+        };
+
+        let execution_reply =
+            perform_execute_generic_nervous_system_function_call(&*self.env, function, call)
+                .await?;
+
+        self.set_proposal_execution_reply(proposal_id, execution_reply);
+
+        Ok(())
     }
 
     async fn perform_execute_extension_operation(
@@ -3674,7 +3678,7 @@ impl Governance {
             topic: Some(i32::from(proposal_topic)),
 
             // A new proposal has not been executed yet, so there is no reply.
-            execution_reply: ProposalData::default().execution_reply,
+            execution_reply: None,
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {

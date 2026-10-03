@@ -86,7 +86,7 @@ pub(crate) fn execute_proposal(governance: &mut Governance, proposal_id: u64) ->
     // less than 1 s (on my Macbook Pro 2019 Intel). The reason for this
     // generous limit is twofold: 1. avoid flakes in CI, while at the same
     // time 2. do not run forever if something goes wrong.
-    let give_up = || now() < start + std::time::Duration::from_secs(30);
+    let give_up = || now() >= start + std::time::Duration::from_secs(30);
 
     loop {
         let result = governance

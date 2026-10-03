@@ -280,11 +280,8 @@ pub async fn perform_execute_generic_nervous_system_function_validate_and_render
 
 /// Executes a generic nervous system function (i.e., a non-native SNS proposal).
 ///
-/// On success, returns the raw reply bytes from the target canister's
-/// method. Because this is a *generic* function, the SNS does not know the
-/// reply's Candid schema, so these bytes are returned as-is (opaque) for the
-/// caller to store for transparency/auditability; they are not decoded or
-/// otherwise interpreted here.
+/// On success, returns the raw reply bytes from the target canister. We return
+/// them as-is and don't try to decode them.
 pub async fn perform_execute_generic_nervous_system_function_call(
     env: &dyn Environment,
     function: NervousSystemFunction,
@@ -294,26 +291,16 @@ pub async fn perform_execute_generic_nervous_system_function_call(
     let valid_function = ValidGenericNervousSystemFunction::try_from(&function)
         .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))?;
 
-    let result = env
-        .call_canister(
-            valid_function.target_canister_id,
-            &valid_function.target_method,
-            call.payload,
-        )
-        .await;
-
-    // Convert result.
-    match result {
-        Err(err) => Err(GovernanceError::new_with_message(
+    env.call_canister(
+        valid_function.target_canister_id,
+        &valid_function.target_method,
+        call.payload,
+    )
+    .await
+    .map_err(|err| {
+        GovernanceError::new_with_message(
             ErrorType::External,
             format!("Canister method call to execute proposal failed: {err:?}"),
-        )),
-
-        // The reply's Candid schema is unknown to the SNS in general (that is
-        // the whole point of a *generic* nervous system function), so it
-        // cannot be decoded here to detect an application-level error.
-        // Instead, the raw bytes are returned so they can be stored on the
-        // proposal for a human/tooling to inspect after the fact.
-        Ok(reply) => Ok(reply),
-    }
+        )
+    })
 }
