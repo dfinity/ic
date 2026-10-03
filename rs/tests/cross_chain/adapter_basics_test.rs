@@ -11,7 +11,7 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on},
 };
 use ic_tests_ckbtc::{
-    IcRpcClientType,
+    IcRpcClientType, OVERALL_TIMEOUT, TIMEOUT_PER_TEST,
     adapter::{AdapterProxy, fund_with_tokens},
     adapter_test_setup, subnet_sys,
     utils::get_rpc_client,
@@ -178,6 +178,11 @@ fn test_send_tx<T: IcRpcClientType>(env: TestEnv) {
 
 fn test<T: 'static + IcRpcClientType>() -> Result<()> {
     SystemTestGroup::new()
+        // Setting up the bitcoind/dogecoind UVM and the IC node requires two sequential Farm VM
+        // allocations, which can exceed the driver's default 10 minute setup timeout on a slow
+        // Farm day (see the docs of `TIMEOUT_PER_TEST`).
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
         .with_setup(adapter_test_setup::<T>)
         .add_test(systest!(test_received_blocks::<T>))
         .add_test(systest!(test_receives_new_3rd_party_txs::<T>))

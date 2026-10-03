@@ -51,9 +51,27 @@ use std::{
 pub mod adapter;
 pub mod utils;
 
-/// For an, as of yet, unexplained reason the setup task of all the ckbtc system-tests often times out
-/// after the default 10 minutes because creating the btc-node takes a long time.
-/// So to reduce flakiness we bump the timeout to 15 minutes.
+/// The setup task of the ckbtc system-tests can need more than the driver's default 10 minutes
+/// on Farm: it performs two sequential Farm VM allocations (the bitcoind/dogecoind universal VM,
+/// then the IC node(s)), and on a slow Farm day a single VM allocation takes 3-5 minutes
+/// (observed on 2026-09-08, when the two allocations consumed 8.5 of the 10 minutes).
+/// So to reduce flakiness we bump the per-task timeout to 15 minutes.
+///
+/// When metrics are enabled the driver additionally runs a `metrics_setup` task in parallel with
+/// `setup`, under the same per-task timeout. It allocates a third Farm VM (Prometheus) only once
+/// ic-prep has run, i.e. after the IC node allocation, so it is effectively a third sequential
+/// allocation. If it does not finish within the per-task timeout it is killed and the tests run
+/// without metrics (it cannot fail `setup`), but the tests only start once it has finished or
+/// been killed, so the larger budget also lets the Prometheus VM come up.
+///
+/// Note that the driver can only enforce these timeouts itself (and report the timed-out task)
+/// if bazel's own test timeout is larger, i.e. the target has `test_timeout = "eternal"`. Under
+/// the default `"long"` (15 minutes) bazel's clock starts first (`run_systest.sh` `exec`s the
+/// driver), so the 15 minute per-task timeout never fires, the 20 minute overall timeout is
+/// unreachable, and a too-slow setup ends as a bazel `TIMEOUT` without a driver report. The bump
+/// still matters there, since it stops the driver from killing `setup` after 10 minutes. The
+/// adapter basics tests in `rs/tests/cross_chain` use `"eternal"`; the ckbtc minter tests in this
+/// directory currently still run under `"long"`.
 pub const TIMEOUT_PER_TEST: Duration = Duration::from_secs(15 * 60);
 pub const OVERALL_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
