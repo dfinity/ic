@@ -45,7 +45,9 @@ use ic_registry_keys::{
     make_node_operator_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
     make_subnet_list_record_key, make_unassigned_nodes_config_record_key,
 };
-use ic_registry_local_store::{Changelog, KeyMutation, LocalStoreImpl, LocalStoreWriter};
+use ic_registry_local_store::{
+    Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
+};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
@@ -739,7 +741,7 @@ impl IcConfig {
              }| {
                 let rel_version = (*version - ZERO_REGISTRY_VERSION).get();
                 if cl.len() < rel_version as usize {
-                    cl.push(vec![]);
+                    cl.push(ChangelogEntry::default());
                 }
                 cl.last_mut().unwrap().push(KeyMutation {
                     key: key.clone(),

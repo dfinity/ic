@@ -1,6 +1,6 @@
 #![deny(missing_docs)]
 use crate::consensus::{
-    ConsensusCrypto,
+    ConsensusCrypto, MEMBERSHIP_HOLD,
     metrics::BlockMakerMetrics,
     status::{self, Status},
 };
@@ -12,6 +12,7 @@ use ic_consensus_utils::{
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
     get_subnet_record,
     membership::Membership,
+    membership_hold,
     pool_reader::{PoolReader, UnexpectedChainLength},
     subnet_splitting,
 };
@@ -553,8 +554,38 @@ impl BlockMaker {
             .dkg
             .get_next_start_height();
         let latest_version = self.registry_client.get_latest_version();
-        // Check if there is a stable version that we can bump up to.
-        for v in (parents_version.get()..=latest_version.get()).rev() {
+
+        // Don't adopt a membership change until the nodes it adds have had time to
+        // sync state. We compare against the *parent's* time rather than our own
+        // clock: the validator checks this rule against the time of the block we are
+        // about to build, which is strictly later, so judging by the parent's keeps
+        // us on the conservative side of it.
+        let max_adoptable_version = membership_hold::highest_adoptable_version(
+            self.registry_client.as_ref(),
+            self.replica_config.subnet_id,
+            last_summary
+                .payload
+                .as_ref()
+                .as_summary()
+                .dkg
+                .registry_version,
+            latest_version,
+            parent.context.time,
+            MEMBERSHIP_HOLD,
+        )
+        .map_err(|err| {
+            warn!(
+                every_n_seconds => 5,
+                self.log,
+                "Failed to determine the highest adoptable registry version: {err:?}"
+            );
+        })
+        .ok()?;
+
+        // Check if there is a stable version that we can bump up to. If everything up
+        // to the parent's version is being held back, the range is empty and we keep
+        // the parent's version below.
+        for v in (parents_version.get()..=max_adoptable_version.get()).rev() {
             let version = RegistryVersion::from(v);
 
             // Don't consider a registry version if it's too fresh.
