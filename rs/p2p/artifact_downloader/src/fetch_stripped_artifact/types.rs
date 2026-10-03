@@ -1,5 +1,6 @@
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
+use ic_types::canister_http::CanisterHttpResponse;
 use ic_types::consensus::idkg::IDkgArtifactId;
 use ic_types::crypto::CryptoHash;
 use ic_types::crypto::canister_threshold_sig::idkg::SignedIDkgDealing;
@@ -11,6 +12,11 @@ pub(super) mod rpc;
 pub(super) mod stripped;
 
 type IngressBytesHash = CryptoHashOf<SignedRequestBytes>;
+
+/// A unique identifier of a [`CanisterHttpResponse`]: the hash of its content,
+/// which is what the response metadata that consensus signs over is keyed by, and
+/// what the canister HTTP pool indexes its response contents by.
+pub(crate) type CanisterHttpResponseContentHash = CryptoHashOf<CanisterHttpResponse>;
 
 /// A unique identifier of a [`SignedIngress`].
 /// Note that the hash of [`SignedIngress::binary`] should be enough to uniquely identify a
@@ -71,6 +77,7 @@ pub(crate) enum StrippedMessage {
 pub(crate) enum StrippedMessageType {
     Ingress,
     IDkgDealing,
+    CanisterHttpResponse,
 }
 
 impl StrippedMessageType {
@@ -78,6 +85,7 @@ impl StrippedMessageType {
         match self {
             StrippedMessageType::Ingress => "ingress",
             StrippedMessageType::IDkgDealing => "idkg_dealing",
+            StrippedMessageType::CanisterHttpResponse => "canister_http_response",
         }
     }
 }

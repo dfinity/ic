@@ -11,7 +11,9 @@ use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_deali
 use ic_interfaces::p2p::consensus::{ArtifactAssembler, BouncerValue, Peers, ValidatedPoolReader};
 use ic_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_p2p_test_utils::mocks::{MockBouncerFactory, MockTransport, MockValidatedPoolReader};
+use ic_p2p_test_utils::mocks::{
+    FakeCanisterHttpPool, MockBouncerFactory, MockTransport, MockValidatedPoolReader,
+};
 use ic_test_utilities_consensus::{
     fake::{Fake, FakeContentSigner},
     make_genesis,
@@ -105,6 +107,7 @@ fn set_up_assembler(
         Arc::new(RwLock::new(consensus_pool)),
         Arc::new(RwLock::new(ingress_pool)),
         Arc::new(RwLock::new(idkg_pool)),
+        Arc::new(RwLock::new(FakeCanisterHttpPool::empty())),
         Arc::new(mock_bouncer_factory),
         MetricsRegistry::new(),
         NODE_1,
