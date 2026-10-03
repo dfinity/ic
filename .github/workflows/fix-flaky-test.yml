@@ -1,0 +1,354 @@
+name: Fix Flaky Test
+
+# Called by schedule-fix-flaky-tests.yml for each flaky test. Claude only commits the fix locally:
+# open-deflake-pr.yml opens it as a PR in a separate run (see there).
+
+on:
+  workflow_call:
+    inputs:
+      label:
+        description: The most flaky label of the test
+        required: true
+        type: string
+      labels:
+        description: The space-separated flaky labels of all variants of the test
+        required: true
+        type: string
+      base:
+        description: The label of the test without its variant suffix
+        required: true
+        type: string
+      slug:
+        description: The base label usable in branch and artifact names
+        required: true
+        type: string
+      ci_all_bazel_targets:
+        description: Whether to open the PR with the CI_ALL_BAZEL_TARGETS label
+        required: true
+        type: boolean
+      dry_run:
+        description: Fix the test but don't open a PR
+        required: true
+        type: boolean
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CI_JOB_NAME: ${{ github.job }}
+
+jobs:
+  fix:
+    name: Fix
+    runs-on:
+      labels: dind-large
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:0b6a915e614105c632a0c7a0f6e530ed506decfbd0316b297b28e9c555c532a2
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
+    timeout-minutes: 720
+    permissions:
+      contents: read
+      actions: read # for downloading the logs of RBE tests
+      pull-requests: read
+    outputs:
+      status: ${{ steps.package.outputs.status }}
+      base_sha: ${{ steps.base.outputs.sha }}
+    env:
+      GIT_TERMINAL_PROMPT: 0
+      GH_PROMPT_DISABLED: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Record the base commit
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/netrc
+
+      # GitHub runners override the container's entrypoint which is ci/container/init.sh
+      # so we run it explicitly here to ensure the system is set up correctly for running local system-tests.
+      - run: ci/container/init.sh
+
+      - name: Setup gh cli
+        # Same step as in update-mainnet-canister-revisions.yaml.
+        env:
+          GH_CLI_VERSION: 2.98.0
+          # sha256 of gh_${GH_CLI_VERSION}_linux_amd64.tar.gz. When bumping the
+          # version, take the new value from that release's
+          # gh_${GH_CLI_VERSION}_checksums.txt asset.
+          GH_CLI_SHA256: 3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de
+        run: |
+          set -eEuxo pipefail
+
+          # Without --fail, 4xx and 5xx are considered "success", because UNIX.
+          # If this keeps failing, consider applying other --retry-??? flags.
+          curl \
+            --location https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_amd64.tar.gz \
+            --output gh_cli.tar.gz \
+            --fail \
+            --retry 7
+
+          # Release assets are mutable under an existing tag, so the URL alone is
+          # not a trust anchor: verify against the checksum pinned above before
+          # unpacking or running anything.
+          echo "${GH_CLI_SHA256}  gh_cli.tar.gz" | sha256sum --check
+
+          tar -xvf gh_cli.tar.gz
+          mv "gh_${GH_CLI_VERSION}_linux_amd64" gh_cli
+          chmod +x ./gh_cli/bin/gh
+          sudo cp ./gh_cli/bin/gh /usr/local/bin/
+          rm -rf gh_cli*
+
+      # Anyone can open a PR from a fork or comment on a PR, so Claude only gets to read the PRs
+      # and comments of trusted authors, collected here.
+      - name: Collect related PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ inputs.base }}
+          SLUG: ${{ inputs.slug }}
+        run: |
+          set -euo pipefail
+          since="$(date -u -d '30 days ago' +%F)"
+          name="${BASE##*:}"
+          fields=number,title,state,isDraft,isCrossRepository,author,headRefName,updatedAt,closedAt,mergedAt,url,body,files,reviews,comments
+          words="\"${name//_/ }\""
+          package="${BASE#//}"
+          package="${package%%:*}/"
+          touching="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 1000 --json number,isCrossRepository,updatedAt,files \
+            | jq -r --arg package "$package" --arg since "$since" \
+              '.[] | select((.isCrossRepository | not) and .updatedAt >= $since and any(.files[].path; startswith($package))) | .number')"
+          # Open PRs about the test or touching its package, and closed deflake PRs: those of this test at any age,
+          # so that a rejected fix isn't proposed again. `head:` matches the branches that start with its value.
+          prs="$({
+            for search in "deflake in:title" "$words in:title" "head:ai/deflake-$SLUG-"; do
+              gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 500 --search "$search" --json "$fields"
+            done
+            for number in $touching; do
+              gh pr view "$number" --repo "$GITHUB_REPOSITORY" --json "$fields" --jq '[.]'
+            done
+            for search in "deflake in:title closed:>=$since" "$words deflake in:title" "head:ai/deflake-$SLUG-"; do
+              gh pr list --repo "$GITHUB_REPOSITORY" --state closed --limit 500 --search "$search" --json "$fields"
+            done
+          } | jq -s 'add | unique_by(.number) | map(select(.isCrossRepository | not))')"
+          # authorAssociation hides private org membership from this token, so authors are trusted by permission:
+          # anyone who can read the repository can open a PR from one of its branches.
+          trusted="$(jq -r '[.[] | .author, (.reviews + .comments)[].author | .login] | unique[]' <<<"$prs" | while read -r login; do
+            permission="$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$login/permission" --jq .permission 2>/dev/null || true)"
+            if [[ "$permission" == admin || "$permission" == write || "$login" == copilot-pull-request-reviewer ]]; then
+              echo "$login"
+            fi
+          done | jq -R . | jq -s -c .)"
+          jq --argjson trusted "$trusted" '
+            def trusted: .author.login | IN($trusted[]);
+            map(
+              # The files of untrusted PRs are kept to avoid conflicts. claude[bot] opens PRs for people with write
+              # access, but what an earlier Claude run wrote is not passed on to the next one.
+              (if trusted then . elif .author.login == "app/claude" then del(.body) else del(.title, .body) end)
+              | .author = .author.login
+              | .files |= map(.path)
+              | .reviews |= map(select(trusted) | {author: .author.login, state, body})
+              | .comments |= map(select(trusted) | {author: .author.login, body})
+            )' <<<"$prs" > "$RUNNER_TEMP/deflake-context.json"
+          jq -r '.[] | "#\(.number) \(.state) \(.title // "(untrusted author)")"' "$RUNNER_TEMP/deflake-context.json"
+          echo "Trusted the PRs, reviews and comments of: $(jq -r 'join(", ")' <<<"$trusted")"
+
+      # With sudo Claude would be root in this privileged container on a shared runner.
+      - name: Drop sudo
+        run: |
+          sudo sed -i '/^ALL ALL=(ALL) NOPASSWD: ALL$/d' /etc/sudoers
+          if sudo -n -l >/dev/null 2>&1; then
+            echo "sudo still allows commands:" >&2
+            sudo -n -l >&2
+            exit 1
+          fi
+
+      - name: Fix the flaky test
+        id: claude
+        uses: anthropics/claude-code-action@12dd8d74c712f5f3669365b2369b558c495b1104 # v1.0.238
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Read-only, so that no token in this job can push or open PRs.
+          github_token: ${{ github.token }}
+          # The actor of scheduled runs.
+          allowed_bots: github-merge-queue[bot]
+          bot_id: 209825114
+          bot_name: claude[bot]
+          # The action stops at the first result message, so nothing may finish in a later turn: the tools that
+          # defer work are denied and background tasks and cron disabled. The fix doesn't need the web.
+          claude_args: >-
+            --model claude-opus-5-5
+            --effort max
+            --permission-mode bypassPermissions
+            --permission-prompts none
+            --disallowedTools Workflow,Monitor,SendMessage,CronCreate,ScheduleWakeup,EnterPlanMode,WebFetch,WebSearch
+            --json-schema '{"type":"object","properties":{"status":{"type":"string","enum":["fixed","skipped","no_logs","not_reproducible","needs_human","failed"]},"reason":{"type":"string"},"pr_body":{"type":"string"}},"required":["status","reason"]}'
+          settings: |
+            {
+              "env": {
+                "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
+                "CLAUDE_CODE_DISABLE_CRON": "1",
+                "BASH_DEFAULT_TIMEOUT_MS": "10800000",
+                "BASH_MAX_TIMEOUT_MS": "10800000",
+                "CLAUDE_CODE_RETRY_WATCHDOG": "1"
+              }
+            }
+          prompt: |
+            You run unattended in a GitHub Actions job of dfinity/ic (self-hosted dind-large runner, ic-build
+            container, ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+            Nobody can answer questions: decide yourself, or stop and report.
+
+            Fix the flaky test ${{ inputs.label }} by following the fix-flaky-tests skill
+            (.claude/skills/fix-flaky-tests/SKILL.md), starting at step 2 of "Fix a flaky test". These variants of
+            the same test (same test binary) all flaked in the last week: ${{ inputs.labels }}.
+            Fix ONE root cause.
+
+            First check whether the test is already fixed or being fixed, like step 1.2 of the skill, but unlike
+            step 1.2 a mere mention is not enough. Stop with status "skipped", naming the PR or commit, if:
+            - $RUNNER_TEMP/deflake-context.json lists an open PR that fixes the flakiness of this test, or an open
+              PR updated in the last 30 days that modifies its source files (to avoid conflicts; the file has all
+              such PRs that touch its package).
+            - A commit of the last week fixed it (find it with
+              `git log --since='1 week ago' -i -E --grep '<test name with _ replaced by [_. ]>'` and
+              `git log --since='1 week ago' -- <the source files of the test>`) and
+              `bazel run //ci/githubstats:query -- last --flaky --since <that commit> --skip-download <label>`
+              shows no flaky run since then. A reverted fix doesn't count.
+            If a deflake PR for this test was closed without being merged, don't propose its rejected fix again.
+            Read PRs and comments only from that file: don't read other PR, issue or comment text with gh.
+            Only count flaky runs on master, in the merge queue, or on PRs that don't change this test.
+
+            Deviations from the skill in this environment:
+            - Skip the "Prerequisites": master is checked out at ${{ steps.base.outputs.sha }} with its full history,
+              and gh uses the read-only GH_TOKEN. Never run `gh auth login`, never change the git remotes, and
+              never pull or rebase.
+            - In step 2 run the command of the skill for each label (Farm labels with --download-ic-logs
+              --download-console-logs, *_local labels without) and read each LOG_DIR/README.md.
+              If none of the flaky runs has logs, stop with status "no_logs".
+            - Run bazel, cargo and ./ci/scripts/rust-lint.sh in the foreground, one at a time, from the main agent.
+              Only use subagents for read-only analysis.
+            - Every `bazel test` that includes a *_local target uses --local_test_jobs=2 since the runner only has
+              64 CPUs. Otherwise use --local_test_jobs=3 instead of --jobs=3. In step 6 verify every label whose
+              flakiness the fix addresses. For system-tests these runs also satisfy the test step of
+              .claude/CLAUDE.md: only build the other system-tests its rdeps query returns.
+            - Only change files under rs/ or packages/, but no *.bzl files, nothing under rs/ic_os/config/types/,
+              no symlinks or binary files, and at most 1000 changed lines in at most 10 commits. In Cargo.toml files
+              only add or remove dependencies as `name = { workspace = true }`, and change the root Cargo.lock only
+              accordingly. If the fix needs anything else, stop with status "needs_human" and explain why.
+            - In step 7 commit the fix on a local branch named `deflake`. Don't push and don't open a PR: a later
+              workflow does that. Instead return the PR description as pr_body: the root cause analysis, the
+              verification results and all flaky labels.
+            - The reason, pr_body and your commit messages are published in this public repository: don't include
+              raw log lines or internal hostnames, URLs or IP addresses, and only use inline links.
+
+      - name: Report
+        if: always()
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          set -euo pipefail
+          if [ -f "$EXECUTION_FILE" ]; then
+            jq -r '
+              (map(select(.type == "system" and .subtype == "init")) | first // {}) as $init
+              | (map(select(.type == "result")) | first // {}) as $r
+              | "model: \($init.model)",
+                "permission mode: \($init.permissionMode)",
+                "Claude Code: \($init.claude_code_version)",
+                "result: \($r.subtype) is_error=\($r.is_error) turns=\($r.num_turns) terminal_reason=\($r.terminal_reason)",
+                "background tasks: \(map(select(.type == "system" and ((.subtype == "task_started" and .is_backgrounded != false and .ambient != true) or (.subtype == "task_updated" and .patch.is_backgrounded == true)))) | length)"
+              ' "$EXECUTION_FILE"
+          fi
+
+      # Only early feedback: Claude could have tampered with this job, so open-deflake-pr.yml checks again.
+      - name: Package
+        id: package
+        if: always()
+        env:
+          RESULT: ${{ steps.claude.outputs.structured_output }}
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+          LABELS: ${{ inputs.labels }}
+          SLUG: ${{ inputs.slug }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          # Claude shares this HOME, so start from scratch.
+          rm -rf ~/deflake ~/deflake-result
+          status=failed
+          reason="Claude returned no result"
+          if [ -n "$RESULT" ] && jq -e '.status | IN("fixed", "skipped", "no_logs", "not_reproducible", "needs_human", "failed")' <<<"$RESULT" >/dev/null; then
+            status="$(jq -r .status <<<"$RESULT")"
+            reason="$(jq -r .reason <<<"$RESULT")"
+          fi
+          if [ "$status" == fixed ]; then
+            if ! git rev-parse --verify --quiet refs/heads/deflake >/dev/null \
+              || ! git merge-base --is-ancestor "$BASE_SHA" refs/heads/deflake \
+              || [ "$(git rev-list --count "$BASE_SHA..refs/heads/deflake")" -lt 1 ] \
+              || [ "$(git rev-list --count "$BASE_SHA..refs/heads/deflake")" -gt 10 ]; then
+              status=failed
+              reason="the fix isn't 1 to 10 commits on branch deflake on top of $BASE_SHA"
+            elif ! jq -e '.pr_body | strings | test("\\S")' <<<"$RESULT" >/dev/null; then
+              status=failed
+              reason="Claude fixed the test but returned no PR description"
+            elif [ "$DRY_RUN" != true ]; then
+              mkdir -p ~/deflake
+              git bundle create ~/deflake/deflake.bundle refs/heads/deflake ^"$BASE_SHA"
+              jq -r .pr_body <<<"$RESULT" > ~/deflake/body.md
+            fi
+          fi
+          mkdir -p ~/deflake-result
+          jq -n --arg slug "$SLUG" --arg labels "$LABELS" --arg status "$status" --arg reason "$reason" \
+            '{$slug, $labels, $status, reason: $reason[:1000]}' > ~/deflake-result/"result-$SLUG.json"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "**$status**: \`$(tr -d '`\n\r' <<<"${reason:0:1000}")\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the fix
+        if: steps.package.outputs.status == 'fixed' && !inputs.dry_run
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: deflake-${{ inputs.slug }}
+          # (${{ runner.temp }} is not used since it expands to the host path.)
+          path: ~/deflake
+          retention-days: 3
+
+      - name: Upload the result
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: deflake-result-${{ inputs.slug }}
+          path: ~/deflake-result
+          retention-days: 7
+
+  request-pr:
+    name: Request PR
+    needs: fix
+    if: needs.fix.outputs.status == 'fixed' && !inputs.dry_run
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write # for dispatching open-deflake-pr.yml
+    steps:
+      # A separate run, because the claude[bot] token that open-deflake-pr.yml gets requires the
+      # running workflow file to equal the one on master, which may have changed since this run started.
+      - name: Dispatch open-deflake-pr.yml
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LABEL: ${{ inputs.label }}
+          LABELS: ${{ inputs.labels }}
+          SLUG: ${{ inputs.slug }}
+          BASE_SHA: ${{ needs.fix.outputs.base_sha }}
+          CI_ALL_BAZEL_TARGETS: ${{ inputs.ci_all_bazel_targets }}
+        run: |
+          gh workflow run open-deflake-pr.yml --repo "$GITHUB_REPOSITORY" --ref master \
+            -f run_id="$GITHUB_RUN_ID" \
+            -f label="$LABEL" \
+            -f labels="$LABELS" \
+            -f slug="$SLUG" \
+            -f base_sha="$BASE_SHA" \
+            -f ci_all_bazel_targets="$CI_ALL_BAZEL_TARGETS"

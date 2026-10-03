@@ -26,14 +26,14 @@ This guide explains how to find flaky tests to fix and how to debug them. Flaky 
 
 1. If not instructed to fix a test with a specified `label` determine which test to fix by picking the most flaky test in the last week which has not yet been fixed. To do this:
 
-    1. Run the following command to get the top 100 tests ordered descendingly by how much percent of their total runs they flaked in the last week, showing only tests which flaked 1% or more of their runs:
+    1. Run the following command to get the top 100 tests ordered descendingly by how much percent of their total runs they flaked in the last week, showing only tests which actually flaked:
        ```
-       bazel run //ci/githubstats:query -- top 100 flaky% --ge 1 --week
+       bazel run //ci/githubstats:query -- top 100 flaky% --gt 0 --week --columns=label,last_flaky_at,total,flaky,flaky%,duration_p90
        ```
 
     2. Pick the `label` of the top most test which doesn't have an open PR or git commit in the last week mentioning its `<test_name>` which is the part of the `label` after the `:`.
 
-       `<test_name>` might be suffixed with `_head_nns` or `_colocate` which are variants of the same test. Strip those suffixes when checking for open PRs or commits to avoid missing matches.
+       `<test_name>` might be suffixed with `_local`, `_farm` or `_farm_colocate`, optionally preceded by `_head_nns` (like `_head_nns_farm_colocate`), which are variants of the same test (older runs used `_colocate` for `_farm_colocate` and a bare `_head_nns` for `_head_nns_farm`). Strip those suffixes, i.e. `(_head_nns)?(_local|_farm|_farm_colocate|_colocate)?$`, when checking for open PRs or commits to avoid missing matches.
 
        To check if there is an open PR mentioning the test, run the following command
        (replace underscores with spaces because GitHub search doesn't match underscored compound words):
