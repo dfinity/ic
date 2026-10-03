@@ -14499,6 +14499,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-subnet-merging"
+version = "0.9.0"
+dependencies = [
+ "futures",
+ "ic-base-types",
+ "reqwest",
+ "tokio",
+]
+
+[[package]]
 name = "ic-subnet-splitting"
 version = "0.9.0"
 dependencies = [
@@ -17668,6 +17678,7 @@ dependencies = [
  "ic-base-types",
  "ic-management-canister-types 0.8.0",
  "ic-registry-subnet-type",
+ "ic-subnet-merging",
  "ic-system-test-driver",
  "ic-types",
  "ic-universal-canister",
