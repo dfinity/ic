@@ -328,7 +328,9 @@ pub(crate) fn fake_canister_http_reject(callback_id: u64) -> CanisterHttpRespons
         id: CallbackId::new(callback_id),
         content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
             reject_code: RejectCode::SysTransient,
-            message: String::from("rejected"),
+            // Comfortably above `MIN_STRIPPED_CONTENT_BYTES`, so that the tests
+            // which expect a reject to be stripped still do.
+            message: "rejected because the remote end did something regrettable".repeat(2),
         }),
     }
 }
@@ -442,6 +444,18 @@ pub(crate) fn fake_flexible_canister_http_too_many_rejects_message(
                 pb::FlexibleCanisterHttpError::from(error),
             ),
         ),
+    }
+}
+
+/// A `timeouts` entry of a canister http payload, which carries no response and
+/// is thus never stripped.
+pub(crate) fn fake_canister_http_timeout_message(
+    callback_id: u64,
+) -> pb::CanisterHttpResponseMessage {
+    pb::CanisterHttpResponseMessage {
+        message_type: Some(pb::canister_http_response_message::MessageType::Timeout(
+            callback_id,
+        )),
     }
 }
 
