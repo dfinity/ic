@@ -103,8 +103,9 @@ where
     ///
     /// This function fetches the nodes metrics for the given subnets from the management canisters
     /// updating the local metrics with the fetched metrics.
-    /// If all subnets metrics are fetched successfully, it returns the last date
-    /// for which metrics were updated.
+    /// If all subnets metrics are fetched successfully, it returns the furthest date any of them
+    /// reached — see the comment on that computation for why it is the furthest and not the
+    /// earliest, which is not the obvious choice.
     pub async fn update_subnets_metrics(
         &self,
         subnets: Vec<SubnetId>,
@@ -178,6 +179,32 @@ where
         }
 
         if failures.is_empty() {
+            // The furthest day any subnet reached, deliberately — not the earliest one.
+            //
+            // Subnets answer with different amounts of history. `node_metrics_history` withholds
+            // the running (current-day) snapshot, and a day's snapshot is only closed once a later
+            // block arrives, so a subnet halted for recovery — or stalled — answers with fewer days
+            // than a healthy one, and a subnet that stalled before closing its first snapshot
+            // answers with nothing at all. Taking the earliest day would hold `last_day_synced`
+            // back to that subnet, and `validate_reward_period` would then reject the whole reward
+            // period: *no* provider paid for those days, the ones with nodes in that subnet
+            // included, and minting frozen for as long as the subnet stayed down.
+            //
+            // That is the wrong way round. A halted or unreachable subnet is a protocol-level event
+            // that node providers do not control, so it must not withhold their rewards. The
+            // reward calculation is built the same way: a node with no metrics for a day counts as
+            // unassigned, which for a provider with a healthy fleet is rewarded in full.
+            //
+            // Completeness is guarded by the all-or-nothing check above rather than by this: a
+            // call that *fails* means data exists that we could not fetch — our own staleness — and
+            // stops the sync without advancing anything. A call that *succeeds* returns every
+            // snapshot the subnet has closed, so whatever is still missing does not yet exist.
+            //
+            // Accepted gap: a subnet that has not rolled over into the new day when the sync runs
+            // reports one day short, its real data arriving minutes later. A mint landing in that
+            // window pays full rewards for a day whose metrics did exist. That is a timing
+            // artefact rather than the protocol-fault case above, and too narrow to be worth a
+            // gate that can stall minting network-wide.
             let max_ts_update = self
                 .last_timestamp_per_subnet(subnets)
                 .into_values()
