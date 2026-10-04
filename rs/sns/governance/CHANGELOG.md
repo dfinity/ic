@@ -11,6 +11,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-10-02: Proposal 144202
+
+http://dashboard.internetcomputer.org/proposal/144202
+
+## Added
+
+- Expose each neuron's exact voting reward shares for its latest participating reward event through
+  `get_neuron` and `list_neurons`.
+
+
 # 2026-08-31: Proposal 143747
 
 http://dashboard.internetcomputer.org/proposal/143747

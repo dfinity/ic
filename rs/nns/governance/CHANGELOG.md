@@ -11,6 +11,18 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-10-02: Proposal 144200
+
+http://dashboard.internetcomputer.org/proposal/144200
+
+## Added
+
+* Added a new `NnsFunction` variant `MergeSubnets`, which proposes to merge a
+  subnet into another subnet: in the routing table, reassigns all canister
+  ranges hosted by the source subnet to the destination subnet. The source
+  subnet is not deleted.
+
+
 # 2026-09-01: Proposal 143761
 
 http://dashboard.internetcomputer.org/proposal/143761
