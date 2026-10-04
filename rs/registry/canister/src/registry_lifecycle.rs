@@ -978,8 +978,8 @@ mod test {
         );
     }
 
-    // Backfilling ~40 `CatchUpPackageContents` records of ~300 KB each in one atomic mutation
-    // (~12 MB) would exceed `MAX_CHUNKABLE_ATOMIC_MUTATION_LEN` and make the post-upgrade trap.
+    // Backfilling ~40 `CatchUpPackageContents` records of ~400 KB each in one atomic mutation
+    // (~16 MB) would exceed `MAX_CHUNKABLE_ATOMIC_MUTATION_LEN` and make the post-upgrade trap.
     #[test]
     fn post_upgrade_backfills_cup_type_in_several_batches_when_records_are_large() {
         // Step 1: Prepare the world: a registry with many large legacy (no `cup_type`) records.
@@ -987,8 +987,9 @@ mod test {
 
         const NUM_RECORDS: u64 = 40;
         // The backfilled record carries this payload twice (in `state_hash` and in the
-        // `Recovery` args), i.e. ~300 KB per record, and ~12 MB for all of them.
-        const RECORD_PAYLOAD_LEN: usize = 150_000;
+        // `Recovery` args), i.e. ~400 KB per record, and ~16 MB for all of them, which is
+        // more than `MAX_CHUNKABLE_ATOMIC_MUTATION_LEN` (13 MiB).
+        const RECORD_PAYLOAD_LEN: usize = 200_000;
         let subnet_ids = (0..NUM_RECORDS)
             .map(|i| subnet_test_id(2000 + i))
             .collect::<Vec<_>>();
