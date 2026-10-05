@@ -20,6 +20,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-quic-transport = { path = "../quic_transport" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
+prost = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }

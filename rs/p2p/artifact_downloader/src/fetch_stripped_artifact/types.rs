@@ -14,8 +14,8 @@ pub(super) mod stripped;
 type IngressBytesHash = CryptoHashOf<SignedRequestBytes>;
 
 /// A unique identifier of a [`CanisterHttpResponse`]: the hash of its content,
-/// which is what the response metadata that consensus signs over is keyed by, and
-/// what the canister HTTP pool indexes its response contents by.
+/// which the response metadata that consensus signs over carries, and which the
+/// canister HTTP pool indexes its response contents by.
 pub(crate) type CanisterHttpResponseContentHash = CryptoHashOf<CanisterHttpResponse>;
 
 /// A unique identifier of a [`SignedIngress`].
