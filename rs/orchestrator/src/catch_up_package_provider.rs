@@ -50,7 +50,7 @@ use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
     consensus::{
-        CupType, HasHeight, HasVersion, SubnetSplittingArgs,
+        CupType, HasHeight, HasVersion,
         catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
     },
     registry::RegistryClientError,
@@ -447,9 +447,9 @@ impl CatchUpPackageProvider {
                     error: format!("Failed to decode the CUP type: {err}"),
                 })
             })?;
-            let CupType::SubnetSplitting(SubnetSplittingArgs {
+            let CupType::SubnetSplitting {
                 destination_subnet_id,
-            }) = cup_type
+            } = cup_type
             else {
                 continue;
             };

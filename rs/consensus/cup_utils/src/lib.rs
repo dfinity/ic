@@ -18,8 +18,7 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes, CatchUpPackage, CupType,
-        HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank, RecoveryArgs,
-        SummaryPayload, idkg,
+        HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank, SummaryPayload, idkg,
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoError, CryptoHash, Signable, Signed,
@@ -200,16 +199,16 @@ pub fn make_registry_cup_from_cup_contents(
             UNIX_EPOCH,
             CryptoHashOfState::from(CryptoHash(Vec::new())),
         ),
-        Ok(CupType::Recovery(RecoveryArgs {
+        Ok(CupType::Recovery {
             height,
             time,
             state_hash,
-        })) => (height, time, state_hash),
+        }) => (height, time, state_hash),
         // If the CUP we are about to build is a subnet splitting CUP, return early. It makes no sense
         // to build a registry CUP out of subnet splitting CUP contents because the transcripts here are
         // used directly by consensus to build the CUP themselves, i.e. nodes threshold-sign it, instead
         // of blindly taking it from the registry here.
-        Ok(CupType::SubnetSplitting(..)) => return None,
+        Ok(CupType::SubnetSplitting { .. }) => return None,
         Err(err) => {
             warn!(
                 logger,
