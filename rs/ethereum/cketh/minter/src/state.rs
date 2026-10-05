@@ -40,6 +40,7 @@ pub mod audit;
 pub mod automatic_deposits;
 pub mod eth_logs_scraping;
 pub mod event;
+pub mod receipt_fetch;
 pub mod sweep_observations;
 pub mod sweeper_funding;
 pub mod transactions;
