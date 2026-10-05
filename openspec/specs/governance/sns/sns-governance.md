@@ -218,6 +218,11 @@ The governance canister supports a comprehensive set of native proposal actions,
 - **THEN** up to 200,000 generic functions can be registered (MAX_NUMBER_OF_GENERIC_NERVOUS_SYSTEM_FUNCTIONS)
 - **AND** deleted function IDs cannot be recycled (deletion markers are preserved in id_to_nervous_system_functions)
 
+#### Scenario: Generic nervous system function call reply is retained
+- **WHEN** an `ExecuteGenericNervousSystemFunction` proposal's call to the target canister returns
+- **THEN** the reply is stored on the proposal rather than discarded, truncated if it is too long
+- **AND** success or failure is still determined only by whether the call itself succeeded, since the reply's meaning is specific to the target canister and cannot be interpreted generically
+
 #### Scenario: Dapp management proposals scope limit
 - **WHEN** a RegisterDappCanisters, DeregisterDappCanisters, or ManageDappCanisterSettings proposal is submitted
 - **THEN** it can manage at most 1,000 dapp canisters per proposal (MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL)
