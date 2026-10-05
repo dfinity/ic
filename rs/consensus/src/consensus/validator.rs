@@ -2185,7 +2185,8 @@ pub mod test {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::{
-        CatchUpPackageContents, SubnetRecord, SubnetSplittingArgs as SubnetSplittingArgsProto,
+        CatchUpPackageContents, SubnetRecord,
+        SubnetSplittingSourceArgs as SubnetSplittingSourceArgsProto,
         catch_up_package_contents::CupType,
     };
     use ic_registry_client_fake::FakeRegistryClient;
@@ -3416,7 +3417,7 @@ pub mod test {
     const SUBNET_SPLIT_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(3);
 
     /// Schedules a subnet split at [`SUBNET_SPLIT_REGISTRY_VERSION`] by overwriting the subnet's
-    /// CUP contents record with one carrying a [`CupType::SubnetSplitting`], the way the NNS would.
+    /// CUP contents record with one carrying a [`CupType::SubnetSplittingSource`], the way the NNS would.
     fn schedule_subnet_split(
         registry_data_provider: &Arc<ProtoRegistryDataProvider>,
         registry: &FakeRegistryClient,
@@ -3429,9 +3430,11 @@ pub mod test {
             .expect("Failed to get the CUP contents")
             .value
             .expect("The CUP contents should be in the registry");
-        cup_contents.cup_type = Some(CupType::SubnetSplitting(SubnetSplittingArgsProto {
-            destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
-        }));
+        cup_contents.cup_type = Some(CupType::SubnetSplittingSource(
+            SubnetSplittingSourceArgsProto {
+                destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
+            },
+        ));
 
         registry_data_provider
             .add(

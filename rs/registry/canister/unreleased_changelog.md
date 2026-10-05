@@ -50,6 +50,10 @@ on the process that this file is part of, see
   fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward
   (`deployment_progress == 1.0`).
 
+* `do_split_subnet` now writes the destination subnet's `CatchUpPackageContents` record with CUP type
+  `CupType::SubnetSplittingDest` instead of `CupType::Genesis`. The source subnet's CUP type
+  `CupType::SubnetSplitting` was renamed to `CupType::SubnetSplittingSource` (wire-compatible).
+
 ## Deprecated
 
 ## Removed

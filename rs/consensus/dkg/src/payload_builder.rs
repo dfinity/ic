@@ -1022,7 +1022,8 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
     use ic_protobuf::registry::subnet::v1::{
-        SubnetSplittingArgs as SubnetSplittingArgsProto, catch_up_package_contents::CupType,
+        SubnetSplittingSourceArgs as SubnetSplittingSourceArgsProto,
+        catch_up_package_contents::CupType,
     };
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_registry_keys::make_catch_up_package_contents_key;
@@ -1884,11 +1885,13 @@ mod tests {
                     &make_catch_up_package_contents_key(source_subnet_id),
                     split_registry_version,
                     Some(CatchUpPackageContents {
-                        cup_type: Some(CupType::SubnetSplitting(SubnetSplittingArgsProto {
-                            destination_subnet_id: Some(subnet_id_into_protobuf(
-                                destination_subnet_id,
-                            )),
-                        })),
+                        cup_type: Some(CupType::SubnetSplittingSource(
+                            SubnetSplittingSourceArgsProto {
+                                destination_subnet_id: Some(subnet_id_into_protobuf(
+                                    destination_subnet_id,
+                                )),
+                            },
+                        )),
                         ..cup_contents
                     }),
                 )

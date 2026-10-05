@@ -417,8 +417,12 @@ pub enum CupType {
         /// The hash of the state that the subnet should use.
         state_hash: CryptoHashOfState,
     },
-    /// A CUP used to indicate a subnet to split into two.
-    SubnetSplitting { destination_subnet_id: SubnetId },
+    /// A CUP used to indicate a subnet to split into two, written for the source subnet of the
+    /// split.
+    SubnetSplittingSource { destination_subnet_id: SubnetId },
+    /// A CUP used to indicate a subnet to split into two, written for the destination subnet of
+    /// the split.
+    SubnetSplittingDest,
 }
 
 impl TryFrom<Option<subnet_pb::catch_up_package_contents::CupType>> for CupType {
@@ -442,12 +446,17 @@ impl TryFrom<Option<subnet_pb::catch_up_package_contents::CupType>> for CupType 
                 time: Time::from_nanos_since_unix_epoch(time),
                 state_hash: CryptoHashOfState::from(CryptoHash(state_hash)),
             },
-            CupTypePb::SubnetSplitting(subnet_splitting_args) => CupType::SubnetSplitting {
-                destination_subnet_id: subnet_id_try_from_option(
-                    subnet_splitting_args.destination_subnet_id,
-                    "cup_type::subnet_splitting::destination_subnet_id",
-                )?,
-            },
+            CupTypePb::SubnetSplittingSource(subnet_splitting_source_args) => {
+                CupType::SubnetSplittingSource {
+                    destination_subnet_id: subnet_id_try_from_option(
+                        subnet_splitting_source_args.destination_subnet_id,
+                        "cup_type::subnet_splitting_source::destination_subnet_id",
+                    )?,
+                }
+            }
+            CupTypePb::SubnetSplittingDest(subnet_pb::SubnetSplittingDestArgs {}) => {
+                CupType::SubnetSplittingDest
+            }
         })
     }
 }

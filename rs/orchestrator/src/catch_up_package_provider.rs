@@ -447,7 +447,7 @@ impl CatchUpPackageProvider {
                     error: format!("Failed to decode the CUP type: {err}"),
                 })
             })?;
-            let CupType::SubnetSplitting {
+            let CupType::SubnetSplittingSource {
                 destination_subnet_id,
             } = cup_type
             else {
@@ -653,7 +653,7 @@ pub(crate) mod tests {
     use ic_protobuf::registry::{
         node::v1::ConnectionEndpoint,
         subnet::v1::{
-            CatchUpPackageContents, RecoveryArgs, SubnetSplittingArgs,
+            CatchUpPackageContents, RecoveryArgs, SubnetSplittingSourceArgs,
             catch_up_package_contents::CupType,
         },
     };
@@ -1216,7 +1216,7 @@ pub(crate) mod tests {
         )
     }
 
-    /// Marks the source subnet's CUP contents record with [`CupType::SubnetSplitting`] into
+    /// Marks the source subnet's CUP contents record with [`CupType::SubnetSplittingSource`] into
     /// `destination_subnet_id` at the given registry version. This is how the orchestrator detects
     /// a pending split.
     pub(crate) fn add_subnet_splitting_record(
@@ -1229,7 +1229,7 @@ pub(crate) mod tests {
                 &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
                 registry_version,
                 Some(CatchUpPackageContents {
-                    cup_type: Some(CupType::SubnetSplitting(SubnetSplittingArgs {
+                    cup_type: Some(CupType::SubnetSplittingSource(SubnetSplittingSourceArgs {
                         destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
                     })),
                     ..Default::default()
@@ -1244,7 +1244,7 @@ pub(crate) mod tests {
     /// Before the split, all given nodes are members of `SOURCE_SUBNET_ID`. From the split registry
     /// version onwards, `source_nodes` remain in `SOURCE_SUBNET_ID` while `destination_nodes` are
     /// members of `DESTINATION_SUBNET_ID`, and the source subnet's CUP contents record is marked
-    /// with [`CupType::SubnetSplitting`] (see [`add_subnet_splitting_record`]).
+    /// with [`CupType::SubnetSplittingSource`] (see [`add_subnet_splitting_record`]).
     fn setup_split_registry(
         node_id: NodeId,
         source_nodes: &[NodeId],

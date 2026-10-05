@@ -739,7 +739,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::{
-        CatchUpPackageContents, SubnetSplittingArgs, catch_up_package_contents::CupType,
+        CatchUpPackageContents, SubnetSplittingSourceArgs, catch_up_package_contents::CupType,
     };
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_test_utilities_consensus::fake::FromParent;
@@ -1707,11 +1707,13 @@ mod tests {
                             &make_catch_up_package_contents_key(SOURCE_SUBNET_ID),
                             splitting_registry_version,
                             Some(CatchUpPackageContents {
-                                cup_type: Some(CupType::SubnetSplitting(SubnetSplittingArgs {
-                                    destination_subnet_id: Some(subnet_id_into_protobuf(
-                                        DESTINATION_SUBNET_ID,
-                                    )),
-                                })),
+                                cup_type: Some(CupType::SubnetSplittingSource(
+                                    SubnetSplittingSourceArgs {
+                                        destination_subnet_id: Some(subnet_id_into_protobuf(
+                                            DESTINATION_SUBNET_ID,
+                                        )),
+                                    },
+                                )),
                                 ..Default::default()
                             }),
                         )

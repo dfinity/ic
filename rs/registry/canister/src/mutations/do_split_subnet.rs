@@ -7,8 +7,8 @@ use dfn_core::call;
 use ic_base_types::SubnetId;
 use ic_management_canister_types_private::{SetupInitialDKGArgs, SetupInitialDKGResponse};
 use ic_protobuf::registry::subnet::v1::{
-    CanisterCyclesCostSchedule, CatchUpPackageContents, GenesisArgs, SubnetRecord,
-    SubnetSplittingArgs, catch_up_package_contents::CupType,
+    CanisterCyclesCostSchedule, CatchUpPackageContents, SubnetRecord, SubnetSplittingDestArgs,
+    SubnetSplittingSourceArgs, catch_up_package_contents::CupType,
 };
 use ic_registry_keys::{
     make_canister_migrations_record_key, make_catch_up_package_contents_key,
@@ -166,12 +166,14 @@ impl Registry {
 
         let source_cup_contents = get_cup_contents(
             &source_dkg_response,
-            CupType::SubnetSplitting(SubnetSplittingArgs {
+            CupType::SubnetSplittingSource(SubnetSplittingSourceArgs {
                 destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
             }),
         );
-        let destination_cup_contents =
-            get_cup_contents(&destination_dkg_response, CupType::Genesis(GenesisArgs {}));
+        let destination_cup_contents = get_cup_contents(
+            &destination_dkg_response,
+            CupType::SubnetSplittingDest(SubnetSplittingDestArgs {}),
+        );
 
         let post_call_registry_version = self.latest_version();
 

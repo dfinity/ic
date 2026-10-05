@@ -187,8 +187,10 @@ message CatchUpPackageContents {
     GenesisArgs genesis = 9;
     /// A CUP used to recover a subnet during a disaster.
     RecoveryArgs recovery = 10;
-    /// A CUP used to split a subnet into two.
-    SubnetSplittingArgs subnet_splitting = 11;
+    /// A CUP used to split a subnet into two, written for the source subnet of the split.
+    SubnetSplittingSourceArgs subnet_splitting_source = 11;
+    /// A CUP used to split a subnet into two, written for the destination subnet of the split.
+    SubnetSplittingDestArgs subnet_splitting_dest = 12;
   }
 }
 
@@ -206,10 +208,12 @@ message RecoveryArgs {
   bytes state_hash = 3;
 }
 
-message SubnetSplittingArgs {
+message SubnetSplittingSourceArgs {
   /// The ID of the subnet created by the split.
   types.v1.SubnetId destination_subnet_id = 1;
 }
+
+message SubnetSplittingDestArgs {}
 
 message RegistryStoreUri {
   /// The uri at which the registry store data should be retrieved. The data

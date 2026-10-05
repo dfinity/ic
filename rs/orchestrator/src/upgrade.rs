@@ -3099,7 +3099,7 @@ mod tests {
         }
 
         // The split itself: the source subnet's CUP contents record is marked with
-        // `CupType::SubnetSplitting`, and the two nodes end up in different subnets. The former is
+        // `CupType::SubnetSplittingSource`, and the two nodes end up in different subnets. The former is
         // how the orchestrator detects the pending split.
         add_subnet_list_record(
             &data_provider,

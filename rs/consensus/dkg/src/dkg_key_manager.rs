@@ -662,7 +662,7 @@ mod tests {
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::{
-        CatchUpPackageContents, GenesisArgs, InitialNiDkgTranscriptRecord, SubnetSplittingArgs,
+        CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetSplittingDestArgs, SubnetSplittingSourceArgs,
         catch_up_package_contents::CupType,
     };
     use ic_registry_keys::make_catch_up_package_contents_key;
@@ -885,13 +885,13 @@ mod tests {
                     };
 
                     let cup_type = if subnet_id == source_subnet_id {
-                        CupType::SubnetSplitting(SubnetSplittingArgs {
+                        CupType::SubnetSplittingSource(SubnetSplittingSourceArgs {
                             destination_subnet_id: Some(subnet_id_into_protobuf(
                                 destination_subnet_id,
                             )),
                         })
                     } else {
-                        CupType::Genesis(GenesisArgs {})
+                        CupType::SubnetSplittingDest(SubnetSplittingDestArgs {})
                     };
                     registry_data_provider
                         .add(

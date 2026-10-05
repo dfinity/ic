@@ -182,7 +182,7 @@ pub struct CatchUpPackageContents {
     #[prost(message, repeated, tag = "8")]
     pub chain_key_initializations: ::prost::alloc::vec::Vec<ChainKeyInitialization>,
     /// / The purpose of the CUP.
-    #[prost(oneof = "catch_up_package_contents::CupType", tags = "9, 10, 11")]
+    #[prost(oneof = "catch_up_package_contents::CupType", tags = "9, 10, 11, 12")]
     pub cup_type: ::core::option::Option<catch_up_package_contents::CupType>,
 }
 /// Nested message and enum types in `CatchUpPackageContents`.
@@ -196,9 +196,12 @@ pub mod catch_up_package_contents {
         /// / A CUP used to recover a subnet during a disaster.
         #[prost(message, tag = "10")]
         Recovery(super::RecoveryArgs),
-        /// / A CUP used to split a subnet into two.
+        /// / A CUP used to split a subnet into two, written for the source subnet of the split.
         #[prost(message, tag = "11")]
-        SubnetSplitting(super::SubnetSplittingArgs),
+        SubnetSplittingSource(super::SubnetSplittingSourceArgs),
+        /// / A CUP used to split a subnet into two, written for the destination subnet of the split.
+        #[prost(message, tag = "12")]
+        SubnetSplittingDest(super::SubnetSplittingDestArgs),
     }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -216,11 +219,13 @@ pub struct RecoveryArgs {
     pub state_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct SubnetSplittingArgs {
+pub struct SubnetSplittingSourceArgs {
     /// / The ID of the subnet created by the split.
     #[prost(message, optional, tag = "1")]
     pub destination_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SubnetSplittingDestArgs {}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RegistryStoreUri {
     /// / The uri at which the registry store data should be retrieved. The data

@@ -55,7 +55,7 @@ pub enum StatusError {
 /// `looked_up_registry_version`; in particular, a recovery record may have already overwritten
 /// the subnet splitting record.
 ///
-/// Otherwise, the registry decides. A [`CupType::SubnetSplitting`] record is never deleted — a
+/// Otherwise, the registry decides. A [`CupType::SubnetSplittingSource`] record is never deleted — a
 /// later split, a recovery or the genesis record just overwrite it — so its presence alone
 /// doesn't mean the split is still ahead of us. Three versions decide that:
 ///
@@ -131,7 +131,7 @@ pub fn get_status(
     let cup_type = CupType::try_from(contents.cup_type)
         .map_err(StatusError::CatchUpContentsDeserializationError)?;
 
-    let CupType::SubnetSplitting {
+    let CupType::SubnetSplittingSource {
         destination_subnet_id,
     } = cup_type
     else {
@@ -242,7 +242,8 @@ mod tests {
     use assert_matches::assert_matches;
     use ic_interfaces_registry::RegistryClientVersionedResult;
     use ic_protobuf::registry::subnet::v1::{
-        CatchUpPackageContents, GenesisArgs, RecoveryArgs, catch_up_package_contents::CupType,
+        CatchUpPackageContents, GenesisArgs, RecoveryArgs, SubnetSplittingDestArgs,
+        catch_up_package_contents::CupType,
     };
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_test_utilities_consensus::fake::Fake;
@@ -315,7 +316,7 @@ mod tests {
         REGISTRY_CUP_REGISTRY_VERSION.increment(),
         REGISTRY_CUP_REGISTRY_VERSION.increment(),
     )]
-    fn get_status_should_return_not_scheduled_when_latest_cup_is_not_subnet_splitting_test(
+    fn get_status_should_return_not_scheduled_when_latest_cup_is_not_subnet_splitting_source_test(
         #[values(
             CupType::Genesis(GenesisArgs {}),
             CupType::Recovery(RecoveryArgs {
@@ -323,6 +324,7 @@ mod tests {
                 time: 1,
                 state_hash: vec![],
             }),
+            CupType::SubnetSplittingDest(SubnetSplittingDestArgs {}),
         )]
         cup_type: CupType,
         #[values(
@@ -371,8 +373,8 @@ mod tests {
         #[case] last_summary_block_registry_version: RegistryVersion,
         #[case] looked_up_registry_version: RegistryVersion,
     ) {
-        let registry = set_up_registry(CupType::SubnetSplitting(
-            ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
+        let registry = set_up_registry(CupType::SubnetSplittingSource(
+            ic_protobuf::registry::subnet::v1::SubnetSplittingSourceArgs {
                 destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
             },
         ));
@@ -429,8 +431,8 @@ mod tests {
         #[case] last_summary_block_registry_version: RegistryVersion,
         #[case] looked_up_registry_version: RegistryVersion,
     ) {
-        let registry = set_up_registry(CupType::SubnetSplitting(
-            ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
+        let registry = set_up_registry(CupType::SubnetSplittingSource(
+            ic_protobuf::registry::subnet::v1::SubnetSplittingSourceArgs {
                 destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
             },
         ));
@@ -473,8 +475,9 @@ mod tests {
                 time: 1,
                 state_hash: vec![],
             }),
-            CupType::SubnetSplitting(
-                ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
+            CupType::SubnetSplittingDest(SubnetSplittingDestArgs {}),
+            CupType::SubnetSplittingSource(
+                ic_protobuf::registry::subnet::v1::SubnetSplittingSourceArgs {
                     destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
                 },
             ),
@@ -530,8 +533,9 @@ mod tests {
                 time: 1,
                 state_hash: vec![],
             }),
-            CupType::SubnetSplitting(
-                ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
+            CupType::SubnetSplittingDest(SubnetSplittingDestArgs {}),
+            CupType::SubnetSplittingSource(
+                ic_protobuf::registry::subnet::v1::SubnetSplittingSourceArgs {
                     destination_subnet_id: Some(subnet_id_into_protobuf(DESTINATION_SUBNET_ID)),
                 },
             ),
