@@ -46,13 +46,13 @@ fn process_err(
     add_backtrace(&mut e, &store);
     match store.as_context_mut().data_mut().system_api_mut() {
         Ok(api) => {
-            let result = wasmtime::Error::msg(format! {"{e}"});
+            let result = wasmtime::Error::msg(format!("{e}"));
             api.set_execution_error(e);
             result
         }
-        Err(_) => wasmtime::Error::msg(
-            format! {"Failed to access system api while processing error: {e}"},
-        ),
+        Err(_) => wasmtime::Error::msg(format!(
+            "Failed to access system api while processing error: {e}"
+        )),
     }
 }
 

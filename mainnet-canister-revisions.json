@@ -72,24 +72,24 @@
     "sha256": "7a628302f262b2453c11abcbb58ee7d5bcb7c424dc3f3635eef32588720a66ff"
   },
   "governance": {
-    "rev": "0c9710598f7ef85692b588a6ec518c8d8bf817ae",
-    "sha256": "74e07d7d70ac89e254cf51d4214ec71a38789f922a82305d550a7281e4b23fc1"
+    "rev": "98c898f8de068a1fc0e97ebc805f9fa7f315d862",
+    "sha256": "7f85124ee08c3f59c0050009268807c7aea2b80ee296c23338b05458888f19df"
   },
   "governance-canister_test": {
-    "rev": "0c9710598f7ef85692b588a6ec518c8d8bf817ae",
-    "sha256": "485e17af1fb44a4b6290e903183fceb7be7ec2110a97ea87fc861492b348f72c"
+    "rev": "98c898f8de068a1fc0e97ebc805f9fa7f315d862",
+    "sha256": "7b13cd2ce4e78fedee37fa0aaf1c06b118a259e13c8535f1bec5d9b326219436"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_backend": {
-    "sha256": "ffac2970f854d38d07dcf68130c58fb236bfc5c671d4e92535fb614fc715de2f",
-    "tag": "release-2026-09-25"
+    "sha256": "67a1cadff8105890630c847676fed88dbf2c2e6715f9354e057523c1cb76fdf0",
+    "tag": "release-2026-10-02"
   },
   "internet_identity_frontend": {
-    "sha256": "44102fe83fae243b354e90ae212ee650a605c87182959c22fe9d90d3e2a8ab0d",
-    "tag": "release-2026-09-25"
+    "sha256": "a8bf61eb5745e241f0fe54e35e915cf9f68b4068c36bf7119637c85af04b111b",
+    "tag": "release-2026-10-02"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -112,8 +112,8 @@
     "sha256": "b646b205a5f967350b71812ca36b3dd6d18dd4074f6ed9060d3874dd6e588bfa"
   },
   "registry": {
-    "rev": "237a41f0f03801f24d6eda835248bcb5ce189f0e",
-    "sha256": "fbe290283a2c2d01401df42f8481e6f95512324eb5aad9568d71ba982939b823"
+    "rev": "98c898f8de068a1fc0e97ebc805f9fa7f315d862",
+    "sha256": "afdef2277d40ae716ee3d5a7e2248592c646b4a326c66268a38ae07cd1373495"
   },
   "root": {
     "rev": "3ec5d044f5dc45a93943ec14258891a1c3c272be",
@@ -132,8 +132,8 @@
     "sha256": "f7f48f402a128cbd18dc7734c7f149f2814c8181766f39897a66d514d47ccf11"
   },
   "sns_governance": {
-    "rev": "647f2c68c6090cf45e9b1de1c5ef85134a45c19e",
-    "sha256": "3bfd1b3792ae0bf16344e40376ddf05d3065f2016715f14dc00dea82c1a903ef"
+    "rev": "98c898f8de068a1fc0e97ebc805f9fa7f315d862",
+    "sha256": "24ef2004240d2a34bcdaa616134d27bc18d11c1e96b378a46d564feedcc1a8c3"
   },
   "sns_index": {
     "rev": "cf41372e3d4dc1accfe2c09a7969f8bddc729dc1",
@@ -156,7 +156,7 @@
     "tag": "0.7.0"
   },
   "swap": {
-    "rev": "0e4c8234a9e0508ae30c5b8a7498406294c25e95",
-    "sha256": "dad7d704719615f9dc5165ce195b57abfa75a712034d703c5d46a6aec267bdd0"
+    "rev": "98c898f8de068a1fc0e97ebc805f9fa7f315d862",
+    "sha256": "f3c9cd2a503f3136c91f1d44c5b4bac2d5f15a7d347731aaff03e5fa80df8c48"
   }
 }
