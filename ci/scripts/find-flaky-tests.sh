@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Lists the tests that flaked since the previous daily run, or just $LABEL if set, grouped by base test, as
-# the matrix of .github/workflows/schedule-fix-flaky-tests.yml. Groups that already have an open deflake
-# PR, or that match a regex in $SKIP_PATTERNS (one per line), are dropped.
+# the matrix of .github/workflows/schedule-fix-flaky-tests.yml. Groups that are missing at HEAD, already
+# have an open deflake PR or match a regex in $SKIP_PATTERNS (one per line) are dropped, and only the first
+# 20 of the rest are kept.
 #
 # Prints the groups to stdout and, when run in GitHub Actions, writes them to $GITHUB_OUTPUT as
 # `tests` and a summary to $GITHUB_STEP_SUMMARY.
@@ -61,7 +62,8 @@ if [ -n "$labels" ]; then
         --arg long "$long" \
         --argjson prs "$prs" \
         --argjson trusted "$trusted" \
-        --arg patterns "${SKIP_PATTERNS:-}" '
+        --arg patterns "${SKIP_PATTERNS:-}" \
+        --argjson max_tests 20 '
         def lines: gsub("\r"; "") | split("\n") | map(select(length > 0));
         # Variants of a system-test, like _local and _head_nns_farm_colocate (a bare _head_nns is a legacy
         # name), and copies of a rust_test made by rust_test_with_binary run the same test binary.
@@ -112,7 +114,11 @@ if [ -n "$labels" ]; then
                 )
             }
         )
-        | if (map(.slug) | unique | length) != length then error("duplicate slugs") else . end')"
+        | if (map(.slug) | unique | length) != length then error("duplicate slugs") else . end
+        # An incident can make many tests flaky at once, like 60 on 2026-10-02, and fixing them all, 4 at a time
+        # and up to 4 hours each, would keep the run busy for days.
+        | [foreach .[] as $group (0; . + if $group.drop == null then 1 else 0 end;
+            if $group.drop == null and . > $max_tests then $group + {drop: "over the limit of \($max_tests) tests"} else $group end)]')"
 
     tests="$(jq -c 'map(select(.drop == null) | del(.missing, .drop))' <<<"$groups")"
     summary="$(jq -r '
