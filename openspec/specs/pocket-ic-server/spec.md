@@ -41,6 +41,11 @@ PocketIC supports configurable subnet topologies.
 - **THEN** a dedicated subnet is created with test threshold key configurations (Schnorr and ECDSA)
 - **AND** this subnet is separate from II/Fiduciary subnets which hold production key configurations
 
+#### Scenario: Secp256r1 ECDSA keys alongside secp256k1
+- **WHEN** a subnet holds an ECDSA key under a given name (`key_1` on II/Fiduciary, `test_key_1` and `dfx_test_key` on the test threshold keys subnet)
+- **THEN** it also holds a secp256r1 key under that same name, derived from a fixed seed and the key name so it is shared across all PocketIC subnets
+- **AND** `sign_with_ecdsa` for a secp256r1 key id signs with that key and normalizes the signature's `s` to the lower half of the range
+
 #### Scenario: Configure initial time
 - **WHEN** an initial time is specified in the instance configuration
 - **THEN** the instance starts with the specified IC time
