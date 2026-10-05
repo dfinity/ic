@@ -87,10 +87,9 @@ impl BoundaryNodeManager {
             Ok(domain_name) => self
                 .process_manager
                 .ensure_running((self.version.clone(), domain_name)),
-            Err(err @ OrchestratorError::DomainNameMissingError(_, _)) => {
+            Err(OrchestratorError::DomainNameMissingError(_, _)) => {
                 // ic-boundary should not run when the node doesn't have a domain name
-                self.process_manager.stop()?;
-                Err(err)
+                self.process_manager.stop()
             }
             Err(err) => Err(err),
         }
