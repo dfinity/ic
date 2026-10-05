@@ -128,16 +128,17 @@ impl<Id: Copy + Ord> ReceiptFetchWindow<Id> {
     }
 
     fn next_ids(&self, by_id: &BTreeMap<Id, Vec<Hash>>) -> Vec<Id> {
-        let after_cursor = match self.cursor {
-            Some(cursor) => Bound::Excluded(cursor),
-            None => Bound::Unbounded,
-        };
-        by_id
-            .range((after_cursor, Bound::Unbounded))
-            .map(|(id, _hashes)| *id)
-            .chain(by_id.keys().copied())
-            .take(self.window.min(by_id.len()))
-            .collect()
+        match self.cursor {
+            None => by_id.keys().copied().take(self.window).collect(),
+            // The ids after the cursor and the ids up to and including it partition the pending
+            // ids, so a round takes none of them twice however wide the window is.
+            Some(cursor) => by_id
+                .range((Bound::Excluded(cursor), Bound::Unbounded))
+                .chain(by_id.range((Bound::Unbounded, Bound::Included(cursor))))
+                .map(|(id, _hashes)| *id)
+                .take(self.window)
+                .collect(),
+        }
     }
 
     /// Deliberately not a general backoff: only a pipeline with no failure to shrink its window
