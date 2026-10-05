@@ -107,6 +107,13 @@ Users burn ckETH to withdraw real ETH to an Ethereum address. The minter creates
 - **AND** a `FinalizedTransaction` event is recorded
 - **AND** the ETH balance is updated based on the transaction status
 
+#### Scenario: Bounded, adaptive receipt fan-out
+- **WHEN** a finalization round fetches transaction receipts for the pending withdrawal set
+- **THEN** only a capped window of withdrawals is covered per round, grouped by withdrawal first so a resubmitted withdrawal's variants are never split across rounds
+- **AND** a cursor rotates the window over the pending set between rounds, so a withdrawal whose receipt can never be retrieved cannot starve the ones behind it
+- **AND** the window size adapts to the round's outcome: it doubles after a clean round, halves after a partly failed round, and drops to one after a totally failed round
+- **AND** receipts already obtained in a round are kept even if another lookup in that round failed, rather than the round's results being discarded wholesale
+
 #### Scenario: Transaction resubmission with fee bumping
 - **WHEN** a sent transaction has not been mined
 - **THEN** a new transaction is created with at least 10% higher `max_priority_fee_per_gas`
