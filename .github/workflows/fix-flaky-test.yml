@@ -178,7 +178,8 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Read-only, so that no token in this job can push or open PRs.
           github_token: ${{ github.token }}
-          # The actor of scheduled runs.
+          # claude-code-action refuses bot actors, and the merge queue is the actor of scheduled runs
+          # because it pushed the cron schedule to master.
           allowed_bots: github-merge-queue[bot]
           bot_id: 209825114
           bot_name: claude[bot]

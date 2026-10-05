@@ -127,7 +127,8 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           path_to_bun_executable: ${{ runner.temp }}/bun-linux-x64/bun
           path_to_claude_code_executable: ${{ runner.temp }}/claude
-          # The actor of runs dispatched with GITHUB_TOKEN.
+          # claude-code-action refuses bot actors, and github-actions[bot] is the actor of the runs that
+          # fix-flaky-test.yml dispatches with GITHUB_TOKEN.
           allowed_bots: github-actions[bot]
           bot_id: 209825114
           bot_name: claude[bot]
