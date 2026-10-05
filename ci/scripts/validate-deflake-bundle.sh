@@ -76,13 +76,27 @@ body_file="$RUNNER_TEMP/pr-body.md"
     for label in $LABELS; do
         echo "* \`$label\`"
     done
-    echo
-    # Keep the first 60000 characters, decoding leniently since malformed UTF-8, like a character split by the
-    # byte limit, is fatal to Perl's regexes. Then drop what could hide text from reviewers: HTML comments (also
-    # unterminated ones), link reference definitions (which also serve as comments), the tags of collapsed sections
-    # and invisible, private-use or unassigned characters.
-    head -c 240000 "$RUNNER_TEMP/deflake/body.md" \
-        | perl -0777 -CO -MEncode -pe '$_ = substr(decode("UTF-8", $_), 0, 60000); 1 while s/<!--.*?(?:-->|\z)//s; s/^ {0,3}\[[^\]\n]*\]:.*\n?//mg; s{</?(?:details|summary)\b[^>]*>}{}gi; s/[\p{Cf}\p{Co}\p{Cn}\x{FE00}-\x{FE0F}\x{E0100}-\x{E01EF}]//g'
+    # Below a rule, so that what Claude wrote can't continue the list of labels.
+    printf '\n---\n\n'
+    # Decode leniently, since malformed UTF-8, like a character split by the byte limit, is fatal to Perl's regexes.
+    # Then make sure that GitHub shows all text, as the text it's written as: drop invisible, private-use, unassigned
+    # and control characters first, so that dropping them can't form what follows. Move the info strings of code
+    # fences, which GitHub doesn't show, onto lines of their own in the same quotes and lists. Insert a zero-width
+    # non-joiner into HTML, character references, link reference definitions, links and images, which GitHub hides in
+    # part, into mentions, which notify people, and into the delimiter rows of tables, whose cells beyond the header's
+    # GitHub drops. Write $ as a character reference, since TeX comments hide the rest of a line in math. Then keep the
+    # first 60000 characters, below GitHub's limit for PR descriptions.
+    head -c 240000 "$RUNNER_TEMP/deflake/body.md" | perl -0777 -CO -MEncode -pe '
+        $_ = decode("UTF-8", $_);
+        s/[\p{Cf}\p{Co}\p{Cn}\p{Default_Ignorable_Code_Point}]|(?![\t\n])\p{Cc}//g;
+        s/^([ \t>*+\-.)0-9]*?)(`{3,}(?!`)|~{3,}(?!~))([ \t]*[^ \t\n])/do {
+            my ($quotes_and_lists, $fence, $info) = ($1, $2, $3);
+            "$quotes_and_lists$fence\n" . ($quotes_and_lists =~ s{[^\t >]}{ }gr) . $info
+        }/gme;
+        s/<(?=[A-Za-z!?\/])|&(?=#?[A-Za-z0-9]+;)|\](?=[:(])|(?<![A-Za-z0-9])\@(?=[A-Za-z0-9])/$&\x{200C}/g;
+        s/^[ \t>|:-]*\|[ \t>|:-]*$/$& =~ s{-}{-\x{200C}}gr/gme;
+        s/\\?\$/&#36;/g;
+        $_ = substr($_, 0, 60000)'
 } >"$body_file"
 
 {

@@ -258,8 +258,10 @@ jobs:
             - In step 7 commit the fix on a local branch named `deflake`. Don't push and don't open a PR: a later
               workflow does that. Instead return the PR description as pr_body: the root cause analysis, the
               verification results and all flaky labels.
-            - The reason, pr_body and your commit messages are published in this public repository: don't include
-              raw log lines or internal hostnames, URLs or IP addresses, and only use inline links.
+            - The reason and pr_body are published in this public repository: don't include raw log lines or
+              internal hostnames, URLs or IP addresses. pr_body shows HTML, character references, links, images,
+              footnotes, tables, mentions and the languages of code blocks as plain text and $ in code as &#36;,
+              so write plain Markdown with bare URLs, and lists instead of tables.
 
       - name: Report
         if: always()
