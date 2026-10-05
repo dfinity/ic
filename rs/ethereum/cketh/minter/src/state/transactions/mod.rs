@@ -17,6 +17,7 @@ use crate::numeric::{
     CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
+use crate::state::receipt_fetch::ReceiptFetchWindow;
 use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch, encode_sweep_eth_batch};
 use crate::tx::{
     Eip1559TransactionRequest, Finalized, FinalizedEip1559Transaction, GasFeeEstimate,
@@ -568,6 +569,9 @@ pub struct TransactionPipeline<R: PipelineRequest> {
     sent_tx: MultiKeyMap<TransactionNonce, R::Id, Vec<SentTransaction<R>>>,
     finalized_tx: MultiKeyMap<TransactionNonce, R::Id, Finalized<R::Transaction>>,
     next_nonce: TransactionNonce,
+    /// Ids the next finalization round fetches receipts for, and where in the pending set it
+    /// resumes. Not event-sourced, so it is reset on upgrade.
+    receipt_fetch: ReceiptFetchWindow<R::Id>,
 }
 
 /// The pipeline sending from the minter's main address, on which user withdrawals travel.
@@ -641,6 +645,7 @@ where
             sent_tx: MultiKeyMap::default(),
             finalized_tx: MultiKeyMap::default(),
             next_nonce,
+            receipt_fetch: ReceiptFetchWindow::default(),
         }
     }
 
@@ -807,6 +812,24 @@ where
         Self::cleanup_failed_resubmitted_transactions(&mut self.created_tx, &nonce);
         let new_tx = last_sent_tx.clone_resubmission_strategy(new_tx);
         assert_eq!(self.created_tx.try_insert(nonce, *id, new_tx), Ok(()));
+    }
+
+    /// The transactions whose receipts the next round fetches: as many pending ids as this
+    /// pipeline's window allows, resumed past where the previous round stopped.
+    pub fn select_receipt_fetch_round(
+        &mut self,
+        finalized_transaction_count: &TransactionCount,
+    ) -> BTreeMap<Hash, R::Id> {
+        let pending = self.sent_transactions_to_finalize(finalized_transaction_count);
+        self.receipt_fetch.select_next_round(&pending)
+    }
+
+    pub fn receipt_fetch(&self) -> &ReceiptFetchWindow<R::Id> {
+        &self.receipt_fetch
+    }
+
+    pub fn receipt_fetch_mut(&mut self) -> &mut ReceiptFetchWindow<R::Id> {
+        &mut self.receipt_fetch
     }
 
     pub fn sent_transactions_to_finalize(
@@ -1061,6 +1084,9 @@ where
             sent_tx,
             finalized_tx,
             next_nonce,
+            // Not event-sourced: a replayed pipeline has a default window while the live one may
+            // have advanced, so it is deliberately left out of the comparison.
+            receipt_fetch: _,
         } = self;
 
         // We can reorder request in `reschedule_request`. The audit log won't
@@ -1213,6 +1239,15 @@ impl WithdrawalTransactions {
         ensure_eq!(reimbursement_requests, &other.reimbursement_requests);
         ensure_eq!(reimbursed, &other.reimbursed);
         pipeline.is_equivalent_to(&other.pipeline)
+    }
+
+    /// The pipeline carrying user withdrawals, whose receipt fetch the finalization round drives.
+    pub fn pipeline(&self) -> &MinterTransactionPipeline {
+        &self.pipeline
+    }
+
+    pub fn pipeline_mut(&mut self) -> &mut MinterTransactionPipeline {
+        &mut self.pipeline
     }
 
     pub fn next_transaction_nonce(&self) -> TransactionNonce {
