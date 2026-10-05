@@ -201,26 +201,27 @@ impl<P: Process> SingleProcessRunner<P> {
     /// processes in question, cf. https://linux.die.net/man/2/waitpid.
     fn signal_group(&self, signal: Signal) -> Result<()> {
         let running = self.running_cell.running.lock().unwrap();
-        if let Some(Running { pid, .. }) = *running {
-            let mut gpid = pid;
-            // We want to signal the whole process group.
-            if gpid > Pid::from_raw(0) {
-                let t_gpid = gpid.as_raw();
-                let t_gpid = -t_gpid;
-                gpid = Pid::from_raw(t_gpid);
-            }
-            return match signal::kill(gpid, signal) {
-                // The process group no longer exists: its leader has been reaped, and the thread
-                // waiting on it is about to clear the pid.
-                Ok(()) | Err(Errno::ESRCH) => Ok(()),
-                Err(err) => Err(std::io::Error::other(format!(
-                    "Failed to send {signal} to {} process with gpid {gpid}: {err}",
-                    P::NAME
-                ))),
-            };
+        let Some(Running { pid, .. }) = *running else {
+            info!(self.log, "no {} process running", P::NAME);
+            return Ok(());
+        };
+
+        let mut gpid = pid;
+        // We want to signal the whole process group.
+        if gpid > Pid::from_raw(0) {
+            let t_gpid = gpid.as_raw();
+            let t_gpid = -t_gpid;
+            gpid = Pid::from_raw(t_gpid);
         }
-        info!(self.log, "no {} process running", P::NAME);
-        Ok(())
+        match signal::kill(gpid, signal) {
+            // The process group no longer exists: its leader has been reaped, and the thread
+            // waiting on it is about to clear the pid.
+            Ok(()) | Err(Errno::ESRCH) => Ok(()),
+            Err(err) => Err(std::io::Error::other(format!(
+                "Failed to send {signal} to {} process with gpid {gpid}: {err}",
+                P::NAME
+            ))),
+        }
     }
 
     /// Waits up to `timeout` for the currently running process to exit.
@@ -314,7 +315,7 @@ impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
     }
 
     fn is_running(&self) -> bool {
-        self.running_cell.get_pid().is_some()
+        self.get_process().is_some()
     }
 
     fn get_process(&self) -> Option<Arc<P>> {
