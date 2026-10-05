@@ -25,7 +25,6 @@ use ic_system_test_driver::{
     util::runtime_from_url,
 };
 use ic_types::{CanisterId, NodeId, ReplicaVersion, SubnetId};
-use once_cell::sync::OnceCell;
 use registry_canister::mutations::{
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
@@ -33,6 +32,7 @@ use registry_canister::mutations::{
 };
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
+use std::sync::OnceLock;
 use url::Url;
 
 /*
@@ -51,8 +51,8 @@ use url::Url;
 */
 
 /// Test neuron ID and secret key of its controller encoded in PEM format.
-pub(crate) static RECOVERED_NNS_DICTATOR_NEURON_IDENTITY: OnceCell<(NeuronId, String)> =
-    OnceCell::new();
+pub(crate) static RECOVERED_NNS_DICTATOR_NEURON_IDENTITY: OnceLock<(NeuronId, String)> =
+    OnceLock::new();
 
 #[derive(Deserialize, Serialize)]
 pub struct RecoveredNnsDictatorNeuron {

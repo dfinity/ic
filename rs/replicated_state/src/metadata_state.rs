@@ -1745,6 +1745,12 @@ impl Stream {
             .map(|reject_signal| reject_signal.index)
     }
 
+    /// Whether the stream holds a reject signal in `[from, to)`.
+    pub fn has_reject_signal_between(&self, from: StreamIndex, to: StreamIndex) -> bool {
+        self.next_reject_signal_index(from)
+            .is_some_and(|index| index < to)
+    }
+
     /// Returns the index just beyond the last sent signal.
     pub fn signals_end(&self) -> StreamIndex {
         self.signals_end

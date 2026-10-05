@@ -9,7 +9,7 @@ use ic_consensus_certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_xnet::XNetEndpoint;
-use ic_https_outcalls_adapter_client::setup_canister_http_client;
+use ic_https_outcalls_adapter_client::{setup_canister_http_channel, setup_canister_http_client};
 use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
     time_source::SysTimeSource,
@@ -245,13 +245,14 @@ pub fn construct_ic_stack(
         rt_handle_xnet.clone(),
         node_id,
         subnet_id,
+        max_certified_height_rx.clone(),
         metrics_registry,
         log.clone(),
     ));
     let xnet_endpoint = XNetEndpoint::new(
         rt_handle_xnet.clone(),
         Arc::clone(&certified_stream_store),
-        Arc::clone(&xnet_payload_builder) as Arc<_>,
+        xnet_payload_builder.advert_handler(),
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
         config.message_routing,
@@ -304,12 +305,19 @@ pub fn construct_ic_stack(
     );
 
     // ---------- HTTPS OUTCALLS PAYLOAD BUILDER DEPS FOLLOW ----------
-    let canister_http_adapter_client = setup_canister_http_client(
+    let canister_http_channel = setup_canister_http_channel(
         rt_handle_main.clone(),
         metrics_registry,
-        config.adapters_config,
+        &config.adapters_config,
+        log,
+    );
+
+    let canister_http_adapter_client = setup_canister_http_client(
+        rt_handle_main.clone(),
+        canister_http_channel,
         execution_services.transform_execution_service,
         max_canister_http_requests_in_flight,
+        metrics_registry,
         log.clone(),
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------

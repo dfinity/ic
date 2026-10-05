@@ -151,6 +151,8 @@ jobs:
       options: >-
         --privileged --mount type=tmpfs,target="/tmp/containers"
       volumes:
+        # nscloud-setup finds the runner's Namespace token in here and exports NSC_TOKEN_FILE,
+        # which nsc and namespace-actions/upload-artifact read.
         - /var/run/nsc/:/var/run/nsc/
         # The runner profile's Namespace cache volume (always /cache on the host). The
         # "Mount the Bazel repository cache" step bind-mounts a directory of it into this
@@ -158,17 +160,15 @@ jobs:
         - /cache:/cache
         # The runner's scratch filesystem, see runs-on above.
         - /namespace/scratch:/namespace/scratch
-      # Forward the Namespace credentials into the container so the
-      # namespace-actions/upload-artifact step can authenticate against Namespace
-      # Artifact Storage from inside the job container. See:
-      # https://namespace.so/docs/reference/github-actions/upload-artifact
+      # Forward the Namespace Artifact Storage variables into the container for the
+      # namespace-actions/upload-artifact of the "Upload target files to Namespace Artifact
+      # Storage" step. See: https://namespace.so/docs/reference/github-actions/upload-artifact
       env:
-        NSC_TOKEN_FILE: ${{ env.NSC_TOKEN_FILE }}
         NAMESPACE_ACTIONS_RESULTS_URL: ${{ env.NAMESPACE_ACTIONS_RESULTS_URL }}
         NAMESPACE_ACTIONS_RESULTS_SERVICE: ${{ env.NAMESPACE_ACTIONS_RESULTS_SERVICE }}
         NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD: ${{ env.NAMESPACE_ACTIONS_DIRECT_ZIP_UPLOAD }}
         # Set (to /cache) by the Namespace runner when the profile has a cache volume and
-        # forwarded like the credentials above; the "Prepare the Bazel repository cache"
+        # forwarded like the variables above; the "Prepare the Bazel repository cache"
         # step checks it and the other repository-cache steps are skipped when it is unset.
         NSC_CACHE_PATH: ${{ env.NSC_CACHE_PATH }}
     # A job timeout cancels the job, skipping the uploads of the bazel-namespace action, so this

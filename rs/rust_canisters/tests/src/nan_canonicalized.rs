@@ -5,8 +5,6 @@ static CANON_64BIT_NAN: u64 =
     0b0111_1111_1111_1000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000_0000;
 
 use ic_cdk::query;
-use std::f32;
-use std::f64;
 
 type Floats = Vec<(f32, f64)>;
 

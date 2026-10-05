@@ -29,9 +29,11 @@ use std::error::Error;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::{Notify, Semaphore};
+use tokio::time::error::Elapsed;
 use tokio::{runtime, select};
+use tokio_io_timeout::TimeoutStream;
 use tower::Service;
 use url::Url;
 
@@ -79,6 +81,24 @@ const ADVERT_RATE_LIMIT_BURST: f64 = 10.0;
 /// Number of nodes above which the rate limiter drops the buckets that have
 /// refilled completely, as they are equivalent to absent ones.
 const ADVERT_RATE_LIMIT_MAX_BUCKETS: usize = 1024;
+
+/// How long a connection may go without sending anything, whatever the stage:
+/// TLS handshake, request or idle. XNet clients send HTTP/2 keep-alive pings
+/// every 10 seconds.
+#[cfg(not(test))]
+const CONNECTION_READ_TIMEOUT: Duration = Duration::from_secs(30);
+/// Shorter in tests, but longer than `ADVERT_BODY_TIMEOUT`, so that it fires first.
+#[cfg(test)]
+const CONNECTION_READ_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// How long to wait for a TLS handshake to complete. XNet clients give up on a
+/// request, handshake included, after 5 seconds anyway.
+#[cfg(not(test))]
+const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// How long to wait for an advert's body once its headers have arrived. At most
+/// `ADVERT_MAX_BODY_BYTES`, it takes a small fraction of this to transfer.
+const ADVERT_BODY_TIMEOUT: Duration = Duration::from_secs(1);
 
 impl XNetEndpointMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -184,12 +204,31 @@ fn ok<T>(t: T) -> Result<T, Infallible> {
     Ok(t)
 }
 
-/// Handles an incoming HTTP request by taking a permit from the semaphore, parsing the URL,
-/// handing over to `route_request()` and replying with the produced response.
+/// Handles an incoming HTTP request by reading the advert body, if any; taking a
+/// permit from the semaphore; parsing the URL; handing over to `route_request()`;
+/// and replying with the produced response.
 async fn handle_xnet_request(
     State(ctx): State<Arc<Context<impl CertifiedStreamStore>>>,
     request: Request<Body>,
 ) -> impl IntoResponse {
+    let peer_node_id = request.extensions().get::<NodeId>().copied();
+
+    // Only the advert endpoint takes a request body. Read it with a timeout before
+    // taking a permit, so that a caller withholding it cannot DoS the endpoint.
+    let is_advert =
+        request.method() == Method::POST && request.uri().path().starts_with(API_URL_ADVERT_PREFIX);
+    let (parts, body) = request.into_parts();
+    let body = if is_advert {
+        tokio::time::timeout(
+            ADVERT_BODY_TIMEOUT,
+            axum::body::to_bytes(body, ADVERT_MAX_BODY_BYTES),
+        )
+        .await
+        .unwrap_or_else(|elapsed| Err(axum::Error::new(elapsed)))
+    } else {
+        Ok(Bytes::new())
+    };
+
     let owned_permit = match ctx.semaphore.clone().try_acquire_owned() {
         Ok(permit) => permit,
         Err(_) => {
@@ -203,17 +242,6 @@ async fn handle_xnet_request(
                 .body(Body::from("Queue full"))
                 .unwrap());
         }
-    };
-    let peer_node_id = request.extensions().get::<NodeId>().copied();
-
-    // Only the advert endpoint takes a request body.
-    let is_advert =
-        request.method() == Method::POST && request.uri().path().starts_with(API_URL_ADVERT_PREFIX);
-    let (parts, body) = request.into_parts();
-    let body = if is_advert {
-        axum::body::to_bytes(body, ADVERT_MAX_BODY_BYTES).await
-    } else {
-        Ok(Bytes::new())
     };
 
     ok(tokio::task::spawn_blocking(move || {
@@ -282,6 +310,10 @@ fn start_server(
                     let registry_client = registry_client.clone();
                     let tls = tls.clone();
                     tokio::spawn(async move {
+                        let mut stream = TimeoutStream::new(stream);
+                        stream.set_read_timeout(Some(CONNECTION_READ_TIMEOUT));
+                        let stream = Box::pin(stream);
+
                         #[cfg(test)]
                         {
                             // TLS is not used in tests.
@@ -315,7 +347,11 @@ fn start_server(
 
                             let tls_acceptor =
                                 tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
-                            match tls_acceptor.accept(stream).await {
+                            let tls_stream =
+                                tokio::time::timeout(TLS_HANDSHAKE_TIMEOUT, tls_acceptor.accept(stream))
+                                    .await
+                                    .unwrap_or_else(|elapsed| Err(elapsed.into()));
+                            match tls_stream {
                                 Ok(tls_stream) => {
                                     let peer_node_id = match peer_node_id(&tls_stream) {
                                         Ok(peer_node_id) => peer_node_id,
@@ -632,18 +668,21 @@ fn handle_advert(
             return Err(forbidden(msg));
         }
 
-        // Anything beyond `ADVERT_MAX_BODY_BYTES`, or a body we failed to read. An
-        // empty body (i.e. one we never read) fails to decode below.
         let body = match body {
             Ok(body) => body,
 
+            // An advert body that timed out, was too large or we otherwise failed to read.
+            // An empty body will fail to decode below.
             Err(err) => {
-                if let Some(source) = err.source()
-                    && source.is::<LengthLimitError>()
-                {
-                    return Err(payload_too_large(format!("Advert too large: {err}")));
-                }
-                return Err(bad_request(format!("Could not read advert: {err}")));
+                return Err(match err.source() {
+                    Some(source) if source.is::<Elapsed>() => request_timeout(format!(
+                        "Advert body not received within {ADVERT_BODY_TIMEOUT:?}"
+                    )),
+                    Some(source) if source.is::<LengthLimitError>() => {
+                        payload_too_large(format!("Advert too large: {err}"))
+                    }
+                    _ => bad_request(format!("Could not read advert: {err}")),
+                });
             }
         };
 
@@ -823,6 +862,14 @@ fn bad_request<T: Into<Body>>(msg: T) -> Response<Body> {
 fn forbidden<T: Into<Body>>(msg: T) -> Response<Body> {
     Response::builder()
         .status(StatusCode::FORBIDDEN)
+        .body(msg.into())
+        .unwrap()
+}
+
+/// Produces a 408 Request Timeout response with the given content.
+fn request_timeout<T: Into<Body>>(msg: T) -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::REQUEST_TIMEOUT)
         .body(msg.into())
         .unwrap()
 }
