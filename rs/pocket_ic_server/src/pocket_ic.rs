@@ -53,7 +53,9 @@ use ic_https_outcalls_adapter::{
     Config as HttpsOutcallsConfig, IncomingSource as CanisterHttpIncomingSource,
     start_server as start_canister_http_server,
 };
-use ic_https_outcalls_adapter_client::{CanisterHttpAdapterClientImpl, setup_canister_http_client};
+use ic_https_outcalls_adapter_client::{
+    CanisterHttpAdapterClientImpl, setup_canister_http_channel, setup_canister_http_client,
+};
 use ic_https_outcalls_pricing::{NetworkUsage, PricingError, PricingFactory};
 use ic_https_outcalls_service::HttpsOutcallRequest;
 use ic_https_outcalls_service::HttpsOutcallResponse;
@@ -495,12 +497,18 @@ impl Subnet {
             https_outcalls_uds_path: Some(uds_path),
             ..Default::default()
         };
-        let client = setup_canister_http_client(
+        let channel = setup_canister_http_channel(
             state_machine.runtime.handle().clone(),
             &state_machine.metrics_registry,
-            adapter_config,
+            &adapter_config,
+            &state_machine.replica_logger,
+        );
+        let client = setup_canister_http_client(
+            state_machine.runtime.handle().clone(),
+            channel,
             state_machine.transform_handler.lock().unwrap().clone(),
             MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
+            &state_machine.metrics_registry,
             state_machine.replica_logger.clone(),
         );
         let canister_http = Arc::new(Mutex::new(CanisterHttp {
@@ -917,11 +925,13 @@ impl PocketIcSubnets {
                 subnet_chain_keys.push(MasterPublicKeyId::Schnorr(key_id));
             }
 
-            let key_id = EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "key_1".to_string(),
-            };
-            subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
+            for curve in [EcdsaCurve::Secp256k1, EcdsaCurve::Secp256r1] {
+                let key_id = EcdsaKeyId {
+                    curve,
+                    name: "key_1".to_string(),
+                };
+                subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
+            }
 
             let key_id = VetKdKeyId {
                 curve: VetKdCurve::Bls12_381_G2,
@@ -940,12 +950,14 @@ impl PocketIcSubnets {
                 }
             }
 
-            for name in ["test_key_1", "dfx_test_key"] {
-                let key_id = EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: name.to_string(),
-                };
-                subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
+            for curve in [EcdsaCurve::Secp256k1, EcdsaCurve::Secp256r1] {
+                for name in ["test_key_1", "dfx_test_key"] {
+                    let key_id = EcdsaKeyId {
+                        curve,
+                        name: name.to_string(),
+                    };
+                    subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
+                }
             }
 
             for name in ["test_key_1", "dfx_test_key"] {

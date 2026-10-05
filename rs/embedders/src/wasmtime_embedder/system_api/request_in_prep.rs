@@ -1,6 +1,5 @@
-use super::{sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
-use ic_base_types::InternalAddress;
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use super::sandbox_safe_system_state::SandboxSafeSystemState;
+use ic_interfaces::execution_environment::{Heap, HypervisorError, HypervisorResult};
 use ic_logger::ReplicaLogger;
 use ic_replicated_state::OutputRequest;
 use ic_types::Time;
@@ -69,7 +68,7 @@ impl RequestInPrep {
         callee_size: usize,
         method_name_src: usize,
         method_name_len: usize,
-        heap: &[u8],
+        heap: &Heap<'_>,
         on_reply: WasmClosure,
         on_reject: WasmClosure,
         max_size_remote_subnet: NumBytes,
@@ -107,22 +106,13 @@ impl RequestInPrep {
                     doc_link: doc_ref(LARGE_NAME_LINK),
                 });
             }
-            let method_name = valid_subslice(
-                "ic0.call_new method_name",
-                InternalAddress::new(method_name_src),
-                InternalAddress::new(method_name_len),
-                heap,
-            )?;
+            let method_name =
+                heap.get("ic0.call_new method_name", method_name_src, method_name_len)?;
             String::from_utf8_lossy(method_name).to_string()
         };
 
         let callee = {
-            let bytes = valid_subslice(
-                "ic0.call_new callee_src",
-                InternalAddress::new(callee_src),
-                InternalAddress::new(callee_size),
-                heap,
-            )?;
+            let bytes = heap.get("ic0.call_new callee_src", callee_src, callee_size)?;
             PrincipalId::try_from(bytes).map_err(HypervisorError::InvalidPrincipalId)?
         };
 
@@ -161,7 +151,7 @@ impl RequestInPrep {
         &mut self,
         src: usize,
         size: usize,
-        heap: &[u8],
+        heap: &Heap<'_>,
     ) -> HypervisorResult<()> {
         let current_size = self.method_name.len() + self.method_payload.len();
         let max_size_local_subnet =
@@ -179,12 +169,7 @@ impl RequestInPrep {
                 doc_link: doc_ref(PAYLOAD_SIZE_LINK),
             })
         } else {
-            let data = valid_subslice(
-                "ic0.call_data_append",
-                InternalAddress::new(src),
-                InternalAddress::new(size),
-                heap,
-            )?;
+            let data = heap.get("ic0.call_data_append", src, size)?;
             self.method_payload.extend_from_slice(data);
             Ok(())
         }

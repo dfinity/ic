@@ -510,7 +510,7 @@ impl Drop for PendingGuard {
             .unwrap()
             .as_nanos() as u64;
         self.min_alive_until
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |min_alive_until| {
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |min_alive_until| {
                 Some(max(min_alive_until, alive_until))
             })
             .unwrap();

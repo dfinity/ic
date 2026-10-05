@@ -9893,6 +9893,7 @@ dependencies = [
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",
+ "ic-test-utilities-metrics",
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.9.0",
@@ -9945,6 +9946,7 @@ dependencies = [
  "mockall",
  "prometheus",
  "proptest",
+ "prost",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rayon",
@@ -10920,7 +10922,7 @@ dependencies = [
 
 [[package]]
 name = "ic-management-canister-types"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "candid",
  "candid_parser",
@@ -14360,6 +14362,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-secp256k1",
+ "ic-secp256r1",
  "ic-state-layout",
  "ic-state-manager",
  "ic-test-state-machine-client",
@@ -14373,6 +14376,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-xnet-payload-builder",
  "maplit",
+ "p256",
  "proptest",
  "rand 0.8.6",
  "rcgen 0.13.2",
@@ -19377,6 +19381,7 @@ dependencies = [
  "icrc-ledger-types",
  "k256",
  "maplit",
+ "p256",
  "prost",
  "registry-canister",
  "reqwest",
