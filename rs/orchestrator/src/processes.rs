@@ -68,15 +68,21 @@ impl Process for ReplicaProcess {
     /// - if the latest CUP is an unsigned (i.e. recovery) CUP higher than the CUP the replica was
     ///   started with, because consensus would reject the unsigned artifact.
     fn restart_decision(&self, args: &Self::Args<'_>) -> RestartDecision {
+        let Self::Args {
+            platform_version: _,
+            subnet_id: new_subnet_id,
+            cup: new_cup,
+        } = args;
+
         let mut reasons = vec![];
 
-        if args.subnet_id != self.subnet_id {
+        if *new_subnet_id != self.subnet_id {
             reasons.push(format!(
                 "Subnet ID changed from {} to {}, evidence of a destination node of a subnet split",
                 self.subnet_id, args.subnet_id
             ));
         }
-        if !args.cup.is_signed() && args.cup.height() > self.cup_height {
+        if !new_cup.is_signed() && new_cup.height() > self.cup_height {
             reasons.push(format!(
                 "Found higher unsigned CUP (height {} > {}), evidence of a subnet recovery",
                 args.cup.height(),
@@ -180,12 +186,14 @@ impl Process for IcBoundaryProcess {
     }
 
     /// ic-boundary must be restarted if the node's domain name changed.
-    fn restart_decision(&self, (_, domain_name): &Self::Args<'_>) -> RestartDecision {
-        if *domain_name != self.domain_name {
+    fn restart_decision(&self, args: &Self::Args<'_>) -> RestartDecision {
+        let (_new_replica_version, new_domain_name) = args;
+
+        if *new_domain_name != self.domain_name {
             RestartDecision::Restart {
                 reason: format!(
                     "Domain name changed from {} to {}",
-                    self.domain_name, domain_name
+                    self.domain_name, new_domain_name
                 ),
             }
         } else {
@@ -255,7 +263,9 @@ impl Process for IcGatewayProcess {
         })
     }
 
-    fn restart_decision(&self, _args: &Self::Args<'_>) -> RestartDecision {
+    fn restart_decision(&self, args: &Self::Args<'_>) -> RestartDecision {
+        let _new_replica_version: &ReplicaVersion = args;
+
         RestartDecision::KeepRunning
     }
 

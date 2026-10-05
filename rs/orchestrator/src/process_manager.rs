@@ -39,8 +39,7 @@ struct Running<P> {
 }
 
 /// The running process (if any), shared between a [`SingleProcessRunner`] and
-/// the thread waiting for the process to exit. The condition variable is
-/// notified when the process exits and is cleared.
+/// the thread waiting for the process to exit.
 struct RunningState<P> {
     running: Mutex<Option<Running<P>>>,
     exited: Condvar,
