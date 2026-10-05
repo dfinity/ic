@@ -1405,6 +1405,42 @@ fn should_export_the_sweep_pipeline_metrics() {
         )
         .assert_contains_metric_matching(
             r#"cketh_minter_unfinalized_transactions\{pipeline="sweeper"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_window\{pipeline="withdrawal"\} 10 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_window\{pipeline="sweeper"\} 10 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_rounds_since_chain_read\{pipeline="withdrawal"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_rounds_since_chain_read\{pipeline="sweeper"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="receipt"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="not_mined"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="sweeper",outcome="receipt"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="sweeper",outcome="not_mined"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="sweeper",outcome="error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_abandoned_rounds_total\{pipeline="withdrawal"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_abandoned_rounds_total\{pipeline="sweeper"\} 0 \d+"#,
         );
 }
 
@@ -1465,48 +1501,6 @@ fn should_export_the_unfinalized_backlog_metrics() {
         )
         .assert_contains_metric_matching(
             r#"cketh_minter_unfinalized_transactions\{pipeline="sweeper"\} 0 \d+"#,
-        );
-}
-
-#[test]
-fn should_export_the_receipt_fetch_metrics() {
-    CkEthSetup::default()
-        .check_minter_metrics()
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_fetch_window\{pipeline="withdrawal"\} 10 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_fetch_window\{pipeline="sweeper"\} 10 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_fetch_rounds_since_chain_read\{pipeline="withdrawal"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_fetch_rounds_since_chain_read\{pipeline="sweeper"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="receipt"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="not_mined"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="error"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_lookups_total\{pipeline="sweeper",outcome="receipt"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_lookups_total\{pipeline="sweeper",outcome="not_mined"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_lookups_total\{pipeline="sweeper",outcome="error"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_fetch_abandoned_rounds_total\{pipeline="withdrawal"\} 0 \d+"#,
-        )
-        .assert_contains_metric_matching(
-            r#"cketh_minter_receipt_fetch_abandoned_rounds_total\{pipeline="sweeper"\} 0 \d+"#,
         );
 }
 
