@@ -660,6 +660,7 @@ async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
         for _ in 0..=ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING {
             s.automatic_deposits
                 .sweeper_pipeline_mut()
+                .receipt_fetch_mut()
                 .record_round_without_chain_read();
         }
     });
@@ -674,6 +675,7 @@ async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
         read_state(|s| s
             .automatic_deposits
             .sweeper_pipeline()
+            .receipt_fetch()
             .rounds_since_chain_read()),
         ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING + 2
     );

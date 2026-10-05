@@ -111,6 +111,7 @@ mod round {
             for _ in 0..=ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING {
                 s.withdrawal_transactions
                     .pipeline_mut()
+                    .receipt_fetch_mut()
                     .record_round_without_chain_read();
             }
         });
@@ -126,6 +127,7 @@ mod round {
             read_state(|s| s
                 .withdrawal_transactions
                 .pipeline()
+                .receipt_fetch()
                 .rounds_since_chain_read()),
             ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING + 2,
             "a skipped round is one more round that read nothing"
@@ -150,12 +152,17 @@ mod round {
             read_state(|s| s
                 .withdrawal_transactions
                 .pipeline()
+                .receipt_fetch()
                 .rounds_since_chain_read()),
             1,
             "a round that could not read the chain is what starts the skipping"
         );
         assert_eq!(
-            read_state(|s| s.withdrawal_transactions.pipeline().receipt_fetch_window()),
+            read_state(|s| s
+                .withdrawal_transactions
+                .pipeline()
+                .receipt_fetch()
+                .window()),
             INITIAL_RECEIPT_FETCH_WINDOW,
             "a round that never reached its lookups says nothing about the providers"
         );

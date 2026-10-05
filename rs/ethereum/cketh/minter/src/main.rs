@@ -1560,8 +1560,8 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 let withdrawal_pipeline = s.withdrawal_transactions.pipeline();
                 let sweeper_pipeline = s.automatic_deposits.sweeper_pipeline();
                 let receipt_fetch = [
-                    ("withdrawal", withdrawal_pipeline.receipt_fetch_counters()),
-                    ("sweeper", sweeper_pipeline.receipt_fetch_counters()),
+                    ("withdrawal", withdrawal_pipeline.receipt_fetch().counters()),
+                    ("sweeper", sweeper_pipeline.receipt_fetch().counters()),
                 ];
                 w.gauge_vec(
                     "cketh_minter_receipt_fetch_window",
@@ -1569,11 +1569,11 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?
                 .value(
                     &[("pipeline", "withdrawal")],
-                    withdrawal_pipeline.receipt_fetch_window() as f64,
+                    withdrawal_pipeline.receipt_fetch().window() as f64,
                 )?
                 .value(
                     &[("pipeline", "sweeper")],
-                    sweeper_pipeline.receipt_fetch_window() as f64,
+                    sweeper_pipeline.receipt_fetch().window() as f64,
                 )?;
                 w.gauge_vec(
                     "cketh_minter_receipt_fetch_rounds_since_chain_read",
@@ -1581,11 +1581,11 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 )?
                 .value(
                     &[("pipeline", "withdrawal")],
-                    withdrawal_pipeline.rounds_since_chain_read() as f64,
+                    withdrawal_pipeline.receipt_fetch().rounds_since_chain_read() as f64,
                 )?
                 .value(
                     &[("pipeline", "sweeper")],
-                    sweeper_pipeline.rounds_since_chain_read() as f64,
+                    sweeper_pipeline.receipt_fetch().rounds_since_chain_read() as f64,
                 )?;
                 let mut receipt_lookups = w.counter_vec(
                     "cketh_minter_receipt_lookups_total",

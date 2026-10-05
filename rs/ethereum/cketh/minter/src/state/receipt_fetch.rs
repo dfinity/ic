@@ -113,7 +113,10 @@ impl<Id: Copy + Ord> ReceiptFetchWindow<Id> {
     /// The cursor moves past the selected ids whether or not their lookups succeed, so an id whose
     /// receipt cannot be retrieved is retried only once the window has gone round the whole pending
     /// set, rather than pinning every round onto itself and starving the ids behind it.
-    pub fn select_next_round(&mut self, pending: &BTreeMap<Hash, Id>) -> BTreeMap<Hash, Id> {
+    pub(in crate::state) fn select_next_round(
+        &mut self,
+        pending: &BTreeMap<Hash, Id>,
+    ) -> BTreeMap<Hash, Id> {
         let by_id = group_by_id(pending);
         let ids = self.next_ids(&by_id);
         if let Some(last) = ids.last() {

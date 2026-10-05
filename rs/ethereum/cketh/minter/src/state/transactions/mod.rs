@@ -17,7 +17,7 @@ use crate::numeric::{
     CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
-use crate::state::receipt_fetch::{ReceiptFetchCounters, ReceiptFetchWindow, RoundOutcome};
+use crate::state::receipt_fetch::ReceiptFetchWindow;
 use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch, encode_sweep_eth_batch};
 use crate::tx::{
     Eip1559TransactionRequest, Finalized, FinalizedEip1559Transaction, GasFeeEstimate,
@@ -824,29 +824,12 @@ where
         self.receipt_fetch.select_next_round(&pending)
     }
 
-    /// Records how a round that reached its receipt lookups fared, adapting the window to it.
-    pub fn record_receipt_fetch_round(&mut self, outcome: RoundOutcome) {
-        self.receipt_fetch.record_round(outcome)
+    pub fn receipt_fetch(&self) -> &ReceiptFetchWindow<R::Id> {
+        &self.receipt_fetch
     }
 
-    pub fn should_skip_receipt_fetch_round(&self) -> bool {
-        self.receipt_fetch.should_skip_round()
-    }
-
-    pub fn record_round_without_chain_read(&mut self) {
-        self.receipt_fetch.record_round_without_chain_read()
-    }
-
-    pub fn receipt_fetch_window(&self) -> usize {
-        self.receipt_fetch.window()
-    }
-
-    pub fn rounds_since_chain_read(&self) -> u32 {
-        self.receipt_fetch.rounds_since_chain_read()
-    }
-
-    pub fn receipt_fetch_counters(&self) -> ReceiptFetchCounters {
-        self.receipt_fetch.counters()
+    pub fn receipt_fetch_mut(&mut self) -> &mut ReceiptFetchWindow<R::Id> {
+        &mut self.receipt_fetch
     }
 
     pub fn sent_transactions_to_finalize(

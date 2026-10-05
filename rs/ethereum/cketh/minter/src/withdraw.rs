@@ -491,12 +491,12 @@ where
 {
     let context = Req::TASK_NAME;
     let skipped = mutate_state(|s| {
-        let pipeline = Req::pipeline(s);
-        if !pipeline.should_skip_receipt_fetch_round() {
+        let window = Req::pipeline(s).receipt_fetch_mut();
+        if !window.should_skip_round() {
             return None;
         }
-        pipeline.record_round_without_chain_read();
-        Some(pipeline.rounds_since_chain_read())
+        window.record_round_without_chain_read();
+        Some(window.rounds_since_chain_read())
     });
     if let Some(rounds_since_chain_read) = skipped {
         log!(
@@ -514,7 +514,11 @@ where
                 INFO,
                 "[{context}]: failed to get the finalized transaction count of {sender}: {e:?}"
             );
-            mutate_state(|s| Req::pipeline(s).record_round_without_chain_read());
+            mutate_state(|s| {
+                Req::pipeline(s)
+                    .receipt_fetch_mut()
+                    .record_round_without_chain_read()
+            });
             return BTreeMap::new();
         }
     };
@@ -522,12 +526,16 @@ where
     let txs_to_finalize =
         mutate_state(|s| Req::pipeline(s).select_receipt_fetch_round(&finalized_tx_count));
     if txs_to_finalize.is_empty() {
-        mutate_state(|s| Req::pipeline(s).record_receipt_fetch_round(RoundOutcome::default()));
+        mutate_state(|s| {
+            Req::pipeline(s)
+                .receipt_fetch_mut()
+                .record_round(RoundOutcome::default())
+        });
         return BTreeMap::new();
     }
 
     let (receipts, outcome) = fetch_finalized_receipts(txs_to_finalize, runtime).await;
-    mutate_state(|s| Req::pipeline(s).record_receipt_fetch_round(outcome));
+    mutate_state(|s| Req::pipeline(s).receipt_fetch_mut().record_round(outcome));
     receipts
 }
 
