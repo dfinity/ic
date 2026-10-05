@@ -11,7 +11,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     RegistryVersion, SubnetId,
-    consensus::{CatchUpPackage, CupType, HasHeight, RecoveryArgs},
+    consensus::{CatchUpPackage, CupType, HasHeight},
     crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet,
 };
 use prost::Message;
@@ -246,11 +246,11 @@ pub fn verify(
             Ok(contents) => {
                 if let Some(cup_contents) = contents.value
                     && contents.version == version
-                    && let CupType::Recovery(RecoveryArgs {
+                    && let CupType::Recovery {
                         height,
                         time,
                         state_hash,
-                    }) = CupType::try_from(cup_contents.cup_type).map_err(|e| {
+                    } = CupType::try_from(cup_contents.cup_type).map_err(|e| {
                         format!("Cannot verify recovery history at registry version {version}: {e}")
                     })?
                 {

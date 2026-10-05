@@ -131,12 +131,15 @@ pub fn get_status(
     let cup_type = CupType::try_from(contents.cup_type)
         .map_err(StatusError::CatchUpContentsDeserializationError)?;
 
-    let CupType::SubnetSplitting(splitting_args) = cup_type else {
+    let CupType::SubnetSplitting {
+        destination_subnet_id,
+    } = cup_type
+    else {
         return Ok(Status::NotScheduled);
     };
 
     Ok(Status::Scheduled {
-        destination_subnet_id: splitting_args.destination_subnet_id,
+        destination_subnet_id,
         scheduled_at: versioned_record.version,
     })
 }

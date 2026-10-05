@@ -402,22 +402,6 @@ impl SignedBytesWithoutDomainSeparator for CatchUpContentProtobufBytes {
     }
 }
 
-/// Arguments of a [`CupType::Recovery`] record: the parameters of the recovery CUP.
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct RecoveryArgs {
-    /// The blockchain height that the CUP should have.
-    pub height: Height,
-    /// Block time for the CUP's block.
-    pub time: Time,
-    /// The hash of the state that the subnet should use.
-    pub state_hash: CryptoHashOfState,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub struct SubnetSplittingArgs {
-    pub destination_subnet_id: SubnetId,
-}
-
 /// The purpose of a registry `CatchUpPackageContents` record: the kind of CUP the record
 /// describes, together with the parameters specific to that kind.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -425,9 +409,16 @@ pub enum CupType {
     /// Initial CUP used to bootstrap a subnet.
     Genesis,
     /// A CUP used to recover a subnet.
-    Recovery(RecoveryArgs),
+    Recovery {
+        /// The blockchain height that the CUP should have.
+        height: Height,
+        /// Block time for the CUP's block.
+        time: Time,
+        /// The hash of the state that the subnet should use.
+        state_hash: CryptoHashOfState,
+    },
     /// A CUP used to indicate a subnet to split into two.
-    SubnetSplitting(SubnetSplittingArgs),
+    SubnetSplitting { destination_subnet_id: SubnetId },
 }
 
 impl TryFrom<Option<subnet_pb::catch_up_package_contents::CupType>> for CupType {
@@ -446,19 +437,17 @@ impl TryFrom<Option<subnet_pb::catch_up_package_contents::CupType>> for CupType 
                 height,
                 time,
                 state_hash,
-            }) => CupType::Recovery(RecoveryArgs {
+            }) => CupType::Recovery {
                 height: Height::new(height),
                 time: Time::from_nanos_since_unix_epoch(time),
                 state_hash: CryptoHashOfState::from(CryptoHash(state_hash)),
-            }),
-            CupTypePb::SubnetSplitting(subnet_splitting_args) => {
-                CupType::SubnetSplitting(SubnetSplittingArgs {
-                    destination_subnet_id: subnet_id_try_from_option(
-                        subnet_splitting_args.destination_subnet_id,
-                        "cup_type::subnet_splitting::destination_subnet_id",
-                    )?,
-                })
-            }
+            },
+            CupTypePb::SubnetSplitting(subnet_splitting_args) => CupType::SubnetSplitting {
+                destination_subnet_id: subnet_id_try_from_option(
+                    subnet_splitting_args.destination_subnet_id,
+                    "cup_type::subnet_splitting::destination_subnet_id",
+                )?,
+            },
         })
     }
 }
