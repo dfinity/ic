@@ -563,10 +563,7 @@ async fn finalize_transactions_batch<R: CanisterRuntime>(sender: Address, runtim
         return;
     }
 
-    let receipts = fetch_receipts_for_round(sender, runtime, |s| {
-        s.automatic_deposits.sweeper_pipeline_mut()
-    })
-    .await;
+    let receipts = fetch_receipts_for_round::<SweepRequest, _>(sender, runtime).await;
 
     for (sweep_id, transaction_receipt) in receipts {
         mutate_state(|s| {

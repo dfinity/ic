@@ -665,11 +665,9 @@ async fn should_skip_a_sweeper_round_without_touching_the_withdrawal_window() {
     });
     let withdrawals_before = read_state(|s| s.withdrawal_transactions.clone());
 
-    let receipts: BTreeMap<SweepId, _> =
-        fetch_receipts_for_round(Address::new([0_u8; 20]), &no_rpc_runtime(), |s| {
-            s.automatic_deposits.sweeper_pipeline_mut()
-        })
-        .await;
+    let receipts =
+        fetch_receipts_for_round::<SweepRequest, _>(Address::new([0_u8; 20]), &no_rpc_runtime())
+            .await;
 
     assert_eq!(receipts, BTreeMap::new());
     assert_eq!(

@@ -4,6 +4,7 @@ use crate::numeric::LedgerBurnIndex;
 use crate::state::receipt_fetch::{
     INITIAL_RECEIPT_FETCH_WINDOW, ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING, RoundOutcome,
 };
+use crate::state::transactions::WithdrawalRequest;
 use crate::state::{mutate_state, read_state};
 use crate::test_fixtures::{init_state, initial_state, mock, stub_rpc_client};
 use crate::withdraw::{ReceiptResult, collect_finalized_receipts, fetch_receipts_for_round};
@@ -114,9 +115,10 @@ mod round {
             }
         });
 
-        let receipts = fetch_receipts_for_round(Address::new([0_u8; 20]), &no_rpc_runtime(), |s| {
-            s.withdrawal_transactions.pipeline_mut()
-        })
+        let receipts = fetch_receipts_for_round::<WithdrawalRequest, _>(
+            Address::new([0_u8; 20]),
+            &no_rpc_runtime(),
+        )
         .await;
 
         assert_eq!(receipts, BTreeMap::new());
@@ -139,11 +141,9 @@ mod round {
             .times(1)
             .return_once(|| stub_rpc_client(vec![Err(IcError::CallPerformFailed)]));
 
-        let receipts: BTreeMap<LedgerBurnIndex, _> =
-            fetch_receipts_for_round(Address::new([0_u8; 20]), &runtime, |s| {
-                s.withdrawal_transactions.pipeline_mut()
-            })
-            .await;
+        let receipts =
+            fetch_receipts_for_round::<WithdrawalRequest, _>(Address::new([0_u8; 20]), &runtime)
+                .await;
 
         assert_eq!(receipts, BTreeMap::new());
         assert_eq!(

@@ -20,7 +20,7 @@ use crate::{
         receipt_fetch::RoundOutcome,
         transactions::{
             CreateTransactionError, PipelineRequest, Reimbursed, ReimbursementIndex,
-            ReimbursementRequest, TransactionPipeline, WithdrawalRequest,
+            ReimbursementRequest, SweepRequest, TransactionPipeline, WithdrawalRequest,
         },
     },
     time::TimeProvider,
@@ -437,10 +437,7 @@ async fn finalize_transactions_batch<R: CanisterRuntime>(sender: Address, runtim
         return;
     }
 
-    let receipts = fetch_receipts_for_round(sender, runtime, |s| {
-        s.withdrawal_transactions.pipeline_mut()
-    })
-    .await;
+    let receipts = fetch_receipts_for_round::<WithdrawalRequest, _>(sender, runtime).await;
 
     for (withdrawal_id, transaction_receipt) in receipts {
         mutate_state(|s| {
@@ -456,21 +453,45 @@ async fn finalize_transactions_batch<R: CanisterRuntime>(sender: Address, runtim
     }
 }
 
+/// A pipeline the finalization round can drive: it says where in [`State`] the pipeline lives and
+/// which task's logs the round writes under.
+pub(crate) trait RoundPipeline: PipelineRequest + Sized {
+    /// The log prefix of the task driving this pipeline.
+    const TASK_NAME: &'static str;
+
+    fn pipeline(state: &mut State) -> &mut TransactionPipeline<Self>;
+}
+
+impl RoundPipeline for WithdrawalRequest {
+    const TASK_NAME: &'static str = "finalize_transactions_batch";
+
+    fn pipeline(state: &mut State) -> &mut TransactionPipeline<Self> {
+        state.withdrawal_transactions.pipeline_mut()
+    }
+}
+
+impl RoundPipeline for SweepRequest {
+    const TASK_NAME: &'static str = "process_sweeper_transactions";
+
+    fn pipeline(state: &mut State) -> &mut TransactionPipeline<Self> {
+        state.automatic_deposits.sweeper_pipeline_mut()
+    }
+}
+
 /// One round of a pipeline's receipt fetch, bounded by that pipeline's window. Both pipelines
 /// reuse it: naming one of them picks its ids, so a round can never pair them up.
 pub(crate) async fn fetch_receipts_for_round<Req, R>(
     sender: Address,
     runtime: &R,
-    pipeline: fn(&mut State) -> &mut TransactionPipeline<Req>,
 ) -> BTreeMap<Req::Id, EvmTransactionReceipt>
 where
-    Req: PipelineRequest + Clone + Eq + std::fmt::Debug,
+    Req: RoundPipeline + Clone + Eq + std::fmt::Debug,
     Req::Transaction: Clone + Eq + std::fmt::Debug,
     R: CanisterRuntime,
 {
     let context = Req::TASK_NAME;
     let skipped = mutate_state(|s| {
-        let pipeline = pipeline(s);
+        let pipeline = Req::pipeline(s);
         if !pipeline.should_skip_receipt_fetch_round() {
             return None;
         }
@@ -493,20 +514,20 @@ where
                 INFO,
                 "[{context}]: failed to get the finalized transaction count of {sender}: {e:?}"
             );
-            mutate_state(|s| pipeline(s).record_round_without_chain_read());
+            mutate_state(|s| Req::pipeline(s).record_round_without_chain_read());
             return BTreeMap::new();
         }
     };
 
     let txs_to_finalize =
-        mutate_state(|s| pipeline(s).select_receipt_fetch_round(&finalized_tx_count));
+        mutate_state(|s| Req::pipeline(s).select_receipt_fetch_round(&finalized_tx_count));
     if txs_to_finalize.is_empty() {
-        mutate_state(|s| pipeline(s).record_receipt_fetch_round(RoundOutcome::default()));
+        mutate_state(|s| Req::pipeline(s).record_receipt_fetch_round(RoundOutcome::default()));
         return BTreeMap::new();
     }
 
     let (receipts, outcome) = fetch_finalized_receipts(txs_to_finalize, runtime).await;
-    mutate_state(|s| pipeline(s).record_receipt_fetch_round(outcome));
+    mutate_state(|s| Req::pipeline(s).record_receipt_fetch_round(outcome));
     receipts
 }
 
