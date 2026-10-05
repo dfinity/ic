@@ -50,7 +50,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:0b6a915e614105c632a0c7a0f6e530ed506decfbd0316b297b28e9c555c532a2
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
-    timeout-minutes: 720
+    timeout-minutes: 240
     permissions:
       contents: read
       actions: read # for downloading the logs of RBE tests
@@ -197,8 +197,8 @@ jobs:
               "env": {
                 "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
                 "CLAUDE_CODE_DISABLE_CRON": "1",
-                "BASH_DEFAULT_TIMEOUT_MS": "10800000",
-                "BASH_MAX_TIMEOUT_MS": "10800000",
+                "BASH_DEFAULT_TIMEOUT_MS": "7200000",
+                "BASH_MAX_TIMEOUT_MS": "7200000",
                 "CLAUDE_CODE_RETRY_WATCHDOG": "1"
               }
             }
