@@ -111,8 +111,18 @@ fn should_deposit_and_withdraw() {
         let gas_limit = Nat::from(21_000_u32);
         let max_priority_fee_per_gas = Nat::from(1_500_000_000_u32);
 
-        let cketh = cketh
-            .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
+        let finalized = cketh.wait_and_validate_withdrawal(ProcessWithdrawalParams::default());
+        finalized
+            .setup
+            .check_minter_metrics()
+            .assert_contains_metric_matching(
+                r#"cketh_minter_receipt_fetch_window\{pipeline="withdrawal"\} 20 \d+"#,
+            )
+            .assert_contains_metric_matching(
+                r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="receipt"\} 1 \d+"#,
+            );
+
+        let cketh = finalized
             .expect_finalized_status(TxFinalizedStatus::Success {
                 transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
                 effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
@@ -391,7 +401,18 @@ fn should_not_finalize_transaction_when_receipts_do_not_match() {
         )
         .expect_status(RetrieveEthStatus::TxSent(EthTransaction {
             transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-        }));
+        }))
+        .setup
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_window\{pipeline="withdrawal"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="error"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_abandoned_rounds_total\{pipeline="withdrawal"\} 0 \d+"#,
+        );
 }
 
 #[test]
@@ -1393,7 +1414,115 @@ fn should_export_the_sweep_pipeline_metrics() {
         .assert_contains_metric_matching(
             r#"cketh_minter_balance_scan_chunks_total\{outcome="decode_error"\} 0 \d+"#,
         )
-        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds 90 \d+");
+        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds 90 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="queued"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="unsent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="sent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="sweeper"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_window\{pipeline="withdrawal"\} 10 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_window\{pipeline="sweeper"\} 10 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_rounds_since_chain_read\{pipeline="withdrawal"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_rounds_since_chain_read\{pipeline="sweeper"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="receipt"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="not_mined"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="sweeper",outcome="receipt"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="sweeper",outcome="not_mined"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="sweeper",outcome="error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_abandoned_rounds_total\{pipeline="withdrawal"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_abandoned_rounds_total\{pipeline="sweeper"\} 0 \d+"#,
+        );
+}
+
+#[test]
+fn should_export_the_unfinalized_backlog_metrics() {
+    let cketh = CkEthSetup::default();
+    cketh
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="queued"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="unsent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="sent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="withdrawal"\} 0 \d+"#,
+        );
+
+    let caller: Principal = cketh.caller.into();
+    let cketh = cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .expect_ok(1)
+        .call_minter_withdraw_eth(
+            caller,
+            Nat::from(CKETH_WITHDRAWAL_AMOUNT),
+            DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        )
+        .expect_withdrawal_request_accepted()
+        .wait_and_validate_withdrawal(
+            ProcessWithdrawalParams::default().with_inconsistent_transaction_receipt(),
+        )
+        .expect_status(RetrieveEthStatus::TxSent(EthTransaction {
+            transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+        }))
+        .setup;
+
+    cketh
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="sent"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="withdrawal"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="queued"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="unsent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="sent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="sweeper"\} 0 \d+"#,
+        );
 }
 
 #[test]

@@ -12,38 +12,59 @@
 //!
 //! The serialization of a `Thunk<T>` object will force an evaluation.
 //!
-//! Implementation wise, `Thunk` is just a thin wrapper around
-//! `once_cell::Lazy` type, providing `From`, `Serialize`, and `Deserialize`
+//! Implementation wise, `Thunk` is a thin wrapper around `std::sync::OnceLock`
+//! holding the value, plus the (boxed) initialization function that is consumed
+//! on first evaluation. It provides `From`, `Serialize`, and `Deserialize`
 //! trait implementations.
-use once_cell::sync::Lazy;
 use serde::{
     de::{Deserialize, Deserializer},
     ser::{Serialize, Serializer},
 };
+use std::sync::{Mutex, OnceLock};
+
+type Init<T> = Box<dyn FnOnce() -> T + Send>;
 
 /// A lazily initialized value of type `T` that is only initialized upon
 /// first evaluation.
 pub struct Thunk<T> {
-    thunk: Lazy<T, Box<dyn FnOnce() -> T + Send>>,
+    /// The evaluated value, if the thunk has been forced.
+    value: OnceLock<T>,
+    /// The initialization function; `None` once it has been consumed.
+    init: Mutex<Option<Init<T>>>,
 }
 
 impl<T> Thunk<T> {
     /// Return a `Thunk<T>` object with an initialization function `init`
     /// that will not be called until the thunk is evaluated.
-    pub fn new(init: Box<dyn FnOnce() -> T + Send>) -> Self {
+    pub fn new(init: Init<T>) -> Self {
         Thunk {
-            thunk: Lazy::new(init),
+            value: OnceLock::new(),
+            init: Mutex::new(Some(init)),
         }
+    }
+
+    /// Evaluate the thunk if it hasn't been evaluated yet and return a
+    /// reference to the value.
+    fn force(&self) -> &T {
+        self.value.get_or_init(|| {
+            let init = self
+                .init
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .take()
+                .expect("Thunk initialization function was already consumed");
+            init()
+        })
     }
 
     /// Convert a `Thunk<T>` object into its inner value of type `T`.
     /// It will force an evaluation if necessary.
     pub fn into_inner(self) -> T {
-        // Force the thunk to ensure that `into_value` succeeds.
-        Lazy::force(&self.thunk);
-        match Lazy::into_value(self.thunk) {
-            Ok(value) => value,
-            Err(_) => {
+        // Force the thunk to ensure that `into_inner` succeeds.
+        self.force();
+        match self.value.into_inner() {
+            Some(value) => value,
+            None => {
                 unreachable!("Forced thunk is not evaluated. This cannot happen.")
             }
         }
@@ -58,7 +79,7 @@ impl<T: Send + 'static> From<T> for Thunk<T> {
 
 impl<T> AsRef<T> for Thunk<T> {
     fn as_ref(&self) -> &T {
-        &self.thunk
+        self.force()
     }
 }
 

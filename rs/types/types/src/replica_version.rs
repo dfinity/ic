@@ -1,13 +1,12 @@
 //! ReplicaVersion can be converted to/from string representation.
-use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
-pub static REPLICA_BINARY_HASH: OnceCell<String> = OnceCell::new();
+pub static REPLICA_BINARY_HASH: OnceLock<String> = OnceLock::new();
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct ReplicaVersion {

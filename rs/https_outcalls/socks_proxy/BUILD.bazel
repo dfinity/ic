@@ -14,7 +14,6 @@ rust_library(
         "//rs/registry/helpers",
         "//rs/registry/subnet_type",
         "//rs/types/types",
-        "@crate_index//:slog",
     ],
 )
 
