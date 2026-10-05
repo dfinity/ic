@@ -31,5 +31,6 @@ tower = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 tower-test = { workspace = true }

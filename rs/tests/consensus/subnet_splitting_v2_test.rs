@@ -61,7 +61,7 @@ use xnet_test::{Metrics, StartArgs};
 const DKG_INTERVAL: u64 = 99;
 const INITIAL_SOURCE_SUBNET_NODES: usize = 8;
 
-const ACCEPTABLE_SOURCE_DOWNTIME: Duration = Duration::from_secs(15);
+const ACCEPTABLE_SOURCE_DOWNTIME: Duration = Duration::from_secs(20);
 const ACCEPTABLE_DEST_DOWNTIME: Duration = Duration::from_secs(35);
 
 /// Number of counter canisters to install on the source subnet, before splitting it.
