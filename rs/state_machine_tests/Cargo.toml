@@ -57,6 +57,7 @@ ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-secp256k1 = { path = "../../packages/ic-secp256k1" }
+ic-secp256r1 = { path = "../../packages/ic-secp256r1" }
 ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-state-machine-client = "3.0"
@@ -69,6 +70,7 @@ ic-types = { path = "../types/types" }
 ic-types-cycles = { path = "../types/cycles" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
 maplit = { workspace = true }
+p256 = { workspace = true }
 rand = { workspace = true }
 rcgen = { workspace = true }
 serde = { workspace = true }

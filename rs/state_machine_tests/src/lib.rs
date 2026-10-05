@@ -1031,6 +1031,7 @@ impl StateMachineNode {
 #[allow(clippy::large_enum_variant)]
 enum SignatureSecretKey {
     EcdsaSecp256k1(ic_secp256k1::PrivateKey),
+    EcdsaSecp256r1(ic_secp256r1::PrivateKey),
     SchnorrBip340(ic_secp256k1::PrivateKey),
     Ed25519(ic_ed25519::DerivedPrivateKey),
     VetKD(ic_crypto_test_utils_vetkd::PrivateKey),
@@ -2307,26 +2308,48 @@ impl StateMachine {
 
                     (public_key, private_key)
                 }
-                MasterPublicKeyId::Ecdsa(id) => {
-                    use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
+                MasterPublicKeyId::Ecdsa(id) => match id.curve {
+                    EcdsaCurve::Secp256k1 => {
+                        use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
 
-                    let path =
-                        DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+                        let path =
+                            DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
-                    // We use a fixed seed here so that all subnets in PocketIC share the same keys.
-                    let private_key = PrivateKey::generate_from_seed(&[42; 32])
-                        .derive_subkey(&path)
-                        .0;
+                        // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                        let private_key = PrivateKey::generate_from_seed(&[42; 32])
+                            .derive_subkey(&path)
+                            .0;
 
-                    let public_key = MasterPublicKey {
-                        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-                        public_key: private_key.public_key().serialize_sec1(true),
-                    };
+                        let public_key = MasterPublicKey {
+                            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                            public_key: private_key.public_key().serialize_sec1(true),
+                        };
 
-                    let private_key = SignatureSecretKey::EcdsaSecp256k1(private_key);
+                        let private_key = SignatureSecretKey::EcdsaSecp256k1(private_key);
 
-                    (public_key, private_key)
-                }
+                        (public_key, private_key)
+                    }
+                    EcdsaCurve::Secp256r1 => {
+                        use ic_secp256r1::{DerivationIndex, DerivationPath, PrivateKey};
+
+                        let path =
+                            DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
+
+                        // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                        let private_key = PrivateKey::generate_insecure_key_for_testing(42)
+                            .derive_subkey(&path)
+                            .0;
+
+                        let public_key = MasterPublicKey {
+                            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256r1,
+                            public_key: private_key.public_key().serialize_sec1(true),
+                        };
+
+                        let private_key = SignatureSecretKey::EcdsaSecp256r1(private_key);
+
+                        (public_key, private_key)
+                    }
+                },
                 MasterPublicKeyId::Schnorr(id) => match id.algorithm {
                     SchnorrAlgorithm::Bip340Secp256k1 => {
                         use ic_secp256k1::{DerivationIndex, DerivationPath, PrivateKey};
@@ -2901,28 +2924,47 @@ impl StateMachine {
     ) -> Result<SignWithECDSAReply, UserError> {
         assert!(context.is_ecdsa());
 
-        if let Some(SignatureSecretKey::EcdsaSecp256k1(k)) =
-            self.chain_key_subnet_secret_keys.get(&context.key_id())
-        {
-            let path = ic_secp256k1::DerivationPath::from_canister_id_and_path(
-                context.request.sender.get().as_slice(),
-                &context.derivation_path,
-            );
-            let dk = k.derive_subkey(&path).0;
-            let signature = dk
-                .sign_digest_with_ecdsa(&context.ecdsa_args().message_hash)
-                .to_vec();
-            Ok(SignWithECDSAReply { signature })
-        } else {
-            Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "Subnet {} does not hold threshold key {}.",
-                    self.subnet_id,
-                    context.key_id()
-                ),
-            ))
-        }
+        let message_hash = &context.ecdsa_args().message_hash;
+        let signature = match self.chain_key_subnet_secret_keys.get(&context.key_id()) {
+            Some(SignatureSecretKey::EcdsaSecp256k1(k)) => {
+                let path = ic_secp256k1::DerivationPath::from_canister_id_and_path(
+                    context.request.sender.get().as_slice(),
+                    &context.derivation_path,
+                );
+                let dk = k.derive_subkey(&path).0;
+                dk.sign_digest_with_ecdsa(message_hash).to_vec()
+            }
+            Some(SignatureSecretKey::EcdsaSecp256r1(k)) => {
+                let path = ic_secp256r1::DerivationPath::from_canister_id_and_path(
+                    context.request.sender.get().as_slice(),
+                    &context.derivation_path,
+                );
+                let dk = k.derive_subkey(&path).0;
+                let signature = dk
+                    .sign_digest(message_hash)
+                    .expect("a 32-byte message hash is long enough to be signed");
+                // Unlike `ic_secp256r1`, the IC normalizes `s` for all curves.
+                let signature = p256::ecdsa::Signature::from_slice(&signature)
+                    .expect("a freshly produced signature is well-formed");
+                signature
+                    .normalize_s()
+                    .unwrap_or(signature)
+                    .to_bytes()
+                    .to_vec()
+            }
+            _ => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "Subnet {} does not hold threshold key {}.",
+                        self.subnet_id,
+                        context.key_id()
+                    ),
+                ));
+            }
+        };
+
+        Ok(SignWithECDSAReply { signature })
     }
 
     fn build_sign_with_schnorr_reply(
