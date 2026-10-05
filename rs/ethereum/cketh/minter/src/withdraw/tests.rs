@@ -2,12 +2,12 @@ use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::MultiCallError;
 use crate::numeric::LedgerBurnIndex;
 use crate::state::receipt_fetch::{
-    INITIAL_RECEIPT_FETCH_WINDOW, ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING, RoundOutcome,
+    INITIAL_RECEIPT_FETCH_WINDOW, ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING,
 };
 use crate::state::transactions::WithdrawalRequest;
 use crate::state::{mutate_state, read_state};
 use crate::test_fixtures::{init_state, initial_state, mock, stub_rpc_client};
-use crate::withdraw::{ReceiptResult, collect_finalized_receipts, fetch_receipts_for_round};
+use crate::withdraw::{ReceiptLookup, collect_finalized_receipts, fetch_receipts_for_round};
 use evm_rpc_types::{
     Hex20, Hex32, Hex256, HexByte, Nat256, TransactionReceipt as EvmTransactionReceipt,
 };
@@ -20,7 +20,7 @@ mod collect {
 
     #[test]
     fn should_return_nothing_for_an_empty_round() {
-        let (receipts, outcome) = collect_in_hash_order(vec![]);
+        let (receipts, outcome) = collect_finalized_receipts::<LedgerBurnIndex>(vec![]);
 
         assert_eq!(receipts, BTreeMap::new());
         assert_eq!(outcome.lookups(), 0);
@@ -28,10 +28,22 @@ mod collect {
 
     #[test]
     fn should_finalize_the_ids_that_answered_and_leave_the_others_pending() {
-        let (receipts, outcome) = collect_in_hash_order(vec![
-            (hash(1), id(1), Ok(Some(receipt(hash(1))))),
-            (hash(2), id(2), Err(failed_lookup())),
-            (hash(3), id(3), Ok(Some(receipt(hash(3))))),
+        let (receipts, outcome) = collect_finalized_receipts(vec![
+            ReceiptLookup {
+                hash: hash(1),
+                id: id(1),
+                result: Ok(Some(receipt(hash(1)))),
+            },
+            ReceiptLookup {
+                hash: hash(2),
+                id: id(2),
+                result: Err(failed_lookup()),
+            },
+            ReceiptLookup {
+                hash: hash(3),
+                id: id(3),
+                result: Ok(Some(receipt(hash(3)))),
+            },
         ]);
 
         assert_eq!(
@@ -45,10 +57,22 @@ mod collect {
 
     #[test]
     fn should_finalize_a_resubmitted_id_on_the_variant_that_was_mined() {
-        let (receipts, outcome) = collect_in_hash_order(vec![
-            (hash(1), id(1), Ok(None)),
-            (hash(2), id(1), Ok(Some(receipt(hash(2))))),
-            (hash(3), id(1), Err(failed_lookup())),
+        let (receipts, outcome) = collect_finalized_receipts(vec![
+            ReceiptLookup {
+                hash: hash(1),
+                id: id(1),
+                result: Ok(None),
+            },
+            ReceiptLookup {
+                hash: hash(2),
+                id: id(1),
+                result: Ok(Some(receipt(hash(2)))),
+            },
+            ReceiptLookup {
+                hash: hash(3),
+                id: id(1),
+                result: Err(failed_lookup()),
+            },
         ]);
 
         assert_eq!(receipts, BTreeMap::from([(id(1), receipt(hash(2)))]));
@@ -59,10 +83,22 @@ mod collect {
 
     #[test]
     fn should_leave_an_id_pending_without_trapping_when_none_of_its_transactions_was_mined() {
-        let (receipts, outcome) = collect_in_hash_order(vec![
-            (hash(1), id(1), Ok(None)),
-            (hash(2), id(1), Ok(None)),
-            (hash(3), id(2), Ok(Some(receipt(hash(3))))),
+        let (receipts, outcome) = collect_finalized_receipts(vec![
+            ReceiptLookup {
+                hash: hash(1),
+                id: id(1),
+                result: Ok(None),
+            },
+            ReceiptLookup {
+                hash: hash(2),
+                id: id(1),
+                result: Ok(None),
+            },
+            ReceiptLookup {
+                hash: hash(3),
+                id: id(2),
+                result: Ok(Some(receipt(hash(3)))),
+            },
         ]);
 
         assert_eq!(receipts, BTreeMap::from([(id(2), receipt(hash(3)))]));
@@ -72,9 +108,17 @@ mod collect {
 
     #[test]
     fn should_leave_every_id_pending_when_every_lookup_failed() {
-        let (receipts, outcome) = collect_in_hash_order(vec![
-            (hash(1), id(1), Err(failed_lookup())),
-            (hash(2), id(2), Err(failed_lookup())),
+        let (receipts, outcome) = collect_finalized_receipts(vec![
+            ReceiptLookup {
+                hash: hash(1),
+                id: id(1),
+                result: Err(failed_lookup()),
+            },
+            ReceiptLookup {
+                hash: hash(2),
+                id: id(2),
+                result: Err(failed_lookup()),
+            },
         ]);
 
         assert_eq!(receipts, BTreeMap::new());
@@ -84,12 +128,32 @@ mod collect {
 
     #[test]
     fn should_abandon_the_round_but_count_every_lookup_on_two_receipts_for_the_same_id() {
-        let (receipts, outcome) = collect_in_hash_order(vec![
-            (hash(1), id(1), Ok(Some(receipt(hash(1))))),
-            (hash(2), id(1), Ok(Some(receipt(hash(2))))),
-            (hash(3), id(2), Ok(Some(receipt(hash(3))))),
-            (hash(4), id(3), Ok(None)),
-            (hash(5), id(4), Err(failed_lookup())),
+        let (receipts, outcome) = collect_finalized_receipts(vec![
+            ReceiptLookup {
+                hash: hash(1),
+                id: id(1),
+                result: Ok(Some(receipt(hash(1)))),
+            },
+            ReceiptLookup {
+                hash: hash(2),
+                id: id(1),
+                result: Ok(Some(receipt(hash(2)))),
+            },
+            ReceiptLookup {
+                hash: hash(3),
+                id: id(2),
+                result: Ok(Some(receipt(hash(3)))),
+            },
+            ReceiptLookup {
+                hash: hash(4),
+                id: id(3),
+                result: Ok(None),
+            },
+            ReceiptLookup {
+                hash: hash(5),
+                id: id(4),
+                result: Err(failed_lookup()),
+            },
         ]);
 
         assert_eq!(receipts, BTreeMap::new());
@@ -173,28 +237,6 @@ fn no_rpc_runtime() -> mock::MockCanisterRuntime {
     let mut runtime = mock::MockCanisterRuntime::new();
     runtime.expect_evm_rpc_client().never();
     runtime
-}
-
-fn collect_in_hash_order(
-    lookups: Vec<(Hash, LedgerBurnIndex, ReceiptResult)>,
-) -> (
-    BTreeMap<LedgerBurnIndex, EvmTransactionReceipt>,
-    RoundOutcome,
-) {
-    let txs_to_finalize: BTreeMap<Hash, LedgerBurnIndex> = lookups
-        .iter()
-        .map(|(hash, id, _result)| (*hash, *id))
-        .collect();
-    assert_eq!(txs_to_finalize.len(), lookups.len(), "BUG: duplicate hash");
-    let mut by_hash: BTreeMap<Hash, ReceiptResult> = lookups
-        .into_iter()
-        .map(|(hash, _id, result)| (hash, result))
-        .collect();
-    let results = txs_to_finalize
-        .keys()
-        .map(|hash| by_hash.remove(hash).unwrap())
-        .collect();
-    collect_finalized_receipts(txs_to_finalize, results)
 }
 
 fn failed_lookup() -> MultiCallError<Option<EvmTransactionReceipt>> {

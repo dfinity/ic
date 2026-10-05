@@ -542,32 +542,43 @@ where
 type ReceiptResult =
     Result<Option<EvmTransactionReceipt>, MultiCallError<Option<EvmTransactionReceipt>>>;
 
+/// What one receipt lookup of a round asked and what it answered, so the id a result belongs to
+/// travels with it rather than being recovered by position afterwards.
+struct ReceiptLookup<Id> {
+    hash: Hash,
+    id: Id,
+    result: ReceiptResult,
+}
+
 async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug, R: CanisterRuntime>(
     txs_to_finalize: BTreeMap<Hash, Id>,
     runtime: &R,
 ) -> (BTreeMap<Id, EvmTransactionReceipt>, RoundOutcome) {
     let rpc_client = runtime.evm_rpc_client();
-    let results = join_all(txs_to_finalize.keys().map(async |hash| {
-        rpc_client
-            .get_transaction_receipt(*hash)
-            .with_cycles(MIN_ATTACHED_CYCLES)
-            .try_send()
-            .await
-            .reduce_with_strategy(NoReduction)
+    let lookups = join_all(txs_to_finalize.into_iter().map(|(hash, id)| {
+        let rpc_client = &rpc_client;
+        async move {
+            let result = rpc_client
+                .get_transaction_receipt(hash)
+                .with_cycles(MIN_ATTACHED_CYCLES)
+                .try_send()
+                .await
+                .reduce_with_strategy(NoReduction);
+            ReceiptLookup { hash, id, result }
+        }
     }))
     .await;
-    collect_finalized_receipts(txs_to_finalize, results)
+    collect_finalized_receipts(lookups)
 }
 
 fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
-    txs_to_finalize: BTreeMap<Hash, Id>,
-    results: Vec<ReceiptResult>,
+    lookups: Vec<ReceiptLookup<Id>>,
 ) -> (BTreeMap<Id, EvmTransactionReceipt>, RoundOutcome) {
-    let expected_finalized_ids: BTreeSet<Id> = txs_to_finalize.values().copied().collect();
+    let expected_finalized_ids: BTreeSet<Id> = lookups.iter().map(|lookup| lookup.id).collect();
     let mut outcome = RoundOutcome::default();
     let mut receipts: BTreeMap<Id, EvmTransactionReceipt> = BTreeMap::new();
     let mut unanswered: BTreeSet<Id> = BTreeSet::new();
-    for ((hash, id), result) in zip(txs_to_finalize, results) {
+    for ReceiptLookup { hash, id, result } in lookups {
         match result {
             Ok(Some(receipt)) => {
                 log!(
