@@ -8,7 +8,9 @@ use std::{
 use criterion::{BatchSize, Bencher, Criterion, black_box, criterion_group, criterion_main};
 use ic_artifact_downloader::FetchStrippedConsensusArtifact;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
-use ic_interfaces::p2p::consensus::{ArtifactAssembler, BouncerValue, Peers, ValidatedPoolReader};
+use ic_interfaces::p2p::consensus::{
+    ArtifactAssembler, AssembleResult, BouncerValue, Peers, ValidatedPoolReader,
+};
 use ic_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{
@@ -414,6 +416,10 @@ fn assemble_canister_http_responses(criterion: &mut Criterion) {
 /// non-replicated or flexible outcall; 27 is the quorum a fully replicated outcall
 /// carries on a 40-node subnet.
 ///
+/// A single byte is too small to be worth stripping, so `(1, 1, 1)` measures a
+/// block with nothing worth stripping, while every other case strips each of its
+/// responses: [`MIN_STRIPPED_RESPONSE_BYTES`] is the smallest that is stripped.
+///
 /// Every case has to fit into `MAX_CANISTER_HTTP_PAYLOAD_SIZE` once the metadata
 /// and the signatures are counted, which is why the larger response counts pair
 /// with smaller bodies: 500 responses of 27 signatures each spend around 1.4 MB of
@@ -425,10 +431,38 @@ const CANISTER_HTTP_BENCH_CASES: [(u64, usize, usize); 8] = [
     (1, 2_000_000, 27),
     (100, 16 * 1024, 1),
     (100, 16 * 1024, 27),
-    (500, 1, 1),
+    (500, MIN_STRIPPED_RESPONSE_BYTES, 1),
     (500, 3 * 1024, 1),
     (500, 1024, 27),
 ];
+
+/// The smallest canister http response that is stripped from a block, i.e. the
+/// stripper's `MIN_STRIPPED_CONTENT_BYTES`.
+const MIN_STRIPPED_RESPONSE_BYTES: usize = 64;
+
+/// Panics unless `stripped_block` declares as many stripped canister http responses
+/// as `canister_http_responses` has responses worth stripping, so that no case can
+/// silently measure something other than what it names.
+fn assert_declares_stripped_responses(
+    stripped_block: pb::StrippedConsensusMessage,
+    canister_http_responses: &[CanisterHttpResponse],
+) {
+    let expected = canister_http_responses
+        .iter()
+        .filter(|response| response.content.count_bytes() >= MIN_STRIPPED_RESPONSE_BYTES)
+        .count();
+    let declared = match stripped_block.msg {
+        Some(pb::stripped_consensus_message::Msg::StrippedBlockProposal(proposal)) => {
+            proposal.stripped_canister_http_responses.len()
+        }
+        _ => 0,
+    };
+
+    assert_eq!(
+        declared, expected,
+        "the block declares {declared} stripped canister http responses rather than {expected}"
+    );
+}
 
 fn bench_disassemble(
     bencher: &mut Bencher<'_>,
@@ -447,8 +481,12 @@ fn bench_disassemble(
     let block = fake_block_proposal(
         ingress_messages,
         idkg_dealings,
-        canister_http_responses,
+        canister_http_responses.clone(),
         canister_http_signers,
+    );
+    assert_declares_stripped_responses(
+        assembler.disassemble_message(block.clone()).into(),
+        &canister_http_responses,
     );
 
     bencher.iter_batched(
@@ -536,12 +574,24 @@ fn bench_assemble(
     let block = fake_block_proposal(
         ingress_messages,
         idkg_dealings,
-        canister_http_responses,
+        canister_http_responses.clone(),
         canister_http_signers,
     );
 
     let stripped_block = assembler.disassemble_message(block);
     let id = stripped_block.id();
+    assert_declares_stripped_responses(stripped_block.clone().into(), &canister_http_responses);
+    assert!(
+        matches!(
+            rt.block_on(assembler.assemble_message(
+                id.clone(),
+                Some((stripped_block.clone(), NODE_2)),
+                MockPeers(NODE_2),
+            )),
+            AssembleResult::Done { .. }
+        ),
+        "the benchmark must measure a successful assembly"
+    );
 
     bencher.to_async(rt).iter_batched(
         || (assembler.clone(), stripped_block.clone(), id.clone()),

@@ -66,8 +66,8 @@ impl Strippable for ConsensusMessage {
                     // Remove the content of the canister HTTP responses, naming the ones
                     // that were removed so that the receiver does not have to scan the
                     // payload to find out. The payload is left untouched if there is
-                    // nothing to strip, so that a block without a response never pays
-                    // for re-encoding it.
+                    // nothing worth stripping, so that a block without a response never
+                    // pays for re-encoding it.
                     if let Some((pruned, stripped)) =
                         strip_responses(&block.canister_http_payload_bytes)
                     {

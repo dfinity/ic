@@ -333,6 +333,22 @@ pub(crate) fn fake_canister_http_reject(callback_id: u64) -> CanisterHttpRespons
     }
 }
 
+/// A canister http reject response for the given callback id, whose content
+/// counts the given number of bytes.
+pub(crate) fn fake_canister_http_reject_of_size(
+    callback_id: u64,
+    content_size: usize,
+) -> CanisterHttpResponse {
+    let message_len = content_size - CanisterHttpReject::count_bytes_from_parts(0);
+    CanisterHttpResponse {
+        id: CallbackId::new(callback_id),
+        content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: "x".repeat(message_len),
+        }),
+    }
+}
+
 fn fake_canister_http_metadata(response: &CanisterHttpResponse) -> CanisterHttpResponseMetadata {
     CanisterHttpResponseMetadata {
         id: response.id,
@@ -487,6 +503,39 @@ pub(crate) fn fake_canister_http_payload(
     assert_no_messages_dropped(&bytes, expected);
 
     bytes
+}
+
+/// A canister http payload with one of every kind of message, together with the
+/// response contents that a receiver has to come up with to reassemble it once all
+/// of them have been stripped.
+pub(crate) fn fake_canister_http_payload_with_every_kind() -> (Vec<u8>, Vec<CanisterHttpResponse>) {
+    let non_replicated = fake_canister_http_response(1, 1024);
+    let fully_replicated = fake_canister_http_response(2, 1024);
+    let flexible_1 = fake_canister_http_response(3, 1024);
+    let flexible_2 = fake_canister_http_response(3, 2048);
+    let reject = fake_canister_http_reject(4);
+
+    let payload = fake_canister_http_payload(vec![
+        fake_canister_http_response_message(&non_replicated, &[NODE_1]),
+        fake_canister_http_response_message(&fully_replicated, &[NODE_1, NODE_2]),
+        fake_flexible_canister_http_responses_message(
+            3,
+            &[(flexible_1.clone(), NODE_1), (flexible_2.clone(), NODE_2)],
+        ),
+        fake_flexible_canister_http_too_many_rejects_message(4, &[(reject.clone(), NODE_1)]),
+        fake_canister_http_timeout_message(5),
+    ]);
+
+    (
+        payload,
+        vec![
+            non_replicated,
+            fully_replicated,
+            flexible_1,
+            flexible_2,
+            reject,
+        ],
+    )
 }
 
 /// Fails unless `payload` carries all `expected` messages, i.e. unless every

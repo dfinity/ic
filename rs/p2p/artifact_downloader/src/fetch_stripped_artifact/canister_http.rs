@@ -12,10 +12,17 @@
 //! signed over. That hash is all a receiver needs in order to look the content up
 //! in its own canister HTTP pool, or to fetch it from a peer.
 //!
-//! Replacing a response with its hash costs 34 bytes in the stripped block
-//! proposal, so a response is only stripped when its content is larger than that
-//! (see [`MIN_STRIPPED_CONTENT_BYTES`]). Stripping therefore never makes a block
-//! proposal bigger than the one it was stripped from.
+//! The block hash covers the payload's very bytes, so a receiver has to put them
+//! back together exactly. It does so by encoding again what it decodes, which only
+//! reproduces the bytes if they are prost's own encoding of the payload's messages.
+//! This relies on payload validation, which rejects any canister HTTP payload that
+//! is not canonically encoded (`canonical_bytes_to_payload` in
+//! `ic-https-outcalls-consensus`): every block an honest node holds, and thus
+//! strips, carries a canonically encoded payload.
+//!
+//! Declaring a stripped response costs 36 bytes in the stripped block proposal,
+//! and a response is only stripped when its content is at least
+//! [`MIN_STRIPPED_CONTENT_BYTES`], so stripping a response never adds bytes.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -23,7 +30,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_types::{
     CountBytes, NumBytes,
     batch::{MAX_CANISTER_HTTP_PAYLOAD_SIZE, iterator_to_bytes, slice_to_messages},
-    canister_http::CanisterHttpResponse,
+    canister_http::{CanisterHttpReject, CanisterHttpResponse},
     crypto::{CryptoHash, CryptoHashOf},
 };
 use prost::Message;
@@ -47,19 +54,22 @@ pub(crate) enum CanisterHttpPayloadError {
 }
 
 /// Returns the payload with the content of every response worth stripping removed,
-/// together with the hashes of the contents that were removed, or `None` if there
-/// was nothing worth stripping (or the payload could not be parsed, in which case
-/// the block is left untouched and will fail validation later on).
+/// together with the hashes of the contents that were removed, or `None` if the
+/// payload is to be left as it is: if there is nothing worth stripping, or if it
+/// could not be parsed (the block then fails validation later on).
 ///
-/// Note that a payload this returns is *not* free of response content: anything
-/// smaller than [`MIN_STRIPPED_CONTENT_BYTES`] is deliberately left where it is,
-/// because removing it would make the block proposal bigger. The returned hashes
-/// are exactly the contents that were taken out, so they, rather than the payload's
-/// empty slots, are what a receiver has to find.
+/// Assumes that the payload is canonically encoded, i.e. exactly what prost encodes
+/// its messages to, as payload validation requires. A receiver puts the payload back
+/// together by encoding what it decodes, so stripping a payload that prost would
+/// encode differently, e.g. one with an unknown field, would hand every peer that
+/// gets the block from us a block that it has to reject.
 ///
-/// The hashes are deduplicated: two committee members of a flexible outcall that
-/// produced the very same response occupy two slots of the payload, but there is
-/// only one piece of content to look up for both of them.
+/// Note that a payload this returns need not be free of response content: anything
+/// smaller than [`MIN_STRIPPED_CONTENT_BYTES`] is deliberately left where it is. The
+/// returned hashes name exactly the contents that were taken out, deduplicated: two
+/// committee members of a flexible outcall that produced the very same response
+/// occupy two slots of the payload, but there is only one piece of content to look
+/// up for both of them.
 pub(crate) fn strip_responses(
     payload_bytes: &[u8],
 ) -> Option<(Vec<u8>, BTreeSet<CanisterHttpResponseContentHash>)> {
@@ -71,41 +81,30 @@ pub(crate) fn strip_responses(
 
     let mut stripped = BTreeSet::new();
     for_each_response_slot(&mut messages, |content_hash, response| {
-        if response
-            .as_ref()
-            .is_none_or(|response| content_size(response) < MIN_STRIPPED_CONTENT_BYTES)
-        {
-            return;
-        }
-
-        if response.take().is_some() {
+        if is_worth_stripping(response) {
+            *response = None;
             stripped.insert(content_hash);
         }
     });
 
-    (!stripped.is_empty()).then(|| (encode(messages), stripped))
+    // Rather than pay for encoding the payload again, leave it as it is if there was
+    // nothing worth stripping in it.
+    if stripped.is_empty() {
+        return None;
+    }
+
+    Some((encode(messages), stripped))
 }
 
 /// The smallest response content that is worth stripping.
-///
-/// A stripped response is replaced by its content hash in
-/// [`pb::StrippedBlockProposal::stripped_canister_http_responses`], which costs 34
-/// encoded bytes: the 32 byte hash, a tag and a length. Removing less content than
-/// that would make the block proposal *bigger*, so the break-even point is where
-/// this threshold belongs, with only enough slack above it to cover the framing
-/// that the 34 bytes does not count.
-///
-/// It deliberately sits no higher. The declaration and the content it replaces are
-/// both sent to every peer, so the comparison is 34 bytes against the content size
-/// however large the subnet is, and anything above break-even is spending bandwidth
-/// to save the per-response cost of reassembly. A block can carry up to
-/// [`ic_types::canister_http::CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK`] responses, so
-/// every byte of slack here is multiplied by five hundred.
-///
-/// In practice this keeps the replica's own terse rejects in the block, which are
-/// the ones that cost more to strip than they save: "Deadline Exceeded",
-/// "Insufficient cycles" and "Adapter returned empty result" are all under 32 bytes.
 const MIN_STRIPPED_CONTENT_BYTES: usize = 64;
+
+/// Whether a slot holds a response whose content is worth stripping.
+fn is_worth_stripping(response: &Option<pb::CanisterHttpResponse>) -> bool {
+    response
+        .as_ref()
+        .is_some_and(|response| content_size(response) >= MIN_STRIPPED_CONTENT_BYTES)
+}
 
 /// The size of a response's content, the quantity its metadata reports as
 /// `content_size`.
@@ -114,7 +113,9 @@ fn content_size(response: &pb::CanisterHttpResponse) -> usize {
 
     match response.content.as_ref().and_then(|c| c.status.as_ref()) {
         Some(Status::Success(payload)) => payload.len(),
-        Some(Status::Reject(reject)) => std::mem::size_of::<i32>() + reject.message.len(),
+        Some(Status::Reject(reject)) => {
+            CanisterHttpReject::count_bytes_from_parts(reject.message.len())
+        }
         None => 0,
     }
 }
@@ -285,7 +286,8 @@ mod tests {
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
 
     use crate::fetch_stripped_artifact::test_utils::{
-        fake_canister_http_payload, fake_canister_http_reject, fake_canister_http_response,
+        fake_canister_http_payload, fake_canister_http_payload_with_every_kind,
+        fake_canister_http_reject, fake_canister_http_reject_of_size, fake_canister_http_response,
         fake_canister_http_response_message, fake_canister_http_timeout_message,
         fake_flexible_canister_http_responses_message,
         fake_flexible_canister_http_too_many_rejects_message,
@@ -332,39 +334,14 @@ mod tests {
 
     #[test]
     fn strip_and_reinsert_roundtrip_test() {
-        let non_replicated = fake_canister_http_response(1, 1024);
-        let fully_replicated = fake_canister_http_response(2, 1024);
-        let flexible_1 = fake_canister_http_response(3, 1024);
-        let flexible_2 = fake_canister_http_response(3, 2048);
-        let reject = fake_canister_http_reject(4);
-
-        let payload = fake_canister_http_payload(vec![
-            fake_canister_http_response_message(&non_replicated, &[NODE_1]),
-            fake_canister_http_response_message(&fully_replicated, &[NODE_1, NODE_2]),
-            fake_flexible_canister_http_responses_message(
-                3,
-                &[(flexible_1.clone(), NODE_1), (flexible_2.clone(), NODE_2)],
-            ),
-            fake_flexible_canister_http_too_many_rejects_message(4, &[(reject.clone(), NODE_1)]),
-            fake_canister_http_timeout_message(5),
-        ]);
+        let (payload, all) = fake_canister_http_payload_with_every_kind();
 
         let (stripped, stripped_hashes) =
             strip_responses(&payload).expect("Should have stripped something");
 
         // Every response content is gone, whatever kind of outcall it answers, and
         // every one of them is named for the receiver to look it up by.
-        let all = [
-            &non_replicated,
-            &fully_replicated,
-            &flexible_1,
-            &flexible_2,
-            &reject,
-        ];
-        assert_eq!(
-            stripped_hashes,
-            all.iter().map(|response| hash_of(response)).collect()
-        );
+        assert_eq!(stripped_hashes, all.iter().map(hash_of).collect());
         assert_eq!(responses_left_in_payload(&stripped), Vec::new());
 
         // ...and the payload shrank by at least the contents that were removed.
@@ -383,32 +360,96 @@ mod tests {
         // which is what the block hash is computed over.
         let responses = all
             .into_iter()
-            .map(|response| (hash_of(response), Some(response.clone())))
+            .map(|response| (hash_of(&response), Some(response)))
             .collect();
         assert_eq!(reinsert_responses(&stripped, &responses).unwrap(), payload);
     }
 
-    /// A response whose content is smaller than the hash that would replace it is
-    /// left in the block, because removing it would make the proposal bigger.
+    /// Committee members of a flexible outcall that agree deliver the very same
+    /// response, once each: every one of their slots is emptied, but the content is
+    /// declared, and has to be looked up, only once.
+    #[test]
+    fn identical_responses_are_stripped_once_test() {
+        let response = fake_canister_http_response(1, 1024);
+        let reject = fake_canister_http_reject(2);
+        let tiny = fake_canister_http_response(3, MIN_STRIPPED_CONTENT_BYTES - 1);
+
+        let payload = fake_canister_http_payload(vec![
+            fake_flexible_canister_http_responses_message(
+                1,
+                &[(response.clone(), NODE_1), (response.clone(), NODE_2)],
+            ),
+            fake_flexible_canister_http_too_many_rejects_message(
+                2,
+                &[(reject.clone(), NODE_1), (reject.clone(), NODE_2)],
+            ),
+            fake_canister_http_response_message(&tiny, &[NODE_1]),
+        ]);
+
+        let (stripped, stripped_hashes) =
+            strip_responses(&payload).expect("Should have stripped something");
+
+        assert_eq!(
+            stripped_hashes,
+            BTreeSet::from_iter([hash_of(&response), hash_of(&reject)])
+        );
+        assert_eq!(responses_left_in_payload(&stripped), vec![tiny]);
+
+        let responses = [&response, &reject]
+            .into_iter()
+            .map(|response| (hash_of(response), Some(response.clone())))
+            .collect();
+        assert_eq!(reinsert_responses(&stripped, &responses).unwrap(), payload);
+        assert_eq!(find_response(&payload, &hash_of(&response)), Some(response));
+    }
+
+    /// A response whose content is smaller than [`MIN_STRIPPED_CONTENT_BYTES`] is
+    /// left in the block, as stripping it would save little or nothing.
     #[test]
     fn tiny_responses_are_not_stripped_test() {
-        let tiny = fake_canister_http_response(1, MIN_STRIPPED_CONTENT_BYTES - 1);
-        let big = fake_canister_http_response(2, MIN_STRIPPED_CONTENT_BYTES);
+        for (tiny, big) in [
+            (
+                fake_canister_http_response(1, MIN_STRIPPED_CONTENT_BYTES - 1),
+                fake_canister_http_response(2, MIN_STRIPPED_CONTENT_BYTES),
+            ),
+            (
+                fake_canister_http_reject_of_size(1, MIN_STRIPPED_CONTENT_BYTES - 1),
+                fake_canister_http_reject_of_size(2, MIN_STRIPPED_CONTENT_BYTES),
+            ),
+        ] {
+            // On its own there is nothing worth stripping, so the payload is untouched.
+            let only_tiny = fake_canister_http_payload(vec![fake_canister_http_response_message(
+                &tiny,
+                &[NODE_1],
+            )]);
+            assert_eq!(strip_responses(&only_tiny), None);
 
-        // On its own there is nothing worth stripping, so the payload is untouched.
-        let only_tiny =
-            fake_canister_http_payload(vec![fake_canister_http_response_message(&tiny, &[NODE_1])]);
-        assert_eq!(strip_responses(&only_tiny), None);
+            // Alongside one that is worth it, only the larger one goes.
+            let both = fake_canister_http_payload(vec![
+                fake_canister_http_response_message(&tiny, &[NODE_1]),
+                fake_canister_http_response_message(&big, &[NODE_1]),
+            ]);
+            let (stripped, hashes) = strip_responses(&both).expect("Should strip the larger one");
 
-        // Alongside one that is worth it, only the larger one goes.
-        let both = fake_canister_http_payload(vec![
-            fake_canister_http_response_message(&tiny, &[NODE_1]),
-            fake_canister_http_response_message(&big, &[NODE_1]),
-        ]);
-        let (stripped, hashes) = strip_responses(&both).expect("Should strip the larger one");
+            assert_eq!(hashes, BTreeSet::from_iter([hash_of(&big)]));
+            assert_eq!(responses_left_in_payload(&stripped), vec![tiny]);
+        }
+    }
 
-        assert_eq!(hashes, BTreeSet::from_iter([hash_of(&big)]));
-        assert_eq!(responses_left_in_payload(&stripped), vec![tiny]);
+    /// The threshold applies to the very quantity that a response's metadata reports
+    /// as its `content_size`.
+    #[test]
+    fn content_size_is_the_metadata_content_size_test() {
+        for response in [
+            fake_canister_http_response(1, 1024),
+            fake_canister_http_reject(2),
+            fake_canister_http_reject_of_size(3, 20),
+        ] {
+            assert_eq!(
+                content_size(&pb::CanisterHttpResponse::from(response.clone())),
+                response.content.count_bytes()
+            );
+        }
     }
 
     #[test]
