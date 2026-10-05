@@ -174,8 +174,11 @@ impl<P: Process> SingleProcessRunner<P> {
     fn set_running(&self, pid: Pid, process: P) {
         let mut running = self.running_cell.running.lock().unwrap();
         let process = Arc::new(process);
-        if running.replace(Running { pid, process }).is_some() {
-            panic!("Process is still running!");
+        if let Some(old_running) = running.replace(Running { pid, process }) {
+            warn!(
+                self.log,
+                "Process is still running! Old pid: {}, new pid: {}", old_running.pid, pid
+            );
         }
     }
 
@@ -241,7 +244,9 @@ impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
     fn start(&mut self, process: P) -> Result<()> {
         // If there is a currently running process, stop it and wait for it to exit before starting
         // the new one.
-        self.stop()?;
+        if self.is_running() {
+            self.stop()?;
+        }
 
         info!(
             self.log,
@@ -283,10 +288,6 @@ impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
     /// Note that this blocks the calling thread for up to the grace period plus
     /// the kill timeout.
     fn stop(&mut self) -> Result<()> {
-        if !self.is_running() {
-            return Ok(());
-        }
-
         self.signal_group(Signal::SIGTERM)?;
         if !self.wait_for_exit(STOP_GRACE_PERIOD) {
             warn!(
@@ -309,6 +310,13 @@ impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
             && join_handle.join().is_err()
         {
             warn!(self.log, "Thread waiting on {} process panicked", P::NAME);
+        }
+
+        if self.is_running() {
+            return Err(std::io::Error::other(format!(
+                "{} process is still running after stop()",
+                P::NAME
+            )));
         }
 
         Ok(())
