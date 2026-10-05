@@ -299,6 +299,10 @@ jobs:
             elif ! jq -e '.pr_body | strings | test("\\S")' <<<"$RESULT" >/dev/null; then
               status=failed
               reason="Claude fixed the test but returned no PR description"
+            elif uncommitted="$(git status --porcelain)" && [ -n "$uncommitted" ]; then
+              # The bundle only has what's committed, which then isn't all that was verified.
+              status=failed
+              reason="the fix has uncommitted changes: $(head -5 <<<"$uncommitted" | tr '\n' ' ')"
             elif [ "$DRY_RUN" != true ]; then
               mkdir -p ~/deflake
               git bundle create ~/deflake/deflake.bundle refs/heads/deflake ^"$BASE_SHA"

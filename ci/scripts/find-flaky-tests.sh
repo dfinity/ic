@@ -16,6 +16,8 @@ else
     # The workflow runs daily, and the github-stats DB lags up to 3 hours behind CI, so a day plus that lag and an
     # hour of cron delay covers the tests that flaked since the previous run.
     since="$(date -u -d '28 hours ago' '+%F %T')"
+    # `--gt 0` applies to flaky% rounded to one decimal, which only hides a flake among more than 2000 runs of a
+    # test, while the busiest test ran 488 times in the week of 2026-10-05.
     # The bottom border of the table yields an empty last line. Other empty lines mean that the table format
     # changed, so they fail the check below instead of silently dropping their tests.
     labels="$(bazel run //ci/githubstats:query -- top 100 flaky% --gt 0 --since "$since" --columns=label | tail -n+4 | awk '{print $4}' \
