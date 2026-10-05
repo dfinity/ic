@@ -52,14 +52,19 @@ def package(name):
     return dependency.get("package", name) if isinstance(dependency, dict) else name
 
 
+def put(table, key, value):
+    # Empty tables are left out, so that one that only listed workspace dependencies is the same as none.
+    if value:
+        table[key] = value
+    else:
+        table.pop(key, None)
+
+
 def without_workspace_dependencies(manifest):
     for table in tables(manifest):
         for kind in kinds:
-            dependencies = {name: dep for name, dep in table.get(kind, {}).items() if dep != {"workspace": True}}
-            if dependencies:
-                table[kind] = dependencies
-            else:
-                table.pop(kind, None)
+            put(table, kind, {name: dep for name, dep in table.get(kind, {}).items() if dep != {"workspace": True}})
+    put(manifest, "target", {target: table for target, table in manifest.get("target", {}).items() if table})
     return manifest
 
 
