@@ -9,7 +9,7 @@ use ic_embedders::{
     wasmtime_embedder::{CanisterMemoryType, system_api::ApiType, system_api_complexity},
 };
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
+    CanisterBacktrace, Heap, HypervisorError, SystemApi, TrapCode,
 };
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
@@ -2602,7 +2602,12 @@ fn wasm64_root_key() {
         .store_data_mut()
         .system_api_mut()
         .unwrap()
-        .ic0_root_key_copy(0, 0, expected_size, &mut expected_heap)
+        .ic0_root_key_copy(
+            0,
+            0,
+            expected_size,
+            &mut Heap::unchecked(&mut expected_heap),
+        )
         .unwrap();
     assert_eq!(wasm_heap, expected_heap);
 }
@@ -2852,7 +2857,12 @@ fn wasm64_subnet_self_copy() {
         .store_data()
         .system_api()
         .unwrap()
-        .ic0_subnet_self_copy(0, 0, subnet_id_size, &mut expected_heap)
+        .ic0_subnet_self_copy(
+            0,
+            0,
+            subnet_id_size,
+            &mut Heap::unchecked(&mut expected_heap),
+        )
         .unwrap();
 
     assert_eq!(wasm_heap, expected_heap);
@@ -3025,7 +3035,7 @@ fn wasm64_canister_liquid_cycle_balance128() {
         .store_data_mut()
         .system_api_mut()
         .unwrap()
-        .ic0_canister_liquid_cycle_balance128(0, &mut expected_heap)
+        .ic0_canister_liquid_cycle_balance128(0, &mut Heap::unchecked(&mut expected_heap))
         .unwrap();
     assert_eq!(wasm_heap, expected_heap);
 
