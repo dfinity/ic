@@ -129,6 +129,11 @@ The consensus component manages the agreement on HTTP outcall responses across s
 - **THEN** those receipts do not count towards `CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK`, since the response they belong to was already counted in the earlier block that delivered it
 - **AND** receipt collection is bounded only by the payload size, stopping once it is full
 
+#### Scenario: Only canonically encoded payloads validate
+- **WHEN** `validate_payload` is called on a canister HTTP payload, after the size check and before any state lookup or signature verification
+- **THEN** each length-delimited message is decoded and re-encoded, and the payload is rejected unless the re-encoding is byte-for-byte identical to the bytes it was decoded from (an unknown field, a non-minimal length prefix, a repeated field, fields out of tag order, or a non-canonical bool encoding are all rejected)
+- **AND** this check does not apply to batch delivery (`into_messages`), which only ever sees payloads that already passed validation
+
 #### Scenario: Timeout handling
 - **WHEN** a canister HTTP request has been pending longer than `CANISTER_HTTP_TIMEOUT_INTERVAL`
 - **AND** the request is a non-flexible (traditional) request
