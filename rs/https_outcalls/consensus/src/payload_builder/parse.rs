@@ -24,13 +24,6 @@ pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, Proxy
 /// Like [`bytes_to_payload`], but fails unless `data` is exactly what
 /// [`payload_to_bytes`] writes, i.e. unless every message encodes to the very bytes
 /// it was decoded from.
-///
-/// Prost decodes much that it never writes: unknown fields, fields out of tag order
-/// or repeated, non-minimal varints, bools other than 0 and 1. Such bytes decode to
-/// the same messages as their canonical encoding, but the block hash covers the
-/// bytes. A node that re-encodes a payload it did not build, e.g. to strip the
-/// response contents from a block it relays, could then not give its peers a block
-/// that matches the hash it claims.
 pub(crate) fn canonical_bytes_to_payload(
     data: &[u8],
 ) -> Result<CanisterHttpPayload, ProxyDecodeError> {
