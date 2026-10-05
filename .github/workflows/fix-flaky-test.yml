@@ -243,7 +243,8 @@ jobs:
             - Only change files under rs/, packages/ or ic-os/, but no *.bzl files, nothing under
               rs/ic_os/config/types/, no symlinks or binary files, and at most 1000 changed lines in at most 10
               commits. In Cargo.toml files only add or remove dependencies as `name = { workspace = true }`, and
-              change the root Cargo.lock only accordingly. If the fix needs anything else, stop with status
+              change the root Cargo.lock only accordingly. Don't change other dependency or toolchain configuration,
+              like .cargo/config or requirements.txt files. If the fix needs anything else, stop with status
               "needs_human" and explain why.
             - In step 7 commit the fix on a local branch named `deflake`. Don't push and don't open a PR: a later
               workflow does that. Instead return the PR description as pr_body: the root cause analysis, the

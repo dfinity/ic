@@ -36,7 +36,11 @@ while IFS= read -r -d '' path; do
         MODULE.bazel | */MODULE.bazel | *.MODULE.bazel | *MODULE.bazel.lock | REPO.bazel | */REPO.bazel | WORKSPACE | */WORKSPACE | *WORKSPACE.bazel)
             disallowed+=("$path")
             ;;
-        *.bzl | *.bazelrc | .gitattributes | */.gitattributes | .gitmodules | */Cargo.lock | rs/ic_os/config/types/*)
+        # Dependency configuration besides Cargo.toml and the root Cargo.lock, which are validated below.
+        */.cargo/config | */.cargo/config.toml | */rust-toolchain | */rust-toolchain.toml | */*.lock | */requirements*.txt | */pyproject.toml | */package.json | */package-lock.json | */go.mod | */go.sum)
+            disallowed+=("$path")
+            ;;
+        *.bzl | *.bazelrc | .gitattributes | */.gitattributes | .gitmodules | rs/ic_os/config/types/*)
             disallowed+=("$path")
             ;;
         rs/* | packages/* | ic-os/* | Cargo.lock) ;;
