@@ -48,7 +48,8 @@ while IFS= read -r -d '' path; do
         *) disallowed+=("$path") ;;
     esac
 done <"$RUNNER_TEMP/deflake-paths"
-[ ${#disallowed[@]} -eq 0 ] || die "the fix changes disallowed files: ${disallowed[*]}"
+# Quoted, since paths can have any character, like a newline that starts a workflow command.
+[ ${#disallowed[@]} -eq 0 ] || die "the fix changes disallowed files:$(printf ' %q' "${disallowed[@]}")"
 raw="$(git diff --no-renames --raw "$BASE_SHA" "$fix")"
 if awk '$1 ~ /^:(120000|160000)$/ || $2 == "120000" || $2 == "160000" {bad = 1} END {exit !bad}' <<<"$raw"; then
     die "the fix changes a symlink or submodule"
@@ -61,7 +62,7 @@ fi
 changed="$(awk '{n += $1 + $2} END {print n + 0}' <<<"$numstat")"
 [ "$changed" -le 1000 ] || die "the fix changes $changed lines"
 # Lines can be arbitrarily long.
-bytes="$(git diff --no-renames "$BASE_SHA" "$fix" | wc -c)"
+bytes="$(git diff --no-renames "$BASE_SHA" "$fix" | wc -c | tr -d ' ')"
 [ "$bytes" -le 1000000 ] || die "the diff of the fix has $bytes bytes"
 
 author='claude[bot]'

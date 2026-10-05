@@ -14,6 +14,8 @@ import sys
 
 import tomllib
 
+if len(sys.argv) != 3:
+    sys.exit(f"usage: {sys.argv[0]} BASE FIX")
 base, fix = sys.argv[1:]
 kinds = ["dependencies", "dev-dependencies", "build-dependencies"]
 

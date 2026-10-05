@@ -420,6 +420,11 @@ class DependencyTest(ValidatorTest):
     def test_accepts_other_changes(self):
         self.assert_accepted({"rs/alpha/src/lib.rs": "pub fn alpha() -> u32 {\n    2\n}\n"})
 
+    def test_needs_two_revisions(self):
+        script = SCRIPTS / "validate-deflake-dependencies.py"
+        result = subprocess.run([sys.executable, script, self.base], capture_output=True, encoding="utf-8")
+        self.assertEqual((result.returncode, result.stderr), (1, f"usage: {script} BASE FIX\n"))
+
     def test_accepts_formatting_changes(self):
         self.assert_accepted(
             {ALPHA_PATH: replace(ALPHA, "serde = { workspace = true }", "# Serialization.\nserde.workspace = true")}
@@ -894,9 +899,18 @@ class BundleTest(ValidatorTest):
         self.assertEqual(sorted(paths.split(" ")), sorted(disallowed))
 
     def test_rejects_paths_that_look_allowed(self):
-        for path in ["rsx/lib.rs", "packagesx/lib.rs", "ic-osx/lib.rs", " rs/lib.rs", "r\\s/lib.rs"]:
+        # The message quotes the paths for bash.
+        cases = {
+            "rsx/lib.rs": "rsx/lib.rs",
+            "packagesx/lib.rs": "packagesx/lib.rs",
+            "ic-osx/lib.rs": "ic-osx/lib.rs",
+            " rs/lib.rs": "\\ rs/lib.rs",
+            "r\\s/lib.rs": "r\\\\s/lib.rs",
+            "x\n::error::injected": "$'x\\n::error::injected'",
+        }
+        for path, quoted in cases.items():
             with self.subTest(path):
-                self.assert_rejected(f"the fix changes disallowed files: {path}", {path: "x\n"})
+                self.assert_rejected(f"the fix changes disallowed files: {quoted}", {path: "x\n"})
 
     def test_rejects_deleting_and_renaming_disallowed_files(self):
         self.assert_rejected("the fix changes disallowed files: bazel/defs.bzl", {"bazel/defs.bzl": None})
