@@ -103,7 +103,7 @@ Before any mutation is applied, the registry validates that the resulting state 
 #### Scenario: CatchUpPackageContents must carry a cup_type
 - **WHEN** the registry state is validated
 - **THEN** every `catch_up_package_contents_<subnet_id>` record must have its `cup_type` field set (`Genesis`, `Recovery`, or `SubnetSplitting`)
-- **AND** a record predating the introduction of `cup_type` is backfilled: `Genesis` if its `height`, `time`, and `state_hash` are `0`, `0`, and empty, `Recovery` otherwise
+- **AND** the one-time migration that backfilled records predating `cup_type` has already run in production and its code has been removed; every record is expected to already satisfy this invariant
 
 #### Scenario: Free cycles cost schedule restriction
 - **WHEN** a subnet's canister cycles cost schedule is set to "Free"
