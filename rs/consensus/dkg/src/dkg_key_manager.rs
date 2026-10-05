@@ -662,8 +662,8 @@ mod tests {
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::{
-        CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetSplittingDestArgs, SubnetSplittingSourceArgs,
-        catch_up_package_contents::CupType,
+        CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetSplittingDestArgs,
+        SubnetSplittingSourceArgs, catch_up_package_contents::CupType,
     };
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_test_utilities_logger::with_test_replica_logger;
