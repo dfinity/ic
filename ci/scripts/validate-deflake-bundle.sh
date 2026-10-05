@@ -175,6 +175,8 @@ def reference(key):
 for (name, version, source), old in old_packages.items():
     new = new_packages[(name, version, source)]
     old_list, new_list = old.pop("dependencies", []), new.pop("dependencies", [])
+    if not all(isinstance(deps, list) and all(isinstance(d, str) for d in deps) for deps in (old_list, new_list)):
+        sys.exit(f"Cargo.lock lists the dependencies of {name} {version} as something other than strings")
     if len(set(new_list)) != len(new_list):
         sys.exit(f"Cargo.lock lists a dependency of {name} {version} twice")
     old_deps, new_deps = set(old_list), set(new_list)
