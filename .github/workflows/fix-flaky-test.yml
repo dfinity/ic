@@ -140,7 +140,8 @@ jobs:
             done
           } | jq -s 'add | unique_by(.number) | map(select(.isCrossRepository | not))')"
           # authorAssociation hides private org membership from this token, so authors are trusted by permission:
-          # anyone who can read the repository can open a PR from one of its branches.
+          # anyone who can read the repository can open a PR from one of its branches. The permission field
+          # reports maintainers as write.
           trusted="$(jq -r '[.[] | .author, (.reviews + .comments)[].author | .login] | unique[]' <<<"$prs" | while read -r login; do
             permission="$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$login/permission" --jq .permission 2>/dev/null || true)"
             if [[ "$permission" == admin || "$permission" == write || "$login" == copilot-pull-request-reviewer ]]; then

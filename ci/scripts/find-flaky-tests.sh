@@ -43,7 +43,7 @@ if [ -n "$labels" ]; then
         exit 1
     fi
     # Anyone who can read the repository can open a PR from one of its branches, so only the deflake PRs of
-    # claude[bot] and of authors with write access count.
+    # claude[bot] and of authors with write access count. The permission field reports maintainers as write.
     trusted="$(jq -r '.[] | select((.title | test("deflake"; "i")) or (.headRefName | startswith("ai/deflake-"))) | .author.login' <<<"$prs" \
         | sort -u | while read -r login; do
         permission="$(gh api "repos/dfinity/ic/collaborators/$login/permission" --jq .permission 2>/dev/null || true)"
