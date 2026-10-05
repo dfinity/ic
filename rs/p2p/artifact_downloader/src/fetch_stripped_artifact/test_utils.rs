@@ -333,9 +333,7 @@ pub(crate) fn fake_canister_http_reject(callback_id: u64) -> CanisterHttpRespons
     }
 }
 
-pub(crate) fn fake_canister_http_metadata(
-    response: &CanisterHttpResponse,
-) -> CanisterHttpResponseMetadata {
+fn fake_canister_http_metadata(response: &CanisterHttpResponse) -> CanisterHttpResponseMetadata {
     CanisterHttpResponseMetadata {
         id: response.id,
         content_hash: ic_types::crypto::crypto_hash(response),
@@ -445,6 +443,18 @@ pub(crate) fn fake_flexible_canister_http_too_many_rejects_message(
     }
 }
 
+/// A `timeouts` entry of a canister http payload, which carries no response and
+/// is thus never stripped.
+pub(crate) fn fake_canister_http_timeout_message(
+    callback_id: u64,
+) -> pb::CanisterHttpResponseMessage {
+    pb::CanisterHttpResponseMessage {
+        message_type: Some(pb::canister_http_response_message::MessageType::Timeout(
+            callback_id,
+        )),
+    }
+}
+
 /// Like [`fake_canister_http_response_message`], but without the response
 /// content: what the payload of a block proposal that was stripped of it looks
 /// like.
@@ -481,7 +491,7 @@ pub(crate) fn fake_canister_http_payload(
 
 /// Fails unless `payload` carries all `expected` messages, i.e. unless every
 /// message given to `iterator_to_bytes` fit into the payload limit.
-pub(crate) fn assert_no_messages_dropped(payload: &[u8], expected: usize) {
+fn assert_no_messages_dropped(payload: &[u8], expected: usize) {
     let encoded = slice_to_messages::<pb::CanisterHttpResponseMessage>(payload)
         .expect("Should encode a parseable payload")
         .len();
