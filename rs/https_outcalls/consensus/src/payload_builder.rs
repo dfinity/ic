@@ -1286,7 +1286,7 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         }
 
         let past_payloads = parse::parse_past_payloads(past_payloads, &self.log);
-        let payload = parse::bytes_to_payload(payload).map_err(|e| {
+        let payload = parse::canonical_bytes_to_payload(payload).map_err(|e| {
             ValidationError::InvalidArtifact(
                 consensus::InvalidPayloadReason::InvalidCanisterHttpPayload(
                     InvalidCanisterHttpPayloadReason::DecodeError(e),

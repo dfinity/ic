@@ -254,9 +254,14 @@ fn compile_inner(
     let max_num_locals = wasm_validation_details.max_num_locals;
 
     // Instrumentation exports the Wasm memory under this name if and only if
-    // the module declares one.
+    // the module declares one. A canister may also export some other item
+    // (e.g. a function) under the same name, so the export only indicates a
+    // declared heap if it is actually a memory export; checking the kind here
+    // avoids treating such a non-memory export as a declared heap.
     let wasm_memory = module.get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME);
-    let declares_wasm_memory = wasm_memory.is_some();
+    let declares_wasm_memory = wasm_memory
+        .as_ref()
+        .is_some_and(|export| export.memory().is_some());
     let is_wasm64 =
         wasm_memory.is_some_and(|export| export.memory().is_some_and(|mem| mem.is_64()));
 

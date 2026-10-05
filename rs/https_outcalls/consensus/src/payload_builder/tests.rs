@@ -44,6 +44,7 @@ use ic_management_canister_types_private::{
     HttpRequestResourceReport,
 };
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
 use ic_test_utilities::state_manager::RefMockStateManager;
@@ -58,7 +59,7 @@ use ic_types::{
     batch::{
         CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
-        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext, slice_to_messages,
     },
     canister_http::{
         CANDID_OVERHEAD_RESERVE_BYTES, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
@@ -1182,6 +1183,73 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
 
         assert!(validation_result.is_ok());
     });
+}
+
+/// The block hash covers the bytes of the payload, so a payload must be exactly the
+/// canonical encoding of its messages: one that decodes to the very same, valid
+/// messages is rejected otherwise.
+#[test]
+fn validate_payload_rejects_a_non_canonical_encoding_of_a_valid_payload() {
+    let subnet_size = 4;
+    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
+        let delegated_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(77);
+        let request_context = CanisterHttpRequestContext {
+            subnet_size: NumberOfNodes::from(subnet_size as u32),
+            ..request_context(Replication::NonReplicated(delegated_node_id))
+        };
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+        add_signer_to_proof(&mut proof, delegated_node_id);
+        proof.initial_spent =
+            non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(subnet_size as u32));
+        let canonical = payload_to_bytes(
+            CanisterHttpPayload {
+                responses: vec![proof],
+                ..Default::default()
+            },
+            TEST_MAX_PAYLOAD_BYTES,
+        );
+        let non_canonical = with_unknown_field(&canonical);
+        let validate = |payload: &[u8]| {
+            payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                payload,
+                &[],
+            )
+        };
+
+        assert_eq!(
+            bytes_to_payload(&non_canonical).unwrap(),
+            bytes_to_payload(&canonical).unwrap()
+        );
+        assert!(validate(&canonical).is_ok());
+        assert_matches!(
+            validate(&non_canonical),
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::DecodeError(ProxyDecodeError::Other(_)),
+                ),
+            ))
+        );
+    });
+}
+
+/// Appends a field that `CanisterHttpResponseMessage` does not have to every message
+/// of the payload: the result decodes to the same messages, but is not what
+/// `payload_to_bytes` writes for them.
+fn with_unknown_field(payload: &[u8]) -> Vec<u8> {
+    let mut bytes = vec![];
+    for message in slice_to_messages::<pb::CanisterHttpResponseMessage>(payload).unwrap() {
+        let mut encoded = prost::Message::encode_to_vec(&message);
+        // Field 15, of wire type varint, with value 0.
+        encoded.extend_from_slice(&[15 << 3, 0]);
+        prost::encoding::encode_varint(encoded.len() as u64, &mut bytes);
+        bytes.extend(encoded);
+    }
+    bytes
 }
 
 #[test]
