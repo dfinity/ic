@@ -1827,20 +1827,15 @@ mod eth_balance {
 
     #[test]
     fn should_finalize_a_later_nonce_while_an_earlier_one_stays_pending() {
-        let spiked_fee = GasFeeEstimate {
-            base_fee_per_gas: WeiPerGas::from(1_000_000_u32),
-            max_priority_fee_per_gas: WeiPerGas::from(1_000_000_u32),
-        };
-        let straggler = withdrawal_flow(LedgerBurnIndex::new(0), TransactionNonce::ZERO);
-        let ahead = withdrawal_flow(LedgerBurnIndex::new(1), TransactionNonce::ONE);
-
-        let mut out_of_order = deposited_state();
-        let straggler_tx = straggler.send(&mut out_of_order);
-        let ahead_tx = ahead.send(&mut out_of_order);
-        ahead.finalize(&mut out_of_order, &ahead_tx);
+        let OutOfOrder {
+            mut state,
+            straggler,
+            ahead,
+            straggler_tx,
+        } = OutOfOrder::new();
 
         assert_eq!(
-            out_of_order
+            state
                 .withdrawal_transactions
                 .finalized_transactions_iter()
                 .map(|(nonce, id, _tx)| (*nonce, *id))
@@ -1848,23 +1843,8 @@ mod eth_balance {
             vec![(TransactionNonce::ONE, LedgerBurnIndex::new(1))],
             "the later nonce must finalize on its own"
         );
-        assert_eq!(
-            out_of_order
-                .withdrawal_transactions
-                .create_resubmit_transactions(TransactionCount::TWO, spiked_fee.clone()),
-            vec![],
-            "the chain has moved past the straggler's nonce, so it must not be resubmitted"
-        );
-        assert!(
-            !out_of_order
-                .withdrawal_transactions
-                .create_resubmit_transactions(TransactionCount::ZERO, spiked_fee)
-                .is_empty(),
-            "a straggler the chain has not passed is still considered for resubmission, so the \
-             emptiness above is the nonce filter and not the fee"
-        );
 
-        straggler.finalize(&mut out_of_order, &straggler_tx);
+        straggler.finalize(&mut state, &straggler_tx);
 
         let mut in_order = deposited_state();
         let straggler_tx = straggler.send(&mut in_order);
@@ -1872,10 +1852,63 @@ mod eth_balance {
         straggler.finalize(&mut in_order, &straggler_tx);
         ahead.finalize(&mut in_order, &ahead_tx);
         assert_eq!(
-            out_of_order.withdrawal_transactions, in_order.withdrawal_transactions,
+            state.withdrawal_transactions, in_order.withdrawal_transactions,
             "both withdrawals must end up finalized, whichever order their receipts arrived in"
         );
-        assert_eq!(out_of_order.eth_balance, in_order.eth_balance);
+        assert_eq!(state.eth_balance, in_order.eth_balance);
+    }
+
+    #[test]
+    fn should_not_resubmit_a_straggler_the_chain_has_passed() {
+        let spiked_fee = GasFeeEstimate {
+            base_fee_per_gas: WeiPerGas::from(1_000_000_u32),
+            max_priority_fee_per_gas: WeiPerGas::from(1_000_000_u32),
+        };
+        let OutOfOrder { state, .. } = OutOfOrder::new();
+
+        assert_eq!(
+            state
+                .withdrawal_transactions
+                .create_resubmit_transactions(TransactionCount::TWO, spiked_fee.clone()),
+            vec![],
+            "the chain has moved past the straggler's nonce, so it must not be resubmitted"
+        );
+        assert!(
+            !state
+                .withdrawal_transactions
+                .create_resubmit_transactions(TransactionCount::ZERO, spiked_fee)
+                .is_empty(),
+            "a straggler the chain has not passed is still considered for resubmission, so the \
+             emptiness above is the nonce filter and not the fee"
+        );
+    }
+
+    /// Two withdrawals sent, only the later nonce finalized, so the earlier one sits in `sent_tx`
+    /// below an already-finalized nonce.
+    struct OutOfOrder {
+        state: State,
+        straggler: WithdrawalFlow,
+        ahead: WithdrawalFlow,
+        straggler_tx: SignedEip1559TransactionRequest,
+    }
+
+    impl OutOfOrder {
+        fn new() -> Self {
+            let straggler = withdrawal_flow(LedgerBurnIndex::new(0), TransactionNonce::ZERO);
+            let ahead = withdrawal_flow(LedgerBurnIndex::new(1), TransactionNonce::ONE);
+
+            let mut state = deposited_state();
+            let straggler_tx = straggler.send(&mut state);
+            let ahead_tx = ahead.send(&mut state);
+            ahead.finalize(&mut state, &ahead_tx);
+
+            Self {
+                state,
+                straggler,
+                ahead,
+                straggler_tx,
+            }
+        }
     }
 
     fn deposited_state() -> State {
