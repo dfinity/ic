@@ -60,10 +60,15 @@ def put(table, key, value):
         table.pop(key, None)
 
 
+def only_inherited(dependency):
+    # Exactly `{ workspace = true }`, since 1 == True in Python.
+    return isinstance(dependency, dict) and list(dependency) == ["workspace"] and dependency["workspace"] is True
+
+
 def without_workspace_dependencies(manifest):
     for table in tables(manifest):
         for kind in kinds:
-            put(table, kind, {name: dep for name, dep in table.get(kind, {}).items() if dep != {"workspace": True}})
+            put(table, kind, {name: dep for name, dep in table.get(kind, {}).items() if not only_inherited(dep)})
     put(manifest, "target", {target: table for target, table in manifest.get("target", {}).items() if table})
     return manifest
 
@@ -150,7 +155,8 @@ for (name, version, source), old in old_packages.items():
     old_deps, new_deps = set(old_list), set(new_list)
     # Only the crates of the workspace, which have no source, can have changed manifests.
     added, removed, inherits = changes.get(name, (set(), set(), set())) if source is None else (set(), set(), set())
-    # Cargo.lock keeps a dependency while another workspace dependency still selects its package.
+    # Cargo.lock keeps a dependency while another workspace dependency still selects its package, like `foo_bar` with
+    # `package = "foo-bar"` next to `foo-bar`, which Cargo allows since both have the same crate name.
     kept = {reference(k) for k in inherits if package(k) in set(map(package, removed))}
     added, removed = set(map(reference, added)) - old_deps, (set(map(reference, removed)) - kept) & old_deps
     if old != new or new_deps - old_deps != added or old_deps - new_deps != removed:
