@@ -111,8 +111,18 @@ fn should_deposit_and_withdraw() {
         let gas_limit = Nat::from(21_000_u32);
         let max_priority_fee_per_gas = Nat::from(1_500_000_000_u32);
 
-        let cketh = cketh
-            .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
+        let finalized = cketh.wait_and_validate_withdrawal(ProcessWithdrawalParams::default());
+        finalized
+            .setup
+            .check_minter_metrics()
+            .assert_contains_metric_matching(
+                r#"cketh_minter_receipt_fetch_window\{pipeline="withdrawal"\} 20 \d+"#,
+            )
+            .assert_contains_metric_matching(
+                r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="receipt"\} 1 \d+"#,
+            );
+
+        let cketh = finalized
             .expect_finalized_status(TxFinalizedStatus::Success {
                 transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
                 effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
@@ -391,7 +401,18 @@ fn should_not_finalize_transaction_when_receipts_do_not_match() {
         )
         .expect_status(RetrieveEthStatus::TxSent(EthTransaction {
             transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-        }));
+        }))
+        .setup
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_window\{pipeline="withdrawal"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="error"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_abandoned_rounds_total\{pipeline="withdrawal"\} 0 \d+"#,
+        );
 }
 
 #[test]
