@@ -33,6 +33,7 @@ on:
       - .github/workflows/open-deflake-pr.yml
       - ci/scripts/find-flaky-tests.sh
       - ci/scripts/validate-deflake-bundle.sh
+      - ci/scripts/validate-deflake-dependencies.py
       - ci/scripts/open-deflake-pr.sh
       - ci/githubstats/**
 
