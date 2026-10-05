@@ -2568,6 +2568,7 @@ impl ProposalData {
             minimum_yes_proportion_of_exercised,
             action_auxiliary,
             topic,
+            execution_reply: _,
         } = self;
 
         let limited_ballots: BTreeMap<_, _> = ballots
@@ -2603,6 +2604,7 @@ impl ProposalData {
             payload_text_rendering: None,
             proposal: proposal.as_ref().map(Proposal::limited_for_list_proposals),
             ballots: limited_ballots,
+            execution_reply: None,
         }
     }
 
@@ -4990,6 +4992,7 @@ Version {
             executed_timestamp_seconds: 0,
             action_auxiliary: None,
             topic: Some(Topic::Governance as i32),
+            execution_reply: None,
         };
     }
 

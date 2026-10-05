@@ -1,4 +1,5 @@
 use crate::{
+    MAX_SCALAR_FIELD_LEN_BYTES,
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
@@ -1765,6 +1766,22 @@ impl Governance {
         }
     }
 
+    /// Saves a generic function call's reply on its proposal, keeping at most
+    /// `MAX_SCALAR_FIELD_LEN_BYTES` bytes.
+    fn set_proposal_execution_reply(&mut self, pid: u64, mut execution_reply: Vec<u8>) {
+        execution_reply.truncate(MAX_SCALAR_FIELD_LEN_BYTES);
+        let Some(proposal) = self.proto.proposals.get_mut(&pid) else {
+            log!(
+                ERROR,
+                "Tried to record reply after executing proposal {}, but unable to find the proposal.",
+                pid,
+            );
+            return;
+        };
+
+        proposal.execution_reply = Some(execution_reply);
+    }
+
     /// Returns the latest reward event.
     pub fn latest_reward_event(&self) -> RewardEvent {
         self.proto
@@ -2174,7 +2191,7 @@ impl Governance {
                 }
             }
             Action::ExecuteGenericNervousSystemFunction(call) => {
-                self.perform_execute_generic_nervous_system_function(call)
+                self.perform_execute_generic_nervous_system_function(proposal_id, call)
                     .await
             }
             Action::ExecuteExtensionOperation(execute_extension_operation) => {
@@ -2531,32 +2548,37 @@ impl Governance {
         Ok(())
     }
 
-    /// Executes a (non-native) nervous system function as a result of an adopted proposal.
+    /// Executes a (non-native) nervous system function for an adopted proposal.
+    /// On success, saves the target canister's reply on the proposal.
     async fn perform_execute_generic_nervous_system_function(
-        &self,
+        &mut self,
+        proposal_id: u64,
         call: ExecuteGenericNervousSystemFunction,
     ) -> Result<(), GovernanceError> {
-        match self
+        let function = match self
             .proto
             .id_to_nervous_system_functions
             .get(&call.function_id)
         {
-            None => Err(GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                format!(
-                    "There is no generic NervousSystemFunction with id: {}",
-                    call.function_id
-                ),
-            )),
-            Some(function) => {
-                perform_execute_generic_nervous_system_function_call(
-                    &*self.env,
-                    function.clone(),
-                    call,
-                )
-                .await
+            None => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    format!(
+                        "There is no generic NervousSystemFunction with id: {}",
+                        call.function_id
+                    ),
+                ));
             }
-        }
+            Some(function) => function.clone(),
+        };
+
+        let execution_reply =
+            perform_execute_generic_nervous_system_function_call(&*self.env, function, call)
+                .await?;
+
+        self.set_proposal_execution_reply(proposal_id, execution_reply);
+
+        Ok(())
     }
 
     async fn perform_execute_extension_operation(
@@ -3657,6 +3679,9 @@ impl Governance {
             is_eligible_for_rewards: true,
             action_auxiliary,
             topic: Some(i32::from(proposal_topic)),
+
+            // A new proposal has not been executed yet, so there is no reply.
+            execution_reply: None,
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -6756,6 +6781,9 @@ mod test_helpers;
 
 #[cfg(test)]
 mod get_metrics;
+
+#[cfg(test)]
+mod execute_generic_nervous_system_function_tests;
 
 #[cfg(feature = "canbench-rs")]
 mod benches;

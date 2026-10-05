@@ -1595,6 +1595,11 @@ pub struct ProposalData {
     /// This proposal's topic.
     #[prost(enumeration = "Topic", optional, tag = "25")]
     pub topic: ::core::option::Option<i32>,
+    /// The raw reply bytes returned by the target canister for a successful
+    /// ExecuteGenericNervousSystemFunction call, truncated to at most
+    /// MAX_SCALAR_FIELD_LEN_BYTES.
+    #[prost(bytes = "vec", optional, tag = "26")]
+    pub execution_reply: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23, 24")]

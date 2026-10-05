@@ -52,6 +52,7 @@ rust_test(
         "//rs/monitoring/adapter_metrics/client",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
+        "//rs/test_utilities/metrics",
         "//rs/test_utilities/types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
