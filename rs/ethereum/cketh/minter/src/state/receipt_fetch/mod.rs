@@ -67,8 +67,12 @@ impl RoundOutcome {
             .saturating_add(self.failures)
     }
 
+    fn every_lookup_failed(&self) -> bool {
+        self.failures > 0 && self.receipts == 0 && self.not_mined == 0
+    }
+
     fn next_window(&self, window: usize) -> usize {
-        if self.abandoned || (self.lookups() > 0 && self.failures == self.lookups()) {
+        if self.abandoned || self.every_lookup_failed() {
             return MIN_RECEIPT_FETCH_WINDOW;
         }
         if self.failures > 0 {
