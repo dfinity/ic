@@ -39,7 +39,7 @@ while IFS= read -r -d '' path; do
         *.bzl | *.bazelrc | .gitattributes | */.gitattributes | .gitmodules | */Cargo.lock | rs/ic_os/config/types/*)
             disallowed+=("$path")
             ;;
-        rs/* | packages/* | Cargo.lock) ;;
+        rs/* | packages/* | ic-os/* | Cargo.lock) ;;
         *) disallowed+=("$path") ;;
     esac
 done <"$RUNNER_TEMP/deflake-paths"
