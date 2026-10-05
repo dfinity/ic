@@ -12,7 +12,7 @@ use ic_config::{
     flag_status::FlagStatus,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, PerformanceCounterType, StableGrowOutcome, SystemApi,
+    Heap, HypervisorError, HypervisorResult, PerformanceCounterType, StableGrowOutcome, SystemApi,
     TrapCode,
 };
 use ic_logger::error;
@@ -262,9 +262,12 @@ pub fn syscalls<
         f(caller).map_err(|e| process_err(caller, e))
     }
 
+    /// Runs `f` with the system API and the Wasm heap. This is the only place
+    /// that hands heap memory to host code; it goes through [`Heap`] so that
+    /// every access is checked before the first byte is touched.
     fn with_memory_and_system_api<T>(
         mut caller: &mut Caller<'_, StoreData>,
-        f: impl Fn(&mut SystemApiImpl, &mut [u8]) -> HypervisorResult<T>,
+        f: impl Fn(&mut SystemApiImpl, &mut Heap<'_>) -> HypervisorResult<T>,
     ) -> Result<T, wasmtime::Error> {
         caller
             .get_export(WASM_HEAP_MEMORY_NAME)
@@ -283,7 +286,10 @@ pub fn syscalls<
                 // Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
                 #[allow(clippy::needless_borrows_for_generic_args)]
                 let (mem, store) = mem.data_and_store_mut(&mut caller);
-                f(store.system_api_mut()?, mem)
+                // TODO(heap page limit): replace with `Heap::new` and a check
+                // against the memory tracker once the accessed page limit lands.
+                let mut heap = Heap::unchecked(mem);
+                f(store.system_api_mut()?, &mut heap)
             })
             .map_err(|e| process_err(&mut caller, e))
     }
