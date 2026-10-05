@@ -676,6 +676,7 @@ mod tests {
             dkg::{SplittingArgs, SubnetSplittingStatus},
         },
         crypto::crypto_hash,
+        subnet_id_into_protobuf,
     };
     use rstest::rstest;
     use std::collections::BTreeMap;
