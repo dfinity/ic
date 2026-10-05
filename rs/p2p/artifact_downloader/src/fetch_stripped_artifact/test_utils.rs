@@ -303,12 +303,10 @@ pub(crate) fn fake_idkg_payload_with_dealing(
     fake_idkg_payload_with_dealings(vec![(dealing, node_index)])
 }
 
-/// The id of a stripped canister http response, for the response to the given
-/// callback id.
-pub(crate) fn fake_canister_http_response_message_id(callback_id: u64) -> StrippedMessageId {
-    StrippedMessageId::CanisterHttpResponse(ic_types::crypto::crypto_hash(
-        &fake_canister_http_response(callback_id, 8),
-    ))
+/// A stripped canister http response, the response to the given callback id.
+pub(crate) fn fake_canister_http_stripped_message(callback_id: u64) -> StrippedMessage {
+    let response = fake_canister_http_response(callback_id, 1024);
+    StrippedMessage::CanisterHttpResponse(ic_types::crypto::crypto_hash(&response), response)
 }
 
 /// A canister http response for the given callback id, with a body of the given size.
@@ -335,9 +333,7 @@ pub(crate) fn fake_canister_http_reject(callback_id: u64) -> CanisterHttpRespons
     }
 }
 
-pub(crate) fn fake_canister_http_metadata(
-    response: &CanisterHttpResponse,
-) -> CanisterHttpResponseMetadata {
+fn fake_canister_http_metadata(response: &CanisterHttpResponse) -> CanisterHttpResponseMetadata {
     CanisterHttpResponseMetadata {
         id: response.id,
         content_hash: ic_types::crypto::crypto_hash(response),
@@ -495,7 +491,7 @@ pub(crate) fn fake_canister_http_payload(
 
 /// Fails unless `payload` carries all `expected` messages, i.e. unless every
 /// message given to `iterator_to_bytes` fit into the payload limit.
-pub(crate) fn assert_no_messages_dropped(payload: &[u8], expected: usize) {
+fn assert_no_messages_dropped(payload: &[u8], expected: usize) {
     let encoded = slice_to_messages::<pb::CanisterHttpResponseMessage>(payload)
         .expect("Should encode a parseable payload")
         .len();

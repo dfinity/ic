@@ -1167,9 +1167,14 @@ mod tests {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let node_index = 1;
         let idkg_dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let canister_http_response = fake_canister_http_response(1, 1024);
         for stripped_message in [
             StrippedMessage::Ingress(SignedIngressId::from(&ingress_message), ingress_message),
             StrippedMessage::IDkgDealing(idkg_dealing.message_id(), node_index, idkg_dealing),
+            StrippedMessage::CanisterHttpResponse(
+                ic_types::crypto::crypto_hash(&canister_http_response),
+                canister_http_response,
+            ),
         ] {
             let mut mock_transport = MockTransport::new();
             let mut mock_peers = MockPeers::default();
@@ -1190,6 +1195,88 @@ mod tests {
 
             assert_eq!(response, (stripped_message, NODE_1));
         }
+    }
+
+    /// A canister http response is asked for at the endpoint that serves them, by its
+    /// content hash and the block that delivers it.
+    #[tokio::test]
+    async fn download_canister_http_response_request_test() {
+        let block = fake_block_proposal(vec![]);
+        let canister_http_response = fake_canister_http_response(1, 1024);
+        let content_hash = ic_types::crypto::crypto_hash(&canister_http_response);
+        let expected_request = GetCanisterHttpResponseInBlockRequest {
+            content_hash: content_hash.clone(),
+            block_proposal_id: ConsensusMessageId::from(&block),
+        };
+        let stripped_message =
+            StrippedMessage::CanisterHttpResponse(content_hash, canister_http_response);
+
+        let mut mock_transport = MockTransport::new();
+        let mut mock_peers = MockPeers::default();
+        let stripped_message_clone = stripped_message.clone();
+        mock_peers.expect_peers().return_const(vec![NODE_1]);
+        mock_transport
+            .expect_rpc()
+            .withf(move |_, request| {
+                request.uri() == CANISTER_HTTP_RESPONSE_URI
+                    && pb::GetCanisterHttpResponseInBlockRequest::proxy_decode(request.body())
+                        .is_ok_and(|request: GetCanisterHttpResponseInBlockRequest| {
+                            request == expected_request
+                        })
+            })
+            .times(1)
+            .returning(move |_, _| Ok(response(stripped_message_clone.clone())));
+
+        let downloaded = download_stripped_message(
+            Arc::new(mock_transport),
+            stripped_message.id(),
+            ConsensusMessageId::from(&block),
+            &no_op_logger(),
+            &FetchStrippedConsensusArtifactMetrics::new(&MetricsRegistry::new()),
+            mock_peers,
+        )
+        .await;
+
+        assert_eq!(downloaded, (stripped_message, NODE_1));
+    }
+
+    /// A peer that answers with a response other than the one asked for is not
+    /// believed: what comes back is checked against the content hash that was asked
+    /// for, and the response is asked for again.
+    #[tokio::test(start_paused = true)]
+    async fn download_canister_http_response_with_another_hash_is_retried_test() {
+        let block = fake_block_proposal(vec![]);
+        let [wanted, other] = [1, 2].map(|callback_id| {
+            let canister_http_response = fake_canister_http_response(callback_id, 1024);
+            StrippedMessage::CanisterHttpResponse(
+                ic_types::crypto::crypto_hash(&canister_http_response),
+                canister_http_response,
+            )
+        });
+
+        let mut mock_transport = MockTransport::new();
+        let mut mock_peers = MockPeers::default();
+        let mut sequence = mockall::Sequence::new();
+        mock_peers.expect_peers().return_const(vec![NODE_1]);
+        for answer in [other, wanted.clone()] {
+            mock_transport
+                .expect_rpc()
+                .times(1)
+                .in_sequence(&mut sequence)
+                .returning(move |_, _| Ok(response(answer.clone())));
+        }
+
+        let downloaded = download_stripped_message(
+            Arc::new(mock_transport),
+            wanted.id(),
+            ConsensusMessageId::from(&block),
+            &no_op_logger(),
+            &FetchStrippedConsensusArtifactMetrics::new(&MetricsRegistry::new()),
+            mock_peers,
+        )
+        .await;
+
+        assert_eq!(downloaded, (wanted, NODE_1));
     }
 
     #[tokio::test]
