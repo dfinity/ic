@@ -261,7 +261,7 @@ mod tests {
 
     use crate::fetch_stripped_artifact::{
         test_utils::{
-            fake_canister_http_response_message_id, fake_finalization_consensus_message_id,
+            fake_canister_http_stripped_message, fake_finalization_consensus_message_id,
             fake_idkg_dealing, fake_idkg_dealing_support_artifact_id, fake_ingress_message,
             fake_stripped_block_proposal_with_messages,
         },
@@ -292,8 +292,8 @@ mod tests {
         let ingress_2_id = fake_ingress_message("fake_2").id();
         let idkg_dealing_1_id = fake_idkg_dealing(NODE_1, 1).id();
         let idkg_dealing_2_id = fake_idkg_dealing(NODE_2, 2).id();
-        let canister_http_1_id = fake_canister_http_response_message_id(1);
-        let canister_http_2_id = fake_canister_http_response_message_id(2);
+        let canister_http_1_id = fake_canister_http_stripped_message(1).id();
+        let canister_http_2_id = fake_canister_http_stripped_message(2).id();
         let stripped_block_proposal = fake_stripped_block_proposal_with_messages(vec![
             ingress_1_id,
             ingress_2_id,

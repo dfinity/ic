@@ -303,12 +303,10 @@ pub(crate) fn fake_idkg_payload_with_dealing(
     fake_idkg_payload_with_dealings(vec![(dealing, node_index)])
 }
 
-/// The id of a stripped canister http response, for the response to the given
-/// callback id.
-pub(crate) fn fake_canister_http_response_message_id(callback_id: u64) -> StrippedMessageId {
-    StrippedMessageId::CanisterHttpResponse(ic_types::crypto::crypto_hash(
-        &fake_canister_http_response(callback_id, 8),
-    ))
+/// A stripped canister http response, the response to the given callback id.
+pub(crate) fn fake_canister_http_stripped_message(callback_id: u64) -> StrippedMessage {
+    let response = fake_canister_http_response(callback_id, 1024);
+    StrippedMessage::CanisterHttpResponse(ic_types::crypto::crypto_hash(&response), response)
 }
 
 /// A canister http response for the given callback id, with a body of the given size.

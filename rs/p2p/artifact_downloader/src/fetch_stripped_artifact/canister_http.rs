@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    NumBytes,
+    CountBytes, NumBytes,
     batch::{MAX_CANISTER_HTTP_PAYLOAD_SIZE, iterator_to_bytes, slice_to_messages},
     canister_http::CanisterHttpResponse,
     crypto::{CryptoHash, CryptoHashOf},
@@ -33,39 +33,54 @@ pub(crate) enum CanisterHttpPayloadError {
     #[error("The canister http payload could not be parsed: {0}")]
     DecodeError(String),
     #[error("The canister http payload is missing the response with content hash {0:?}")]
-    MissingResponse(CryptoHash),
+    MissingResponse(CanisterHttpResponseContentHash),
+    #[error(
+        "The reassembled canister http payload would exceed {} bytes",
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE
+    )]
+    TooLarge,
 }
 
 /// Puts the given response contents back into the payload, in place of the ones
 /// that were stripped from it, and returns the reassembled payload.
 ///
-/// Fails if the payload is missing a response whose content was not provided.
+/// Fails if the payload is missing a response whose content was not provided, or as
+/// soon as it is clear that the reassembled payload would be bigger than any valid
+/// block's.
 pub(crate) fn reinsert_responses(
     payload_bytes: &[u8],
     responses: &BTreeMap<CanisterHttpResponseContentHash, Option<CanisterHttpResponse>>,
 ) -> Result<Vec<u8>, CanisterHttpPayloadError> {
+    // Stripping never grows a payload, so one stripped from a valid block is within
+    // the limit as well.
+    if payload_bytes.len() > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
+        return Err(CanisterHttpPayloadError::TooLarge);
+    }
     let mut messages = parse(payload_bytes)?;
 
+    // Putting a content back grows the payload by more than the content itself, so
+    // this is a lower bound on the size of the reassembled payload.
+    let mut reassembled_size = payload_bytes.len();
     let mut error = None;
     for_each_response_slot(&mut messages, |content_hash, response| {
-        if response.is_some() {
+        if error.is_some() || response.is_some() {
             return;
         }
-        match responses.get(&content_hash) {
-            Some(Some(content)) => {
-                *response = Some(pb::CanisterHttpResponse::from(content.clone()));
-            }
-            Some(None) | None => {
-                error.get_or_insert_with(|| {
-                    CanisterHttpPayloadError::MissingResponse(content_hash.get())
-                });
-            }
+        let Some(Some(content)) = responses.get(&content_hash) else {
+            error = Some(CanisterHttpPayloadError::MissingResponse(content_hash));
+            return;
+        };
+        reassembled_size = reassembled_size.saturating_add(content.content.count_bytes());
+        if reassembled_size > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
+            error = Some(CanisterHttpPayloadError::TooLarge);
+            return;
         }
+        *response = Some(pb::CanisterHttpResponse::from(content.clone()));
     });
 
     match error {
         Some(error) => Err(error),
-        None => Ok(serialize(messages)),
+        None => Ok(encode(messages)),
     }
 }
 
@@ -105,15 +120,11 @@ fn parse(
         .map_err(|err| CanisterHttpPayloadError::DecodeError(err.to_string()))
 }
 
-fn serialize(messages: Vec<pb::CanisterHttpResponseMessage>) -> Vec<u8> {
-    // A payload that was reassembled from a block that could pass validation is at
-    // most this big, so the limit truncates nothing. Should a peer send a block
-    // whose payload exceeds it, the truncated payload simply fails the block hash
-    // check in `BlockProposalAssembler::try_assemble` and the block is dropped.
-    iterator_to_bytes(
-        messages.into_iter(),
-        NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
-    )
+/// Encodes the messages through the very function the canister HTTP payload builder
+/// uses, [`iterator_to_bytes`], so that the result is exactly what it would write for
+/// them. There is no limit, so that no message is ever dropped.
+fn encode(messages: Vec<pb::CanisterHttpResponseMessage>) -> Vec<u8> {
+    iterator_to_bytes(messages.into_iter(), NumBytes::new(u64::MAX))
 }
 
 /// Calls `f` once for every response slot of the payload, passing the hash of the
@@ -291,9 +302,43 @@ mod tests {
             assert_matches!(
                 reinsert_responses(&stripped, &responses),
                 Err(CanisterHttpPayloadError::MissingResponse(hash))
-                    if hash == hash_of(&response).get()
+                    if hash == hash_of(&response)
             );
         }
+    }
+
+    /// Empty slots are cheap, so a peer can make a great many of them name a single
+    /// large content. Putting it back is refused as soon as the payload would exceed
+    /// what any valid block can carry, rather than once the copies have added up.
+    #[test]
+    fn reinsert_refuses_to_exceed_the_payload_limit_test() {
+        let response = fake_canister_http_response(1, MAX_CANISTER_HTTP_PAYLOAD_SIZE / 2);
+        let slot = fake_stripped_canister_http_response_message(&response, &[NODE_1]);
+        let stripped = fake_canister_http_payload(vec![slot; 3]);
+        let responses = BTreeMap::from_iter([(hash_of(&response), Some(response))]);
+
+        // Only the size of a payload that came back would be of any interest.
+        assert_matches!(
+            reinsert_responses(&stripped, &responses).map(|payload| payload.len()),
+            Err(CanisterHttpPayloadError::TooLarge)
+        );
+    }
+
+    /// No valid block carries a payload bigger than the limit, and stripping never
+    /// grows one, so a stripped payload that big is refused before it is decoded.
+    #[test]
+    fn reinsert_refuses_an_oversized_payload_test() {
+        let slot = fake_stripped_canister_http_response_message(
+            &fake_canister_http_response(1, 1024),
+            &[NODE_1],
+        )
+        .encode_length_delimited_to_vec();
+        let oversized = slot.repeat(MAX_CANISTER_HTTP_PAYLOAD_SIZE / slot.len() + 1);
+
+        assert_matches!(
+            reinsert_responses(&oversized, &BTreeMap::new()).map(|payload| payload.len()),
+            Err(CanisterHttpPayloadError::TooLarge)
+        );
     }
 
     #[test]

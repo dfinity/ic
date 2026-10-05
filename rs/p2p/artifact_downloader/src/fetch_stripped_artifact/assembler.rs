@@ -403,9 +403,9 @@ async fn get_or_fetch<P: Peers>(
 
 #[derive(Debug, PartialEq, Error)]
 pub(crate) enum InsertionError {
-    #[error("Trying to insert an ingress message which was never missing")]
+    #[error("Trying to insert a stripped message which was never missing")]
     NotNeeded,
-    #[error("Trying to insert an ingress message which was already inserted")]
+    #[error("Trying to insert a stripped message which was already inserted")]
     AlreadyInserted,
 }
 
@@ -758,10 +758,10 @@ mod tests {
     use crate::fetch_stripped_artifact::test_utils::{
         fake_block_proposal_with_canister_http, fake_block_proposal_with_ingresses,
         fake_block_proposal_with_ingresses_and_idkg, fake_canister_http_payload,
-        fake_canister_http_response, fake_canister_http_response_message, fake_idkg_dealing,
-        fake_idkg_payload_with_dealings, fake_ingress_message, fake_ingress_message_with_arg_size,
-        fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages,
-        fake_stripped_canister_http_response_message,
+        fake_canister_http_response, fake_canister_http_response_message,
+        fake_canister_http_stripped_message, fake_idkg_dealing, fake_idkg_payload_with_dealings,
+        fake_ingress_message, fake_ingress_message_with_arg_size, fake_ingress_message_with_sig,
+        fake_stripped_block_proposal_with_messages, fake_stripped_canister_http_response_message,
     };
     use crate::fetch_stripped_artifact::types::rpc::{
         GetCanisterHttpResponseInBlockResponse, GetIngressMessageInBlockResponse,
@@ -784,6 +784,33 @@ mod tests {
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_2};
 
     use super::*;
+
+    /// Asserts that `reassembled` is `original`, down to the last byte of its payload.
+    ///
+    /// Block proposals compare equal as soon as their hashes do, and a stripped
+    /// proposal carries those over verbatim, so `==` alone cannot tell whether its
+    /// payload was put back together correctly. Consensus can: before it accepts a
+    /// block, it checks that the payload matches those hashes. So check that too.
+    fn assert_same_block(reassembled: &BlockProposal, original: &BlockProposal) {
+        assert_eq!(reassembled, original);
+        assert_eq!(
+            reassembled.as_ref().payload.as_ref(),
+            original.as_ref().payload.as_ref()
+        );
+        assert!(reassembled.check_integrity());
+    }
+
+    /// Like [`assert_same_block`], for the result of assembling a block proposal
+    /// that was received from `NODE_1`.
+    fn assert_assembled(result: AssembleResult<ConsensusMessage>, original: &BlockProposal) {
+        match result {
+            AssembleResult::Done {
+                message: ConsensusMessage::BlockProposal(reassembled),
+                peer_id,
+            } if peer_id == NODE_1 => assert_same_block(&reassembled, original),
+            result => panic!("The block proposal was not assembled: {result:?}"),
+        }
+    }
 
     #[test]
     fn strip_assemble_roundtrip_test() {
@@ -822,7 +849,7 @@ mod tests {
         // try to reassemble the block
         let assembled_block = assembler.try_assemble().unwrap();
 
-        assert_eq!(assembled_block, block_proposal);
+        assert_same_block(&assembled_block, &block_proposal);
     }
 
     #[test]
@@ -864,7 +891,7 @@ mod tests {
         // try to reassemble the block
         let assembled_block = assembler.try_assemble().unwrap();
 
-        assert_eq!(assembled_block, block_proposal);
+        assert_same_block(&assembled_block, &block_proposal);
     }
 
     #[test]
@@ -1025,11 +1052,13 @@ mod tests {
         let ingress_2_id = fake_ingress_message("fake_2").id();
         let idkg_dealing_1_id = fake_idkg_dealing(NODE_1, 1).id();
         let idkg_dealing_2_id = fake_idkg_dealing(NODE_2, 2).id();
+        let canister_http_response_id = fake_canister_http_stripped_message(1).id();
         let stripped_block_proposal = fake_stripped_block_proposal_with_messages(vec![
             ingress_1_id.clone(),
             ingress_2_id.clone(),
             idkg_dealing_1_id.clone(),
             idkg_dealing_2_id.clone(),
+            canister_http_response_id.clone(),
         ]);
 
         let assembler = BlockProposalAssembler::new(stripped_block_proposal);
@@ -1040,7 +1069,8 @@ mod tests {
                 ingress_1_id,
                 ingress_2_id,
                 idkg_dealing_1_id,
-                idkg_dealing_2_id
+                idkg_dealing_2_id,
+                canister_http_response_id,
             ]
         );
     }
@@ -1049,8 +1079,12 @@ mod tests {
     fn stripped_message_insertion_works_test() {
         let ingress_2 = fake_ingress_message("fake_2");
         let idkg_dealing_2 = fake_idkg_dealing(NODE_2, 2);
-        let stripped_block_proposal =
-            fake_stripped_block_proposal_with_messages(vec![ingress_2.id(), idkg_dealing_2.id()]);
+        let canister_http_response_2 = fake_canister_http_stripped_message(2);
+        let stripped_block_proposal = fake_stripped_block_proposal_with_messages(vec![
+            ingress_2.id(),
+            idkg_dealing_2.id(),
+            canister_http_response_2.id(),
+        ]);
 
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
@@ -1060,12 +1094,21 @@ mod tests {
 
         assert_eq!(
             assembler.missing_stripped_messages(),
-            vec![idkg_dealing_2.id()]
+            vec![idkg_dealing_2.id(), canister_http_response_2.id()]
         );
 
         assembler
             .try_insert_stripped_message(idkg_dealing_2)
             .expect("Should successfully insert the missing dealing");
+
+        assert_eq!(
+            assembler.missing_stripped_messages(),
+            vec![canister_http_response_2.id()]
+        );
+
+        assembler
+            .try_insert_stripped_message(canister_http_response_2)
+            .expect("Should successfully insert the missing canister http response");
 
         assert!(assembler.missing_stripped_messages().is_empty());
     }
@@ -1074,12 +1117,16 @@ mod tests {
     fn stripped_message_insertion_existing_fails_test() {
         let ingress_2 = fake_ingress_message("fake_2");
         let idkg_dealing_2 = fake_idkg_dealing(NODE_2, 2);
-        let stripped_block_proposal =
-            fake_stripped_block_proposal_with_messages(vec![ingress_2.id(), idkg_dealing_2.id()]);
+        let canister_http_response_2 = fake_canister_http_stripped_message(2);
+        let stripped_block_proposal = fake_stripped_block_proposal_with_messages(vec![
+            ingress_2.id(),
+            idkg_dealing_2.id(),
+            canister_http_response_2.id(),
+        ]);
 
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
-        for message in [ingress_2, idkg_dealing_2] {
+        for message in [ingress_2, idkg_dealing_2, canister_http_response_2] {
             assembler
                 .try_insert_stripped_message(message.clone())
                 .expect("Should successfully insert the missing message");
@@ -1097,12 +1144,17 @@ mod tests {
         let ingress_2 = fake_ingress_message("fake_2");
         let idkg_dealing_1 = fake_idkg_dealing(NODE_1, 1);
         let idkg_dealing_2 = fake_idkg_dealing(NODE_2, 2);
-        let stripped_block_proposal =
-            fake_stripped_block_proposal_with_messages(vec![ingress_2.id(), idkg_dealing_2.id()]);
+        let canister_http_response_1 = fake_canister_http_stripped_message(1);
+        let canister_http_response_2 = fake_canister_http_stripped_message(2);
+        let stripped_block_proposal = fake_stripped_block_proposal_with_messages(vec![
+            ingress_2.id(),
+            idkg_dealing_2.id(),
+            canister_http_response_2.id(),
+        ]);
 
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
-        for message in [idkg_dealing_1, ingress_1] {
+        for message in [idkg_dealing_1, ingress_1, canister_http_response_1] {
             assert_eq!(
                 assembler.try_insert_stripped_message(message),
                 Err(InsertionError::NotNeeded)
@@ -1196,17 +1248,12 @@ mod tests {
             )
             .await;
 
-        assert_eq!(
-            reassembled_block_proposal,
-            AssembleResult::Done {
-                message: ConsensusMessage::BlockProposal(block_proposal),
-                peer_id: NODE_1
-            }
-        );
+        assert_assembled(reassembled_block_proposal, &block_proposal);
     }
 
     /// Sets up an assembler whose canister http pool serves `pool_responses`, and
-    /// whose peers serve `peer_response` over the RPC.
+    /// whose peers serve `peer_response` over the RPC, which they expect to be asked
+    /// for exactly once.
     fn set_up_assembler_with_canister_http_responses(
         pool_responses: Vec<CanisterHttpResponse>,
         peer_response: Option<CanisterHttpResponse>,
@@ -1222,6 +1269,7 @@ mod tests {
                 .unwrap();
             mock_transport
                 .expect_rpc()
+                .times(1)
                 .returning(move |_, _| Ok(fake_response.clone()));
         }
 
@@ -1323,13 +1371,7 @@ mod tests {
         let assembler =
             set_up_assembler_with_canister_http_responses(responses, /*peer=*/ None);
 
-        assert_eq!(
-            assemble(&assembler, stripped).await,
-            AssembleResult::Done {
-                message: ConsensusMessage::BlockProposal(unstripped),
-                peer_id: NODE_1
-            }
-        );
+        assert_assembled(assemble(&assembler, stripped).await, &unstripped);
     }
 
     /// A receiver that never saw the response has to fetch it from a peer.
@@ -1344,13 +1386,7 @@ mod tests {
             /*peer=*/ Some(response),
         );
 
-        assert_eq!(
-            assemble(&assembler, stripped).await,
-            AssembleResult::Done {
-                message: ConsensusMessage::BlockProposal(unstripped),
-                peer_id: NODE_1
-            }
-        );
+        assert_assembled(assemble(&assembler, stripped).await, &unstripped);
     }
 
     /// A stripped canister http response that neither the pool nor the peers can
@@ -1367,7 +1403,7 @@ mod tests {
         assert_matches!(
             assembly_error,
             AssemblyError::CanisterHttpPayload(CanisterHttpPayloadError::MissingResponse(hash))
-                if hash == ic_types::crypto::crypto_hash(&response).get()
+                if hash == ic_types::crypto::crypto_hash(&response)
         );
     }
 
