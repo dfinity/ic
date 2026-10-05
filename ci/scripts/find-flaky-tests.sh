@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Lists the tests that flaked in the last week, or just $LABEL if set, grouped by base test, as the
-# matrix of .github/workflows/schedule-fix-flaky-tests.yml. Groups that already have an open deflake
+# Lists the tests that flaked since the previous daily run, or just $LABEL if set, grouped by base test, as
+# the matrix of .github/workflows/schedule-fix-flaky-tests.yml. Groups that already have an open deflake
 # PR, or that match a regex in $SKIP_PATTERNS (one per line), are dropped.
 #
 # Prints the groups to stdout and, when run in GitHub Actions, writes them to $GITHUB_OUTPUT as
@@ -13,14 +13,17 @@ cd "$(git rev-parse --show-toplevel)"
 if [ -n "${LABEL:-}" ]; then
     labels="$LABEL"
 else
+    # The workflow runs daily, and the github-stats DB lags up to 3 hours behind CI, so a day plus that lag and an
+    # hour of cron delay covers the tests that flaked since the previous run.
+    since="$(date -u -d '28 hours ago' '+%F %T')"
     # The bottom border of the table yields an empty last line. Other empty lines mean that the table format
     # changed, so they fail the check below instead of silently dropping their tests.
-    labels="$(bazel run //ci/githubstats:query -- top 100 flaky% --gt 0 --week --columns=label | tail -n+4 | awk '{print $4}' \
+    labels="$(bazel run //ci/githubstats:query -- top 100 flaky% --gt 0 --since "$since" --columns=label | tail -n+4 | awk '{print $4}' \
         | sed '$d; s/^$/(no label)/')"
 fi
 
 tests='[]'
-summary="No test flaked in the last week."
+summary="No test flaked in the last 28 hours."
 if [ -n "$labels" ]; then
     if invalid="$(grep -Ev '^//[A-Za-z0-9_./-]+:[A-Za-z0-9_./+-]+$' <<<"$labels")"; then
         echo "Invalid labels:" >&2

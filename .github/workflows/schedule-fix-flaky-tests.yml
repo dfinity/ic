@@ -1,7 +1,8 @@
 name: Schedule Fix Flaky Tests
 
-# Lets Claude fix every test that flaked in the last week, following .claude/skills/fix-flaky-tests/SKILL.md:
-# fix-flaky-test.yml fixes each test and open-deflake-pr.yml opens the fixes as draft PRs.
+# Lets Claude fix every test that flaked since the previous daily run, following
+# .claude/skills/fix-flaky-tests/SKILL.md: fix-flaky-test.yml fixes each test and open-deflake-pr.yml opens
+# the fixes as draft PRs.
 # Set the repository variable FIX_FLAKY_TESTS_SCHEDULE to 'true' to enable the daily schedule and
 # FIX_FLAKY_TESTS_SKIP_PATTERNS to regexes (one per line) of tests that shouldn't be fixed.
 
@@ -11,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       label:
-        description: Fix only this test label instead of all tests that flaked in the last week
+        description: Fix only this test label instead of all tests that flaked in the last 28 hours
         required: false
         default: ''
         type: string

@@ -208,7 +208,7 @@ jobs:
 
             Fix the flaky test ${{ inputs.label }} by following the fix-flaky-tests skill
             (.claude/skills/fix-flaky-tests/SKILL.md), starting at step 2 of "Fix a flaky test". These variants of
-            the same test (same test binary) all flaked in the last week: ${{ inputs.labels }}.
+            the same test (same test binary) all flaked recently: ${{ inputs.labels }}.
             Fix ONE root cause.
 
             First check whether the test is already fixed or being fixed, like step 1.2 of the skill, but unlike
