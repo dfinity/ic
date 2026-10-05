@@ -35,8 +35,8 @@ const LABEL_TO: &str = "to";
 
 const OPERATOR_UNKNOWN: &str = "unknown";
 
-/// Helper for probabilistically selecting a healthy node on a given subnet,
-/// weighted by proximity.
+/// Helper for probabilistically selecting healthy nodes on a given subnet:
+/// weighted by proximity, when pulling; or uniformly, when advertising.
 ///
 /// Proximity is modeled as the exponential moving average (EMA) of roundtrip
 /// time (RTT) per datacenter operator (under the assumption that all nodes
@@ -58,7 +58,8 @@ pub struct ProximityMap {
     unhealthy_nodes: UnhealthyNodes,
 
     /// Generates a random value in the range [`low`, `high`), i.e. inclusive of
-    /// `low` and exclusive of `high`, to use for picking a replica.
+    /// `low` and exclusive of `high`, to use for picking uniformly random or
+    /// proximity-weighted replicas.
     gen_range: GenRangeFn,
 
     /// Exported `roundtrip_ema_nanos` values.
@@ -129,7 +130,7 @@ impl ProximityMap {
     /// lower RTT are picked with higher probability). Unhealthy nodes are not
     /// picked, unless all of the subnet's nodes are unhealthy.
     ///
-    /// E.g. given  mean RTTs of `[0.1s, 0.5s. 1s]` the computed weights
+    /// E.g. given mean RTTs of `[0.1s, 0.5s, 1s]` the computed weights
     /// (`[10_000, 2_000, 1_000]`) would result in cumulative weights `[10_000,
     /// 12_000, 13_000]`. We then use a random value in the `1..=13_000` range
     /// to select one of the nodes:
@@ -144,7 +145,7 @@ impl ProximityMap {
         version: RegistryVersion,
     ) -> Result<(NodeId, NodeRecord), Error> {
         // Retrieve `subnet`'s nodes, minus the unhealthy ones.
-        let mut nodes = get_subnet_nodes(self.registry.as_ref(), subnet, version)?;
+        let mut nodes = get_subnet_nodes(subnet, self.registry.as_ref(), version)?;
         self.unhealthy_nodes.filter_at_least(1, &mut nodes);
 
         // Compute the individual and total weight of all nodes with explicit weights
@@ -185,8 +186,23 @@ impl ProximityMap {
         let node = nodes[node_index];
         Ok((
             node,
-            get_node_record(self.registry.as_ref(), node, version)?,
+            get_node_record(node, self.registry.as_ref(), version)?,
         ))
+    }
+
+    /// Samples `count` `nodes` uniformly at random, without replacement. Only
+    /// healthy nodes are sampled, unless fewer than `count` are healthy.
+    pub fn uniform_sample(&self, count: usize, mut nodes: Vec<NodeId>) -> Vec<NodeId> {
+        self.unhealthy_nodes.filter_at_least(count, &mut nodes);
+
+        // A partial Fisher-Yates shuffle, driven by `gen_range` so tests can mock it.
+        let count = count.min(nodes.len());
+        for i in 0..count {
+            let j = (self.gen_range)(i as u64, nodes.len() as u64) as usize;
+            nodes.swap(i, j);
+        }
+        nodes.truncate(count);
+        nodes
     }
 
     /// Records a request to `node` that it served.
