@@ -123,9 +123,18 @@ jobs:
           words="\"${name//_/ }\""
           package="${BASE#//}"
           package="${package%%:*}/"
-          touching="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 1000 --json number,isCrossRepository,updatedAt,files \
+          # gh only lists the first 100 files of a PR, so the files of bigger ones are listed page by page.
+          touching="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 1000 --json number,isCrossRepository,updatedAt,changedFiles,files \
             | jq -r --arg package "$package" --arg since "$since" \
-              '.[] | select((.isCrossRepository | not) and .updatedAt >= $since and any(.files[].path; startswith($package))) | .number')"
+              '.[] | select((.isCrossRepository | not) and .updatedAt >= $since)
+                | if any(.files[].path; startswith($package)) then "\(.number) yes" elif .changedFiles > (.files | length) then "\(.number) maybe" else empty end' \
+            | while read -r number touches; do
+                if [ "$touches" == maybe ] && files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$number/files?per_page=100")" \
+                  && ! jq -e -s --arg package "$package" 'add | any(.[].filename; startswith($package))' <<<"$files" >/dev/null; then
+                  continue
+                fi
+                echo "$number"
+              done)"
           # Open PRs about the test or touching its package, and closed deflake PRs: those of this test at any age,
           # so that a rejected fix isn't proposed again. `head:` matches the branches that start with its value.
           prs="$({
@@ -306,6 +315,10 @@ jobs:
               reason="the fix has uncommitted changes: $(head -5 <<<"$uncommitted" | tr '\n' ' ')"
             elif [ "$DRY_RUN" != true ]; then
               mkdir -p ~/deflake
+              # Only the final tree is bundled, so that the public artifact doesn't carry the commits leading to it.
+              squashed="$(git -c user.name='claude[bot]' -c user.email='209825114+claude[bot]@users.noreply.github.com' \
+                commit-tree 'refs/heads/deflake^{tree}' -p "$BASE_SHA" -m 'fix: deflake')"
+              git update-ref refs/heads/deflake "$squashed"
               git bundle create ~/deflake/deflake.bundle refs/heads/deflake ^"$BASE_SHA"
               jq -r .pr_body <<<"$RESULT" > ~/deflake/body.md
             fi

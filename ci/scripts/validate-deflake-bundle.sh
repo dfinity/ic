@@ -23,7 +23,8 @@ header="$(sed '/^$/q' "$bundle")"
 fix=refs/deflake/fix
 git -c transfer.fsckObjects=true fetch --quiet "$bundle" "+refs/heads/deflake:$fix" || die "the bundle can't be fetched"
 git merge-base --is-ancestor "$BASE_SHA" "$fix" || die "the fix isn't on top of $BASE_SHA"
-[ "$(git rev-list --count "$BASE_SHA..$fix")" -le 10 ] || die "the fix has more than 10 commits"
+# fix-flaky-test.yml squashes the fix, so that the public artifact has no intermediate commits.
+[ "$(git rev-list --count "$BASE_SHA..$fix")" -eq 1 ] || die "the fix isn't a single commit"
 ! git diff --quiet "$BASE_SHA" "$fix" || die "the fix doesn't change anything"
 
 # The diffs are captured before checking them so that a failing git diff aborts the script, and a grep
