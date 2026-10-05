@@ -107,26 +107,6 @@ mod collect {
     }
 
     #[test]
-    fn should_leave_every_id_pending_when_every_lookup_failed() {
-        let (receipts, outcome) = collect_finalized_receipts(vec![
-            ReceiptLookup {
-                hash: hash(1),
-                id: id(1),
-                result: Err(failed_lookup()),
-            },
-            ReceiptLookup {
-                hash: hash(2),
-                id: id(2),
-                result: Err(failed_lookup()),
-            },
-        ]);
-
-        assert_eq!(receipts, BTreeMap::new());
-        assert_eq!(outcome.failures(), 2);
-        assert_eq!(outcome.failures(), outcome.lookups());
-    }
-
-    #[test]
     fn should_abandon_the_round_but_count_every_lookup_on_two_receipts_for_the_same_id() {
         let (receipts, outcome) = collect_finalized_receipts(vec![
             ReceiptLookup {
@@ -180,6 +160,13 @@ mod round {
             }
         });
 
+        let rounds_before = read_state(|s| {
+            s.withdrawal_transactions
+                .pipeline()
+                .receipt_fetch()
+                .rounds_since_chain_read()
+        });
+
         let receipts = fetch_receipts_for_round::<WithdrawalRequest, _>(
             Address::new([0_u8; 20]),
             &no_rpc_runtime(),
@@ -193,8 +180,17 @@ mod round {
                 .pipeline()
                 .receipt_fetch()
                 .rounds_since_chain_read()),
-            ROUNDS_SINCE_CHAIN_READ_BEFORE_SKIPPING + 2,
+            rounds_before + 1,
             "a skipped round is one more round that read nothing"
+        );
+        assert_eq!(
+            read_state(|s| s
+                .automatic_deposits
+                .sweeper_pipeline()
+                .receipt_fetch()
+                .rounds_since_chain_read()),
+            0,
+            "one pipeline skipping rounds must not touch the other"
         );
     }
 

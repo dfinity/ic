@@ -14,21 +14,10 @@ mod adaptation {
     fn should_double_the_window_when_no_lookup_failed() {
         let mut window = window_of(1);
 
-        for expected in [2, 4, 8, 16] {
+        for expected in [2, 4, 8, 16, 20, 20] {
             window.record_round(round(1, 0, 0));
             assert_eq!(window.window(), expected);
         }
-    }
-
-    #[test]
-    fn should_not_grow_past_the_ceiling() {
-        let mut window = window_of(16);
-
-        window.record_round(round(3, 0, 0));
-        assert_eq!(window.window(), MAX_RECEIPT_FETCH_WINDOW);
-
-        window.record_round(round(3, 0, 0));
-        assert_eq!(window.window(), MAX_RECEIPT_FETCH_WINDOW);
     }
 
     #[test]
@@ -55,22 +44,16 @@ mod adaptation {
         let mut window = window_of(MAX_RECEIPT_FETCH_WINDOW);
         let mut outcome = round(2, 0, 0);
         outcome.abandon();
+        outcome.abandon();
 
         window.record_round(outcome);
 
         assert_eq!(window.window(), MIN_RECEIPT_FETCH_WINDOW);
-    }
-
-    #[test]
-    fn should_count_a_round_with_several_conflicts_as_one_abandoned_round() {
-        let mut window = window_of(INITIAL_RECEIPT_FETCH_WINDOW);
-        let mut outcome = round(4, 0, 0);
-        outcome.abandon();
-        outcome.abandon();
-
-        window.record_round(outcome);
-
-        assert_eq!(window.counters().abandoned_rounds, 1);
+        assert_eq!(
+            window.counters().abandoned_rounds,
+            1,
+            "several conflicting ids are still the one round that was abandoned"
+        );
     }
 
     #[test]
