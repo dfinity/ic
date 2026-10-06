@@ -265,10 +265,8 @@ async fn try_start_rosetta(
 
     // Rosetta only writes its port file after it has successfully initialized
     // its ledger client, so if it dies before that the file never appears.
-    let port = loop {
-        if let Some(port) = read_port(port_file) {
-            break port;
-        }
+    // The file is written atomically, so once it exists it contains the port.
+    while !port_file.exists() {
         if let Some(status) = proc.try_wait()? {
             return Err(StartAttemptError::exited(format!(
                 "Rosetta exited with {status} before writing its port file {}",
@@ -282,7 +280,10 @@ async fn try_start_rosetta(
             )));
         }
         sleep(WAIT_BETWEEN_ATTEMPTS).await;
-    };
+    }
+
+    let port = std::fs::read_to_string(port_file).expect("Expected port in port file");
+    let port = u16::from_str(&port).expect("Expected port in port file");
 
     let http_client = reqwest::Client::new();
     // wait because rosetta may be recovering from existing state
@@ -327,12 +328,4 @@ async fn try_start_rosetta(
     }
 
     Ok((proc, port))
-}
-
-/// Reads the port Rosetta listens on from its port file, or returns `None`
-/// while the file doesn't exist yet or hasn't been completely written.
-fn read_port(port_file: &Path) -> Option<u16> {
-    std::fs::read_to_string(port_file)
-        .ok()
-        .and_then(|port| u16::from_str(port.trim()).ok())
 }
