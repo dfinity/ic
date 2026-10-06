@@ -2,6 +2,7 @@ use std::io::Write;
 
 use crate::signal_mutex::SignalMutex;
 use ic_logger::replica_logger::no_op_logger;
+use ic_replicated_state::{NumWasmPages, canister_state::WASM_PAGE_SIZE_IN_BYTES};
 use ic_replicated_state::{
     PageIndex, PageMap,
     page_map::{TestPageAllocatorFileDescriptorImpl, test_utils::base_only_storage_layout},
@@ -12,12 +13,13 @@ use libc::c_void;
 use nix::sys::mman::{MapFlags, ProtFlags, mmap_anonymous};
 use rstest::rstest;
 use std::num::NonZeroUsize;
+use std::ops::Range;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ops::{Deref, DerefMut};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::Ordering};
 
 use crate::{
-    AccessKind, DeterministicMemoryTracker, DirtyPageTracking, MemoryLimits,
+    AccessKind, DeterministicMemoryTracker, DirtyPageTracking, MemoryLimits, SigsegvOutcome,
     conversions::OS_PAGES_IN_WASM_PAGE,
 };
 
@@ -31,6 +33,23 @@ fn setup(
     memory_pages: usize,
     page_delta: Vec<PageIndex>,
     dirty_page_tracking: DirtyPageTracking,
+) -> (DeterministicMemoryTracker, PageMap, *mut c_void, Vec<u8>) {
+    setup_with_accessed_page_limit(
+        checkpoint_pages,
+        memory_pages,
+        page_delta,
+        dirty_page_tracking,
+        None,
+    )
+}
+
+/// Like `setup`, but limits the number of Wasm pages that may be accessed.
+fn setup_with_accessed_page_limit(
+    checkpoint_pages: usize,
+    memory_pages: usize,
+    page_delta: Vec<PageIndex>,
+    dirty_page_tracking: DirtyPageTracking,
+    max_accessed_wasm_pages: Option<NumWasmPages>,
 ) -> (DeterministicMemoryTracker, PageMap, *mut c_void, Vec<u8>) {
     let mut vec = vec![0_u8; memory_pages * PAGE_SIZE];
     let tmpfile = tempfile::Builder::new().prefix("test").tempfile().unwrap();
@@ -79,6 +98,7 @@ fn setup(
         MemoryLimits {
             max_memory_size: NumBytes::new((memory_pages * PAGE_SIZE) as u64),
             max_dirty_pages: NumOsPages::new(memory_pages as u64),
+            max_accessed_wasm_pages,
         },
         /* page_overhead not relevant in these tests */ 1,
         Arc::new(SignalMutex::new(|_| {})),
@@ -106,10 +126,27 @@ fn with_setup<F>(
     f(tracker, page_map);
 }
 
-fn sigsegv(tracker: &DeterministicMemoryTracker, page_index: PageIndex, access_kind: AccessKind) {
+fn sigsegv(
+    tracker: &DeterministicMemoryTracker,
+    page_index: PageIndex,
+    access_kind: AccessKind,
+) -> SigsegvOutcome {
     let memory = tracker.memory_area().start as *mut u8;
-    let page_addr = unsafe { memory.add(page_index.get() as usize * PAGE_SIZE) };
-    tracker.handle_sigsegv(Some(access_kind), page_addr as *mut c_void);
+    let page_addr = memory.wrapping_add(page_index.get() as usize * PAGE_SIZE);
+    tracker.handle_sigsegv(Some(access_kind), page_addr as *mut c_void)
+}
+
+/// Signals an access to the first OS page of the specified Wasm page.
+fn sigsegv_wasm_page(
+    tracker: &DeterministicMemoryTracker,
+    wasm_page_index: usize,
+    access_kind: AccessKind,
+) -> SigsegvOutcome {
+    sigsegv(
+        tracker,
+        PageIndex::new((wasm_page_index * OS_PAGES_IN_WASM_PAGE) as u64),
+        access_kind,
+    )
 }
 
 #[cfg(test)]
@@ -226,10 +263,10 @@ mod random_ops {
             let (access_kind, si_addr) =
                 unsafe { signal_access_kind_and_address(siginfo_ptr, ucontext_ptr) };
 
-            let handled = tracker.handle_sigsegv(access_kind, si_addr);
+            let outcome = tracker.handle_sigsegv(access_kind, si_addr);
 
             unsafe {
-                if !handled {
+                if outcome != SigsegvOutcome::Handled {
                     let previous = *PREV_SIGSEGV.lock().unwrap().deref();
                     if previous.sa_flags & libc::SA_SIGINFO != 0 {
                         mem::transmute::<
@@ -531,4 +568,249 @@ fn deterministic_memory_tracker_correctly_count_access_and_dirty_pages(
             }
         },
     );
+}
+
+/// Number of OS pages in the memory used by the accessed page limit tests.
+const LIMIT_TEST_OS_PAGES: usize = 8 * OS_PAGES_IN_WASM_PAGE;
+
+fn with_accessed_page_limit<F>(
+    dirty_page_tracking: DirtyPageTracking,
+    max_accessed_wasm_pages: Option<usize>,
+    f: F,
+) where
+    F: FnOnce(DeterministicMemoryTracker),
+{
+    let (tracker, _page_map, _memory, _vec) = setup_with_accessed_page_limit(
+        50,
+        LIMIT_TEST_OS_PAGES,
+        (25..75).map(PageIndex::new).collect(),
+        dirty_page_tracking,
+        max_accessed_wasm_pages.map(NumWasmPages::new),
+    );
+    f(tracker);
+}
+
+fn wasm_page_byte_range(wasm_pages: Range<usize>) -> Range<u64> {
+    (wasm_pages.start * WASM_PAGE_SIZE_IN_BYTES) as u64
+        ..(wasm_pages.end * WASM_PAGE_SIZE_IN_BYTES) as u64
+}
+
+#[rstest]
+fn accessed_page_limit_refuses_the_page_after_the_limit(
+    #[values(DirtyPageTracking::Ignore, DirtyPageTracking::Track)]
+    dirty_page_tracking: DirtyPageTracking,
+    #[values(AccessKind::Read, AccessKind::Write)] access_kind: AccessKind,
+) {
+    with_accessed_page_limit(dirty_page_tracking, Some(2), |tracker| {
+        let flag = tracker.page_limit_exceeded_flag().clone();
+
+        assert_eq!(
+            sigsegv_wasm_page(&tracker, 0, access_kind),
+            SigsegvOutcome::Handled
+        );
+        assert_eq!(
+            sigsegv_wasm_page(&tracker, 5, access_kind),
+            SigsegvOutcome::Handled
+        );
+        assert_eq!(tracker.num_accessed_pages(), 2 * OS_PAGES_IN_WASM_PAGE);
+        assert!(!flag.load(Ordering::Relaxed));
+        assert_eq!(tracker.metrics().sigsegv_refused_count(), 0);
+
+        // The third distinct page is refused and nothing changes.
+        assert_eq!(
+            sigsegv_wasm_page(&tracker, 3, access_kind),
+            SigsegvOutcome::Refused
+        );
+        assert_eq!(tracker.num_accessed_pages(), 2 * OS_PAGES_IN_WASM_PAGE);
+        assert!(!tracker.is_accessed(PageIndex::new((3 * OS_PAGES_IN_WASM_PAGE) as u64)));
+        assert!(flag.load(Ordering::Relaxed));
+        assert_eq!(tracker.metrics().sigsegv_refused_count(), 1);
+        assert_eq!(tracker.metrics().sigsegv_count(), 3);
+
+        // The refused page is still not mapped, so the same access is refused again.
+        assert_eq!(
+            sigsegv_wasm_page(&tracker, 3, access_kind),
+            SigsegvOutcome::Refused
+        );
+        assert_eq!(tracker.metrics().sigsegv_refused_count(), 2);
+    });
+}
+
+#[test]
+fn accessed_page_limit_allows_writes_to_accessed_pages_at_the_limit() {
+    with_accessed_page_limit(DirtyPageTracking::Track, Some(2), |tracker| {
+        assert_eq!(
+            sigsegv_wasm_page(&tracker, 0, AccessKind::Read),
+            SigsegvOutcome::Handled
+        );
+        assert_eq!(
+            sigsegv_wasm_page(&tracker, 1, AccessKind::Read),
+            SigsegvOutcome::Handled
+        );
+        assert_eq!(tracker.take_dirty_pages().len(), 0);
+
+        // The limit is reached, but a write to an accessed page only lifts the
+        // write-protection and does not map a new page.
+        assert_eq!(
+            sigsegv_wasm_page(&tracker, 1, AccessKind::Write),
+            SigsegvOutcome::Handled
+        );
+        assert_eq!(tracker.take_dirty_pages().len(), OS_PAGES_IN_WASM_PAGE);
+        assert_eq!(tracker.num_accessed_pages(), 2 * OS_PAGES_IN_WASM_PAGE);
+        assert!(!tracker.page_limit_exceeded_flag().load(Ordering::Relaxed));
+
+        // Without the access kind the tracker first tries to write-protect
+        // an accessed page, which also succeeds at the limit.
+        let memory = tracker.memory_area().start as *mut c_void;
+        assert_eq!(
+            tracker.handle_sigsegv(None, memory),
+            SigsegvOutcome::Handled
+        );
+        assert_eq!(tracker.take_dirty_pages().len(), OS_PAGES_IN_WASM_PAGE);
+
+        // A write to a new page is refused.
+        assert_eq!(
+            sigsegv_wasm_page(&tracker, 2, AccessKind::Write),
+            SigsegvOutcome::Refused
+        );
+        assert_eq!(tracker.take_dirty_pages().len(), 0);
+    });
+}
+
+#[rstest]
+fn no_accessed_page_limit_maps_every_page(
+    #[values(DirtyPageTracking::Ignore, DirtyPageTracking::Track)]
+    dirty_page_tracking: DirtyPageTracking,
+) {
+    with_accessed_page_limit(dirty_page_tracking, None, |tracker| {
+        for wasm_page in 0..8 {
+            assert_eq!(
+                sigsegv_wasm_page(&tracker, wasm_page, AccessKind::Read),
+                SigsegvOutcome::Handled
+            );
+        }
+        assert_eq!(tracker.num_accessed_pages(), LIMIT_TEST_OS_PAGES);
+        assert!(!tracker.page_limit_exceeded_flag().load(Ordering::Relaxed));
+        assert!(tracker.check_range_fits(wasm_page_byte_range(0..1_000_000)));
+    });
+}
+
+#[test]
+fn addresses_outside_the_tracked_memory_are_not_tracked() {
+    with_accessed_page_limit(DirtyPageTracking::Track, Some(1), |tracker| {
+        let outside = tracker
+            .memory_area()
+            .start
+            .wrapping_add(LIMIT_TEST_OS_PAGES * PAGE_SIZE) as *mut c_void;
+        assert_eq!(
+            tracker.handle_sigsegv(Some(AccessKind::Read), outside),
+            SigsegvOutcome::NotTracked
+        );
+        assert_eq!(tracker.num_accessed_pages(), 0);
+        assert!(!tracker.page_limit_exceeded_flag().load(Ordering::Relaxed));
+    });
+}
+
+#[test]
+fn check_range_fits_counts_only_unaccessed_pages() {
+    with_accessed_page_limit(DirtyPageTracking::Track, Some(3), |tracker| {
+        // Accessed Wasm pages: {0, 2}.
+        sigsegv_wasm_page(&tracker, 0, AccessKind::Read);
+        sigsegv_wasm_page(&tracker, 2, AccessKind::Read);
+
+        // Empty ranges always fit.
+        assert!(tracker.check_range_fits(0..0));
+        assert!(tracker.check_range_fits(wasm_page_byte_range(7..7)));
+
+        // Already accessed pages do not count.
+        assert!(tracker.check_range_fits(wasm_page_byte_range(0..1)));
+        assert!(tracker.check_range_fits(wasm_page_byte_range(2..3)));
+
+        // One new page fits (2 + 1 <= 3), even in a range spanning accessed pages.
+        assert!(tracker.check_range_fits(wasm_page_byte_range(1..2)));
+        assert!(tracker.check_range_fits(wasm_page_byte_range(0..3)));
+        // A range ending on the first byte of a page does not touch that page.
+        assert!(tracker.check_range_fits(
+            (WASM_PAGE_SIZE_IN_BYTES - 1) as u64..(2 * WASM_PAGE_SIZE_IN_BYTES) as u64
+        ));
+
+        // Two new pages do not fit (2 + 2 > 3).
+        assert!(!tracker.check_range_fits(wasm_page_byte_range(0..4)));
+        assert!(!tracker.check_range_fits(wasm_page_byte_range(3..5)));
+        // Touching a single byte of each of two new pages is enough.
+        assert!(!tracker.check_range_fits(
+            (2 * WASM_PAGE_SIZE_IN_BYTES - 1) as u64..(3 * WASM_PAGE_SIZE_IN_BYTES + 1) as u64
+        ));
+
+        // Checking does not change the tracker state.
+        assert_eq!(tracker.num_accessed_pages(), 2 * OS_PAGES_IN_WASM_PAGE);
+        assert!(!tracker.page_limit_exceeded_flag().load(Ordering::Relaxed));
+
+        // After accessing the third page, only accessed pages fit.
+        assert_eq!(
+            sigsegv_wasm_page(&tracker, 1, AccessKind::Read),
+            SigsegvOutcome::Handled
+        );
+        assert!(tracker.check_range_fits(wasm_page_byte_range(0..3)));
+        assert!(!tracker.check_range_fits(wasm_page_byte_range(0..4)));
+        assert!(!tracker.check_range_fits(wasm_page_byte_range(7..8)));
+    });
+}
+
+#[test]
+fn check_range_fits_beyond_the_tracked_memory() {
+    with_accessed_page_limit(DirtyPageTracking::Track, Some(3), |tracker| {
+        sigsegv_wasm_page(&tracker, 7, AccessKind::Read);
+        // Pages beyond the tracked memory count as unaccessed (1 + 2 <= 3).
+        assert!(tracker.check_range_fits(wasm_page_byte_range(7..9)));
+        assert!(tracker.check_range_fits(wasm_page_byte_range(8..10)));
+        assert!(tracker.check_range_fits(wasm_page_byte_range(7..10)));
+        assert!(!tracker.check_range_fits(wasm_page_byte_range(7..11)));
+        assert!(!tracker.check_range_fits(wasm_page_byte_range(8..11)));
+        assert!(!tracker.check_range_fits(wasm_page_byte_range(100..103)));
+    });
+}
+
+mod count_unaccessed_wasm_pages {
+    use super::*;
+    use proptest::prelude::*;
+    use std::collections::BTreeSet;
+
+    /// Enough Wasm pages for the bitmap to span several `u32` blocks.
+    const WASM_PAGES: usize = 100;
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(512))]
+        /// The block-wise popcount agrees with counting page by page, also for
+        /// ranges that extend beyond the bitmap.
+        #[test]
+        fn matches_counting_page_by_page(
+            accessed in prop::collection::btree_set(0..WASM_PAGES, 0..WASM_PAGES),
+            (start, end) in (0..WASM_PAGES + 40)
+                .prop_flat_map(|start| (Just(start), start..=WASM_PAGES + 40)),
+        ) {
+            run_matches_counting_page_by_page(accessed, start..end);
+        }
+    }
+
+    fn run_matches_counting_page_by_page(accessed: BTreeSet<usize>, wasm_pages: Range<usize>) {
+        let (tracker, _page_map, _memory, _vec) = setup_with_accessed_page_limit(
+            0,
+            WASM_PAGES * OS_PAGES_IN_WASM_PAGE,
+            vec![],
+            DirtyPageTracking::Ignore,
+            None,
+        );
+        for page in &accessed {
+            assert_eq!(
+                sigsegv_wasm_page(&tracker, *page, AccessKind::Read),
+                SigsegvOutcome::Handled
+            );
+        }
+        let expected = wasm_pages
+            .clone()
+            .filter(|page| !accessed.contains(page))
+            .count();
+        assert_eq!(tracker.count_unaccessed_wasm_pages(wasm_pages), expected);
+    }
 }

@@ -51,10 +51,22 @@
 //! Additionally, the tracker provides a digest of the accessed and dirty
 //! pages, which can be used to verify that the same pages were accessed
 //! across different replicas.
+//!
+//! ## Accessed Page Limit
+//!
+//! Optionally, the tracker limits the number of distinct Wasm pages that may
+//! be accessed. Once the limit is reached, a signal for an unaccessed page is
+//! refused (`SigsegvOutcome::Refused`): the page is not mapped and the
+//! `page_limit_exceeded` flag is set. Writes to already accessed pages are
+//! never refused. `check_range_fits` lets the embedder check upfront whether
+//! an access to a byte range would stay within the limit.
 
 use std::cell::RefCell;
 use std::ops::Range;
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use bit_vec::BitVec;
 use ic_logger::{ReplicaLogger, debug};
@@ -65,7 +77,7 @@ use ic_types::{NumBytes, NumOsPages};
 use nix::sys::mman::{ProtFlags, mprotect};
 
 use crate::{
-    AccessKind, DirtyPageTracking, MemoryArea, MemoryLimits, MemoryTrackerMetrics,
+    AccessKind, DirtyPageTracking, MemoryArea, MemoryLimits, MemoryTrackerMetrics, SigsegvOutcome,
     apply_memory_instructions, map_unaccessed_pages, print_enomem_help, range_size_in_bytes,
     signal_mutex::SignalMutex,
 };
@@ -141,6 +153,8 @@ pub struct DeterministicState {
     accessed_wasm_pages_list: Vec<WasmPageIndex>,
     /// Number of accessed Wasm pages.
     accessed_wasm_pages_count: NumWasmPages,
+    /// Maximum number of accessed Wasm pages, if limited.
+    max_accessed_wasm_pages: Option<NumWasmPages>,
     /// A digest of accessed Wasm pages, which can be used to check for
     /// deterministic memory access across different replicas.
     #[cfg(feature = "sigsegv_handler_checksum")]
@@ -182,6 +196,7 @@ impl DeterministicState {
         let MemoryLimits {
             max_memory_size,
             max_dirty_pages,
+            max_accessed_wasm_pages,
         } = memory_limits;
 
         let num_bytes = NumBytes::from_num_os_pages(num_os_pages);
@@ -203,6 +218,7 @@ impl DeterministicState {
             accessed_wasm_pages_bitmap: BitVec::from_elem(max_wasm_pages.get(), false),
             accessed_wasm_pages_list: Vec::new(),
             accessed_wasm_pages_count: NumWasmPages::new(0),
+            max_accessed_wasm_pages,
             #[cfg(feature = "sigsegv_handler_checksum")]
             accessed_wasm_pages_digest: WasmPageIndexDigest::new(0),
             dirty_wasm_pages_bitmap: BitVec::from_elem(max_wasm_pages.get(), false),
@@ -230,6 +246,75 @@ impl DeterministicState {
         self.accessed_wasm_pages_bitmap
             .get(wasm_page_idx.get() as usize)
             .unwrap_or(false)
+    }
+
+    /// Returns true if marking the specified Wasm page as accessed would
+    /// exceed the accessed page limit. Pages that are already accessed never
+    /// exceed the limit.
+    fn exceeds_limit_if_accessed(&self, wasm_page_idx: WasmPageIndex) -> bool {
+        match self.max_accessed_wasm_pages {
+            None => false,
+            Some(limit) => {
+                self.accessed_wasm_pages_count >= limit
+                    && !self.is_wasm_page_accessed(wasm_page_idx)
+            }
+        }
+    }
+
+    /// Returns the number of Wasm pages in the specified range that are not
+    /// marked as accessed. Pages beyond the bitmap count as not accessed.
+    fn count_unaccessed_wasm_pages(&self, wasm_pages: Range<usize>) -> usize {
+        if wasm_pages.is_empty() {
+            return 0;
+        }
+        let bitmap_len = self.accessed_wasm_pages_bitmap.len();
+        let beyond_bitmap = wasm_pages
+            .end
+            .saturating_sub(wasm_pages.start.max(bitmap_len));
+        let in_bitmap = wasm_pages.start..wasm_pages.end.min(bitmap_len);
+        if in_bitmap.is_empty() {
+            return beyond_bitmap;
+        }
+
+        // Count the set bits block-wise. Bit `i` lives at bit `i % BITS` of
+        // block `i / BITS`, see `BitVec::get`.
+        let storage = self.accessed_wasm_pages_bitmap.storage();
+        const BITS: usize = u32::BITS as usize;
+        let first_block = in_bitmap.start / BITS;
+        let last_block = (in_bitmap.end - 1) / BITS;
+        let mut accessed = 0_usize;
+        for (block_idx, block) in storage[first_block..=last_block].iter().enumerate() {
+            let block_idx = first_block + block_idx;
+            let block_start = block_idx * BITS;
+            // Mask out the bits before `in_bitmap.start` and after `in_bitmap.end`.
+            let low_bits = in_bitmap.start.saturating_sub(block_start);
+            let high_bits = (block_start + BITS).saturating_sub(in_bitmap.end);
+            let mask = (u32::MAX << low_bits) & (u32::MAX >> high_bits);
+            accessed += (block & mask).count_ones() as usize;
+        }
+        (in_bitmap.end - in_bitmap.start - accessed) + beyond_bitmap
+    }
+
+    /// Returns true if accessing all pages in the specified byte range fits
+    /// within the accessed page limit.
+    fn range_fits_limit(&self, byte_range: Range<u64>) -> bool {
+        let Some(limit) = self.max_accessed_wasm_pages else {
+            return true;
+        };
+        if byte_range.is_empty() {
+            return true;
+        }
+        let wasm_page_size = WASM_PAGE_SIZE_IN_BYTES as u64;
+        let first_page = (byte_range.start / wasm_page_size) as usize;
+        let last_page = ((byte_range.end - 1) / wasm_page_size) as usize;
+        let wasm_pages = first_page..last_page + 1;
+
+        let accessed = self.accessed_wasm_pages_count.get();
+        // Fast path: even if every page in the range is new, we stay within the limit.
+        if accessed + wasm_pages.len() <= limit.get() {
+            return true;
+        }
+        accessed + self.count_unaccessed_wasm_pages(wasm_pages) <= limit.get()
     }
 
     /// Marks specified Wasm page as dirty.
@@ -325,6 +410,8 @@ pub struct DeterministicMemoryTracker {
     state: RefCell<DeterministicState>,
     page_overhead: u64,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
+    /// Set once a page was refused because of the accessed page limit.
+    page_limit_exceeded: Arc<AtomicBool>,
 }
 
 impl DeterministicMemoryTracker {
@@ -367,7 +454,7 @@ impl DeterministicMemoryTracker {
         &self,
         access_kind: Option<AccessKind>,
         faulting_address: *mut libc::c_void,
-    ) -> bool {
+    ) -> SigsegvOutcome {
         #[cfg(feature = "sigsegv_handler_checksum")]
         self.checksum.borrow_mut().record_access(
             self.memory_area.start,
@@ -379,7 +466,7 @@ impl DeterministicMemoryTracker {
         if !self.memory_area.contains(faulting_address) {
             state.non_deterministic_metrics.memory_miss += 1;
             // This memory tracker is not responsible for handling this address.
-            return false;
+            return SigsegvOutcome::NotTracked;
         };
         state.non_deterministic_metrics.memory_hit += 1;
 
@@ -388,6 +475,27 @@ impl DeterministicMemoryTracker {
 
         const READ: ProtFlags = ProtFlags::PROT_READ;
         const WRITE: ProtFlags = ProtFlags::PROT_WRITE;
+
+        // A (possible) write to an already accessed page only needs its
+        // write-protection lifted. This never maps a new page, so it is not
+        // subject to the accessed page limit.
+        if self.dirty_page_tracking == DirtyPageTracking::Track
+            && access_kind != Some(AccessKind::Read)
+            && state.try_write_protect_wasm_page(&self.memory_area, faulting_wasm_page_idx)
+        {
+            state.non_deterministic_metrics.protect_write += 1;
+            self.mark_wasm_page_dirty(state, faulting_wasm_page_idx);
+            return SigsegvOutcome::Handled;
+        }
+
+        // From here on the faulting page is unaccessed and about to be mapped.
+        if state.exceeds_limit_if_accessed(faulting_wasm_page_idx) {
+            self.page_limit_exceeded.store(true, Ordering::Relaxed);
+            self.metrics
+                .sigsegv_refused_count
+                .fetch_add(1, Ordering::Relaxed);
+            return SigsegvOutcome::Refused;
+        }
 
         match (access_kind, self.dirty_page_tracking) {
             (_, DirtyPageTracking::Ignore) => {
@@ -402,7 +510,7 @@ impl DeterministicMemoryTracker {
                 // When ignoring dirty pages, we only report accessed pages.
                 self.mark_wasm_page_accessed(state, faulting_wasm_page_idx);
             }
-            (Some(AccessKind::Read), DirtyPageTracking::Track) => {
+            (Some(AccessKind::Read) | None, DirtyPageTracking::Track) => {
                 state.map_wasm_page_as(
                     &self.page_map,
                     &self.memory_area,
@@ -414,40 +522,40 @@ impl DeterministicMemoryTracker {
                 self.mark_wasm_page_accessed(state, faulting_wasm_page_idx);
             }
             (Some(AccessKind::Write), DirtyPageTracking::Track) => {
-                if state.try_write_protect_wasm_page(&self.memory_area, faulting_wasm_page_idx) {
-                    state.non_deterministic_metrics.protect_write += 1;
-                    self.mark_wasm_page_dirty(state, faulting_wasm_page_idx);
-                } else {
-                    state.map_wasm_page_as(
-                        &self.page_map,
-                        &self.memory_area,
-                        &self.metrics,
-                        faulting_wasm_page_idx,
-                        READ | WRITE,
-                    );
-                    state.non_deterministic_metrics.map_read_write += 1;
-                    self.mark_wasm_page_accessed(state, faulting_wasm_page_idx);
-                    self.mark_wasm_page_dirty(state, faulting_wasm_page_idx);
-                }
-            }
-            (None, DirtyPageTracking::Track) => {
-                if state.try_write_protect_wasm_page(&self.memory_area, faulting_wasm_page_idx) {
-                    state.non_deterministic_metrics.protect_write += 1;
-                    self.mark_wasm_page_dirty(state, faulting_wasm_page_idx);
-                } else {
-                    state.map_wasm_page_as(
-                        &self.page_map,
-                        &self.memory_area,
-                        &self.metrics,
-                        faulting_wasm_page_idx,
-                        READ,
-                    );
-                    state.non_deterministic_metrics.map_read += 1;
-                    self.mark_wasm_page_accessed(state, faulting_wasm_page_idx);
-                }
+                state.map_wasm_page_as(
+                    &self.page_map,
+                    &self.memory_area,
+                    &self.metrics,
+                    faulting_wasm_page_idx,
+                    READ | WRITE,
+                );
+                state.non_deterministic_metrics.map_read_write += 1;
+                self.mark_wasm_page_accessed(state, faulting_wasm_page_idx);
+                self.mark_wasm_page_dirty(state, faulting_wasm_page_idx);
             }
         }
-        true
+        SigsegvOutcome::Handled
+    }
+
+    /// Returns true if accessing every byte in `byte_range` (relative to the
+    /// start of the tracked memory) fits within the accessed page limit, given
+    /// the pages accessed so far.
+    pub fn check_range_fits(&self, byte_range: Range<u64>) -> bool {
+        // SAFETY: The caller must ensure that the tracker has a deterministic state.
+        let state = &*self.state.borrow();
+        state.range_fits_limit(byte_range)
+    }
+
+    /// Returns the flag that is set once a page was refused because of the
+    /// accessed page limit. Clone the `Arc` to read the flag later without
+    /// locking the tracker.
+    pub fn page_limit_exceeded_flag(&self) -> &Arc<AtomicBool> {
+        &self.page_limit_exceeded
+    }
+
+    #[cfg(test)]
+    pub(crate) fn count_unaccessed_wasm_pages(&self, wasm_pages: Range<usize>) -> usize {
+        self.state.borrow().count_unaccessed_wasm_pages(wasm_pages)
     }
 
     /// Returns a deterministic number of accessed OS pages.
@@ -496,6 +604,7 @@ impl DeterministicMemoryTracker {
             state: RefCell::new(state),
             page_overhead,
             subtract_instruction_counter,
+            page_limit_exceeded: Arc::new(AtomicBool::new(false)),
         };
 
         let mut instructions = tracker.page_map.get_base_memory_instructions();
@@ -516,7 +625,7 @@ impl DeterministicMemoryTracker {
         &self,
         access_kind: Option<AccessKind>,
         fault_address: *mut libc::c_void,
-    ) -> bool {
+    ) -> SigsegvOutcome {
         self.metrics.sigsegv_count.fetch_add(1, Ordering::Relaxed);
         self.handle_missing_os_page(access_kind, fault_address)
     }

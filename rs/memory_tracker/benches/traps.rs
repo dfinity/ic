@@ -47,6 +47,7 @@ fn new_tracker(ptr: *mut c_void) -> DeterministicMemoryTracker {
         MemoryLimits {
             max_memory_size: NumBytes::new(WASM_PAGE_SIZE_IN_BYTES as u64),
             max_dirty_pages: NumOsPages::new((WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64),
+            max_accessed_wasm_pages: None,
         },
         /* page_overhead */ 0,
         Arc::new(SignalMutex::new(|_| {})),
