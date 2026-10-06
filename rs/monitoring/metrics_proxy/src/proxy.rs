@@ -217,8 +217,13 @@ pub struct MetricsProxier {
 
 impl From<HttpProxyTarget> for MetricsProxier {
     fn from(target: HttpProxyTarget) -> Self {
-        let client =
-            Client::builder().danger_accept_invalid_certs(target.connect_to.tolerate_bad_tls);
+        // Resolve through the system resolver (getaddrinfo) rather than hickory, which
+        // reqwest picks by default when the `hickory-dns` feature is enabled (it is, via
+        // Bazel feature unification). Hickory only queries DNS servers and so bypasses
+        // NSS modules such as `nss_icos`, which is what resolves `guestos` on the HostOS.
+        let client = Client::builder()
+            .no_hickory_dns()
+            .danger_accept_invalid_certs(target.connect_to.tolerate_bad_tls);
         MetricsProxier {
             target,
             cache: Arc::new(Mutex::new(SampleCacheStore::default())),
