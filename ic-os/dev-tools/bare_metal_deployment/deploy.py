@@ -662,9 +662,7 @@ def check_metrics_proxy_endpoint(hostos_ip: IPv6Address, path: str, metric: str)
 
 
 def check_hostos_metrics_proxy(hostos_ip: IPv6Address) -> bool:
-    # The guestos_* endpoints are chained by the HostOS metrics-proxy to the GuestOS one via the
-    # `guestos` host name, so they also cover that name resolving on the HostOS (via nss_icos).
-    # guestos_replica is not checked since the bare-metal node is not part of a subnet.
+    # Skip guestos_replica: the bare-metal node is not in a subnet.
     hostos_ok = check_metrics_proxy_endpoint(hostos_ip, "hostos_node_exporter", "hostos_version")
     guestos_ok = check_metrics_proxy_endpoint(hostos_ip, "guestos_node_exporter", "guestos_version")
     return hostos_ok and guestos_ok
