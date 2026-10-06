@@ -642,6 +642,34 @@ def benchmark_nodes(
         return True
 
 
+def check_metrics_proxy_endpoint(hostos_ip: IPv6Address, path: str, metric: str) -> bool:
+    metrics_endpoint = f"https://[{hostos_ip.exploded}]:42372/metrics/{path}"
+    log.info(f"Attempting GET on metrics-proxy at {metrics_endpoint}...")
+    metrics_output = get_url_content(metrics_endpoint, 5)
+    if not metrics_output:
+        log.warning(f"Request to {metrics_endpoint} failed.")
+        return False
+
+    try:
+        metric_line = next(
+            line for line in metrics_output.splitlines() if not line.startswith("#") and line.startswith(f"{metric}{{")
+        )
+        log.info(f"{metric} metric via metrics-proxy: {metric_line}")
+        return True
+    except StopIteration:
+        log.warning(f"{metric} metric not found at {metrics_endpoint}")
+        return False
+
+
+def check_hostos_metrics_proxy(hostos_ip: IPv6Address) -> bool:
+    # The guestos_* endpoints are chained by the HostOS metrics-proxy to the GuestOS one via the
+    # `guestos` host name, so they also cover that name resolving on the HostOS (via nss_icos).
+    # guestos_replica is not checked since the bare-metal node is not part of a subnet.
+    hostos_ok = check_metrics_proxy_endpoint(hostos_ip, "hostos_node_exporter", "hostos_version")
+    guestos_ok = check_metrics_proxy_endpoint(hostos_ip, "guestos_node_exporter", "guestos_version")
+    return hostos_ok and guestos_ok
+
+
 def check_node_hostos_metrics(bmc_info: BMCInfo):
     log.info("Checking HostOS metrics.")
 
@@ -656,6 +684,7 @@ def check_node_hostos_metrics(bmc_info: BMCInfo):
         check_hostos_power_metrics(metrics_output)
         and check_hostos_version_metrics(metrics_output)
         and check_hostos_hw_generation_metrics(metrics_output)
+        and check_hostos_metrics_proxy(bmc_info.hostos_ipv6_address)
     )
 
     return OperationResult(bmc_info, success=result)
