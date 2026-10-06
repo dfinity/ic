@@ -2,7 +2,7 @@
 # Lists the tests that flaked since the previous daily run, or just $LABEL if set, grouped by base test, as
 # the matrix of .github/workflows/schedule-fix-flaky-tests.yml. Groups that are missing at HEAD, already
 # have an open deflake PR or match a regex in $SKIP_PATTERNS (one per line) are dropped, and only the first
-# 20 of the rest are kept.
+# $MAX_TESTS (10 by default) of the rest are kept.
 #
 # Prints the groups to stdout and, when run in GitHub Actions, writes them to $GITHUB_OUTPUT as
 # `tests` and a summary to $GITHUB_STEP_SUMMARY.
@@ -10,6 +10,12 @@
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
+
+max_tests="${MAX_TESTS:-10}"
+if ! [[ "$max_tests" =~ ^[1-9][0-9]*$ ]]; then
+    echo "MAX_FLAKY_TESTS_TO_FIX must be a positive integer, not '$max_tests'." >&2
+    exit 1
+fi
 
 if [ -n "${LABEL:-}" ]; then
     labels="$LABEL"
@@ -63,7 +69,7 @@ if [ -n "$labels" ]; then
         --argjson prs "$prs" \
         --argjson trusted "$trusted" \
         --arg patterns "${SKIP_PATTERNS:-}" \
-        --argjson max_tests 20 '
+        --argjson max_tests "$max_tests" '
         def lines: gsub("\r"; "") | split("\n") | map(select(length > 0));
         # Variants of a system-test, like _local and _head_nns_farm_colocate (a bare _head_nns is a legacy
         # name), and copies of a rust_test made by rust_test_with_binary run the same test binary.
