@@ -56,9 +56,8 @@ use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
-/// Number of registry versions to add to the broken NNS before breaking it, such that the registry
-/// of the recovered NNS is at a higher version than the one of the parent NNS, which is more
-/// realistic.
+/// Number of registry versions to add to the broken NNS before breaking it, such that the original
+/// registry is at a higher version than the one of the parent NNS, which is more realistic.
 const NUM_REGISTRY_VERSION_BUMPS: usize = 5;
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 
