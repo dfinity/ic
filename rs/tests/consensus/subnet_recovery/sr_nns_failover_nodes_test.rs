@@ -86,7 +86,6 @@ pub fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     InternetComputer::new()
-        .with_name("restore")
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
@@ -97,14 +96,14 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot_by_name("broken"));
-    install_nns_and_check_progress(env.topology_snapshot_by_name("restore"));
+    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
 
     let topo_broken_ic = env.topology_snapshot_by_name("broken");
-    let topo_restore_ic = env.topology_snapshot_by_name("restore");
+    let topo_restore_ic = env.topology_snapshot();
 
     let ic_version = get_guestos_img_version();
     info!(logger, "IC_VERSION_ID: {:?}", ic_version);
