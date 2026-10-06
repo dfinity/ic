@@ -2,7 +2,7 @@
 # Lists the tests that flaked since the previous daily run, or just $LABEL if set, grouped by base test, as
 # the matrix of .github/workflows/schedule-fix-flaky-tests.yml. Groups that are missing at HEAD, already
 # have an open deflake PR or match a regex in $SKIP_PATTERNS (one per line) are dropped, and only the first
-# $MAX_FLAKY_TESTS_TO_FIX (10 by default) of the rest are kept.
+# $MAX_FLAKY_TESTS_TO_FIX of the rest are kept.
 #
 # Prints the groups to stdout and, when run in GitHub Actions, writes them to $GITHUB_OUTPUT as
 # `tests` and a summary to $GITHUB_STEP_SUMMARY.
@@ -11,9 +11,9 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-max_tests="${MAX_FLAKY_TESTS_TO_FIX:-10}"
-if ! [[ "$max_tests" =~ ^[1-9][0-9]*$ ]]; then
-    echo "MAX_FLAKY_TESTS_TO_FIX must be a positive integer, not '$max_tests'." >&2
+max_flaky_tests_to_fix="${MAX_FLAKY_TESTS_TO_FIX:?must be set to the number of tests to fix per run}"
+if ! [[ "$max_flaky_tests_to_fix" =~ ^[1-9][0-9]*$ ]]; then
+    echo "MAX_FLAKY_TESTS_TO_FIX must be a positive integer, not '$max_flaky_tests_to_fix'." >&2
     exit 1
 fi
 
@@ -69,7 +69,7 @@ if [ -n "$labels" ]; then
         --argjson prs "$prs" \
         --argjson trusted "$trusted" \
         --arg patterns "${SKIP_PATTERNS:-}" \
-        --argjson max_tests "$max_tests" '
+        --argjson max_flaky_tests_to_fix "$max_flaky_tests_to_fix" '
         def lines: gsub("\r"; "") | split("\n") | map(select(length > 0));
         # Variants of a system-test, like _local and _head_nns_farm_colocate (a bare _head_nns is a legacy
         # name), and copies of a rust_test made by rust_test_with_binary run the same test binary.
@@ -124,7 +124,7 @@ if [ -n "$labels" ]; then
         # An incident can make many tests flaky at once, like 60 on 2026-10-02, and fixing them all, 4 at a time
         # and up to 4 hours each, would keep the run busy for days.
         | [foreach .[] as $group (0; . + if $group.drop == null then 1 else 0 end;
-            if $group.drop == null and . > $max_tests then $group + {drop: "over the limit of \($max_tests) tests"} else $group end)]')"
+            if $group.drop == null and . > $max_flaky_tests_to_fix then $group + {drop: "over the limit of \($max_flaky_tests_to_fix) tests"} else $group end)]')"
 
     tests="$(jq -c 'map(select(.drop == null) | del(.missing, .drop))' <<<"$groups")"
     summary="$(jq -r '
