@@ -48,6 +48,11 @@ jobs:
     if: github.repository == 'dfinity/ic' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Only runs on master get the ANTHROPIC_API_KEY secret of this environment. The job deploys nothing, so it
+    # records no deployment.
+    environment:
+      name: fix-flaky-tests
+      deployment: false
     permissions:
       contents: read
       actions: read # for downloading the fix from the other run

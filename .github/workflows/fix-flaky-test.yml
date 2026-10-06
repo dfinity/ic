@@ -51,6 +51,11 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 240
+    # Only runs on master get the ANTHROPIC_API_KEY secret of this environment. The job deploys nothing, so it
+    # records no deployment.
+    environment:
+      name: fix-flaky-tests
+      deployment: false
     permissions:
       contents: read
       actions: read # for downloading the logs of RBE tests

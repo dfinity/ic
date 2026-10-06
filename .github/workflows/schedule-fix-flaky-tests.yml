@@ -130,6 +130,7 @@ jobs:
       ci_all_bazel_targets: ${{ matrix.test.ci_all_bazel_targets }}
       # inputs.dry_run is '' on schedule, which isn't a boolean.
       dry_run: ${{ inputs.dry_run == true }}
+    # Empty here, but a called workflow only gets the environment secrets whose names its caller passes.
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     permissions:
