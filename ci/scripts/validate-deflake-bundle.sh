@@ -50,10 +50,16 @@ while IFS= read -r -d '' path; do
 done <"$RUNNER_TEMP/deflake-paths"
 # Quoted, since paths can have any character, like a newline that starts a workflow command.
 [ ${#disallowed[@]} -eq 0 ] || die "the fix changes disallowed files:$(printf ' %q' "${disallowed[@]}")"
-raw="$(git diff --no-renames --raw "$BASE_SHA" "$fix")"
+raw="$(git diff --no-renames --raw --no-abbrev "$BASE_SHA" "$fix")"
 if awk '$1 ~ /^:(120000|160000)$/ || $2 == "120000" || $2 == "160000" {bad = 1} END {exit !bad}' <<<"$raw"; then
     die "the fix changes a symlink or submodule"
 fi
+max_bytes=1000000
+# The files can be arbitrarily large, so their sizes are checked from the object headers before anything reads them.
+# The diff has at least as many bytes as the files grow, so a fix that grows them by more would fail its limit anyway.
+growth="$(awk '{print $3; print $4}' <<<"$raw" | git cat-file --batch-check='%(objectsize)' \
+    | awk '{size = ($2 == "missing") ? 0 : $1} NR % 2 {old = size; next} size > old {growth += size - old} END {print growth + 0}')"
+[ "$growth" -le "$max_bytes" ] || die "the fix grows its files by $growth bytes"
 "$(dirname "$0")/validate-deflake-dependencies.py" "$BASE_SHA" "$fix" || die "the fix changes dependencies beyond adding or removing workspace dependencies"
 numstat="$(git diff --no-renames --numstat "$BASE_SHA" "$fix")"
 if grep -q $'^-\t-\t' <<<"$numstat"; then
@@ -63,7 +69,7 @@ changed="$(awk '{n += $1 + $2} END {print n + 0}' <<<"$numstat")"
 [ "$changed" -le 1000 ] || die "the fix changes $changed lines"
 # Lines can be arbitrarily long.
 bytes="$(git diff --no-renames "$BASE_SHA" "$fix" | wc -c | tr -d ' ')"
-[ "$bytes" -le 1000000 ] || die "the diff of the fix has $bytes bytes"
+[ "$bytes" -le "$max_bytes" ] || die "the diff of the fix has $bytes bytes"
 
 author='claude[bot]'
 email='209825114+claude[bot]@users.noreply.github.com'

@@ -955,6 +955,21 @@ class BundleTest(ValidatorTest):
                 long = files | {"rs/alpha/src/line.rs": "x" * (n + 1) + "\n"}
                 self.assert_rejected("the diff of the fix has 1000001 bytes", long)
 
+    def test_limits_the_growth_before_reading_the_files(self):
+        huge = "x" * 1_000_000 + "\n"
+        self.assert_rejected("the fix grows its files by 1000001 bytes", {"rs/alpha/src/huge.rs": huge})
+        halves = {"rs/alpha/src/a.rs": huge[500_000:], "rs/alpha/src/b.rs": huge[500_000:]}
+        self.assert_rejected("the fix grows its files by 1000002 bytes", halves)
+        # Shrinking a file doesn't make up for it, since the diff has its deleted lines too.
+        shrunk = {"rs/alpha/src/big.rs": None, "rs/alpha/src/huge.rs": huge}
+        self.assert_rejected("the fix grows its files by 1000001 bytes", shrunk)
+        # Before the dependency checks parse Cargo.lock.
+        lockfile = {"Cargo.lock": BASE_FILES["Cargo.lock"] + "#" + huge}
+        self.assert_rejected("the fix grows its files by 1000002 bytes", lockfile)
+        # Then the diff, with its headers and the + of each line, is over the limit.
+        exact = {"rs/alpha/src/huge.rs": huge[1:]}
+        self.assert_rejected(f"the diff of the fix has {self.diff_bytes(exact)} bytes", exact)
+
     def test_rejects_bundles_of_other_commits(self):
         self.assert_rejected(f"the bundle doesn't build on {self.base}", base=self.root)
         for index in [1, 2]:
