@@ -310,8 +310,10 @@ impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
         }
 
         if self.is_running() {
+            // This should never happen: the second `self.wait_for_exit` above should have returned
+            // `false` and thus return at that point.
             return Err(std::io::Error::other(format!(
-                "{} process is still running after stop()",
+                "{} process is still running after stop(). This is a bug.",
                 P::NAME
             )));
         }
