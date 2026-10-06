@@ -69,11 +69,11 @@ fn smoke_test() {
 
 /// Rosetta exits when it can't reach the replica while initializing, before
 /// it writes its port file. Starting it against a port nothing listens on must
-/// therefore fail with a descriptive panic after a bounded number of attempts
-/// instead of waiting for the port file forever, which used to hang the
-/// system tests until the bazel timeout.
+/// therefore fail with a descriptive panic once `MAX_START_ATTEMPTS` or
+/// `START_TIMEOUT` is exhausted, instead of waiting for the port file forever,
+/// which used to hang the system tests until the bazel timeout.
 #[test]
-#[should_panic(expected = "Failed to start Rosetta after")]
+#[should_panic(expected = "Failed to start Rosetta")]
 fn start_rosetta_fails_fast_when_the_replica_is_unreachable() {
     let rt = Runtime::new().unwrap();
     let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
