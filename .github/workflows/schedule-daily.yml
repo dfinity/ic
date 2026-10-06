@@ -103,6 +103,7 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
+              --config=flaky_retry \
               --test_tag_filters=nns_tests_nightly \
               //... \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
