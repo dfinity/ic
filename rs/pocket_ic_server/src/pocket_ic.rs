@@ -2142,7 +2142,8 @@ impl PocketIcSubnets {
             //           };
             //         };
             //       };
-            //       notifications_enabled_origins = null;
+            //       notifications_allow_insecure_endpoint = null;
+            //       notifications_enabled = opt true;
             //       archive_config = opt record {
             //         polling_interval_ns = 15_000_000_000 : nat64;
             //         entries_buffer_limit = 10_000 : nat64;
@@ -2260,6 +2261,7 @@ impl PocketIcSubnets {
                 openid_configs: openid_google, // DIFFERENT FROM ICP MAINNET
                 sso_allow_insecure_discovery: None,
                 notifications_allow_insecure_sender_list: None,
+                notifications_allow_insecure_endpoint: None,
                 analytics_config: None, // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
@@ -2270,7 +2272,7 @@ impl PocketIcSubnets {
                 dnssec_config: None,                // DIFFERENT FROM ICP MAINNET
                 doh_config: None,                   // DIFFERENT FROM ICP MAINNET
                 mcp_official_url: None,             // DIFFERENT FROM ICP MAINNET
-                notifications_enabled_origins: None,
+                notifications_enabled: None,        // DIFFERENT FROM ICP MAINNET
             });
             ii_subnet
                 .state_machine
