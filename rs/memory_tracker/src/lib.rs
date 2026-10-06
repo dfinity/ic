@@ -1,5 +1,5 @@
 use ic_replicated_state::{
-    PageIndex, PageMap,
+    NumWasmPages, PageIndex, PageMap,
     page_map::{FileDescriptor, MemoryInstructions},
 };
 use ic_sys::PAGE_SIZE;
@@ -79,6 +79,24 @@ pub use deterministic::DeterministicMemoryTracker;
 pub struct MemoryLimits {
     pub max_memory_size: NumBytes,
     pub max_dirty_pages: NumOsPages,
+    /// Maximum number of distinct Wasm pages that may be accessed during a
+    /// single execution. The tracker refuses to map the first page beyond the
+    /// limit (see `SigsegvOutcome::Refused`). `None` disables the limit.
+    pub max_accessed_wasm_pages: Option<NumWasmPages>,
+}
+
+/// The result of handling a missing page signal.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum SigsegvOutcome {
+    /// The faulting page was mapped (or write-protection was lifted) and the
+    /// faulting instruction can be resumed.
+    Handled,
+    /// The faulting address belongs to the tracked memory, but mapping the page
+    /// would exceed `MemoryLimits::max_accessed_wasm_pages`. Nothing was
+    /// mapped; resuming the faulting instruction would fault again.
+    Refused,
+    /// The faulting address is outside of the tracked memory area.
+    NotTracked,
 }
 
 /// Specifies whether the currently running message execution needs to know
@@ -101,6 +119,7 @@ pub enum AccessKind {
 #[derive(Default)]
 pub struct MemoryTrackerMetrics {
     sigsegv_count: AtomicUsize,
+    sigsegv_refused_count: AtomicUsize,
     mmap_count: AtomicUsize,
     mprotect_count: AtomicUsize,
     copy_page_count: AtomicUsize,
@@ -110,6 +129,11 @@ pub struct MemoryTrackerMetrics {
 impl MemoryTrackerMetrics {
     pub fn sigsegv_count(&self) -> usize {
         self.sigsegv_count.load(Ordering::Relaxed)
+    }
+
+    /// The number of signals that were refused because of the accessed page limit.
+    pub fn sigsegv_refused_count(&self) -> usize {
+        self.sigsegv_refused_count.load(Ordering::Relaxed)
     }
 
     pub fn mmap_count(&self) -> usize {
