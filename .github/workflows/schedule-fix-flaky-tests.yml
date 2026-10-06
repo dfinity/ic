@@ -111,7 +111,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           LABEL: ${{ inputs.label }}
           SKIP_PATTERNS: ${{ vars.FIX_FLAKY_TESTS_SKIP_PATTERNS }}
-          MAX_TESTS: ${{ vars.MAX_FLAKY_TESTS_TO_FIX }}
+          MAX_FLAKY_TESTS_TO_FIX: ${{ vars.MAX_FLAKY_TESTS_TO_FIX }}
         run: ci/scripts/find-flaky-tests.sh
 
   fix:

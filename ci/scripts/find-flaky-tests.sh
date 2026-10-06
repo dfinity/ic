@@ -2,7 +2,7 @@
 # Lists the tests that flaked since the previous daily run, or just $LABEL if set, grouped by base test, as
 # the matrix of .github/workflows/schedule-fix-flaky-tests.yml. Groups that are missing at HEAD, already
 # have an open deflake PR or match a regex in $SKIP_PATTERNS (one per line) are dropped, and only the first
-# $MAX_TESTS (10 by default) of the rest are kept.
+# $MAX_FLAKY_TESTS_TO_FIX (10 by default) of the rest are kept.
 #
 # Prints the groups to stdout and, when run in GitHub Actions, writes them to $GITHUB_OUTPUT as
 # `tests` and a summary to $GITHUB_STEP_SUMMARY.
@@ -11,7 +11,7 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
-max_tests="${MAX_TESTS:-10}"
+max_tests="${MAX_FLAKY_TESTS_TO_FIX:-10}"
 if ! [[ "$max_tests" =~ ^[1-9][0-9]*$ ]]; then
     echo "MAX_FLAKY_TESTS_TO_FIX must be a positive integer, not '$max_tests'." >&2
     exit 1
