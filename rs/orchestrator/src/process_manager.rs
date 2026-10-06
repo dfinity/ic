@@ -174,11 +174,8 @@ impl<P: Process> SingleProcessRunner<P> {
     fn set_running(&self, pid: Pid, process: P) {
         let mut running = self.running_cell.running.lock().unwrap();
         let process = Arc::new(process);
-        if let Some(old_running) = running.replace(Running { pid, process }) {
-            warn!(
-                self.log,
-                "Process is still running! Old pid: {}, new pid: {}", old_running.pid, pid
-            );
+        if running.replace(Running { pid, process }).is_some() {
+            panic!("Process is still running!");
         }
     }
 
