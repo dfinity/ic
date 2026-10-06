@@ -462,12 +462,11 @@ impl Upgrade {
         );
         let downloader = FileDownloader::new(Some(self.logger.clone()));
         let local_store_location = tempfile::tempdir()
-            .expect("temporary location for local store download could not be created")
-            .keep();
+            .expect("temporary location for local store download could not be created");
         downloader
             .download_and_extract_tar(
                 &registry_store_uri.uri,
-                &local_store_location,
+                local_store_location.path(),
                 Some(registry_store_uri.hash),
             )
             .await
@@ -480,7 +479,7 @@ impl Upgrade {
             // replace the registry local store, so we simply issue a warning.
             warn!(self.logger, "Failed to stop children with error {:?}", e);
         }
-        let new_local_store = LocalStoreImpl::new(local_store_location);
+        let new_local_store = LocalStoreImpl::new(local_store_location.path());
         self.registry_replicator
             .stop_polling_and_set_local_registry_data(&new_local_store)
             .await;
