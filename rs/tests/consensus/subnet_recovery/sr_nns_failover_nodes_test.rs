@@ -62,7 +62,6 @@ const SUBNET_SIZE: usize = 4;
 /// This better simulates a real recovery scenario, where the registry of the recovered NNS is at a
 /// higher version than the one of the parent NNS.
 const NUM_REGISTRY_VERSION_BUMPS: usize = 5;
-// const NUM_REGISTRY_VERSION_BUMPS: usize = 0;
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 
 fn main() -> Result<()> {
