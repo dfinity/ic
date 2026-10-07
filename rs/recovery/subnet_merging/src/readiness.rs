@@ -141,7 +141,7 @@ pub async fn evaluate_merge_readiness(
             &metrics,
             METRIC_REGISTRY_VERSION,
             |_| true,
-            node_ips.len(),
+            node_ips,
         )
         .unwrap_or(0.0);
         min_registry_version = Some(min_registry_version.map_or(version, |v: f64| v.min(version)));

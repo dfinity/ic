@@ -64,7 +64,7 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_registry_subnet_type::SubnetType;
-use ic_subnet_merging::metrics_helper::{fetch_metrics, min_across_replicas};
+use ic_subnet_merging::metrics_helper::{fetch_metrics, min_sum_across_replicas};
 use ic_subnet_merging::readiness::{
     Condition, METRIC_SUBNET_CALL_CONTEXTS, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, SubnetNodeIps,
     Term, evaluate_merge_readiness,
@@ -609,28 +609,19 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
                 ],
             )
             .await?;
-            // The minimum across all replicas, so that the requests are known to
-            // be inducted on every replica.
-            let enqueued = min_across_replicas(
-                &metrics,
-                METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
-                |labels| labels.get("kind").is_some_and(|kind| kind == "canister"),
-                node_ips.len(),
-            )
+            // Sum the phases on each replica before taking the minimum: a
+            // request may still be queued on one replica and executing on another.
+            let inducted = min_sum_across_replicas(&metrics, &node_ips, |name, labels| {
+                (name == METRIC_SUBNET_INPUT_QUEUE_MESSAGES
+                    && labels.get("kind").is_some_and(|kind| kind == "canister"))
+                    || (name == METRIC_SUBNET_CALL_CONTEXTS
+                        && labels
+                            .get("type")
+                            .is_some_and(|ty| ty == LABEL_INSTALL_CODE))
+            })
             .unwrap_or(0.0);
-            let executing = min_across_replicas(
-                &metrics,
-                METRIC_SUBNET_CALL_CONTEXTS,
-                |labels| {
-                    labels
-                        .get("type")
-                        .is_some_and(|ty| ty == LABEL_INSTALL_CODE)
-                },
-                node_ips.len(),
-            )
-            .unwrap_or(0.0);
-            if enqueued + executing < expected {
-                bail!("{enqueued} request(s) enqueued and {executing} executing");
+            if inducted < expected {
+                bail!("at least {inducted} request(s) inducted per replica; expected {expected}");
             }
             Ok(())
         }

@@ -18,8 +18,8 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 pub type Labels = BTreeMap<String, String>;
 
 /// The metrics of a set of nodes, keyed by series (i.e. metric name plus
-/// labels), with one value per node reporting the series.
-pub type Metrics = BTreeMap<(String, Labels), Vec<f64>>;
+/// labels), with values keyed by the IP of each node reporting the series.
+pub type Metrics = BTreeMap<(String, Labels), BTreeMap<IpAddr, f64>>;
 
 /// The nodes whose metrics could not be scraped, with the reason for each.
 #[derive(Debug)]
@@ -61,7 +61,7 @@ pub async fn fetch_metrics(node_ips: &[IpAddr], metrics: &[&str]) -> Result<Metr
         match body {
             Ok(body) => {
                 for (series, value) in parse_metrics(&body, metrics) {
-                    result.entry(series).or_default().push(value);
+                    result.entry(series).or_default().insert(*ip, value);
                 }
             }
             Err(reason) => failures.push((*ip, reason)),
@@ -123,7 +123,7 @@ pub fn matching_series<'a>(
     metrics: &'a Metrics,
     metric: &str,
     labels_match: impl Fn(&Labels) -> bool,
-) -> Vec<&'a Vec<f64>> {
+) -> Vec<&'a BTreeMap<IpAddr, f64>> {
     metrics
         .iter()
         .filter(|((name, labels), _)| name == metric && labels_match(labels))
@@ -144,35 +144,119 @@ pub fn max_across_replicas(
 ) -> Option<f64> {
     matching_series(metrics, metric, labels_match)
         .into_iter()
-        .flatten()
+        .flat_map(|values| values.values())
         .copied()
         .reduce(f64::max)
 }
 
-/// The smallest value any of `replicas` replicas reports for any series of
-/// `metric` whose labels match `labels_match`. `None` if fewer than `replicas`
-/// values are reported, i.e. if a replica does not export the series: unlike
-/// `max_across_replicas`, a minimum that has to hold on every replica is only
-/// meaningful once every one of them reports.
+/// The smallest matching value across the given replicas. Returns `None` if
+/// any replica reports no matching series, or if `replicas` is empty.
+/// Multiple series reported by one node cannot stand in for another node.
 pub fn min_across_replicas(
     metrics: &Metrics,
     metric: &str,
     labels_match: impl Fn(&Labels) -> bool,
-    replicas: usize,
+    replicas: &[IpAddr],
 ) -> Option<f64> {
-    let values: Vec<f64> = matching_series(metrics, metric, labels_match)
-        .into_iter()
-        .flatten()
-        .copied()
+    let series = matching_series(metrics, metric, labels_match);
+    let minima: Option<Vec<f64>> = replicas
+        .iter()
+        .map(|ip| {
+            series
+                .iter()
+                .filter_map(|values| values.get(ip))
+                .copied()
+                .reduce(f64::min)
+        })
         .collect();
-    (values.len() >= replicas)
-        .then(|| values.into_iter().reduce(f64::min))
-        .flatten()
+    minima?.into_iter().reduce(f64::min)
+}
+
+/// Sums the selected series separately for each replica, then returns the
+/// smallest total. Missing series contribute zero; an empty replica list
+/// returns `None`. This preserves totals when replicas observe items in
+/// different phases (e.g. queued on one replica and executing on another).
+pub fn min_sum_across_replicas(
+    metrics: &Metrics,
+    replicas: &[IpAddr],
+    series_match: impl Fn(&str, &Labels) -> bool,
+) -> Option<f64> {
+    let series: Vec<_> = metrics
+        .iter()
+        .filter(|((name, labels), _)| series_match(name, labels))
+        .map(|(_, values)| values)
+        .collect();
+    replicas
+        .iter()
+        .map(|ip| {
+            series
+                .iter()
+                .filter_map(|values| values.get(ip))
+                .sum::<f64>()
+        })
+        .reduce(f64::min)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn ip(node: u8) -> IpAddr {
+        IpAddr::from([127, 0, 0, node])
+    }
+
+    fn values(entries: &[(u8, f64)]) -> BTreeMap<IpAddr, f64> {
+        entries
+            .iter()
+            .map(|&(node, value)| (ip(node), value))
+            .collect()
+    }
+
+    #[test]
+    fn minimum_requires_each_replica_to_report() {
+        let metrics = Metrics::from([
+            (series("m", &[("kind", "a")]), values(&[(1, 5.0)])),
+            (series("m", &[("kind", "b")]), values(&[(1, 6.0)])),
+        ]);
+        assert_eq!(
+            min_across_replicas(&metrics, "m", |_| true, &[ip(1), ip(2)]),
+            None
+        );
+        assert_eq!(
+            min_across_replicas(&metrics, "m", |_| true, &[ip(1)]),
+            Some(5.0)
+        );
+        assert_eq!(min_across_replicas(&metrics, "m", |_| true, &[]), None);
+    }
+
+    #[test]
+    fn sums_phases_before_taking_minimum() {
+        let metrics = Metrics::from([
+            (
+                series("queued", &[("kind", "canister")]),
+                values(&[(1, 5.0), (2, 4.0)]),
+            ),
+            // A missing executing series on node 1 contributes zero.
+            (series("executing", &[]), values(&[(2, 1.0)])),
+            (
+                series("queued", &[("kind", "ingress")]),
+                values(&[(1, 100.0), (2, 100.0)]),
+            ),
+        ]);
+        let selected = |name: &str, labels: &Labels| {
+            name == "executing"
+                || (name == "queued" && labels.get("kind").is_some_and(|kind| kind == "canister"))
+        };
+        assert_eq!(
+            min_sum_across_replicas(&metrics, &[ip(1), ip(2)], selected),
+            Some(5.0)
+        );
+        assert_eq!(
+            min_sum_across_replicas(&metrics, &[ip(1), ip(2), ip(3)], selected),
+            Some(0.0)
+        );
+        assert_eq!(min_sum_across_replicas(&metrics, &[], selected), None);
+    }
 
     fn series(metric: &str, labels: &[(&str, &str)]) -> (String, Labels) {
         let labels = labels
@@ -228,10 +312,16 @@ some_other_metric 12
         let metrics = Metrics::from([
             (
                 series("mr_stream_messages", &[("remote", "a")]),
-                vec![1.0, 3.0],
+                values(&[(1, 1.0), (2, 3.0)]),
             ),
-            (series("mr_stream_messages", &[("remote", "b")]), vec![5.0]),
-            (series("mr_stream_messages_total", &[]), vec![100.0]),
+            (
+                series("mr_stream_messages", &[("remote", "b")]),
+                values(&[(1, 5.0)]),
+            ),
+            (
+                series("mr_stream_messages_total", &[]),
+                values(&[(1, 100.0)]),
+            ),
         ]);
 
         assert_eq!(
@@ -249,16 +339,21 @@ some_other_metric 12
             None
         );
         assert_eq!(
-            min_across_replicas(&metrics, "mr_stream_messages", |_| true, 3),
+            min_across_replicas(&metrics, "mr_stream_messages", |_| true, &[ip(1), ip(2)]),
             Some(1.0)
         );
         assert_eq!(
-            min_across_replicas(&metrics, "mr_stream_messages", |_| true, 4),
+            min_across_replicas(
+                &metrics,
+                "mr_stream_messages",
+                |_| true,
+                &[ip(1), ip(2), ip(3)]
+            ),
             None,
             "a replica that does not report the series must not be skipped"
         );
         assert_eq!(
-            min_across_replicas(&metrics, "mr_registry_version", |_| true, 0),
+            min_across_replicas(&metrics, "mr_registry_version", |_| true, &[]),
             None
         );
     }
