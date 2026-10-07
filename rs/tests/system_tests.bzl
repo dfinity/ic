@@ -306,6 +306,7 @@ def system_test(
         _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "//rs/tests:prometheus_vm_img"
 
     _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "@dnsmasq//:dnsmasq"
+    _local_only_deps["ENV_DEPS__NTP_DAEMON_PATH"] = "//:ntp_daemon"
     _local_only_deps["ENV_DEPS__QEMU_IMG_PATH"] = "@qemu_img_prebuilt_linux_amd64//:qemu-img"
     _local_only_deps["ENV_DEPS__QEMU_SYSTEM_X86_64_PATH"] = "@qemu_system_bin_prebuilt_linux_amd64_x86_64_softmmu//:qemu-system-x86_64"
     _local_only_deps["ENV_DEPS__QEMU_SYSTEM_DATA_PATH"] = "@qemu_system_data_prebuilt_linux_amd64//:qemu-system-data"
@@ -316,11 +317,12 @@ def system_test(
     _local_only_deps["ENV_DEPS__OVMF_CODE_PATH"] = "//:OVMF_CODE_4M.fd"
     _local_only_deps["ENV_DEPS__OVMF_VARS_PATH"] = "//:OVMF_VARS_4M.fd"
 
-    # The dev root CA, which the local backend's ic-gateway uses to issue its TLS
-    # certificate: every dev IC-OS image installs this CA into
-    # /usr/local/share/ca-certificates in the `output_dev` stage of the GuestOS and
-    # HostOS Dockerfiles, so a node trusts the gateway with no node-side config.
-    # See `IcGatewayVm::load_or_create_local_playnet`.
+    # The dev root CA, from which the local backend issues the TLS certificates of
+    # its ic-gateway and its time server: every dev IC-OS image installs this CA
+    # into /usr/local/share/ca-certificates in the `output_dev` stage of the
+    # GuestOS and HostOS Dockerfiles, so a node trusts both with no node-side
+    # config. See `IcGatewayVm::load_or_create_local_playnet` and
+    # `LocalBackend::start_time_server`.
     #
     # Local-only on purpose. The Farm backend uses a playnet certificate and never
     # reads these, and a runtime dep reaches *every* variant's runfiles -- which for
