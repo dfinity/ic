@@ -2853,10 +2853,12 @@ fn consumed_cycles_total_calculates_the_right_amount() {
 /// missing contribution is always detectable in the total.
 #[test]
 fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
-    // `DeletedCanisters` is also mirrored by the dedicated
-    // `consumed_cycles_by_deleted_canisters` scalar field (as it is in
-    // production), while the remaining subnet-level use cases live only in the
-    // map.
+    // `DeletedCanisters` (the leftover balances of deleted canisters) is already
+    // included in the `consumed_cycles_by_deleted_canisters` scalar below, which
+    // additionally covers the cycles those canisters had consumed; so the gauge
+    // counts the scalar and skips this entry. Both are set to 1 here, as for a
+    // deleted canister that consumed nothing and had 1 cycle left. The remaining
+    // subnet-level use cases live only in the map.
     let mut consumed_cycles_by_use_case = BTreeMap::new();
     consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
     consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(2));
