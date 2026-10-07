@@ -2823,12 +2823,6 @@ pub async fn install_nns_canisters(
             builder.enable_swapping_feature_for_subnet(subnet);
         }
         if registry_canister_init_payload
-            .is_blank_replica_version_id_for_cloud_engines_enabled
-            .unwrap_or_default()
-        {
-            builder.enable_blank_replica_version_id_for_cloud_engines();
-        }
-        if registry_canister_init_payload
             .is_subnet_splitting_enabled
             .unwrap_or_default()
         {
