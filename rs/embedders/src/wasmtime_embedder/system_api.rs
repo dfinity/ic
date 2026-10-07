@@ -4359,6 +4359,7 @@ impl SystemApi for SystemApiImpl {
 
         let mut decoder_config = DecoderConfig::new();
         decoder_config.set_skipping_quota(MAX_COST_HTTP_REQUEST_V2_SKIPPING_QUOTA);
+        decoder_config.set_full_error_message(false);
 
         let cost_params_v2: CostHttpRequestV2Params =
             decode_one_with_config(params_bytes, &decoder_config).map_err(|e| {
