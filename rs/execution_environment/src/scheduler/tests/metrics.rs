@@ -1894,9 +1894,14 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
 
         let removed_cycles =
             CompoundCycles::<Instructions>::new(Cycles::from(1000_u128), cost_schedule);
-        test.canister_state_mut(canister_id)
-            .system_state
-            .consume_cycles(removed_cycles);
+        let system_state = &mut test.canister_state_mut(canister_id).system_state;
+        system_state.consume_cycles(removed_cycles);
+        // Settle the prepayment with a zero refund, as finishing the execution would,
+        // so that the cycles count as actually consumed.
+        system_state.refund_cycles(
+            removed_cycles,
+            CompoundCycles::<Instructions>::new(Cycles::zero(), cost_schedule),
+        );
 
         observe_state_metrics(&mut test, 0);
 
@@ -1999,9 +2004,14 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
 
         let removed_cycles =
             CompoundCycles::<Instructions>::new(Cycles::from(1000_u128), cost_schedule);
-        test.canister_state_mut(canister_id)
-            .system_state
-            .consume_cycles(removed_cycles);
+        let system_state = &mut test.canister_state_mut(canister_id).system_state;
+        system_state.consume_cycles(removed_cycles);
+        // Settle the prepayment with a zero refund, as finishing the execution would,
+        // so that the cycles count as actually consumed.
+        system_state.refund_cycles(
+            removed_cycles,
+            CompoundCycles::<Instructions>::new(Cycles::zero(), cost_schedule),
+        );
 
         test.inject_call_to_ic00(
             Method::DeleteCanister,
