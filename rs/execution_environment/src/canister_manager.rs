@@ -1261,9 +1261,14 @@ impl CanisterManager {
         for (use_case, cycles) in canister_to_delete
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases()
+            .consumed_cycles_by_use_cases_monotonic()
             .iter()
         {
+            // HTTPS outcalls are already recorded at the subnet level when they are
+            // charged, so adding the canister's share again would double count them.
+            if *use_case == CyclesUseCase::HTTPOutcalls {
+                continue;
+            }
             state
                 .metadata
                 .subnet_metrics
