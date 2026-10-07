@@ -1794,15 +1794,6 @@ fn outcalls_cycles_are_migrated_into_use_cases_on_an_idle_subnet() {
         by_use_case[&CyclesUseCase::ECDSAOutcalls],
         NominalCycles::new(200)
     );
-
-    // The monotonic counters map is left untouched, so no spurious counter jump.
-    assert!(
-        test.state()
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_by_use_case_monotonic()
-            .is_empty()
-    );
 }
 
 #[test]

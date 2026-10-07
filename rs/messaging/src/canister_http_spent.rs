@@ -679,9 +679,9 @@ mod tests {
         subnet_consumed_for(state, CyclesUseCase::DeletedCanisters)
     }
 
-    /// The cycles reported as consumed for `use_case` at the subnet level, both in
-    /// the by-use-case gauge and counter maps (which must agree). For the use cases
-    /// that also have a dedicated field, that field must agree, too.
+    /// The cycles reported as consumed for `use_case` at the subnet level, in the
+    /// by-use-case map. For the use cases that also have a dedicated field, that
+    /// field must agree, too.
     fn subnet_consumed_for(state: &ReplicatedState, use_case: CyclesUseCase) -> u128 {
         let subnet_metrics = &state.metadata.subnet_metrics;
         let get = |map: &BTreeMap<CyclesUseCase, NominalCycles>| {
@@ -690,10 +690,6 @@ mod tests {
                 .unwrap_or_else(NominalCycles::zero)
         };
         let gauge = get(subnet_metrics.get_consumed_cycles_by_use_case());
-        assert_eq!(
-            gauge,
-            get(subnet_metrics.get_consumed_cycles_by_use_case_monotonic())
-        );
         match use_case {
             CyclesUseCase::HTTPOutcalls => {
                 assert_eq!(gauge, subnet_metrics.get_consumed_cycles_http_outcalls())

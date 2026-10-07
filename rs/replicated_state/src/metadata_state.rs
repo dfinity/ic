@@ -453,7 +453,6 @@ pub struct SubnetMetrics {
     consumed_cycles_http_outcalls: NominalCycles,
     consumed_cycles_ecdsa_outcalls: NominalCycles,
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
-    consumed_cycles_by_use_case_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
     pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
     pub num_canisters: u64,
@@ -487,10 +486,6 @@ impl SubnetMetrics {
         }
         *self
             .consumed_cycles_by_use_case
-            .entry(use_case)
-            .or_insert_with(NominalCycles::zero) += cycles;
-        *self
-            .consumed_cycles_by_use_case_monotonic
             .entry(use_case)
             .or_insert_with(NominalCycles::zero) += cycles;
     }
@@ -546,10 +541,6 @@ impl SubnetMetrics {
     /// the same amount: `max(entry, scalar) + delta == max(entry + delta, scalar
     /// + delta)`. It is also idempotent, so extra invocations are harmless.
     ///
-    /// Only the `consumed_cycles_by_use_case` map is migrated; the monotonic
-    /// `consumed_cycles_by_use_case_monotonic` map is intentionally left
-    /// untouched (backfilling it would introduce a spurious counter jump).
-    ///
     /// The scalar fields are intentionally kept (and kept up to date) rather
     /// than zeroed, even though nothing reads their value anymore (all readers
     /// go through `consumed_cycles_by_use_case`), so that downgrading to an
@@ -604,12 +595,6 @@ impl SubnetMetrics {
 
     pub fn get_consumed_cycles_by_use_case(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_case
-    }
-
-    pub fn get_consumed_cycles_by_use_case_monotonic(
-        &self,
-    ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
-        &self.consumed_cycles_by_use_case_monotonic
     }
 
     /// Computes the subnet-level aggregate of the consumed cycles, i.e. the part
