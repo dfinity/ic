@@ -26,7 +26,7 @@ use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
-    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec,
+    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, labels,
     metric_vec, nonzero_values,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
@@ -44,7 +44,6 @@ use ic_types_cycles::{
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
-use std::collections::BTreeMap;
 use std::time::Duration;
 
 /// Observes the state metrics at `height`, having first refreshed the derived
@@ -1475,16 +1474,30 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
 
         let removed_cycles =
             CompoundCycles::<Instructions>::new(Cycles::from(1000_u128), cost_schedule);
-        let system_state = &mut test.canister_state_mut(canister_id).system_state;
-        system_state.consume_cycles(removed_cycles);
-        // Settle the prepayment with a zero refund, as finishing the execution would,
-        // so that the cycles count as actually consumed.
-        system_state.refund_cycles(
-            removed_cycles,
-            CompoundCycles::<Instructions>::new(Cycles::zero(), cost_schedule),
+        test.canister_state_mut(canister_id)
+            .system_state
+            .consume_cycles(removed_cycles);
+
+        // As long as the prepayment is outstanding, nothing counts as consumed yet.
+        observe_state_metrics(&mut test, 0);
+        assert_eq!(
+            fetch_gauge_vec(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_from_replica_start",
+            ),
+            metric_vec(&[(&[("use_case", "Instructions")], 0.0)]),
         );
 
-        observe_state_metrics(&mut test, 0);
+        // Settle the prepayment with a zero refund, as finishing the execution would,
+        // so that the cycles count as actually consumed.
+        test.canister_state_mut(canister_id)
+            .system_state
+            .refund_cycles(
+                removed_cycles,
+                CompoundCycles::<Instructions>::new(Cycles::zero(), cost_schedule),
+            );
+
+        observe_state_metrics(&mut test, 1);
 
         assert_eq!(
             fetch_gauge_vec(
@@ -1671,30 +1684,22 @@ fn http_outcalls_consumed_cycles_are_not_double_counted_on_canister_deletion() {
 
     observe_state_metrics(&mut test, 0);
 
-    // The subnet-level `HTTPOutcalls` entries still hold just the outcall above.
+    // The subnet-level `HTTPOutcalls` entry still holds just the outcall above.
     let subnet_metrics = &test.state().metadata.subnet_metrics;
     assert_eq!(subnet_metrics.get_consumed_cycles_http_outcalls(), outcalls);
-    assert_eq!(
-        subnet_metrics
-            .get_consumed_cycles_by_use_case()
-            .get(&CyclesUseCase::HTTPOutcalls),
-        Some(&outcalls)
-    );
     // The deletion only adds the canister's leftover balance to the total.
     assert_eq!(
         subnet_metrics.consumed_cycles_total_including_canisters(),
         total_before + NominalCycles::new(leftover_cycles.get())
     );
     // And the exported metrics report the outcall once.
+    let http_outcalls = labels(&[("use_case", "HTTPOutcalls")]);
     assert_eq!(
         fetch_gauge_vec(
             test.metrics_registry(),
             "replicated_state_consumed_cycles_from_replica_start",
         )
-        .get(&BTreeMap::from([(
-            "use_case".to_string(),
-            "HTTPOutcalls".to_string()
-        )])),
+        .get(&http_outcalls),
         Some(&(outcalls.get() as f64))
     );
     assert_eq!(
@@ -1702,10 +1707,7 @@ fn http_outcalls_consumed_cycles_are_not_double_counted_on_canister_deletion() {
             test.metrics_registry(),
             "replicated_state_consumed_cycles_from_replica_start_as_counters",
         )
-        .get(&BTreeMap::from([(
-            "use_case".to_string(),
-            "HTTPOutcalls".to_string()
-        )])),
+        .get(&http_outcalls),
         Some(&(outcalls.get() as f64))
     );
 }
