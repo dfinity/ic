@@ -145,6 +145,11 @@ The orchestrator fetches, verifies, and persists catch-up packages to determine 
 - **THEN** the orchestrator detects a subnet genesis or recovery scenario
 - **AND** if it is an NNS subnet recovery, the new registry is downloaded and the node restarts
 
+#### Scenario: NNS recovery on failover nodes is retry-safe
+- **WHEN** a failover node's orchestrator finds a `registry_store_uri` in the latest CUP's contents, for an NNS recovery onto a new set of nodes
+- **THEN** it looks for that URI, and downloads the recovery local store from it, before persisting the recovery CUP -- not after, so a failed download does not leave behind a persisted CUP whose subnet ID cannot yet be determined (that subnet ID lives in the registry version the download was supposed to fetch)
+- **AND** the recovery CUP is persisted only once the download succeeds, immediately before the orchestrator process restarts, so a failed download is retried cleanly on the next iteration of the upgrade loop
+
 #### Scenario: CUP persistence
 - **WHEN** a new CUP is obtained that is newer than the locally persisted one
 - **THEN** the CUP is written to disk in protobuf format at `cup.types.v1.CatchUpPackage.pb`
