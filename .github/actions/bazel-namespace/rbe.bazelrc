@@ -19,8 +19,8 @@
 #       --bazelrc=.github/actions/bazel-namespace/rbe.bazelrc test //some:test
 
 # Run actions remotely, falling back to the sandbox or to local execution for actions that can't
-# run remotely, like the ic-os image builds that bazel/conf/.bazelrc.build forces to run locally
-# with --strategy_regexp.
+# run remotely, like the ic-os container builds that bazel/conf/.bazelrc.build forces to run
+# locally with --strategy=IcosContainerBuild=local and --strategy=IcosContainerBaseImage=local.
 build --spawn_strategy=remote,sandboxed,local
 build --strategy=Genrule=remote,sandboxed,local
 

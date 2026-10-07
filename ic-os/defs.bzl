@@ -195,7 +195,9 @@ mounted=1
 tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
 """,
         message = "Extracting base GuestOS boot partition via fuse2fs",
-        tags = ["manual", "no-cache"],
+        # Mounting with fuse2fs needs /dev/fuse and the setuid fusermount, which
+        # neither the sandbox nor the remote executors provide.
+        tags = ["manual", "no-sandbox", "no-remote-exec"],
         target_compatible_with = ["@platforms//os:linux"],
         tools = ["//:fuse2fs"],
     )
@@ -209,7 +211,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         extra_files = {
             ":alternative_guestos_proposal.cbor": "/alternative_guestos_proposal.cbor:0644",
         },
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     # -------------------- Extract root and boot partitions --------------------
@@ -262,7 +264,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                 ])
             },
             target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
 
         ext4_image(
@@ -282,7 +284,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                     ]
                 )
             },
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
 
         # Extract individual files (boot args, initrd, vmlinuz, OVMF firmware) from the
@@ -301,8 +303,10 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                 extracted_vmlinuz,
                 extracted_ovmf_sev,
             ],
+            # Scratch in the working directory, not /tmp: the boot partition image
+            # is 1 GiB, which the remote executors' 1 GB /tmp can't hold (#10797).
             cmd = """
-                tmpdir="$$(mktemp -d)"
+                tmpdir="$$(mktemp -d -p "$$PWD")"
                 trap 'rm -rf "$$tmpdir"' EXIT
 
                 tar --extract -a --file "$<" --directory "$$tmpdir"
@@ -339,7 +343,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                 testonly = malicious,
                 srcs = [partition_root_unsigned_tzst],
                 outs = [partition_root_signed_tzst, partition_root_hash],
-                cmd = "$(location //toolchains/sysimage:proc_wrapper) " +
+                cmd = "$(location //toolchains/sysimage:tmpdir_wrapper) " +
                       "$(location //toolchains/sysimage:verity_sign) " +
                       "-i $< -o $(location :" + partition_root_signed_tzst + ") " +
                       "-r $(location " + partition_root_hash + ") " +
@@ -347,12 +351,12 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                       "--zstd $(location @zstd//:zstd_cli)",
                 executable = False,
                 tools = [
-                    "//toolchains/sysimage:proc_wrapper",
+                    "//toolchains/sysimage:tmpdir_wrapper",
                     "//toolchains/sysimage:verity_sign",
                     "//rs/ic_os/build_tools/dflate",
                     "@zstd//:zstd_cli",
                 ],
-                tags = ["manual", "no-cache"],
+                tags = ["manual"],
                 visibility = ["//rs/tests:__subpackages__", "//ic-os:__subpackages__"],
             )
 
@@ -366,7 +370,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
             )
         else:
             # No signing required, no ROOT_HASH substitution
-            native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual", "no-cache"])
+            native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual"])
             native.alias(
                 name = boot_args,
                 actual = ":boot_args_template",
@@ -474,7 +478,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         layout = image_deps["partition_table"],
         partitions = partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
     )
 
@@ -484,7 +488,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         partitions = partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
         populate_b_partitions = True,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
         testonly = True,
         target_compatible_with = ["@platforms//os:linux"],
         visibility = [
@@ -529,14 +533,14 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                     file_contexts = ":file_contexts",
                     partition_size = "1G",
                     target_compatible_with = ["@platforms//os:linux"],
-                    tags = ["manual", "no-cache"],
+                    tags = ["manual"],
                 )
 
             upgrade_image_kwargs = {
                 "name": update_image_tar,
                 "boot_partition": ":partition-boot-alternative.tzst" if build_alternative_guestos_image else ":partition-boot" + test_suffix + ".tzst",
                 "root_partition": ":partition-root" + test_suffix + ".tzst",
-                "tags": ["manual", "no-cache"],
+                "tags": ["manual"],
                 "target_compatible_with": ["@platforms//os:linux"],
                 "version_file": ":version" + test_suffix + ".txt",
             } | (

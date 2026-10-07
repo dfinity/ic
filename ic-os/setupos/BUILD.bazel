@@ -26,7 +26,6 @@ create_test_img(
     source = "//ic-os/setupos/envs/dev:disk-img.tar.zst",
     tags = [
         "manual",
-        "no-cache",
     ],
     visibility =
         [
@@ -41,7 +40,6 @@ create_test_img(
     source = "@mainnet_latest_hostos_images//:disk-img.tar.zst",
     tags = [
         "manual",
-        "no-cache",
     ],
     visibility = [
         "//rs:ic-os-pkg",
@@ -55,7 +53,6 @@ create_test_img(
     source = "@mainnet_latest_hostos_images_dev//:disk-img.tar.zst",
     tags = [
         "manual",
-        "no-cache",
     ],
     visibility = [
         "//rs:ic-os-pkg",

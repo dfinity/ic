@@ -14,7 +14,7 @@ import sys
 import tarfile
 import tempfile
 
-from toolchains.sysimage.utils import parse_size
+from toolchains.sysimage.utils import faketime_env, parse_size
 
 
 def untar_to_vfat(tf, fs_basedir, out_file, path_transform, mtools):
@@ -41,9 +41,6 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform, mtools):
             os.mkdir(os.path.join(fs_basedir, path))
             subprocess.run(
                 [
-                    "faketime",
-                    "-f",
-                    "1970-1-1 0:0:0",
                     os.path.abspath(mtools),
                     "-c",
                     "mmd",
@@ -51,6 +48,7 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform, mtools):
                     out_file,
                     "::/" + path,
                 ],
+                env=faketime_env(),
                 check=True,
             )
         elif member.type == tarfile.REGTYPE or member.type == tarfile.AREGTYPE:
@@ -58,9 +56,6 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform, mtools):
                 f.write(tf.extractfile(member).read())
             subprocess.run(
                 [
-                    "faketime",
-                    "-f",
-                    "1970-1-1 0:0:0",
                     os.path.abspath(mtools),
                     "-c",
                     "mcopy",
@@ -70,6 +65,7 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform, mtools):
                     os.path.join(fs_basedir, path),
                     "::/" + path,
                 ],
+                env=faketime_env(),
                 check=True,
             )
         else:
@@ -83,9 +79,6 @@ def install_extra_files(out_file, extra_files, path_transform, mtools):
             install_target = install_target[1:]
         subprocess.run(
             [
-                "faketime",
-                "-f",
-                "1970-1-1 0:0:0",
                 os.path.abspath(mtools),
                 "-c",
                 "mcopy",
@@ -95,6 +88,7 @@ def install_extra_files(out_file, extra_files, path_transform, mtools):
                 source_file,
                 "::/" + path_transform(install_target),
             ],
+            env=faketime_env(),
             check=True,
         )
 
@@ -184,7 +178,7 @@ def main():
         check=True,
     )
 
-    # tempfile cleanup is handled by proc_wrapper.sh
+    # tempfile cleanup is handled by tmpdir_wrapper.sh
 
 
 if __name__ == "__main__":

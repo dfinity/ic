@@ -114,7 +114,7 @@ def main():
         check=True,
     )
 
-    # tempfile cleanup is handled by proc_wrapper.sh
+    # tempfile cleanup is handled by tmpdir_wrapper.sh
 
 
 if __name__ == "__main__":
