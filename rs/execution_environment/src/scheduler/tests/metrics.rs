@@ -45,6 +45,7 @@ use ic_types_cycles::{
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use more_asserts::assert_ge;
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 /// Observes the state metrics at `height`, having first refreshed the derived
@@ -2043,6 +2044,90 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
             ]),
         );
     }
+}
+
+/// HTTPS outcalls are recorded at the subnet level when they are charged, so
+/// deleting the canister that made them must not record them there again: that would
+/// double count them in the subnet's consumed cycles total and metrics.
+#[test]
+fn http_outcalls_consumed_cycles_are_not_double_counted_on_canister_deletion() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister_id = test.create_canister_with(
+        Cycles::from(5_000_000_000_000_u128),
+        ComputeAllocation::zero(),
+        MemoryAllocation::default(),
+        None,
+        None,
+        Some(CanisterStatusType::Stopped),
+    );
+
+    // Record an HTTPS outcall the way charging for one does: at the subnet level and
+    // in the canister's monotonic amounts.
+    let outcalls = NominalCycles::new(1_000_000);
+    let subnet_metrics = &mut test.state_mut().metadata.subnet_metrics;
+    subnet_metrics.observe_consumed_cycles_http_outcalls(outcalls);
+    subnet_metrics.observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, outcalls);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .observe_consumed_cycles_for_https_outcall(outcalls);
+
+    test.state_mut().refresh_consumed_cycles();
+    let total_before = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_total_including_canisters();
+    let leftover_cycles = test.canister_state(canister_id).system_state.balance();
+
+    test.inject_call_to_ic00(
+        Method::DeleteCanister,
+        CanisterIdRecord::from(canister_id).encode(),
+        Cycles::zero(),
+        CanisterId::try_from(user_test_id(1).get()).unwrap(),
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.state().canister_state(&canister_id).is_none());
+
+    observe_state_metrics(&mut test, 0);
+
+    // The subnet-level `HTTPOutcalls` entries still hold just the outcall above.
+    let subnet_metrics = &test.state().metadata.subnet_metrics;
+    assert_eq!(subnet_metrics.get_consumed_cycles_http_outcalls(), outcalls);
+    assert_eq!(
+        subnet_metrics
+            .get_consumed_cycles_by_use_case_monotonic()
+            .get(&CyclesUseCase::HTTPOutcalls),
+        Some(&outcalls)
+    );
+    // The deletion only adds the canister's leftover balance to the total.
+    assert_eq!(
+        subnet_metrics.consumed_cycles_total_including_canisters(),
+        total_before + NominalCycles::new(leftover_cycles.get())
+    );
+    // And the exported metrics report the outcall once.
+    assert_eq!(
+        fetch_gauge_vec(
+            test.metrics_registry(),
+            "replicated_state_consumed_cycles_from_replica_start",
+        )
+        .get(&BTreeMap::from([(
+            "use_case".to_string(),
+            "HTTPOutcalls".to_string()
+        )])),
+        Some(&(outcalls.get() as f64))
+    );
+    assert_eq!(
+        fetch_counter_vec(
+            test.metrics_registry(),
+            "replicated_state_consumed_cycles_from_replica_start_as_counters",
+        )
+        .get(&BTreeMap::from([(
+            "use_case".to_string(),
+            "HTTPOutcalls".to_string()
+        )])),
+        Some(&(outcalls.get() as f64))
+    );
 }
 
 #[test]
