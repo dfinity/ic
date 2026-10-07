@@ -250,7 +250,7 @@ pub fn verify(
                         height,
                         time,
                         state_hash,
-                    } = CupType::try_from(cup_contents.cup_type).map_err(|e| {
+                    } = CupType::try_from(&cup_contents).map_err(|e| {
                         format!("Cannot verify recovery history at registry version {version}: {e}")
                     })?
                 {

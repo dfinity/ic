@@ -421,17 +421,13 @@ pub enum CupType {
     SubnetSplitting { destination_subnet_id: SubnetId },
 }
 
-impl TryFrom<Option<subnet_pb::catch_up_package_contents::CupType>> for CupType {
+impl TryFrom<subnet_pb::catch_up_package_contents::CupType> for CupType {
     type Error = ProxyDecodeError;
 
     fn try_from(
-        cup_type: Option<subnet_pb::catch_up_package_contents::CupType>,
+        cup_type: subnet_pb::catch_up_package_contents::CupType,
     ) -> Result<Self, Self::Error> {
         use subnet_pb::catch_up_package_contents::CupType as CupTypePb;
-
-        let cup_type = cup_type.ok_or(ProxyDecodeError::MissingField(
-            "CatchUpPackageContents::cup_type",
-        ))?;
 
         Ok(match cup_type {
             CupTypePb::Genesis(subnet_pb::GenesisArgs {}) => CupType::Genesis,
@@ -451,6 +447,17 @@ impl TryFrom<Option<subnet_pb::catch_up_package_contents::CupType>> for CupType 
                 )?,
             },
         })
+    }
+}
+
+impl TryFrom<&subnet_pb::CatchUpPackageContents> for CupType {
+    type Error = ProxyDecodeError;
+
+    fn try_from(cup_contents: &subnet_pb::CatchUpPackageContents) -> Result<Self, Self::Error> {
+        try_from_option_field(
+            cup_contents.cup_type.clone(),
+            "CatchUpPackageContents::cup_type",
+        )
     }
 }
 
@@ -534,24 +541,35 @@ mod tests {
         },
     )]
     fn test_cup_type_from_proto(#[case] cup_type_pb: CupTypePb, #[case] expected: CupType) {
-        assert_matches!(CupType::try_from(Some(cup_type_pb)), Ok(cup_type) if cup_type == expected);
+        assert_matches!(CupType::try_from(cup_type_pb), Ok(cup_type) if cup_type == expected);
     }
 
-    #[rstest]
-    #[case::missing_cup_type(None, "CatchUpPackageContents::cup_type")]
-    #[case::missing_destination_subnet_id(
-        Some(CupTypePb::SubnetSplitting(subnet_pb::SubnetSplittingArgs {
+    #[test]
+    fn test_cup_type_from_proto_fails_without_destination_subnet_id() {
+        let cup_type_pb = CupTypePb::SubnetSplitting(subnet_pb::SubnetSplittingArgs {
             destination_subnet_id: None,
-        })),
-        "SubnetSplittingArgs::destination_subnet_id",
-    )]
-    fn test_cup_type_from_proto_fails_on_missing_field(
-        #[case] cup_type_pb: Option<CupTypePb>,
-        #[case] expected_missing_field: &str,
-    ) {
+        });
+
         assert_matches!(
             CupType::try_from(cup_type_pb),
-            Err(ProxyDecodeError::MissingField(field)) if field == expected_missing_field
+            Err(ProxyDecodeError::MissingField(
+                "SubnetSplittingArgs::destination_subnet_id"
+            ))
+        );
+    }
+
+    #[test]
+    fn test_cup_type_from_cup_contents_fails_without_cup_type() {
+        let cup_contents = subnet_pb::CatchUpPackageContents {
+            cup_type: None,
+            ..Default::default()
+        };
+
+        assert_matches!(
+            CupType::try_from(&cup_contents),
+            Err(ProxyDecodeError::MissingField(
+                "CatchUpPackageContents::cup_type"
+            ))
         );
     }
 }

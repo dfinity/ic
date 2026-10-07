@@ -193,7 +193,7 @@ pub fn make_registry_cup_from_cup_contents(
     registry_version: RegistryVersion,
     logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
-    let (cup_height, time, state_hash) = match CupType::try_from(cup_contents.cup_type.clone()) {
+    let (cup_height, time, state_hash) = match CupType::try_from(&cup_contents) {
         Ok(CupType::Genesis) => (
             Height::new(0),
             UNIX_EPOCH,

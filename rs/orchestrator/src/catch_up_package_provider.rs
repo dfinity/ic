@@ -442,7 +442,7 @@ impl CatchUpPackageProvider {
                 continue;
             };
 
-            let cup_type = CupType::try_from(contents.cup_type).map_err(|err| {
+            let cup_type = CupType::try_from(&contents).map_err(|err| {
                 OrchestratorError::RegistryClientError(RegistryClientError::DecodeError {
                     error: format!("Failed to decode the CUP type: {err}"),
                 })

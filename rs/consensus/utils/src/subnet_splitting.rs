@@ -128,8 +128,8 @@ pub fn get_status(
         return Ok(Status::NotScheduled);
     }
 
-    let cup_type = CupType::try_from(contents.cup_type)
-        .map_err(StatusError::CatchUpContentsDeserializationError)?;
+    let cup_type =
+        CupType::try_from(&contents).map_err(StatusError::CatchUpContentsDeserializationError)?;
 
     let CupType::SubnetSplitting {
         destination_subnet_id,
