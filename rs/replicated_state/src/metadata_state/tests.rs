@@ -2896,7 +2896,9 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         consumed_cycles_by_use_case,
         ..Default::default()
     };
-    subnet_metrics.refresh_consumed_cycles(NominalCycles::new(64));
+    // The canisters' monotonic part only feeds the monotonic total, never the
+    // gauge.
+    subnet_metrics.refresh_consumed_cycles(NominalCycles::new(64), NominalCycles::new(128));
 
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
     state.metadata.subnet_metrics = subnet_metrics;
@@ -2920,6 +2922,16 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
     )
     .unwrap();
     assert_eq!(gauge, 127.0);
+
+    // The monotonic total shares the subnet-level part (63) but adds the
+    // canisters' monotonic part (128) instead.
+    assert_eq!(
+        state
+            .metadata
+            .subnet_metrics
+            .consumed_cycles_total_including_canisters_monotonic(),
+        NominalCycles::new(191)
+    );
 }
 
 #[test]

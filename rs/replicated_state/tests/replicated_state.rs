@@ -69,8 +69,8 @@ use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::StreamIndex;
 use ic_types::{CountBytes, MemoryAllocation, SnapshotId, Time};
 use ic_types_cycles::{
-    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, Instructions, NominalCycles,
-    NominalCyclesTesting,
+    CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, Instructions, Memory,
+    NominalCycles, NominalCyclesTesting,
 };
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -1789,7 +1789,8 @@ fn credit_refund() {
 }
 
 /// A replica restarting from a checkpoint must arrive at the same
-/// `consumed_cycles_total_including_canisters` as one that keeps running:
+/// `consumed_cycles_total_including_canisters` (and
+/// `consumed_cycles_total_including_canisters_monotonic`) as one that keeps running:
 /// `ReplicatedState::new_from_checkpoint` re-derives the aggregate from the
 /// persisted subnet-level total and the loaded canisters, exactly as
 /// `refresh_consumed_cycles` does on every commit. Were the two to diverge, the
@@ -1821,7 +1822,9 @@ fn consumed_cycles_total_is_the_same_across_a_restart() {
     let subnet_level = metadata.subnet_metrics.consumed_cycles_total();
     assert!(subnet_level > NominalCycles::zero());
 
-    // A still-existing canister that has consumed some cycles.
+    // A still-existing canister that has consumed some cycles: both via a direct
+    // charge (raising the gauge and the monotonic amount) and via a prepayment
+    // whose refund is still outstanding (raising the gauge only).
     let mut canister = CanisterState::new(
         SystemState::new_running_for_testing(
             CANISTER_ID,
@@ -1835,12 +1838,23 @@ fn consumed_cycles_total_is_the_same_across_a_restart() {
     );
     canister
         .system_state
+        .consume_cycles(CompoundCycles::<Memory>::new(
+            Cycles::new(7_890),
+            CanisterCyclesCostSchedule::Normal,
+        ));
+    canister
+        .system_state
         .consume_cycles(CompoundCycles::<Instructions>::new(
             Cycles::new(123_456),
             CanisterCyclesCostSchedule::Normal,
         ));
     let consumed_by_canister = canister.system_state.canister_metrics().consumed_cycles();
-    assert!(consumed_by_canister > NominalCycles::zero());
+    let consumed_by_canister_monotonic = canister
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_monotonic();
+    assert!(consumed_by_canister_monotonic > NominalCycles::zero());
+    assert!(consumed_by_canister > consumed_by_canister_monotonic);
 
     // A running replica publishes the aggregate on every commit.
     let mut live = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
@@ -1852,6 +1866,12 @@ fn consumed_cycles_total_is_the_same_across_a_restart() {
             .subnet_metrics
             .consumed_cycles_total_including_canisters(),
         subnet_level + consumed_by_canister
+    );
+    assert_eq!(
+        live.metadata
+            .subnet_metrics
+            .consumed_cycles_total_including_canisters_monotonic(),
+        subnet_level + consumed_by_canister_monotonic
     );
 
     // A replica restarting from a checkpoint holding the same canister and the

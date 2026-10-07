@@ -30,6 +30,12 @@ pub enum CertificationVersion {
     /// `/subnet/<subnet_id>/metrics` and additionally include the cycles
     /// consumed by all non-deleted canisters in the reported total.
     V29 = 29,
+    /// Report the cycles consumed by non-deleted canisters in
+    /// `/subnet/<subnet_id>/metrics` as the sum of the monotonic
+    /// `CanisterMetrics::consumed_cycles_monotonic` instead of the
+    /// `CanisterMetrics::consumed_cycles` gauge (which includes outstanding
+    /// prepayments).
+    V30 = 30,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -73,7 +79,7 @@ pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = Certificat
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V29;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V30;
 
 /// Returns a list of all certification versions from `MIN_SUPPORTED_CERTIFICATION_VERSION`
 /// up to `MAX_SUPPORTED_CERTIFICATION_VERSION`.
