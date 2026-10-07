@@ -1593,9 +1593,14 @@ key-exchange-timeout-ms = 10000
             );
         }
 
-        // virtio-balloon and virtio-rng, each on its own root port.
+        // virtio-balloon and virtio-rng, each on its own root port. Free page reporting
+        // hands the memory a guest frees back to the host, e.g. all of it when the guest
+        // reboots, rather than QEMU holding on to the guest's high-water mark.
         let rp = root_port!();
-        arg!("-device", format!("virtio-balloon-pci,bus={rp},addr=0x0"));
+        arg!(
+            "-device",
+            format!("virtio-balloon-pci,bus={rp},addr=0x0,free-page-reporting=on")
+        );
         let rp = root_port!();
         arg!("-object", "rng-random,id=rng0,filename=/dev/urandom");
         arg!(
