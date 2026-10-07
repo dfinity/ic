@@ -217,8 +217,10 @@ pub struct MetricsProxier {
 
 impl From<HttpProxyTarget> for MetricsProxier {
     fn from(target: HttpProxyTarget) -> Self {
-        let client =
-            Client::builder().danger_accept_invalid_certs(target.connect_to.tolerate_bad_tls);
+        // Use getaddrinfo rather than hickory, so NSS can resolve `guestos` on the HostOS.
+        let client = Client::builder()
+            .no_hickory_dns()
+            .danger_accept_invalid_certs(target.connect_to.tolerate_bad_tls);
         MetricsProxier {
             target,
             cache: Arc::new(Mutex::new(SampleCacheStore::default())),
