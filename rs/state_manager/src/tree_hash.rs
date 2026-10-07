@@ -384,18 +384,12 @@ mod tests {
             });
             subnet_metrics.threshold_signature_agreements =
                 BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
-            // Exercise the monotonic canisters' part reported starting with `V30`.
-            // The gauge part stays zero, so that the hashes for earlier
+            // Exercise the monotonic canisters' part, which only `V30` and later
+            // report. The gauge part stays zero, so that the hashes for earlier
             // certification versions are unaffected. (In production, the monotonic
             // part never exceeds the gauge part, but that is irrelevant here.)
-            let consumed_by_canisters_monotonic =
-                if certification_version >= CertificationVersion::V30 {
-                    NominalCycles::new(30_000_000_000)
-                } else {
-                    NominalCycles::zero()
-                };
             subnet_metrics
-                .refresh_consumed_cycles(NominalCycles::zero(), consumed_by_canisters_monotonic);
+                .refresh_consumed_cycles(NominalCycles::zero(), NominalCycles::new(30_000_000_000));
 
             state.metadata.subnet_metrics = subnet_metrics;
 

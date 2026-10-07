@@ -3198,8 +3198,9 @@ fn certified_subnet_metrics(env: &StateMachine) -> (MixedHashTree, CryptoHashOfP
 /// is not persisted: `ReplicatedState::new_from_checkpoint` re-derives it from the
 /// canisters it loads, exactly as the refresh on every committed state does. From
 /// certification version `V29` on, that aggregate (or, from `V30` on, its
-/// monotonic counterpart) is what `/subnet/<subnet_id>/metrics` certifies, so a replica restarting from a
-/// checkpoint has to certify byte-for-byte the same leaf as one that kept running.
+/// monotonic counterpart) is what `/subnet/<subnet_id>/metrics` certifies, so a
+/// replica restarting from a checkpoint has to certify byte-for-byte the same leaf
+/// as one that kept running.
 #[test]
 fn subnet_metrics_are_unchanged_across_a_restart() {
     let env = StateMachineBuilder::new()
