@@ -270,6 +270,8 @@ fn canonical_encoding_stream_header_v26() {
 ///     consumed_cycles_http_outcalls: 50_000_000_000.into(),
 ///     consumed_cycles_ecdsa_outcalls: 100_000_000_000.into(),
 ///     consumed_cycles_by_use_case: btreemap! {
+///         CyclesUseCase::HTTPOutcalls => 50_000_000_000.into(),
+///         CyclesUseCase::ECDSAOutcalls => 100_000_000_000.into(),
 ///         CyclesUseCase::Instructions => 80_000_000_000.into(),
 ///         CyclesUseCase::RequestAndResponseTransmission => 20_000_000_000.into(),
 ///     },
@@ -285,8 +287,10 @@ fn canonical_encoding_stream_header_v26() {
 ///
 /// Expected (for certification versions up to and including `V28`):
 ///
-/// For the `consumed_cycles_total`, the expected value (250B) is the sum of all
-/// the invividual values above.
+/// For the `consumed_cycles_total`, the expected value (250B) is the sum of the
+/// `consumed_cycles_by_deleted_canisters` and `consumed_cycles_by_use_case`
+/// values above (the legacy scalar outcall fields only mirror the outcall use
+/// cases and are not summed).
 ///
 /// ```text
 /// A4                        # map(4)
@@ -326,8 +330,18 @@ fn canonical_encoding_subnet_metrics() {
     for certification_version in all_supported_versions() {
         let mut metrics = SubnetMetrics::default();
         metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::zero());
+        // As production does, observe the outcalls both in the scalar fields and
+        // under their use cases.
         metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(50_000_000_000));
+        metrics.observe_consumed_cycles_with_use_case(
+            CyclesUseCase::HTTPOutcalls,
+            NominalCycles::new(50_000_000_000),
+        );
         metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(100_000_000_000));
+        metrics.observe_consumed_cycles_with_use_case(
+            CyclesUseCase::ECDSAOutcalls,
+            NominalCycles::new(100_000_000_000),
+        );
         metrics.num_canisters = 5;
         metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
         metrics.update_transactions_total = 4200;
@@ -349,12 +363,6 @@ fn canonical_encoding_subnet_metrics() {
         });
         metrics.threshold_signature_agreements =
             BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
-
-        // As the scheduler does once per round, fold the scalar outcall fields
-        // into the corresponding `consumed_cycles_by_use_case` entries, which is
-        // where the totals below read them from. The scalar fields are left in
-        // place, as they still are in production.
-        metrics.migrate_outcalls_cycles_to_use_cases();
 
         metrics.refresh_consumed_cycles(
             NominalCycles::new(50_000_000_000),

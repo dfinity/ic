@@ -22,10 +22,6 @@ pub struct RegistryCanisterInitPayload {
     pub swapping_whitelisted_callers: Option<Vec<PrincipalId>>,
     pub swapping_enabled_subnets: Option<Vec<SubnetId>>,
 
-    // Same deal as the swapping flags above, but for the blank
-    // replica_version_id (for Cloud Engines) feature.
-    pub is_blank_replica_version_id_for_cloud_engines_enabled: Option<bool>,
-
     // Same deal as above, but for the Subnet Splitting feature.
     // Used by system tests which exercise subnet splitting, and will
     // go away once the feature is fully rolled out.
@@ -54,7 +50,6 @@ pub struct RegistryCanisterInitPayloadBuilder {
     is_swapping_feature_enabled: bool,
     swapping_whitelisted_callers: BTreeSet<PrincipalId>,
     swapping_enabled_subnets: BTreeSet<SubnetId>,
-    is_blank_replica_version_id_for_cloud_engines_enabled: bool,
     is_subnet_splitting_enabled: bool,
 }
 
@@ -66,7 +61,6 @@ impl RegistryCanisterInitPayloadBuilder {
             is_swapping_feature_enabled: false,
             swapping_whitelisted_callers: BTreeSet::new(),
             swapping_enabled_subnets: BTreeSet::new(),
-            is_blank_replica_version_id_for_cloud_engines_enabled: false,
             is_subnet_splitting_enabled: false,
         }
     }
@@ -92,9 +86,6 @@ impl RegistryCanisterInitPayloadBuilder {
             swapping_enabled_subnets: Some(
                 self.swapping_enabled_subnets.clone().into_iter().collect(),
             ),
-            is_blank_replica_version_id_for_cloud_engines_enabled: Some(
-                self.is_blank_replica_version_id_for_cloud_engines_enabled,
-            ),
             is_subnet_splitting_enabled: Some(self.is_subnet_splitting_enabled),
         }
     }
@@ -111,11 +102,6 @@ impl RegistryCanisterInitPayloadBuilder {
 
     pub fn whitelist_swapping_feature_caller(&mut self, caller: PrincipalId) -> &mut Self {
         self.swapping_whitelisted_callers.insert(caller);
-        self
-    }
-
-    pub fn enable_blank_replica_version_id_for_cloud_engines(&mut self) -> &mut Self {
-        self.is_blank_replica_version_id_for_cloud_engines_enabled = true;
         self
     }
 

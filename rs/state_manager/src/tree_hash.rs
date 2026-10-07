@@ -349,10 +349,20 @@ mod tests {
             let mut subnet_metrics = SubnetMetrics::default();
 
             subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::zero());
+            // As production does, observe the outcalls both in the scalar fields
+            // and under their use cases.
             subnet_metrics
                 .observe_consumed_cycles_http_outcalls(NominalCycles::new(50_000_000_000));
+            subnet_metrics.observe_consumed_cycles_with_use_case(
+                CyclesUseCase::HTTPOutcalls,
+                NominalCycles::new(50_000_000_000),
+            );
             subnet_metrics
                 .observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(100_000_000_000));
+            subnet_metrics.observe_consumed_cycles_with_use_case(
+                CyclesUseCase::ECDSAOutcalls,
+                NominalCycles::new(100_000_000_000),
+            );
             subnet_metrics.num_canisters = 5;
             subnet_metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
             subnet_metrics.update_transactions_total = 4200;
@@ -374,12 +384,6 @@ mod tests {
             });
             subnet_metrics.threshold_signature_agreements =
                 BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
-            // As the scheduler does once per round, fold the scalar outcall
-            // fields into the corresponding `consumed_cycles_by_use_case`
-            // entries, which is where the totals read them from. The scalar
-            // fields are left in place, as they still are in production.
-            subnet_metrics.migrate_outcalls_cycles_to_use_cases();
-
             // Exercise the monotonic canisters' part reported starting with `V30`.
             // The gauge part stays zero, so that the hashes for earlier
             // certification versions are unaffected. (In production, the monotonic
