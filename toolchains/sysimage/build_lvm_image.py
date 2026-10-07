@@ -105,7 +105,7 @@ def main():
         check=True,
     )
 
-    # tempfile cleanup is handled by proc_wrapper.sh
+    # tempfile cleanup is handled by tmpdir_wrapper.sh
 
 
 def read_volume_description(data):

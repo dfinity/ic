@@ -14,6 +14,8 @@ import sys
 import tempfile
 from itertools import batched
 
+from toolchains.sysimage.utils import faketime_env
+
 
 def limit_file_contexts(file_contexts, base_path):
     r"""
@@ -210,11 +212,6 @@ def main():
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
     mke2fs_args = [
-        "faketime",
-        "-f",
-        "1970-1-1 0:0:0",
-        # Absolute path so faketime (which execs it) resolves it as a path
-        # rather than searching PATH.
         os.path.abspath(args.mkfs_ext4),
         "-E",
         "hash_seed=c61251eb-100b-48fe-b089-57dea7368612",
@@ -226,7 +223,7 @@ def main():
         image_file,
         str(image_size),
     ]
-    subprocess.run(mke2fs_args, check=True, env={"SOURCE_DATE_EPOCH": "0"})
+    subprocess.run(mke2fs_args, check=True, env=faketime_env({**os.environ, "SOURCE_DATE_EPOCH": "0"}))
 
     # Use our tool, diroid, to create an fs_config file to be used by e2fsdroid.
     # This file is a simple list of files with their desired uid, gid, and mode.
@@ -243,9 +240,6 @@ def main():
     subprocess.run(diroid_args, check=True)
 
     e2fsdroid_args = [
-        "faketime",
-        "-f",
-        "1970-1-1 0:0:0",
         "fakeroot",
         "-i",
         fakeroot_statefile,
@@ -262,7 +256,13 @@ def main():
     if file_contexts_file:
         e2fsdroid_args += ["-S", file_contexts_file]
     e2fsdroid_args += [image_file]
-    subprocess.run(e2fsdroid_args, check=True, env={"SOURCE_DATE_EPOCH": "0"})
+    # tmpdir_wrapper.sh already sets FAKEROOTDONTTRYCHOWN; set it here too so that
+    # running this script directly in a user namespace doesn't fail on chown.
+    subprocess.run(
+        e2fsdroid_args,
+        check=True,
+        env=faketime_env({**os.environ, "SOURCE_DATE_EPOCH": "0", "FAKEROOTDONTTRYCHOWN": "1"}),
+    )
 
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
@@ -291,7 +291,7 @@ def main():
         check=True,
     )
 
-    # tempfile cleanup is handled by proc_wrapper.sh
+    # tempfile cleanup is handled by tmpdir_wrapper.sh
 
 
 if __name__ == "__main__":

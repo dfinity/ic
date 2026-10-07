@@ -1,0 +1,302 @@
+= Building IC-OS images with Bazel caching and remote execution
+
+:toc:
+
+== Problem
+
+IC-OS images were built outside Bazel's usual guarantees:
+
+* *No sandbox, no remote execution.* `bazel/conf/.bazelrc.build` had
+  `--strategy_regexp=ic-os[:/].*=local`, which forced *every* action whose
+  description mentions an `ic-os` package to run directly on the host. That
+  covered the `podman` container builds and also the ext4/vfat/disk/LVM image
+  steps, verity signing and launch measurements. (Tests were not affected:
+  Bazel never applies `--strategy_regexp` to the `TestRunner` mnemonic.)
+* *No cache.* Most partition and image targets were tagged `no-cache`, added in
+  #3256 to save disk-cache space (24G vs 6.9G per build) on the grounds that
+  "the images are rebuilt on almost every change anyway". The result is that
+  every PR that needs an image (any system test) rebuilds the boot, root, ESP,
+  LVM, disk and upgrade images from scratch, even when their inputs are
+  bit-for-bit unchanged.
+* *Privileged CI.* Because the `podman` steps run on the host, the CI
+  containers run `--privileged` with a tmpfs at `/tmp/containers`.
+* *Every PR builds all of IC-OS.* The `build-ic` job of `ci-main.yml` always
+  runs `ci/container/build-ic.sh -i` with `--config=local`. This is
+  deliberate: it is the uncached half of the build-determinism comparison.
+
+== What actually needs privileges
+
+[cols="2,2,1"]
+|===
+|Step |Tooling |Needs
+
+|`build_container_base_image` (`local-base-*` only)
+|rootless `podman build` + `apt install`
+|user namespaces, network; not reproducible
+
+|`build_container_filesystem` (`rootfs-tree.tar`)
+|rootless `podman build` of `ic-os/*/context/Dockerfile` over a digest-pinned
+base image. Its `RUN` steps execute target binaries (`update-initramfs`,
+`adduser`, `systemctl enable`, the SELinux `prep.sh`)
+|user namespaces, network (base image pull)
+
+|`//ic-os/bootloader:build-bootloader-tree`
+|rootless `podman build`
+|user namespaces, network
+
+|`alternative_guestos_base_bootfs_tree_tar`
+|`fuse2fs` mount
+|`/dev/fuse`, setuid `fusermount`
+
+|`ext4_image`, `vfat_image`, `fat32_image`, `disk_image`, `lvm_image`,
+`upgrade_image`, verity signing, boot-file extraction, launch measurements
+|`fakeroot`, `mke2fs`/`debugfs` (`@e2fsprogs`, built from source),
+`e2fsdroid` (`@android_platform_tools`), `mtools`,
+`sfdisk`, `veritysetup format` on a regular file, `dflate`, `diroid`, `jq`
+|no privileges: they only read and write regular files. They do use host tools
+from the build image (`fakeroot`, libfaketime, `/usr/sbin/veritysetup`,
+`/usr/sbin/sfdisk`, `tar`, `zstd`, `jq`), so the RBE worker image must match
+the CI image, which `rbe.bazelrc` already requires
+|===
+
+Most IC binaries are injected *after* the container build, by `ext4_image`
+(`extra_files`). So `rootfs-tree.tar` depends on the pinned base image, the
+files in `ic-os/components`, and the few binaries listed as component files.
+On GuestOS that is `//rs/ic_os/open_rootfs`, which goes into the initramfs
+(`ic-os/components/guestos.bzl`). The privileged step is therefore invalidated
+by IC-OS component changes and by Rust changes in `open_rootfs`'s dependency
+tree (e.g. `rs/nns/governance/api`, `rs/ic_os/config`), but not by most other
+Rust changes, such as the replica. Builds without
+`--config=stamped` use the constant version
+`0000000000000000000000000000000000000000` (see `bazel/workspace_status.sh`),
+so unchanged inputs produce unchanged action keys across PRs. CI's
+`build-determinism` job already checks that these outputs are reproducible.
+
+== Phase 1 (this change): cache everything, run unprivileged steps anywhere
+
+* Each sysimage action gets a mnemonic (`IcosExt4Image`, `IcosDiskImage`, ...).
+  Only `IcosContainerBaseImage` and `IcosContainerBuild` (see
+  `ICOS_CONTAINER_MNEMONICS` in `toolchains/sysimage/toolchain.bzl`) are forced
+  `local`, via `--strategy=<mnemonic>=local`. Everything else follows the normal
+  spawn strategy: sandboxed locally, `remote` on RBE. `IcosContainerBuild`
+  outputs stay cached; `IcosContainerBaseImage` keeps `no-remote-cache`
+  because its `apt install` isn't reproducible.
+* The `podman` wrapper (`proc_wrapper.sh`, which needs `podman unshare` or
+  `sudo` to clean up) is now used only by the container actions. All other
+  actions use `tmpdir_wrapper.sh`, which manages a private `TMPDIR` in the
+  action's working directory and sets `FAKEROOTDONTTRYCHOWN` (see the notes
+  below).
+* `no-cache` is removed from all image targets, including the uncompressed
+  intermediates (`disk-img.tar`, `disk-img-for-tests.tar`, `update-img*.tar`)
+  and the unsigned root partition. Excluding those from the cache doesn't
+  save much: Bazel needs an action's input digests to compute its cache key,
+  so an uncached intermediate gets rebuilt on every run before its compressed
+  or signed successor can be fetched. Those are the most expensive actions,
+  and `disk-img-for-tests.tar` is also used directly by
+  `//rs/ic_os/os_tools/guest_vm_runner` tests. On RBE, outputs land in the
+  CAS anyway. The `local-base-*` envs keep their `no-cache` tag, but
+  `icos_build` only passes it to the top-level filegroup and the conformance
+  test. Their partitions and images are cacheable too, which is harmless:
+  their keys include the digest of the non-reproducible `base_image.tar`, so
+  they never hit.
+* `fakeroot` is listed explicitly in `ci/container/files/packages.common`.
+  It is already in the image as a `Recommends` of `dpkg-dev` (via
+  `build-essential`), but the image actions now rely on it on remote workers.
+* The two remaining genrules that need the host (the `podman` bootloader tree
+  and the `fuse2fs` bootfs extraction) are tagged
+  `no-sandbox` + `no-remote-exec`. Their outputs are still cached.
+
+Expected effect: on a PR that doesn't touch `ic-os/components` or the
+component binaries, `rootfs-tree.tar` comes from the remote cache and podman
+never runs. A PR that doesn't change any binary baked into an image gets every
+partition and image from the cache. A PR that does change one rebuilds only the affected
+`partition-root` → verity → disk/upgrade chain, and on RBE that chain runs on
+remote workers instead of the CI driver.
+
+Cache size: every CI job uploads its results
+(`--remote_upload_local_results=true`), so the newly cached partitions and
+compressed images are uploaded for each of the ~20 image envs. On stamped
+release builds the commit hash is baked into the root and boot partitions, so
+those upload on every merge and rarely hit. #3256 measured 24G vs 6.9G per
+build. The growth must be measured on CI (`ci-rbe-evaluation` and
+bazel-remote) before merging.
+
+Scratch space: a root partition build extracts about 3 GB and creates a
+10 GB sparse image, and `create_test_img` unpacks a whole SetupOS disk image.
+The RBE workers only have a 1 GB `/tmp` (#10797, and the `no-remote-exec` on
+`guest-img` in `bazel/mainnet-icos-images.bzl`), so `tmpdir_wrapper.sh` and the
+genrules that unpack images (`create_test_img`, `extract_boot_partition_files`)
+create their scratch directory in the action's working directory instead of
+`/tmp`: the execroot on the worker's disk remotely, the sandbox directory under
+the output base locally. Check the disk headroom of the `ci-main.yml` runners
+and of the RBE workers.
+
+== Supported build environments
+
+[cols="1,2,2,2"]
+|===
+|Environment |How Bazel runs |Container steps (`IcosContainer*`, bootloader, fuse2fs) |All other image steps
+
+|DFINITY CI (`dind-large` runners, `ci-main.yml`)
+|In the `ic-build` container (`--privileged`, tmpfs at `/tmp/containers`),
+with the `bazel-remote` cache from `bazel/conf/.bazelrc.internal`. PR jobs
+upload results.
+|Locally on the runner, as before
+|Sandboxed (`linux-sandbox`) on the runner; results cached in `bazel-remote`
+
+|Namespace (`ci-rbe-evaluation.yml`, `.github/actions/bazel-namespace`)
+|`--noworkspace_rc` with `.bazelrc.build`, the `nsc` endpoints and
+`rbe.bazelrc` (`--spawn_strategy=remote,sandboxed,local`). The driver
+container is `--privileged`.
+|Locally on the RBE driver, as before; scratch on `/namespace/scratch` via `TMPDIR`
+|Remotely on the RBE workers, which run the same `ic-build` image
+
+|Local (`ci/container/container-run.sh`, podman or Docker, or the VS Code
+devcontainer)
+|In the `ic-build` container: privileged podman, or Docker with
+`SYS_ADMIN`/`/dev/fuse` and unconfined seccomp/AppArmor. Reads the
+`bazel-remote` cache on the DFINITY network; use `--config=local` without it.
+|Locally in the container, as before
+|Sandboxed (`linux-sandbox`) in the container
+|===
+
+Notes:
+
+* `fakeroot` and Bazel's sandbox: `linux-sandbox` runs each action in a user
+  namespace where only the caller's uid is mapped. `fakeroot` tries the real
+  `chown` first and only ignores `EPERM`, but in that namespace a `chown` to an
+  unmapped uid fails with `EINVAL`. `tmpdir_wrapper.sh` therefore sets
+  `FAKEROOTDONTTRYCHOWN=1`, so ownership lives only in fakeroot's state file,
+  as it always effectively did for a non-root build.
+* `faketime` and Bazel's sandbox: the `faketime` wrapper (even with
+  `--disable-shm`) and libfaketime itself create a POSIX semaphore and shared
+  memory in `/dev/shm` named after the PID, to share a running clock between
+  processes. Sandboxed actions each get their own PID namespace but share
+  `/dev/shm`, so concurrent actions collide (`sem_open: File exists`,
+  `shm_open failed: File exists`). The image tools therefore preload
+  `libfaketime` directly with `FAKETIME=1970-1-1 0:0:0` and
+  `FAKETIME_DISABLE_SHM=1` (`faketime_env()` in
+  `toolchains/sysimage/utils.py`, `debugfs_with_frozen_clock()` in
+  `partition_tools`). A frozen absolute time doesn't need the shared clock.
+* The image targets only require Linux (`target_compatible_with =
+  @platforms//os:linux`), but they are x86_64 images and their tools expect
+  the x86_64 Debian layout, e.g. `/usr/sbin/debugfs`. On macOS they are
+  skipped, as before. Build them in the dev container on an x86_64 Linux host.
+  libfaketime is looked up in the usual Debian/Ubuntu, Fedora and Arch
+  locations, or at `$LIBFAKETIME` when that is set (for running the tools, e.g.
+  `setupos-disable-checks`, outside Bazel). If it is missing, the image tools
+  fail instead of silently producing non-reproducible images.
+* On a bare Linux host (no dev container) the image steps need the same host
+  tools as the `ic-build` image (`podman`, `fakeroot`, `libfaketime`,
+  `cryptsetup-bin`, `fdisk`, `zstd`, `jq`). If `linux-sandbox` can't create
+  namespaces there (e.g. Ubuntu's `apparmor_restrict_unprivileged_userns`),
+  Bazel uses its process-wrapper sandbox instead. Rootless podman needs the
+  same namespaces, so such a host couldn't build images before either.
+* *Escape hatch:* `--config=icos_host` restores the old behaviour in any of the
+  three environments: every `ic-os` image action runs on the host,
+  unsandboxed. Use it if the image steps fail sandboxed or on the Namespace
+  workers, e.g. because `fakeroot` (SysV IPC, `LD_PRELOAD`) doesn't work under
+  the worker isolation. If only SysV IPC is the problem, a narrower fix is
+  fakeroot's TCP daemon (`fakeroot --faked faked-tcp`, shipped in the same
+  package), which doesn't use SysV message queues. On Namespace it can be appended to the Bazel arguments
+  of `ci-rbe-evaluation.yml` until the workers support these actions.
+
+== Phase 2: KVM vs. Docker for the remaining container step
+
+The only step that still needs the host is executing the target's own binaries
+over the base rootfs (the Dockerfile `RUN` steps). Options:
+
+[cols="1,3,3"]
+|===
+|Option |Pros |Cons
+
+|Docker (daemon)
+|Familiar; matches the Dockerfiles.
+|The daemon runs as root, and access to its socket is root-equivalent. It can't
+run inside a Bazel sandbox or as an RBE action without a privileged,
+docker-in-docker worker. Output depends on the daemon/BuildKit version.
+*Rejected.*
+
+|Rootless podman (status quo)
+|No daemon. Already deterministic (`--timestamp 0`, tar repack).
+|Needs unprivileged user namespaces plus setuid `newuidmap`/`newgidmap` and
+`/etc/subuid` ranges. Bazel's linux-sandbox and many RBE isolations
+(`no_new_privs`, seccomp, nested userns) break this, hence `--privileged` CI
+containers. It could run remotely only on a dedicated RBE pool that allows
+userns.
+
+|KVM microVM (recommended)
+|Needs only read/write access to `/dev/kvm`: no root, no setuid helpers, no
+user namespaces. Strong isolation; the build kernel is pinned, so execution is
+deterministic. It works inside the linux-sandbox
+(`--sandbox_add_mount_pair=/dev/kvm`) and remotely, by routing actions with a
+`requires-kvm`-style exec property to KVM-capable workers. CI already uses
+`/dev/kvm` (`ci/container/init.sh`, `container-run.sh` for local system
+tests). Falls back to QEMU TCG (slower, no device needed) on hosts without
+KVM.
+|The Dockerfile `RUN` steps have to become a script run in the VM (they are
+already plain shell). Each action pays a few seconds of VM boot. Needs a small
+pinned kernel/initramfs as a Bazel input. Needs Namespace to expose
+`/dev/kvm` on (a pool of) RBE workers.
+
+|No execution (pure tar assembly)
+|Fully hermetic. Any executor works.
+|Not possible as-is: `update-initramfs`, `adduser`/`addgroup`, `systemctl
+enable` and the SELinux policy build in `prep.sh` have to run inside the
+target. Re-implementing them as Bazel rules is a large, fragile effort.
+|===
+
+*Recommendation:* a KVM microVM executor for `IcosContainerBuild` and the
+bootloader tree:
+
+. Fetch base images with `rules_oci` `oci.pull` (already a dependency in
+  `MODULE.bazel`) using the digests in `ic-os/*/context/docker-base.*`. The
+  action then gets the base rootfs as an input, with no network and no
+  `podman pull`.
+. Unpack the base rootfs and component files into an ext4 scratch disk with the
+  existing unprivileged tools (`fakeroot` + `e2fsdroid`).
+. Boot `qemu-system-x86_64 -enable-kvm -kernel <pinned> -initrd <pinned>`
+  with that disk as root and the converted Dockerfile steps as init, then
+  export the result with `debugfs rdump`/`dflate`.
+. Tag the action `requires-kvm` and give it a Namespace exec property for a
+  KVM-capable worker pool. Locally, mount `/dev/kvm` into the sandbox.
+
+Once that lands, nothing in the IC-OS build needs `--privileged` or
+`/tmp/containers`, and the `local` strategy lines can be removed.
+
+== Phase 3: CI
+
+* Keep the uncached `build-ic` determinism build for `master`, `rc--*` and the
+  nightly schedule. On PRs, run it only when IC-OS inputs changed, e.g. via
+  `ci/scripts/targets.py` on the `build-ic.sh -i` targets.
+* Once Phase 2 lands, drop `--privileged` and the `/tmp/containers` tmpfs from
+  `ci-main.yml` and `ci-rbe-evaluation.yml`.
+
+== Open questions
+
+* Can Namespace RBE workers expose `/dev/kvm` (nested virtualization), or do
+  they allow unprivileged user namespaces? This decides between Phase 2 options
+  and needs input from the infra team.
+* How big is the remote CAS growth from Phase 1? Measure on the
+  `ci-rbe-evaluation` workflow.
+* Do the image actions work on Namespace workers at all? `fakeroot` needs SysV
+  IPC (or `faked-tcp` instead) and `LD_PRELOAD`, and libfaketime needs
+  `LD_PRELOAD`, under Namespace's `sandboxed` isolation, plus several GB of
+  disk in the execroot. This has not been exercised yet.
+* Cache trust: PR jobs upload to the cache that release builds read from.
+  Stamped release images embed the commit hash in the root and boot partitions,
+  so they don't hit entries from PRs. Their unstamped inputs can, though
+  (`rootfs-tree.tar` already could before this change, now also the ESP, grub
+  and config partitions). `build-determinism` would catch a poisoned entry, but
+  only after the artifacts are published. Decide whether release builds should
+  skip remote-cache reads for IC-OS image actions.
+* `build_disk_image.py` and `build_lvm_image.py` call `zstd` from `PATH` even
+  though `@zstd` is passed in, which leaves an undeclared host tool.
+* Known limitation: the image actions use host tools from the `ic-build`
+  image (`fakeroot`, libfaketime, `/usr/sbin/debugfs`, `sfdisk`,
+  `veritysetup`, `tar`, `zstd`) that aren't Bazel inputs, so their cache keys
+  don't change when the image does. After a dev-image change that alters one
+  of these tools' output, stale cached images can be served until the inputs
+  change; `build-determinism` would flag it. Adding `ci/container/TAG` as an
+  input would fix that, but it would invalidate every cached image on each
+  dev-image rebuild.

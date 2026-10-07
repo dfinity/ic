@@ -25,7 +25,6 @@ file_size_check(
     max_file_size = 600 * 1000 * 1000,  # 580 MB on 2025-06-26
     tags = [
         "manual",
-        "no-cache",
     ],
 )
 
@@ -35,7 +34,6 @@ file_size_check(
     max_file_size = 600 * 1000 * 1000,  # 578 MB on 2025-06-26
     tags = [
         "manual",
-        "no-cache",
     ],
 )
 
@@ -45,7 +43,6 @@ file_size_check(
     max_file_size = 600 * 1000 * 1000,  # 578 MB on 2025-06-26
     tags = [
         "manual",
-        "no-cache",
     ],
 )
 

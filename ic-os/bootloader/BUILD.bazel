@@ -21,11 +21,13 @@ genrule(
         "bootloader-tree.tar",
     ],
     cmd = "$(location build-bootloader-tree.sh) -b $< -o $@",
-    # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
-    # so we need this Namespace.so-specific execution property to open up the network on RBE:
-    exec_properties = {"namespace_requires_network": "true"},
     tags = [
         "manual",
+        # Runs rootless 'podman build', which needs to create user namespaces:
+        # keep it on the host like the IcosContainer* actions of
+        # //toolchains/sysimage:toolchain.bzl. Its output is still cached.
+        "no-remote-exec",
+        "no-sandbox",
         "requires-network",
     ],
     target_compatible_with = [

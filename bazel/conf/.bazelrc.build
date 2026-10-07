@@ -47,8 +47,19 @@ build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
 build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
-# Build everything ic-os without sandbox
-build --strategy_regexp=ic-os[:/].*=local
+# The ic-os container builds run rootless 'podman build', which needs to create user namespaces,
+# so they run locally, outside the sandbox (see ICOS_CONTAINER_MNEMONICS in
+# toolchains/sysimage/toolchain.bzl). IcosContainerBuild outputs are still cached; the base image
+# is only cached locally (no-remote-cache), as it's not reproducible. All other ic-os image actions
+# only operate on plain files and run sandboxed or remotely like any other action.
+build --strategy=IcosContainerBaseImage=local
+build --strategy=IcosContainerBuild=local
+
+# Escape hatch: run all ic-os image actions on the host, unsandboxed, as before. Use it with
+# `--config=icos_host` on a machine or executor where they fail sandboxed or remotely. The progress
+# messages of the image actions contain their output path, so this matches all of them (it never
+# matches tests: Bazel doesn't apply --strategy_regexp to the TestRunner mnemonic).
+build:icos_host --strategy_regexp=ic-os[:/].*=local
 
 build --workspace_status_command='$(pwd)/bazel/workspace_status.sh'
 

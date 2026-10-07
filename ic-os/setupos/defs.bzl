@@ -107,7 +107,7 @@ def _custom_partitions(mode):
         src = guest_image,
         out = "guest-os.img.tar.zst",
         allow_symlink = True,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     copy_file(
@@ -115,7 +115,7 @@ def _custom_partitions(mode):
         src = host_image,
         out = "host-os.img.tar.zst",
         allow_symlink = True,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     config_dict = {
@@ -168,7 +168,7 @@ def _custom_partitions(mode):
         srcs = data_srcs,
         mode = "0644",
         package_dir = "data",
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     ext4_image(
@@ -179,7 +179,7 @@ def _custom_partitions(mode):
         target_compatible_with = [
             "@platforms//os:linux",
         ],
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     return [
@@ -192,12 +192,17 @@ def create_test_img(name, source, **kwargs):
         name = name,
         srcs = [source],
         outs = [name + ".tar.zst"],
+        # Scratch, including setupos-disable-checks' temporary files, in the working
+        # directory, not /tmp: the SetupOS disk image is several GB and the remote
+        # executors only have a 1 GB /tmp (#10797).
         cmd = """
-            tmpdir="$$(mktemp -d)"
+            tmpdir="$$(mktemp -d -p "$$PWD")"
             trap "rm -rf $$tmpdir" EXIT
+            export TMPDIR="$$tmpdir"
             tar -xf $< -C $$tmpdir
             $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path $$tmpdir/disk.img
-            tar --zstd -Scf $@ -C $$tmpdir disk.img
+            # Same flags as build_disk_image.py, so that the output is deterministic.
+            tar --zstd -cf $@ --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C $$tmpdir disk.img
         """,
         target_compatible_with = ["@platforms//os:linux"],
         tools = ["//rs/ic_os/dev_test_tools/setupos-disable-checks"],
