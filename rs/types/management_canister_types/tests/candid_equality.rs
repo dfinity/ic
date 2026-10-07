@@ -263,13 +263,7 @@ mod test {
             std::env::var("IC_DID").expect("Failed to read IC_DID environment variable");
         let declared_interface_str =
             std::fs::read_to_string(ic_did_path).expect("Failed to read ic.did file");
-        let filtered_interface_str = declared_interface_str
-            .lines()
-            // Bitcoin APIs are deprecated from the management canister, so we filter them out.
-            .filter(|line| !line.trim_start().starts_with("bitcoin_"))
-            .collect::<Vec<&str>>()
-            .join("\n");
-        let declared_interface = CandidSource::Text(&filtered_interface_str);
+        let declared_interface = CandidSource::Text(&declared_interface_str);
 
         candid::export_service!();
         let implemented_interface_str = __export_service();
