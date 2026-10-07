@@ -667,8 +667,8 @@ mod tests {
     }
 
     /// The cycles reported as consumed for HTTPS outcalls at the subnet level, in
-    /// the dedicated field as well as in the by-use-case gauge and counter maps.
-    /// All three must always agree, as they are observed together.
+    /// the dedicated field as well as in the by-use-case map. Both must always
+    /// agree, as they are observed together.
     fn subnet_consumed(state: &ReplicatedState) -> u128 {
         subnet_consumed_for(state, CyclesUseCase::HTTPOutcalls)
     }
