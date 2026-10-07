@@ -2856,9 +2856,11 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
     // `DeletedCanisters` (the leftover balances of deleted canisters) is already
     // included in the `consumed_cycles_by_deleted_canisters` scalar below, which
     // additionally covers the cycles those canisters had consumed; so the gauge
-    // counts the scalar and skips this entry. Both are set to 1 here, as for a
-    // deleted canister that consumed nothing and had 1 cycle left. The remaining
-    // subnet-level use cases live only in the map.
+    // counts the scalar and skips this entry. The scalar (64) is set higher than
+    // the entry (1), as for a deleted canister that consumed 63 cycles and had 1
+    // cycle left, so that counting the entry instead of (or on top of) the scalar
+    // would change the total. The remaining subnet-level use cases live only in
+    // the map.
     let mut consumed_cycles_by_use_case = BTreeMap::new();
     consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
     consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(2));
@@ -2887,13 +2889,13 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
     }
 
     let mut subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: NominalCycles::new(1),
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(64),
         consumed_cycles_by_use_case,
         ..Default::default()
     };
     // The canisters' monotonic part only feeds the monotonic total, never the
     // gauge.
-    subnet_metrics.refresh_consumed_cycles(NominalCycles::new(64), NominalCycles::new(128));
+    subnet_metrics.refresh_consumed_cycles(NominalCycles::new(128), NominalCycles::new(256));
 
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
     state.metadata.subnet_metrics = subnet_metrics;
@@ -2907,8 +2909,8 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         &no_op_logger(),
     );
 
-    // Deleted canisters (1) + ECDSA (2) + HTTP (4) + Schnorr (8) + VetKd (16)
-    // + dropped messages (32) + the canisters' part (64) = 127. The
+    // Deleted canisters (64) + ECDSA (2) + HTTP (4) + Schnorr (8) + VetKd (16)
+    // + dropped messages (32) + the canisters' part (128) = 254. The
     // canister-level use cases inserted into the map above (each worth 1024)
     // must not appear in the total.
     let gauge = fetch_gauge(
@@ -2916,16 +2918,16 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         "replicated_state_consumed_cycles_since_replica_started",
     )
     .unwrap();
-    assert_eq!(gauge, 127.0);
+    assert_eq!(gauge, 254.0);
 
-    // The monotonic total shares the subnet-level part (63) but adds the
-    // canisters' monotonic part (128) instead.
+    // The monotonic total shares the subnet-level part (126) but adds the
+    // canisters' monotonic part (256) instead.
     assert_eq!(
         state
             .metadata
             .subnet_metrics
             .consumed_cycles_total_including_canisters_monotonic(),
-        NominalCycles::new(191)
+        NominalCycles::new(382)
     );
 }
 
