@@ -43,7 +43,7 @@ pub enum Method { ... }
 Enumerates all management canister methods. Key categories:
 
 **Canister Lifecycle:**
-`CreateCanister`, `InstallCode`, `InstallChunkedCode`, `UninstallCode`, `StartCanister`, `StopCanister`, `DeleteCanister`, `UpdateSettings`, `CanisterStatus`, `CanisterInfo`, `CanisterMetadata`, `DepositCycles`
+`CreateCanister`, `InstallCode`, `InstallChunkedCode`, `UninstallCode`, `StartCanister`, `StopCanister`, `DeleteCanister`, `UpdateSettings`, `CanisterStatus`, `CanisterInfo`, `CanisterMetadata`, `CanisterMetrics`, `DepositCycles`
 
 **Cryptographic Operations:**
 `ECDSAPublicKey`, `SignWithECDSA`, `SchnorrPublicKey`, `SignWithSchnorr`, `VetKdPublicKey`, `VetKdDeriveKey`, `RawRand`, `SetupInitialDKG`, `ReshareChainKey`
