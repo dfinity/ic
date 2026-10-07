@@ -1783,15 +1783,19 @@ fn consumed_cycles_total_is_the_same_across_a_restart() {
     let subnet_metrics = &mut metadata.subnet_metrics;
     subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::new(1_000));
     subnet_metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(200));
+    subnet_metrics.observe_consumed_cycles_with_use_case(
+        CyclesUseCase::HTTPOutcalls,
+        NominalCycles::new(200),
+    );
     subnet_metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(30));
+    subnet_metrics.observe_consumed_cycles_with_use_case(
+        CyclesUseCase::ECDSAOutcalls,
+        NominalCycles::new(30),
+    );
     subnet_metrics.observe_consumed_cycles_with_use_case(
         CyclesUseCase::SchnorrOutcalls,
         NominalCycles::new(4),
     );
-    // As the scheduler does once per round, fold the scalar outcall metrics into
-    // the corresponding `consumed_cycles_by_use_case` entries, which is where
-    // the total reads them from.
-    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
     let subnet_level = metadata.subnet_metrics.consumed_cycles_total();
     assert!(subnet_level > NominalCycles::zero());
 
