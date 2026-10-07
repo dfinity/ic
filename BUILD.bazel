@@ -424,6 +424,7 @@ genrule(
     cmd = "dpkg-deb --fsys-tarfile $(execpath @ntpd_rs_deb//file) | tar -xO ./usr/bin/ntp-daemon > $@ && chmod +x $@",
     executable = True,
     target_compatible_with = [
+        "@platforms//cpu:x86_64",  # the `.deb` is amd64
         "@platforms//os:linux",  # technically: Ubuntu/Debian with dpkg-deb
     ],
 )
