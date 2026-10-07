@@ -270,6 +270,8 @@ fn canonical_encoding_stream_header_v26() {
 ///     consumed_cycles_http_outcalls: 50_000_000_000.into(),
 ///     consumed_cycles_ecdsa_outcalls: 100_000_000_000.into(),
 ///     consumed_cycles_by_use_case: btreemap! {
+///         CyclesUseCase::HTTPOutcalls => 50_000_000_000.into(),
+///         CyclesUseCase::ECDSAOutcalls => 100_000_000_000.into(),
 ///         CyclesUseCase::Instructions => 80_000_000_000.into(),
 ///         CyclesUseCase::RequestAndResponseTransmission => 20_000_000_000.into(),
 ///     },
@@ -285,8 +287,10 @@ fn canonical_encoding_stream_header_v26() {
 ///
 /// Expected (for certification versions up to and including `V28`):
 ///
-/// For the `consumed_cycles_total`, the expected value (250B) is the sum of all
-/// the invividual values above.
+/// For the `consumed_cycles_total`, the expected value (250B) is the sum of the
+/// `consumed_cycles_by_deleted_canisters` and `consumed_cycles_by_use_case`
+/// values above (the legacy scalar outcall fields only mirror the outcall use
+/// cases and are not summed).
 ///
 /// ```text
 /// A4                        # map(4)

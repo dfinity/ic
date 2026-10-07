@@ -2416,8 +2416,7 @@ impl SystemState {
                 ..
             }) => outstanding.instructions += prepaid_execution_cycles.nominal(),
             // Not a paused or aborted task, so it cannot be in this slot. Bail out
-            // rather than silently returning a bogus amount; the caller reports the
-            // `None` as a critical error.
+            // rather than silently returning a bogus amount.
             Some(
                 ExecutionTask::Heartbeat
                 | ExecutionTask::GlobalTimer
