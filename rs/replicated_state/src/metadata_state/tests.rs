@@ -2784,8 +2784,8 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     // the total again (otherwise the cycles consumed by deleted canisters would
     // be double counted).
     consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
-    // Subnet-level outcall use cases; the legacy scalar fields are migrated into
-    // these entries, so the entries (not the fields) are added to the total.
+    // Subnet-level outcall use cases; the entries (not the legacy scalar fields)
+    // are added to the total.
     consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(2));
     consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(4));
     // Canister-level use cases that only ever enter the map when a canister is
@@ -2920,138 +2920,6 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
     )
     .unwrap();
     assert_eq!(gauge, 127.0);
-}
-
-#[test]
-fn migrate_outcalls_scalar_fields_into_use_cases() {
-    let mut subnet_metrics = SubnetMetrics {
-        // Simulate a state persisted before use-case tracking existed: the scalar
-        // fields hold the full history while the use-case entries only cover a
-        // more recent (smaller) subset.
-        consumed_cycles_http_outcalls: NominalCycles::new(100),
-        consumed_cycles_ecdsa_outcalls: NominalCycles::new(200),
-        consumed_cycles_by_use_case: BTreeMap::from([
-            (CyclesUseCase::HTTPOutcalls, NominalCycles::new(60)),
-            (CyclesUseCase::ECDSAOutcalls, NominalCycles::new(150)),
-        ]),
-        ..Default::default()
-    };
-
-    // An unrelated use case is observed, as would happen during a round.
-    subnet_metrics
-        .observe_consumed_cycles_with_use_case(CyclesUseCase::Instructions, NominalCycles::new(5));
-
-    // The migration runs unconditionally at the end of the round.
-    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
-
-    let by_use_case = subnet_metrics.get_consumed_cycles_by_use_case();
-
-    // The HTTP/ECDSA use-case entries have been brought up to the (superset)
-    // scalar values, even though no outcall was observed.
-    assert_eq!(
-        by_use_case[&CyclesUseCase::HTTPOutcalls],
-        NominalCycles::new(100)
-    );
-    assert_eq!(
-        by_use_case[&CyclesUseCase::ECDSAOutcalls],
-        NominalCycles::new(200)
-    );
-    // The observed use case was recorded as usual.
-    assert_eq!(
-        by_use_case[&CyclesUseCase::Instructions],
-        NominalCycles::new(5)
-    );
-
-    // The scalar fields are not zeroed (kept for downgrade compatibility),
-    // even though nothing reads their value anymore.
-    assert_eq!(
-        subnet_metrics.consumed_cycles_http_outcalls,
-        NominalCycles::new(100)
-    );
-    assert_eq!(
-        subnet_metrics.consumed_cycles_ecdsa_outcalls,
-        NominalCycles::new(200)
-    );
-
-    // The getters read the (now migrated) use-case entries.
-    assert_eq!(
-        subnet_metrics.get_consumed_cycles_http_outcalls(),
-        NominalCycles::new(100)
-    );
-    assert_eq!(
-        subnet_metrics.get_consumed_cycles_ecdsa_outcalls(),
-        NominalCycles::new(200)
-    );
-}
-
-#[test]
-fn observe_http_outcall_use_case_stays_in_lockstep_with_scalar() {
-    let mut subnet_metrics = SubnetMetrics {
-        // Pre-use-case-tracking history: the scalar (100) is a superset of the
-        // use-case entry (60).
-        consumed_cycles_http_outcalls: NominalCycles::new(100),
-        consumed_cycles_by_use_case: BTreeMap::from([(
-            CyclesUseCase::HTTPOutcalls,
-            NominalCycles::new(60),
-        )]),
-        ..Default::default()
-    };
-
-    // Production order for an HTTP outcall: the scalar is bumped first, then the
-    // matching use case is observed.
-    subnet_metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(5));
-    subnet_metrics
-        .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, NominalCycles::new(5));
-
-    // The migration runs unconditionally at the end of the round. Because both
-    // the scalar and the use-case entry grew by the same amount, reconciling
-    // after the increments yields the same result as reconciling before them.
-    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
-
-    // The use-case entry caught up to the (superset) scalar and grew by 5, with
-    // no double counting.
-    assert_eq!(
-        subnet_metrics.get_consumed_cycles_by_use_case()[&CyclesUseCase::HTTPOutcalls],
-        NominalCycles::new(105)
-    );
-    assert_eq!(
-        subnet_metrics.get_consumed_cycles_http_outcalls(),
-        NominalCycles::new(105)
-    );
-}
-
-#[test]
-fn migrate_outcalls_scalar_fields_without_any_observation() {
-    // A subnet that consumed ECDSA outcall cycles before use-case tracking
-    // existed and has been idle (in subnet-level terms) ever since: no outcall,
-    // no canister deletion, no dropped message. Nothing observes a use case.
-    let mut subnet_metrics = SubnetMetrics {
-        consumed_cycles_ecdsa_outcalls: NominalCycles::new(200),
-        consumed_cycles_by_use_case: BTreeMap::from([(
-            CyclesUseCase::ECDSAOutcalls,
-            NominalCycles::new(150),
-        )]),
-        ..Default::default()
-    };
-
-    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
-
-    // The stale entry was backfilled without any use case being observed.
-    assert_eq!(
-        subnet_metrics.get_consumed_cycles_by_use_case()[&CyclesUseCase::ECDSAOutcalls],
-        NominalCycles::new(200)
-    );
-    // A zero scalar does not insert a spurious entry.
-    assert!(
-        !subnet_metrics
-            .get_consumed_cycles_by_use_case()
-            .contains_key(&CyclesUseCase::HTTPOutcalls)
-    );
-
-    // Idempotent: running it again changes nothing.
-    let before = subnet_metrics.get_consumed_cycles_by_use_case().clone();
-    subnet_metrics.migrate_outcalls_cycles_to_use_cases();
-    assert_eq!(subnet_metrics.get_consumed_cycles_by_use_case(), &before);
 }
 
 #[test]

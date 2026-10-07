@@ -521,57 +521,6 @@ impl SubnetMetrics {
         self.get_consumed_cycles_subnet_use_case(CyclesUseCase::ECDSAOutcalls)
     }
 
-    /// Migrates the cycles consumed by HTTP and ECDSA outcalls that are tracked
-    /// in the legacy scalar fields (`consumed_cycles_http_outcalls` /
-    /// `consumed_cycles_ecdsa_outcalls`) into the corresponding entries of
-    /// `consumed_cycles_by_use_case`.
-    ///
-    /// The scalar fields predate use-case tracking, so they are a superset of
-    /// the corresponding use-case entries. We therefore bring the use-case
-    /// entries up to the scalar value (via `max`), which backfills the history
-    /// that predates use-case tracking while avoiding double counting the
-    /// overlapping period.
-    ///
-    /// This is called unconditionally once per round (from the scheduler's
-    /// `finish_round`), i.e. independently of any subnet activity. Hooking it to
-    /// an observation instead would leave the entries stale indefinitely on
-    /// subnets that observe no subnet-level use case at all: the subnet-level use
-    /// cases are only observed on HTTP outcalls, threshold signature outcalls,
-    /// canister deletion and cycles lost to dropped messages, so a subnet that
-    /// does none of these (e.g. one that has stopped performing outcalls) would
-    /// never catch up.
-    ///
-    /// Running once per round rather than per observation is equivalent, because
-    /// the call sites bump the scalar field and the matching use-case entry by
-    /// the same amount: `max(entry, scalar) + delta == max(entry + delta, scalar
-    /// + delta)`. It is also idempotent, so extra invocations are harmless.
-    ///
-    /// The scalar fields are intentionally kept (and kept up to date) rather
-    /// than zeroed, even though nothing reads their value anymore (all readers
-    /// go through `consumed_cycles_by_use_case`), so that downgrading to an
-    /// earlier replica version observes the correct totals.
-    pub fn migrate_outcalls_cycles_to_use_cases(&mut self) {
-        for (scalar, use_case) in [
-            (
-                self.consumed_cycles_http_outcalls,
-                CyclesUseCase::HTTPOutcalls,
-            ),
-            (
-                self.consumed_cycles_ecdsa_outcalls,
-                CyclesUseCase::ECDSAOutcalls,
-            ),
-        ] {
-            if scalar.get() == 0 {
-                continue;
-            }
-            let entry = self
-                .consumed_cycles_by_use_case
-                .entry(use_case)
-                .or_insert_with(NominalCycles::zero);
-            *entry = (*entry).max(scalar);
-        }
-    }
-
     /// Cycles consumed by Schnorr threshold-signature outcalls
     /// (`CyclesUseCase::SchnorrOutcalls`).
     pub fn get_consumed_cycles_schnorr_outcalls(&self) -> NominalCycles {
