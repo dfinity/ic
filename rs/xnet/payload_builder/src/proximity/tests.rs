@@ -9,7 +9,7 @@ use ic_test_utilities_metrics::{
 /// `gen_range()` values in the `[low + numerator_low * (high - low) /
 /// denominator, low + numerator_high * (high - low) / denominator)` range (i.e.
 /// dividing the range into `denominator` equal chunks, any random value in
-/// chunks `nominator_low` through `nominator_high` will result in
+/// chunks `numerator_low` through `numerator_high` will result in
 /// `expected_node` being selected).
 fn assert_pick_node(
     expected_node: NodeId,
@@ -45,14 +45,13 @@ fn assert_pick_node(
 #[tokio::test]
 async fn pick_node_no_roundtrip_times() {
     with_test_replica_logger(|log| {
-        let registry = create_xnet_endpoint_url_test_fixture();
+        let registry = get_node_selection_registry_for_test();
         let metrics = MetricsRegistry::new();
 
         let mut proximity_map = ProximityMap::with_rng(
             mock_gen_range_low(0, 0),
             LOCAL_NODE,
             registry,
-            Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics)),
             &metrics,
             log,
         );
@@ -69,18 +68,17 @@ async fn pick_node_no_roundtrip_times() {
 #[tokio::test]
 async fn pick_node_some_roundtrip_times() {
     with_test_replica_logger(|log| {
-        let registry = create_xnet_endpoint_url_test_fixture();
+        let registry = get_node_selection_registry_for_test();
         let metrics = MetricsRegistry::new();
 
         // A proximity map with a recorded roundtrip time to operator 1. Should result
         // in all nodes being selected with the same probability (as operator 2
-        // should be assigned the mean priority of all weighted operators, i.e. the same
-        // priority as operator 1).
+        // should be assigned the mean weight of all weighted operators, i.e. the same
+        // weight as operator 1).
         let mut proximity_map = ProximityMap::with_rng(
             mock_gen_range_low(0, 0),
             LOCAL_NODE,
             registry,
-            Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics)),
             &metrics,
             log,
         );
@@ -101,14 +99,13 @@ async fn pick_node_some_roundtrip_times() {
 #[tokio::test]
 async fn pick_node_all_roundtrip_times() {
     with_test_replica_logger(|log| {
-        let registry = create_xnet_endpoint_url_test_fixture();
+        let registry = get_node_selection_registry_for_test();
         let metrics = MetricsRegistry::new();
 
         let mut proximity_map = ProximityMap::with_rng(
             mock_gen_range_low(0, 0),
             LOCAL_NODE,
             registry,
-            Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics)),
             &metrics,
             log,
         );
@@ -136,14 +133,13 @@ async fn pick_node_all_roundtrip_times() {
 #[tokio::test]
 async fn pick_node_extreme_roundtrip_times() {
     with_test_replica_logger(|log| {
-        let registry = create_xnet_endpoint_url_test_fixture();
+        let registry = get_node_selection_registry_for_test();
         let metrics = MetricsRegistry::new();
 
         let mut proximity_map = ProximityMap::with_rng(
             mock_gen_range_low(0, 0),
             LOCAL_NODE,
             registry,
-            Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics)),
             &metrics,
             log,
         );
@@ -194,36 +190,70 @@ async fn pick_node_extreme_roundtrip_times() {
 #[tokio::test]
 async fn pick_node_unhealthy_nodes() {
     with_test_replica_logger(|log| {
-        let registry = create_xnet_endpoint_url_test_fixture();
+        let registry = get_node_selection_registry_for_test();
         let metrics = MetricsRegistry::new();
-        let unhealthy_nodes = Arc::new(UnhealthyNodes::new(UNHEALTHY_NODE_TTL, &metrics));
 
         let mut proximity_map = ProximityMap::with_rng(
             mock_gen_range_low(0, 0),
             LOCAL_NODE,
             registry,
-            unhealthy_nodes.clone(),
             &metrics,
             log,
         );
 
         // With node 1 unhealthy, the other two nodes are picked from.
-        unhealthy_nodes.observe_failure(REMOTE_NODE_1_OPERATOR_1);
+        proximity_map.observe_failure(REMOTE_NODE_1_OPERATOR_1);
         assert_pick_node(REMOTE_NODE_2_OPERATOR_1, &mut proximity_map, 0, 1, 2);
         assert_pick_node(REMOTE_NODE_3_OPERATOR_2, &mut proximity_map, 1, 2, 2);
 
         // With all three unhealthy, all three are picked from again.
-        unhealthy_nodes.observe_failure(REMOTE_NODE_2_OPERATOR_1);
-        unhealthy_nodes.observe_failure(REMOTE_NODE_3_OPERATOR_2);
+        proximity_map.observe_failure(REMOTE_NODE_2_OPERATOR_1);
+        proximity_map.observe_failure(REMOTE_NODE_3_OPERATOR_2);
         assert_pick_node(REMOTE_NODE_1_OPERATOR_1, &mut proximity_map, 0, 1, 3);
         assert_pick_node(REMOTE_NODE_2_OPERATOR_1, &mut proximity_map, 1, 2, 3);
         assert_pick_node(REMOTE_NODE_3_OPERATOR_2, &mut proximity_map, 2, 3, 3);
         assert_eq!(Some(3), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
 
         // A successful request to node 1 leaves it as the only node to pick.
-        unhealthy_nodes.observe_success(REMOTE_NODE_1_OPERATOR_1);
+        proximity_map.observe_success(REMOTE_NODE_1_OPERATOR_1);
         assert_pick_node(REMOTE_NODE_1_OPERATOR_1, &mut proximity_map, 0, 1, 1);
         assert_eq!(Some(2), fetch_int_gauge(&metrics, METRIC_UNHEALTHY_NODES));
+    });
+}
+
+/// `uniform_sample()` draws each position from the nodes not drawn yet; and
+/// draws no more nodes than there are.
+#[test]
+fn uniform_sample() {
+    with_test_replica_logger(|log| {
+        let registry = get_node_selection_registry_for_test();
+        let nodes = vec![
+            REMOTE_NODE_1_OPERATOR_1,
+            REMOTE_NODE_2_OPERATOR_1,
+            REMOTE_NODE_3_OPERATOR_2,
+        ];
+        let sample = |gen_range, count| {
+            ProximityMap::with_rng(
+                gen_range,
+                LOCAL_NODE,
+                registry.clone(),
+                &MetricsRegistry::new(),
+                log.clone(),
+            )
+            .uniform_sample(count, nodes.clone())
+        };
+
+        // Always drawing the first node not drawn yet.
+        assert_eq!(
+            vec![REMOTE_NODE_1_OPERATOR_1, REMOTE_NODE_2_OPERATOR_1],
+            sample(mock_gen_range_low(0, 1), 2)
+        );
+        // Always drawing the last one.
+        assert_eq!(
+            vec![REMOTE_NODE_3_OPERATOR_2, REMOTE_NODE_1_OPERATOR_1],
+            sample(mock_gen_range_high(1, 1), 2)
+        );
+        assert_eq!(nodes, sample(mock_gen_range_low(0, 1), 5));
     });
 }
 

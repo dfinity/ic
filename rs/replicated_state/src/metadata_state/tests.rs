@@ -863,10 +863,10 @@ fn subnet_call_contexts_metric() {
     };
     let call = || CanisterCall::Request(Arc::new(request()));
     let canister_http_request_context = || CanisterHttpRequestContext {
-        request: request(),
+        request: Arc::new(request()),
         url: "https://".to_string(),
         max_response_bytes: None,
-        headers: Vec::new(),
+        headers: Arc::new(Vec::new()),
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: None,
@@ -911,7 +911,7 @@ fn subnet_call_contexts_metric() {
         (
             "sign_with_threshold",
             SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
-                request: request(),
+                request: Arc::new(request()),
                 args: ThresholdArguments::Ecdsa(EcdsaArguments {
                     key_id: make_key_id(),
                     message_hash: [0_u8; 32],
@@ -1126,13 +1126,13 @@ fn subnet_call_contexts_deserialization() {
         request: RequestBuilder::default()
             .sender(canister_test_id(1))
             .receiver(canister_test_id(2))
-            .build(),
+            .build_arc(),
         url: url.clone(),
         max_response_bytes: None,
-        headers: Vec::new(),
+        headers: Arc::new(Vec::new()),
         body: None,
         http_method: CanisterHttpMethod::GET,
-        transform: Some(transform.clone()),
+        transform: Some(Arc::new(transform.clone())),
         time: UNIX_EPOCH,
         replication: Replication::FullyReplicated,
         pricing_version: PricingVersion::Legacy,
@@ -1203,7 +1203,10 @@ fn subnet_call_contexts_deserialization() {
         deserialized_http_request_context.http_method,
         CanisterHttpMethod::GET
     );
-    assert_eq!(deserialized_http_request_context.transform, Some(transform));
+    assert_eq!(
+        deserialized_http_request_context.transform,
+        Some(Arc::new(transform))
+    );
 
     // Check install code call deserialization.
     assert_eq!(
@@ -1248,16 +1251,16 @@ fn canister_http_request_context(
             .sender(canister_test_id(1))
             .receiver(IC_00)
             .method_payload(vec![1, 2, 3])
-            .build(),
+            .build_arc(),
         url: "https://example.com".into(),
         max_response_bytes: None,
-        headers: vec![],
-        body: Some(vec![4, 5, 6]),
+        headers: Arc::new(vec![]),
+        body: Some(Arc::new(vec![4, 5, 6])),
         http_method: CanisterHttpMethod::GET,
-        transform: Some(Transform {
+        transform: Some(Arc::new(Transform {
             method_name: "transform".into(),
             context: vec![7, 8, 9],
-        }),
+        })),
         time,
         replication: Replication::FullyReplicated,
         pricing_version,
@@ -1542,7 +1545,7 @@ fn sign_with_threshold_context_roundtrip() {
             contexts.insert(
                 CallbackId::new(id),
                 SignWithThresholdContext {
-                    request: RequestBuilder::new().build(),
+                    request: RequestBuilder::new().build_arc(),
                     args,
                     derivation_path: Arc::new(vec![]),
                     batch_time: UNIX_EPOCH,
@@ -2501,6 +2504,33 @@ fn stream_next_reject_signal_index() {
     // Past all reject signals: `None`.
     assert_eq!(None, stream.next_reject_signal_index(143.into()));
     assert_eq!(None, stream.next_reject_signal_index(153.into()));
+}
+
+#[test]
+fn stream_has_reject_signal_between() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+    stream.reject_signals = VecDeque::from([
+        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 142.into()),
+    ]);
+
+    // Inclusive of `from`, exclusive of `to`.
+    assert!(stream.has_reject_signal_between(138.into(), 139.into()));
+    assert!(!stream.has_reject_signal_between(137.into(), 138.into()));
+    // Between reject signals.
+    assert!(!stream.has_reject_signal_between(139.into(), 142.into()));
+    assert!(stream.has_reject_signal_between(139.into(), 143.into()));
+    // Empty ranges.
+    assert!(!stream.has_reject_signal_between(138.into(), 138.into()));
+    assert!(!stream.has_reject_signal_between(142.into(), 0.into()));
+    // Past all reject signals.
+    assert!(!stream.has_reject_signal_between(143.into(), 153.into()));
 }
 
 #[test]

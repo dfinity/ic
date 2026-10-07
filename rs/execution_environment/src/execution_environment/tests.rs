@@ -3293,10 +3293,10 @@ fn execute_canister_http_request() {
         assert_eq!(http_request_context.url, url);
         assert_eq!(
             http_request_context.transform,
-            Some(Transform {
+            Some(Arc::new(Transform {
                 method_name: transform_method_name,
                 context: transform_context,
-            })
+            }))
         );
         assert_eq!(http_request_context.http_method, CanisterHttpMethod::GET);
         assert_eq!(http_request_context.request.sender, caller_canister);

@@ -17,6 +17,7 @@ use crate::numeric::{
     CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
+use crate::state::receipt_fetch::ReceiptFetchWindow;
 use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch, encode_sweep_eth_batch};
 use crate::tx::{
     Eip1559TransactionRequest, Finalized, FinalizedEip1559Transaction, GasFeeEstimate,
@@ -568,6 +569,9 @@ pub struct TransactionPipeline<R: PipelineRequest> {
     sent_tx: MultiKeyMap<TransactionNonce, R::Id, Vec<SentTransaction<R>>>,
     finalized_tx: MultiKeyMap<TransactionNonce, R::Id, Finalized<R::Transaction>>,
     next_nonce: TransactionNonce,
+    /// Ids the next finalization round fetches receipts for, and where in the pending set it
+    /// resumes. Not event-sourced, so it is reset on upgrade.
+    receipt_fetch: ReceiptFetchWindow<R::Id>,
 }
 
 /// The pipeline sending from the minter's main address, on which user withdrawals travel.
@@ -641,6 +645,7 @@ where
             sent_tx: MultiKeyMap::default(),
             finalized_tx: MultiKeyMap::default(),
             next_nonce,
+            receipt_fetch: ReceiptFetchWindow::default(),
         }
     }
 
@@ -809,6 +814,24 @@ where
         assert_eq!(self.created_tx.try_insert(nonce, *id, new_tx), Ok(()));
     }
 
+    /// The transactions whose receipts the next round fetches: as many pending ids as this
+    /// pipeline's window allows, resumed past where the previous round stopped.
+    pub fn select_receipt_fetch_round(
+        &mut self,
+        finalized_transaction_count: &TransactionCount,
+    ) -> BTreeMap<Hash, R::Id> {
+        let pending = self.sent_transactions_to_finalize(finalized_transaction_count);
+        self.receipt_fetch.select_next_round(&pending)
+    }
+
+    pub fn receipt_fetch(&self) -> &ReceiptFetchWindow<R::Id> {
+        &self.receipt_fetch
+    }
+
+    pub fn receipt_fetch_mut(&mut self) -> &mut ReceiptFetchWindow<R::Id> {
+        &mut self.receipt_fetch
+    }
+
     pub fn sent_transactions_to_finalize(
         &self,
         finalized_transaction_count: &TransactionCount,
@@ -913,6 +936,27 @@ where
 
     pub fn requests_len(&self) -> usize {
         self.pending_requests.len()
+    }
+
+    /// Requests whose transaction is created but none of whose transactions is sent yet. A
+    /// transaction sits in one stage only, but a request being resubmitted has its fee-bumped
+    /// transaction in `created_tx` while its earlier attempts stay in `sent_tx`, and counts as sent.
+    pub fn created_tx_excluding_resubmissions_len(&self) -> usize {
+        self.created_tx
+            .alt_keys()
+            .filter(|id| !self.sent_tx.contains_alt(*id))
+            .count()
+    }
+
+    pub fn sent_tx_nonces_len(&self) -> usize {
+        self.sent_tx.len()
+    }
+
+    pub fn sent_tx_transactions_len(&self) -> usize {
+        self.sent_tx
+            .iter()
+            .map(|(_nonce, _id, txs)| txs.len())
+            .sum()
     }
 
     pub fn transactions_to_sign_iter(
@@ -1040,6 +1084,9 @@ where
             sent_tx,
             finalized_tx,
             next_nonce,
+            // Not event-sourced: a replayed pipeline has a default window while the live one may
+            // have advanced, so it is deliberately left out of the comparison.
+            receipt_fetch: _,
         } = self;
 
         // We can reorder request in `reschedule_request`. The audit log won't
@@ -1194,6 +1241,15 @@ impl WithdrawalTransactions {
         pipeline.is_equivalent_to(&other.pipeline)
     }
 
+    /// The pipeline carrying user withdrawals, whose receipt fetch the finalization round drives.
+    pub fn pipeline(&self) -> &MinterTransactionPipeline {
+        &self.pipeline
+    }
+
+    pub fn pipeline_mut(&mut self) -> &mut MinterTransactionPipeline {
+        &mut self.pipeline
+    }
+
     pub fn next_transaction_nonce(&self) -> TransactionNonce {
         self.pipeline.next_transaction_nonce()
     }
@@ -1236,6 +1292,18 @@ impl WithdrawalTransactions {
     ) -> BTreeMap<Hash, LedgerBurnIndex> {
         self.pipeline
             .sent_transactions_to_finalize(finalized_transaction_count)
+    }
+
+    pub fn created_tx_excluding_resubmissions_len(&self) -> usize {
+        self.pipeline.created_tx_excluding_resubmissions_len()
+    }
+
+    pub fn sent_tx_nonces_len(&self) -> usize {
+        self.pipeline.sent_tx_nonces_len()
+    }
+
+    pub fn sent_tx_transactions_len(&self) -> usize {
+        self.pipeline.sent_tx_transactions_len()
     }
 
     pub fn requests_batch(&self, requested_batch_size: usize) -> Vec<WithdrawalRequest> {

@@ -24,7 +24,7 @@ use ic_test_utilities_registry::test_subnet_record;
 use ic_test_utilities_types::{
     ids::{
         NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_0, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5,
-        SUBNET_6, canister_test_id, node_test_id, subnet_test_id,
+        SUBNET_6, canister_test_id, node_test_id,
     },
     messages::RequestBuilder,
 };
@@ -69,15 +69,15 @@ pub(crate) const OPERATOR_2: PrincipalId = PrincipalId::new(1, [2; 29]);
 /// contain slices for `SUBNET_1` through `SUBNET_4`.
 ///
 /// Both the state and the payloads include a stream/non-empty stream slice for
-/// `SUBNET_1`, so duplicating any payload; or removing any payload except the
-/// last; will result in an invalid combination.
+/// `SUBNET_1`, so duplicating any payload; or removing the oldest payload; will
+/// result in an invalid combination.
 pub(crate) fn get_xnet_state_for_testing(
     state_manager: &FakeStateManager,
 ) -> (Vec<XNetPayload>, BTreeMap<SubnetId, ExpectedIndices>) {
-    get_xnet_state_for_testing_with_subnet_type(state_manager, None)
+    get_xnet_state_for_testing_with_own_subnet_type(state_manager, None)
 }
 
-pub(crate) fn get_xnet_state_for_testing_with_subnet_type(
+pub(crate) fn get_xnet_state_for_testing_with_own_subnet_type(
     state_manager: &FakeStateManager,
     own_subnet_type: Option<SubnetType>,
 ) -> (Vec<XNetPayload>, BTreeMap<SubnetId, ExpectedIndices>) {
@@ -94,13 +94,13 @@ pub(crate) fn get_xnet_state_for_testing_with_subnet_type(
         signal_end: 5,
     });
 
-    put_replicated_state_for_testing_with_subnet_type(
+    put_replicated_state_for_testing_with_own_subnet_type(
         state_manager,
         btreemap![SUBNET_1 => stream_1, SUBNET_2 => stream_2],
         own_subnet_type,
     );
 
-    // An `XNetPayload` with `CertifiedStreamSlices` from `SUBNET_1` and `SUBNET_3`.
+    // A `XNetPayload` with `CertifiedStreamSlices` from `SUBNET_1` and `SUBNET_3`.
     let slice_1_1 = make_certified_stream_slice(
         SUBNET_1,
         StreamConfig {
@@ -121,7 +121,7 @@ pub(crate) fn get_xnet_state_for_testing_with_subnet_type(
         stream_slices: btreemap![SUBNET_1 => slice_1_1, SUBNET_3 => slice_1_3],
     };
 
-    // An `XNetPayload` with `CertifiedStreamSlices` from `SUBNET_1` and `SUBNET_2`.
+    // A `XNetPayload` with `CertifiedStreamSlices` from `SUBNET_1` and `SUBNET_2`.
     let slice_2_1 = make_certified_stream_slice(
         SUBNET_1,
         // A slice with no messages but containing signals that if ignored would lead the
@@ -144,7 +144,7 @@ pub(crate) fn get_xnet_state_for_testing_with_subnet_type(
         stream_slices: btreemap![SUBNET_1 => slice_2_1, SUBNET_2 => slice_2_2],
     };
 
-    // An `XNetPayload` with `CertifiedStreamSlices` from `SUBNET_1` and `SUBNET_2`.
+    // A `XNetPayload` with `CertifiedStreamSlices` from `SUBNET_1` and `SUBNET_4`.
     let slice_3_1 = make_certified_stream_slice(
         SUBNET_1,
         StreamConfig {
@@ -187,10 +187,10 @@ pub(crate) fn put_replicated_state_for_testing(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     streams: StreamMap,
 ) {
-    put_replicated_state_for_testing_with_subnet_type(state_manager, streams, None);
+    put_replicated_state_for_testing_with_own_subnet_type(state_manager, streams, None);
 }
 
-pub(crate) fn put_replicated_state_for_testing_with_subnet_type(
+pub(crate) fn put_replicated_state_for_testing_with_own_subnet_type(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     streams: StreamMap,
     own_subnet_type: Option<SubnetType>,
@@ -250,16 +250,25 @@ pub(crate) fn make_certified_stream_slice_with_msg_limit(
 /// and its test-only CBOR encoding, this uses the canonical encoding and can be
 /// handed directly to `decode_slice_header()`.
 pub(crate) fn make_advert(stream: &Stream) -> CertifiedStreamSlice {
-    // `REMOTE_SUBNET`'s state, holding the advertised stream to us.
-    let mut state = ReplicatedState::new(REMOTE_SUBNET, SubnetType::Application);
-    state.with_streams(btreemap![LOCAL_SUBNET => stream.clone()]);
+    make_advert_for(REMOTE_SUBNET, LOCAL_SUBNET, stream)
+}
+
+/// Same as `make_advert()`, but with explicit source and destination subnets.
+pub(crate) fn make_advert_for(
+    src: SubnetId,
+    dst: SubnetId,
+    stream: &Stream,
+) -> CertifiedStreamSlice {
+    // `src`'s state, holding the advertised stream to `dst`.
+    let mut state = ReplicatedState::new(src, SubnetType::Application);
+    state.with_streams(btreemap![dst => stream.clone()]);
     state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
 
     let begin = stream.messages_begin();
     let (tree, _) = stream_encoding::encode_stream_slice(
         &state,
         CERTIFIED_HEIGHT,
-        LOCAL_SUBNET,
+        dst,
         begin,
         begin,
         None,
@@ -318,27 +327,21 @@ pub(crate) fn get_validation_context_for_test() -> ValidationContext {
     }
 }
 
-/// Generates a registry data_provider containing `subnet_count` subnets with a
-/// single node each (starting with subnet 1) at `REGISTRY_VERSION`; and
-/// matching`XNetEndpoint` URLs for each node (beginning at the respective
-/// expected index or else 0).
-pub(crate) fn get_registry_and_urls_for_test(
-    subnet_count: u8,
-    expected_indices: BTreeMap<SubnetId, ExpectedIndices>,
-) -> (Arc<FakeRegistryClient>, Vec<String>) {
-    get_registry_and_urls_for_test_with_subnet_types(subnet_count, expected_indices, btreemap![])
+/// Generates a client for a registry holding the local node record; and
+/// `Application` subnet records (with no member nodes) for `subnets`.
+pub(crate) fn get_registry_for_test(subnets: &[SubnetId]) -> Arc<FakeRegistryClient> {
+    get_registry_for_test_with_subnet_types(
+        subnets
+            .iter()
+            .map(|&subnet_id| (subnet_id, SubnetType::Application))
+            .collect(),
+    )
 }
 
-/// Like `get_registry_and_urls_for_test`, but with configurable subnet types.
-/// Subnets not present in `subnet_types` default to `SubnetType::Application`.
-pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
-    subnet_count: u8,
-    mut expected_indices: BTreeMap<SubnetId, ExpectedIndices>,
+/// Like `get_registry_for_test`, but with the given subnet types.
+pub(crate) fn get_registry_for_test_with_subnet_types(
     subnet_types: BTreeMap<SubnetId, SubnetType>,
-) -> (Arc<FakeRegistryClient>, Vec<String>) {
-    let mut urls = vec![];
-    let mut subnets: Vec<Vec<u8>> = vec![];
-
+) -> Arc<FakeRegistryClient> {
     let data_provider = ProtoRegistryDataProvider::new();
 
     data_provider
@@ -349,67 +352,7 @@ pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
         )
         .expect("Could not add node record for local node");
 
-    for i in 0..subnet_count {
-        let subnet_id = subnet_test_id(1 + i as u64);
-        let node_id = node_test_id(1001 + i as u64);
-        let node_ip = format!("192.168.0.{}", 1 + i);
-        let xnet_port = 2197 + i as u16;
-        let expected_index = expected_indices
-            .remove(&subnet_id)
-            .unwrap_or_default()
-            .message_index;
-
-        subnets.push(subnet_id.get().into_vec());
-
-        let mut subnet_record = test_subnet_record();
-        if let Some(&subnet_type) = subnet_types.get(&subnet_id) {
-            subnet_record.subnet_type = i32::from(subnet_type);
-        }
-        subnet_record.membership = vec![node_id.get().into_vec()];
-
-        // Set node to subnet assignment.
-        data_provider
-            .add(
-                &make_subnet_record_key(subnet_id),
-                REGISTRY_VERSION,
-                Some(subnet_record),
-            )
-            .expect("Could not add subnet record.");
-
-        // Set connection information for node.
-        let xnet_endpoint = ConnectionEndpoint {
-            ip_addr: node_ip.clone(),
-            port: xnet_port as u32,
-        };
-        data_provider
-            .add(
-                &make_node_record_key(node_id),
-                REGISTRY_VERSION,
-                Some(NodeRecord {
-                    xnet: Some(xnet_endpoint.clone()),
-                    ..Default::default()
-                }),
-            )
-            .expect("Could not add node record.");
-
-        urls.push(format!(
-            "http://{}:{}/api/v1/stream/{}?msg_begin={}&witness_begin={}&byte_limit={}",
-            node_ip,
-            xnet_port,
-            LOCAL_SUBNET,
-            expected_index,
-            expected_index,
-            adjusted_byte_limit(POOLED_SLICE_BYTE_SIZE_MAX)
-        ));
-    }
-
-    // Register subnet records for any additional subnets in `subnet_types` that
-    // were not already covered by `subnet_count`.
     for (&subnet_id, &subnet_type) in &subnet_types {
-        if subnets.iter().any(|s| s == &subnet_id.get().into_vec()) {
-            continue;
-        }
-        subnets.push(subnet_id.get().into_vec());
         let mut subnet_record = test_subnet_record();
         subnet_record.subnet_type = i32::from(subnet_type);
         data_provider
@@ -421,36 +364,35 @@ pub(crate) fn get_registry_and_urls_for_test_with_subnet_types(
             .expect("Could not add subnet record.");
     }
 
-    // Add lists of subnets.
     data_provider
         .add(
             make_subnet_list_record_key().as_str(),
             REGISTRY_VERSION,
-            Some(SubnetListRecord { subnets }),
+            Some(SubnetListRecord {
+                subnets: subnet_types
+                    .keys()
+                    .map(|subnet_id| subnet_id.get().into_vec())
+                    .collect(),
+            }),
         )
         .expect("Could not add subnet list record.");
 
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
     registry_client.update_to_latest_version();
-    (registry_client, urls)
+    registry_client
 }
 
 /// Generates a `RegistryClient` with a local node record and subnet records
 /// for `SUBNET_1` through `SUBNET_4` (all as `Application`), plus a cloud engine
-/// `SUBNET_6` which should be ignored by the payload builder.
+/// `SUBNET_6`.
 pub fn get_simple_registry_for_test() -> Arc<dyn RegistryClient> {
-    let (registry, _) = get_registry_and_urls_for_test_with_subnet_types(
-        0,
-        btreemap![],
-        btreemap![
+    get_registry_for_test_with_subnet_types(btreemap![
             SUBNET_1 => SubnetType::Application,
             SUBNET_2 => SubnetType::Application,
             SUBNET_3 => SubnetType::Application,
             SUBNET_4 => SubnetType::Application,
             SUBNET_6 => SubnetType::CloudEngine,
-        ],
-    );
-    registry
+    ])
 }
 
 /// Adds a node record with the given values to the given data provider.
@@ -495,14 +437,14 @@ fn add_subnet_record(
         .expect("Could not add subnet record.");
 }
 
-/// Creates a registry to be used with the `xnet_endpoint_url` tests. The setup
-/// is as follows:
-/// * `LOCAL_SUBNET` consisting of `LOCAL_NODE_1_OPERATOR_1` (operated by node
-///   operator 1); and
-/// * `REMOTE_SUBNET` consisting of 3 nodes: `LOCAL_NODE_1_OPERATOR_1` and
-///   `LOCAL_NODE_2_OPERATOR_1` (both operated by node operator 1) and
-///   `LOCAL_NODE_3_OPERATOR_2` (operated by node operator 2).
-pub(crate) fn create_xnet_endpoint_url_test_fixture() -> Arc<FakeRegistryClient> {
+/// Creates a registry for node selection tests (proximity, advert targets and
+/// endpoint URLs). The setup is as follows:
+/// * `LOCAL_SUBNET` consisting of `LOCAL_NODE_1_OPERATOR_1` (operated by
+///   `OPERATOR_1`) plus 5 other nodes; and
+/// * `REMOTE_SUBNET` consisting of 3 nodes: `REMOTE_NODE_1_OPERATOR_1` and
+///   `REMOTE_NODE_2_OPERATOR_1` (both operated by `OPERATOR_1`) and
+///   `REMOTE_NODE_3_OPERATOR_2` (operated by `OPERATOR_2`).
+pub(crate) fn get_node_selection_registry_for_test() -> Arc<FakeRegistryClient> {
     let data_provider = ProtoRegistryDataProvider::new();
 
     add_node_record_with_node_operator_id(
@@ -511,7 +453,11 @@ pub(crate) fn create_xnet_endpoint_url_test_fixture() -> Arc<FakeRegistryClient>
         "192.168.0.1".to_string(),
         OPERATOR_1,
     );
-    add_subnet_record(&data_provider, LOCAL_SUBNET, vec![LOCAL_NODE_1_OPERATOR_1]);
+    let local_nodes = [LOCAL_NODE_1_OPERATOR_1]
+        .into_iter()
+        .chain((101..106).map(node_test_id))
+        .collect();
+    add_subnet_record(&data_provider, LOCAL_SUBNET, local_nodes);
 
     add_node_record_with_node_operator_id(
         &data_provider,
@@ -567,4 +513,10 @@ fn mock_gen_range(numerator: u64, denominator: u64, offset: u64) -> GenRangeFn {
 
         low + (high - low) / denominator * numerator - offset
     })
+}
+
+/// A `max_certified_height` receiver whose sender is already dropped, so the
+/// advert task started by `XNetPayloadBuilderImpl::new()` ends right away.
+pub(crate) fn already_closed_receiver() -> watch::Receiver<Height> {
+    watch::channel(Height::new(0)).1
 }

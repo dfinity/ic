@@ -5,7 +5,6 @@ use crate::asset::{Asset, Erc20Asset, EthAsset};
 use crate::attestation::AttestationRequest;
 use crate::balance_scan::batcher::Delegation;
 use crate::deposit_address::DepositAddress;
-use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::logs::INFO;
 use crate::numeric::{BlockNumber, Erc20Value, TransactionCount, TransactionNonce};
@@ -120,6 +119,15 @@ impl AutomaticDeposits {
         }
     }
 
+    /// The sweeper address' pipeline, whose receipt fetch the sweeper round drives.
+    pub fn sweeper_pipeline(&self) -> &SweeperTransactionPipeline {
+        &self.sweeper_transactions
+    }
+
+    pub fn sweeper_pipeline_mut(&mut self) -> &mut SweeperTransactionPipeline {
+        &mut self.sweeper_transactions
+    }
+
     pub fn has_pending_sweeps(&self) -> bool {
         self.sweeper_transactions.has_pending_requests()
     }
@@ -168,12 +176,21 @@ impl AutomaticDeposits {
             .transactions_to_send_batch(latest_transaction_count, batch_size)
     }
 
-    pub fn sent_sweep_transactions_to_finalize(
-        &self,
-        finalized_transaction_count: &TransactionCount,
-    ) -> BTreeMap<Hash, SweepId> {
+    pub fn queued_sweep_requests_len(&self) -> usize {
+        self.sweeper_transactions.requests_len()
+    }
+
+    pub fn created_sweep_tx_excluding_resubmissions_len(&self) -> usize {
         self.sweeper_transactions
-            .sent_transactions_to_finalize(finalized_transaction_count)
+            .created_tx_excluding_resubmissions_len()
+    }
+
+    pub fn sent_sweep_tx_nonces_len(&self) -> usize {
+        self.sweeper_transactions.sent_tx_nonces_len()
+    }
+
+    pub fn sent_sweep_tx_transactions_len(&self) -> usize {
+        self.sweeper_transactions.sent_tx_transactions_len()
     }
 
     pub fn record_sweep_request(&mut self, request: SweepRequest) {

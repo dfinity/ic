@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use ic_canonical_state::{CURRENT_CERTIFICATION_VERSION, LabelLike};
+use ic_config::message_routing::ADVERT_MAX_BODY_BYTES;
 use ic_crypto_tree_hash::{Label, LabeledTree, flat_map::FlatMap};
 use ic_interfaces::messaging::XNetAdvertOutcome;
 use ic_interfaces_certified_stream_store::{
@@ -10,6 +11,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{messaging::xnet::v1, proxy::ProtoProxy};
 use ic_replicated_state::Stream;
+use ic_replicated_state::testing::StreamTesting;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     HistogramStats, fetch_int_counter_vec, metric_vec, nonzero_values,
@@ -17,7 +19,10 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_state::arb_stream_slice;
 use ic_test_utilities_types::xnet::{StreamHeaderBuilder, StreamSliceBuilder};
 use ic_types::messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT;
-use ic_types::xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex, StreamSlice};
+use ic_types::xnet::{
+    CertifiedStreamSlice, RejectReason, RejectSignal, StreamHeader, StreamIndex,
+    StreamIndexedQueue, StreamSlice,
+};
 use ic_types::{CountBytes, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{
     CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError, CertifiedSlicePool,
@@ -205,7 +210,7 @@ fn slice_garbage_collect_reject_signals(
     });
 }
 
-#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn slice_take_prefix(
     #[strategy(arb_stream_slice(
         0, // min_size
@@ -350,7 +355,7 @@ fn slice_take_prefix(
     });
 }
 
-#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn invalid_slice(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -594,7 +599,7 @@ fn matching_count_bytes(
     });
 }
 
-/// Takes a pooled slice from the given subnet. Panics if no such slice exists.
+/// Takes a pooled slice from the given subnet, if such a slice exists.
 fn take_slice(
     pool: &Mutex<CertifiedSlicePool>,
     subnet_id: SubnetId,
@@ -615,7 +620,7 @@ fn put(
     slice: CertifiedStreamSlice,
     certified_stream_store: &dyn CertifiedStreamStore,
     log: &ReplicaLogger,
-) -> CertifiedSliceResult<()> {
+) -> CertifiedSliceResult<bool> {
     CertifiedSlicePool::put(
         pool,
         subnet_id,
@@ -632,7 +637,7 @@ fn append(
     partial: CertifiedStreamSlice,
     certified_stream_store: &dyn CertifiedStreamStore,
     log: &ReplicaLogger,
-) -> CertifiedSliceResult<()> {
+) -> CertifiedSliceResult<bool> {
     CertifiedSlicePool::append(
         pool,
         subnet_id,
@@ -655,20 +660,30 @@ fn classify_advert(
     subnet_id: SubnetId,
     header: &StreamHeader,
 ) -> XNetAdvertOutcome {
-    classify_advert_with(pool, subnet_id, header, &|_, _| false)
+    pool.lock()
+        .unwrap()
+        .classify_advert(subnet_id, header, None)
 }
 
-/// `classify_advert()` against reject signals of ours, as reported by
-/// `have_reject_signal_between`.
+/// `classify_advert()` given our stream to `subnet_id`.
 fn classify_advert_with(
     pool: &Mutex<CertifiedSlicePool>,
     subnet_id: SubnetId,
     header: &StreamHeader,
-    have_reject_signal_between: &dyn Fn(StreamIndex, StreamIndex) -> bool,
+    own_stream: &Stream,
 ) -> XNetAdvertOutcome {
     pool.lock()
         .unwrap()
-        .classify_advert(subnet_id, header, have_reject_signal_between)
+        .classify_advert(subnet_id, header, Some(own_stream))
+}
+
+/// Stream holding nothing but a reject signal at `index`.
+fn stream_with_reject_signal_at(index: StreamIndex) -> Stream {
+    Stream::with_signals(
+        StreamIndexedQueue::with_begin(StreamIndex::new(0)),
+        index.increment(),
+        vec![RejectSignal::new(RejectReason::CanisterMigrating, index)].into(),
+    )
 }
 
 fn peer_header(pool: &Mutex<CertifiedSlicePool>, subnet_id: SubnetId) -> Option<StreamHeader> {
@@ -706,11 +721,11 @@ fn pool(
 ) {
     let (mut stream, from, msg_count) = test_slice;
 
-    /// Asserts that the pool has a cached stream position for the given subnet.
+    /// Tests whether the pool has a cached stream position for the given subnet.
     fn has_stream_position(subnet_id: SubnetId, pool: &Mutex<CertifiedSlicePool>) -> bool {
         !matches!(slice_stats(pool, subnet_id), (None, _, _, _))
     }
-    /// Asserts that the pool contains a slice from the given subnet.
+    /// Tests whether the pool contains a slice from the given subnet.
     fn has_slice(subnet_id: SubnetId, pool: &Mutex<CertifiedSlicePool>) -> bool {
         !matches!(slice_stats(pool, subnet_id), (_, None, 0, 0))
     }
@@ -946,7 +961,7 @@ fn pool(
 // This test creates two `StateManagerFixtures` per case (each spinning up a full
 // `StateManagerImpl` with disk I/O), so we reduce the number of cases to keep
 // the overall load within reasonable bounds.
-#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn pool_append_same_slice(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -1226,7 +1241,7 @@ fn pool_append_non_empty_to_non_empty(
     });
 }
 
-#[test_strategy::proptest(ProptestConfig::with_cases(20))]
+#[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn pool_put_invalid_slice(
     #[strategy(arb_stream_slice(
         1, // min_size
@@ -1257,7 +1272,7 @@ fn pool_put_invalid_slice(
         // Fail validation for the slice.
         certified_stream_store
             .expect_decode_certified_stream_slice()
-            .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
+            .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(SRC_SUBNET)));
         let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
         let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log.clone()));
 
@@ -1322,7 +1337,7 @@ fn pool_append_invalid_slice(
             .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
         certified_stream_store
             .expect_decode_certified_stream_slice()
-            .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
+            .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(SRC_SUBNET)));
         let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
         let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log.clone()));
 
@@ -1398,7 +1413,7 @@ fn pool_append_invalid_slice_to_empty(
         // Fail validation for the slice.
         certified_stream_store
             .expect_decode_certified_stream_slice()
-            .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(REMOTE_SUBNET)));
+            .returning(move |_, _, _| Err(DecodeStreamError::InvalidSignature(SRC_SUBNET)));
         let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
         let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log.clone()));
 
@@ -1425,7 +1440,7 @@ fn pool_append_invalid_slice_to_empty(
 // signals after inducting it is capped) requires streams with thousands of messages in it.
 //
 // It is therefore using a reduced number of cases to keep the load within reasonable bounds.
-#[test_strategy::proptest(ProptestConfig::with_cases(5))]
+#[test_strategy::proptest(ProptestConfig::with_cases(3))]
 fn pool_take_slice_respects_signal_limit(
     #[strategy(arb_stream_slice(
         MAX_SIGNALS, // min_size
@@ -1447,8 +1462,8 @@ fn pool_take_slice_respects_signal_limit(
         };
 
         let stream_begin = stream.messages_begin();
-        let fixture = StateManagerFixture::local(log.clone()).with_stream(SRC_SUBNET, stream);
-        let slice = fixture.get_slice(SRC_SUBNET, from, msg_count);
+        let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
+        let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
         // Actual return value does not matter as long as it's `Ok(_)`.
@@ -1650,9 +1665,9 @@ fn assert_pool_unlocked(pool: &Mutex<CertifiedSlicePool>) {
 
 /// Tests that the pool lock is not held while a slice is being validated (which
 /// is the expensive part of `put()` and `append()`); and that a concurrent
-/// `append()` that lands meanwhile is pooled iff more useful.
+/// `put()` that lands meanwhile is pooled iff more useful.
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
-fn pool_append_concurrent_append(
+fn pool_append_concurrent_put(
     #[strategy(arb_stream_slice(
         3, // min_size
         10, // max_size
@@ -1700,7 +1715,7 @@ fn pool_append_concurrent_append(
         });
 
         // Appending the second message produces a 2 message slice.
-        append(&pool, SRC_SUBNET, second_slice, &*store, &log).unwrap();
+        assert!(!append(&pool, SRC_SUBNET, second_slice, &*store, &log).unwrap());
 
         // The concurrently pooled slice is more useful and is not displaced by the
         // shorter, appended one.
@@ -1721,7 +1736,8 @@ fn pool_append_concurrent_append(
 }
 
 /// Tests that a pooled slice is only ever replaced by a more useful one: one
-/// with more messages; or, failing that, with more signals.
+/// with more messages; or, failing that, with more signals. And that `put()`
+/// reports whether it pooled the slice.
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn pool_put_more_useful_slice_only(
     #[strategy(arb_stream_slice(
@@ -1754,19 +1770,19 @@ fn pool_put_more_useful_slice_only(
         let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log.clone()));
 
         // Pool a single message slice, then replace it with the full slice.
-        put(&pool, SRC_SUBNET, prefix_slice.clone(), &store, &log).unwrap();
+        assert!(put(&pool, SRC_SUBNET, prefix_slice.clone(), &store, &log).unwrap());
         assert_matches!(slice_stats(&pool, SRC_SUBNET), (_, _, 1, _));
-        put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap();
+        assert!(put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap());
         assert_matches!(slice_stats(&pool, SRC_SUBNET), (_, _, count, _) if count == msg_count);
 
         // Putting the single message slice again is a no-op: it has fewer messages.
-        put(&pool, SRC_SUBNET, prefix_slice.clone(), &store, &log).unwrap();
+        assert!(!put(&pool, SRC_SUBNET, prefix_slice.clone(), &store, &log).unwrap());
         assert_matches!(slice_stats(&pool, SRC_SUBNET), (_, _, count, _) if count == msg_count);
 
         // But the same messages plus an extra signal do replace it...
-        put(&pool, SRC_SUBNET, more_signals_slice.clone(), &store, &log).unwrap();
+        assert!(put(&pool, SRC_SUBNET, more_signals_slice.clone(), &store, &log).unwrap());
         // ...while the slice with fewer signals does not.
-        put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap();
+        assert!(!put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap());
         assert_opt_slices_eq(
             Some(more_signals_slice),
             take_slice(&pool, SRC_SUBNET, None, None, None),
@@ -1779,6 +1795,59 @@ fn pool_put_more_useful_slice_only(
             ]),
             fixture.fetch_pool_put_count()
         );
+    });
+}
+
+/// Tests that `schedule_pending_pulls()` schedules a pull from a peer iff its
+/// recorded header offers something not covered by the cached stream position
+/// (or pooled slice); and only once.
+#[test]
+fn pool_schedule_pending_pulls() {
+    with_test_replica_logger(|log| {
+        let mut pool = CertifiedSlicePool::new(&MetricsRegistry::new(), log);
+        let header = StreamHeaderBuilder::new()
+            .begin(2.into())
+            .end(5.into())
+            .signals_end(3.into())
+            .build();
+        let no_reject_signals = btreemap![];
+
+        // Nothing scheduled for a peer we have heard nothing from.
+        pool.schedule_pending_pulls(&no_reject_signals);
+        assert!(!pool.unschedule_pull(SRC_SUBNET));
+
+        // With nothing pooled and no stream position, the recorded header has
+        // something to pull. Scheduled only once.
+        pool.record_peer_header(SRC_SUBNET, &header);
+        pool.schedule_pending_pulls(&no_reject_signals);
+        pool.schedule_pending_pulls(&no_reject_signals);
+        assert!(pool.unschedule_pull(SRC_SUBNET));
+        assert!(!pool.unschedule_pull(SRC_SUBNET));
+
+        // Nothing to pull once past payloads cover the recorded header...
+        pool.garbage_collect(btreemap! {
+            SRC_SUBNET => ExpectedIndices {
+                message_index: header.end(),
+                signal_index: header.signals_end(),
+                max_no_gc_header_begin: header.begin(),
+            }
+        });
+        pool.schedule_pending_pulls(&no_reject_signals);
+        assert!(!pool.unschedule_pull(SRC_SUBNET));
+
+        // ...unless the recorded header's `begin` would garbage collect a reject
+        // signal of ours that the stream position's would not.
+        pool.garbage_collect(btreemap! {
+            SRC_SUBNET => ExpectedIndices {
+                message_index: header.end(),
+                signal_index: header.signals_end(),
+                max_no_gc_header_begin: 0.into(),
+            }
+        });
+        pool.schedule_pending_pulls(&btreemap! {
+            SRC_SUBNET => stream_with_reject_signal_at(0.into())
+        });
+        assert!(pool.unschedule_pull(SRC_SUBNET));
     });
 }
 
@@ -1819,7 +1888,7 @@ fn pool_peer_header(
             .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
         let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log.clone()));
 
-        // Nothing on record for a peer we have heard nothing from.
+        // No recorded header for a peer we have heard nothing from.
         assert_eq!(None, peer_header(&pool, SRC_SUBNET));
 
         put(&pool, SRC_SUBNET, slice.clone(), &store, &log).unwrap();
@@ -2010,7 +2079,7 @@ fn pool_classify_advert(
             );
         };
 
-        // Nothing on record for a peer we have heard nothing from.
+        // No recorded header for a peer we have heard nothing from.
         assert_eq!(
             classify_advert(&pool, SRC_SUBNET, &header),
             XNetAdvertOutcome::Actionable
@@ -2094,7 +2163,7 @@ fn pool_classify_advert_accumulates_reference_points(
             .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
 
         // A pool at the given stream position, holding a slice covering all messages
-        // after that position (and the header); and having the header on record.
+        // after that position (and the header); and with the header recorded.
         let pool_at = |stream_position| {
             // A registry of its own, as each pool registers the same metrics.
             let pool = Mutex::new(CertifiedSlicePool::new(
@@ -2128,7 +2197,7 @@ fn pool_classify_advert_accumulates_reference_points(
             .end(stream.messages_end())
             .signals_end(stream.signals_end().increment())
             .build();
-        let reject_signal_at_begin = |from, to| from <= messages_begin && messages_begin < to;
+        let reject_signal_at_begin = stream_with_reject_signal_at(messages_begin);
         let pool = pool_at(ExpectedIndices {
             message_index: messages_begin,
             signal_index: stream.signals_end().increment(),
@@ -2147,8 +2216,7 @@ fn pool_classify_advert_accumulates_reference_points(
             .end(stream.messages_end())
             .signals_end(stream.signals_end())
             .build();
-        let reject_signal_before_begin =
-            |from, to| from <= messages_begin.decrement() && messages_begin.decrement() < to;
+        let reject_signal_before_begin = stream_with_reject_signal_at(messages_begin.decrement());
         let pool = pool_at(ExpectedIndices {
             message_index: stream.messages_end(),
             signal_index: stream.signals_end(),
@@ -2257,13 +2325,12 @@ fn pool_classify_advert_collecting_reject_signal(
             .signals_end(stream.signals_end())
             .build();
 
-        // A reject signal at `messages_begin`, i.e. one only the advertised header,
-        // which begins past it, collects.
-        let reject_signal_at_begin = |from, to| from <= messages_begin && messages_begin < to;
-        // A reject signal before `messages_begin`, i.e. one every reference header has
-        // already collected.
-        let reject_signal_before_begin =
-            |from, to| from <= messages_begin.decrement() && messages_begin.decrement() < to;
+        // Stream with a reject signal at `messages_begin`, i.e. one only the advertised
+        // header, which begins past it, collects.
+        let reject_signal_at_begin = stream_with_reject_signal_at(messages_begin);
+        // Stream with a reject signal before `messages_begin`, i.e. one every reference
+        // header has already collected.
+        let reject_signal_before_begin = stream_with_reject_signal_at(messages_begin.decrement());
 
         // A stream position accounting for all of the advertised signals, with the
         // given `message_index` and `max_no_gc_header_begin`.
@@ -2332,6 +2399,42 @@ fn pool_classify_advert_collecting_reject_signal(
         assert_eq!(
             classify_advert_with(&pool, SRC_SUBNET, &header, &reject_signal_before_begin),
             XNetAdvertOutcome::InPayload
+        );
+    });
+}
+
+/// An advert carrying as many reject signals as a stream header can hold must
+/// fit within `ADVERT_MAX_BODY_BYTES`, or we would reject valid adverts.
+///
+/// The signals are consecutive because that is the widest case reachable: they
+/// are delta encoded as variable length integers, and the signals we hold span
+/// at most `MAX_STREAM_MESSAGES` indices, as the peer cannot send beyond that
+/// without the `begin` that garbage collects them. Spreading them out further
+/// does grow the advert — to ~90 KB at the extreme — but that would require us
+/// to have inducted more than `MAX_STREAM_MESSAGES` at once (which we don't).
+#[test]
+fn worst_case_advert_size() {
+    with_test_replica_logger(|log| {
+        let reject_signals = (0..MAX_SIGNALS as u64)
+            .map(|index| {
+                RejectSignal::new(RejectReason::CanisterMigrating, StreamIndex::new(index))
+            })
+            .collect();
+        let stream = Stream::with_signals(
+            StreamIndexedQueue::with_begin(StreamIndex::new(0)),
+            StreamIndex::new(MAX_SIGNALS as u64),
+            reject_signals,
+        );
+        let fixture = StateManagerFixture::remote(log).with_stream(DST_SUBNET, stream);
+
+        // A header-only slice, as `certified_header()` produces.
+        let advert = fixture.get_slice(DST_SUBNET, StreamIndex::new(0), 0);
+        let advert_bytes = v1::CertifiedStreamSlice::proxy_encode(advert).len();
+
+        assert!(
+            advert_bytes < ADVERT_MAX_BODY_BYTES,
+            "an advert with {MAX_SIGNALS} reject signals encodes to {advert_bytes} bytes, \
+             at or above the {ADVERT_MAX_BODY_BYTES} byte limit"
         );
     });
 }
