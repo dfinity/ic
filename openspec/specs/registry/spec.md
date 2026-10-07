@@ -105,6 +105,11 @@ Before any mutation is applied, the registry validates that the resulting state 
 - **THEN** every `catch_up_package_contents_<subnet_id>` record must have its `cup_type` field set (`Genesis`, `Recovery`, or `SubnetSplitting`)
 - **AND** the one-time migration that backfilled records predating `cup_type` has already run in production and its code has been removed; every record is expected to already satisfy this invariant
 
+#### Scenario: cup_type is the protocol stack's source for height, time, and state_hash
+- **WHEN** the protocol stack reads a registry CUP record
+- **THEN** it reads `height`, `time`, and `state_hash` from the `Recovery` variant of `cup_type`, not from the record's legacy top-level fields of the same names, which it no longer consults
+- **AND** `Genesis` and `SubnetSplitting` carry no height/time/state_hash, since those kinds of CUP do not need them
+
 #### Scenario: Free cycles cost schedule restriction
 - **WHEN** a subnet's canister cycles cost schedule is set to "Free"
 - **THEN** the subnet type must be either Application or CloudEngine
