@@ -1067,9 +1067,7 @@ fn outstanding_prepayments_of_open_callbacks() {
     // the transmission of both the request and the response, so the response
     // transmission prepayment is not counted on top of it; it is the fallback for
     // legacy callbacks only, see
-    // `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`. The
-    // same two are what an aborted response execution carries, see
-    // `checkpoint_round_backfills_consumed_cycles_monotonic_of_aborted_response_execution`.
+    // `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`.
     //
     // The response execution prepayment is outstanding for `Instructions`, the call
     // transmission one for `RequestAndResponseTransmission`.
@@ -1144,12 +1142,10 @@ fn outstanding_prepayments_of_paused_and_aborted_executions() {
     );
 }
 
-/// Backfilling the monotonic amounts from the gauges is exact, thanks to the
-/// invariants that a gauge exceeds its monotonic counterpart by exactly the
-/// prepayments outstanding for it. And it is idempotent, so it can be redone in
-/// every checkpoint round. Covers the scalar total and the by-use-case map alike.
+/// A gauge exceeds its monotonic counterpart by exactly the prepayments outstanding
+/// for it. Covers the scalar total and the by-use-case map alike.
 #[test]
-fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
+fn consumed_cycles_monotonic_is_the_gauge_net_of_outstanding_prepayments() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let mut fixture = CanisterStateFixture::new();
     let system_state = &mut fixture.canister_state.system_state;
@@ -1228,95 +1224,6 @@ fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
     );
     assert_eq!(system_state.outstanding_prepayments(), Some(outstanding));
     assert_settled(system_state, settled, settled_memory, settled_instructions);
-
-    // Pretend the canister was loaded from a checkpoint predating the fields.
-    system_state.reset_consumed_cycles_monotonic();
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        NominalCycles::zero()
-    );
-    assert!(
-        system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases_monotonic()
-            .is_empty()
-    );
-
-    system_state.migrate_consumed_cycles_to_monotonic();
-    assert_settled(system_state, settled, settled_memory, settled_instructions);
-
-    // Redoing it changes nothing.
-    system_state.migrate_consumed_cycles_to_monotonic();
-    assert_settled(system_state, settled, settled_memory, settled_instructions);
-}
-
-/// The `HTTPOutcalls` entry of the monotonic map is the one entry with no
-/// canister-level gauge to derive it from, so the backfill must leave it alone.
-#[test]
-fn migrate_consumed_cycles_to_monotonic_skips_http_outcalls() {
-    let mut fixture = CanisterStateFixture::new();
-    let system_state = &mut fixture.canister_state.system_state;
-    system_state.consume_cycles(CompoundCycles::<MemoryUseCase>::new(
-        Cycles::new(500),
-        CanisterCyclesCostSchedule::Normal,
-    ));
-
-    // Pretend the canister was loaded from a checkpoint predating the monotonic
-    // amounts, then made an HTTPS outcall.
-    system_state.reset_consumed_cycles_monotonic();
-    let outcalls = NominalCycles::new(700);
-    system_state.observe_consumed_cycles_for_https_outcall(outcalls);
-
-    system_state.migrate_consumed_cycles_to_monotonic();
-
-    // The `Memory` entry was backfilled from its gauge; the `HTTPOutcalls` one was
-    // left at what the outcall above contributed, as the gauges account for HTTPS
-    // outcalls at the subnet level only.
-    assert_eq!(
-        system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases_monotonic(),
-        &BTreeMap::from([
-            (CyclesUseCase::Memory, NominalCycles::new(500)),
-            (CyclesUseCase::HTTPOutcalls, outcalls),
-        ])
-    );
-    // And it is not part of the scalar total, which covers the gauges' use cases only.
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        NominalCycles::new(500)
-    );
-}
-
-/// A canister with a paused execution cannot be backfilled, as the prepayment of the
-/// paused execution is not part of the replicated state.
-#[test]
-fn migrate_consumed_cycles_to_monotonic_skips_paused_execution() {
-    let mut fixture = CanisterStateFixture::new();
-    let system_state = &mut fixture.canister_state.system_state;
-    system_state.consume_cycles(CompoundCycles::<MemoryUseCase>::new(
-        Cycles::new(500),
-        CanisterCyclesCostSchedule::Normal,
-    ));
-    system_state
-        .task_queue
-        .enqueue(ExecutionTask::PausedExecution {
-            id: PausedExecutionId(0),
-            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-        });
-
-    system_state.reset_consumed_cycles_monotonic();
-    system_state.migrate_consumed_cycles_to_monotonic();
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        NominalCycles::zero()
-    );
-    assert!(
-        system_state
-            .canister_metrics()
-            .consumed_cycles_by_use_cases_monotonic()
-            .is_empty()
-    );
 }
 
 #[test]
