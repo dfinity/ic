@@ -88,11 +88,11 @@ impl std::error::Error for ReadinessError {
 /// is cooling down and the registry version `V` at which it was labeled as
 /// such. Returns one term per condition.
 ///
-/// Every term is evaluated on the median across the replicas reporting the
-/// respective series, except for the registry version, which is the minimum
-/// across all replicas: the term has to hold on every single replica, and a
-/// median would already hold (or interpolate to `V`) while some replicas lag
-/// behind. A replica that does not report its registry version reads as zero.
+/// Every term has to hold on every single replica, as a replica that lags
+/// behind still holds what the others have already processed: the registry
+/// version is the minimum across all replicas, and every other term is the
+/// maximum across the replicas reporting the respective series. A replica that
+/// does not report its registry version reads as zero.
 /// Fails if any node of any subnet (the cooling down one included) cannot be
 /// scraped, rather than evaluating the terms on partial data: most terms
 /// compare against zero, which missing data would satisfy. A series that a
@@ -147,31 +147,48 @@ pub async fn evaluate_merge_readiness(
         min_registry_version = Some(min_registry_version.map_or(version, |v: f64| v.min(version)));
         if subnet_id != source_subnet_id {
             incoming_stream_messages +=
-                metrics_helper::sum_of_medians(&metrics, METRIC_STREAM_MESSAGES, |labels| {
+                metrics_helper::max_across_replicas(&metrics, METRIC_STREAM_MESSAGES, |labels| {
                     labels.get("remote") == Some(&source_subnet)
-                });
+                })
+                .unwrap_or(0.0);
         }
     }
     let min_registry_version = min_registry_version.unwrap_or(0.0);
 
     let outgoing_stream_messages =
-        metrics_helper::sum_of_medians(&own_metrics, METRIC_STREAM_MESSAGES, |_| true);
-    let ingress_history_messages =
-        metrics_helper::sum_of_medians(&own_metrics, METRIC_INGRESS_HISTORY_BY_STATE, |labels| {
+        metrics_helper::max_across_replicas(&own_metrics, METRIC_STREAM_MESSAGES, |_| true)
+            .unwrap_or(0.0);
+    let ingress_history_messages = metrics_helper::max_across_replicas(
+        &own_metrics,
+        METRIC_INGRESS_HISTORY_BY_STATE,
+        |labels| {
             labels
                 .get("state")
                 .is_none_or(|state| state != "processing")
-        });
-    let subnet_input_queue_messages =
-        metrics_helper::sum_of_medians(&own_metrics, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, |_| true);
-    let subnet_output_queue_messages =
-        metrics_helper::sum_of_medians(&own_metrics, METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES, |_| true);
+        },
+    )
+    .unwrap_or(0.0);
+    let subnet_input_queue_messages = metrics_helper::max_across_replicas(
+        &own_metrics,
+        METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
+        |_| true,
+    )
+    .unwrap_or(0.0);
+    let subnet_output_queue_messages = metrics_helper::max_across_replicas(
+        &own_metrics,
+        METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
+        |_| true,
+    )
+    .unwrap_or(0.0);
     let subnet_call_contexts =
-        metrics_helper::sum_of_medians(&own_metrics, METRIC_SUBNET_CALL_CONTEXTS, |_| true);
+        metrics_helper::max_across_replicas(&own_metrics, METRIC_SUBNET_CALL_CONTEXTS, |_| true)
+            .unwrap_or(0.0);
     let pending_refunds =
-        metrics_helper::sum_of_medians(&own_metrics, METRIC_PENDING_REFUNDS, |_| true);
+        metrics_helper::max_across_replicas(&own_metrics, METRIC_PENDING_REFUNDS, |_| true)
+            .unwrap_or(0.0);
     let pending_refunds_cycles =
-        metrics_helper::sum_of_medians(&own_metrics, METRIC_PENDING_REFUNDS_CYCLES, |_| true);
+        metrics_helper::max_across_replicas(&own_metrics, METRIC_PENDING_REFUNDS_CYCLES, |_| true)
+            .unwrap_or(0.0);
 
     let term = |condition, description: String, satisfied: bool| Term {
         condition,
@@ -191,7 +208,7 @@ pub async fn evaluate_merge_readiness(
             Condition::IncomingStreams,
             format!(
                 "no remote subnet holds a message in its stream to subnet {source_subnet_id} \
-                 ({incoming_stream_messages} messages)"
+                 (at most {incoming_stream_messages} messages per replica, summed over the remote subnets)"
             ),
             incoming_stream_messages == 0.0,
         ),
@@ -199,7 +216,7 @@ pub async fn evaluate_merge_readiness(
             Condition::OutgoingStreams,
             format!(
                 "subnet {source_subnet_id} holds no message in any of its streams, loopback \
-                 included ({outgoing_stream_messages} messages)"
+                 included (at most {outgoing_stream_messages} messages per stream and replica)"
             ),
             outgoing_stream_messages == 0.0,
         ),
@@ -207,25 +224,29 @@ pub async fn evaluate_merge_readiness(
             Condition::IngressHistory,
             format!(
                 "the ingress history holds nothing but `processing` entries \
-                 ({ingress_history_messages} other entries)"
+                 (at most {ingress_history_messages} other entries per state and replica)"
             ),
             ingress_history_messages == 0.0,
         ),
         term(
             Condition::SubnetInputQueues,
-            format!("the subnet input queues are empty ({subnet_input_queue_messages} messages)"),
+            format!(
+                "the subnet input queues are empty (at most {subnet_input_queue_messages} messages per kind and replica)"
+            ),
             subnet_input_queue_messages == 0.0,
         ),
         term(
             Condition::SubnetOutputQueues,
-            format!("the subnet output queues are empty ({subnet_output_queue_messages} messages)"),
+            format!(
+                "the subnet output queues are empty (at most {subnet_output_queue_messages} messages per replica)"
+            ),
             subnet_output_queue_messages == 0.0,
         ),
         term(
             Condition::SubnetCallContexts,
             format!(
-                "the subnet call context manager holds no call context ({subnet_call_contexts} \
-                 call contexts)"
+                "the subnet call context manager holds no call context (at most \
+                 {subnet_call_contexts} call contexts per type and replica)"
             ),
             subnet_call_contexts == 0.0,
         ),
@@ -238,8 +259,8 @@ pub async fn evaluate_merge_readiness(
             // takes the refunds of the destination subnet, not those of the
             // subnet that is merged away.
             format!(
-                "the refund pool holds no pending anonymous refund ({pending_refunds} refunds, \
-                 worth {pending_refunds_cycles} cycles)"
+                "the refund pool holds no pending anonymous refund (at most {pending_refunds} \
+                 refunds, worth at most {pending_refunds_cycles} cycles, per replica)"
             ),
             pending_refunds == 0.0,
         ),

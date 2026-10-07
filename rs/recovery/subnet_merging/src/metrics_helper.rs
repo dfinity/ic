@@ -1,9 +1,5 @@
-//! Scraping of replica metrics, and the Prometheus aggregations the "merge
-//! readiness" condition is stated in.
-//!
-//! The condition is stated as Prometheus queries over the metrics of all
-//! replicas of a subnet; this module provides the same data by scraping the
-//! metrics endpoints of the nodes directly.
+//! Scraping of replica metrics, and the aggregations across the replicas of a
+//! subnet that the "merge readiness" condition is evaluated on.
 
 use futures::future::join_all;
 use prometheus_parse::{Scrape, Value};
@@ -52,10 +48,9 @@ impl std::error::Error for ScrapeError {}
 
 /// Fetches all series of the given metrics from the given nodes.
 ///
-/// Fails if any node cannot be scraped, unlike Prometheus, which would simply
-/// have no value for that node: a condition evaluated on the median across
-/// nodes could otherwise hold on partial data. A series that no node reports
-/// is absent though (which `sum_of_medians` reads as zero), as a node that
+/// Fails if any node cannot be scraped: a condition evaluated across the nodes
+/// could otherwise hold on partial data. A series that no node reports is
+/// absent though (which `max_across_replicas` reads as `None`), as a node that
 /// responds simply does not export that series.
 pub async fn fetch_metrics(node_ips: &[IpAddr], metrics: &[&str]) -> Result<Metrics, ScrapeError> {
     let responses = join_all(node_ips.iter().map(fetch_node_metrics)).await;
@@ -136,39 +131,29 @@ pub fn matching_series<'a>(
         .collect()
 }
 
-/// Prometheus' `quantile(0.5, ...)`: the median of `values`, interpolating
-/// between the two middle values if there is an even number of them. `None` iff
-/// `values` is empty.
-pub fn median(values: &[f64]) -> Option<f64> {
-    if values.is_empty() {
-        return None;
-    }
-    let mut values = values.to_vec();
-    values.sort_by(|a, b| a.partial_cmp(b).expect("metric value should not be NaN"));
-    let middle = (values.len() - 1) as f64 / 2.0;
-    Some((values[middle.floor() as usize] + values[middle.ceil() as usize]) / 2.0)
-}
-
-/// `sum(quantile without(ic_node, instance) (0.5, <metric>{<labels_match>}))`:
-/// the median across the replicas reporting each matching series, summed over
-/// those series.
-pub fn sum_of_medians(
+/// The largest value any replica reports for any series of `metric` whose
+/// labels match `labels_match`. `None` if there is no such series.
+///
+/// A replica that does not report a series is skipped, which fits the terms
+/// this is used for: they count items, and a replica that holds none of them
+/// simply does not export the series.
+pub fn max_across_replicas(
     metrics: &Metrics,
     metric: &str,
     labels_match: impl Fn(&Labels) -> bool,
-) -> f64 {
+) -> Option<f64> {
     matching_series(metrics, metric, labels_match)
         .into_iter()
-        .filter_map(|values| median(values))
-        .sum()
+        .flatten()
+        .copied()
+        .reduce(f64::max)
 }
 
-/// `min(<metric>{<labels_match>})` over all `replicas` replicas: the smallest
-/// value any of them reports for any matching series. `None` if fewer than
-/// `replicas` values are reported, i.e. if a replica does not export the
-/// series: unlike the medians in `sum_of_medians`, which describe the
-/// replicas that do report a series, a minimum that has to hold on every
-/// replica is only meaningful once every one of them reports.
+/// The smallest value any of `replicas` replicas reports for any series of
+/// `metric` whose labels match `labels_match`. `None` if fewer than `replicas`
+/// values are reported, i.e. if a replica does not export the series: unlike
+/// `max_across_replicas`, a minimum that has to hold on every replica is only
+/// meaningful once every one of them reports.
 pub fn min_across_replicas(
     metrics: &Metrics,
     metric: &str,
@@ -239,16 +224,7 @@ some_other_metric 12
     }
 
     #[test]
-    fn median_test() {
-        assert_eq!(median(&[]), None);
-        assert_eq!(median(&[3.0]), Some(3.0));
-        assert_eq!(median(&[3.0, 1.0]), Some(2.0));
-        assert_eq!(median(&[3.0, 1.0, 2.0]), Some(2.0));
-        assert_eq!(median(&[4.0, 1.0, 3.0, 2.0]), Some(2.5));
-    }
-
-    #[test]
-    fn medians_across_series_test() {
+    fn across_replicas_test() {
         let metrics = Metrics::from([
             (
                 series("mr_stream_messages", &[("remote", "a")]),
@@ -259,18 +235,18 @@ some_other_metric 12
         ]);
 
         assert_eq!(
-            sum_of_medians(&metrics, "mr_stream_messages", |_| true),
-            7.0
+            max_across_replicas(&metrics, "mr_stream_messages", |_| true),
+            Some(5.0)
         );
         assert_eq!(
-            sum_of_medians(&metrics, "mr_stream_messages", |labels| labels
+            max_across_replicas(&metrics, "mr_stream_messages", |labels| labels
                 .get("remote")
-                .is_some_and(|remote| remote == "b")),
-            5.0
+                .is_some_and(|remote| remote == "a")),
+            Some(3.0)
         );
         assert_eq!(
-            sum_of_medians(&metrics, "mr_registry_version", |_| true),
-            0.0
+            max_across_replicas(&metrics, "mr_registry_version", |_| true),
+            None
         );
         assert_eq!(
             min_across_replicas(&metrics, "mr_stream_messages", |_| true, 3),

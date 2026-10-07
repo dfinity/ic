@@ -64,7 +64,7 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_registry_subnet_type::SubnetType;
-use ic_subnet_merging::metrics_helper::{fetch_metrics, sum_of_medians};
+use ic_subnet_merging::metrics_helper::{fetch_metrics, min_across_replicas};
 use ic_subnet_merging::readiness::{
     Condition, METRIC_SUBNET_CALL_CONTEXTS, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, SubnetNodeIps,
     Term, evaluate_merge_readiness,
@@ -121,8 +121,9 @@ const INIT_INSTRUCTIONS: u64 = 295 * B;
 /// `U7`. The test never sets it, so those loops never end.
 const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 
-/// The number of nodes of every subnet. More than one so that the medians the
-/// merge readiness condition is made of are medians of more than one value.
+/// The number of nodes of every subnet. More than one so that the minima and
+/// maxima the merge readiness condition is made of range over more than one
+/// replica.
 const SUBNET_SIZE: usize = 4;
 
 /// The DKG interval length of the Application subnets, i.e. one less than the
@@ -608,12 +609,26 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
                 ],
             )
             .await?;
-            let enqueued = sum_of_medians(&metrics, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, |_| true);
-            let executing = sum_of_medians(&metrics, METRIC_SUBNET_CALL_CONTEXTS, |labels| {
-                labels
-                    .get("type")
-                    .is_some_and(|ty| ty == LABEL_INSTALL_CODE)
-            });
+            // The minimum across all replicas, so that the requests are known to
+            // be inducted on every replica.
+            let enqueued = min_across_replicas(
+                &metrics,
+                METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
+                |labels| labels.get("kind").is_some_and(|kind| kind == "canister"),
+                node_ips.len(),
+            )
+            .unwrap_or(0.0);
+            let executing = min_across_replicas(
+                &metrics,
+                METRIC_SUBNET_CALL_CONTEXTS,
+                |labels| {
+                    labels
+                        .get("type")
+                        .is_some_and(|ty| ty == LABEL_INSTALL_CODE)
+                },
+                node_ips.len(),
+            )
+            .unwrap_or(0.0);
             if enqueued + executing < expected {
                 bail!("{enqueued} request(s) enqueued and {executing} executing");
             }
