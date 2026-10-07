@@ -356,6 +356,17 @@ http_file(
     url = "https://snapshot.debian.org/archive/debian/20260403T143651Z/pool/main/e/edk2/ovmf-amdsev_2025.11-5_all.deb",
 )
 
+# ntpd-rs, the NTS time server the local system-test backend serves its VMs'
+# clocks from (see `rs/tests/driver/src/driver/local_backend.rs`). Its releases
+# ship no plain binary archive, so we extract the daemon from the `.deb`, like
+# OVMF above.
+http_file(
+    name = "ntpd_rs_deb",
+    downloaded_file_path = "ntpd-rs.deb",
+    sha256 = "bfb1cb83bdc3705ef6a945ed81b00d8da2443057e57dfb8e7f4b61f695317a4d",
+    url = "https://github.com/pendulum-project/ntpd-rs/releases/download/v1.9.0/ntpd-rs_1.9.0-1_amd64.deb",
+)
+
 # TLA+ tools
 bazel_dep(name = "rules_java", version = "9.3.0")
 
