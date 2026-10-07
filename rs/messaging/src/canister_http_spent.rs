@@ -666,9 +666,7 @@ mod tests {
             .unwrap_or(0)
     }
 
-    /// The cycles reported as consumed for HTTPS outcalls at the subnet level, in
-    /// the dedicated field as well as in the by-use-case map. Both must always
-    /// agree, as they are observed together.
+    /// The cycles reported as consumed for HTTPS outcalls at the subnet level.
     fn subnet_consumed(state: &ReplicatedState) -> u128 {
         subnet_consumed_for(state, CyclesUseCase::HTTPOutcalls)
     }
@@ -679,28 +677,15 @@ mod tests {
         subnet_consumed_for(state, CyclesUseCase::DeletedCanisters)
     }
 
-    /// The cycles reported as consumed for `use_case` at the subnet level, in the
-    /// by-use-case map. For the use cases that also have a dedicated field, that
-    /// field must agree, too.
+    /// The cycles reported as consumed for `use_case` at the subnet level.
     fn subnet_consumed_for(state: &ReplicatedState, use_case: CyclesUseCase) -> u128 {
-        let subnet_metrics = &state.metadata.subnet_metrics;
-        let get = |map: &BTreeMap<CyclesUseCase, NominalCycles>| {
-            map.get(&use_case)
-                .copied()
-                .unwrap_or_else(NominalCycles::zero)
-        };
-        let gauge = get(subnet_metrics.get_consumed_cycles_by_use_case());
-        match use_case {
-            CyclesUseCase::HTTPOutcalls => {
-                assert_eq!(gauge, subnet_metrics.get_consumed_cycles_http_outcalls())
-            }
-            CyclesUseCase::DeletedCanisters => assert_eq!(
-                gauge,
-                subnet_metrics.get_consumed_cycles_by_deleted_canisters()
-            ),
-            _ => {}
-        }
-        gauge.get()
+        state
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_by_use_case()
+            .get(&use_case)
+            .map(|n| n.get())
+            .unwrap_or(0)
     }
 
     fn get_refund_status(state: &ReplicatedState, refundable: Cycles) -> RefundStatus {

@@ -452,6 +452,11 @@ pub struct SubnetMetrics {
     consumed_cycles_by_deleted_canisters: NominalCycles,
     consumed_cycles_http_outcalls: NominalCycles,
     consumed_cycles_ecdsa_outcalls: NominalCycles,
+    /// The cycles consumed on this subnet, per use case. The entries only ever
+    /// grow: subnet-level use cases are never refunded, and canister-level ones
+    /// only enter the map when a canister is deleted. So besides the gauge, this
+    /// map also feeds the monotonic
+    /// `replicated_state_consumed_cycles_from_replica_start_as_counters` metric.
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
     pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.

@@ -3047,6 +3047,7 @@ fn migrate_outcalls_scalar_fields_without_any_observation() {
             .get_consumed_cycles_by_use_case()
             .contains_key(&CyclesUseCase::HTTPOutcalls)
     );
+
     // Idempotent: running it again changes nothing.
     let before = subnet_metrics.get_consumed_cycles_by_use_case().clone();
     subnet_metrics.migrate_outcalls_cycles_to_use_cases();
