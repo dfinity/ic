@@ -121,7 +121,7 @@ pub async fn evaluate_merge_readiness(
     // Terms 1 and 2 range over all subnets: the registry version of every
     // replica of every subnet and the streams of all remote subnets towards
     // this one.
-    let remote_label = format!("remote=\"{source_subnet_id}\"");
+    let source_subnet = source_subnet_id.to_string();
     let mut min_registry_version = None;
     let mut incoming_stream_messages = 0.0;
     for (&subnet_id, node_ips) in subnets {
@@ -149,7 +149,7 @@ pub async fn evaluate_merge_readiness(
             incoming_stream_messages += metrics_helper::median_across_replicas(
                 &metrics,
                 METRIC_STREAM_MESSAGES,
-                |labels| labels.contains(&remote_label),
+                |labels| labels.get("remote") == Some(&source_subnet),
             )
             .unwrap_or(0.0);
         }
@@ -160,7 +160,9 @@ pub async fn evaluate_merge_readiness(
         metrics_helper::sum_of_medians(&own_metrics, METRIC_STREAM_MESSAGES, |_| true);
     let ingress_history_messages =
         metrics_helper::sum_of_medians(&own_metrics, METRIC_INGRESS_HISTORY_BY_STATE, |labels| {
-            !labels.contains("state=\"processing\"")
+            labels
+                .get("state")
+                .is_none_or(|state| state != "processing")
         });
     let subnet_input_queue_messages =
         metrics_helper::sum_of_medians(&own_metrics, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, |_| true);

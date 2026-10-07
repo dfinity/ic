@@ -6,6 +6,7 @@
 //! metrics endpoints of the nodes directly.
 
 use futures::future::join_all;
+use prometheus_parse::{Scrape, Value};
 
 use std::{
     collections::BTreeMap,
@@ -17,9 +18,12 @@ use std::{
 /// Timeout of a single metrics request, as in `ic_recovery::get_node_metrics`.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// The labels of a series, by label name.
+pub type Labels = BTreeMap<String, String>;
+
 /// The metrics of a set of nodes, keyed by series (i.e. metric name plus
 /// labels), with one value per node reporting the series.
-pub type Metrics = BTreeMap<String, Vec<f64>>;
+pub type Metrics = BTreeMap<(String, Labels), Vec<f64>>;
 
 /// The nodes whose metrics could not be scraped, with the reason for each.
 #[derive(Debug)]
@@ -94,52 +98,41 @@ async fn fetch_node_metrics(ip: &IpAddr) -> Result<String, String> {
     }
 }
 
-/// Picks the series of the requested metrics out of a Prometheus text exposition.
-///
-/// A sample line is `<series> <value> [<timestamp>]`, where the series is the
-/// metric name followed by its labels (if any) and label values may contain
-/// spaces, so the series ends at the closing brace of its labels (or at the
-/// first whitespace if it has none) rather than at the last space of the line.
-fn parse_metrics(body: &str, metrics: &[&str]) -> Vec<(String, f64)> {
-    body.lines()
-        .filter(|line| !line.starts_with('#'))
-        .filter_map(|line| {
-            let (series, sample) = match line.rfind('}') {
-                Some(end) => line.split_at(end + 1),
-                None => line.split_once(char::is_whitespace)?,
+/// Picks the series of the requested metrics out of a Prometheus text
+/// exposition. Histograms and summaries are skipped, as are NaN values.
+fn parse_metrics(body: &str, metrics: &[&str]) -> Vec<((String, Labels), f64)> {
+    // `Scrape::parse` only fails if reading a line fails, which it cannot here.
+    let scrape = Scrape::parse(body.lines().map(|line| Ok(line.to_string())))
+        .expect("parsing a string should not fail");
+    scrape
+        .samples
+        .into_iter()
+        .filter(|sample| metrics.contains(&sample.metric.as_str()))
+        .filter_map(|sample| {
+            let value = match sample.value {
+                Value::Counter(value) | Value::Gauge(value) | Value::Untyped(value) => value,
+                Value::Histogram(_) | Value::Summary(_) => return None,
             };
-            if !metrics
+            let labels = sample
+                .labels
                 .iter()
-                .any(|metric| series_labels(series, metric).is_some())
-            {
-                return None;
-            }
-            let value = sample.split_whitespace().next()?.parse::<f64>().ok()?;
-            (!value.is_nan()).then(|| (series.to_string(), value))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            (!value.is_nan()).then_some(((sample.metric, labels), value))
         })
         .collect()
 }
 
-/// The labels of `series` (`{...}`, or the empty string for an unlabeled
-/// series) if it is a series of `metric`, i.e. the metric name followed by its
-/// labels (if any); `None` otherwise. Metric names are prefixes of one another
-/// (e.g. `..._messages` and `..._messages_total`), so a plain prefix check
-/// would mix up their series.
-fn series_labels<'a>(series: &'a str, metric: &str) -> Option<&'a str> {
-    let labels = series.strip_prefix(metric)?;
-    (labels.is_empty() || labels.starts_with('{')).then_some(labels)
-}
-
-/// The per-node values of every series of `metric` whose labels (`{...}`, or
-/// the empty string for an unlabeled series) match `labels_match`.
+/// The per-node values of every series of `metric` whose labels match
+/// `labels_match`.
 pub fn matching_series<'a>(
     metrics: &'a Metrics,
     metric: &str,
-    labels_match: impl Fn(&str) -> bool,
+    labels_match: impl Fn(&Labels) -> bool,
 ) -> Vec<&'a Vec<f64>> {
     metrics
         .iter()
-        .filter(|(series, _)| series_labels(series, metric).is_some_and(&labels_match))
+        .filter(|((name, labels), _)| name == metric && labels_match(labels))
         .map(|(_, values)| values)
         .collect()
 }
@@ -160,7 +153,11 @@ pub fn median(values: &[f64]) -> Option<f64> {
 /// `sum(quantile without(ic_node, instance) (0.5, <metric>{<labels_match>}))`:
 /// the median across the replicas reporting each matching series, summed over
 /// those series.
-pub fn sum_of_medians(metrics: &Metrics, metric: &str, labels_match: impl Fn(&str) -> bool) -> f64 {
+pub fn sum_of_medians(
+    metrics: &Metrics,
+    metric: &str,
+    labels_match: impl Fn(&Labels) -> bool,
+) -> f64 {
     matching_series(metrics, metric, labels_match)
         .into_iter()
         .filter_map(|values| median(values))
@@ -176,7 +173,7 @@ pub fn sum_of_medians(metrics: &Metrics, metric: &str, labels_match: impl Fn(&st
 pub fn median_across_replicas(
     metrics: &Metrics,
     metric: &str,
-    labels_match: impl Fn(&str) -> bool,
+    labels_match: impl Fn(&Labels) -> bool,
 ) -> Option<f64> {
     let values: Vec<f64> = matching_series(metrics, metric, labels_match)
         .into_iter()
@@ -195,7 +192,7 @@ pub fn median_across_replicas(
 pub fn min_across_replicas(
     metrics: &Metrics,
     metric: &str,
-    labels_match: impl Fn(&str) -> bool,
+    labels_match: impl Fn(&Labels) -> bool,
     replicas: usize,
 ) -> Option<f64> {
     let values: Vec<f64> = matching_series(metrics, metric, labels_match)
@@ -212,6 +209,14 @@ pub fn min_across_replicas(
 mod tests {
     use super::*;
 
+    fn series(metric: &str, labels: &[(&str, &str)]) -> (String, Labels) {
+        let labels = labels
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect();
+        (metric.to_string(), labels)
+    }
+
     const BODY: &str = "\
 # HELP mr_stream_messages Messages in streams.
 # TYPE mr_stream_messages gauge
@@ -219,6 +224,11 @@ mr_stream_messages{remote=\"subnet_1\"} 3
 mr_stream_messages{remote=\"subnet_2\"} 4 1700000000000
 mr_stream_messages{remote=\"subnet 3\"} 5
 mr_stream_messages_total 7
+# TYPE some_histogram histogram
+some_histogram_bucket{le=\"1\"} 1
+some_histogram_bucket{le=\"+Inf\"} 2
+some_histogram_sum 1.5
+some_histogram_count 2
 replicated_state_pending_refunds 0 1700000000000
 some_other_metric 12
 ";
@@ -227,20 +237,24 @@ some_other_metric 12
     fn parse_metrics_test() {
         let parsed = parse_metrics(
             BODY,
-            &["mr_stream_messages", "replicated_state_pending_refunds"],
+            &[
+                "mr_stream_messages",
+                "replicated_state_pending_refunds",
+                "some_histogram",
+            ],
         );
 
         assert_eq!(
             parsed,
             vec![
-                ("mr_stream_messages{remote=\"subnet_1\"}".to_string(), 3.0),
-                ("mr_stream_messages{remote=\"subnet_2\"}".to_string(), 4.0),
-                ("mr_stream_messages{remote=\"subnet 3\"}".to_string(), 5.0),
-                ("replicated_state_pending_refunds".to_string(), 0.0),
+                (series("mr_stream_messages", &[("remote", "subnet_1")]), 3.0),
+                (series("mr_stream_messages", &[("remote", "subnet_2")]), 4.0),
+                (series("mr_stream_messages", &[("remote", "subnet 3")]), 5.0),
+                (series("replicated_state_pending_refunds", &[]), 0.0),
             ],
             "the series of `mr_stream_messages_total`, which `mr_stream_messages` is a prefix \
-             of, must not be picked up; a trailing timestamp must not be read as the value; and \
-             a label value may contain a space",
+             of, must not be picked up; a trailing timestamp must not be read as the value; a \
+             label value may contain a space; and histograms must be skipped",
         );
     }
 
@@ -257,11 +271,11 @@ some_other_metric 12
     fn medians_across_series_test() {
         let metrics = Metrics::from([
             (
-                "mr_stream_messages{remote=\"a\"}".to_string(),
+                series("mr_stream_messages", &[("remote", "a")]),
                 vec![1.0, 3.0],
             ),
-            ("mr_stream_messages{remote=\"b\"}".to_string(), vec![5.0]),
-            ("mr_stream_messages_total".to_string(), vec![100.0]),
+            (series("mr_stream_messages", &[("remote", "b")]), vec![5.0]),
+            (series("mr_stream_messages_total", &[]), vec![100.0]),
         ]);
 
         assert_eq!(
@@ -270,7 +284,8 @@ some_other_metric 12
         );
         assert_eq!(
             sum_of_medians(&metrics, "mr_stream_messages", |labels| labels
-                .contains("remote=\"b\"")),
+                .get("remote")
+                .is_some_and(|remote| remote == "b")),
             5.0
         );
         assert_eq!(

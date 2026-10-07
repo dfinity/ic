@@ -14904,6 +14904,7 @@ version = "0.9.0"
 dependencies = [
  "futures",
  "ic-base-types",
+ "prometheus-parse",
  "reqwest",
  "tokio",
 ]

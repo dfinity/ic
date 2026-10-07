@@ -89,9 +89,9 @@ use ic_universal_canister::{
 use slog::{Logger, info};
 use std::time::Duration;
 
-/// The label selecting the `install_code` call contexts of
+/// The value of the `type` label selecting the `install_code` call contexts of
 /// `METRIC_SUBNET_CALL_CONTEXTS`.
-const LABEL_INSTALL_CODE: &str = "type=\"install_code\"";
+const LABEL_INSTALL_CODE: &str = "install_code";
 
 /// Number of loop iterations each universal canister must have completed before
 /// the conditions are evaluated, so that the loops are known to be making
@@ -610,7 +610,9 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
             .await?;
             let enqueued = sum_of_medians(&metrics, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, |_| true);
             let executing = sum_of_medians(&metrics, METRIC_SUBNET_CALL_CONTEXTS, |labels| {
-                labels.contains(LABEL_INSTALL_CODE)
+                labels
+                    .get("type")
+                    .is_some_and(|ty| ty == LABEL_INSTALL_CODE)
             });
             if enqueued + executing < expected {
                 bail!("{enqueued} request(s) enqueued and {executing} executing");
