@@ -507,7 +507,10 @@ impl CatchUpPackageProvider {
     /// discovered.
     ///
     /// Follows guidelines for DFINITY thread-safe I/O.
-    fn persist_cup(&self, cup_proto: &pb::CatchUpPackage) -> OrchestratorResult<PathBuf> {
+    pub(crate) fn persist_cup(
+        &self,
+        cup_proto: &pb::CatchUpPackage,
+    ) -> OrchestratorResult<PathBuf> {
         let cup_file_path = self.get_cup_path();
         let cup = CatchUpPackage::try_from(cup_proto).map_err(|e| {
             OrchestratorError::IoError(
