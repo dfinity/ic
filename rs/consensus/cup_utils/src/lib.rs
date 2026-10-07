@@ -435,7 +435,8 @@ mod tests {
     use ic_protobuf::{
         registry::subnet::v1::{
             CatchUpPackageContents, ChainKeyConfig, GenesisArgs, KeyConfig, RecoveryArgs,
-            RegistryStoreUri, SubnetRecord, catch_up_package_contents::CupType,
+            RegistryStoreUri, SubnetRecord, SubnetSplittingArgs,
+            catch_up_package_contents::CupType,
         },
         types::v1::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, master_public_key_id::KeyId},
     };
@@ -445,6 +446,7 @@ mod tests {
         consensus::{ConsensusMessageHashable, HasVersion, idkg::IDkgUIDGenerator},
         crypto::{AlgorithmId, CryptoHash, CryptoResult, threshold_sig::ni_dkg::NiDkgTag},
         registry::RegistryClientError,
+        subnet_id_into_protobuf,
     };
     use ic_types_test_utils::ids::subnet_test_id;
     use rstest::rstest;
@@ -750,7 +752,9 @@ mod tests {
             CryptoHash(vec![1, 2, 3, 4, 5]),
         )),
     )]
-    #[case::subnet_splitting(Some(CupType::SubnetSplitting(Default::default())), None)]
+    #[case::subnet_splitting(Some(CupType::SubnetSplitting(SubnetSplittingArgs {
+        destination_subnet_id: Some(subnet_id_into_protobuf(subnet_test_id(1))),
+    })), None)]
     #[case::missing(None, None)]
     fn test_make_registry_cup(
         #[case] cup_type: Option<CupType>,
