@@ -286,7 +286,7 @@ impl Upgrade {
         // loop will fail to parse the CUP's subnet ID since that CUP corresponds to the new
         // registry. Instead, we persist the CUP only after we have successfully downloaded the
         // registry, just before we restart the process.
-        self.download_registry_and_restart_if_nns_subnet_recovery(
+        self.download_registry_and_restart_if_nns_failover_nodes_recovery(
             subnet_id,
             latest_registry_version,
         )
@@ -437,7 +437,7 @@ impl Upgrade {
     // contents of the local registry store in the process of doing this, we
     // will not perpetually hit this case, and thus it is not important to
     // check the height.
-    async fn download_registry_and_restart_if_nns_subnet_recovery(
+    async fn download_registry_and_restart_if_nns_failover_nodes_recovery(
         &self,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
@@ -485,10 +485,12 @@ impl Upgrade {
             // replace the registry local store, so we simply issue a warning.
             warn!(self.logger, "Failed to stop children with error {:?}", e);
         }
+
         let new_local_store = LocalStoreImpl::new(local_store_location.path());
         self.registry_replicator
             .stop_polling_and_set_local_registry_data(&new_local_store)
             .await;
+
         // Restart the current process to pick up the new local store.
         // The call should not return. If it does, it is an error.
         Err(reexec_current_process(&self.logger))
