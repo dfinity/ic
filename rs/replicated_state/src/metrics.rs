@@ -473,26 +473,22 @@ impl ReplicatedStateMetrics {
                 | Some(ExecutionTask::OnLowWasmMemory)
                 | None => {}
             }
-            join_consumed_cycles_by_use_case(
-                &mut consumed_cycles_total_by_use_case,
-                canister
-                    .system_state
-                    .canister_metrics()
-                    .consumed_cycles_by_use_cases(),
-            );
-            // For the purpose of exporting the total counters to prometheus, filter out HTTPS
-            // outcalls from canister level metrics as they will be added later from the subnet level metrics.
-            // This only applies for the counter version of metrics as the gauge version only updates
-            // the subnet level part.
-            let mut counter_metrics_map = canister
+            // For the purpose of exporting the totals to prometheus, filter out HTTPS
+            // outcalls from canister level metrics as they will be added later from the
+            // subnet level metrics.
+            let mut canister_metrics_map = canister
                 .system_state
                 .canister_metrics()
                 .consumed_cycles_by_use_cases_monotonic()
                 .clone();
-            counter_metrics_map.remove(&CyclesUseCase::HTTPOutcalls);
+            canister_metrics_map.remove(&CyclesUseCase::HTTPOutcalls);
+            join_consumed_cycles_by_use_case(
+                &mut consumed_cycles_total_by_use_case,
+                &canister_metrics_map,
+            );
             join_consumed_cycles_by_use_case(
                 &mut consumed_cycles_total_by_use_case_monotonic,
-                &counter_metrics_map,
+                &canister_metrics_map,
             );
             let queues = canister.system_state.queues();
             ingress_queue_message_count += queues.ingress_queue_message_count();
