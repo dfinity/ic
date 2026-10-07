@@ -1779,18 +1779,14 @@ fn credit_refund() {
 #[test]
 fn consumed_cycles_total_is_the_same_across_a_restart() {
     // Non-zero subnet-level consumption, covering both ways it accumulates:
-    // deleted canisters and subnet-level use cases. As production does, the
-    // outcalls are observed both in the legacy scalar fields and under their use
-    // cases.
+    // deleted canisters and subnet-level use cases.
     let mut metadata = SystemMetadata::new(SUBNET_ID, SubnetType::Application);
     let subnet_metrics = &mut metadata.subnet_metrics;
     subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::new(1_000));
-    subnet_metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(200));
     subnet_metrics.observe_consumed_cycles_with_use_case(
         CyclesUseCase::HTTPOutcalls,
         NominalCycles::new(200),
     );
-    subnet_metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(30));
     subnet_metrics.observe_consumed_cycles_with_use_case(
         CyclesUseCase::ECDSAOutcalls,
         NominalCycles::new(30),

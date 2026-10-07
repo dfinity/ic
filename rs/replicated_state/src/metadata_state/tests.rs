@@ -2784,8 +2784,7 @@ fn consumed_cycles_total_calculates_the_right_amount() {
     // the total again (otherwise the cycles consumed by deleted canisters would
     // be double counted).
     consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
-    // Subnet-level outcall use cases; the entries (not the legacy scalar fields)
-    // are added to the total.
+    // Subnet-level outcall use cases; added to the total.
     consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(2));
     consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(4));
     // Canister-level use cases that only ever enter the map when a canister is
@@ -2820,11 +2819,6 @@ fn consumed_cycles_total_calculates_the_right_amount() {
 
     let subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(16384),
-        // Deliberately out of sync with (and much larger than) the matching
-        // use-case entries: nothing reads the value of the legacy scalar fields
-        // anymore, so they must not contribute to either total.
-        consumed_cycles_http_outcalls: NominalCycles::new(32768),
-        consumed_cycles_ecdsa_outcalls: NominalCycles::new(65536),
         consumed_cycles_by_use_case,
         ..Default::default()
     };
@@ -2859,9 +2853,10 @@ fn consumed_cycles_total_calculates_the_right_amount() {
 /// missing contribution is always detectable in the total.
 #[test]
 fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
-    // The three use cases with a dedicated scalar field are also mirrored in the
-    // by-use-case map (as they are in production), while `SchnorrOutcalls`,
-    // `VetKd` and `DroppedMessages` live only in the map.
+    // `DeletedCanisters` is also mirrored by the dedicated
+    // `consumed_cycles_by_deleted_canisters` scalar field (as it is in
+    // production), while the remaining subnet-level use cases live only in the
+    // map.
     let mut consumed_cycles_by_use_case = BTreeMap::new();
     consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
     consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(2));
@@ -2891,8 +2886,6 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
 
     let mut subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(1),
-        consumed_cycles_ecdsa_outcalls: NominalCycles::new(2),
-        consumed_cycles_http_outcalls: NominalCycles::new(4),
         consumed_cycles_by_use_case,
         ..Default::default()
     };

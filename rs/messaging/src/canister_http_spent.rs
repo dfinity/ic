@@ -437,7 +437,6 @@ fn apply_accounting(
 
     let subnet_metrics = &mut state.metadata.subnet_metrics;
     if !subnet_consumed.is_zero() {
-        subnet_metrics.observe_consumed_cycles_http_outcalls(subnet_consumed);
         subnet_metrics
             .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, subnet_consumed);
     }
@@ -562,7 +561,6 @@ mod tests {
         )
         .nominal();
         let subnet_metrics = &mut state.metadata.subnet_metrics;
-        subnet_metrics.observe_consumed_cycles_http_outcalls(consumed_before);
         subnet_metrics
             .observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, consumed_before);
 
