@@ -146,12 +146,10 @@ pub async fn evaluate_merge_readiness(
         .unwrap_or(0.0);
         min_registry_version = Some(min_registry_version.map_or(version, |v: f64| v.min(version)));
         if subnet_id != source_subnet_id {
-            incoming_stream_messages += metrics_helper::median_across_replicas(
-                &metrics,
-                METRIC_STREAM_MESSAGES,
-                |labels| labels.get("remote") == Some(&source_subnet),
-            )
-            .unwrap_or(0.0);
+            incoming_stream_messages +=
+                metrics_helper::sum_of_medians(&metrics, METRIC_STREAM_MESSAGES, |labels| {
+                    labels.get("remote") == Some(&source_subnet)
+                });
         }
     }
     let min_registry_version = min_registry_version.unwrap_or(0.0);
@@ -166,22 +164,14 @@ pub async fn evaluate_merge_readiness(
         });
     let subnet_input_queue_messages =
         metrics_helper::sum_of_medians(&own_metrics, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, |_| true);
-    let subnet_output_queue_messages = metrics_helper::median_across_replicas(
-        &own_metrics,
-        METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
-        |_| true,
-    )
-    .unwrap_or(0.0);
+    let subnet_output_queue_messages =
+        metrics_helper::sum_of_medians(&own_metrics, METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES, |_| true);
     let subnet_call_contexts =
         metrics_helper::sum_of_medians(&own_metrics, METRIC_SUBNET_CALL_CONTEXTS, |_| true);
     let pending_refunds =
-        metrics_helper::median_across_replicas(&own_metrics, METRIC_PENDING_REFUNDS, |_| true)
-            .unwrap_or(0.0);
+        metrics_helper::sum_of_medians(&own_metrics, METRIC_PENDING_REFUNDS, |_| true);
     let pending_refunds_cycles =
-        metrics_helper::median_across_replicas(&own_metrics, METRIC_PENDING_REFUNDS_CYCLES, |_| {
-            true
-        })
-        .unwrap_or(0.0);
+        metrics_helper::sum_of_medians(&own_metrics, METRIC_PENDING_REFUNDS_CYCLES, |_| true);
 
     let term = |condition, description: String, satisfied: bool| Term {
         condition,

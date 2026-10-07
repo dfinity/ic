@@ -55,9 +55,8 @@ impl std::error::Error for ScrapeError {}
 /// Fails if any node cannot be scraped, unlike Prometheus, which would simply
 /// have no value for that node: a condition evaluated on the median across
 /// nodes could otherwise hold on partial data. A series that no node reports
-/// is absent though (which `sum_of_medians` reads as zero, and
-/// `median_across_replicas` as `None`), as a node that responds simply does not
-/// export that series.
+/// is absent though (which `sum_of_medians` reads as zero), as a node that
+/// responds simply does not export that series.
 pub async fn fetch_metrics(node_ips: &[IpAddr], metrics: &[&str]) -> Result<Metrics, ScrapeError> {
     let responses = join_all(node_ips.iter().map(fetch_node_metrics)).await;
 
@@ -164,31 +163,12 @@ pub fn sum_of_medians(
         .sum()
 }
 
-/// `quantile(0.5, <metric>{<labels_match>})`: the median across all replicas
-/// reporting any matching series. `None` if there is no such series.
-///
-/// This pools the values of all matching series (e.g. across all `remote` or
-/// `state` label values), so it is only meaningful for unlabeled metrics or if
-/// `labels_match` selects a single label combination.
-pub fn median_across_replicas(
-    metrics: &Metrics,
-    metric: &str,
-    labels_match: impl Fn(&Labels) -> bool,
-) -> Option<f64> {
-    let values: Vec<f64> = matching_series(metrics, metric, labels_match)
-        .into_iter()
-        .flatten()
-        .copied()
-        .collect();
-    median(&values)
-}
-
 /// `min(<metric>{<labels_match>})` over all `replicas` replicas: the smallest
 /// value any of them reports for any matching series. `None` if fewer than
 /// `replicas` values are reported, i.e. if a replica does not export the
-/// series: unlike the medians above, which describe the replicas that do
-/// report a series, a minimum that has to hold on every replica is only
-/// meaningful once every one of them reports.
+/// series: unlike the medians in `sum_of_medians`, which describe the
+/// replicas that do report a series, a minimum that has to hold on every
+/// replica is only meaningful once every one of them reports.
 pub fn min_across_replicas(
     metrics: &Metrics,
     metric: &str,
@@ -289,12 +269,8 @@ some_other_metric 12
             5.0
         );
         assert_eq!(
-            median_across_replicas(&metrics, "mr_stream_messages", |_| true),
-            Some(3.0)
-        );
-        assert_eq!(
-            median_across_replicas(&metrics, "mr_registry_version", |_| true),
-            None
+            sum_of_medians(&metrics, "mr_registry_version", |_| true),
+            0.0
         );
         assert_eq!(
             min_across_replicas(&metrics, "mr_stream_messages", |_| true, 3),
