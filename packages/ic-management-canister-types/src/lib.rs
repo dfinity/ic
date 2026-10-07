@@ -1625,7 +1625,7 @@ pub struct SubnetMetricsArgs {
 ///
 /// All but `million_round_instructions_total` are the same values, with the same
 /// staleness, that `read_state` returns for the `/subnet/<subnet_id>/metrics` path,
-/// so the two agree; that field has no `read_state` counterpart.
+/// so those agree; that field has no `read_state` counterpart.
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
 )]
@@ -1656,7 +1656,7 @@ pub struct SubnetMetricsResult {
     ///
     /// Covers both executed Wasm and the fixed per-execution and per-canister
     /// scheduler overheads plus non-Wasm charges (compilation, chunk assembly,
-    /// snapshots), so it is not a Wasm instruction meter.
+    /// snapshots), so this is not a Wasm instruction meter.
     pub million_round_instructions_total: Nat,
 }
 
