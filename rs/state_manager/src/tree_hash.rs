@@ -349,10 +349,20 @@ mod tests {
             let mut subnet_metrics = SubnetMetrics::default();
 
             subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::zero());
+            // As production does, observe the outcalls both in the scalar fields
+            // and under their use cases.
             subnet_metrics
                 .observe_consumed_cycles_http_outcalls(NominalCycles::new(50_000_000_000));
+            subnet_metrics.observe_consumed_cycles_with_use_case(
+                CyclesUseCase::HTTPOutcalls,
+                NominalCycles::new(50_000_000_000),
+            );
             subnet_metrics
                 .observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(100_000_000_000));
+            subnet_metrics.observe_consumed_cycles_with_use_case(
+                CyclesUseCase::ECDSAOutcalls,
+                NominalCycles::new(100_000_000_000),
+            );
             subnet_metrics.num_canisters = 5;
             subnet_metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
             subnet_metrics.update_transactions_total = 4200;
@@ -374,13 +384,12 @@ mod tests {
             });
             subnet_metrics.threshold_signature_agreements =
                 BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
-            // As the scheduler does once per round, fold the scalar outcall
-            // fields into the corresponding `consumed_cycles_by_use_case`
-            // entries, which is where the totals read them from. The scalar
-            // fields are left in place, as they still are in production.
-            subnet_metrics.migrate_outcalls_cycles_to_use_cases();
-
-            subnet_metrics.refresh_consumed_cycles(NominalCycles::zero());
+            // Exercise the monotonic canisters' part, which only `V30` and later
+            // report. The gauge part stays zero, so that the hashes for earlier
+            // certification versions are unaffected. (In production, the monotonic
+            // part never exceeds the gauge part, but that is irrelevant here.)
+            subnet_metrics
+                .refresh_consumed_cycles(NominalCycles::zero(), NominalCycles::new(30_000_000_000));
 
             state.metadata.subnet_metrics = subnet_metrics;
 
@@ -418,6 +427,7 @@ mod tests {
             "3EE82452CD7712A87BC313F6AD0BBEEC7F264A4699BEBD324A961080D96F5FD1",
             "512D8886C4E68D75AA1EE4AFC26A67F2BA00E56FB75FE5C9FB7E69DDA25026EB",
             "A15A37BD9A0454C39D6B9A4234001D19B02433D8F0CD790664027145790B06B3",
+            "C81D47E2FDC5822705E25AE2C06C11FDE4E3EE0ECE4187A5089A27C7B1688392",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 

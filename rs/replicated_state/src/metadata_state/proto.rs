@@ -276,15 +276,6 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
                     cycles: Some((&cycles).into()),
                 })
                 .collect(),
-            consumed_cycles_by_use_case_monotonic: item
-                .consumed_cycles_by_use_case_monotonic
-                .clone()
-                .into_iter()
-                .map(|(use_case, cycles)| ConsumedCyclesByUseCase {
-                    use_case: pbCyclesUseCase::from(use_case).into(),
-                    cycles: Some((&cycles).into()),
-                })
-                .collect(),
             num_canisters: Some(item.num_canisters),
             canister_state_bytes: Some(item.canister_state_bytes.get()),
             update_transactions_total: Some(item.update_transactions_total),
@@ -299,19 +290,6 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
         let mut consumed_cycles_by_use_case = BTreeMap::new();
         for x in item.consumed_cycles_by_use_case.into_iter() {
             consumed_cycles_by_use_case.insert(
-                CyclesUseCase::try_from(pbCyclesUseCase::try_from(x.use_case).map_err(|_| {
-                    ProxyDecodeError::ValueOutOfRange {
-                        typ: "CyclesUseCase",
-                        err: format!("Unexpected value of cycles use case: {}", x.use_case),
-                    }
-                })?)?,
-                NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
-            );
-        }
-
-        let mut consumed_cycles_by_use_case_monotonic = BTreeMap::new();
-        for x in item.consumed_cycles_by_use_case_monotonic.into_iter() {
-            consumed_cycles_by_use_case_monotonic.insert(
                 CyclesUseCase::try_from(pbCyclesUseCase::try_from(x.use_case).map_err(|_| {
                     ProxyDecodeError::ValueOutOfRange {
                         typ: "CyclesUseCase",
@@ -350,11 +328,11 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             .unwrap_or_else(|_| NominalCycles::zero()),
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
-            consumed_cycles_by_use_case_monotonic,
             // Transient, with no corresponding proto field:
             // `ReplicatedState::new_from_checkpoint` derives it from the canisters
             // it loads.
             consumed_cycles_total_including_canisters: NominalCycles::zero(),
+            consumed_cycles_total_including_canisters_monotonic: NominalCycles::zero(),
             num_canisters: try_from_option_field(
                 item.num_canisters,
                 "SubnetMetrics::num_canisters",
