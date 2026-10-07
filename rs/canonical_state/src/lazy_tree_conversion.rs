@@ -597,6 +597,7 @@ macro_rules! message_expander {
                 CertificationVersion::V27 => $expand::<{ CertificationVersion::V27 as u32 }>,
                 CertificationVersion::V28 => $expand::<{ CertificationVersion::V28 as u32 }>,
                 CertificationVersion::V29 => $expand::<{ CertificationVersion::V29 as u32 }>,
+                CertificationVersion::V30 => $expand::<{ CertificationVersion::V30 as u32 }>,
             }
         }
     };
@@ -1024,6 +1025,7 @@ fn select_canister_expander(version: CertificationVersion) -> SubtreeExpander {
         CertificationVersion::V27 => expand_canister::<{ CertificationVersion::V27 as u32 }>,
         CertificationVersion::V28 => expand_canister::<{ CertificationVersion::V28 as u32 }>,
         CertificationVersion::V29 => expand_canister::<{ CertificationVersion::V29 as u32 }>,
+        CertificationVersion::V30 => expand_canister::<{ CertificationVersion::V30 as u32 }>,
     }
 }
 
@@ -1144,7 +1146,8 @@ fn subnets_as_tree<'a>(
                         subnet_id == &own_subnet_id,
                         "metrics",
                         // Starting with `V29`, the reported total also includes
-                        // the cycles consumed by all non-deleted canisters.
+                        // the cycles consumed by all non-deleted canisters
+                        // (starting with `V30`, as monotonic amounts).
                         blob(move || encode_subnet_metrics(metrics, certification_version)),
                     )
                     .with_tree_if(
