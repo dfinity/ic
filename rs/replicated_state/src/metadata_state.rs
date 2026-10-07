@@ -474,6 +474,12 @@ pub struct SubnetMetrics {
     /// until [`Self::refresh_consumed_cycles`] derives it.
     #[validate_eq(Ignore)]
     consumed_cycles_total_including_canisters: NominalCycles,
+
+    /// Backing store of
+    /// [`Self::consumed_cycles_total_including_canisters_monotonic()`]; zero until
+    /// [`Self::refresh_consumed_cycles`] derives it.
+    #[validate_eq(Ignore)]
+    consumed_cycles_total_including_canisters_monotonic: NominalCycles,
 }
 
 impl SubnetMetrics {
@@ -618,8 +624,10 @@ impl SubnetMetrics {
     /// This is the current computation, which avoids double counting the cycles
     /// consumed by deleted canisters, as the legacy
     /// [`Self::consumed_cycles_total_v28`] does. It is one of the two summands of
-    /// [`Self::consumed_cycles_total_including_canisters`], which is what the
-    /// canonical state consumer reports from certification version `V29` on.
+    /// [`Self::consumed_cycles_total_including_canisters`] and of
+    /// [`Self::consumed_cycles_total_including_canisters_monotonic`], which are
+    /// what the canonical state consumer reports for certification version `V29`
+    /// and from certification version `V30` on, respectively.
     pub fn consumed_cycles_total(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
@@ -660,24 +668,48 @@ impl SubnetMetrics {
     /// exist, as of the end of the last committed round.
     ///
     /// Every consumer of the full total reads it here -- the certified state tree at
-    /// `/subnet/<subnet_id>/metrics` (from certification version `V29`) and the
+    /// `/subnet/<subnet_id>/metrics` (at certification version `V29`) and the
     /// `replicated_state_consumed_cycles_since_replica_started` gauge -- so they
     /// cannot drift apart.
     pub fn consumed_cycles_total_including_canisters(&self) -> NominalCycles {
         self.consumed_cycles_total_including_canisters
     }
 
-    /// Recomputes [`Self::consumed_cycles_total_including_canisters`] from the
-    /// subnet-level aggregate and `consumed_by_canisters`, the sum of
-    /// `CanisterMetrics::consumed_cycles()` over the canisters that currently exist.
+    /// The monotonic counterpart of
+    /// [`Self::consumed_cycles_total_including_canisters`]:
+    /// [`Self::consumed_cycles_total`] plus the sum of
+    /// `CanisterMetrics::consumed_cycles_monotonic()` (rather than of the
+    /// `CanisterMetrics::consumed_cycles()` gauge, which also includes outstanding
+    /// prepayments) over the canisters that currently exist, as of the end of the
+    /// last committed round.
+    ///
+    /// This is what the certified state tree at `/subnet/<subnet_id>/metrics`
+    /// reports from certification version `V30` on.
+    pub fn consumed_cycles_total_including_canisters_monotonic(&self) -> NominalCycles {
+        self.consumed_cycles_total_including_canisters_monotonic
+    }
+
+    /// Recomputes [`Self::consumed_cycles_total_including_canisters`] and
+    /// [`Self::consumed_cycles_total_including_canisters_monotonic`] from the
+    /// subnet-level aggregate and, respectively, `consumed_by_canisters`, the sum
+    /// of `CanisterMetrics::consumed_cycles()`, and `consumed_by_canisters_monotonic`,
+    /// the sum of `CanisterMetrics::consumed_cycles_monotonic()`, over the canisters
+    /// that currently exist.
     ///
     /// Callers pass the canisters' part only; adding the subnet-level part happens
-    /// here, so no caller can get it wrong. The total is derived, not
+    /// here, so no caller can get it wrong. The totals are derived, not
     /// persisted: `ReplicatedState::refresh_consumed_cycles` calls this whenever a
     /// state is committed and `ReplicatedState::new_from_checkpoint` on load.
-    pub fn refresh_consumed_cycles(&mut self, consumed_by_canisters: NominalCycles) {
+    pub fn refresh_consumed_cycles(
+        &mut self,
+        consumed_by_canisters: NominalCycles,
+        consumed_by_canisters_monotonic: NominalCycles,
+    ) {
+        let consumed_cycles_total = self.consumed_cycles_total();
         self.consumed_cycles_total_including_canisters =
-            self.consumed_cycles_total() + consumed_by_canisters;
+            consumed_cycles_total + consumed_by_canisters;
+        self.consumed_cycles_total_including_canisters_monotonic =
+            consumed_cycles_total + consumed_by_canisters_monotonic;
     }
 
     /// Legacy computation of the total consumed cycles, used by the canonical
@@ -689,8 +721,9 @@ impl SubnetMetrics {
     /// `consumed_cycles_by_use_case` map, and both are summed here. It is kept
     /// unchanged to preserve the certified state for certification versions up
     /// to and including `V28`; from `V29` on the consumer reports
-    /// [`Self::consumed_cycles_total_including_canisters`], which does not
-    /// double count.
+    /// [`Self::consumed_cycles_total_including_canisters`] (`V29`) or
+    /// [`Self::consumed_cycles_total_including_canisters_monotonic`] (from `V30`
+    /// on), which do not double count.
     pub fn consumed_cycles_total_v28(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
