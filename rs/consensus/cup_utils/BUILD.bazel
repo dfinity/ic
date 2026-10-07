@@ -29,5 +29,6 @@ rust_test(
         "//rs/registry/keys",
         "//rs/types/types_test_utils",
         "@crate_index//:prost",
+        "@crate_index//:rstest",
     ],
 )
