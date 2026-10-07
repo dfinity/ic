@@ -278,9 +278,14 @@ impl Upgrade {
         // When we arrived here, we are an assigned node.
         *self.subnet_assignment.write().unwrap() = SubnetAssignment::Assigned(subnet_id);
 
-        // Always check if we're in an NNS subnet recovery case and download the new registry if
-        // needed. If we indeed are in this scenario and everything succeeds, the process restarts
-        // and the below function will not return
+        // Always check if there is an ongoing NNS recovery on failover nodes. If we indeed are in
+        // this scenario and everything succeeds, the process restarts and the below function will
+        // not return.
+        // We perform this check _before_ we fetch and persist the latest CUP, because if the latter
+        // indeed triggers this scenario but the registry download fails, the next iteration of the
+        // loop will fail to parse the CUP's subnet ID since that CUP corresponds to the new
+        // registry. Instead, we persist the CUP only after we have successfully downloaded the
+        // registry, just before we restart the process.
         self.download_registry_and_restart_if_nns_subnet_recovery(
             subnet_id,
             latest_registry_version,
