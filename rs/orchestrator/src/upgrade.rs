@@ -466,8 +466,9 @@ impl Upgrade {
             registry_store_uri.hash,
         );
         let downloader = FileDownloader::new(Some(self.logger.clone()));
-        let local_store_location = tempfile::tempdir()
-            .expect("temporary location for local store download could not be created");
+        let local_store_location = tempfile::tempdir().map_err(|e| {
+            OrchestratorError::IoError("Failed to create temporary directory".to_string(), e)
+        })?;
         downloader
             .download_and_extract_tar(
                 &registry_store_uri.uri,
