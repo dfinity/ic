@@ -447,7 +447,7 @@ impl TryFrom<Option<subnet_pb::catch_up_package_contents::CupType>> for CupType 
             CupTypePb::SubnetSplitting(subnet_splitting_args) => CupType::SubnetSplitting {
                 destination_subnet_id: subnet_id_try_from_option(
                     subnet_splitting_args.destination_subnet_id,
-                    "cup_type::subnet_splitting::destination_subnet_id",
+                    "SubnetSplittingArgs::destination_subnet_id",
                 )?,
             },
         })
@@ -543,7 +543,7 @@ mod tests {
         Some(CupTypePb::SubnetSplitting(subnet_pb::SubnetSplittingArgs {
             destination_subnet_id: None,
         })),
-        "cup_type::subnet_splitting::destination_subnet_id",
+        "SubnetSplittingArgs::destination_subnet_id",
     )]
     fn test_cup_type_from_proto_fails_on_missing_field(
         #[case] cup_type_pb: Option<CupTypePb>,
