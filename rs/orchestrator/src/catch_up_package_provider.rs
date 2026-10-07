@@ -44,16 +44,13 @@ use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_limits::MAX_MESSAGE_SIZE_BYTES;
 use ic_logger::{ReplicaLogger, info, warn};
-use ic_protobuf::{
-    registry::{node::v1::NodeRecord, subnet::v1::catch_up_package_contents::CupType},
-    types::v1 as pb,
-};
+use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
 use ic_registry_client_helpers::subnet::{SubnetRegistry, SubnetTransportRegistry};
 use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
     consensus::{
-        HasHeight, HasVersion, SubnetSplittingArgs,
+        CupType, HasHeight, HasVersion,
         catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
     },
     registry::RegistryClientError,
@@ -445,16 +442,17 @@ impl CatchUpPackageProvider {
                 continue;
             };
 
-            let Some(CupType::SubnetSplitting(subnet_splitting_args)) = contents.cup_type else {
-                continue;
-            };
-            let SubnetSplittingArgs {
-                destination_subnet_id,
-            } = SubnetSplittingArgs::try_from(subnet_splitting_args).map_err(|err| {
+            let cup_type = CupType::try_from(&contents).map_err(|err| {
                 OrchestratorError::RegistryClientError(RegistryClientError::DecodeError {
-                    error: format!("Failed to decode the subnet splitting args: {err}"),
+                    error: format!("Failed to decode the CUP type: {err}"),
                 })
             })?;
+            let CupType::SubnetSplitting {
+                destination_subnet_id,
+            } = cup_type
+            else {
+                continue;
+            };
 
             let Some(new_subnet_id) = self
                 .registry
@@ -654,7 +652,10 @@ pub(crate) mod tests {
     use ic_logger::no_op_logger;
     use ic_protobuf::registry::{
         node::v1::ConnectionEndpoint,
-        subnet::v1::{CatchUpPackageContents, RecoveryArgs, SubnetSplittingArgs},
+        subnet::v1::{
+            CatchUpPackageContents, RecoveryArgs, SubnetSplittingArgs,
+            catch_up_package_contents::CupType,
+        },
     };
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{make_catch_up_package_contents_key, make_node_record_key};

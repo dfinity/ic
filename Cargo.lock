@@ -7799,6 +7799,7 @@ dependencies = [
  "ic-types-test-utils",
  "phantom_newtype",
  "prost",
+ "rstest",
  "slog",
 ]
 
