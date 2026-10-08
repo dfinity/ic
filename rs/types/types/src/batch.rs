@@ -310,18 +310,34 @@ where
 }
 
 /// Parse a slice filled with protobuf encoded [`Message`]s into a vector
-pub fn slice_to_messages<M>(mut data: &[u8]) -> Result<Vec<M>, DecodeError>
+pub fn slice_to_messages<M>(data: &[u8]) -> Result<Vec<M>, DecodeError>
 where
     M: Message + Default,
 {
-    let mut msgs = vec![];
+    slice_to_messages_iter(data).collect()
+}
 
-    while !data.is_empty() {
-        let msg = M::decode_length_delimited(&mut data)?;
-        msgs.push(msg)
-    }
-
-    Ok(msgs)
+/// Lazily parses a slice filled with protobuf encoded [`Message`]s, as
+/// [`slice_to_messages`] does, but decoding one message per step, so that a caller
+/// looking for a particular message decodes no further than that.
+///
+/// Ends after the first message that cannot be decoded, as the messages after it
+/// can no longer be told apart.
+pub fn slice_to_messages_iter<M>(
+    mut data: &[u8],
+) -> impl Iterator<Item = Result<M, DecodeError>> + '_
+where
+    M: Message + Default,
+{
+    let mut failed = false;
+    std::iter::from_fn(move || {
+        if failed || data.is_empty() {
+            return None;
+        }
+        let msg = M::decode_length_delimited(&mut data);
+        failed = msg.is_err();
+        Some(msg)
+    })
 }
 
 /// Response to a subnet call that requires Consensus' involvement.
@@ -416,6 +432,37 @@ pub struct CanisterHttpAsyncSpent {
 mod tests {
     use super::*;
     use crate::CountBytes;
+
+    #[test]
+    fn slice_to_messages_iter_test() {
+        let bytes = iterator_to_bytes([1_u64, 2, 3].into_iter(), NumBytes::new(1024));
+
+        assert_eq!(
+            slice_to_messages_iter::<u64>(&bytes)
+                .map(Result::ok)
+                .collect::<Vec<_>>(),
+            vec![Some(1), Some(2), Some(3)]
+        );
+        assert_eq!(slice_to_messages::<u64>(&bytes).unwrap(), vec![1, 2, 3]);
+    }
+
+    /// The messages after one that cannot be decoded are never returned, even if
+    /// they happen to decode.
+    #[test]
+    fn slice_to_messages_iter_ends_after_the_first_error_test() {
+        let mut bytes = iterator_to_bytes([1_u64].into_iter(), NumBytes::new(1024));
+        // A message of two bytes that are not a valid varint.
+        bytes.extend_from_slice(&[2, 0xff, 0xff]);
+        bytes.extend(iterator_to_bytes([2_u64].into_iter(), NumBytes::new(1024)));
+
+        assert_eq!(
+            slice_to_messages_iter::<u64>(&bytes)
+                .map(Result::ok)
+                .collect::<Vec<_>>(),
+            vec![Some(1), None]
+        );
+        assert!(slice_to_messages::<u64>(&bytes).is_err());
+    }
 
     /// This is a quick test to check the invariant, that the [`Default`] implementation
     /// of a payload section actually produces the empty payload,
