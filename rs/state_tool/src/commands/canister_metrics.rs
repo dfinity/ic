@@ -22,6 +22,14 @@ pub fn get(
     load_metrics_output_path: &Path,
     connectivity_metrics_output_path: &Path,
 ) -> Result<(), String> {
+    // Otherwise the second file would silently overwrite the first one.
+    if load_metrics_output_path == connectivity_metrics_output_path {
+        return Err(format!(
+            "The load metrics and connectivity metrics output paths must differ, got {} for both",
+            load_metrics_output_path.display()
+        ));
+    }
+
     let replicated_state = load_checkpoint(
         &CompleteCheckpointLayout::new_untracked(
             checkpoint_dir,
@@ -113,4 +121,26 @@ fn write_connectivity_metrics_file(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_rejects_identical_output_paths() {
+        let output_path = Path::new("metrics.csv");
+
+        // The checkpoint doesn't exist, so this only succeeds in returning the expected error if the
+        // output paths are checked before the checkpoint is loaded.
+        let err = get(
+            PathBuf::from("/non/existent/checkpoint"),
+            output_path,
+            output_path,
+        )
+        .unwrap_err();
+
+        assert!(err.contains("output paths must differ"), "{err}");
+        assert!(!output_path.exists());
+    }
 }

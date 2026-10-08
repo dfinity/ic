@@ -32,6 +32,8 @@ def load_subnet_data(
                                         an earlier time. It is subtracted from the communication
                                         data to compute relative message counts (clipped at 0).
 
+    Communication with canisters which are not in the load data is ignored.
+
     """
     canister_data = pd.read_csv(load_path).set_index("canister_id")
     canister_baseline_data = pd.read_csv(load_baseline_path).set_index("canister_id")
@@ -55,6 +57,13 @@ def load_subnet_data(
     canister_data["index"] = range(len(canister_data))
     canister_id_to_index = dict(zip(canister_data["canister_id"], canister_data["index"]))
     index_to_canister_id = dict(zip(canister_data["index"], canister_data["canister_id"]))
+
+    # Ignore communication with canisters which are not in the load data: the connection metrics
+    # may still refer to canisters which have since been deleted or migrated away from the subnet.
+    known_canisters = communication_data["sender_canister_id"].isin(canister_id_to_index) & communication_data[
+        "receiver_canister_id"
+    ].isin(canister_id_to_index)
+    communication_data = communication_data[known_canisters]
 
     edges: Dict[Tuple[int, int], int] = {}
     for _, row in communication_data.iterrows():

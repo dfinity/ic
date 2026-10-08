@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -29,6 +30,24 @@ class TestCsvLoading(unittest.TestCase):
         # the canisters in "fake_communication_sample.csv" form a cycling graph
         self.assertEqual(result["edges"], {(i, (i - 1) % 20): 1 for i in range(20)})
         self.assertEqual(len(result["index_to_canister_id"]), len(result["load"]))
+
+    def test_communication_with_unknown_canisters_is_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            communication_path = Path(tmp_dir) / "communication.csv"
+            # Canisters which are not in the load data (e.g. deleted or migrated away) are ignored.
+            communication_path.write_text(
+                Path(FAKE_COMMUNICATION_SAMPLE_CSV_PATH).read_text().rstrip("\n")
+                + "\nunknown-sender,rwlgt-iiaaa-aaaaa-aaaaa-cai,1"
+                + "\nrwlgt-iiaaa-aaaaa-aaaaa-cai,unknown-receiver,1\n"
+            )
+            result = load_subnet_data(
+                FAKE_LOAD_SAMPLE_CSV_PATH,
+                FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+                "ingress_messages_executed",
+                communication_path,
+                FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+            )
+        self.assertEqual(result["edges"], {(i, (i - 1) % 20): 1 for i in range(20)})
 
     def test_solver_sanity_check(self):
         result = find_split(
