@@ -6,16 +6,18 @@
 //! cargo build --target wasm32-unknown-unknown --release
 //! ```
 use candid::{CandidType, Deserialize, Principal};
-use futures::future::join_all;
+use futures::future::select_all;
+use futures::poll;
 use ic_cdk::api::{canister_cycle_balance, canister_self, msg_caller, time};
 use ic_cdk::call::{Call, CallFailed};
 use ic_cdk::{heartbeat, query, update};
 use ic_management_canister_types::CanisterId;
-use rand::Rng;
-use rand_pcg::Lcg64Xsh32;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::future::IntoFuture;
+use std::task::Poll;
 use std::time::Duration;
 use xnet_test::{Metrics, NetworkTopology, StartArgs};
 
@@ -51,9 +53,7 @@ thread_local! {
 
     /// The pseudo-random number generator we use to pick the next canister to talk to.
     /// It doesn't need to be cryptographically secure, we just want it to be simple and fast.
-    /// The default values for state and stream parameters come from the official documentation:
-    /// https://rust-random.github.io/rand/rand_pcg/struct.Lcg64Xsh32.html
-    static RNG: RefCell<Lcg64Xsh32> = RefCell::new(Lcg64Xsh32::new(0xcafe_f00d_d15e_a5e5, 0x0a02_bdbf_7bb3_c0a7));
+    static RNG: RefCell<SmallRng> = RefCell::new(SmallRng::seed_from_u64(0xcafe_f00d_d15e_a5e5));
 }
 
 /// Input for `return_cycles` method.
@@ -228,10 +228,9 @@ async fn fanout() {
         }
     }
 
-    let results = join_all(futures).await;
-
-    for res in results {
-        match res {
+    // Records the outcome of a single call into the metrics.
+    fn record_result(result: Result<ic_cdk::call::Response, CallFailed>) {
+        match result {
             Ok(response) => match response.candid::<Reply>() {
                 Ok(reply) => {
                     let elapsed = Duration::from_nanos(time() - reply.time_nanos);
@@ -261,6 +260,33 @@ async fn fanout() {
                 METRICS.with(|m| m.borrow_mut().reject_responses += 1);
             }
         }
+    }
+
+    // Phase 1: issue every call (`ic0.call_perform`) in order.
+    //
+    // A `CallFuture` only performs the call when first polled. `poll!` polls
+    // exactly once without yielding, ensuring that the calls are enqueued in order.
+    // This must not be left to `select_all` below: `select_all` stops at the first
+    // ready future (e.g. a synchronous queue full failure) and `swap_remove`s it,
+    // reordering the not-yet-performed futures / calls.
+    let mut pending = Vec::with_capacity(futures.len());
+    for mut future in futures {
+        match poll!(&mut future) {
+            // Call was enqueued; await its response in phase 2.
+            Poll::Pending => pending.push(future),
+            // `call_perform` failed synchronously. Nothing was enqueued, record the
+            // outcome.
+            Poll::Ready(result) => record_result(result),
+        }
+    }
+
+    // Phase 2: await responses as they complete, recording per-call latencies.
+    // Calls were already issued, so any `swap_remove` reordering by `select_all` no
+    // longer has any effect on correctness.
+    while !pending.is_empty() {
+        let (result, _, remaining) = select_all(pending).await;
+        pending = remaining;
+        record_result(result);
     }
 }
 

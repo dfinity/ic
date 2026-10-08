@@ -2,28 +2,26 @@
 # Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file
 # to regenerate Cargo Bazel lockfiles.
 
-bazel_dep(name = "rules_rust", version = "0.69.0")
-archive_override(
+bazel_dep(name = "rules_rust", version = "0.74.0")
+single_version_override(
     module_name = "rules_rust",
-    integrity = "sha256-u8dkwlLQYSgbI1knek1GSA4tz69yr8HObgCtpYzL/Uw=",
     patch_strip = 1,
-    patches = [
-        "//bazel:rules_rust_strip_level.patch",
-        "//bazel:rules_rust_package_alias.patch",
-    ],
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.69.0/rules_rust-0.69.0.tar.gz"],
+    patches = ["//bazel:rules_rust_static_runtime.patch"],
 )
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.93.1"],
+    versions = ["1.99.0"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
-BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
+BUILD_INFO_REV = "27ba16a68aa312de66f2ebd0f16665f1429eee36"
+
+# Fork of `comparable` migrated to syn 2 (upstream still uses syn 1).
+COMPARABLE_REV = "8338f595496454f9e770389e2edc0d96e137a4e9"
 
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 
@@ -36,6 +34,16 @@ crate.spec(
     version = "^2.10.0",
 )
 crate.spec(
+    default_features = False,
+    features = [
+        "macros",
+        "compress-brotli",
+        "compress-gzip",
+        "compress-zstd",
+        "http2",
+        "unicode",
+        "compat",
+    ],
     package = "actix-web",
     version = "^4.9.0",
 )
@@ -60,6 +68,52 @@ crate.spec(
     version = "^0.14.2",
 )
 crate.spec(
+    features = [
+        "k256",
+        "serde",
+    ],
+    package = "alloy-consensus",
+    version = "^1.8.3",
+)
+crate.spec(
+    features = [
+        "k256",
+        "serde",
+    ],
+    package = "alloy-eips",
+    version = "^1.8.3",
+)
+crate.spec(
+    features = [
+        "k256",
+        "serde",
+    ],
+    package = "alloy-primitives",
+    version = "^1.6.0",
+)
+crate.spec(
+    package = "alloy-rpc-types-eth",
+    version = "^1.8.3",
+)
+crate.spec(
+    package = "alloy-sol-types",
+    version = "^1.6.0",
+)
+crate.spec(
+    features = [
+        "std",
+    ],
+    package = "aes-gcm",
+    version = "^0.10.3",
+)
+crate.spec(
+    features = [
+        "std",
+    ],
+    package = "argon2",
+    version = "^0.4",
+)
+crate.spec(
     package = "arbitrary",
     version = "^1.3.2",
 )
@@ -72,19 +126,11 @@ crate.spec(
     version = "^1.0.93",
 )
 crate.spec(
-    package = "arrayvec",
-    version = "^0.7.4",
-)
-crate.spec(
     features = [
         "serde_json",
     ],
     package = "askama",
     version = "0.15",
-)
-crate.spec(
-    package = "assert-json-diff",
-    version = "^2.0.1",
 )
 crate.spec(
     package = "assert_cmd",
@@ -93,10 +139,6 @@ crate.spec(
 crate.spec(
     package = "assert_matches",
     version = "^1.5.0",
-)
-crate.spec(
-    package = "async-recursion",
-    version = "^1.0.5",
 )
 crate.spec(
     package = "async-stream",
@@ -112,9 +154,16 @@ crate.spec(
     version = "^0.8.4",
 )
 crate.spec(
-    features = ["typed-header"],
+    features = [
+        "middleware",
+        "typed-header",
+    ],
     package = "axum-extra",
-    version = "^0.10.1",
+    version = "^0.12",
+)
+crate.spec(
+    package = "axum-otel-metrics",
+    version = "^0.14.1",
 )
 crate.spec(
     features = [
@@ -124,20 +173,17 @@ crate.spec(
     version = "^0.7.3",
 )
 crate.spec(
-    package = "backoff",
-    version = "^0.4.0",
-)
-crate.spec(
+    default_features = False,
+    features = [
+        "std",
+        "std-blocking-sleep",
+    ],
     package = "backon",
-    version = "^0.4.1",
-)
-crate.spec(
-    package = "base32",
-    version = "^0.4.0",
+    version = "^1.6.0",
 )
 crate.spec(
     package = "base64",
-    version = "^0.13.1",
+    version = "^0.22",
 )
 crate.spec(
     package = "bech32",
@@ -174,18 +220,9 @@ crate.spec(
     version = "^0.32.7-doge.0",
 )
 crate.spec(
-    features = [
-        "default",
-        "rand",
-        "use-serde",
-    ],
     package = "bitcoin",
     package_alias = "bitcoin-0-28",
     version = "^0.28.2",
-)
-crate.spec(
-    package = "bitflags",
-    version = "^1.2.1",
 )
 crate.spec(
     package = "bs58",
@@ -215,14 +252,6 @@ crate.spec(
     rev = BUILD_INFO_REV,
 )
 crate.spec(
-    package = "by_address",
-    version = "^1.1.0",
-)
-crate.spec(
-    package = "byte-unit",
-    version = "^4.0.14",
-)
-crate.spec(
     package = "byteorder",
     version = "^1.3.4",
 )
@@ -231,25 +260,16 @@ crate.spec(
     version = "^1.11.1",
 )
 crate.spec(
-    default_features = False,
-    package = "cached",
-    version = "^0.49",
-)
-crate.spec(
-    package = "canbench",
-    version = "^0.4.1",
-)
-crate.spec(
     package = "canbench-rs",
-    version = "^0.4.1",
+    version = "0.7.0",
 )
 crate.spec(
     package = "candid",
-    version = "^0.10.22",
+    version = "^0.10.37",
 )
 crate.spec(
     package = "cargo_metadata",
-    version = "^0.14.2",
+    version = "0.23",
 )
 crate.spec(
     package = "candid_parser",
@@ -258,10 +278,6 @@ crate.spec(
 crate.spec(
     package = "cc",
     version = "=1.2.48",
-)
-crate.spec(
-    package = "cddl",
-    version = "^0.9.4",
 )
 crate.spec(
     package = "cfg-if",
@@ -295,7 +311,7 @@ crate.spec(
 )
 crate.spec(
     package = "ciborium",
-    version = "^0.2.1",
+    version = "^0.2.2",
 )
 crate.spec(
     package = "cidr",
@@ -310,15 +326,6 @@ crate.spec(
     version = "^4.5.20",
 )
 crate.spec(
-    default_features = False,
-    features = [
-        "rustls-tls",
-    ],
-    git = "https://github.com/dfinity/cloudflare-rs.git",
-    package = "cloudflare",
-    rev = "8b011d170d9d61eaad77bb9645371f6219285104",
-)
-crate.spec(
     package = "colored",
     version = "^2.0.0",
 )
@@ -326,16 +333,17 @@ crate.spec(
     features = [
         "derive",
     ],
+    git = "https://github.com/dfinity/comparable",
     package = "comparable",
-    version = "^0.5",
+    rev = COMPARABLE_REV,
 )
 crate.spec(
     package = "console",
     version = "^0.11",
 )
 crate.spec(
-    package = "convert_case",
-    version = "^0.6.0",
+    package = "configparser",
+    version = "^3.3.0",
 )
 crate.spec(
     package = "crc32fast",
@@ -350,12 +358,12 @@ crate.spec(
     version = "^0.5.1",
 )
 crate.spec(
-    package = "crossbeam",
-    version = "^0.8.4",
-)
-crate.spec(
     package = "crossbeam-channel",
     version = "^0.5.15",
+)
+crate.spec(
+    package = "crossbeam-utils",
+    version = "^0.8.21",
 )
 crate.spec(
     package = "csv",
@@ -375,20 +383,12 @@ crate.spec(
     version = "^4.1.3",
 )
 crate.spec(
-    package = "cvt",
-    version = "^0.1.1",
-)
-crate.spec(
     package = "darling",
     version = "^0.20.11",
 )
 crate.spec(
     package = "dashmap",
     version = "^5.3.4",
-)
-crate.spec(
-    package = "derivative",
-    version = "^2.2",
 )
 crate.spec(
     default_features = False,
@@ -405,12 +405,17 @@ crate.spec(
     version = "0.34",
 )
 crate.spec(
-    package = "dfx-core",
-    version = "^0.3.0",
+    features = ["serde"],
+    package = "duration-string",
+    version = "^0.5.3",
 )
 crate.spec(
-    package = "dyn-clone",
-    version = "^1.0.14",
+    package = "dialoguer",
+    version = "^0.11.0",
+)
+crate.spec(
+    package = "directories-next",
+    version = "^2.0.0",
 )
 crate.spec(
     features = [
@@ -427,11 +432,16 @@ crate.spec(
 )
 crate.spec(
     package = "educe",
-    version = "^0.4",
+    version = "^0.5",
 )
+
+# Not used directly; spec'd only to constrain the version resolved for `educe`'s
+# transitive `enum-ordinalize` -> `enum-ordinalize-derive` chain.
+# DO NOT upgrade to >=4.4.2 as it pulls in syn 3 whereas the rest of the
+# codebase uses syn 2.
 crate.spec(
-    package = "env-file-reader",
-    version = "^0.3",
+    package = "enum-ordinalize-derive",
+    version = "=4.4.1",
 )
 crate.spec(
     package = "erased-serde",
@@ -443,13 +453,9 @@ crate.spec(
     version = "^0.5.7",
 )
 crate.spec(
-    package = "ethers-core",
-    version = "^2.0.7",
-)
-crate.spec(
     features = ["serde"],
     package = "ethnum",
-    version = "^1.3.2",
+    version = "^1.5.3",
 )
 crate.spec(
     package = "evm_rpc_client",
@@ -458,14 +464,6 @@ crate.spec(
 crate.spec(
     package = "evm_rpc_types",
     version = "^3.1.0",
-)
-crate.spec(
-    package = "exec",
-    version = "^0.3.1",
-)
-crate.spec(
-    package = "eyre",
-    version = "^0.6.8",
 )
 crate.spec(
     default_features = False,
@@ -500,14 +498,71 @@ crate.spec(
     version = "^0.3.31",
 )
 crate.spec(
-    package = "getifs",
-    version = "^0.4.0",
-)
-crate.spec(
     features = [
         "custom",
     ],
     package = "getrandom",
+    version = "^0.2",
+)
+
+# ring 0.17.x declares `wasm32_unknown_unknown_js = ["getrandom/js"]`, which causes
+# cargo-bazel to enable wasm-bindgen in getrandom 0.2.x for wasm32-unknown-unknown —
+# even for canister targets that never depend on ring.  We override the getrandom lib
+# target with an identical copy that simply omits the wasm-bindgen deps/features on
+# wasm32, bypassing the lock-file feature resolution entirely.
+crate.annotation(
+    additive_build_file_content = """\
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+rust_library(
+    name = "getrandom_no_wasm_bindgen",
+    srcs = glob(
+        allow_empty = True,
+        include = ["**/*.rs"],
+    ),
+    compile_data = glob(
+        allow_empty = True,
+        include = ["**"],
+        exclude = [
+            "**/* *",
+            ".tmp_git_root/**/*",
+            "BUILD",
+            "BUILD.bazel",
+            "WORKSPACE",
+            "WORKSPACE.bazel",
+        ],
+    ),
+    crate_features = ["custom", "std"],
+    crate_name = "getrandom",
+    crate_root = "src/lib.rs",
+    deps = [
+        "@crate_index__cfg-if-1.0.0//:cfg_if",
+    ] + select({
+        "@rules_rust//rust/platform:aarch64-apple-darwin": ["@crate_index__libc-0.2.186//:libc"],
+        "@rules_rust//rust/platform:aarch64-unknown-linux-gnu": ["@crate_index__libc-0.2.186//:libc"],
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+        "@rules_rust//rust/platform:x86_64-apple-darwin": ["@crate_index__libc-0.2.186//:libc"],
+        "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": ["@crate_index__libc-0.2.186//:libc"],
+        "//conditions:default": [],
+    }),
+    edition = "2018",
+    rustc_env_files = [":cargo_toml_env_vars"],
+    rustc_flags = ["--cap-lints=allow"],
+    tags = ["cargo-bazel", "crate-name=getrandom", "manual", "noclippy", "norustfmt"],
+    target_compatible_with = select({
+        "@rules_rust//rust/platform:aarch64-apple-darwin": [],
+        "@rules_rust//rust/platform:aarch64-unknown-linux-gnu": [],
+        "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+        "@rules_rust//rust/platform:x86_64-apple-darwin": [],
+        "@rules_rust//rust/platform:x86_64-unknown-linux-gnu": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    version = "0.2.10",
+    visibility = ["//visibility:public"],
+)
+""",
+    crate = "getrandom",
+    override_target_lib = "@@rules_rust++crate+crate_index__getrandom-0.2.10//:getrandom_no_wasm_bindgen",
     version = "^0.2",
 )
 crate.spec(
@@ -515,16 +570,12 @@ crate.spec(
     version = "4.1",
 )
 crate.spec(
-    package = "goldenfile",
-    version = "^1.8",
-)
-crate.spec(
     package = "group",
     version = "^0.13",
 )
 crate.spec(
     package = "hashlink",
-    version = "^0.8.0",
+    version = "^0.10.0",
 )
 crate.spec(
     features = [
@@ -535,11 +586,11 @@ crate.spec(
 )
 crate.spec(
     package = "hex-literal",
-    version = "^0.4.1",
+    version = "1.1",
 )
 crate.spec(
     package = "hickory-resolver",
-    version = "0.25.2",
+    version = "0.26.1",
 )
 crate.spec(
     package = "hkdf",
@@ -568,15 +619,11 @@ crate.spec(
         "alloc",
     ],
     package = "hpke",
-    version = "^0.12",
+    version = "^0.13",
 )
 crate.spec(
     package = "humantime",
     version = "^2.2.0",
-)
-crate.spec(
-    package = "humantime-serde",
-    version = "^1.1.1",
 )
 crate.spec(
     features = ["full"],
@@ -599,7 +646,7 @@ crate.spec(
         "http1",
         "http2",
         "native-tokio",
-        "ring",
+        "aws-lc-rs",
         "tls12",
     ],
     package = "hyper-rustls",
@@ -612,21 +659,19 @@ crate.spec(
 crate.spec(
     features = [
         "pem",
-        "ring",
     ],
     package = "ic-agent",
-    version = "^0.45.0",
+    version = "^0.49.1",
 )
 crate.spec(
     features = [
         "acme-alpn",
+        "acme-dns",
+        "clients-hyper",
+        "pubsub",
     ],
     package = "ic-bn-lib",
-    version = "0.1.15",
-)
-crate.spec(
-    package = "ic-bn-lib-common",
-    version = "0.1.4",
+    version = "^0.9",
 )
 crate.spec(
     package = "ic-btc-interface",
@@ -638,7 +683,7 @@ crate.spec(
 )
 crate.spec(
     package = "ic-canister-runtime",
-    version = "^0.2.0",
+    version = "^0.2.3",
 )
 crate.spec(
     git = "https://github.com/dfinity/ic-canister-sig-creation.git",
@@ -651,11 +696,19 @@ crate.spec(
 )
 crate.spec(
     package = "ic-cdk",
-    version = "^0.19.0",
+    version = "^0.20.2",
+)
+crate.spec(
+    package = "ic-cdk-bitcoin-canister",
+    version = "^0.2.0",
 )
 crate.spec(
     package = "ic-cdk-executor",
     version = "^2.0.0",
+)
+crate.spec(
+    package = "ic-cdk-management-canister",
+    version = "^0.1.1",
 )
 crate.spec(
     package = "ic-cdk-timers",
@@ -678,30 +731,14 @@ crate.spec(
     version = "^0.3.0",
 )
 crate.spec(
-    default_features = False,
+    features = ["acme"],
     git = "https://github.com/dfinity/ic-gateway",
     package = "ic-gateway",
-    rev = "f33afac2aa47b8760090c93823b7fa7f5ba67dc4",
-)
-crate.spec(
-    package = "ic-custom-domains-backend",
-    version = "0.1.4",
-)
-crate.spec(
-    package = "ic-custom-domains-base",
-    version = "0.1.4",
-)
-crate.spec(
-    package = "ic-custom-domains-canister-client",
-    version = "0.1.4",
-)
-crate.spec(
-    package = "ic-http-certification",
-    version = "3.0.3",
+    tag = "v0.6.12",
 )
 crate.spec(
     package = "ic-identity-hsm",
-    version = "^0.45.0",
+    version = "^0.49.1",
 )
 crate.spec(
     package = "ic-metrics-encoder",
@@ -709,16 +746,12 @@ crate.spec(
 )
 crate.spec(
     package = "ic-management-canister-types",
-    version = "^0.5.0",
+    version = "^0.8.0",
 )
 crate.spec(
     default_features = False,
     package = "ic_principal",
-    version = "^0.1.1",
-)
-crate.spec(
-    package = "ic-response-verification",
-    version = "3.1.0",
+    version = "^0.1.5",
 )
 crate.spec(
     package = "ic-sha3",
@@ -749,12 +782,12 @@ crate.spec(
 )
 crate.spec(
     package = "ic-transport-types",
-    version = "^0.45.0",
+    version = "^0.49.1",
 )
 crate.spec(
     features = ["raw"],
     package = "ic-utils",
-    version = "^0.45.0",
+    version = "^0.49.1",
 )
 crate.spec(
     default_features = False,
@@ -766,15 +799,18 @@ crate.spec(
 )
 crate.spec(
     package = "ic-vetkeys",
-    version = "^0.6.0",
+    version = "^0.7.0",
 )
 crate.spec(
     default_features = False,
     features = [
+        "check-endpoints",
         "exe",
     ],
     package = "ic-wasm",
-    version = "^0.8.4",
+    # 0.11.1 relaxed the `thiserror` requirement to "2"; anything older forces
+    # thiserror >=2.0.19, which pulls in syn 3. See the `thiserror` spec below.
+    version = "^0.11.1",
 )
 crate.spec(
     package = "ic-xrc-types",
@@ -794,19 +830,21 @@ crate.spec(
 )
 crate.spec(
     package = "indoc",
-    version = "^1.0.9",
+    version = "^2.0.7",
 )
 crate.spec(
     package = "inferno",
     version = "^0.12.0",
 )
 crate.spec(
-    package = "insta",
-    version = "^1.31.0",
+    default_features = False,
+    features = ["stream"],
+    package = "inotify",
+    version = "^0.11.2",
 )
 crate.spec(
-    package = "instant-acme",
-    version = "^0.7.2",
+    package = "insta",
+    version = "^1.31.0",
 )
 crate.spec(
     features = ["serde"],
@@ -819,20 +857,12 @@ crate.spec(
     version = "^2.10.1",
 )
 crate.spec(
-    package = "isocountry",
-    version = "^0.3.2",
-)
-crate.spec(
     package = "itertools",
     version = "^0.12.0",
 )
 crate.spec(
     package = "jsonrpc",
-    version = "^0.18.0",
-)
-crate.spec(
-    package = "json-patch",
-    version = "^0.2.6",
+    version = "^0.20.1",
 )
 crate.spec(
     package = "json5",
@@ -851,6 +881,17 @@ crate.spec(
     ],
     package = "k256",
     version = "^0.13.4",
+)
+crate.spec(
+    features = [
+        "apple-native",
+        "windows-native",
+        "linux-native",
+        "sync-secret-service",
+        "vendored",
+    ],
+    package = "keyring",
+    version = "^3",
 )
 crate.spec(
     package = "lazy_static",
@@ -872,10 +913,6 @@ crate.spec(
     version = "0.15",
 )
 crate.spec(
-    package = "libflate",
-    version = "^2.1.0",
-)
-crate.spec(
     default_features = False,
     package = "libfuzzer-sys",
     version = "^0.4.7",
@@ -885,23 +922,23 @@ crate.spec(
     version = "^0.5.0",
 )
 crate.spec(
+    package = "libsystemd",
+    version = "0.7.2",
+)
+crate.spec(
     package = "little-loadshedder",
     version = "^0.2.0",
 )
 crate.spec(
     git = "https://github.com/dfinity-lab/lmdb-rs",
     package = "lmdb-rkv",
-    rev = "64eb770caa940f215190d86d61e4c132511be5e2",
+    rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f",
 )
 crate.spec(
     default_features = False,
     git = "https://github.com/dfinity-lab/lmdb-rs",
     package = "lmdb-rkv-sys",
-    rev = "64eb770caa940f215190d86d61e4c132511be5e2",
-)
-crate.spec(
-    package = "local-ip-address",
-    version = "^0.5.6",
+    rev = "a244a247789fd9ece0fe1a406180c32e5bbc0c3f",
 )
 crate.spec(
     package = "loopdev-3",
@@ -910,14 +947,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     package = "lru",
-    version = "^0.7.8",
-)
-crate.spec(
-    features = [
-        "static",  # By using the `static` feature the lzma-sys crate uses its embedded liblzma C library
-    ],
-    package = "lzma-sys",
-    version = "^0.1.20",
+    version = "^0.12",
 )
 crate.spec(
     package = "macaddr",
@@ -933,29 +963,7 @@ crate.spec(
 )
 crate.spec(
     package = "maxminddb",
-    version = "^0.24",
-)
-crate.spec(
-    package = "memchr",
-    version = "2.7",
-)
-crate.spec(
-    # When updating this, please make sure that the built
-    # binary exports metrics http_cache_* after one
-    # successful request to the proxy.  The OpenTelemetry
-    # package version pinned by this software must equal
-    # the OpenTelemetry version pinned by the
-    # axum-otel-metrics version pinned by this software,
-    # due to technical idiosyncrasies of the OpenTelemetry
-    # crate.  When these do not match, custom metrics are
-    # not exported.
-    default_features = False,
-    features = [
-        "rustls-tls-webpki-roots",
-    ],
-    git = "https://github.com/dfinity/metrics-proxy.git",
-    package = "metrics-proxy",
-    rev = "b6933ed79ac07baee7f3fbc0793bed95e614d27c",
+    version = "^0.29",
 )
 crate.spec(
     features = [
@@ -963,17 +971,14 @@ crate.spec(
         "derive",
     ],
     package = "minicbor",
-    version = "^0.19.1",
-)
-crate.spec(
-    package = "minicbor-derive",
-    version = "^0.13.0",
+    version = "^0.22.0",
 )
 crate.spec(
     package = "mockall",
-    version = "^0.13.1",
+    version = "^0.15.0",
 )
 crate.spec(
+    default_features = False,
     package = "mockito",
     version = "^1.6.1",
 )
@@ -983,7 +988,7 @@ crate.spec(
         "sync",
     ],
     package = "moka",
-    version = "^0.12.8",
+    version = "^0.12.15",
 )
 crate.spec(
     package = "more-asserts",
@@ -995,12 +1000,20 @@ crate.spec(
 )
 crate.spec(
     features = [
-        "ptrace",
-        "user",
-        "signal",
+        "fs",  # used by ic-sys/state_manager for memfd_create, dup, flock, renameat2
+        "ioctl",  # used by ic-os device for the ioctl_read! macro
+        "mman",  # used by replicated_state/memory_tracker/embedders for mmap/mprotect/madvise
+        "net",  # used by xnet payload_builder tests for SockaddrIn
+        "process",  # used by canister_sandbox/execution_environment for sys::wait
+        "ptrace",  # used by execution_environment fuzzer for sys::ptrace
+        "signal",  # used by canister_sandbox/guestos_tool for sys::signal
+        "socket",  # used by xnet payload_builder tests for socket/bind/getsockname
+        "time",  # used by state_manager tests for TimeSpec (utimensat)
+        "user",  # used by test_utilities/ic-os for getuid/geteuid/getegid
+        "zerocopy",  # used by ic-sys for fcntl::copy_file_range
     ],
     package = "nix",
-    version = "^0.24.3",
+    version = "^0.31.3",
 )
 crate.spec(
     package = "num-bigint",
@@ -1020,10 +1033,6 @@ crate.spec(
     version = "^0.2.12",
 )
 crate.spec(
-    package = "num_cpus",
-    version = "^1.16.0",
-)
-crate.spec(
     package = "object",
     version = "^0.37.3",
 )
@@ -1032,35 +1041,33 @@ crate.spec(
     version = "^1.8",
 )
 crate.spec(
-    package = "openssh-keys",
-    version = "^0.5.0",
+    features = [
+        "metrics",
+        "trace",
+    ],
+    package = "opentelemetry",
+    version = "^0.32.0",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "grpc-tonic",
+        "trace",
+    ],
+    package = "opentelemetry-otlp",
+    version = "^0.32.0",
+)
+crate.spec(
+    package = "opentelemetry-prometheus",
+    version = "^0.32.0",
 )
 crate.spec(
     features = [
         "metrics",
         "trace",
     ],
-    package = "opentelemetry",
-    version = "^0.27.0",
-)
-crate.spec(
-    features = [
-        "grpc-tonic",
-    ],
-    package = "opentelemetry-otlp",
-    version = "^0.27.0",
-)
-crate.spec(
-    features = [
-        "trace",
-        "rt-tokio",
-    ],
     package = "opentelemetry_sdk",
-    version = "^0.27.1",
-)
-crate.spec(
-    package = "opentelemetry-prometheus",
-    version = "^0.14.1",
+    version = "^0.32.1",
 )
 crate.spec(
     default_features = False,
@@ -1096,10 +1103,6 @@ crate.spec(
     version = "^1.0.15",
 )
 crate.spec(
-    package = "pcre2",
-    version = "^0.2.6",
-)
-crate.spec(
     default_features = False,
     features = ["std"],
     package = "pem",
@@ -1128,27 +1131,22 @@ crate.spec(
         "flamegraph",
         "prost-codec",
     ],
+    # the upstream pprof uses outdated dependencies that bloat our dependency
+    # graph, so we use our own fork that updates some dependencies and loosens
+    # bounds:
+    # https://github.com/tikv/pprof-rs
+    git = "https://github.com/dfinity/pprof-rs",
     package = "pprof",
-    version = "^0.14.0",
+    rev = "9159b45ecc3540d7fc44c6a6e70a173676cfa771",
 )
 crate.spec(
+    default_features = False,
     package = "predicates",
     version = "^3.1.2",
 )
 crate.spec(
-    package = "pretty-bytes",
-    version = "^0.2.2",
-)
-crate.spec(
     package = "pretty_assertions",
     version = "^1.4.0",
-)
-crate.spec(
-    features = [
-        "serde",
-    ],
-    package = "priority-queue",
-    version = "^1.3.1",
 )
 crate.spec(
     package = "proc-macro2",
@@ -1178,20 +1176,13 @@ crate.spec(
     package = "proptest-derive",
     version = "^0.5.0",
 )
-
-# why are both needed?
 crate.spec(
     package = "prost",
-    package_alias = "prost_0_12",
-    version = "^0.12.2",
-)
-crate.spec(
-    package = "prost",
-    version = "^0.13.3",
+    version = "^0.14.3",
 )
 crate.spec(
     package = "prost-build",
-    version = "^0.13.3",
+    version = "^0.14.3",
 )
 crate.spec(
     package = "protobuf",
@@ -1213,13 +1204,13 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
-        "ring",
+        "aws-lc-rs",
         "log",
         "runtime-tokio",
-        "rustls",
+        "rustls-aws-lc-rs",
     ],
     package = "quinn",
-    version = "^0.11.5",
+    version = "^0.11.11",
 )
 crate.spec(
     package = "quinn-udp",
@@ -1234,19 +1225,30 @@ crate.spec(
         "small_rng",
     ],
     package = "rand",
-    version = "^0.8.5",
+    version = "^0.8.6",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "os_rng",
+    ],
+    package = "rand",
+    package_alias = "rand_0_9",
+    version = "^0.9.3",
 )
 crate.spec(
     package = "rand_chacha",
     version = "^0.3.1",
 )
 crate.spec(
-    package = "rand_distr",
-    version = "^0.4",
+    default_features = False,
+    package = "rand_chacha",
+    package_alias = "rand_chacha_0_9",
+    version = "^0.9.0",
 )
 crate.spec(
-    package = "rand_pcg",
-    version = "^0.3.1",
+    package = "rand_distr",
+    version = "^0.4",
 )
 crate.spec(
     package = "ratelimit",
@@ -1262,6 +1264,7 @@ crate.spec(
 )
 crate.spec(
     features = [
+        "x509-parser",
         "zeroize",
     ],
     package = "rcgen",
@@ -1286,12 +1289,12 @@ crate.spec(
         "http2",
         "json",
         "multipart",
-        "rustls-tls",
-        "rustls-tls-native-roots",
+        "rustls",
+        "socks",
         "stream",
     ],
     package = "reqwest",
-    version = "^0.12.24",
+    version = "^0.13",
 )
 crate.spec(
     package = "rexpect",
@@ -1334,6 +1337,10 @@ crate.spec(
     version = "^0.19.0",
 )
 crate.spec(
+    # vendored: build the bundled libusb instead of linking the system one
+    # (mirrors vsock_lib's Cargo.toml), so the build needs no
+    # libusb-1.0-0-dev. See also the libusb1-sys annotation below.
+    features = ["vendored"],
     package = "rusb",
     version = "0.9",
 )
@@ -1346,12 +1353,14 @@ crate.spec(
     version = "^0.37.0",
 )
 crate.spec(
+    default_features = False,
+    features = ["serde"],
     package = "rust_decimal",
-    version = "^1.36.0",
+    version = "^1.42",
 )
 crate.spec(
     package = "rust_decimal_macros",
-    version = "^1.36.0",
+    version = "^1.40",
 )
 crate.spec(
     package = "rustc-demangle",
@@ -1362,13 +1371,9 @@ crate.spec(
     version = "^1.1.0",
 )
 crate.spec(
-    package = "rust-ini",
-    version = "^0.21.1",
-)
-crate.spec(
     default_features = False,
     features = [
-        "ring",
+        "aws_lc_rs",
         "std",
         "brotli",
         "tls12",
@@ -1404,8 +1409,9 @@ crate.spec(
     version = "^1.1.0",
 )
 crate.spec(
+    default_features = False,
     package = "scraper",
-    version = "^0.17.1",
+    version = "^0.24.0",
 )
 crate.spec(
     default_features = False,
@@ -1413,16 +1419,17 @@ crate.spec(
     version = "^0.11.0",
 )
 crate.spec(
-    package = "securefmt",
-    version = "^0.1.5",
-)
-crate.spec(
     features = [
         "global-context",
-        "rand-std",
+        "rand",
+        "std",
     ],
     package = "secp256k1",
-    version = "^0.22",
+    version = "^0.29",
+)
+crate.spec(
+    package = "security-framework",
+    version = "^3",
 )
 crate.spec(
     features = [
@@ -1441,7 +1448,7 @@ crate.spec(
 )
 crate.spec(
     package = "serde-bytes-repr",
-    version = "^0.1.5",
+    version = "^0.3.0",
 )
 crate.spec(
     package = "serde_bytes",
@@ -1461,7 +1468,7 @@ crate.spec(
 )
 crate.spec(
     package = "serde_with",
-    version = "^1.14.0",
+    version = "^3.21.0",
 )
 crate.spec(
     package = "serde_yaml",
@@ -1483,10 +1490,6 @@ crate.spec(
 crate.spec(
     package = "sha3",
     version = "^0.10.8",
-)
-crate.spec(
-    package = "shell-escape",
-    version = "^0.1.5",
 )
 crate.spec(
     features = [
@@ -1598,14 +1601,6 @@ crate.spec(
     version = "^0.6.18",
 )
 crate.spec(
-    package = "sysinfo",
-    version = "0.37",
-)
-crate.spec(
-    package = "systemd",
-    version = "0.10",
-)
-crate.spec(
     package = "sys-mount",
     version = "3.0",
 )
@@ -1618,23 +1613,25 @@ crate.spec(
     version = "^0.4.38",
 )
 crate.spec(
+    package = "target-lexicon",
+    version = "^0.13.5",
+)
+crate.spec(
     features = [
         "full",
     ],
+    # Pinned to a fork because the published `tarpc` uses syn 3, while the rest of this repo (still) uses syn 2.
+    git = "https://github.com/dfinity/tarpc",
     package = "tarpc",
-    version = "^0.34",
+    rev = "cddf1c64011d00f36016146e8447bef99531030c",
 )
 crate.spec(
     package = "tempfile",
     version = "3.20",
 )
 crate.spec(
-    package = "tester",
-    version = "^0.7.0",
-)
-crate.spec(
     package = "test-strategy",
-    version = "^0.3.1",
+    version = "^0.4.0",
 )
 crate.spec(
     package = "textplots",
@@ -1644,13 +1641,12 @@ crate.spec(
     package = "tui-textarea",
     version = "^0.7",
 )
+
+# DO NOT upgrade to >=2.0.19 as it pulls in syn 3 whereas the rest of the
+# codebase uses syn 2.
 crate.spec(
     package = "thiserror",
-    version = "^2.0.18",
-)
-crate.spec(
-    package = "thousands",
-    version = "^0.2.0",
+    version = "=2.0.18",
 )
 crate.spec(
     package = "threadpool",
@@ -1659,11 +1655,11 @@ crate.spec(
 crate.spec(
     features = ["stats"],
     package = "tikv-jemalloc-ctl",
-    version = "^0.6",
+    version = "^0.7",
 )
 crate.spec(
     package = "tikv-jemallocator",
-    version = "^0.6",
+    version = "^0.7",
 )
 crate.spec(
     package = "time",
@@ -1685,14 +1681,10 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
-        "ring",
+        "aws-lc-rs",
     ],
     package = "tokio-rustls",
     version = "^0.26.0",
-)
-crate.spec(
-    package = "tokio-stream",
-    version = "^0.1.17",
 )
 crate.spec(
     features = [
@@ -1700,7 +1692,7 @@ crate.spec(
         "json",
     ],
     package = "tokio-serde",
-    version = "^0.8",
+    version = "^0.9",
 )
 crate.spec(
     package = "tokio-socks",
@@ -1716,7 +1708,7 @@ crate.spec(
 )
 crate.spec(
     package = "tokio-tungstenite",
-    version = "^0.26.0",
+    version = "^0.29",
 )
 crate.spec(
     features = [
@@ -1733,11 +1725,15 @@ crate.spec(
 )
 crate.spec(
     package = "tonic",
-    version = "^0.12.3",
+    version = "^0.14.5",
 )
 crate.spec(
-    package = "tonic-build",
-    version = "^0.12.3",
+    package = "tonic-prost",
+    version = "^0.14.5",
+)
+crate.spec(
+    package = "tonic-prost-build",
+    version = "^0.14.5",
 )
 crate.spec(
     features = ["full"],
@@ -1753,6 +1749,7 @@ crate.spec(
         "request-id",
         "util",
         "compression-full",
+        "timeout",
         "tracing",
     ],
     package = "tower-http",
@@ -1760,11 +1757,7 @@ crate.spec(
 )
 crate.spec(
     package = "tower_governor",
-    version = "^0.7.0",
-)
-crate.spec(
-    package = "tower-request-id",
-    version = "^0.3.0",
+    version = "^0.8.0",
 )
 crate.spec(
     package = "tower-test",
@@ -1788,11 +1781,11 @@ crate.spec(
 )
 crate.spec(
     package = "tracing-opentelemetry",
-    version = "^0.28.0",
+    version = "^0.33.0",
 )
 crate.spec(
     package = "tracing-serde",
-    version = "^0.1.3",
+    version = "^0.2",
 )
 crate.spec(
     package = "tracing-slog",
@@ -1841,7 +1834,11 @@ crate.spec(
 )
 crate.spec(
     package = "vsock",
-    version = "^0.4",
+    version = "^0.5.4",
+)
+crate.spec(
+    package = "tokio-vsock",
+    version = "0.7.2",
 )
 crate.spec(
     package = "walkdir",
@@ -1849,23 +1846,14 @@ crate.spec(
 )
 crate.spec(
     package = "walrus",
-    version = "^0.23.3",
-)
-crate.spec(
-    features = ["tls"],
-    package = "warp",
-    version = "^0.3.7",
-)
-crate.spec(
-    package = "wasm-bindgen",
-    version = "^0.2",
+    version = "^0.26.4",
 )
 crate.spec(
     features = [
         "wasmparser",
     ],
     package = "wasm-encoder",
-    version = "^0.245.0",
+    version = "^0.254.0",
 )
 crate.spec(
     default_features = False,
@@ -1873,15 +1861,15 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-smith",
-    version = "^0.245.0",
+    version = "^0.254.0",
 )
 crate.spec(
     package = "wasmparser",
-    version = "^0.245.0",
+    version = "^0.254.0",
 )
 crate.spec(
     package = "wasmprinter",
-    version = "^0.245.0",
+    version = "^0.254.0",
 )
 crate.spec(
     default_features = False,
@@ -1893,32 +1881,24 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^43.0.1",
+    version = "^48.0.1",
 )
 crate.spec(
     package = "wast",
-    version = "^244.0.0",
+    version = "^254.0.0",
 )
 crate.spec(
     package = "wat",
-    version = "~1.245.0",
+    version = "~1.254.0",
 )
 crate.spec(
     package = "webpki-roots",
     version = "1.0.6",
 )
 crate.spec(
-    package = "which",
-    version = "^4.2.2",
-)
-crate.spec(
     features = ["parallel"],
     package = "wirm",
-    version = "2.1.0",
-)
-crate.spec(
-    package = "wsl",
-    version = "^0.1.0",
+    version = "4.0.4",
 )
 crate.spec(
     default_features = False,
@@ -1942,22 +1922,7 @@ crate.spec(
 )
 crate.spec(
     package = "x509-parser",
-    version = "^0.16.0",
-)
-crate.spec(
-    features = [
-        # By using the `static` feature the x2 crate configures the lzma-sys crate to use its embedded liblzma C library
-        # instead of requiring liblzma to be installed in the environment.
-        # See: https://github.com/alexcrichton/xz2-rs/blob/main/Cargo.toml#L33
-        # See: https://github.com/alexcrichton/xz2-rs/blob/main/lzma-sys/build.rs
-        "static",
-    ],
-    package = "xz2",
-    version = "^0.1.7",
-)
-crate.spec(
-    package = "yansi",
-    version = "^0.5.0",
+    version = "^0.18.1",
 )
 crate.spec(
     features = [
@@ -1998,9 +1963,6 @@ DEFAULT_RUSTC_FLAGS = [
 # NOTE: make sure this stays in sync with bazel/fuzz_testing.bzl
 DEFAULT_SANITIZERS = [
     "-Zsanitizer=address",
-    # zig doesn't like how rustc pushes the sanitizers, so do it ourselves.
-    "-Zexternal-clangrt",
-    "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
 ]
 
 # This flag will be used by third party crates and internal rust_libraries during fuzzing
@@ -2024,28 +1986,24 @@ crate.annotation_select(
 )
 crate.annotation(
     build_script_data = [
-        "@@+_repo_rules+openssl//:gen_dir",
+        "@openssl//:gen_dir",
     ],
     build_script_env = {
         "OPENSSL_NO_VENDOR": "1",
-        "OPENSSL_LIB_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/lib64",
-        "OPENSSL_INCLUDE_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/include",
+        "OPENSSL_LIB_DIR": "$(execpath @openssl//:gen_dir)/lib64",
+        "OPENSSL_INCLUDE_DIR": "$(execpath @openssl//:gen_dir)/include",
         "OPENSSL_STATIC": "1",
     },
     crate = "openssl-sys",
 )
 crate.annotation(
-    crate = "canbench",
-    gen_binaries = ["canbench"],
-)
-crate.annotation(
-    crate = "cc",
-    patch_args = ["-p1"],
-    patches = ["@@//bazel:cc_rs.patch"],
+    crate = "askama_derive",
+    patch_args = ["-p2"],
+    patches = ["@@//bazel:askama.patch"],
 )
 crate.annotation(
     build_script_data = [
-        "@@+_repo_rules+openssl//:gen_dir",
+        "@openssl//:gen_dir",
     ],
     crate = "libssh2-sys",
     # Patch for determinism issues
@@ -2089,18 +2047,41 @@ crate.annotation(
 )
 crate.annotation(
     build_script_data = [
-        "@@+_repo_rules+lmdb//:liblmdb",
-        "@@+_repo_rules+lmdb//:lmdb.h",
+        "@lmdb//:liblmdb",
+        "@lmdb//:lmdb.h",
     ],
     build_script_env = {
-        "LMDB_OVERRIDE": "$(location @@+_repo_rules+lmdb//:liblmdb)",
-        "LMDB_H_PATH": "$(location @@+_repo_rules+lmdb//:lmdb.h)",
+        "LMDB_OVERRIDE": "$(location @lmdb//:liblmdb)",
+        "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
     },
     crate = "lmdb-rkv-sys",
     # patch our fork of the lmdb-rkv-sys to allow specifying the path
     # to the built static archive
     patch_args = ["-p1"],
     patches = ["@@//bazel:lmdb_rkv_sys.patch"],
+)
+crate.annotation(
+    # Disabling the libudev probe makes the vendored libusb fall back to its
+    # netlink hotplug backend, dropping the libudev dependency entirely.
+    build_script_env = {"LIBUDEV_NO_PKG_CONFIG": "1"},
+    crate = "libusb1-sys",
+)
+crate.annotation(
+    crate = "pkg-config",
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:pkg-config.patch"],
+)
+crate.annotation(
+    crate = "devicemapper-sys",
+    link_deps = ["@@//third_party:devmapper"],
+)
+crate.annotation(
+    crate = "libcryptsetup-rs-sys",
+    link_deps = ["@@//third_party:cryptsetup"],
+)
+crate.annotation(
+    crate = "virt-sys",
+    link_deps = ["@@//third_party:libvirt"],
 )
 crate.annotation(
     crate = "p256",
@@ -2111,8 +2092,8 @@ crate.annotation(
 )
 crate.annotation_select(
     # Avoid building jemalloc from rust (in part bc it creates builder-specific config files)
-    build_script_data = ["@@+_repo_rules+jemalloc//:libjemalloc"],
-    build_script_env = {"JEMALLOC_OVERRIDE": "$(location @@+_repo_rules+jemalloc//:libjemalloc)"},
+    build_script_data = ["@jemalloc//:libjemalloc"],
+    build_script_env = {"JEMALLOC_OVERRIDE": "$(location @jemalloc//:libjemalloc)"},
     crate = "tikv-jemalloc-sys",
     triples = ["x86_64-unknown-linux-gnu"],
 )
@@ -2121,13 +2102,15 @@ crate.annotation_select(
     rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
     triples = ["@@//bazel:fuzzing_code_enabled"],
 )
-crate.annotation(
+
+# cfg flag to avoid linking issues. The cfg is scoped to wasm32 (the canister
+# target) because on native targets the vendored C library exports
+# version-renamed symbols, and the cfg makes the Rust bindings reference the
+# un-renamed names, breaking linking.
+crate.annotation_select(
     crate = "secp256k1-sys",
     rustc_flags = ["--cfg=rust_secp_no_symbol_renaming"],
-    # This specific version is used by ic-btc-kyt canister, which
-    # requires an extra cfg flag to avoid linking issues.
-    # Applying the same cfg to other versions of secp256k1-sys
-    # may break other programs or tests.
+    triples = ["wasm32-unknown-unknown"],
     version = "0.10.0",
 )
 crate.annotation(
@@ -2162,10 +2145,10 @@ crate.annotation(
 )
 crate.annotation(
     build_script_data = [
-        "@@protobuf+//:protoc",
+        "@@//bazel:protoc",
     ],
     build_script_env = {
-        "PROTOC": "$(execpath @@protobuf+//:protoc)",
+        "PROTOC": "$(execpath @@//bazel:protoc)",
     },
     crate = "pprof",
 )
@@ -2176,8 +2159,8 @@ crate.annotation(
     crate = "prost-build",
 )
 crate.annotation(
-    crate = "metrics-proxy",
-    gen_binaries = ["metrics-proxy"],
+    crate = "ic-gateway",
+    gen_binaries = ["ic-gateway"],
 )
 crate.splicing_config(
     resolver_version = "2",
@@ -2195,6 +2178,10 @@ crate.from_specs(
             "x86_64-unknown-linux-gnu",
         ],
 )
+
+# inject nice names for those repos to avoid canonical naming
+inject_repo(crate, "openssl", "lmdb", "jemalloc")
+
 use_repo(crate, "crate_index")
 
 ####

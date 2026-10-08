@@ -1,4 +1,5 @@
 use crate::{
+    MAX_SCALAR_FIELD_LEN_BYTES,
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
@@ -66,11 +67,11 @@ use crate::{
                 DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::{DissolveState, Followees, TopicFollowees},
+            neuron::{DissolveState, Followees, RewardEventParticipation, TopicFollowees},
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
-            upgrade_journal_entry, valuation,
+            upgrade_journal_entry, upgrade_sns_controlled_canister, valuation,
         },
     },
     proposal::{
@@ -97,6 +98,7 @@ use ic_canister_profiler::SpanStats;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
+    CanisterInstallModeV2, CanisterUpgradeOptions, WasmMemoryPersistence,
 };
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
@@ -112,13 +114,14 @@ use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
-use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
+use ic_protobuf::types::v1::WasmMemoryPersistence as WasmMemoryPersistenceProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use ic_sns_governance_token_valuation::Valuation;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
+use num_bigint::BigUint;
 
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -1370,6 +1373,8 @@ impl Governance {
             aging_since_timestamp_seconds: parent_neuron.aging_since_timestamp_seconds,
             followees: parent_neuron.followees.clone(),
             topic_followees: parent_neuron.topic_followees.clone(),
+            // The child did not participate in the parent's past reward event.
+            latest_reward_event_participation: None,
             maturity_e8s_equivalent: 0,
             dissolve_state: parent_neuron.dissolve_state,
             voting_power_percentage_multiplier: parent_neuron.voting_power_percentage_multiplier,
@@ -1759,6 +1764,22 @@ impl Governance {
                 );
             }
         }
+    }
+
+    /// Saves a generic function call's reply on its proposal, keeping at most
+    /// `MAX_SCALAR_FIELD_LEN_BYTES` bytes.
+    fn set_proposal_execution_reply(&mut self, pid: u64, mut execution_reply: Vec<u8>) {
+        execution_reply.truncate(MAX_SCALAR_FIELD_LEN_BYTES);
+        let Some(proposal) = self.proto.proposals.get_mut(&pid) else {
+            log!(
+                ERROR,
+                "Tried to record reply after executing proposal {}, but unable to find the proposal.",
+                pid,
+            );
+            return;
+        };
+
+        proposal.execution_reply = Some(execution_reply);
     }
 
     /// Returns the latest reward event.
@@ -2170,7 +2191,7 @@ impl Governance {
                 }
             }
             Action::ExecuteGenericNervousSystemFunction(call) => {
-                self.perform_execute_generic_nervous_system_function(call)
+                self.perform_execute_generic_nervous_system_function(proposal_id, call)
                     .await
             }
             Action::ExecuteExtensionOperation(execute_extension_operation) => {
@@ -2527,32 +2548,37 @@ impl Governance {
         Ok(())
     }
 
-    /// Executes a (non-native) nervous system function as a result of an adopted proposal.
+    /// Executes a (non-native) nervous system function for an adopted proposal.
+    /// On success, saves the target canister's reply on the proposal.
     async fn perform_execute_generic_nervous_system_function(
-        &self,
+        &mut self,
+        proposal_id: u64,
         call: ExecuteGenericNervousSystemFunction,
     ) -> Result<(), GovernanceError> {
-        match self
+        let function = match self
             .proto
             .id_to_nervous_system_functions
             .get(&call.function_id)
         {
-            None => Err(GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                format!(
-                    "There is no generic NervousSystemFunction with id: {}",
-                    call.function_id
-                ),
-            )),
-            Some(function) => {
-                perform_execute_generic_nervous_system_function_call(
-                    &*self.env,
-                    function.clone(),
-                    call,
-                )
-                .await
+            None => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    format!(
+                        "There is no generic NervousSystemFunction with id: {}",
+                        call.function_id
+                    ),
+                ));
             }
-        }
+            Some(function) => function.clone(),
+        };
+
+        let execution_reply =
+            perform_execute_generic_nervous_system_function_call(&*self.env, function, call)
+                .await?;
+
+        self.set_proposal_execution_reply(proposal_id, execution_reply);
+
+        Ok(())
     }
 
     async fn perform_execute_extension_operation(
@@ -2676,7 +2702,12 @@ impl Governance {
             ));
         }
 
-        let mode = upgrade.mode_or_upgrade() as i32;
+        let mode = upgrade.mode_or_upgrade();
+        let mode = CanisterInstallMode::try_from(mode)?;
+
+        let canister_upgrade_options =
+            valid_canister_upgrade_options(mode, upgrade.canister_upgrade_options)
+                .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
 
         let wasm = Wasm::try_from(&upgrade)
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
@@ -2687,7 +2718,8 @@ impl Governance {
             upgrade
                 .canister_upgrade_arg
                 .unwrap_or_else(|| Encode!().unwrap()),
-            CanisterInstallMode::try_from(CanisterInstallModeProto::try_from(mode)?)?,
+            mode,
+            canister_upgrade_options,
         )
         .await
     }
@@ -2698,6 +2730,7 @@ impl Governance {
         wasm: Wasm,
         arg: Vec<u8>,
         mode: CanisterInstallMode,
+        canister_upgrade_options: Option<CanisterUpgradeOptions>,
     ) -> Result<(), GovernanceError> {
         // Serialize upgrade.
         let payload = {
@@ -2708,6 +2741,7 @@ impl Governance {
             // For more details, please refer to the comments above the (definition of the)
             // stop_before_installing field in ChangeCanisterRequest.
             let stop_before_installing = true;
+            let mode = assemble_mode(mode, canister_upgrade_options);
 
             let mut change_canister_arg =
                 ChangeCanisterRequest::new(stop_before_installing, mode, canister_id)
@@ -2883,6 +2917,11 @@ impl Governance {
                     Wasm::Bytes(target_wasm.clone()),
                     Encode!().unwrap(),
                     CanisterInstallMode::Upgrade,
+                    // upgrade options. skip_pre_upgrade would be dangerous, and
+                    // wasm_memory_persistence is not needed either, because no
+                    // SNS framework canister is written in Motoko (as of
+                    // August, 2026).
+                    None,
                 )
                 .await?;
             }
@@ -2950,6 +2989,11 @@ impl Governance {
                     Wasm::Bytes(target_wasm.clone()),
                     Encode!().unwrap(),
                     CanisterInstallMode::Upgrade,
+                    // upgrade options. skip_pre_upgrade would be dangerous, and
+                    // wasm_memory_persistence is not needed either, because no
+                    // SNS framework canister is written in Motoko (as of
+                    // August, 2026).
+                    None,
                 )
                 .await?;
             }
@@ -3152,6 +3196,7 @@ impl Governance {
             Wasm::Bytes(ledger_wasm),
             ledger_upgrade_arg,
             CanisterInstallMode::Upgrade,
+            None, // upgrade options
         )
         .await?;
 
@@ -3634,6 +3679,9 @@ impl Governance {
             is_eligible_for_rewards: true,
             action_auxiliary,
             topic: Some(i32::from(proposal_topic)),
+
+            // A new proposal has not been executed yet, so there is no reply.
+            execution_reply: None,
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -4343,6 +4391,7 @@ impl Governance {
             topic_followees: Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {},
             }),
+            latest_reward_event_participation: None,
             maturity_e8s_equivalent: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
             // A neuron created through the `claim_or_refresh` ManageNeuron command will
@@ -4513,6 +4562,7 @@ impl Governance {
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
                 topic_followees: Some(neuron_recipe.construct_topic_followees()),
+                latest_reward_event_participation: None,
                 maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                     neuron_recipe.get_dissolve_delay_seconds_or_panic(),
@@ -5970,6 +6020,33 @@ impl Governance {
                     }
                 };
 
+                if neuron_reward_shares > dec!(0) {
+                    // SNS reward shares are currently sums of integer ballot voting powers, so
+                    // the fractional part is expected to be zero. If this invariant is violated,
+                    // truncate only the participation value and continue calculating native
+                    // rewards with the original Decimal below.
+                    if neuron_reward_shares.fract() != Decimal::ZERO {
+                        log!(
+                            ERROR,
+                            "Unexpected fractional SNS reward shares for neuron {neuron_id:?}: \
+                             {neuron_reward_shares}. SNS reward shares are expected to be sums of \
+                             integer ballot voting powers. Recording the truncated value in \
+                             latest_reward_event_participation while native reward calculation \
+                             continues using the original Decimal."
+                        );
+                    }
+
+                    // as_i128 truncates; otherwise this is lossless because reward shares are sums of u64s.
+                    // unsigned_abs does not lose the sign because this is inside the > 0 branch.
+                    let reward_shares =
+                        BigUint::from(neuron_reward_shares.as_i128().unsigned_abs()).to_bytes_be();
+
+                    neuron.latest_reward_event_participation = Some(RewardEventParticipation {
+                        reward_event_end_timestamp_seconds,
+                        reward_shares,
+                    });
+                }
+
                 // Dividing before multiplying maximizes our chances of success.
                 let neuron_reward_e8s =
                     rewards_purse_e8s * (neuron_reward_shares / total_reward_shares);
@@ -6577,6 +6654,75 @@ impl TimeWarp {
     }
 }
 
+/// Combines the arguments into the Mode type required by Root (and the
+/// Management canister).
+///
+/// If mode is not Upgrade, then canister_upgrade_options does not affect the
+/// return value (but in non-release builds, this panics via debug_assert).
+fn assemble_mode(
+    mode: CanisterInstallMode,
+    canister_upgrade_options: Option<CanisterUpgradeOptions>,
+) -> CanisterInstallModeV2 {
+    match mode {
+        CanisterInstallMode::Upgrade => CanisterInstallModeV2::Upgrade(canister_upgrade_options),
+        mode => {
+            // This checks that the caller is calling us correctly. This only
+            // happens in non-release builds. In production,
+            // canister_upgrade_options is ignored when it is Some.
+            debug_assert_eq!(canister_upgrade_options, None);
+            CanisterInstallModeV2::from(mode)
+        }
+    }
+}
+
+/// Converts canister_upgrade_options into the type required by SNS Root.
+///
+/// Returns Err in the following cases:
+///
+/// 1. mode is not Upgrade.
+/// 2. wasm_memory_persistence is not one of the allowed values:
+///    a. Keep
+///    b. Replace
+///    c. None
+pub(crate) fn valid_canister_upgrade_options(
+    mode: CanisterInstallMode,
+    canister_upgrade_options: Option<upgrade_sns_controlled_canister::CanisterUpgradeOptions>,
+) -> Result<Option<CanisterUpgradeOptions>, String> {
+    let Some(canister_upgrade_options) = canister_upgrade_options else {
+        return Ok(None);
+    };
+
+    if mode != CanisterInstallMode::Upgrade {
+        return Err("canister_upgrade_options can only be set when mode is upgrade".to_string());
+    }
+
+    let upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        skip_pre_upgrade,
+        wasm_memory_persistence,
+    } = canister_upgrade_options;
+
+    let wasm_memory_persistence = match wasm_memory_persistence {
+        None => None,
+        Some(code) => Some(convert_i32_to_wasm_memory_persistence(code)?),
+    };
+
+    Ok(Some(CanisterUpgradeOptions {
+        skip_pre_upgrade,
+        wasm_memory_persistence,
+    }))
+}
+
+/// Converts from integer code to the enum type required by the Root canister
+/// (and the Management canister).
+///
+/// Ok values are Keep and Replace.
+fn convert_i32_to_wasm_memory_persistence(code: i32) -> Result<WasmMemoryPersistence, String> {
+    let new_error = || format!("Unrecognized wasm_memory_persistence code: {code}");
+
+    let result = WasmMemoryPersistenceProto::try_from(code).map_err(|_| new_error())?;
+    WasmMemoryPersistence::try_from(result).map_err(|_| new_error())
+}
+
 fn get_neuron_id_from_manage_neuron(
     manage_neuron: &ManageNeuron,
     caller: &PrincipalId,
@@ -6628,10 +6774,16 @@ mod advance_target_sns_version_tests;
 mod proposal_topics_tests;
 
 #[cfg(test)]
+mod reward_event_participation_tests;
+
+#[cfg(test)]
 mod test_helpers;
 
 #[cfg(test)]
 mod get_metrics;
+
+#[cfg(test)]
+mod execute_generic_nervous_system_function_tests;
 
 #[cfg(feature = "canbench-rs")]
 mod benches;

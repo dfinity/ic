@@ -34,12 +34,9 @@ RUN sed -e 's/\(# \)\?\(backup *= *\)[01]/\20/' -e 's/\(# \)\?\(archive *= *\)[0
 # Deactivate systemd userdb. We don't use it.
 RUN sed -e 's/ *systemd//' -i /etc/nsswitch.conf
 
-# Compile locale specification
-RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
-
 # Clear files that may lead to indeterministic build.
 RUN apt-get clean && \
-    find /usr/lib/python3.12 -name "*.pyc" | xargs rm && \
+    find /usr/lib/python3.14 -name "*.pyc" | xargs rm && \
     find /usr/lib/python3 -name "*.pyc" | xargs rm && \
     find /usr/share/python3 -name "*.pyc" | xargs rm && \
     truncate --size 0 /etc/machine-id

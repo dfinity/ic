@@ -16,7 +16,7 @@ use crate::{
         events::{find_last_event, history_len},
         limiter::num_successes_in_past_24_h,
         migrations_disabled, num_validations,
-        requests::{find_request, insert_request, num_requests},
+        requests::{find_request, insert_request, num_requests, oldest_request_age_nanos},
         set_allowlist,
     },
     rate_limited, start_timers,
@@ -131,6 +131,13 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "migration_canister_requests_in_flight",
         num_requests() as f64,
         "Number of currently ongoing migration requests.",
+    )?;
+
+    // This gauge is 0 if there is no request in flight.
+    w.encode_gauge(
+        "migration_canister_oldest_request_in_flight_age_seconds",
+        oldest_request_age_nanos() as f64 / 1_000_000_000_f64,
+        "Age in seconds of the migration request that has been in flight the longest.",
     )?;
 
     w.encode_gauge(

@@ -18,41 +18,12 @@ impl DerEncodedCustomData for GetDiskEncryptionKeyTokenCustomData<'_> {
     fn namespace(&self) -> SevCustomDataNamespace {
         SevCustomDataNamespace::GetDiskEncryptionKeyToken
     }
-
-    fn needs_legacy_encoding() -> bool {
-        true
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use attestation::custom_data::EncodeSevCustomData;
-
-    #[test]
-    fn test_get_disk_encryption_key_token_custom_data_is_stable_legacy() {
-        let client_tls_public_key = OctetStringRef::new(&[1, 2, 3, 4]).unwrap();
-        let server_tls_public_key = OctetStringRef::new(&[5, 6, 7, 8]).unwrap();
-        let custom_data = GetDiskEncryptionKeyTokenCustomData {
-            client_tls_public_key,
-            server_tls_public_key,
-        };
-
-        let result = custom_data.encode_for_sev_legacy().unwrap();
-        assert_eq!(
-            &result,
-            // The numbers below don't have any special meaning, but they should stay stable.
-            // If the encoding below has to be changed, the attestation report verification will
-            // probably fail because the old GuestOS version will still derive the previous
-            // encoding, so take extra care!
-            &[
-                31, 13, 254, 213, 44, 96, 47, 104, 171, 127, 68, 166, 43, 242, 61, 116, 55, 229,
-                214, 227, 107, 88, 24, 26, 223, 134, 119, 215, 136, 162, 198, 128, 60, 107, 133,
-                229, 145, 220, 92, 231, 186, 211, 34, 11, 30, 155, 53, 20, 23, 114, 250, 74, 83,
-                143, 28, 23, 30, 166, 65, 176, 215, 27, 136, 191
-            ]
-        );
-    }
 
     #[test]
     fn test_get_disk_encryption_key_token_custom_data_is_stable() {

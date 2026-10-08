@@ -10,3 +10,12 @@ sh_binary(
         "fuzz_test",
     ],
 )
+
+sh_binary(
+    name = "afl_clang_lto_linker",
+    srcs = ["afl-clang-lto-linker.sh"],
+    tags = [
+        "afl",
+        "fuzz_test",
+    ],
+)

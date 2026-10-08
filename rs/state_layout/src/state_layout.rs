@@ -2,6 +2,7 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource, SnapshotVisibility,
+    StatusVisibility,
 };
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_protobuf::state::{
@@ -21,9 +22,8 @@ use ic_replicated_state::{
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
-    AccumulatedPriority, CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, ExecutionRound,
-    Height, LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId, SnapshotId, Time,
-    batch::TotalQueryStats,
+    CanisterId, CanisterTimer, ComputeAllocation, ExecutionRound, Height, MemoryAllocation,
+    NumInstructions, PrincipalId, SnapshotId, Time, batch::TotalQueryStats,
 };
 use ic_types_cycles::{Cycles, CyclesUseCase, NominalCycles};
 use ic_utils::thread::maybe_parallel_map;
@@ -36,7 +36,7 @@ use std::fs::OpenOptions;
 use std::io::{Error, Write};
 
 /// Result of marking files readonly, containing counts for monitoring
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ReadonlyMarkingResult {
     pub files_traversed: usize,
     pub files_made_readonly: usize,
@@ -67,6 +67,7 @@ pub const QUEUES_FILE: &str = "queues.pbuf";
 pub const CANISTER_FILE: &str = "canister.pbuf";
 pub const INGRESS_HISTORY_FILE: &str = "ingress_history.pbuf";
 pub const SPLIT_MARKER_FILE: &str = "split_from.pbuf";
+pub const SUBNET_MERGED_FILE: &str = "subnet_merged.pbuf";
 pub const SUBNET_QUEUES_FILE: &str = "subnet_queues.pbuf";
 pub const REFUNDS_FILE: &str = "refunds.pbuf";
 pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
@@ -161,6 +162,10 @@ pub struct ExecutionStateBits {
     pub last_executed_round: ExecutionRound,
     pub metadata: WasmMetadata,
     pub binary_hash: WasmHash,
+    /// The round time at which this code was installed/upgraded or restored from
+    /// a snapshot, in nanoseconds since the Unix epoch. `None` for execution
+    /// states persisted before this field was introduced.
+    pub last_install_timestamp_nanos: Option<u64>,
     pub next_scheduled_method: NextScheduledMethod,
     pub is_wasm64: bool,
 }
@@ -170,11 +175,7 @@ pub struct ExecutionStateBits {
 #[derive(Debug)]
 pub struct CanisterStateBits {
     pub controllers: BTreeSet<PrincipalId>,
-    pub last_full_execution_round: ExecutionRound,
     pub compute_allocation: ComputeAllocation,
-    pub accumulated_priority: AccumulatedPriority,
-    pub priority_credit: AccumulatedPriority,
-    pub long_execution_mode: LongExecutionMode,
     pub execution_state_bits: Option<ExecutionStateBits>,
     pub memory_allocation: MemoryAllocation,
     pub wasm_memory_threshold: NumBytes,
@@ -183,6 +184,7 @@ pub struct CanisterStateBits {
     pub cycles_debit: Cycles,
     pub reserved_balance: Cycles,
     pub reserved_balance_limit: Option<Cycles>,
+    pub minimum_incoming_canister_call_cycles: Cycles,
     pub status: CanisterStatus,
     pub rounds_scheduled: u64,
     pub scheduled_as_first: u64,
@@ -190,13 +192,16 @@ pub struct CanisterStateBits {
     pub interrupted_during_execution: u64,
     pub certified_data: Vec<u8>,
     pub consumed_cycles: NominalCycles,
+    pub consumed_cycles_monotonic: NominalCycles,
     pub stable_memory_size: NumWasmPages,
     pub heap_delta_debit: NumBytes,
     pub install_code_debit: NumInstructions,
     pub time_of_last_allocation_charge_nanos: u64,
     pub global_timer_nanos: Option<u64>,
     pub canister_version: u64,
+    pub canister_creation_timestamp_nanos: Option<u64>,
     pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
     pub connection_metrics: BTreeMap<CanisterId, ConnectionMetrics>,
     pub instructions_executed: NumInstructions,
     pub ingress_messages_executed: u64,
@@ -209,9 +214,9 @@ pub struct CanisterStateBits {
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibilityV2,
     pub snapshot_visibility: SnapshotVisibility,
+    pub status_visibility: StatusVisibility,
     pub log_memory_limit: NumBytes,
-    pub canister_log: CanisterLog,
-    pub next_canister_log_record_idx: u64,
+    pub log_memory_store_persistent_next_idx: u64,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
     pub task_queue: TaskQueue,
@@ -248,6 +253,9 @@ pub struct CanisterSnapshotBits {
     pub global_timer: Option<CanisterTimer>,
     /// The state of the low memory hook.
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
+    /// Whether this snapshot has been loaded onto a canister and is therefore
+    /// immutable.
+    pub restored: bool,
 }
 
 #[derive(Clone)]
@@ -316,6 +324,7 @@ struct CheckpointRefData {
 /// │   │           └── vmemory_0.bin
 /// │   ├── ingress_history.pbuf
 /// │   ├── split_from.pbuf
+/// │   ├── subnet_merged.pbuf
 /// │   ├── subnet_queues.pbuf
 /// │   └── system_metadata.pbuf
 /// │
@@ -339,6 +348,7 @@ struct CheckpointRefData {
 /// │      │           └── vmemory_0.bin
 /// │      ├── ingress_history.pbuf
 /// │      ├── split_from.pbuf
+/// │      ├── subnet_merged.pbuf
 /// │      ├── subnet_queues.pbuf
 /// │      └── system_metadata.pbuf
 /// │
@@ -487,13 +497,16 @@ impl TipHandler {
     }
 
     /// Deletes canisters from tip if they are not in `ids`.
+    ///
+    /// Returns the IDs of the deleted canisters.
     pub fn filter_tip_canisters(
         &mut self,
         height: Height,
         ids: &BTreeSet<CanisterId>,
-    ) -> Result<(), LayoutError> {
+    ) -> Result<Vec<CanisterId>, LayoutError> {
         let tip = self.tip(height)?;
         let canisters_on_disk = tip.canister_ids()?;
+        let mut deleted_canister_ids = Vec::new();
         for id in canisters_on_disk {
             if !ids.contains(&id) {
                 let canister_path = tip.canister(&id)?.raw_path();
@@ -502,25 +515,58 @@ impl TipHandler {
                     message: "Cannot remove canister.".to_string(),
                     io_err: err,
                 })?;
+                deleted_canister_ids.push(id);
             }
         }
-        Ok(())
+        Ok(deleted_canister_ids)
     }
 
     /// Deletes snapshots from tip if they are not in `ids`.
+    ///
+    /// Returns the IDs of the deleted snapshots.
     pub fn filter_tip_snapshots(
         &mut self,
         height: Height,
         ids: &BTreeSet<SnapshotId>,
-    ) -> Result<(), LayoutError> {
+    ) -> Result<Vec<SnapshotId>, LayoutError> {
         let tip = self.tip(height)?;
         let snapshots_on_disk = tip.snapshot_ids()?;
+        let mut deleted_snapshot_ids = Vec::new();
         for id in snapshots_on_disk {
             if !ids.contains(&id) {
-                tip.snapshot(&id)?.delete_dir()?;
+                tip.delete_snapshot_dir(&id)?;
+                deleted_snapshot_ids.push(id);
             }
         }
-        Ok(())
+        Ok(deleted_snapshot_ids)
+    }
+
+    /// Deletes the directory of the given canister from tip.
+    ///
+    /// This is a no-op if the canister has no directory in tip, e.g. because it was
+    /// created and deleted without any of its `PageMap`s having been flushed.
+    pub fn delete_canister_directory(
+        &mut self,
+        height: Height,
+        canister_id: CanisterId,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        tip.delete_canister_dir(&canister_id)
+    }
+
+    /// Deletes the directory of the given snapshot from tip.
+    ///
+    /// This is a no-op if the snapshot has no directory in tip, e.g. because it was
+    /// created from uploaded metadata (which copies no files from the canister, so no
+    /// directory is created for it) and deleted before the first flush of its
+    /// `PageMap`s.
+    pub fn delete_snapshot_directory(
+        &mut self,
+        height: Height,
+        snapshot_id: SnapshotId,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        tip.delete_snapshot_dir(&snapshot_id)
     }
 
     /// Moves the entire canister directory from one canister id to another.
@@ -706,6 +752,11 @@ impl StateLayout {
     /// Returns the the raw root path for state
     pub fn raw_path(&self) -> &Path {
         &self.root
+    }
+
+    /// `syncfs` the filesystem holding the state.
+    pub fn syncfs(&self) -> std::io::Result<()> {
+        syncfs(&self.root)
     }
 
     /// Returns the path to the temporary directory.
@@ -1317,7 +1368,7 @@ impl StateLayout {
         let cp_path = self.diverged_checkpoints().join(&checkpoint_name);
         let tmp_path = self
             .fs_tmp()
-            .join(format!("diverged_checkpoint_{}", &checkpoint_name));
+            .join(format!("diverged_checkpoint_{}", checkpoint_name));
         self.rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
@@ -1367,7 +1418,7 @@ impl StateLayout {
     pub fn remove_backup(&self, height: Height) -> Result<(), LayoutError> {
         let backup_name = Self::checkpoint_name(height);
         let backup_path = self.backups().join(&backup_name);
-        let tmp_path = self.fs_tmp().join(format!("backup_{}", &backup_name));
+        let tmp_path = self.fs_tmp().join(format!("backup_{}", backup_name));
         self.rename_to_tmp_path(&backup_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: backup_path.clone(),
@@ -1756,6 +1807,14 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         self.0.root.join(SPLIT_MARKER_FILE).into()
     }
 
+    /// The "subnet was merged" marker, backing `SystemMetadata::subnet_merged`.
+    ///
+    /// A `false` flag encodes to an empty message, so (as with all other empty
+    /// protos) the file is not written at all in that case.
+    pub fn subnet_merged_marker(&self) -> ProtoFileWith<pb_metadata::SubnetMerged, Permissions> {
+        self.0.root.join(SUBNET_MERGED_FILE).into()
+    }
+
     pub fn stats(&self) -> ProtoFileWith<pb_stats::Stats, Permissions> {
         self.0.root.join(STATS_FILE).into()
     }
@@ -1778,13 +1837,16 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         &self,
         canister_id: &CanisterId,
     ) -> Result<CanisterLayout<Permissions>, LayoutError> {
-        CanisterLayout::new(
-            self.0
-                .root
-                .join(CANISTER_STATES_DIR)
-                .join(hex::encode(canister_id.get_ref().as_slice())),
-            self,
-        )
+        CanisterLayout::new(self.canister_path(canister_id), self)
+    }
+
+    /// The path of the given canister's directory. As opposed to `canister()`, this
+    /// does not create the directory.
+    fn canister_path(&self, canister_id: &CanisterId) -> PathBuf {
+        self.0
+            .root
+            .join(CANISTER_STATES_DIR)
+            .join(hex::encode(canister_id.get_ref().as_slice()))
     }
 
     /// Lists all snapshots in the checkpoint.
@@ -1847,16 +1909,19 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         &self,
         snapshot_id: &SnapshotId,
     ) -> Result<SnapshotLayout<Permissions>, LayoutError> {
-        SnapshotLayout::new(
-            self.0
-                .root
-                .join(SNAPSHOTS_DIR)
-                .join(hex::encode(
-                    snapshot_id.get_canister_id().get_ref().as_slice(),
-                ))
-                .join(hex::encode(snapshot_id.as_slice())),
-            self,
-        )
+        SnapshotLayout::new(self.snapshot_path(snapshot_id), self)
+    }
+
+    /// The path of the given snapshot's directory. As opposed to `snapshot()`, this
+    /// does not create the directory.
+    fn snapshot_path(&self, snapshot_id: &SnapshotId) -> PathBuf {
+        self.0
+            .root
+            .join(SNAPSHOTS_DIR)
+            .join(hex::encode(
+                snapshot_id.get_canister_id().get_ref().as_slice(),
+            ))
+            .join(hex::encode(snapshot_id.as_slice()))
     }
 
     pub fn height(&self) -> Height {
@@ -2008,6 +2073,33 @@ where
             message: "Failed to sync checkpoint directory for the creation of the state sync checkpoint marker".to_string(),
             io_err: err,
         })
+    }
+
+    /// Removes the entire directory of the given canister.
+    ///
+    /// This is a no-op if the canister has no directory, e.g. because it was created
+    /// and deleted without any of its `PageMap`s having been flushed.
+    pub fn delete_canister_dir(&self, canister_id: &CanisterId) -> Result<(), LayoutError> {
+        let canister_path = self.canister_path(canister_id);
+        match std::fs::remove_dir_all(&canister_path) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(err) => Err(LayoutError::IoError {
+                path: canister_path,
+                message: "Cannot remove canister.".to_string(),
+                io_err: err,
+            }),
+        }
+    }
+
+    /// Removes the entire directory of the given snapshot; and the enclosing directory
+    /// named after the snapshot's canister, if this was the canister's last snapshot.
+    ///
+    /// This is a no-op if the snapshot has no directory, e.g. because it was created
+    /// from uploaded metadata (which copies no files from the canister, so no directory
+    /// is created for it) and deleted before the first flush of its `PageMap`s.
+    pub fn delete_snapshot_dir(&self, snapshot_id: &SnapshotId) -> Result<(), LayoutError> {
+        delete_snapshot_dir(&self.snapshot_path(snapshot_id))
     }
 }
 
@@ -2486,24 +2578,38 @@ where
 {
     /// Remove the entire directory for the snapshot.
     pub fn delete_dir(&self) -> Result<(), LayoutError> {
-        let map_error = |err| LayoutError::IoError {
-            path: self.raw_path(),
-            message: "Cannot remove snapshot.".to_string(),
-            io_err: err,
-        };
-
-        std::fs::remove_dir_all(self.raw_path()).map_err(map_error)?;
-
-        // Remove the parent directory named after the canister if this was the last snapshot of that canister.
-        // Unwrap is safe as snapshots are not at located at `/`.
-        let parent = self.raw_path().parent().unwrap().to_owned();
-
-        if parent.read_dir().map_err(map_error)?.next().is_none() {
-            std::fs::remove_dir(&parent).map_err(map_error)?;
-        }
-
-        Ok(())
+        delete_snapshot_dir(&self.raw_path())
     }
+}
+
+/// Removes the entire directory of a snapshot; and the enclosing directory named after
+/// the snapshot's canister, if this was the canister's last snapshot.
+///
+/// This is a no-op if the snapshot has no directory, e.g. because it was created from
+/// uploaded metadata (which copies no files from the canister, so no directory is
+/// created for it) and deleted before the first flush of its `PageMap`s.
+fn delete_snapshot_dir(snapshot_path: &Path) -> Result<(), LayoutError> {
+    let map_error = |err| LayoutError::IoError {
+        path: snapshot_path.to_path_buf(),
+        message: "Cannot remove snapshot.".to_string(),
+        io_err: err,
+    };
+
+    match std::fs::remove_dir_all(snapshot_path) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(map_error(err)),
+    }
+
+    // Remove the parent directory named after the canister if this was the last snapshot of that canister.
+    // Unwrap is safe as snapshots are not located at `/`.
+    let parent = snapshot_path.parent().unwrap();
+
+    if parent.read_dir().map_err(map_error)?.next().is_none() {
+        std::fs::remove_dir(parent).map_err(map_error)?;
+    }
+
+    Ok(())
 }
 
 fn open_for_write(path: &Path) -> Result<std::fs::File, LayoutError> {
@@ -2859,6 +2965,26 @@ fn mark_readonly_if_file(path: &Path) -> std::io::Result<bool> {
     Ok(false)
 }
 
+/// Synchronizes the filesystem containing the given path.
+///
+/// On Linux, this uses `syncfs` to synchronize the entire filesystem. On other
+/// platforms it falls back to `File::sync_all()`.
+fn syncfs<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    let f = std::fs::File::open(&path)?;
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::AsRawFd;
+        if unsafe { libc::syncfs(f.as_raw_fd()) } == -1 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        f.sync_all()?;
+    }
+    Ok(())
+}
+
 fn dir_list_recursive(
     path: &Path,
     thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
@@ -3035,7 +3161,7 @@ struct CopyAndSyncFile {
     dst: PathBuf,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Eq, PartialEq)]
 enum CopyInstruction {
     /// The file doesn't need to be copied
     Skip,

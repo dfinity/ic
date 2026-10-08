@@ -64,7 +64,7 @@ EOF
             if [ $1 == "--zip" ]; then # zip branch
                 SOURCE_BASENAME=$(basename $SOURCE_BINARY)
                 zip -j "${SOURCE_BASENAME}_seed_corpus.zip" seed_corpus.txt
-                zip -j "${AFL_ZIP_PREFIX}_${SOURCE_BASENAME}-${CURRENT_TIME}.zip" $SOURCE_BINARY /afl/afl-fuzz /afl/afl-showmap
+                zip -j "${AFL_ZIP_PREFIX}_${SOURCE_BASENAME}-${CURRENT_TIME}.zip" $SOURCE_BINARY /usr/local/bin/{afl-fuzz,afl-showmap}
                 zip -ru "${AFL_ZIP_PREFIX}_${SOURCE_BASENAME}-${CURRENT_TIME}.zip" "${SOURCE_BASENAME}_seed_corpus.zip"
                 rm -r "${SOURCE_BASENAME}_seed_corpus.zip"
             else # bin branch

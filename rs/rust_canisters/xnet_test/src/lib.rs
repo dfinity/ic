@@ -10,7 +10,7 @@ use std::time::Duration;
 pub type NetworkTopology = Vec<Vec<CanisterId>>;
 
 /// Arguments for the "start" call of this canister.
-#[derive(Default, Clone, CandidType, Deserialize, Debug)]
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct StartArgs {
     pub network_topology: NetworkTopology,
     pub canister_to_subnet_rate: u64,
@@ -22,7 +22,7 @@ pub struct StartArgs {
 /// Metrics observed by this canister.
 ///
 /// This message is used as reply payload for "metrics" query.
-#[derive(Default, Clone, CandidType, Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct Metrics {
     /// Number of calls attempted (whether successful or not).
     pub calls_attempted: usize,
@@ -68,7 +68,7 @@ impl Metrics {
 ///
 /// The latency is measured using IC time, which is not guaranteed to be
 /// particularly accurate.
-#[derive(CandidType, Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct LatencyDistribution {
     buckets: Vec<(i64, usize)>,
     sum_millis: usize,

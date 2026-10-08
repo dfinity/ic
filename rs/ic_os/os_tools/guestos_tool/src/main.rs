@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use tracing::{info, warn};
+use tracing::{Level, info, warn};
 
 use cloud_provision::obtain_guestos_config;
 use generate_network_config::{generate_networkd_config, validate_and_construct_ipv4_address_info};
@@ -55,10 +55,6 @@ pub enum Commands {
         /// Path where to save the obtained config.json
         #[arg(long, default_value = "/mnt/config/config.json")]
         config_path: PathBuf,
-
-        /// systemd-networkd output directory
-        #[arg(long, default_value = DEFAULT_SYSTEMD_NETWORK_DIR)]
-        systemd_network_dir: PathBuf,
     },
 }
 
@@ -70,7 +66,7 @@ struct GuestOSArgs {
 }
 
 pub fn main() -> Result<()> {
-    ic_os_logging::init_logging();
+    ic_os_logging::init_logging_with_level(Level::INFO);
 
     #[cfg(not(target_os = "linux"))]
     {
@@ -118,12 +114,17 @@ pub fn main() -> Result<()> {
             Ok(())
         }
 
-        Some(Commands::CloudProvision {
-            config_path,
-            systemd_network_dir,
-        }) => {
-            let config = obtain_guestos_config(systemd_network_dir)
-                .context("unable to obtain GuestOS config")?;
+        Some(Commands::CloudProvision { config_path }) => {
+            info!("Obtaining GuestOS config from the Cloud MDS...");
+
+            let config = match obtain_guestos_config().context("unable to obtain GuestOS config") {
+                Ok(v) => v,
+                Err(e) => {
+                    info!("{e:#}");
+                    return Err(e);
+                }
+            };
+
             let json = serde_json::to_vec_pretty(&config).context("unable to encode to JSON")?;
             std::fs::write(&config_path, &json)
                 .context("unable to write GuestOS config to disk")?;

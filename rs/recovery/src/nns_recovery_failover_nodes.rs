@@ -59,12 +59,13 @@ pub struct NNSRecoveryFailoverNodesArgs {
     #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub subnet_id: SubnetId,
 
-    /// Replica version to start the new NNS with (has to be blessed by parent NNS)
+    /// Replica version to start the new NNS with (has to be elected by parent NNS)
     #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 
     #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
+    /// The replay will stop at this height and create a checkpoint of the state sitting one height
+    /// above the last replayed height.
     pub replay_until_height: Option<u64>,
 
     /// IP address of the auxiliary host the registry is uploaded to
@@ -86,6 +87,10 @@ pub struct NNSRecoveryFailoverNodesArgs {
     /// IP address of the node to download the subnet state from
     #[clap(long)]
     pub download_node: Option<IpAddr>,
+
+    /// Height of the checkpoint to download. If not provided, the latest checkpoint is used.
+    #[clap(long)]
+    pub download_state_height: Option<u64>,
 
     /// The method of uploading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the target node.
@@ -180,10 +185,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
         // Depending on the next step we might require some user interaction before we can execute
         // it.
         match step_type {
+            #[allow(clippy::collapsible_match)]
             StepType::StopReplica | StepType::DownloadConsensusPool | StepType::DownloadState => {
                 if self.params.download_node.is_none() {
-                    // We could pick a node with highest finalization height automatically, but we
-                    // might have a preference between nodes of the same finalization height.
+                    // We could pick a node with highest finalization and CUP height automatically,
+                    // but we might have a preference between nodes of same heights.
                     print_height_info(
                         &self.logger,
                         &self.recovery.registry_helper,
@@ -196,11 +202,20 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             _ => {}
         }
         match step_type {
+            #[allow(clippy::collapsible_match)]
+            StepType::DownloadState => {
+                if self.params.download_state_height.is_none() {
+                    self.params.download_state_height = read_optional(
+                        &self.logger,
+                        "Enter the height of the checkpoint to download (leave empty for latest checkpoint):",
+                    );
+                }
+            }
             StepType::ProposeToCreateSubnet => {
                 if self.params.replica_version.is_none() {
                     self.params.replica_version = read_optional(
                         &self.logger,
-                        "New NNS version (current unassigned version or other version blessed by parent NNS): ",
+                        "New NNS version (current unassigned version or other version elected by parent NNS): ",
                     );
                 }
                 if self.params.replacement_nodes.is_none() {
@@ -211,6 +226,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::DownloadParentNNSStore => {
                 if self.params.parent_nns_host_ip.is_none() {
                     self.params.parent_nns_host_ip = read_optional(
@@ -220,6 +236,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::ICReplayWithRegistryContent => {
                 if self.params.replay_until_height.is_none() {
                     self.params.replay_until_height =
@@ -244,6 +261,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::WaitForCUP => {
                 if self.params.upload_method.is_none() {
                     self.params.upload_method = read_optional_data_location(
@@ -298,6 +316,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                         SshUser::Admin,
                         self.recovery.admin_key_file.clone(),
                         /*keep_downloaded_state=*/ false,
+                        self.params.download_state_height,
                     )?))
                 } else {
                     Err(RecoveryError::StepSkipped)
@@ -346,7 +365,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
 
             StepType::ValidateReplayOutput => Ok(Box::new(
                 self.recovery
-                    .get_validate_replay_step(self.params.subnet_id, 0),
+                    .get_validate_replay_step(self.params.subnet_id),
             )),
 
             StepType::UpdateRegistryLocalStore => Ok(Box::new(
@@ -385,7 +404,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     self.params.registry_url.clone()
                 };
                 if let Some(url) = url {
-                    let state_params = self.recovery.get_replay_output()?;
+                    let state_params = self.recovery.get_replay_output()?.state_params;
                     let recovery_height = Recovery::get_recovery_height(state_params.height);
 
                     let store_tar = self.get_local_store_tar();
@@ -411,6 +430,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                         state_params.hash,
                         &[],
                         Some(registry_params),
+                        None,
                         None,
                     )?))
                 } else {

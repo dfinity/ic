@@ -16,6 +16,7 @@ use axum::{Router, body::Body}; // TODO: try to remove the axum dep here
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
 use ic_base_types::NodeId;
+use ic_limits::MAX_MESSAGE_SIZE_BYTES;
 use ic_logger::{ReplicaLogger, info};
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
@@ -24,7 +25,7 @@ use tokio::task::JoinSet;
 use tower::ServiceExt;
 
 use crate::{
-    ConnId, MAX_MESSAGE_SIZE_BYTES, P2PError, ResetStreamOnDrop,
+    ConnId, P2PError, ResetStreamOnDrop,
     connection_handle::ConnectionHandle,
     metrics::{
         ERROR_TYPE_APP, INFALIBBLE, QuicTransportMetrics, STREAM_TYPE_BIDI, observe_conn_error,

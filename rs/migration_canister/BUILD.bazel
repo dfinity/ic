@@ -17,11 +17,11 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic_stable_structures_next",
-        "@crate_index//:itertools",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:strum",
@@ -44,11 +44,11 @@ rust_canister(
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic_stable_structures_next",
-        "@crate_index//:itertools",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:strum",
@@ -72,11 +72,11 @@ rust_test(
         "@crate_index//:candid_parser",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:ic_stable_structures_next",
-        "@crate_index//:itertools",
         "@crate_index//:rand",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
@@ -103,10 +103,13 @@ rust_test(
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         "RUST_TEST_THREADS": "4",  # running too many PocketIC tests in parallel affects overall performance
     },
+    exec_properties = {"test.cpu": "16"},
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    tags = ["cpu:16"],
+    tags = [
+        "long_test",  # The P90 duration was over 8 minutes in the month up to 2026-09-17.
+    ],
     deps = [
         # Keep sorted
         "//packages/ic-http-types",

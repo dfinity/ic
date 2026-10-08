@@ -36,18 +36,18 @@ pub trait CanisterApi {
     ) -> Result<(), String>;
 
     /// Return cycles available from the canister's own balance, or error if not enough
-    fn this_canister_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String>;
+    fn this_canister_has_enough_cycles(&self, required_cycles: u128) -> Result<u128, String>;
 
     /// Return the cycles available, or fail if insufficient cycles are available.
-    fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String>;
+    fn message_has_enough_cycles(&self, required_cycles: u128) -> Result<u128, String>;
 
     /// Accept Some(number) of cycles, or if no cycles are given (i.e. None), accept all available cycles in the message
-    fn accept_message_cycles(&self, cycles: Option<u64>) -> Result<u64, String>;
+    fn accept_message_cycles(&self, cycles: Option<u128>) -> Result<u128, String>;
 
     /// Send cycles to another canister
     async fn send_cycles_to_canister(
         &self,
         target_canister: CanisterId,
-        cycles: u64,
+        cycles: u128,
     ) -> Result<(), String>;
 }

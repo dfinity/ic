@@ -83,6 +83,7 @@ fn with_stream_header_deltas(
         QueueFull => header.reject_signals.queue_full_deltas = deltas,
         OutOfMemory => header.reject_signals.out_of_memory_deltas = deltas,
         Unknown => header.reject_signals.unknown_deltas = deltas,
+        EngineNotAllowed => header.reject_signals.engine_not_allowed_deltas = deltas,
     }
     header
 }

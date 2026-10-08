@@ -310,7 +310,7 @@ fn test_eq(#[strategy(proptest::collection::vec(0_u64..20_u64, 0..10))] keys: Ve
     use ic_validate_eq::ValidateEq;
     use std::fmt::Debug;
 
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Clone, PartialEq, Debug)]
     struct Foo(usize);
     impl ValidateEq for Foo {
         fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
@@ -387,7 +387,7 @@ fn test_u128_values(
     #[strategy(proptest::collection::vec(any::<u128>(), 0..10))] keys: Vec<u128>,
     #[strategy(proptest::collection::vec(any::<u128>(), 10))] lookups: Vec<u128>,
 ) {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
     struct Key128(u64, u64);
     impl Key128 {
         fn new(value: u128) -> Self {
@@ -426,7 +426,7 @@ fn test_u128_values(
 fn test_validate_eq() {
     use ic_validate_eq::ValidateEq;
 
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Clone, PartialEq, Debug)]
     struct MyU64(u64);
     impl ValidateEq for MyU64 {
         fn validate_eq(&self, rhs: &Self) -> Result<(), String> {

@@ -1,5 +1,7 @@
 use crate::events::MinterEventAssert;
-use crate::{MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL};
+use crate::{
+    FEE_PERCENTILES_REFRESH_INTERVAL, MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL, drain_startup_tasks,
+};
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
 use ic_ckdoge_minter::{
@@ -11,10 +13,14 @@ use ic_ckdoge_minter::{
     },
     event::{CkDogeMinterEvent, CkDogeMinterEventType},
     lifecycle::{MinterArg, upgrade::UpgradeArgs},
+    updates::icrc21::StandardRecord,
 };
 use ic_management_canister_types::{CanisterId, CanisterStatusResult};
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc21::errors::Icrc21Error;
+use icrc_ledger_types::icrc21::requests::ConsentMessageRequest;
+use icrc_ledger_types::icrc21::responses::ConsentInfo;
 use pocket_ic::common::rest::RawMessageId;
 use pocket_ic::{PocketIc, RejectResponse};
 use std::sync::Arc;
@@ -157,6 +163,31 @@ impl MinterCanister {
             )
             .expect("BUG: failed to call estimate_withdrawal_fee");
         Decode!(&call_result, Result<WithdrawalFee, EstimateWithdrawalFeeError>).unwrap()
+    }
+
+    pub fn await_fee_refresh(&self) {
+        let refreshes_before = self.count_fee_percentile_refreshes();
+        self.env
+            .advance_time(FEE_PERCENTILES_REFRESH_INTERVAL + Duration::from_secs(1));
+        let max_ticks = 100;
+        for _ in 0..max_ticks {
+            self.env.tick();
+            if self.count_fee_percentile_refreshes() > refreshes_before {
+                return;
+            }
+        }
+        dbg!(self.get_logs());
+        panic!(
+            "BUG: did not observe a successful fee-percentile refresh within {max_ticks} ticks \
+             (the RefreshFeePercentiles task may have run but failed to compute a median fee)"
+        );
+    }
+
+    fn count_fee_percentile_refreshes(&self) -> usize {
+        self.get_logs()
+            .iter()
+            .filter(|entry| entry.message.contains("update median fee per vbyte"))
+            .count()
     }
 
     pub fn retrieve_doge_status(&self, ledger_burn_index: u64) -> RetrieveDogeStatus {
@@ -303,6 +334,36 @@ impl MinterCanister {
         Decode!(&call_result, Vec<CkDogeMinterEvent>).unwrap()
     }
 
+    pub fn icrc10_supported_standards(&self) -> Vec<StandardRecord> {
+        let call_result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "icrc10_supported_standards",
+                Encode!().unwrap(),
+            )
+            .expect("BUG: failed to call icrc10_supported_standards");
+        Decode!(&call_result, Vec<StandardRecord>).unwrap()
+    }
+
+    pub fn icrc21_canister_call_consent_message(
+        &self,
+        sender: Principal,
+        request: &ConsentMessageRequest,
+    ) -> Result<ConsentInfo, Icrc21Error> {
+        let call_result = self
+            .env
+            .update_call(
+                self.id,
+                sender,
+                "icrc21_canister_call_consent_message",
+                Encode!(request).unwrap(),
+            )
+            .expect("BUG: failed to call icrc21_canister_call_consent_message");
+        Decode!(&call_result, Result<ConsentInfo, Icrc21Error>).unwrap()
+    }
+
     pub fn id(&self) -> CanisterId {
         self.id
     }
@@ -317,8 +378,7 @@ impl MinterCanister {
                 Some(NNS_ROOT_PRINCIPAL),
             )
             .expect("BUG: failed to upgrade minter");
-        // run immediate tasks after upgrade, like refreshing fee percentiles.
-        self.env.tick();
+        drain_startup_tasks(&self.env);
     }
 }
 

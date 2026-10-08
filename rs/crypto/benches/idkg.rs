@@ -284,7 +284,7 @@ fn bench_create_transcript<M: Measurement, R: RngCore + CryptoRng>(
     let bench_context = OnceCell::new();
 
     group.bench_function(format!("create_transcript_{mode}"), |bench| {
-        bench.iter_batched_ref(
+        bench.iter_batched(
             || {
                 let (env, _, params) = bench_context.get_or_init(|| {
                     let env = test_case.new_test_environment(vault_type, rng);
@@ -336,7 +336,7 @@ fn bench_verify_transcript<M: Measurement, R: RngCore + CryptoRng>(
                     .nodes
                     .random_filtered_by_receivers(params.receivers(), rng);
                 let transcript =
-                    create_transcript_or_panic(receiver, params, &dealings_with_receivers_support);
+                    create_transcript_or_panic(receiver, params, dealings_with_receivers_support);
                 let other_receiver = other_receiver_or_same_if_only_one(
                     params.receivers(),
                     receiver,
@@ -380,7 +380,7 @@ fn bench_load_transcript<M: Measurement, R: RngCore + CryptoRng>(
                     .nodes
                     .random_filtered_by_receivers(params.receivers(), rng);
                 let transcript =
-                    create_transcript_or_panic(receiver, params, &dealings_with_receivers_support);
+                    create_transcript_or_panic(receiver, params, dealings_with_receivers_support);
                 let other_receiver = other_receiver_or_same_if_only_one(
                     params.receivers(),
                     receiver,

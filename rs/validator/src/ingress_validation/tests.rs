@@ -1,11 +1,12 @@
 use super::*;
 use assert_matches::assert_matches;
+use base64::prelude::*;
 use ic_crypto_standalone_sig_verifier::ed25519_public_key_to_der;
 use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, node_test_id};
 use ic_types::{
-    messages::{Delegation, SignedDelegation, UserSignature},
+    messages::{Delegation, DelegationPermissions, SignedDelegation, UserSignature},
     time::UNIX_EPOCH,
 };
 use std::time::Duration;
@@ -23,8 +24,9 @@ fn plain_authentication_correct_signature_passes() {
         "MwqQH8l2vCNhRTzYmBA95p7tQWg4S0G4v0zyIiX21H6c6E1oL8xWDuOe67Yh98yt6z8n84D875I2qmvLliWODA==";
 
     let user_signature = UserSignature {
-        signature: base64::decode(signature).unwrap(),
-        signer_pubkey: ed25519_public_key_to_der(base64::decode(pubkey_base64).unwrap()).unwrap(),
+        signature: BASE64_STANDARD.decode(signature).unwrap(),
+        signer_pubkey: ed25519_public_key_to_der(BASE64_STANDARD.decode(pubkey_base64).unwrap())
+            .unwrap(),
         sender_delegation: None,
     };
 
@@ -41,8 +43,9 @@ fn plain_authentication_correct_signature_passes() {
 
     // Same signature as above with empty delegations specified. Should also pass.
     let user_signature = UserSignature {
-        signature: base64::decode(signature).unwrap(),
-        signer_pubkey: ed25519_public_key_to_der(base64::decode(pubkey_base64).unwrap()).unwrap(),
+        signature: BASE64_STANDARD.decode(signature).unwrap(),
+        signer_pubkey: ed25519_public_key_to_der(BASE64_STANDARD.decode(pubkey_base64).unwrap())
+            .unwrap(),
         sender_delegation: Some(Vec::new()),
     };
 
@@ -71,8 +74,9 @@ fn plain_authentication_incorrect_signature_passes() {
         "nWfuICAf29zspOaoGUcn/xIFUtnUiZRsbhxgZywz6OzRTHKoY32sU78uE0z8UFcbInkzwDtw+4PP2JQrnwHtCw==";
 
     let user_signature = UserSignature {
-        signature: base64::decode(signature).unwrap(),
-        signer_pubkey: ed25519_public_key_to_der(base64::decode(pubkey_base64).unwrap()).unwrap(),
+        signature: BASE64_STANDARD.decode(signature).unwrap(),
+        signer_pubkey: ed25519_public_key_to_der(BASE64_STANDARD.decode(pubkey_base64).unwrap())
+            .unwrap(),
         sender_delegation: None,
     };
 
@@ -104,17 +108,21 @@ fn plain_authentication_with_one_delegation() {
     // Keypair 1 delegates to keypair 2.
 
     let pk1 = ed25519_public_key_to_der(
-        base64::decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=").unwrap(),
+        BASE64_STANDARD
+            .decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=")
+            .unwrap(),
     )
     .unwrap();
     let pk2 = ed25519_public_key_to_der(
-        base64::decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=").unwrap(),
+        BASE64_STANDARD
+            .decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=")
+            .unwrap(),
     )
     .unwrap();
     let delegation = Delegation::new(pk2, UNIX_EPOCH);
 
     // Signature of sk1 for the delegation above.
-    let delegation_signature = base64::decode(
+    let delegation_signature = BASE64_STANDARD.decode(
         "QhNcIhRQalYnRK4WJ3KWIrfqMIC1RAiehoGU/rqDbfzvz4trSBH0THxJY+P7J7dJ63HPXiBa1vYnSfVjbpoCCg==",
     )
     .unwrap();
@@ -126,12 +134,12 @@ fn plain_authentication_with_one_delegation() {
     let signed_delegation = SignedDelegation::new(delegation, delegation_signature);
 
     let user_signature = UserSignature {
-        signature: base64::decode(message_id_signature).unwrap(),
+        signature: BASE64_STANDARD.decode(message_id_signature).unwrap(),
         signer_pubkey: pk1,
         sender_delegation: Some(vec![signed_delegation]),
     };
 
-    assert_eq!(
+    assert_matches!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -139,7 +147,7 @@ fn plain_authentication_with_one_delegation() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(CanisterIdSet::all())
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::all() && !restrictions.queries_only
     );
 
     // Try verifying the signature in the future. It should fail because the
@@ -172,17 +180,21 @@ fn plain_authentication_with_one_scoped_delegation() {
     // Keypair 1 delegates to keypair 2.
 
     let pk1 = ed25519_public_key_to_der(
-        base64::decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=").unwrap(),
+        BASE64_STANDARD
+            .decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=")
+            .unwrap(),
     )
     .unwrap();
     let pk2 = ed25519_public_key_to_der(
-        base64::decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=").unwrap(),
+        BASE64_STANDARD
+            .decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=")
+            .unwrap(),
     )
     .unwrap();
-    let delegation = Delegation::new_with_targets(pk2, UNIX_EPOCH, vec![canister_test_id(1)]);
+    let delegation = Delegation::new(pk2, UNIX_EPOCH).with_targets(vec![canister_test_id(1)]);
 
     // Signature of sk1 for the delegation above.
-    let delegation_signature = base64::decode(
+    let delegation_signature = BASE64_STANDARD.decode(
         "yULx4bstJpKWTcymC3T9kQUVC0fD04pxuHtMSOH2c9NkM5AqplrRmJgeb92p583nuexafMS6SXWfmWszSo14CA==",
     )
     .unwrap();
@@ -194,7 +206,7 @@ fn plain_authentication_with_one_scoped_delegation() {
     let signed_delegation = SignedDelegation::new(delegation, delegation_signature);
 
     let user_signature = UserSignature {
-        signature: base64::decode(message_id_signature).unwrap(),
+        signature: BASE64_STANDARD.decode(message_id_signature).unwrap(),
         signer_pubkey: pk1,
         sender_delegation: Some(vec![signed_delegation]),
     };
@@ -207,8 +219,82 @@ fn plain_authentication_with_one_scoped_delegation() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(ids) if ids == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap() && !restrictions.queries_only
     );
+}
+
+mod delegation_permissions {
+    use super::*;
+    use ic_types::crypto::Signable;
+
+    /// Signs `delegation` with `signer` and the message id with `sender_sk`,
+    /// then validates the single-delegation chain `signer -> sender_sk`.
+    /// Uses ECDSA secp256r1 identities (supported by the validator and
+    /// signable in-process, unlike the hard-coded ed25519 signatures used by
+    /// the surrounding tests).
+    fn validate_single_delegation(
+        permissions: Option<DelegationPermissions>,
+    ) -> Result<DelegationRestrictions, RequestValidationError> {
+        let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+        let message_id = message_test_id(1);
+        let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
+
+        let signer_sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
+        let session_sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
+        let signer_pk = signer_sk.public_key().serialize_der();
+        let session_pk = session_sk.public_key().serialize_der();
+
+        let delegation = match permissions {
+            Some(permissions) => {
+                Delegation::new(session_pk, UNIX_EPOCH).with_permissions(permissions)
+            }
+            None => Delegation::new(session_pk, UNIX_EPOCH),
+        };
+        let delegation_sig = signer_sk
+            .sign_message(&delegation.as_signed_bytes())
+            .to_vec();
+        let signed_delegation = SignedDelegation::new(delegation, delegation_sig);
+
+        let user_signature = UserSignature {
+            signature: session_sk
+                .sign_message(&message_id.as_signed_bytes())
+                .to_vec(),
+            signer_pubkey: signer_pk,
+            sender_delegation: Some(vec![signed_delegation]),
+        };
+
+        validate_signature(
+            &sig_verifier,
+            &message_id,
+            &user_signature,
+            UNIX_EPOCH,
+            &MockRootOfTrustProvider::new(),
+        )
+    }
+
+    #[test]
+    fn queries_permission_sets_queries_only() {
+        assert_matches!(
+            validate_single_delegation(Some(DelegationPermissions::Queries)),
+            Ok(restrictions) if restrictions.queries_only
+        );
+    }
+
+    #[test]
+    fn all_permission_does_not_set_queries_only() {
+        assert_matches!(
+            validate_single_delegation(Some(DelegationPermissions::All)),
+            Ok(restrictions) if !restrictions.queries_only
+        );
+    }
+
+    #[test]
+    fn absent_permission_does_not_set_queries_only() {
+        assert_matches!(
+            validate_single_delegation(None),
+            Ok(restrictions) if !restrictions.queries_only
+        );
+    }
 }
 
 #[test]
@@ -232,31 +318,36 @@ fn plain_authentication_with_multiple_delegations() {
     //
     // Each keypair delegates to the one below it.
     let pk1 = ed25519_public_key_to_der(
-        base64::decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=").unwrap(),
+        BASE64_STANDARD
+            .decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=")
+            .unwrap(),
     )
     .unwrap();
     let pk2 = ed25519_public_key_to_der(
-        base64::decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=").unwrap(),
+        BASE64_STANDARD
+            .decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=")
+            .unwrap(),
     )
     .unwrap();
     let pk3 = ed25519_public_key_to_der(
-        base64::decode("02aktrssfFxcxrf18Fx6nENqaxgVLC+e+x3Y3tunQPs=").unwrap(),
+        BASE64_STANDARD
+            .decode("02aktrssfFxcxrf18Fx6nENqaxgVLC+e+x3Y3tunQPs=")
+            .unwrap(),
     )
     .unwrap();
     let pk4 = ed25519_public_key_to_der(
-        base64::decode("b9k9ldofRsdXBrcfHoInQGhhtzbGCVBb9Kpcw2ij2Ck=").unwrap(),
+        BASE64_STANDARD
+            .decode("b9k9ldofRsdXBrcfHoInQGhhtzbGCVBb9Kpcw2ij2Ck=")
+            .unwrap(),
     )
     .unwrap();
 
     // KP1 delegating to KP2.
-    let delegation = Delegation::new_with_targets(
-        pk2,
-        UNIX_EPOCH + Duration::new(4, 0),
-        vec![canister_test_id(1), canister_test_id(2)],
-    );
+    let delegation = Delegation::new(pk2, UNIX_EPOCH + Duration::new(4, 0))
+        .with_targets(vec![canister_test_id(1), canister_test_id(2)]);
 
     // Signature of SK1 for `delegation` above.
-    let delegation_signature = base64::decode(
+    let delegation_signature = BASE64_STANDARD.decode(
         "R1LC9wYXfuWn1BjTJHWF8ANyxyTVqEJzhybvOMxgn9gERpqdQoh+BhsLue3byTp7X1uEtc44QYKLIH1adajHCg==",
     )
     .unwrap();
@@ -264,19 +355,16 @@ fn plain_authentication_with_multiple_delegations() {
     // KP2 delegating to KP3.
     let delegation_2 = Delegation::new(pk3, UNIX_EPOCH + Duration::new(2, 0));
     // Signature of SK2 for delegation_2
-    let delegation_2_signature = base64::decode(
+    let delegation_2_signature = BASE64_STANDARD.decode(
         "rP1xtpEK9ypS+I4JU5rywZNQjYMa0JsVXR+a2DkmShbXQ08s0PmUh6KaGmP56YJtI1hIz3ZELlYKvw+M/jAcCA==",
     )
     .unwrap();
 
     // KP3 delegating to KP4.
-    let delegation_3 = Delegation::new_with_targets(
-        pk4,
-        UNIX_EPOCH + Duration::new(3, 0),
-        vec![canister_test_id(1)],
-    );
+    let delegation_3 = Delegation::new(pk4, UNIX_EPOCH + Duration::new(3, 0))
+        .with_targets(vec![canister_test_id(1)]);
     // Signature of SK3 for delegation_3
-    let delegation_3_signature = base64::decode(
+    let delegation_3_signature = BASE64_STANDARD.decode(
         "a/hTCL8yOijzFIcHdcE0uvt2dj3WQdTiMLPX+xI8mWC0wRt+CYlMoFTc6JlfBopEJDrDwdEBz1n6/S8R2A/CCQ==",
     )
     .unwrap();
@@ -290,7 +378,7 @@ fn plain_authentication_with_multiple_delegations() {
     let signed_delegation_3 = SignedDelegation::new(delegation_3, delegation_3_signature);
 
     let user_signature = UserSignature {
-        signature: base64::decode(message_id_signature).unwrap(),
+        signature: BASE64_STANDARD.decode(message_id_signature).unwrap(),
         signer_pubkey: pk1,
         sender_delegation: Some(vec![
             signed_delegation,
@@ -308,7 +396,7 @@ fn plain_authentication_with_multiple_delegations() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(ids) if ids == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap() && !restrictions.queries_only
     );
     assert_matches!(
         validate_signature(
@@ -344,8 +432,9 @@ fn plain_authentication_with_malformed_delegation() {
         "MwqQH8l2vCNhRTzYmBA95p7tQWg4S0G4v0zyIiX21H6c6E1oL8xWDuOe67Yh98yt6z8n84D875I2qmvLliWODA==";
 
     let user_signature = UserSignature {
-        signature: base64::decode(signature).unwrap(),
-        signer_pubkey: ed25519_public_key_to_der(base64::decode(pubkey_base64).unwrap()).unwrap(),
+        signature: BASE64_STANDARD.decode(signature).unwrap(),
+        signer_pubkey: ed25519_public_key_to_der(BASE64_STANDARD.decode(pubkey_base64).unwrap())
+            .unwrap(),
         // Add a malformed delegation.
         sender_delegation: Some(vec![SignedDelegation::new(
             Delegation::new(
@@ -381,15 +470,19 @@ fn plain_authentication_with_invalid_delegation() {
     // SK2: LDFkTfdAOC4kGVyOUaf0rZs2W6+hWo2YqSAU59m/agQ=
     // PK2: SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=
 
-    let pk1 = base64::decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=").unwrap();
-    let pk2 = base64::decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=").unwrap();
+    let pk1 = BASE64_STANDARD
+        .decode("rrkzV33aO4TcH2DMz3ducPaZyIiG/8YbnNjHW+0hRvg=")
+        .unwrap();
+    let pk2 = BASE64_STANDARD
+        .decode("SyP7C1lwpbsWjwT7ow5CnbiL5JzbyjzQrdDVQQb18yE=")
+        .unwrap();
 
     // KP1 delegating to KP2.
     let delegation = Delegation::new(pk2, UNIX_EPOCH + Duration::new(4, 0));
     // Faulty delegation signature. The correct one should be:
     // f5uiR36pRe4VL1k2VTwSvZGmViFTUZxZoh/IeYA183DgK1lhDLRpln57+2Ik2Mkqs5H/
     // G8jwx1+FQ/RZFaX1Dw==
-    let delegation_signature = base64::decode(
+    let delegation_signature = BASE64_STANDARD.decode(
         "HnM9ZfEg1E/+KPFBf6JGMS/TwtbjWVIm9PwG8vxbb74p0NBT98kDwtaT4TU0rSxm7WcWLNf7GnPu4b+0VroNBw==",
     )
     .unwrap();
@@ -401,7 +494,7 @@ fn plain_authentication_with_invalid_delegation() {
     let signed_delegation = SignedDelegation::new(delegation, delegation_signature);
 
     let user_signature = UserSignature {
-        signature: base64::decode(message_id_signature).unwrap(),
+        signature: BASE64_STANDARD.decode(message_id_signature).unwrap(),
         signer_pubkey: pk1,
         sender_delegation: Some(vec![signed_delegation]),
     };
@@ -434,7 +527,7 @@ fn validate_signature_webauthn() {
         sender_delegation: None,
     };
 
-    assert_eq!(
+    assert_matches!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -442,7 +535,40 @@ fn validate_signature_webauthn() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(CanisterIdSet::all())
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::all() && !restrictions.queries_only
+    );
+}
+
+#[test]
+fn validate_signature_webauthn_ed25519() {
+    let sig_verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+    let message_id = message_test_id(13);
+
+    // Ed25519 public key derived from the RFC 8032 TEST 1 seed
+    // (9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60),
+    // encoded as a COSE_Key map {kty=OKP, alg=EdDSA, crv=Ed25519, x=pk} and
+    // wrapped in the IC's SubjectPublicKeyInfo (OID 1.3.6.1.4.1.56387.1.1).
+    let pubkey_hex = "303b300c060a2b0601040183b8430101032b00a4010103272006215820d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+
+    // WebAuthn signature by the corresponding secret key over the signed
+    // bytes of `message_test_id(13)` (i.e. "\x0Aic-request" || message_id).
+    let signature_hex = "d9d9f7a37261757468656e74696361746f725f646174614961726269747261727970636c69656e745f646174615f6a736f6e58887b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a22436d6c6a4c584a6c6358566c6333514e414141414141414141414141414141414141414141414141414141414141414141414141414141414141222c226f726967696e223a2269632d696e67726573732d766572696669636174696f6e2d74657374227d697369676e61747572655840a0f73a56b4177b7da14c1c6be3e847394dc8511dae919e3da3ffad4307c413c350a3d028c047c2e12b822b9a1833eaf7136a38361e5ee05ece1f21c4ef2dc705";
+
+    let user_signature = UserSignature {
+        signature: hex::decode(signature_hex).unwrap(),
+        signer_pubkey: hex::decode(pubkey_hex).unwrap(),
+        sender_delegation: None,
+    };
+
+    assert_matches!(
+        validate_signature(
+            &sig_verifier,
+            &message_id,
+            &user_signature,
+            UNIX_EPOCH,
+            &MockRootOfTrustProvider::new()
+        ),
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::all() && !restrictions.queries_only
     );
 }
 
@@ -471,7 +597,7 @@ fn validate_signature_webauthn_with_delegations() {
         sender_delegation: Some(vec![SignedDelegation::new(delegation, delegation_sig)]),
     };
 
-    assert_eq!(
+    assert_matches!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -479,7 +605,7 @@ fn validate_signature_webauthn_with_delegations() {
             UNIX_EPOCH,
             &MockRootOfTrustProvider::new()
         ),
-        Ok(CanisterIdSet::all())
+        Ok(restrictions) if restrictions.targets == CanisterIdSet::all() && !restrictions.queries_only
     );
 }
 

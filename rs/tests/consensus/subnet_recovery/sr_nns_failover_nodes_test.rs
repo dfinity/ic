@@ -25,12 +25,13 @@ use anyhow::Result;
 use canister_http::get_universal_vm_address;
 use ic_agent::Agent;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    assert_subnet_is_broken, break_nodes, node_with_highest_certification_share_height,
+    NodeHeights, assert_subnet_is_broken, break_nodes, node_with_highest_cup_and_cert_share_heights,
 };
 use ic_consensus_system_test_utils::{
     rw_message::{
         cert_state_makes_progress_with_retries, install_nns_and_check_progress, store_message,
     },
+    ssh_access::{get_update_subnet_payload_with_keys, update_subnet_record},
     subnet::assert_subnet_is_healthy,
 };
 use ic_recovery::nns_recovery_failover_nodes::{
@@ -55,6 +56,9 @@ use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
+/// Number of registry versions to add to the broken NNS before breaking it, such that the original
+/// registry is at a higher version than the one of the parent NNS, which is more realistic.
+const NUM_REGISTRY_VERSION_BUMPS: usize = 5;
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 
 fn main() -> Result<()> {
@@ -62,7 +66,7 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_test(systest!(test))
         // The replica binary is "broken" and restarted by the orchestrator multiple times
-        .remove_metrics_to_check("orchestrator_replica_process_start_attempts_total")
+        .remove_metrics_to_check("orchestrator_processes_start_attempts_total")
         .execute_from_args()?;
     Ok(())
 }
@@ -78,7 +82,6 @@ pub fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     InternetComputer::new()
-        .with_name("restore")
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
@@ -89,14 +92,14 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot_by_name("broken"));
-    install_nns_and_check_progress(env.topology_snapshot_by_name("restore"));
+    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
 
     let topo_broken_ic = env.topology_snapshot_by_name("broken");
-    let topo_restore_ic = env.topology_snapshot_by_name("restore");
+    let topo_restore_ic = env.topology_snapshot();
 
     let ic_version = get_guestos_img_version();
     info!(logger, "IC_VERSION_ID: {:?}", ic_version);
@@ -165,14 +168,29 @@ pub fn test(env: TestEnv) {
         &logger,
     );
 
+    info!(
+        logger,
+        "Bump the registry version of the NNS subnet {} times", NUM_REGISTRY_VERSION_BUMPS
+    );
+    for _ in 0..NUM_REGISTRY_VERSION_BUMPS {
+        // A no-op update of the subnet record still creates a new registry version.
+        block_on(update_subnet_record(
+            nns_node.get_public_url(),
+            get_update_subnet_payload_with_keys(orig_nns_subnet.subnet_id, None, None),
+        ));
+    }
+
     // Break f+1 nodes
     let f = (SUBNET_SIZE - 1) / 3;
     break_nodes(&orig_nns_nodes.take(f + 1).collect::<Vec<_>>(), &logger);
 
     assert_subnet_is_broken(&nns_node.get_public_url(), app_can_id, msg, true, &logger);
 
-    let (download_node, highest_cert_share) =
-        node_with_highest_certification_share_height(&orig_nns_subnet, &logger);
+    let NodeHeights {
+        node: download_node,
+        cup: highest_cup,
+        cert_share: highest_cert_share,
+    } = node_with_highest_cup_and_cert_share_heights(&orig_nns_subnet, &logger);
     info!(
         logger,
         "Selected download node {} ({:?}) with highest certification share height {}",
@@ -199,6 +217,10 @@ pub fn test(env: TestEnv) {
         registry_url: None,
         validate_nns_url: nns_node.get_public_url(),
         download_node: Some(download_node.get_ip_addr()),
+        // If the state height to download was computed to be 0 (i.e. the subnet stalled in its
+        // first DKG interval), there is no checkpoint yet and we should actually not provide a
+        // height to the recovery tool
+        download_state_height: (highest_cup != 0).then_some(highest_cup),
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         parent_nns_host_ip: Some(parent_nns_node.get_ip_addr()),
         replacement_nodes: Some(replacement_nodes),

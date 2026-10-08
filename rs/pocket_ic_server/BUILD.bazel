@@ -21,6 +21,7 @@ LIB_DEPENDENCIES = [
     "//rs/http_endpoints/public",
     "//rs/https_outcalls/adapter:adapter_with_http",
     "//rs/https_outcalls/client",
+    "//rs/https_outcalls/pricing",
     "//rs/https_outcalls/service",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
@@ -52,6 +53,7 @@ LIB_DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_machine_tests",
     "//rs/state_manager",
+    "//rs/sys",
     "//rs/types/cycles",
     "//rs/types/management_canister_types",
     "//rs/types/types",
@@ -62,7 +64,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:axum",
     "@crate_index//:axum-extra",
     "@crate_index//:axum-server",
-    "@crate_index//:backoff",
+    "@crate_index//:backon",
     "@crate_index//:base64",
     "@crate_index//:bitcoin_dogecoin",
     "@crate_index//:bytes",
@@ -77,9 +79,9 @@ LIB_DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
-    "@crate_index//:ic-bn-lib-common",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-management-canister",
     "@crate_index//:ic-doge-interface",
     "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
@@ -102,7 +104,6 @@ LIB_DEPENDENCIES = [
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:wat",
-    "@crate_index//:wsl",
 ]
 
 TEST_DEPENDENCIES = [
@@ -126,6 +127,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-management-canister",
     "@crate_index//:ic-doge-interface",
     "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
@@ -142,12 +144,6 @@ TEST_DEPENDENCIES = [
     "@crate_index//:walrus",
     "@crate_index//:wat",
 ]
-
-MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait",
-]
-
-ALIASES = {}
 
 EXTERNAL_CANISTER_DATA = [
     "@mainnet_canisters//:cycles_ledger.wasm.gz",
@@ -251,7 +247,6 @@ MAINNET_NNS_CANISTER_ENV = {
     cargo_build_script(
         name = "build_script" + name_suffix,
         srcs = ["build.rs"],
-        aliases = ALIASES,
         build_script_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
         data = EXTERNAL_CANISTER_DATA + nns_canister_data + ["templates/dashboard.html"],
         deps = BUILD_DEPENDENCIES,
@@ -265,7 +260,6 @@ MAINNET_NNS_CANISTER_ENV = {
 [
     rust_library(
         name = "pocket-ic-server-lib" + name_suffix,
-        testonly = True,
         srcs = [
             "src/beta_features.rs",
             "src/external_canister_types.rs",
@@ -274,11 +268,14 @@ MAINNET_NNS_CANISTER_ENV = {
         ] + glob([
             "src/state_api/**/*.rs",
         ]),
-        compile_data = EXTERNAL_CANISTER_DATA + nns_canister_data,
+        compile_data = EXTERNAL_CANISTER_DATA + nns_canister_data + ["templates/dashboard.html"],
         crate_name = "pocket_ic_server",
-        proc_macro_deps = MACRO_DEPENDENCIES,
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:async-trait",
+        ],
         rustc_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
-        version = "13.0.0",
+        version = "16.0.0",
         deps = LIB_DEPENDENCIES + [":build_script"],
     )
     for (name_suffix, nns_canister_data, nns_canister_env) in [
@@ -290,10 +287,12 @@ MAINNET_NNS_CANISTER_ENV = {
 [
     rust_binary(
         name = "pocket-ic-server" + name_suffix,
-        testonly = True,
         srcs = ["src/main.rs"],
         compile_data = ["//:mainnet-routing-table.json"],
-        proc_macro_deps = MACRO_DEPENDENCIES,
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:async-trait",
+        ],
         rustc_env = {
             "MAINNET_ROUTING_TABLE": "$(location //:mainnet-routing-table.json)",
         },
@@ -315,7 +314,10 @@ MAINNET_NNS_CANISTER_ENV = {
 rust_ic_test(
     name = "pocket-ic-server-lib-test",
     crate = ":pocket-ic-server-lib",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     deps = TEST_DEPENDENCIES,
 )
 
@@ -341,7 +343,6 @@ rust_test(
             "tests/common.rs",
             "tests/" + name + ".rs",
         ],
-        aliases = {},
         data = [
             ":pocket-ic-server",
             "@mainnet_canisters//:internet_identity_backend.wasm.gz",
@@ -355,8 +356,8 @@ rust_test(
             "II_FRONTEND_WASM": "$(rootpath @mainnet_canisters//:internet_identity_frontend.wasm.gz)",
             "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         },
+        exec_properties = {"test.cpu": "8"},
         tags = [
-            "cpu:8",
             # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
             # Failed to bind PocketIC server to address 127.0.0.1:0
             "requires-network",
@@ -375,7 +376,6 @@ rust_test(
     srcs = [
         "tests/bitcoin_integration_tests.rs",
     ],
-    aliases = {},
     data = [
         ":pocket-ic-server",
         "//:bitcoind",
@@ -399,7 +399,6 @@ rust_test(
     srcs = [
         "tests/dogecoin_integration_tests.rs",
     ],
-    aliases = {},
     data = [
         ":pocket-ic-server",
         "//:dogecoind",

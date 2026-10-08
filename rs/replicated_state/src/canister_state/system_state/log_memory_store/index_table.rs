@@ -12,7 +12,7 @@ const INVALID_INDEX_ENTRY: u64 = u64::MAX;
 /// Lightweight descriptor of a single log record used by the index table.
 /// It stores the record’s start position in the data region and basic
 /// metadata for range queries (idx, timestamp, byte length).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub(super) struct IndexEntry {
     /// Start position of the record within the data region.
     pub position: MemoryPosition,

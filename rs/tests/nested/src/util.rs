@@ -8,11 +8,7 @@ use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
-use ic_registry_keys::make_unassigned_nodes_config_record_key;
-use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::Error as RegistryTransportError;
 use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
@@ -31,7 +27,6 @@ use ic_system_test_driver::{
     util::{block_on, runtime_from_url},
 };
 use ic_types::{Height, NodeId, ReplicaVersion, hostos_version::HostosVersion};
-use prost::Message;
 use regex::Regex;
 use reqwest::Client;
 use slog::{Logger, info, warn};
@@ -124,31 +119,8 @@ pub async fn elect_guestos_version(
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 }
 
-/// Get the current unassigned nodes configuration from the NNS registry.
-pub async fn get_unassigned_nodes_config(
-    nns_node: &IcNodeSnapshot,
-) -> Option<UnassignedNodesConfigRecord> {
-    let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
-    let unassigned_nodes_config_result = registry_canister
-        .get_value(
-            make_unassigned_nodes_config_record_key()
-                .as_bytes()
-                .to_vec(),
-            None,
-        )
-        .await;
-
-    // The record may not exist, in this case return None
-    match unassigned_nodes_config_result {
-        Err(RegistryTransportError::KeyNotPresent(_)) => None,
-        Ok(res) => Some(res),
-        err @ Err(_) => Some(err.unwrap()),
-    }
-    .map(|v| UnassignedNodesConfigRecord::decode(v.0.as_slice()).unwrap())
-}
-
 /// Get the elected guestOS version from the NNS registry.
-pub async fn get_elected_guestos_versions(topology: &TopologySnapshot) -> Vec<String> {
+pub fn get_elected_guestos_versions(topology: &TopologySnapshot) -> Vec<String> {
     topology
         .replica_version_records()
         .unwrap()

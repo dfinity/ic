@@ -4,34 +4,6 @@ load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/sha2",
-    "//rs/protobuf",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:thiserror",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/crypto/tree_hash/test_utils",
-    "@crate_index//:assert_matches",
-    "@crate_index//:criterion",
-    "@crate_index//:maplit",
-    "@crate_index//:proptest",
-    "@crate_index//:prost",
-    "@crate_index//:rand",
-    "@crate_index//:serde_cbor",
-]
-
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:test-strategy",
-]
-
 rust_library(
     name = "tree_hash",
     srcs = glob(["src/**"]),
@@ -41,38 +13,118 @@ rust_library(
         "//conditions:default": [],
     }),
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/sha2",
+        "//rs/protobuf",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:thiserror",
+    ],
 )
 
 rust_test(
     name = "tree_hash_test",
     crate = ":tree_hash",
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:prost",
+        "@crate_index//:serde_cbor",
+    ],
 )
 
 rust_test_suite(
     name = "tree_hash_integration",
     srcs = glob(["tests/**"]),
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
+    deps = [
+        # Keep sorted.
+        ":tree_hash",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/sha2",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/tree_hash/test_utils",
+        "//rs/protobuf",
+        "@crate_index//:assert_matches",
+        "@crate_index//:maplit",
+        "@crate_index//:proptest",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:thiserror",
+    ],
 )
 
 rust_doc_test(
     name = "tree_hash_doc_test",
     crate = ":tree_hash",
-    deps = DEV_DEPENDENCIES + ["@crate_index//:rand_chacha"],
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/tree_hash/test_utils",
+        "@crate_index//:assert_matches",
+        "@crate_index//:criterion",
+        "@crate_index//:maplit",
+        "@crate_index//:proptest",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:serde_cbor",
+    ],
 )
 
 rust_bench(
     name = "tree_hash_bench",
     testonly = True,
     srcs = ["benches/tree_hash.rs"],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
+    deps = [
+        # Keep sorted.
+        ":tree_hash",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/sha2",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/tree_hash/test_utils",
+        "//rs/protobuf",
+        "@crate_index//:assert_matches",
+        "@crate_index//:criterion",
+        "@crate_index//:maplit",
+        "@crate_index//:proptest",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:thiserror",
+    ],
 )
 
 rust_bench(
     name = "flat_map_bench",
     testonly = True,
     srcs = ["benches/flat_map.rs"],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
+    deps = [
+        # Keep sorted.
+        ":tree_hash",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/sha2",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/tree_hash/test_utils",
+        "//rs/protobuf",
+        "@crate_index//:assert_matches",
+        "@crate_index//:criterion",
+        "@crate_index//:maplit",
+        "@crate_index//:proptest",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:thiserror",
+    ],
 )

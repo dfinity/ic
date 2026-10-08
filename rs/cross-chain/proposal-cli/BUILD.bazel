@@ -1,37 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:askama",
-    "@crate_index//:candid",
-    "@crate_index//:candid_parser",
-    "@crate_index//:clap",
-    "@crate_index//:futures",
-    "@crate_index//:hex",
-    "@crate_index//:maplit",
-    "@crate_index//:reqwest",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:sha2",
-    "@crate_index//:strum",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:strum_macros",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:assert_matches",
-    "@crate_index//:maplit",
-]
-
-DEV_MACRO_DEPENDENCIES = []
-
 rust_binary(
     name = "make_proposal",
     srcs = glob(["src/**/*.rs"]),
@@ -41,8 +9,28 @@ rust_binary(
         "templates/reinstall.md",
         "templates/submit_with_ic_admin.shx",
     ],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:strum_macros",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:askama",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+        "@crate_index//:clap",
+        "@crate_index//:futures",
+        "@crate_index//:hex",
+        "@crate_index//:maplit",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:sha2",
+        "@crate_index//:strum",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
 )
 
 rust_test(
@@ -61,6 +49,9 @@ rust_test(
         "//rs/ledger_suite/icrc1/index-ng:index-ng.did",
         "//rs/ledger_suite/icrc1/ledger:ledger.did",
     ],
-    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:assert_matches",
+        "@crate_index//:maplit",
+    ],
 )

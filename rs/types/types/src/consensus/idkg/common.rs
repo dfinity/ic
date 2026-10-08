@@ -46,9 +46,6 @@ use super::{
     schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
 };
 
-/// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
-pub type PseudoRandomId = [u8; 32];
-
 /// RequestId is used for two purposes:
 /// 1. to identify the matching request in signature request contexts.
 /// 2. to identify which pre-signature the request is matched to.

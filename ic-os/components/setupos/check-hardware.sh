@@ -77,7 +77,7 @@ function check_num_cpus() {
     local cpu_json="$1"
     local required_sockets="$2"
 
-    local num_cpu_sockets=$(echo "${cpu_json}" | jq -r '.[].id' | wc -l)
+    local num_cpu_sockets=$(echo "${cpu_json}" | jq -r '.[] | select(has("disabled") | not) | .id' | wc -l)
     log_and_halt_installation_on_error "$?" "Unable to extract CPU sockets from CPU JSON."
 
     if [ "${num_cpu_sockets}" -lt "${required_sockets}" ]; then
@@ -89,7 +89,7 @@ function verify_capability_for_all_sockets() {
     local cpu_json="$1"
     local capability_name="$2"
 
-    for socket_id in $(echo "${cpu_json}" | jq -r '.[].id'); do
+    for socket_id in $(echo "${cpu_json}" | jq -r '.[] | select(has("disabled") | not) | .id'); do
         local capability=$(echo "${cpu_json}" | jq -r \
             --arg socket "${socket_id}" \
             --arg capability "${capability_name}" \
@@ -112,7 +112,7 @@ function verify_model_for_all_sockets() {
     local cpu_json="$1"
     local required_model="$2"
 
-    for socket_id in $(echo "${cpu_json}" | jq -r '.[].id'); do
+    for socket_id in $(echo "${cpu_json}" | jq -r '.[] | select(has("disabled") | not) | .id'); do
         local model=$(echo "${cpu_json}" | jq -r --arg socket "${socket_id}" '.[] | select(.id==$socket) | .product')
 
         echo -n "* CPU model '${model}' "

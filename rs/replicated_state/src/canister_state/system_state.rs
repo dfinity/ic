@@ -10,49 +10,51 @@ use self::{
     log_memory_store::LogMemoryStore,
     wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata},
 };
+pub use super::queues::CanisterOutputQueuesIterator;
 use super::queues::refunds::RefundPool;
 use super::queues::{CanisterInput, can_push};
-pub use super::queues::{CanisterOutputQueuesIterator, memory_usage_of_request};
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
-    CanisterQueues, CanisterState, CheckpointLoadingMetrics, DroppedMessageMetrics, InputQueueType,
-    PageMap, StateError,
+    CanisterQueues, CanisterStates, CheckpointLoadingMetrics, DroppedMessageMetrics,
+    InputQueueType, PageMap, StateError,
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::{EnvironmentVariables, NumSeconds};
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE;
 use ic_error_types::RejectCode;
-use ic_interfaces::execution_environment::HypervisorError;
+use ic_interfaces::execution_environment::{HypervisorError, MessageMemoryUsage};
 use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
-    LogVisibilityV2, SnapshotVisibility,
+    LogVisibilityV2, SnapshotVisibility, StatusVisibility,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
-    Ingress, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    Response, SenderInfo, StopCanisterCallId, StopCanisterContext,
+    Ingress, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext, Request,
+    RequestMetadata, RequestOrResponse, Response, SenderInfo, StopCanisterCallId,
+    StopCanisterContext,
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, MemoryAllocation, NumBytes,
+    CanisterId, CanisterTimer, ComputeAllocation, CountBytes, MemoryAllocation, NumBytes,
     NumInstructions, PrincipalId, Time,
 };
 use ic_types_cycles::{
     CanisterCyclesCostSchedule, CompoundCycles, Cycles, CyclesUseCase, CyclesUseCaseKind,
-    CyclesUseCaseRefundableKind, IngressInduction, Instructions, NominalCycles, Uninstall,
+    CyclesUseCaseRefundableKind, IngressInduction, Instructions, NominalCycles,
+    RequestAndResponseTransmission, Uninstall,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
@@ -67,6 +69,131 @@ lazy_static! {
 
 /// Maximum number of canister changes stored in the canister history.
 pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
+
+/// A bundle of outgoing inter-canister `Request` and matching `Callback`.
+///
+/// A `Request` and its `Callback` share several fields (destination, payment,
+/// deadline). And the request's `sender_reply_callback` cannot be known until
+/// the callback has actually been registered. `OutputRequest` holds the union
+/// of the distinct fields exactly once, and produces both the `Callback` (via
+/// [`OutputRequest::to_callback`]) and, once a `CallbackId` has been assigned,
+/// the `Request` (via [`OutputRequest::into_request`]).
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub struct OutputRequest {
+    // Fields shared by `Request` and `Callback`.
+    /// The destination canister (`Request::receiver` / `Callback::respondent`).
+    pub receiver: CanisterId,
+    /// Cycles attached to the request (`Request::payment` /
+    /// `Callback::cycles_sent`).
+    pub payment: Cycles,
+    /// If non-zero, this is a best-effort call (`Request::deadline` /
+    /// `Callback::deadline`).
+    pub deadline: CoarseTime,
+
+    // `Request`-only fields.
+    pub sender: CanisterId,
+    pub method_name: String,
+    pub method_payload: Vec<u8>,
+    pub metadata: RequestMetadata,
+
+    // `Callback`-only fields.
+    pub call_context_id: CallContextId,
+    pub prepayment_for_response_execution: CompoundCycles<Instructions>,
+    pub prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    pub prepayment_for_call_transmission: CompoundCycles<RequestAndResponseTransmission>,
+    pub on_reply: WasmClosure,
+    pub on_reject: WasmClosure,
+    pub on_cleanup: Option<WasmClosure>,
+}
+
+impl OutputRequest {
+    /// Returns `true` if this is a best-effort call (i.e. if it has a non-zero
+    /// deadline).
+    pub fn is_best_effort(&self) -> bool {
+        self.deadline != NO_DEADLINE
+    }
+
+    /// Returns the size of the user-controlled part of the eventual `Request`,
+    /// in bytes.
+    ///
+    /// Mirrors `Request::payload_size_bytes()`.
+    pub fn payload_size_bytes(&self) -> NumBytes {
+        let payload_size_bytes =
+            NumBytes::from((self.method_name.len() + self.method_payload.len()) as u64);
+        debug_assert_eq!(
+            payload_size_bytes,
+            self.clone().into_request(0.into()).payload_size_bytes()
+        );
+        payload_size_bytes
+    }
+
+    /// Returns the byte size of the eventual `Request`.
+    ///
+    /// Mirrors `Request::count_bytes()`.
+    pub fn count_bytes(&self) -> usize {
+        let count_bytes = std::mem::size_of::<RequestOrResponse>()
+            + std::mem::size_of::<Request>()
+            + self.payload_size_bytes().get() as usize;
+        debug_assert_eq!(
+            count_bytes,
+            self.clone().into_request(0.into()).count_bytes()
+        );
+        count_bytes
+    }
+
+    /// Returns the guaranteed response and best-effort memory used by the eventual
+    /// `Request` if enqueued into an input or output queue.
+    ///
+    /// Best-effort requests use `self.count_bytes()` worth of best-effort memory.
+    /// Guaranteed response requests use the maximum of `MAX_RESPONSE_COUNT_BYTES`
+    /// (reservation for the largest possible response) and `self.count_bytes()`
+    pub fn message_memory_usage(&self) -> MessageMemoryUsage {
+        let count_bytes = self.count_bytes();
+        if self.is_best_effort() {
+            MessageMemoryUsage {
+                guaranteed_response: NumBytes::new(0),
+                best_effort: (count_bytes as u64).into(),
+            }
+        } else {
+            MessageMemoryUsage {
+                guaranteed_response: (count_bytes.max(MAX_RESPONSE_COUNT_BYTES) as u64).into(),
+                best_effort: NumBytes::new(0),
+            }
+        }
+    }
+
+    /// Builds the `Callback` that the response to this request should be routed
+    /// to.
+    fn to_callback(&self) -> Callback {
+        Callback {
+            call_context_id: self.call_context_id,
+            respondent: self.receiver,
+            cycles_sent: self.payment,
+            prepayment_for_response_execution: self.prepayment_for_response_execution,
+            prepayment_for_response_transmission: self.prepayment_for_response_transmission,
+            prepayment_for_call_transmission: self.prepayment_for_call_transmission,
+            on_reply: self.on_reply.clone(),
+            on_reject: self.on_reject.clone(),
+            on_cleanup: self.on_cleanup.clone(),
+            deadline: self.deadline,
+        }
+    }
+
+    /// Consumes `self`, producing the `Request` with the given (already registered)
+    /// `sender_reply_callback`.
+    pub fn into_request(self, sender_reply_callback: CallbackId) -> Request {
+        Request {
+            receiver: self.receiver,
+            sender: self.sender,
+            sender_reply_callback,
+            payment: self.payment,
+            method_name: self.method_name,
+            method_payload: self.method_payload,
+            metadata: self.metadata,
+            deadline: self.deadline,
+        }
+    }
+}
 
 #[derive(PartialEq)]
 enum ConsumingCycles {
@@ -198,7 +325,9 @@ pub struct CanisterMetrics {
     load_metrics: LoadMetrics,
     connection_metrics: LRUConnectionMetrics,
     consumed_cycles: NominalCycles,
+    consumed_cycles_monotonic: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
 impl CanisterMetrics {
@@ -208,7 +337,9 @@ impl CanisterMetrics {
         executed: u64,
         interrupted_during_execution: u64,
         consumed_cycles: NominalCycles,
+        consumed_cycles_monotonic: NominalCycles,
         consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+        consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
         instructions_executed: NumInstructions,
         load_metrics: LoadMetrics,
         connection_metrics: BTreeMap<CanisterId, ConnectionMetrics>,
@@ -219,7 +350,9 @@ impl CanisterMetrics {
             executed,
             interrupted_during_execution,
             consumed_cycles,
+            consumed_cycles_monotonic,
             consumed_cycles_by_use_cases,
+            consumed_cycles_by_use_cases_monotonic,
             instructions_executed,
             load_metrics,
             connection_metrics: LRUConnectionMetrics {
@@ -248,12 +381,57 @@ impl CanisterMetrics {
         self.interrupted_during_execution
     }
 
+    /// The total cycles consumed by the canister, as a gauge: raised by every
+    /// prepayment and lowered again by its refund.
     pub fn consumed_cycles(&self) -> NominalCycles {
         self.consumed_cycles
     }
 
+    /// The monotonic counterpart of [`Self::consumed_cycles`]: it is only ever
+    /// increased, by the actually consumed amount (prepayment minus refund) once the
+    /// refund is known; or right away, for a direct charge made without a prepayment
+    /// (e.g. for memory usage). The gauge above, in contrast, is raised by the
+    /// prepayment and lowered again by the refund.
+    ///
+    /// The scalar counterpart of [`Self::consumed_cycles_by_use_cases_monotonic`],
+    /// covering everything except HTTPS outcalls. The two need not add up: this
+    /// metric and the by-use-case ones were introduced at different times.
+    ///
+    /// See `SystemState::outstanding_prepayments` for the invariant that ties the
+    /// two together.
+    pub fn consumed_cycles_monotonic(&self) -> NominalCycles {
+        self.consumed_cycles_monotonic
+    }
+
+    /// The cycles consumed by the canister per use case, as gauges: each is raised by
+    /// every prepayment for that use case and lowered again by its refund.
+    ///
+    /// They only reach back to April 2023, so unlike the scalar
+    /// [`Self::consumed_cycles`] -- which has been tracked since the beginning -- they
+    /// are not the canister's full history.
+    ///
+    /// Has no `HTTPOutcalls` entry: HTTPS outcalls are only tracked as a gauge at the
+    /// subnet level.
     pub fn consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_cases
+    }
+
+    /// The monotonic counterparts of [`Self::consumed_cycles_by_use_cases`]: each is
+    /// only ever increased, by the actually consumed amount (prepayment minus refund)
+    /// once the refund is known; or right away, for a direct charge made without a
+    /// prepayment (e.g. for memory usage).
+    ///
+    /// Unlike the gauges, these have an `HTTPOutcalls` entry (see
+    /// `SystemState::observe_consumed_cycles_for_https_outcall`): HTTPS outcalls are
+    /// only tracked as a gauge at the subnet level, but as a monotonic amount here
+    /// too.
+    ///
+    /// See `SystemState::outstanding_prepayments` for the invariant that ties these
+    /// to the gauges.
+    pub fn consumed_cycles_by_use_cases_monotonic(
+        &self,
+    ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+        &self.consumed_cycles_by_use_cases_monotonic
     }
 
     pub fn observe_round_scheduled(&mut self) {
@@ -287,6 +465,52 @@ impl CanisterMetrics {
 
     pub fn connection_metrics_mut(&mut self) -> &mut LRUConnectionMetrics {
         &mut self.connection_metrics
+    }
+}
+
+/// A canister's prepayments whose refunds are still outstanding, broken down by
+/// use case.
+///
+/// Only [`CyclesUseCase::Instructions`] and
+/// [`CyclesUseCase::RequestAndResponseTransmission`] can have any: they are the only
+/// two [`CyclesUseCaseRefundableKind`]s, every other use case is charged outright.
+///
+/// See [`SystemState::outstanding_prepayments`].
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default)]
+pub struct OutstandingPrepayments {
+    /// Outstanding for [`CyclesUseCase::Instructions`].
+    pub instructions: NominalCycles,
+    /// Outstanding for [`CyclesUseCase::RequestAndResponseTransmission`].
+    pub transmission: NominalCycles,
+}
+
+impl OutstandingPrepayments {
+    /// The total across all use cases, i.e. the amount by which
+    /// [`CanisterMetrics::consumed_cycles`] exceeds
+    /// [`CanisterMetrics::consumed_cycles_monotonic`].
+    pub fn total(&self) -> NominalCycles {
+        self.instructions + self.transmission
+    }
+
+    /// The total amount of outstanding prepayments for `use_case`. Zero for
+    /// a use case that is never prepaid, and thus never refunded.
+    pub fn for_use_case(&self, use_case: CyclesUseCase) -> NominalCycles {
+        match use_case {
+            CyclesUseCase::Instructions => self.instructions,
+            CyclesUseCase::RequestAndResponseTransmission => self.transmission,
+            CyclesUseCase::Memory
+            | CyclesUseCase::ComputeAllocation
+            | CyclesUseCase::Uninstall
+            | CyclesUseCase::IngressInduction
+            | CyclesUseCase::CanisterCreation
+            | CyclesUseCase::BurnedCycles
+            | CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::SchnorrOutcalls
+            | CyclesUseCase::VetKd
+            | CyclesUseCase::HTTPOutcalls
+            | CyclesUseCase::DeletedCanisters
+            | CyclesUseCase::DroppedMessages => NominalCycles::zero(),
+        }
     }
 }
 
@@ -477,6 +701,12 @@ pub struct SystemState {
     /// fail if `reserved_balance + N` exceeds this limit if the limit is set.
     reserved_balance_limit: Option<Cycles>,
 
+    /// Minimum number of cycles required for an incoming call from a different canister.
+    /// Calls from a different canister with fewer cycles are rejected with a CanisterError at no cycles cost to the callee.
+    /// Self-calls (from the canister itself) and ingress messages are not affected.
+    /// A value of 0 means no minimum is enforced.
+    pub minimum_incoming_canister_call_cycles: Cycles,
+
     /// Queue of tasks to be executed next. If a paused or aborted execution task is
     /// present, it must be executed before any other tasks or messages.
     pub task_queue: TaskQueue,
@@ -486,6 +716,12 @@ pub struct SystemState {
 
     /// Canister version.
     canister_version: u64,
+
+    /// The round time at which the canister was created, in nanoseconds since the
+    /// Unix epoch. It is `None` only for canisters created before this field was
+    /// introduced (i.e. loaded from a checkpoint that predates it); every newly
+    /// created canister has it set.
+    pub canister_creation_timestamp: Option<Time>,
 
     /// Canister history.
     #[validate_eq(CompareWithValidateEq)]
@@ -501,9 +737,8 @@ pub struct SystemState {
     /// Snapshot visibility of the canister.
     pub snapshot_visibility: SnapshotVisibility,
 
-    /// Log records of the canister.
-    #[validate_eq(CompareWithValidateEq)]
-    pub canister_log: CanisterLog,
+    /// Status visibility of the canister.
+    pub status_visibility: StatusVisibility,
 
     /// The memory used for storing log entries.
     #[validate_eq(CompareWithValidateEq)]
@@ -639,6 +874,7 @@ impl SystemState {
         controller: PrincipalId,
         initial_cycles: Cycles,
         time_of_last_allocation_charge: Time,
+        canister_creation_timestamp: Time,
         freeze_threshold: NumSeconds,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
@@ -647,6 +883,7 @@ impl SystemState {
             controller,
             initial_cycles,
             time_of_last_allocation_charge,
+            Some(canister_creation_timestamp),
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
@@ -658,6 +895,7 @@ impl SystemState {
         controller: PrincipalId,
         initial_cycles: Cycles,
         time_of_last_allocation_charge: Time,
+        canister_creation_timestamp: Option<Time>,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
@@ -671,6 +909,7 @@ impl SystemState {
             ingress_induction_cycles_debit: Cycles::zero(),
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
+            minimum_incoming_canister_call_cycles: Cycles::zero(),
             memory_allocation: MemoryAllocation::default(),
             compute_allocation: ComputeAllocation::default(),
             environment_variables: Default::default(),
@@ -683,15 +922,13 @@ impl SystemState {
             task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: 0,
+            canister_creation_timestamp,
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
             snapshot_visibility: Default::default(),
-            // TODO(EXC-2118): CanisterLog does not store log records efficiently,
-            // therefore it should not scale to memory limit from above.
-            // Remove this field after migration is done.
-            canister_log: CanisterLog::default_aggregate(),
-            log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
+            status_visibility: Default::default(),
+            log_memory_store: LogMemoryStore::new(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
         }
@@ -715,17 +952,19 @@ impl SystemState {
         ingress_induction_cycles_debit: Cycles,
         reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
+        minimum_incoming_canister_call_cycles: Cycles,
         task_queue: TaskQueue,
         global_timer: CanisterTimer,
         canister_version: u64,
+        canister_creation_timestamp: Option<Time>,
         canister_history: CanisterHistory,
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
-        canister_log: CanisterLog,
-        next_canister_log_record_idx: u64,
+        status_visibility: StatusVisibility,
         log_memory_store_data: Option<PageMap>,
+        log_memory_store_persistent_next_idx: u64,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
         environment_variables: BTreeMap<String, String>,
@@ -748,9 +987,11 @@ impl SystemState {
             ingress_induction_cycles_debit,
             reserved_balance,
             reserved_balance_limit,
+            minimum_incoming_canister_call_cycles,
             task_queue,
             global_timer,
             canister_version,
+            canister_creation_timestamp,
             canister_history,
             wasm_chunk_store: WasmChunkStore::from_checkpoint(
                 wasm_chunk_store_data,
@@ -758,11 +999,10 @@ impl SystemState {
             ),
             log_visibility,
             snapshot_visibility,
-            canister_log,
+            status_visibility,
             log_memory_store: LogMemoryStore::from_checkpoint(
-                LOG_MEMORY_STORE_FEATURE,
                 log_memory_store_data,
-                next_canister_log_record_idx,
+                log_memory_store_persistent_next_idx,
             ),
             wasm_memory_limit,
             next_snapshot_id,
@@ -834,6 +1074,7 @@ impl SystemState {
             controller,
             initial_cycles,
             UNIX_EPOCH,
+            None,
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
@@ -910,44 +1151,48 @@ impl SystemState {
         self.ingress_induction_cycles_debit += charge;
     }
 
-    /// Removes a previously postponed charge for ingress messages from the balance
-    /// of the canister.
-    ///
-    /// Note that this will saturate the balance to zero if the charge to remove is
-    /// larger than the current debit.
-    pub fn remove_charge_from_ingress_induction_cycles_debit(&mut self, charge: Cycles) {
-        self.ingress_induction_cycles_debit -= charge;
-    }
-
     /// Charges the pending 'ingress_induction_cycles_debit' from the balance.
     ///
-    /// Precondition:
-    /// - The balance is large enough to cover the debit.
+    /// If `strict` is `true`, the caller guarantees that the balance is large
+    /// enough to cover the debit and it is a bug if that is not the case.
+    ///
+    /// If `strict` is `false`, the balance is allowed to be smaller than the
+    /// debit: only the available cycles are charged and the rest of the debit is
+    /// silently dropped (making some of the postponed ingress induction charges
+    /// free). This is used after a cleanup callback, which can burn the canister's
+    /// cycles balance below the pending debit and must always be allowed to
+    /// succeed.
     pub fn apply_ingress_induction_cycles_debit(
         &mut self,
         canister_id: CanisterId,
         cost_schedule: CanisterCyclesCostSchedule,
+        strict: bool,
         log: &ReplicaLogger,
         charging_from_balance_error: &IntCounter,
     ) {
         // We rely on saturating operations of `Cycles` here.
         let remaining_debit = self.ingress_induction_cycles_debit - self.cycles_balance;
-        debug_assert_eq!(remaining_debit.get(), 0);
-        if remaining_debit.get() > 0 {
-            // This case is unreachable and may happen only due to a bug: if the
-            // caller has reduced the cycles balance below the cycles debit.
-            charging_from_balance_error.inc();
-            error!(
-                log,
-                "[EXC-BUG]: Debited cycles exceed the cycles balance of {} by {} in install_code",
-                canister_id,
-                remaining_debit,
-            );
-            // Continue the execution by dropping the remaining debit, which makes
-            // some of the postponed charges free.
+        if strict {
+            debug_assert_eq!(remaining_debit.get(), 0);
+            if remaining_debit.get() > 0 {
+                // This case is unreachable and may happen only due to a bug: if the
+                // caller has reduced the cycles balance below the cycles debit.
+                charging_from_balance_error.inc();
+                error!(
+                    log,
+                    "[EXC-BUG]: Debited cycles exceed the cycles balance of {} by {}",
+                    canister_id,
+                    remaining_debit,
+                );
+                // Continue the execution by dropping the remaining debit, which makes
+                // some of the postponed charges free.
+            }
         }
+        // Charge only the part of the debit that the balance can cover. The remaining
+        // debit is dropped, so it must not be reported as consumed either.
+        let charged_debit = self.ingress_induction_cycles_debit - remaining_debit;
         self.consume_cycles(CompoundCycles::<IngressInduction>::new(
-            self.ingress_induction_cycles_debit,
+            charged_debit,
             cost_schedule,
         ));
         self.ingress_induction_cycles_debit = Cycles::zero();
@@ -1043,10 +1288,7 @@ impl SystemState {
 
     /// Registers a callback and returns its ID. Returns an error if the canister is
     /// `Stopped`.
-    //
-    // TODO: Check whether this could be done implicitly, when pushing an outbound
-    // request.
-    pub fn register_callback(&mut self, callback: Callback) -> Result<CallbackId, StateError> {
+    fn register_callback(&mut self, callback: Callback) -> Result<CallbackId, StateError> {
         Ok(call_context_manager_mut(&mut self.status)
             .ok_or(StateError::CanisterStopped(self.canister_id))?
             .register_callback(callback))
@@ -1063,33 +1305,42 @@ impl SystemState {
             .unregister_callback(callback_id))
     }
 
-    /// Pushes a `Request` type message into the relevant output queue.
-    /// This is preceded by withdrawing the cycles for sending the `Request` and
-    /// receiving and processing the corresponding `Response`.
-    /// If cycles withdrawal succeeds, the function also reserves a slot on the
-    /// matching input queue for the `Response`.
+    /// Atomically registers the `Callback` carried by the given `OutputRequest` and
+    /// enqueues the `Request` (with the resulting `CallbackId`) onto the relevant
+    /// output queue.
     ///
-    /// # Errors
-    ///
-    /// Returns a `QueueFull` error along with the provided message if either
-    /// the output queue or the matching input queue is full.
+    /// Returns the assigned `CallbackId` on success. Returns an error if the
+    /// canister is `Stopped` (callback cannot be registered); or if the output or
+    /// matching input queue is full.
     pub fn push_output_request(
         &mut self,
-        msg: Arc<Request>,
+        request: OutputRequest,
         time: Time,
-    ) -> Result<(), (StateError, Arc<Request>)> {
+    ) -> Result<CallbackId, StateError> {
         assert_eq!(
-            msg.sender, self.canister_id,
+            request.sender, self.canister_id,
             "Expected `Request` to have been sent by canister ID {}, but instead got {}",
-            self.canister_id, msg.sender
+            self.canister_id, request.sender
         );
-        self.queues.push_output_request(msg, time)
+
+        let callback = request.to_callback();
+        let callback_id = self.register_callback(callback)?;
+        let request = request.into_request(callback_id);
+        let result = self.queues.push_output_request(request.into(), time);
+        match result {
+            Ok(()) => Ok(callback_id),
+            Err((err, _msg)) => {
+                self.unregister_callback(callback_id)?;
+                Err(err)
+            }
+        }
     }
 
-    /// See documentation for [`CanisterQueues::reject_subnet_output_request`].
+    /// Atomically registers the `Callback` carried by the given `OutputRequest` and
+    /// enqueues a matching reject response with the given `RejectContext`.
     pub fn reject_subnet_output_request(
         &mut self,
-        request: Request,
+        request: OutputRequest,
         reject_context: RejectContext,
         subnet_ids: &BTreeSet<PrincipalId>,
     ) -> Result<(), StateError> {
@@ -1098,8 +1349,16 @@ impl SystemState {
             "Expected `Request` to have been sent from canister ID {}, but instead got {}",
             self.canister_id, request.sender
         );
-        self.queues
-            .reject_subnet_output_request(request, reject_context, subnet_ids)
+        let callback = request.to_callback();
+        let callback_id = self.register_callback(callback)?;
+        let request = request.into_request(callback_id);
+        let result = self
+            .queues
+            .reject_subnet_output_request(request, reject_context, subnet_ids);
+        if result.is_err() {
+            self.unregister_callback(callback_id)?;
+        }
+        result
     }
 
     /// Returns the number of output requests that can be pushed onto the queue
@@ -1539,11 +1798,14 @@ impl SystemState {
     /// executing on one subnet, but for which a response may only be produced by
     /// another subnet.
     pub fn drop_in_progress_management_calls_after_split(&mut self) {
-        // Remove aborted install code task.
+        // Remove aborted install code task and fully refund the prepaid execution
+        // cycles.
         //
         // Note that this cannot be a paused install code task, because we abort all
         // paused tasks before triggering the split.
-        self.task_queue.remove_aborted_install_code_task();
+        if let Some(prepaid_execution_cycles) = self.task_queue.remove_aborted_install_code_task() {
+            self.refund_cycles(prepaid_execution_cycles, prepaid_execution_cycles);
+        }
 
         // Roll back `Stopping` canister states to `Running` and drop all their stop
         // contexts (the calls corresponding to the dropped stop contexts will be
@@ -1729,7 +1991,7 @@ impl SystemState {
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+        local_canisters: &CanisterStates,
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) {
@@ -1757,6 +2019,17 @@ impl SystemState {
             .unwrap_or(false)
     }
 
+    /// Returns true iff the canister has any unexpired best-effort callback (i.e. a
+    /// callback that has not yet been returned by `time_out_callbacks()`).
+    ///
+    /// Such a callback may still need to be timed out by a future invocation of
+    /// `time_out_callbacks()`, which is why this is part of the "cold" predicate.
+    pub fn has_unexpired_callbacks(&self) -> bool {
+        self.call_context_manager()
+            .map(CallContextManager::has_unexpired_callbacks)
+            .unwrap_or(false)
+    }
+
     /// Enqueues "deadline expired" references for all expired best-effort callbacks
     /// without a response.
     ///
@@ -1768,7 +2041,7 @@ impl SystemState {
         &mut self,
         current_time: CoarseTime,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+        local_canisters: &CanisterStates,
     ) -> (usize, Vec<StateError>) {
         if self.status == CanisterStatus::Stopped {
             // Stopped canisters have no call context manager, so no callbacks.
@@ -1824,7 +2097,7 @@ impl SystemState {
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+        local_canisters: &CanisterStates,
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) -> bool {
@@ -1848,7 +2121,7 @@ impl SystemState {
     pub(crate) fn split_input_schedules(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+        local_canisters: &CanisterStates,
     ) {
         self.queues
             .split_input_schedules(own_canister_id, local_canisters);
@@ -1923,6 +2196,11 @@ impl SystemState {
     /// the consumed amount. Should be used either for cases where a prepayment
     /// needs to be made (that will be refunded later with `refund_cycles`) or
     /// a direct charge happens without a prepayment (e.g. when paying for memory).
+    ///
+    /// Callers are expected to cover the requested amount out of the balances, or
+    /// to cap the requested amount at what the balances cover. As defense in depth
+    /// against a caller that does neither, any part that the balances cannot cover
+    /// is neither charged nor reported as consumed.
     pub fn consume_cycles<T: CyclesUseCaseKind>(&mut self, requested_amount: CompoundCycles<T>) {
         let requested_real = requested_amount.real();
         let use_case = T::cycles_use_case();
@@ -1941,13 +2219,19 @@ impl SystemState {
             | CyclesUseCase::VetKd
             | CyclesUseCase::HTTPOutcalls
             | CyclesUseCase::DeletedCanisters
-            | CyclesUseCase::NonConsumed
             | CyclesUseCase::BurnedCycles
             | CyclesUseCase::DroppedMessages => requested_real,
         };
+        // Should the balance not cover the whole amount, the subtraction below
+        // saturates at zero and the uncovered part is never actually charged. Report
+        // only the part that the balance could cover as consumed, so that the consumed
+        // cycles metrics never exceed the cycles removed from the balance. This is
+        // defense in depth: the balance is expected to cover the whole amount.
+        let uncharged_amount = remaining_amount - self.cycles_balance;
         self.cycles_balance -= remaining_amount;
+        let charged_amount = requested_amount.minus_uncharged(uncharged_amount);
         self.observe_consumed_cycles_with_use_case(
-            requested_amount.nominal(),
+            charged_amount.nominal(),
             NominalCycles::zero(),
             use_case,
             ConsumingCycles::Prepayment,
@@ -2002,6 +2286,17 @@ impl SystemState {
         self.consume_cycles(CompoundCycles::<Uninstall>::new(balance, cost_schedule));
     }
 
+    /// Observes the consumed cycles for HTTPS outcalls. This should only be
+    /// called to update the counter metric on the canister level, as the gauge
+    /// metric for HTTPS outcalls is updated on the subnet level only.
+    pub fn observe_consumed_cycles_for_https_outcall(&mut self, amount: NominalCycles) {
+        *self
+            .canister_metrics
+            .consumed_cycles_by_use_cases_monotonic
+            .entry(CyclesUseCase::HTTPOutcalls)
+            .or_insert_with(NominalCycles::zero) += amount;
+    }
+
     fn observe_consumed_cycles_with_use_case(
         &mut self,
         prepayment: NominalCycles,
@@ -2012,16 +2307,11 @@ impl SystemState {
         // The use cases below are not valid on the canister
         // level, they should only appear on the subnet level.
         debug_assert_ne!(use_case, CyclesUseCase::ECDSAOutcalls);
+        debug_assert_ne!(use_case, CyclesUseCase::SchnorrOutcalls);
+        debug_assert_ne!(use_case, CyclesUseCase::VetKd);
         debug_assert_ne!(use_case, CyclesUseCase::HTTPOutcalls);
         debug_assert_ne!(use_case, CyclesUseCase::DeletedCanisters);
         debug_assert_ne!(use_case, CyclesUseCase::DroppedMessages);
-
-        // CyclesUseCase::NonConsumed should never be sent to this function.
-        debug_assert_ne!(
-            use_case,
-            CyclesUseCase::NonConsumed,
-            "Non-consumed cycles should not be tracked in the canister metrics."
-        );
 
         // `prepayment` must be greater or equal to `refund`.
         // `refund` must be 0 when we are handling a prepayment.
@@ -2036,26 +2326,55 @@ impl SystemState {
             ConsumingCycles::Refund => {}
         }
 
-        // Skip if the amounts are zero and no metric updates are needed.
-        if (consuming_cycles == ConsumingCycles::Prepayment && prepayment.is_zero())
-            || (consuming_cycles == ConsumingCycles::Refund && refund.is_zero())
-        {
+        // Skip only if there is nothing to record at all. Note that a refund equal to
+        // its prepayment still has to lower the gauge by the refunded amount, even
+        // though it contributes nothing to the monotonic amounts.
+        if prepayment == NominalCycles::zero() && refund == NominalCycles::zero() {
             return;
         }
 
         let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
             &mut self.canister_metrics.consumed_cycles_by_use_cases;
-
         let use_case_consumption = metric.entry(use_case).or_insert_with(NominalCycles::zero);
+        let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> =
+            &mut self.canister_metrics.consumed_cycles_by_use_cases_monotonic;
+        let use_case_consumption_monotonic =
+            metric.entry(use_case).or_insert_with(NominalCycles::zero);
 
         match consuming_cycles {
             ConsumingCycles::Prepayment => {
                 *use_case_consumption += prepayment;
                 self.canister_metrics.consumed_cycles += prepayment;
+                match use_case {
+                    CyclesUseCase::Instructions | CyclesUseCase::RequestAndResponseTransmission => {
+                        // These use cases are accounted for during refund
+                        // for the monotonic metrics.
+                    }
+                    CyclesUseCase::Memory
+                    | CyclesUseCase::ComputeAllocation
+                    | CyclesUseCase::Uninstall
+                    | CyclesUseCase::IngressInduction
+                    | CyclesUseCase::CanisterCreation
+                    | CyclesUseCase::BurnedCycles => {
+                        *use_case_consumption_monotonic += prepayment;
+                        self.canister_metrics.consumed_cycles_monotonic += prepayment;
+                    }
+
+                    CyclesUseCase::ECDSAOutcalls
+                    | CyclesUseCase::SchnorrOutcalls
+                    | CyclesUseCase::VetKd
+                    | CyclesUseCase::HTTPOutcalls
+                    | CyclesUseCase::DeletedCanisters
+                    | CyclesUseCase::DroppedMessages => {
+                        // These use cases should not be tracked on the canister level.
+                    }
+                }
             }
             ConsumingCycles::Refund => {
                 *use_case_consumption -= refund;
                 self.canister_metrics.consumed_cycles -= refund;
+                *use_case_consumption_monotonic += prepayment - refund;
+                self.canister_metrics.consumed_cycles_monotonic += prepayment - refund;
             }
         }
     }
@@ -2066,6 +2385,111 @@ impl SystemState {
 
     pub fn canister_metrics_mut(&mut self) -> &mut CanisterMetrics {
         &mut self.canister_metrics
+    }
+
+    /// The prepayments that have already been added to
+    /// [`CanisterMetrics::consumed_cycles`] and to
+    /// [`CanisterMetrics::consumed_cycles_by_use_cases`] but whose refund has not
+    /// been observed yet; i.e. the amounts that will be reported as the prepayment of
+    /// a future `ConsumingCycles::Refund` observation.
+    ///
+    /// Only `Instructions` and `RequestAndResponseTransmission` charges are ever
+    /// refunded (they are the only two `CyclesUseCaseRefundableKind`s) and an
+    /// outstanding prepayment of either is always recorded in the replicated state:
+    ///
+    ///  * in the `Callback` of a call whose response has not been executed yet
+    ///    (`prepayment_for_response_execution` and
+    ///    `prepayment_for_call_transmission`); or
+    ///  * in the `prepaid_execution_cycles` of an aborted execution or an aborted
+    ///    `install_code`.
+    ///
+    /// Together with how the metrics are updated, this yields the invariants
+    ///
+    /// ```text
+    /// consumed_cycles - outstanding_prepayments().total() == consumed_cycles_monotonic
+    /// ```
+    ///
+    /// and, for every use case `u` of `consumed_cycles_by_use_cases`,
+    ///
+    /// ```text
+    /// consumed_cycles_by_use_cases[u] - outstanding_prepayments().for_use_case(u)
+    ///     == consumed_cycles_by_use_cases_monotonic[u]
+    /// ```
+    ///
+    /// which hold whenever no execution is in progress or paused.
+    ///
+    /// Note that the by-use-case invariant covers only the use cases of the gauge
+    /// map, and reads an absent monotonic entry as zero. The `HTTPOutcalls` entry of
+    /// the monotonic map is thus outside it: it has no gauge counterpart at the
+    /// canister level (see
+    /// [`CanisterMetrics::consumed_cycles_by_use_cases_monotonic`]).
+    ///
+    /// Returns `None` if the outstanding prepayments cannot be derived from the
+    /// replicated state, i.e. if the canister has a paused execution whose
+    /// prepayment is not part of it.
+    pub fn outstanding_prepayments(&self) -> Option<OutstandingPrepayments> {
+        /// Adds the prepayments made when the request behind `callback` was sent (see
+        /// `SandboxSafeSystemState::push_output_request`), to be refunded when its
+        /// response is executed.
+        fn add_callback_prepayments(outstanding: &mut OutstandingPrepayments, callback: &Callback) {
+            outstanding.instructions += callback.prepayment_for_response_execution.nominal();
+            // `prepayment_for_call_transmission` is zero for callbacks created before
+            // April 2026; the refund path falls back to
+            // `prepayment_for_response_transmission` for those, so mirror it here.
+            outstanding.transmission += if callback.prepayment_for_call_transmission.is_zero() {
+                callback.prepayment_for_response_transmission.nominal()
+            } else {
+                callback.prepayment_for_call_transmission.nominal()
+            };
+        }
+
+        let mut outstanding = OutstandingPrepayments::default();
+
+        match self.task_queue.paused_or_aborted_task() {
+            // A paused execution is ephemeral, so its prepayment is only held in
+            // memory, not in the replicated state.
+            Some(ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_)) => {
+                return None;
+            }
+            Some(ExecutionTask::AbortedExecution {
+                input,
+                prepaid_execution_cycles,
+            }) => {
+                // Zero for an aborted response execution, which prepays nothing of
+                // its own: it is paid for by the callback that the task carries.
+                outstanding.instructions += prepaid_execution_cycles.nominal();
+                // That callback was unregistered from the `CallContextManager` when
+                // the response was popped, so it is not also counted below; and
+                // nothing was refunded yet, because aborting discards the changes
+                // that the initial steps of the response execution made.
+                if let CanisterMessageOrTask::Message(CanisterMessage::Response {
+                    callback, ..
+                }) = input
+                {
+                    add_callback_prepayments(&mut outstanding, callback);
+                }
+            }
+            Some(ExecutionTask::AbortedInstallCode {
+                prepaid_execution_cycles,
+                ..
+            }) => outstanding.instructions += prepaid_execution_cycles.nominal(),
+            // Not a paused or aborted task, so it cannot be in this slot. Bail out
+            // rather than silently returning a bogus amount.
+            Some(
+                ExecutionTask::Heartbeat
+                | ExecutionTask::GlobalTimer
+                | ExecutionTask::OnLowWasmMemory,
+            ) => return None,
+            None => {}
+        }
+
+        if let Some(call_context_manager) = self.call_context_manager() {
+            for callback in call_context_manager.callbacks().values() {
+                add_callback_prepayments(&mut outstanding, callback);
+            }
+        }
+
+        Some(outstanding)
     }
 
     /// Clears all canister changes and their memory usage,
@@ -2212,7 +2636,7 @@ impl SystemState {
     ) -> Cycles {
         self.cycles_balance
             + self.queues.attached_cycles()
-            + refunds.map(RefundPool::compute_total).unwrap_or_default()
+            + refunds.map(RefundPool::total).unwrap_or_default()
             + extra_cycles.unwrap_or_default()
     }
 
@@ -2360,6 +2784,7 @@ fn invalid_callback() -> Arc<Callback> {
         Cycles::zero(),
         CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
+        CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal),
         WasmClosure::new(0, 0),
         WasmClosure::new(0, 0),
         None,
@@ -2398,6 +2823,10 @@ pub mod testing {
             deadline: CoarseTime,
         ) -> (CallbackId, Arc<Callback>);
 
+        /// Testing only: Zeroes the `prepayment_for_call_transmission` of the given
+        /// callback, e.g. to simulate a callback created before April 2026.
+        fn reset_prepayment_for_call_transmission(&mut self, callback_id: CallbackId);
+
         /// Testing only: sets the canister status.
         fn set_status(&mut self, status: CanisterStatus);
 
@@ -2413,7 +2842,7 @@ pub mod testing {
         fn split_input_schedules(
             &mut self,
             own_canister_id: &CanisterId,
-            local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+            local_canisters: &CanisterStates,
         );
     }
 
@@ -2432,6 +2861,12 @@ pub mod testing {
 
         fn pop_input(&mut self) -> Option<CanisterMessage> {
             self.pop_input()
+        }
+
+        fn reset_prepayment_for_call_transmission(&mut self, callback_id: CallbackId) {
+            call_context_manager_mut(&mut self.status)
+                .unwrap()
+                .reset_prepayment_for_call_transmission(callback_id);
         }
 
         fn set_status(&mut self, status: CanisterStatus) {
@@ -2465,6 +2900,7 @@ pub mod testing {
                 Cycles::new(13),
                 CompoundCycles::new(Cycles::new(42), CanisterCyclesCostSchedule::Normal),
                 CompoundCycles::new(Cycles::new(84), CanisterCyclesCostSchedule::Normal),
+                CompoundCycles::new(Cycles::new(168), CanisterCyclesCostSchedule::Normal),
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
@@ -2491,7 +2927,7 @@ pub mod testing {
         fn split_input_schedules(
             &mut self,
             own_canister_id: &CanisterId,
-            local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+            local_canisters: &CanisterStates,
         ) {
             self.split_input_schedules(own_canister_id, local_canisters)
         }
@@ -2530,21 +2966,120 @@ pub mod testing {
             ingress_induction_cycles_debit: Default::default(),
             reserved_balance: Default::default(),
             reserved_balance_limit: Default::default(),
+            minimum_incoming_canister_call_cycles: Cycles::zero(),
             task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: Default::default(),
+            canister_creation_timestamp: Default::default(),
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
             snapshot_visibility: Default::default(),
-            // TODO(EXC-2118): CanisterLog does not store log records efficiently,
-            // therefore it should not scale to memory limit from above.
-            // Remove this field after migration is done.
-            canister_log: CanisterLog::default_aggregate(),
-            log_memory_store: LogMemoryStore::new(LOG_MEMORY_STORE_FEATURE),
+            status_visibility: Default::default(),
+            log_memory_store: LogMemoryStore::new(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             environment_variables: Default::default(),
         };
+    }
+
+    /// Builder for `OutputRequest`, for use in tests.
+    pub struct OutputRequestBuilder {
+        request: OutputRequest,
+    }
+
+    impl Default for OutputRequestBuilder {
+        /// Creates an `OutputRequestBuilder` with default values.
+        fn default() -> Self {
+            let name = "No-Op";
+            fn prepayment<T: ic_types_cycles::CyclesUseCaseKind>() -> CompoundCycles<T> {
+                CompoundCycles::new(Cycles::zero(), CanisterCyclesCostSchedule::Normal)
+            }
+
+            Self {
+                request: OutputRequest {
+                    receiver: 0.into(),
+                    payment: Cycles::zero(),
+                    deadline: NO_DEADLINE,
+                    sender: 1.into(),
+                    method_name: name.to_string(),
+                    method_payload: Vec::new(),
+                    metadata: Default::default(),
+                    call_context_id: 2.into(),
+                    prepayment_for_response_execution: prepayment(),
+                    prepayment_for_response_transmission: prepayment(),
+                    prepayment_for_call_transmission: prepayment(),
+                    on_reply: ic_types::methods::WasmClosure::new(0, 0),
+                    on_reject: ic_types::methods::WasmClosure::new(0, 0),
+                    on_cleanup: None,
+                },
+            }
+        }
+    }
+
+    impl OutputRequestBuilder {
+        /// Creates a new `OutputRequestBuilder`.
+        pub fn new() -> Self {
+            Default::default()
+        }
+
+        pub fn receiver(mut self, receiver: CanisterId) -> Self {
+            self.request.receiver = receiver;
+            self
+        }
+
+        pub fn sender(mut self, sender: CanisterId) -> Self {
+            self.request.sender = sender;
+            self
+        }
+
+        pub fn payment(mut self, payment: Cycles) -> Self {
+            self.request.payment = payment;
+            self
+        }
+
+        pub fn method_name<S: ToString>(mut self, method_name: S) -> Self {
+            self.request.method_name = method_name.to_string();
+            self
+        }
+
+        pub fn method_payload(mut self, method_payload: Vec<u8>) -> Self {
+            self.request.method_payload = method_payload;
+            self
+        }
+
+        pub fn deadline(mut self, deadline: ic_types::time::CoarseTime) -> Self {
+            self.request.deadline = deadline;
+            self
+        }
+
+        pub fn prepayment_for_response_execution(
+            mut self,
+            prepayment: CompoundCycles<Instructions>,
+        ) -> Self {
+            self.request.prepayment_for_response_execution = prepayment;
+            self
+        }
+
+        pub fn prepayment_for_response_transmission(
+            mut self,
+            prepayment: CompoundCycles<RequestAndResponseTransmission>,
+        ) -> Self {
+            self.request.prepayment_for_response_transmission = prepayment;
+            self
+        }
+
+        pub fn prepayment_for_call_transmission(
+            mut self,
+            prepayment: CompoundCycles<RequestAndResponseTransmission>,
+        ) -> Self {
+            self.request.prepayment_for_call_transmission = prepayment;
+            self
+        }
+
+        /// Returns the built `OutputRequest`.
+        pub fn build(self) -> OutputRequest {
+            self.request
+        }
     }
 }

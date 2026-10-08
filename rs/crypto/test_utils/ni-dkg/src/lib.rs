@@ -43,7 +43,7 @@ pub use initial_config::{
 pub fn create_transcript<R: CryptoComponentRng>(
     ni_dkg_config: &NiDkgConfig,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<R>>,
-    dealings: &BTreeMap<NodeId, NiDkgDealing>,
+    dealings: BTreeMap<NodeId, NiDkgDealing>,
     node_id: NodeId,
 ) -> NiDkgTranscript {
     crypto_for(node_id, crypto_components)
@@ -73,7 +73,7 @@ pub fn run_ni_dkg_and_create_single_transcript<R: CryptoComponentRng>(
     create_transcript(
         ni_dkg_config,
         crypto_components,
-        &dealings,
+        dealings,
         *transcript_creator,
     )
 }

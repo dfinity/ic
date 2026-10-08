@@ -14,8 +14,9 @@ use ic_protobuf::registry::subnet::v1::SubnetFeatures as SubnetFeaturesPb;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{NodeId, PrincipalId, ReplicaVersion};
+use ic_types::{NodeId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::do_create_subnet;
+use registry_canister::mutations::do_create_subnet::CanisterCyclesCostSchedule;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use url::Url;
@@ -36,6 +37,11 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     #[clap(long)]
     // Assigns this subnet ID to the newly created subnet
     pub subnet_id_override: Option<PrincipalId>,
+
+    #[clap(long)]
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    pub initial_dkg_subnet_id: Option<PrincipalId>,
 
     #[clap(long)]
     /// Maximum amount of bytes per message. This is a hard cap.
@@ -74,7 +80,7 @@ pub(crate) struct ProposeToCreateSubnetCmd {
 
     #[clap(long)]
     /// ID of the Replica version to run.
-    pub replica_version_id: Option<ReplicaVersion>,
+    pub replica_version_id: ReplicaVersion,
 
     #[clap(long)]
     /// The length of all DKG intervals. The DKG interval length is the number
@@ -165,6 +171,11 @@ pub(crate) struct ProposeToCreateSubnetCmd {
     /// subnet.
     #[clap(long)]
     pub max_number_of_canisters: Option<u64>,
+
+    /// The canister cycles cost schedule for this subnet.
+    /// Can be "Normal" (default) or "Free" (used by cloud engine subnets).
+    #[clap(long)]
+    pub canister_cycles_cost_schedule: Option<CanisterCyclesCostSchedule>,
 
     /// The features that are enabled and disabled on the subnet.
     #[clap(long)]
@@ -268,10 +279,10 @@ impl ProposeToCreateSubnetCmd {
         }
         // Other default parameters.
         {
-            self.replica_version_id
-                .get_or_insert(ReplicaVersion::default());
             self.max_number_of_canisters.get_or_insert(0);
             self.features.get_or_insert(SubnetFeatures::default());
+            self.canister_cycles_cost_schedule
+                .get_or_insert(CanisterCyclesCostSchedule::Normal);
         }
     }
 
@@ -306,15 +317,12 @@ impl ProposeToCreateSubnetCmd {
         do_create_subnet::CreateSubnetPayload {
             node_ids,
             subnet_id_override: self.subnet_id_override,
+            initial_dkg_subnet_id: self.initial_dkg_subnet_id.map(SubnetId::from),
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.unwrap_or_default(),
             max_ingress_messages_per_block: self.max_ingress_messages_per_block.unwrap_or_default(),
             max_ingress_bytes_per_block: self.max_ingress_bytes_per_block,
             max_block_payload_size: self.max_block_payload_size.unwrap_or_default(),
-            replica_version_id: self
-                .replica_version_id
-                .as_ref()
-                .expect("replica_version_id must be specified.")
-                .to_string(),
+            replica_version_id: self.replica_version_id.to_string(),
             unit_delay_millis: self.unit_delay_millis.unwrap_or_default(),
             initial_notary_delay_millis: self.initial_notary_delay_millis.unwrap_or_default(),
             dkg_interval_length: self.dkg_interval_length.unwrap_or_default(),
@@ -329,7 +337,8 @@ impl ProposeToCreateSubnetCmd {
             max_number_of_canisters: self.max_number_of_canisters.unwrap_or_default(),
             chain_key_config,
             canister_cycles_cost_schedule: Some(
-                do_create_subnet::CanisterCyclesCostSchedule::Normal,
+                self.canister_cycles_cost_schedule
+                    .expect("canister_cycles_cost_schedule must be specified."),
             ),
             subnet_admins: Some(self.subnet_admins.clone()),
             resource_limits: self.resource_limits,
@@ -368,9 +377,7 @@ mod tests {
 
     fn minimal_create_payload() -> do_create_subnet::CreateSubnetPayload {
         do_create_subnet::CreateSubnetPayload {
-            canister_cycles_cost_schedule: Some(
-                do_create_subnet::CanisterCyclesCostSchedule::Normal,
-            ),
+            canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
             subnet_admins: Some(vec![]),
             ..Default::default()
         }
@@ -394,13 +401,14 @@ mod tests {
             summary_file: None,
             subnet_handler_id: None,
             subnet_id_override: None,
+            initial_dkg_subnet_id: None,
             max_ingress_bytes_per_message: None,
             max_ingress_messages_per_block: None,
             max_ingress_bytes_per_block: None,
             max_block_payload_size: None,
             unit_delay_millis: None,
             initial_notary_delay_millis: None,
-            replica_version_id: None,
+            replica_version_id: ReplicaVersion::from_str("").unwrap(),
             dkg_interval_length: None,
             dkg_dealings_per_block: None,
             initial_chain_key_configs_to_request: None,
@@ -411,13 +419,14 @@ mod tests {
             features: None,
             subnet_admins: vec![],
             resource_limits: None,
+            canister_cycles_cost_schedule: None,
         }
     }
 
     #[test]
     fn cli_to_payload_conversion_works_for_chain_key_fields() {
         // Boilerplate stuff
-        let replica_version_id = ReplicaVersion::default();
+        let replica_version_id = ReplicaVersion::from_str("123").unwrap();
         let features = SubnetFeatures::default();
 
         let initial_chain_key_configs_to_request = r#"[{
@@ -450,8 +459,9 @@ mod tests {
             idkg_key_rotation_period_ms,
             max_parallel_pre_signature_transcripts_in_creation,
 
-            replica_version_id: Some(replica_version_id.clone()),
+            replica_version_id: replica_version_id.clone(),
             features: Some(features),
+            canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Normal),
             ..empty_propose_to_create_subnet_cmd()
         };
         assert_eq!(
@@ -507,6 +517,20 @@ mod tests {
                 features: SubnetFeaturesPb::from(features),
                 ..minimal_create_payload()
             },
+        );
+    }
+
+    #[test]
+    fn cli_to_payload_conversion_includes_initial_dkg_subnet_id() {
+        let initial_dkg_subnet_id = PrincipalId::from_str("gxevo-lhkam-aaaaa-aaaap-yai").unwrap();
+        let mut cmd = ProposeToCreateSubnetCmd {
+            initial_dkg_subnet_id: Some(initial_dkg_subnet_id),
+            ..empty_propose_to_create_subnet_cmd()
+        };
+        cmd.apply_defaults_for_unset_fields();
+        assert_eq!(
+            cmd.new_payload().initial_dkg_subnet_id,
+            Some(SubnetId::from(initial_dkg_subnet_id))
         );
     }
 

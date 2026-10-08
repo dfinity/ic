@@ -13,7 +13,7 @@ candid = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers.workspace = true
 sns-treasury-manager = { path = "../../treasury_manager" }
-ic-canister-log = "0.2.0"
+ic-canister-log = { workspace = true }
 
 [dev-dependencies]
-candid_parser = "0.1.2"
+candid_parser = { workspace = true }

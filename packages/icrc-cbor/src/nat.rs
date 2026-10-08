@@ -1,5 +1,5 @@
 use candid::Nat;
-use minicbor::data::Tag;
+use minicbor::data::{IanaTag, Tag};
 use minicbor::decode::{Decoder, Error};
 use minicbor::encode::{Encoder, Write};
 use num_bigint::BigUint;
@@ -15,7 +15,7 @@ pub fn decode<Ctx>(d: &mut Decoder<'_>, _ctx: &mut Ctx) -> Result<Nat, Error> {
         Err(e) => return Err(e),
     }
     let tag: Tag = d.tag()?;
-    if tag != Tag::PosBignum {
+    if tag != Tag::from(IanaTag::PosBignum) {
         return Err(Error::message(
             "failed to parse Nat: expected the PosBignum tag",
         ));
@@ -34,7 +34,7 @@ pub fn encode<Ctx, W: Write>(
     }
     match v.0.to_u64() {
         Some(n) => e.u64(n)?.ok(),
-        None => e.tag(Tag::PosBignum)?.bytes(&v.0.to_bytes_be())?.ok(),
+        None => e.tag(IanaTag::PosBignum)?.bytes(&v.0.to_bytes_be())?.ok(),
     }
 }
 

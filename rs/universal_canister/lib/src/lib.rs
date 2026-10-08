@@ -85,7 +85,7 @@ enum CallCycles {
 ///
 /// Payloads for the UC encode `Ops` representing what instructions to
 /// execute.
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub struct PayloadBuilder(Vec<u8>);
 
 impl PayloadBuilder {
@@ -844,6 +844,21 @@ impl PayloadBuilder {
     pub fn wasm_memory_grow(mut self, pages: u32) -> Self {
         self = self.push_int(pages);
         self.0.push(Ops::WasmMemoryGrow as u8);
+        self
+    }
+
+    /// Loops indefinitely — each iteration performing a management-canister
+    /// `canister_status` call for the executing canister — until the canister's
+    /// global data equals `trigger`, and then replies with `reply`.
+    ///
+    /// Because each loop iteration is an inter-canister call, the reply to the
+    /// caller is delayed across message boundaries until some other message
+    /// sets the global data to `trigger` (e.g. via `set_global_data`). This is
+    /// useful for delaying a response until an external condition is met.
+    pub fn loop_until_global_data_set(mut self, trigger: &[u8], reply: &[u8]) -> Self {
+        self = self.push_bytes(trigger);
+        self = self.push_bytes(reply);
+        self.0.push(Ops::LoopUntilGlobalDataSet as u8);
         self
     }
 

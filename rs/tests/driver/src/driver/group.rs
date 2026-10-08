@@ -11,25 +11,29 @@ use crate::driver::{
     task_scheduler::{TaskScheduler, TaskTable},
     test_env_api::{
         FarmBaseUrl, HasFarmUrl, HasGroupSetup, HasTopologySnapshot, IcNodeContainer,
-        ORCHESTRATOR_METRICS_PORT, REPLICA_METRICS_PORT,
+        ORCHESTRATOR_METRICS_PORT, REPLICA_METRICS_PORT, TopologySnapshot,
     },
 };
 use crate::driver::{
     keepalive_task::{KEEPALIVE_TASK_NAME, keepalive_task},
+    log_consoles_task::{LOG_CONSOLES_TASK_NAME, log_consoles_task},
+    logs_stream_task::{LOGS_STREAM_TASK_NAME, journald_node_logs_dir, logs_stream_task},
     metrics_setup_task::{METRICS_SETUP_TASK_NAME, metrics_setup_task},
     metrics_sync_task::{METRICS_SYNC_TASK_NAME, metrics_sync_task},
     report::SystemTestGroupError,
+    serve_files_task::{SERVE_FILES_TASK_NAME, serve_files_task},
     subprocess_task::SubprocessTask,
     task::{SkipTestTask, Task},
     timeout::TimeoutTask,
-    uvms_logs_stream_task::{UVMS_LOGS_STREAM_TASK_NAME, uvms_logs_stream_task},
+    unallowed_log_patterns::{LogSource, check_unallowed_log_patterns},
     vector_logging_task::{VECTOR_LOGGING_TASK_NAME, vector_logging_task},
 };
 use crate::driver::{
     log_events,
     pot_dsl::{PotSetupFn, SysTestFn},
+    prometheus_vm::HasPrometheus,
     test_env::{TestEnv, TestEnvAttribute},
-    test_setup::{GroupSetup, InfraProvider},
+    test_setup::{GroupSetup, SystemTestBackend},
 };
 use anyhow::{Result, bail};
 use chrono::Utc;
@@ -39,18 +43,31 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, debug, info, trace};
 use std::path::PathBuf;
-use std::{collections::BTreeMap, iter::once, time::Duration};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    iter::once,
+    time::Duration,
+};
 use tokio::runtime::{Builder, Handle, Runtime};
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
 pub const MAX_RUNTIME_THREADS: usize = 16;
 
+/// Returns the number of CPUs available to this process, falling back to 1
+/// if it cannot be determined.
+pub fn available_parallelism() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+}
+
 const REPORT_TASK_NAME: &str = "report";
 const SETUP_TASK_NAME: &str = "setup";
 const TEARDOWN_TASK_NAME: &str = "teardown";
 const ASSERT_NO_METRICS_ERRORS_TASK_NAME: &str = "assert_no_metrics_errors";
 const ASSERT_NO_REPLICA_RESTARTS_TASK_NAME: &str = "assert_no_replica_restarts";
+const ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME: &str = "assert_no_unallowed_log_patterns";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 
 #[derive(Debug, Parser)]
@@ -119,14 +136,29 @@ pub struct CliArgs {
     )]
     pub enable_metrics: bool,
 
-    #[clap(long = "no-logs", help = "If set, the vector vm will not be spawned.")]
+    #[clap(
+        long = "no-logs",
+        help = "If set, the vector vm will not be spawned. On Farm this also disables the `assert_no_unallowed_log_patterns` teardown, which queries the logs that vector ships to ElasticSearch."
+    )]
     pub no_logs: bool,
 
     #[clap(
         long = "exclude-logs",
-        help = "The list of regexes which will be skipped from the streaming."
+        help = "The list of regexes which will be skipped from the streaming. Note that on the local backend an IC node excluded from streaming is not scanned by the `assert_no_unallowed_log_patterns` teardown either."
     )]
     pub exclude_logs: Vec<Regex>,
+
+    #[clap(
+        long = "stream-ic-node-logs",
+        help = "If set, the journald logs of all IC nodes are streamed to the test log and persisted under `<working-dir>/journald_logs/nodes/<node_id>.jsonl`. Used by the local backend which has no Vector VM to ship logs to ElasticSearch; there the `assert_no_unallowed_log_patterns` teardown scans those files instead."
+    )]
+    pub stream_ic_node_logs: bool,
+
+    #[clap(
+        long = "stream-console-logs",
+        help = "If set, the serial console logs of all VMs are streamed to the test log. Used by the local backend which captures each VM's console to a file on disk."
+    )]
+    pub stream_console_logs: bool,
 
     #[clap(long, short, help = "Reduce terminal logging to mostly test output.")]
     pub quiet: bool,
@@ -191,16 +223,30 @@ impl TestEnvAttribute for SetupResult {
     }
 }
 
+/// The time at which the test group started, persisted during setup so that teardown tasks
+/// (which run in separate child processes where `Utc::now()` would otherwise reflect only
+/// the teardown process start) can query log backends for the full test duration.
+#[derive(Deserialize, Serialize)]
+pub(crate) struct GroupStartTime(pub(crate) chrono::DateTime<Utc>);
+
+impl TestEnvAttribute for GroupStartTime {
+    fn attribute_name() -> String {
+        String::from("group_start_time")
+    }
+}
+
 pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
     matches!(
         task_id,
         TaskId::Test(task_name)
         if task_name.ne(REPORT_TASK_NAME)
            && task_name.ne(KEEPALIVE_TASK_NAME)
-           && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME)
+           && task_name.ne(LOGS_STREAM_TASK_NAME)
+           && task_name.ne(LOG_CONSOLES_TASK_NAME)
            && task_name.ne(METRICS_SETUP_TASK_NAME)
            && task_name.ne(METRICS_SYNC_TASK_NAME)
            && task_name.ne(VECTOR_LOGGING_TASK_NAME)
+           && task_name.ne(SERVE_FILES_TASK_NAME)
            && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX)
            && !task_name.starts_with("dummy(")
     )
@@ -418,6 +464,94 @@ impl SystemTestSubGroup {
     }
 }
 
+// Replica metrics to check by default. Including a prefix is supported and will match on all
+// metrics with that prefix. For that reason, keep the list prefix-free.
+fn default_replica_metrics() -> BTreeMap<&'static str, u64> {
+    BTreeMap::from([
+        ("critical_errors", 0),
+        ("consensus_invalidated_artifacts", 0),
+        ("dkg_invalidated_artifacts", 0),
+        ("idkg_invalidated_artifacts", 0),
+        ("certification_invalidated_artifacts", 0),
+        ("canister_http_invalidated_artifacts", 0),
+        ("mr_canister_http_accounting_errors_total", 0),
+        ("canister_http_pool_manager_errors", 0),
+    ])
+}
+
+// Orchestrator metrics to check by default. Including a prefix is supported and will match on all
+// metrics with that prefix. For that reason, keep the list prefix-free.
+fn default_orchestrator_metrics() -> BTreeMap<&'static str, u64> {
+    BTreeMap::from([
+        ("orchestrator_cup_deserialization_failed_total", 0),
+        ("orchestrator_state_removal_failed_total", 0),
+        ("orchestrator_tasks_failed_total", 0),
+        ("orchestrator_processes_start_attempts_total", 1),
+    ])
+}
+
+fn check_metrics_for_nodes(
+    topology: &TopologySnapshot,
+    replica_metrics: &BTreeMap<&str, u64>,
+    orchestrator_metrics: &BTreeMap<&str, u64>,
+) {
+    for node in topology.subnets().flat_map(|subnet| subnet.nodes()) {
+        node.assert_metrics_values(replica_metrics, REPLICA_METRICS_PORT);
+        node.assert_metrics_values(orchestrator_metrics, ORCHESTRATOR_METRICS_PORT);
+    }
+}
+
+/// Checks replica and orchestrator error metrics on all subnet nodes, using the
+/// same thresholds as the default `SystemTestGroup` teardown. Call this before
+/// replica restart so that errors accumulated in the current process are not lost.
+pub fn assert_no_critical_errors(env: &TestEnv) {
+    check_metrics_for_nodes(
+        &env.topology_snapshot(),
+        &default_replica_metrics(),
+        &default_orchestrator_metrics(),
+    );
+}
+
+/// Returns the teardowns that download the Prometheus data directory to the local
+/// test directory when the `DOWNLOAD_P8S_DATA` environment variable is set to `true`
+/// or `1`, and an empty vector otherwise.
+///
+/// Before downloading, the teardown waits for `DOWNLOAD_P8S_DATA_COOLDOWN_SECS`
+/// seconds (default `0`) such that Prometheus has time to scrape the final metrics.
+fn download_prometheus_data_teardowns() -> Vec<Box<dyn PotSetupFn>> {
+    let should_download = std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
+    if !should_download {
+        return Vec::new();
+    }
+    let teardown = |env: TestEnv| {
+        let cooldown_secs = std::env::var("DOWNLOAD_P8S_DATA_COOLDOWN_SECS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+        if cooldown_secs > 0 {
+            info!(
+                env.logger(),
+                "Waiting {cooldown_secs} seconds before downloading the prometheus data \
+                such that prometheus has time to scrape the final metrics ..."
+            );
+            std::thread::sleep(Duration::from_secs(cooldown_secs));
+        }
+        if env.download_prometheus_data_dir_if_exists() {
+            env.emit_report(String::from(
+                "Downloaded prometheus data to 'prometheus-data-dir.tar.zst' in the test output \
+                directory. You can now use `rs/tests/run-p8s.sh` script to play with the metrics",
+            ));
+        } else {
+            env.emit_report(String::from(
+                "Not downloading the prometheus data because no PrometheusVm was deployed. \
+                Enable metrics for the test (e.g. `enable_metrics = True` on the Bazel target) \
+                if you want the prometheus data to be downloaded.",
+            ));
+        }
+    };
+    vec![Box::new(teardown)]
+}
+
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
     teardowns: Vec<Box<dyn PotSetupFn>>,
@@ -427,6 +561,12 @@ pub struct SystemTestGroup {
     with_farm: bool,
     replica_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
     orchestrator_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
+    /// Map from an unallowed log phrase to a set of exclusion phrases. A log line counts
+    /// as a match if its (Vector-normalized) `MESSAGE` contains the pattern and does not
+    /// contain any of the associated exclusions, comparing ASCII case-insensitively.
+    /// See `crate::driver::unallowed_log_patterns` for how the IC node logs are obtained
+    /// on each backend.
+    unallowed_log_patterns: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl Default for SystemTestGroup {
@@ -460,24 +600,23 @@ impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
             setup: Default::default(),
-            teardowns: Default::default(),
+            teardowns: download_prometheus_data_teardowns(),
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
             with_farm: true,
-            replica_metrics_to_check: BTreeMap::from([
-                ("critical_errors", 0),
-                ("consensus_invalidated_artifacts", 0),
-                ("dkg_invalidated_artifacts", 0),
-                ("idkg_invalidated_artifacts", 0),
-                ("certification_invalidated_artifacts", 0),
-                ("canister_http_invalidated_artifacts", 0),
-            ]),
-            orchestrator_metrics_to_check: BTreeMap::from([
-                ("orchestrator_cup_deserialization_failed_total", 0),
-                ("orchestrator_state_removal_failed_total", 0),
-                ("orchestrator_tasks_failed_total", 0),
-                ("orchestrator_replica_process_start_attempts_total", 1),
+            replica_metrics_to_check: default_replica_metrics(),
+            orchestrator_metrics_to_check: default_orchestrator_metrics(),
+            unallowed_log_patterns: BTreeMap::from([
+                ("This is a bug".to_string(), BTreeSet::new()),
+                (
+                    "panicked".to_string(),
+                    BTreeSet::from([
+                        // Canisters are expected to panic:
+                        "canister".to_string(),
+                        "rs/canister_sandbox/src/replica_controller/allowed_panics.rs".to_string(),
+                    ]),
+                ),
             ]),
         }
     }
@@ -528,6 +667,52 @@ impl SystemTestGroup {
         self.replica_metrics_to_check = BTreeMap::new();
         self.orchestrator_metrics_to_check = BTreeMap::new();
 
+        self
+    }
+
+    /// Add a log-message phrase pattern that must not appear in any IC node log line
+    /// collected during the test. After the tests, the IC node logs are checked and the
+    /// test fails if at least one log line contains the pattern (ASCII case-insensitively,
+    /// plain phrase, not a regex): on Farm by querying ElasticSearch (`match_phrase` on the
+    /// `MESSAGE` field as a pre-filter), on the local backend by scanning the journald
+    /// records persisted by `logs_stream_task`. See `crate::driver::unallowed_log_patterns`.
+    ///
+    /// If the pattern was already registered (possibly with exclusions), its existing
+    /// exclusions are preserved.
+    pub fn add_unallowed_log_pattern(mut self, pattern: impl Into<String>) -> Self {
+        self.unallowed_log_patterns
+            .entry(pattern.into())
+            .or_default();
+        self
+    }
+
+    /// Like `add_unallowed_log_pattern` but exempts log lines whose `MESSAGE` also contains
+    /// `exclusion` from triggering a failure. Multiple calls with the same `pattern`
+    /// accumulate exclusions.
+    pub fn add_unallowed_log_pattern_except(
+        mut self,
+        pattern: impl Into<String>,
+        exclusion: impl Into<String>,
+    ) -> Self {
+        self.unallowed_log_patterns
+            .entry(pattern.into())
+            .or_default()
+            .insert(exclusion.into());
+        self
+    }
+
+    /// Remove a single unallowed log pattern previously registered (either by default in
+    /// `SystemTestGroup::new` or via `add_unallowed_log_pattern` /
+    /// `add_unallowed_log_pattern_except`).
+    pub fn remove_unallowed_log_pattern(mut self, pattern: &str) -> Self {
+        self.unallowed_log_patterns.remove(pattern);
+        self
+    }
+
+    /// Remove all unallowed log patterns, disabling the log-pattern check entirely for
+    /// this group (on both backends).
+    pub fn remove_all_unallowed_log_patterns(mut self) -> Self {
+        self.unallowed_log_patterns = BTreeMap::new();
         self
     }
 
@@ -633,19 +818,24 @@ impl SystemTestGroup {
             timeout_per_test: self.effective_timeout_per_test(),
         };
 
-        let uvms_logs_stream_task_id = TaskId::Test(String::from(UVMS_LOGS_STREAM_TASK_NAME));
-        let uvms_logs_stream_task = Box::from(subproc(
-            uvms_logs_stream_task_id,
+        let logs_stream_task_id = TaskId::Test(String::from(LOGS_STREAM_TASK_NAME));
+        let logs_stream_task = Box::from(subproc(
+            logs_stream_task_id,
             {
                 let group_ctx = group_ctx.clone();
-                move || uvms_logs_stream_task(group_ctx)
+                move || logs_stream_task(group_ctx)
             },
             &mut compose_ctx,
             false,
         )) as Box<dyn Task>;
 
+        // The Local backend has no TTL: its VMs and network live for the lifetime of
+        // the test process, so the keepalive task (which refreshes the Farm group TTL)
+        // is not needed there.
+        let use_local_backend = SystemTestBackend::from_env() == SystemTestBackend::Local;
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
-        let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive {
+        let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive && !use_local_backend
+        {
             Box::from(subproc(
                 keepalive_task_id.clone(),
                 {
@@ -657,6 +847,45 @@ impl SystemTestGroup {
             )) as Box<dyn Task>
         } else {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
+        };
+
+        // Under the Local backend there is no external network, so IC nodes
+        // cannot download `icos_images` (e.g. GuestOS/HostOS update images used
+        // by upgrade tests) from Farm's content-addressed HTTP store. Spawn a
+        // small per-group file server that serves those images from local disk;
+        // the `..._url` helpers in `ic_images` point nodes at it. On Farm this
+        // is a no-op (the images are served by Farm).
+        let serve_files_task_id = TaskId::Test(String::from(SERVE_FILES_TASK_NAME));
+        let serve_files_task = if use_local_backend {
+            Box::from(subproc(
+                serve_files_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || serve_files_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            )) as Box<dyn Task>
+        } else {
+            Box::from(EmptyTask::new(serve_files_task_id)) as Box<dyn Task>
+        };
+
+        // Stream each VM's serial console (captured to a file on disk by the
+        // Local backend) to the test log. Opt-in via `--stream-console-logs`,
+        // which only the Local backend sets; on Farm this is an `EmptyTask`.
+        let log_consoles_task_id = TaskId::Test(String::from(LOG_CONSOLES_TASK_NAME));
+        let log_consoles_task = if group_ctx.stream_console_logs {
+            Box::from(subproc(
+                log_consoles_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || log_consoles_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            )) as Box<dyn Task>
+        } else {
+            Box::from(EmptyTask::new(log_consoles_task_id)) as Box<dyn Task>
         };
 
         // The metrics_sync_task periodically syncs the targets in the current IC topology with Prometheus.
@@ -715,6 +944,10 @@ impl SystemTestGroup {
                     // Persist the cli arguments in case the test needs them
                     cli_arguments.write_attribute(&env);
 
+                    // Persist the group start time so teardown tasks (which run in separate
+                    // child processes) can use it when querying log/metric backends.
+                    GroupStartTime(start_time).write_attribute(&env);
+
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
                 }
@@ -739,16 +972,11 @@ impl SystemTestGroup {
                         }
                     };
 
-                    for node in topology.subnets().flat_map(|subnet| subnet.nodes()) {
-                        node.assert_metrics_values(
-                            &self.replica_metrics_to_check,
-                            REPLICA_METRICS_PORT,
-                        );
-                        node.assert_metrics_values(
-                            &self.orchestrator_metrics_to_check,
-                            ORCHESTRATOR_METRICS_PORT,
-                        );
-                    }
+                    check_metrics_for_nodes(
+                        &topology,
+                        &self.replica_metrics_to_check,
+                        &self.orchestrator_metrics_to_check,
+                    );
                 };
                 Some((
                     ASSERT_NO_METRICS_ERRORS_TASK_NAME.to_string(),
@@ -758,12 +986,48 @@ impl SystemTestGroup {
                 None
             };
 
+        // Where the `assert_no_unallowed_log_patterns` teardown reads the IC node
+        // logs from: on Farm, Vector ships them to ElasticSearch unless `--no-logs`
+        // is set; on the Local backend (no network, no Vector VM) `logs_stream_task`
+        // persists them to files, but only with `--stream-ic-node-logs`. Without a
+        // source there is nothing to check, so no task is scheduled.
+        let unallowed_log_source: Option<LogSource> = if !self.with_farm
+            || self.unallowed_log_patterns.is_empty()
+        {
+            None
+        } else if use_local_backend && group_ctx.stream_ic_node_logs {
+            Some(LogSource::JournaldLogFiles {
+                nodes_dir: journald_node_logs_dir(&group_ctx.group_dir),
+            })
+        } else if !use_local_backend && group_ctx.logs_enabled {
+            Some(LogSource::ElasticSearch)
+        } else {
+            debug!(
+                logger,
+                "Not scheduling {ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME}: no IC node log source \
+                     (local backend without --stream-ic-node-logs, or farm with --no-logs)"
+            );
+            None
+        };
+        let assert_no_unallowed_log_patterns_fn: Option<(String, Box<dyn PotSetupFn>)> =
+            unallowed_log_source.map(|source| {
+                let unallowed_log_patterns = self.unallowed_log_patterns.clone();
+                let teardown_fn = move |env: TestEnv| {
+                    check_unallowed_log_patterns(&env, &source, &unallowed_log_patterns);
+                };
+                (
+                    ASSERT_NO_UNALLOWED_LOG_PATTERNS_TASK_NAME.to_string(),
+                    Box::new(teardown_fn) as Box<dyn PotSetupFn>,
+                )
+            });
+
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
             .teardowns
             .into_iter()
             .enumerate()
             .map(|(i, teardown)| (format!("{TEARDOWN_TASK_NAME}_{i}"), teardown))
             .chain(assert_no_metric_errors_fn)
+            .chain(assert_no_unallowed_log_patterns_fn)
             .map(|(teardown_name, teardown_fn)| {
                 let logger = logger.clone();
                 let group_ctx = group_ctx.clone();
@@ -844,17 +1108,31 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
-            let uvms_stream_plan = compose(
-                Some(uvms_logs_stream_task),
+            let serve_files_plan = compose(
+                Some(serve_files_task),
                 EvalOrder::Sequential,
                 vec![keepalive_plan],
+                &mut compose_ctx,
+            );
+
+            let logs_stream_plan = compose(
+                Some(logs_stream_task),
+                EvalOrder::Sequential,
+                vec![serve_files_plan],
+                &mut compose_ctx,
+            );
+
+            let log_consoles_plan = compose(
+                Some(log_consoles_task),
+                EvalOrder::Sequential,
+                vec![logs_stream_plan],
                 &mut compose_ctx,
             );
 
             let logs_plan = compose(
                 Some(vector_logging_task),
                 EvalOrder::Sequential,
-                vec![uvms_stream_plan],
+                vec![log_consoles_plan],
                 &mut compose_ctx,
             );
 
@@ -895,17 +1173,31 @@ impl SystemTestGroup {
             )),
         };
 
-        let uvms_stream_plan = compose(
-            Some(uvms_logs_stream_task),
+        let serve_files_plan = compose(
+            Some(serve_files_task),
             EvalOrder::Sequential,
             vec![keepalive_plan],
+            &mut compose_ctx,
+        );
+
+        let logs_stream_plan = compose(
+            Some(logs_stream_task),
+            EvalOrder::Sequential,
+            vec![serve_files_plan],
+            &mut compose_ctx,
+        );
+
+        let log_consoles_plan = compose(
+            Some(log_consoles_task),
+            EvalOrder::Sequential,
+            vec![logs_stream_plan],
             &mut compose_ctx,
         );
 
         let logs_plan = compose(
             Some(vector_logging_task),
             EvalOrder::Sequential,
-            vec![uvms_stream_plan],
+            vec![log_consoles_plan],
             &mut compose_ctx,
         );
 
@@ -958,6 +1250,19 @@ impl SystemTestGroup {
         let args = CliArgs::parse().validate()?;
         let is_parent_process = matches!(args.action, SystemTestsSubcommand::Run);
 
+        // Under the Local backend, move this (unprivileged) driver process into a
+        // private user + network namespace it owns, so it can administer its
+        // networking (bridge, TAPs, dnsmasq) with no host capabilities. This MUST
+        // happen here — before `GroupContext::new` builds the async (threaded)
+        // logger, and before the tokio runtime and any task subprocess — because
+        // `unshare(CLONE_NEWUSER)` requires a single-threaded process, and so the
+        // whole process tree (task subprocesses, QEMU, dnsmasq) inherits the
+        // namespaces. Only the parent (`Run`) process sets them up; subprocesses
+        // inherit them across fork/exec.
+        if is_parent_process && SystemTestBackend::from_env() == SystemTestBackend::Local {
+            crate::driver::local_backend::LocalBackend::ensure_administrable_netns()?;
+        }
+
         let group_ctx = GroupContext::new(
             args.group_dir.path.clone(),
             args.subproc_id(),
@@ -968,6 +1273,8 @@ impl SystemTestGroup {
             args.enable_metrics,
             !args.no_logs,
             args.exclude_logs,
+            args.stream_ic_node_logs,
+            args.stream_console_logs,
             args.quiet,
         )?;
 
@@ -979,7 +1286,8 @@ impl SystemTestGroup {
             if let Some(required_args) = args.required_host_features {
                 required_args.write_attribute(&root_env);
             }
-            InfraProvider::Farm.write_attribute(&root_env);
+            let backend = SystemTestBackend::from_env();
+            backend.write_attribute(&root_env);
             if with_farm {
                 root_env.create_group_setup(group_ctx.group_base_name.clone(), args.no_group_ttl);
             }
@@ -989,7 +1297,7 @@ impl SystemTestGroup {
         // create the runtime that lives until this variable is dropped.
         // Note: having only a runtime handle does not guarantee that the runtime is alive.
         let runtime: Runtime = {
-            let cpus = num_cpus::get();
+            let cpus = available_parallelism();
             info!(group_ctx.log(), "Number of CPUs {}", cpus);
             let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
             info!(
@@ -1073,6 +1381,18 @@ impl SystemTestGroup {
                     let event: log_events::LogEvent<_> = report.clone().into();
                     // Emit a json log event, to be consumed by log post-processing tools.
                     event.emit_log(group_ctx.log());
+                    // Write the JUnit XML report Bazel expects at $XML_OUTPUT_FILE in case the latter is set..
+                    if let Some(xml_output_file) = std::env::var_os("XML_OUTPUT_FILE") {
+                        let path = PathBuf::from(xml_output_file);
+                        if let Some(parent) = path.parent() {
+                            std::fs::create_dir_all(parent).unwrap_or_else(|_| {
+                                panic!("Failed to create the directory of {}", path.display())
+                            });
+                        }
+                        std::fs::write(&path, report.to_junit_xml()).unwrap_or_else(|_| {
+                            panic!("Failed to write the JUnit XML report to {}", path.display())
+                        });
+                    }
                     info!(group_ctx.log(), "Report:\n{}", report.pretty_print());
                 }
 
@@ -1113,13 +1433,30 @@ impl SystemTestGroup {
     }
 
     fn delete_farm_group(ctx: GroupContext) {
-        info!(ctx.log(), "Deleting farm group.");
         let env = ensure_setup_env(ctx);
         let group_setup = GroupSetup::read_attribute(&env);
-        let farm_url = env.get_farm_url().unwrap();
-        let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.infra_group_name;
-        farm.delete_group(&group_name)
-            .expect("failed to delete the farm group");
+        match SystemTestBackend::read_attribute(&env) {
+            SystemTestBackend::Farm => {
+                info!(env.logger(), "Deleting farm group.");
+                let farm_url = env.get_farm_url().unwrap();
+                let farm = Farm::new(farm_url, env.logger());
+                farm.delete_group(&group_name)
+                    .expect("failed to delete the farm group");
+            }
+            SystemTestBackend::Local => {
+                info!(env.logger(), "Deleting local group.");
+                match crate::driver::local_backend::LocalBackend::from_test_env(&env) {
+                    Ok(backend) => {
+                        if let Err(e) = backend.delete_group(&group_name) {
+                            slog::warn!(env.logger(), "LocalBackend::delete_group failed: {e:?}");
+                        }
+                    }
+                    Err(e) => {
+                        slog::warn!(env.logger(), "LocalBackend::from_test_env failed: {e:?}");
+                    }
+                }
+            }
+        }
     }
 }

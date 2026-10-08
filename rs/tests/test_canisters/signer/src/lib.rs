@@ -1,5 +1,5 @@
 use candid::CandidType;
-use ic_cdk::management_canister::{EcdsaKeyId, SchnorrAux, SchnorrKeyId, VetKDKeyId};
+use ic_cdk_management_canister::{EcdsaKeyId, SchnorrAux, SchnorrKeyId, VetKDKeyId};
 use serde::Deserialize;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]

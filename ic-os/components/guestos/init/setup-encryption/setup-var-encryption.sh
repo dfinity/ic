@@ -9,9 +9,9 @@ function transfer_log_state() {
     MACHINE_ID=$(cat /etc/machine-id || echo invalid)
     echo "Successfully mounted old /var partition, copying contents for machine id: ${MACHINE_ID}"
 
-    # First, copy actual journal files.
-    mkdir -p /mnt/var_new/log/journal
-    if cp -vr /mnt/var_old/log/journal/"${MACHINE_ID}" /mnt/var_new/log/journal/"${MACHINE_ID}"; then
+    # First, copy latest journal files.
+    mkdir -p /mnt/var_new/log/journal/"${MACHINE_ID}"
+    if cp -pv $(ls -t /mnt/var_old/log/journal/"${MACHINE_ID}"/*.journal | head -3) /mnt/var_new/log/journal/"${MACHINE_ID}"/; then
         chown -R root.systemd-journal /mnt/var_new/log/journal/
         chcon -R system_u:object_r:systemd_journal_t:s0 /mnt/var_new/log/journal/"${MACHINE_ID}"
         ls -lZ /mnt/var_new/log/journal/"${MACHINE_ID}"
@@ -39,7 +39,8 @@ else
     /opt/ic/bin/guest_disk crypt-format var "$VAR_PARTITION"
     /opt/ic/bin/guest_disk crypt-open var "$VAR_PARTITION"
     echo "Populating /var filesystem in ${VAR_PARTITION} on first boot."
-    mkfs.ext4 -F /dev/mapper/var_crypt -d /var
+    # Prevent udev from processing the device while we format it.
+    udevadm lock --device=/dev/mapper/var_crypt mkfs.ext4 -F /dev/mapper/var_crypt -d /var
     # Fix root inode (mkfs fails to set correct security context).
     echo "ea_set / security.selinux system_u:object_r:var_t:s0\\000" | debugfs -w /dev/mapper/var_crypt
 
@@ -80,4 +81,7 @@ else
         # and continue operating.
         cryptsetup luksClose old_var_crypt || echo "Failed to close old /var crypto partition"
     fi
+
+    # Explicitly trigger udev now that the device should be ready.
+    udevadm trigger --settle --action=change /dev/mapper/var_crypt
 fi

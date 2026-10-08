@@ -235,6 +235,22 @@ fn test_upgrade() {
 // }
 
 #[test]
+fn test_change_trigger_threshold_before_archive_spawned() {
+    ic_ledger_suite_state_machine_tests::test_change_trigger_threshold_before_archive_spawned(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_get_all_blocks_with_archiving_disabled() {
+    ic_ledger_suite_state_machine_tests::test_get_all_blocks_with_archiving_disabled::<_, Tokens>(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_upgrade_archive_options() {
     ic_ledger_suite_state_machine_tests::test_upgrade_archive_options(
         ledger_wasm(),
@@ -302,10 +318,17 @@ fn test_get_blocks() {
     ic_ledger_suite_state_machine_tests::test_get_blocks(ledger_wasm(), encode_init_args);
 }
 
-// Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
+// Generate random blocks and check that their CBOR encoding complies with the
+// ledger block CBOR schema.
 #[test]
 fn block_encoding_agrees_with_the_schema() {
     ic_ledger_suite_state_machine_tests::block_encoding_agrees_with_the_schema::<Tokens>();
+}
+
+// Check that the ledger block CBOR schema validator rejects malformed blocks.
+#[test]
+fn block_encoding_schema_catches_malformed_blocks() {
+    ic_ledger_suite_state_machine_tests::block_encoding_schema_catches_malformed_blocks();
 }
 
 // Generate random blocks and check that their value encoding complies with the ICRC-3 spec.
@@ -460,6 +483,23 @@ fn test_transfer_from_smoke() {
 #[test]
 fn test_transfer_from_self() {
     ic_ledger_suite_state_machine_tests::test_transfer_from_self(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_transfer_from_self_subaccount() {
+    ic_ledger_suite_state_machine_tests::test_transfer_from_self_subaccount(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_transfer_from_self_subaccount_burn() {
+    ic_ledger_suite_state_machine_tests::test_transfer_from_self_subaccount_burn(
+        ledger_wasm(),
+        encode_init_args,
+    )
+    .expect("an ICRC ledger accepts a self-spend burn, needing no allowance");
 }
 
 #[test]
@@ -869,7 +909,10 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
             max_transactions_per_response: None,
         },
         max_memo_length: None,
-        feature_flags: Some(FeatureFlags { icrc2: false }),
+        feature_flags: Some(FeatureFlags {
+            icrc2: false,
+            icrc152: false
+        }),
         index_principal: None,
     }))
     .unwrap();
@@ -1229,7 +1272,7 @@ fn test_icrc3_get_blocks() {
     for (local_index, (actual_block, expected_block)) in actual_res
         .blocks
         .into_iter()
-        .zip(expected_res.blocks.into_iter())
+        .zip(expected_res.blocks)
         .enumerate()
     {
         check_old_vs_icrc3_blocks(
@@ -1282,7 +1325,7 @@ fn test_icrc3_get_blocks() {
     for (block_index, (actual_block, expected_block)) in actual_archived_blocks
         .blocks
         .into_iter()
-        .zip(expected_archived_blocks.blocks.into_iter())
+        .zip(expected_archived_blocks.blocks)
         .enumerate()
     {
         check_old_vs_icrc3_blocks(block_index, expected_block.clone(), actual_block.clone());
@@ -1344,7 +1387,7 @@ fn test_icrc3_get_blocks() {
             expected_block_count,
             all_blocks.len(),
             expected_blocks_by_id.len(),
-            &ranges
+            ranges
         );
         for (pos, BlockWithId { id, block }) in all_blocks.into_iter().enumerate() {
             let expected_block = match expected_blocks_by_id.get(&id) {
@@ -1904,7 +1947,10 @@ mod verify_written_blocks {
                     max_transactions_per_response: None,
                 },
                 max_memo_length: None,
-                feature_flags: Some(FeatureFlags { icrc2: true }),
+                feature_flags: Some(FeatureFlags {
+                    icrc2: true,
+                    icrc152: false,
+                }),
                 index_principal: None,
             });
 
@@ -2087,4 +2133,55 @@ mod verify_written_blocks {
             self.ledger
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// ICRC-152 tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_icrc152_feature_flag_disabled() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_feature_flag_disabled(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_unauthorized() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_unauthorized(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_icrc152_validation() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_validation(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_icrc152_mint_and_burn() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_mint_and_burn(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_deduplication() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_deduplication(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_supported_standards() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_supported_standards(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc152_total_volume() {
+    ic_ledger_suite_state_machine_tests::test_icrc152_total_volume(ledger_wasm(), encode_init_args);
 }

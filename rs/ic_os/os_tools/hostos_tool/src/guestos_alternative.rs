@@ -21,9 +21,36 @@ pub fn show_guestos_alternative() -> Result<()> {
     show_guestos_alternative_impl(&GptPartitionProvider::new(GUESTOS_DEVICE.into())?)
 }
 
+/// Returns the current GuestOS boot alternative.
+pub fn get_current_guestos_alternative() -> Result<grub::BootAlternative> {
+    get_current_guestos_alternative_impl(&GptPartitionProvider::new(GUESTOS_DEVICE.into())?)
+}
+
+fn get_current_guestos_alternative_impl(
+    partition_provider: &dyn ic_device::mount::PartitionProvider,
+) -> Result<grub::BootAlternative> {
+    let grub_partition = partition_provider
+        .mount_partition(
+            PartitionSelector::ByUuid(GRUB_PARTITION_UUID),
+            MountOptions {
+                file_system: FileSystem::Vfat,
+                read_only: true, // GuestOS may be running, we must mount readonly
+            },
+        )
+        .context("Could not mount grub partition")?;
+    let grubenv_path = grub_partition.mount_point().join("grubenv");
+
+    let grubenv_file = std::fs::File::open(&grubenv_path).context("Failed to open grubenv")?;
+    let grubenv = grub::GrubEnv::read_from(grubenv_file).context("Failed to read grubenv")?;
+    grubenv
+        .boot_alternative
+        .context("Invalid/missing boot alternative in grubenv")
+}
+
 fn show_guestos_alternative_impl(
     partition_provider: &dyn ic_device::mount::PartitionProvider,
 ) -> Result<()> {
+    let current_boot_alternative = get_current_guestos_alternative_impl(partition_provider);
     let grub_partition = partition_provider
         .mount_partition(
             PartitionSelector::ByUuid(GRUB_PARTITION_UUID),
@@ -39,9 +66,7 @@ fn show_guestos_alternative_impl(
     let grubenv = grub::GrubEnv::read_from(grubenv_file).context("Failed to read grubenv")?;
     println!(
         "GuestOS Boot alternative: {}",
-        grubenv
-            .boot_alternative
-            .map_or_else(|e| e.to_string(), |v| v.to_string())
+        current_boot_alternative.map_or_else(|e| e.to_string(), |v| v.to_string())
     );
     println!(
         "GuestOS Boot cycle: {}",
@@ -121,18 +146,18 @@ fn swap_guestos_alternative_impl(
     command_runner
         .status(Command::new("systemctl").args([
             "stop",
-            "guestos.service",
+            "guestos@0.service",
             "upgrade-guestos.service",
         ]))
-        .context("Failed to stop guestos.service and upgrade-guestos.service")?;
+        .context("Failed to stop guestos@0.service and upgrade-guestos.service")?;
 
     info!("Swapping GuestOS boot alternative...");
     let target_boot_alternative = update_grubenv(partition_provider, target_boot_alternative);
 
     info!("Restarting GuestOS...");
     command_runner
-        .status(Command::new("systemctl").args(["start", "guestos.service"]))
-        .context("Failed to restart guestos.service after swapping GuestOS boot alternative")?;
+        .status(Command::new("systemctl").args(["start", "guestos@0.service"]))
+        .context("Failed to restart guestos@0.service after swapping GuestOS boot alternative")?;
 
     match target_boot_alternative {
         Ok(alternative) => {
@@ -191,7 +216,7 @@ mod tests {
                 .expect_status()
                 .withf(|cmd| {
                     format!("{cmd:?}")
-                        == r#""systemctl" "stop" "guestos.service" "upgrade-guestos.service""#
+                        == r#""systemctl" "stop" "guestos@0.service" "upgrade-guestos.service""#
                 })
                 .once()
                 .return_once(|_| Ok(std::process::ExitStatus::default()));
@@ -199,7 +224,7 @@ mod tests {
         if expect_start_guestos {
             mock_runner
                 .expect_status()
-                .withf(|cmd| format!("{cmd:?}") == r#""systemctl" "start" "guestos.service""#)
+                .withf(|cmd| format!("{cmd:?}") == r#""systemctl" "start" "guestos@0.service""#)
                 .once()
                 .return_once(|_| Ok(std::process::ExitStatus::default()));
         }
@@ -214,6 +239,15 @@ mod tests {
 
         let result = show_guestos_alternative_impl(&provider);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_current_guestos_alternative_impl() {
+        let (provider, _temp_dir) =
+            create_mock_partition_provider(Some(grub::BootAlternative::B), Some(BootCycle::Stable));
+
+        let result = get_current_guestos_alternative_impl(&provider);
+        assert_eq!(result.unwrap(), grub::BootAlternative::B);
     }
 
     #[test]

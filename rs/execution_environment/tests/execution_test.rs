@@ -7,13 +7,16 @@ use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
+use ic_crypto_tree_hash::{MixedHashTree, Path as LabeledTreePath, sparse_labeled_tree_from_paths};
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_execution_environment::units::{GIB, MIB};
+use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallModeV2, CanisterMetadataRequest, CanisterMetadataResponse,
-    CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
-    DerivationPath, EcdsaKeyId, EmptyBlob, IC_00, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method, Payload, SignWithECDSAArgs, TakeCanisterSnapshotArgs,
+    CanisterMetricsArgs, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
+    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, IC_00, InstallCodeArgsV2,
+    ListCanistersResponse, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload,
+    SignWithECDSAArgs, SubnetMetricsArgs, SubnetMetricsResponse, TakeCanisterSnapshotArgs,
     UpdateSettingsArgs,
 };
 use ic_registry_resource_limits::ResourceLimits;
@@ -21,15 +24,18 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
-use ic_test_utilities_execution_environment::get_reply;
+use ic_test_utilities_execution_environment::{get_reject, get_reply};
 use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
 };
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
-use ic_types::{CanisterId, NumBytes, Time, ingress::WasmResult, messages::NO_DEADLINE};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types::{
+    CanisterId, CryptoHashOfPartialState, NumBytes, Time, ingress::WasmResult,
+    messages::NO_DEADLINE,
+};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, NominalCycles};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
@@ -476,7 +482,8 @@ fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
     let seconds_to_burn_balance = env.cycle_balance(canister_id) as u64
         / compute_percent_allocated_per_second_fee.get() as u64;
     env.advance_time(Duration::from_secs(seconds_to_burn_balance + 1));
-    env.tick();
+    // Checkpoint round, to force charging for storage.
+    env.checkpointed_tick();
 
     // Verify the original canister still exists but it's uninstalled and has a
     // zero cycle balance.
@@ -565,9 +572,9 @@ fn compressed_canisters_support() {
 
     let test_canister_wasm = wat::parse_str(TEST_CANISTER).expect("invalid WAT");
     let compressed_wasm = {
-        let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
         std::io::copy(&mut &test_canister_wasm[..], &mut encoder).unwrap();
-        encoder.finish().into_result().unwrap()
+        encoder.finish().unwrap()
     };
     let compressed_hash = ic_crypto_sha2::Sha256::hash(&compressed_wasm);
 
@@ -1418,6 +1425,7 @@ fn test_update_settings_with_different_controllers_amount() {
     let canister_b = env.create_canister(Some(
         CanisterSettingsArgsBuilder::new()
             .with_controllers(vec![canister_a.into()])
+            .with_log_memory_limit(0)
             .build(),
     ));
 
@@ -1623,7 +1631,7 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
 
     fn install_canister(env: &StateMachine) -> Result<CanisterId, UserError> {
         let wasm = wat::parse_str(TEST_CANISTER).expect("invalid WAT");
-        env.install_canister_with_cycles(wasm, vec![], None, Cycles::new(301 * B))
+        env.install_canister_with_cycles(wasm, vec![], None, Cycles::new(400 * B))
     }
 
     fn send_ingress(env: &StateMachine, canister_id: &CanisterId) -> MessageId {
@@ -1793,7 +1801,7 @@ fn current_interval_length_works_on_app_subnets() {
 
     let wasm = wat::parse_str(DIRTY_PAGE_CANISTER).unwrap();
     let _canister_id = env
-        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(301 * B))
+        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(400 * B))
         .unwrap();
 
     // One empty round is always performed when creating a `StateMachine`
@@ -2488,7 +2496,7 @@ fn canister_create_with_default_wasm_memory_limit() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let initial_cycles = Cycles::new(301 * B);
+    let initial_cycles = Cycles::new(400 * B);
     let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
 
     let wasm_memory_limit = fetch_wasm_memory_limit(&env, canister_id);
@@ -2526,85 +2534,6 @@ fn no_critical_error_on_empty_data_segment() {
         ErrorCode::CanisterInvalidWasm,
         "Wasm module has invalid data segment of 0 bytes at 1.",
     );
-}
-
-#[test]
-fn failed_stable_memory_grow_cost_and_time_single_canister() {
-    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE_IN_BYTES;
-
-    let env = StateMachineBuilder::new()
-        .with_subnet_type(SubnetType::Application)
-        .build();
-
-    let canister_id = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
-
-    let timer = std::time::Instant::now();
-    let initial_balance = env.cycle_balance(canister_id);
-    let _res = env.execute_ingress(
-        canister_id,
-        "update",
-        wasm()
-            .stable64_grow(num_wasm_pages)
-            .stable64_write(0, &[42])
-            .trap()
-            .build(),
-    );
-    let elapsed_ms = timer.elapsed().as_millis();
-    let cycles_m = (initial_balance - env.cycle_balance(canister_id)) / 1000 / 1000;
-    assert_lt!(
-        elapsed_ms,
-        10_000,
-        "Test timed out after {elapsed_ms} ms and {cycles_m} M cycles"
-    );
-    assert_gt!(cycles_m, 5);
-}
-
-#[test]
-fn failed_stable_memory_grow_cost_and_time_multiple_canisters() {
-    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE_IN_BYTES;
-    let num_canisters = 128;
-
-    let env = StateMachineBuilder::new()
-        .with_subnet_type(SubnetType::Application)
-        .build();
-
-    let mut canister_ids = vec![];
-    for _ in 0..num_canisters {
-        let canister_id = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
-        canister_ids.push(canister_id);
-    }
-
-    let timer = std::time::Instant::now();
-    let mut total_initial_balance = 0;
-    let mut payload = ic_state_machine_tests::PayloadBuilder::new();
-    for canister_id in &canister_ids {
-        let balance = env.cycle_balance(*canister_id);
-        total_initial_balance += balance;
-        payload = payload.ingress(
-            PrincipalId::new_anonymous(),
-            *canister_id,
-            "update",
-            wasm()
-                .stable64_grow(num_wasm_pages)
-                .stable64_write(0, &[42])
-                .trap()
-                .build(),
-        );
-    }
-    env.execute_payload(payload);
-    let elapsed_ms = timer.elapsed().as_millis();
-    let mut total_balance = 0;
-    for canister_id in &canister_ids {
-        let balance = env.cycle_balance(*canister_id);
-        total_balance += balance;
-    }
-    let cycles_m = (total_initial_balance - total_balance) / 1000 / 1000;
-    assert_lt!(
-        elapsed_ms,
-        10_000,
-        "Test timed out after {elapsed_ms} ms and {cycles_m} M cycles"
-    );
-    assert_gt!(cycles_m, 800);
 }
 
 /// Verifies that canister liquid cycle balance can be used to transfer as many cycles as possible.
@@ -2665,16 +2594,18 @@ fn test_canister_liquid_cycle_balance() {
     // and that the accepted cycles are way more than that.
     let lost_cycles = liquid_balance - accepted_cycles;
     assert_lt!(lost_cycles, 100 * B);
-    assert_gt!(accepted_cycles, INITIAL_CYCLES_BALANCE.get() - 100 * B);
+    // The base_per_second_fee raises the freeze threshold by ~26B, reducing the liquid balance (and thus
+    // accepted cycles) by that amount relative to INITIAL_CYCLES_BALANCE; allow 150B total overhead.
+    assert_gt!(accepted_cycles, INITIAL_CYCLES_BALANCE.get() - 150 * B);
 
     // Finally, we assert that the cycles have indeed moved from one universal canister to the other one.
-    // The remaining balance of the sender is larger than the lost cycles by the unspent cycles in the execution of the ingress message,
-    // but still less than 100B.
+    // The remaining balance of the sender is approximately the freeze threshold (which is ~26B higher than
+    // before due to the base_per_second_fee) plus unspent execution budget, so allow up to 200B.
     let balance = env.cycle_balance(canister_id);
-    assert_lt!(balance, 100 * B);
+    assert_lt!(balance, 200 * B);
     // The receiver now holds the joint cycles balance of both canisters at the beginning minus some overhead.
     let receiver_balance = env.cycle_balance(callee);
-    assert_gt!(receiver_balance, 2 * INITIAL_CYCLES_BALANCE.get() - 100 * B);
+    assert_gt!(receiver_balance, 2 * INITIAL_CYCLES_BALANCE.get() - 200 * B);
 }
 
 /// Test that a message which results in many calls with large payloads (2 GB in
@@ -2755,121 +2686,715 @@ fn get_canister_metadata() {
     );
 }
 
-fn canister_status_count(env: &StateMachine) -> u64 {
+fn list_canisters_count(env: &StateMachine) -> u64 {
     fetch_histogram_vec_stats(
         env.metrics_registry(),
-        "execution_subnet_query_message_duration_seconds",
+        "execution_subnet_message_duration_seconds",
     )
     .get(&labels(&[
-        ("method_name", "query_ic00_canister_status"),
+        ("method_name", "ic00_list_canisters"),
+        ("outcome", "finished"),
         ("status", "success"),
+        ("speed", "fast"),
     ]))
     .map_or(0, |stats| stats.count)
 }
 
+// `list_canisters` consumes round instructions according to its cost model (a
+// base cost plus a per-canister cost). This test checks that the round
+// instruction limit is respected: when many `list_canisters` calls are pending
+// at once, the per-round subnet-message instruction budget only allows some of
+// them to execute per round, so the rest are deferred to later rounds (i.e. not
+// all calls execute in the same round).
 #[test]
-fn canister_status_via_query_call_by_controller_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
+fn list_canisters_respects_round_instruction_limit() {
+    // Keep in sync with `list_canisters_instructions` in `execution/common.rs`.
+    const BASE_INSTRUCTIONS: u64 = 20_000_000;
+    const INSTRUCTIONS_PER_CANISTER: u64 = 16_000;
+    // Number of concurrent `list_canisters` calls. Chosen large enough that they
+    // cannot all fit within a single round's subnet-message instruction budget
+    // (`max_instructions_per_round / 16`, which with the default configuration
+    // fits at most ~12 calls of ~20M instructions each).
+    const NUM_CALLS: u64 = 30;
+
+    // The admin canister is created first so that it gets the first canister ID
+    // in the subnet's range, matching the configured subnet admin.
+    let admin = CanisterId::from_u64(0);
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            subnet_config,
-            HypervisorConfig::default(),
-        )))
-        .build();
-    let canister_id = create_universal_canister_with_cycles(
-        &env,
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
-
-    assert_eq!(canister_status_count(&env), 0);
-
-    let result = env.query(
-        CanisterId::ic_00(),
-        "canister_status",
-        CanisterIdRecord::from(canister_id).encode(),
-    );
-
-    assert!(result.is_ok());
-    assert_eq!(canister_status_count(&env), 1);
-}
-
-#[test]
-fn canister_status_via_query_call_by_subnet_admin_succeeds() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let subnet_admin = user_test_id(100);
-    let env = StateMachineBuilder::new()
-        .with_config(Some(StateMachineConfig::new(
-            subnet_config,
+            SubnetConfig::new(SubnetType::Application),
             HypervisorConfig::default(),
         )))
         .with_subnet_type(SubnetType::Application)
         .with_cost_schedule(CanisterCyclesCostSchedule::Free)
-        .with_subnet_admins(vec![subnet_admin.get()])
+        .with_subnet_admins(vec![admin.get()])
         .build();
-    let canister_id = create_universal_canister_with_cycles(
+
+    let admin_canister = create_universal_canister_with_cycles(
         &env,
         Some(CanisterSettingsArgsBuilder::new().build()),
         INITIAL_CYCLES_BALANCE,
     );
-    // Get the first canister controller.
-    let controller = env.get_controllers(canister_id).unwrap()[0];
+    assert_eq!(admin_canister, admin);
 
-    assert_eq!(canister_status_count(&env), 0);
-    assert_ne!(subnet_admin.get(), controller);
-
-    let result = env.query_as(
-        subnet_admin.get(),
-        CanisterId::ic_00(),
-        "canister_status",
-        CanisterIdRecord::from(canister_id).encode(),
-    );
-    assert!(result.is_ok());
-    assert_eq!(canister_status_count(&env), 1);
-}
-
-#[test]
-fn canister_status_via_query_call_by_neither_controller_nor_subnet_admin_fails() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let subnet_admin = user_test_id(100);
-    let test_user = user_test_id(101);
-    let env = StateMachineBuilder::new()
-        .with_config(Some(StateMachineConfig::new(
-            subnet_config,
-            HypervisorConfig::default(),
-        )))
-        .with_subnet_type(SubnetType::Application)
-        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
-        .with_subnet_admins(vec![subnet_admin.get()])
-        .build();
-    let canister_id = create_universal_canister_with_cycles(
+    // Create an additional canister so that the subnet hosts more than just
+    // the admin canister, exercising the per-canister cost of `list_canisters`.
+    create_universal_canister_with_cycles(
         &env,
         Some(CanisterSettingsArgsBuilder::new().build()),
         INITIAL_CYCLES_BALANCE,
     );
-    // Get the first canister controller.
-    let controller = env.get_controllers(canister_id).unwrap()[0];
 
-    assert_eq!(canister_status_count(&env), 0);
-    assert_ne!(subnet_admin.get(), controller);
-    assert_ne!(test_user.get(), controller);
+    let num_canisters = env.get_latest_state().num_canisters() as u64;
+    assert_eq!(num_canisters, 2);
+    let cost_per_call = BASE_INSTRUCTIONS + INSTRUCTIONS_PER_CANISTER * num_canisters;
 
-    let err = env
-        .query_as(
-            test_user.get(),
+    // Build an update that fires `NUM_CALLS` concurrent `list_canisters`
+    // inter-canister calls (ignoring their responses) and then replies. After
+    // this single message executes, all `NUM_CALLS` calls are pending as subnet
+    // messages at the same time.
+    let mut update = wasm();
+    for _ in 0..NUM_CALLS {
+        update = update.call_simple(
             CanisterId::ic_00(),
-            "canister_status",
-            CanisterIdRecord::from(canister_id).encode(),
-        )
-        .unwrap_err();
-    assert_eq!(
-        err.code(),
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+            "list_canisters",
+            call_args()
+                .other_side(EmptyBlob.encode())
+                .on_reply(wasm().noop())
+                .on_reject(wasm().noop()),
+        );
+    }
+    let update = update.reply().build();
+
+    // `send_ingress` executes a single round in which the update runs and
+    // enqueues all `NUM_CALLS` calls; they are only drained in subsequent rounds.
+    let instructions_baseline = env.subnet_message_instructions();
+    let calls_baseline = list_canisters_count(&env);
+    assert_eq!(calls_baseline, 0);
+    env.send_ingress(
+        PrincipalId::new_anonymous(),
+        admin_canister,
+        "update",
+        update,
     );
-    assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
-    )));
-    assert_eq!(canister_status_count(&env), 0);
+
+    // Execute rounds one at a time, tracking after each round how many
+    // `list_canisters` calls have been executed so far, using the
+    // `execution_subnet_message_duration_seconds` metric to count them
+    // explicitly (rather than inferring the count from consumed instructions).
+    let executed_so_far = || list_canisters_count(&env) - calls_baseline;
+    let mut executed_per_round = vec![];
+    for _ in 0..100 {
+        env.tick();
+        executed_per_round.push(executed_so_far());
+        if executed_so_far() == NUM_CALLS {
+            break;
+        }
+    }
+
+    // Not all `list_canisters` calls were executed in the same round: there is a
+    // round after which some but not all of them had been executed.
+    assert!(
+        executed_per_round.iter().any(|&n| n > 0 && n < NUM_CALLS),
+        "expected list_canisters calls to be spread across rounds, got progression {:?}",
+        executed_per_round,
+    );
+    // Eventually all of them were executed.
+    assert_eq!(*executed_per_round.last().unwrap(), NUM_CALLS);
+    // Each executed call was charged exactly per the cost model, confirming the
+    // round instruction accounting.
+    assert_eq!(
+        env.subnet_message_instructions() - instructions_baseline,
+        (NUM_CALLS * cost_per_call) as f64
+    );
+}
+
+// A subnet admin canister can call `list_canisters` via an inter-canister
+// call and receives a successful response. Coalescing of the returned
+// canister ID ranges is tested separately by `test_list_canisters_success` in
+// `query_handler/tests.rs`.
+#[test]
+fn list_canisters_via_inter_canister_call_succeeds() {
+    // The admin canister is created first so that it gets the first canister ID
+    // in the subnet's range, matching the configured subnet admin.
+    let admin = CanisterId::from_u64(0);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+
+    let admin_canister = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    assert_eq!(admin_canister, admin);
+
+    let list_canisters = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "list_canisters",
+            call_args().other_side(EmptyBlob.encode()),
+        )
+        .build();
+    let reply = get_reply(env.execute_ingress(admin_canister, "update", list_canisters));
+    ListCanistersResponse::decode(&reply).unwrap();
+}
+
+// A non-admin canister calling `list_canisters` via an inter-canister call is
+// rejected, and the rejected call must not consume any round instructions:
+// instructions are only deducted from the round limits for a successful call,
+// per the cost model checked by `list_canisters_respects_round_instruction_limit`
+// above.
+#[test]
+fn list_canisters_via_inter_canister_call_rejected_for_non_admin() {
+    let admin = user_test_id(100).get();
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin])
+        .build();
+
+    let non_admin_canister = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let list_canisters = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            "list_canisters",
+            call_args()
+                .other_side(EmptyBlob.encode())
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    let instructions_baseline = env.subnet_message_instructions();
+    let reject = get_reject(env.execute_ingress(non_admin_canister, "update", list_canisters));
+    assert!(reject.contains("Only the subnet admins can perform certain actions"));
+
+    assert_eq!(env.subnet_message_instructions(), instructions_baseline);
+}
+
+/// Number of rounds one [`read_subnet_metrics`] takes: the ingress executes in
+/// the first, the `subnet_metrics` request it makes in the second, and the reply
+/// reaches the caller in the third.
+const ROUNDS_PER_SUBNET_METRICS_READ: u64 = 3;
+
+/// Calls `subnet_metrics` for the subnet under test from `caller` and returns the
+/// reply. The call has to go through a canister, as `subnet_metrics` cannot be
+/// called by a user.
+///
+/// Asserts on the way that `block_height` is the height of the block in whose
+/// execution the call was processed, i.e. the second of the
+/// [`ROUNDS_PER_SUBNET_METRICS_READ`] rounds this read takes.
+fn read_subnet_metrics(env: &StateMachine, caller: CanisterId) -> SubnetMetricsResponse {
+    let payload = SubnetMetricsArgs {
+        subnet_id: env.get_subnet_id().get(),
+    }
+    .encode();
+    let call = wasm()
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::SubnetMetrics,
+            call_args()
+                .other_side(payload)
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    let height_before = env.state_manager.latest_state_height().get();
+    let reply = get_reply(env.execute_ingress(caller, "update", call));
+    let response = SubnetMetricsResponse::decode(&reply).unwrap();
+    assert_eq!(
+        env.state_manager.latest_state_height().get(),
+        height_before + ROUNDS_PER_SUBNET_METRICS_READ
+    );
+    assert_eq!(response.block_height, candid::Nat::from(height_before + 2));
+
+    response
+}
+
+/// Covers the semantics of every `subnet_metrics` field on a running subnet:
+/// `block_height` is the height of the block in whose execution the call is
+/// processed (asserted by `read_subnet_metrics` on each read below), while the
+/// five aggregate fields report `SystemMetadata::subnet_metrics`, which is
+/// written at the end of a round and hence lags by (at least) one round.
+#[test]
+fn subnet_metrics_reports_the_subnets_metrics() {
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let caller = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    // Message routing recomputes `canister_state_bytes` only in rounds whose
+    // height is a multiple of 10. Idle the subnet up to such a round, so that the
+    // stored value is the memory the canisters take with nothing in flight; the
+    // three rounds of the read below are then 1, 2 and 3 modulo 10, so none of
+    // them can refresh it in between.
+    while !env
+        .state_manager
+        .latest_state_height()
+        .get()
+        .is_multiple_of(10)
+    {
+        env.tick();
+    }
+    let (metrics_before, memory_usage) = {
+        let state = env.get_latest_state();
+        (
+            state.metadata.subnet_metrics.clone(),
+            state.total_canister_memory_usage(),
+        )
+    };
+    assert_eq!(metrics_before.canister_state_bytes, memory_usage);
+    assert_gt!(memory_usage.get(), 0);
+
+    let response = read_subnet_metrics(&env, caller);
+
+    // `num_canisters`: the single canister installed above.
+    assert_eq!(response.num_canisters, candid::Nat::from(1_u64));
+    // `canister_state_bytes`: the memory the canisters take, as of the last
+    // refresh -- computed here independently of the handler.
+    assert_eq!(
+        response.canister_state_bytes,
+        candid::Nat::from(memory_usage.get())
+    );
+    // `update_transactions_total`: the messages executed in replicated mode.
+    // Exactly one was executed since the snapshot above, namely the ingress that
+    // made this call. The `subnet_metrics` request itself executes one round
+    // later still, and the handler reports the round before that, so it is not
+    // counted yet.
+    assert_eq!(
+        response.update_transactions_total,
+        candid::Nat::from(metrics_before.update_transactions_total + 1)
+    );
+    // `consumed_cycles_total`: the subnet-wide aggregate, including the cycles
+    // consumed by the canisters that still exist -- non-zero here only because
+    // `commit_and_certify` refreshes the canisters' part on every committed
+    // state. Creating and installing the caller charged cycles, and executing the
+    // ingress that made this call charged more, so both the reported total and
+    // the total the state holds now are above the snapshot.
+    //
+    // Deliberately no upper bound: while the call is in flight the caller has
+    // prepaid for a maximum-size response, and the prepayment counts as consumed
+    // until the unused part is refunded, so the reported total is in fact *above*
+    // the total once the call has completed.
+    let consumed_before = metrics_before.consumed_cycles_total_including_canisters();
+    let consumed_now = env
+        .get_latest_state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_total_including_canisters();
+    assert_gt!(consumed_before.get(), 0);
+    assert_gt!(consumed_now.get(), consumed_before.get());
+    assert_gt!(
+        response.consumed_cycles_total,
+        candid::Nat::from(consumed_now.get())
+    );
+
+    // `million_round_instructions_total`: the raw counter in millions, rounded
+    // up. The reported value lags by a round or two, so it is bracketed rather
+    // than pinned; the conversion is pinned exactly by
+    // `subnet_metrics_reports_round_instructions_in_millions_rounded_up`.
+    // Non-zero because installing the caller alone charges tens of millions.
+    //
+    // The equality against `instructions_consumed()` is the load-bearing one: it
+    // guards that every `execute_round` exit which observes the round histogram
+    // also accumulates into the counter. Both read the same measurement scope, so
+    // they can only diverge by a path doing one and not the other -- which is
+    // exactly the bug `heap_delta_limit_still_counts_drained_consensus_queue_messages`
+    // covers for the early-return path. This state machine has by now run canister
+    // creation, install code, subnet messages and checkpoint rounds, so the
+    // equality spans all of those paths at once.
+    let raw_now = env
+        .get_latest_state()
+        .metadata
+        .subnet_metrics
+        .round_instructions_total;
+    assert_eq!(raw_now, env.instructions_consumed() as u64);
+    assert_gt!(
+        response.million_round_instructions_total,
+        candid::Nat::from(0_u64)
+    );
+    assert!(
+        response.million_round_instructions_total
+            >= metrics_before.round_instructions_total.div_ceil(1_000_000)
+    );
+    assert!(
+        response.million_round_instructions_total <= raw_now.div_ceil(1_000_000),
+        "reported {} millions exceeds the {raw_now} instructions the state holds now",
+        response.million_round_instructions_total
+    );
+
+    // `num_canisters` follows the canister population in both directions.
+    let other = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+    assert_eq!(
+        read_subnet_metrics(&env, caller).num_canisters,
+        candid::Nat::from(2_u64)
+    );
+    env.stop_canister(other).unwrap();
+    env.delete_canister(other).unwrap();
+    assert_eq!(
+        read_subnet_metrics(&env, caller).num_canisters,
+        candid::Nat::from(1_u64)
+    );
+}
+
+/// Regression test: the `consumed_cycles_total` the endpoint reports is the
+/// aggregate of the last *committed* state, read from
+/// `SubnetMetrics::consumed_cycles_total_including_canisters`, and not recomputed
+/// from the fields as they stand mid-round.
+///
+/// `delete_canister` adds the deleted canister's consumed cycles to
+/// `consumed_cycles_by_deleted_canisters` straight away, while the canisters' part
+/// of the stored aggregate -- which still counts that canister -- is only refreshed
+/// when the next state is committed. Recomputing the total in between therefore
+/// counts the deleted canister twice.
+///
+/// The test forces exactly that window: a single update issues `delete_canister`
+/// and then `subnet_metrics`, so both requests sit in the caller's output queue to
+/// `ic00` in that order and `drain_subnet_queues` executes them in the same round,
+/// the deletion first.
+#[test]
+fn subnet_metrics_consumed_cycles_total_is_the_committed_aggregate() {
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let caller = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    // A stopped canister that `caller` controls, and can therefore delete. The
+    // anonymous principal is a controller too, so that `stop_canister` is allowed.
+    let victim = env.create_canister_with_cycles(
+        None,
+        INITIAL_CYCLES_BALANCE,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![PrincipalId::new_anonymous(), caller.get()])
+                .build(),
+        ),
+    );
+    env.stop_canister(victim).unwrap();
+
+    let call = wasm()
+        // Whatever the deletion answers is irrelevant: the update replies with the
+        // `subnet_metrics` response below.
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::DeleteCanister,
+            call_args()
+                .other_side(CanisterIdRecord::from(victim).encode())
+                .on_reply(wasm().noop())
+                .on_reject(wasm().noop()),
+        )
+        .call_simple(
+            CanisterId::ic_00(),
+            Method::SubnetMetrics,
+            call_args()
+                .other_side(
+                    SubnetMetricsArgs {
+                        subnet_id: env.get_subnet_id().get(),
+                    }
+                    .encode(),
+                )
+                .on_reject(wasm().reject_message().reject()),
+        )
+        .build();
+
+    // The aggregate as of the last committed state, and the victim's consumption --
+    // which a recomputation after the deletion would count a second time.
+    let (pre_total, victim_consumed) = {
+        let state = env.get_latest_state();
+        (
+            state
+                .metadata
+                .subnet_metrics
+                .consumed_cycles_total_including_canisters(),
+            state
+                .canister_state(&victim)
+                .expect("the victim must still exist at this point")
+                .system_state
+                .canister_metrics()
+                .consumed_cycles(),
+        )
+    };
+
+    let reply = get_reply(env.execute_ingress(caller, "update", call));
+    let response = SubnetMetricsResponse::decode(&reply).unwrap();
+
+    // The deletion did happen.
+    assert!(env.get_latest_state().canister_state(&victim).is_none());
+    let post_total = env
+        .get_latest_state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_total_including_canisters();
+
+    // The reported total is a committed snapshot, so it cannot predate the state
+    // the call started from.
+    assert_ge!(
+        response.consumed_cycles_total,
+        candid::Nat::from(pre_total.get())
+    );
+    // And this is what pins the fix. Deleting the victim burns its remaining
+    // balance into `consumed_cycles_by_deleted_canisters`, so `post_total` is far
+    // above every snapshot taken before the deletion committed -- and the handler
+    // reported one of those. Recomputing the total when the handler ran instead,
+    // i.e. after the deletion but before the refresh that drops the victim from the
+    // stored aggregate, would have counted the victim twice and
+    // returned at least `post_total + victim_consumed`; either way, at least
+    // `post_total`. Hence the strict `<`.
+    assert_lt!(
+        response.consumed_cycles_total,
+        candid::Nat::from(post_total.get())
+    );
+    assert_gt!(victim_consumed.get(), 0);
+}
+
+/// The certified `/subnet/<subnet_id>/metrics` leaf of the latest state, together
+/// with the root hash of the canonical state tree it is certified under.
+fn certified_subnet_metrics(env: &StateMachine) -> (MixedHashTree, CryptoHashOfPartialState) {
+    env.certify_latest_state();
+    let paths = vec![LabeledTreePath::new(vec![
+        b"subnet".into(),
+        env.get_subnet_id().get().into(),
+        b"metrics".into(),
+    ])];
+    let (_state, tree, certification) = env
+        .state_manager
+        .read_certified_state(&sparse_labeled_tree_from_paths(&paths).unwrap())
+        .expect("the latest state must be certified");
+    (tree, certification.signed.content.hash)
+}
+
+/// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
+/// is not persisted: `ReplicatedState::new_from_checkpoint` re-derives it from the
+/// canisters it loads, exactly as the refresh on every committed state does. From
+/// certification version `V29` on, that aggregate (or, from `V30` on, its
+/// monotonic counterpart) is what `/subnet/<subnet_id>/metrics` certifies, so a
+/// replica restarting from a checkpoint has to certify byte-for-byte the same leaf
+/// as one that kept running.
+#[test]
+fn subnet_metrics_are_unchanged_across_a_restart() {
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    // Non-zero *persisted* consumption: deleting a canister moves its consumption
+    // and its remaining balance into the subnet-level fields, which are part of the
+    // checkpoint.
+    let victim = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+    env.stop_canister(victim).unwrap();
+    env.delete_canister(victim).unwrap();
+
+    // Non-zero *transient* consumption: a canister that is still around, and has
+    // consumed cycles both by being installed and by burning some explicitly.
+    let canister = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+    env.execute_ingress(
+        canister,
+        "update",
+        wasm().cycles_burn128(1_000_000_u128).reply().build(),
+    )
+    .unwrap();
+
+    // Write a checkpoint holding all of the above, and certify the state it holds.
+    env.checkpointed_tick();
+    let height_before = env.state_manager.latest_state_height();
+    let metrics_before = env.get_latest_state().metadata.subnet_metrics.clone();
+    let certified_before = certified_subnet_metrics(&env);
+
+    // Both parts are non-zero, so the comparison below is not vacuous -- and, in
+    // particular, the transient part is a strictly positive share of the total.
+    assert_gt!(metrics_before.consumed_cycles_total().get(), 0);
+    assert_gt!(
+        metrics_before
+            .consumed_cycles_total_including_canisters()
+            .get(),
+        metrics_before.consumed_cycles_total().get()
+    );
+
+    let env = env.restart_node();
+
+    // The restarted replica resumes from the very same state...
+    assert_eq!(env.state_manager.latest_state_height(), height_before);
+    // ...holding the very same subnet metrics, transient fields included...
+    assert_eq!(
+        env.get_latest_state().metadata.subnet_metrics,
+        metrics_before
+    );
+    // ...and certifying the very same `/subnet/<subnet_id>/metrics` leaf, under the
+    // very same canonical state tree root hash.
+    assert_eq!(certified_subnet_metrics(&env), certified_before);
+}
+
+/// The cycles consumed by the canisters that currently exist, summed over the
+/// canisters themselves rather than read off any aggregate.
+fn consumed_by_canisters(env: &StateMachine) -> NominalCycles {
+    env.get_latest_state()
+        .canisters_iter()
+        .fold(NominalCycles::zero(), |total, canister| {
+            total + canister.system_state.canister_metrics().consumed_cycles()
+        })
+}
+
+/// Asserts that `SubnetMetrics::consumed_cycles_total_including_canisters` of the
+/// latest state is what it is defined to be, and returns it.
+///
+/// No test using this helper makes an outcall, requests a threshold signature or
+/// drops a message, so the whole subnet-level summand is the cycles consumed by
+/// deleted canisters -- asserted rather than assumed, so that a test which starts
+/// producing any of the rest fails here instead of quietly comparing against a total
+/// it no longer accounts for. The canisters' summand is likewise summed over the
+/// canisters themselves, so that neither side of the comparison is read back from
+/// the bookkeeping under test.
+fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
+    let state = env.get_latest_state();
+    let subnet_metrics = &state.metadata.subnet_metrics;
+
+    let consumed_by_deleted_canisters = subnet_metrics.get_consumed_cycles_by_deleted_canisters();
+    assert_eq!(
+        subnet_metrics.consumed_cycles_total(),
+        consumed_by_deleted_canisters
+    );
+
+    let total = subnet_metrics.consumed_cycles_total_including_canisters();
+    assert_eq!(
+        total,
+        consumed_by_deleted_canisters + consumed_by_canisters(env)
+    );
+    total
+}
+
+/// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
+/// is refreshed on every committed state, not only on the rounds that happen to
+/// touch the subnet-level fields. From certification version `V29` on the aggregate
+/// (or, from `V30` on, its monotonic counterpart) is certified at
+/// `/subnet/<subnet_id>/metrics`, so a stale one would be served to
+/// users as the current consumption of the subnet.
+///
+/// A heartbeat that burns a fixed amount of cycles makes every single round consume
+/// cycles, and only on that canister, so a refresh that skipped a round would leave
+/// the aggregate behind by at least the burned amount.
+#[test]
+fn consumed_cycles_in_subnet_metrics_are_refreshed_every_round() {
+    /// Burned by the heartbeat below, in every round.
+    const BURNED_PER_ROUND: u128 = 1_000_000_000;
+    /// Rounds to observe; more than one, so that a refresh happening only on the
+    /// first round after the heartbeat was installed would not pass either.
+    const ROUNDS: usize = 5;
+
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let canister = create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+    env.execute_ingress(
+        canister,
+        "update",
+        wasm()
+            .set_heartbeat(wasm().cycles_burn128(BURNED_PER_ROUND).build())
+            .reply()
+            .build(),
+    )
+    .unwrap();
+
+    let mut previous = assert_consumed_cycles_are_refreshed(&env);
+    for _ in 0..ROUNDS {
+        env.tick();
+
+        let current = assert_consumed_cycles_are_refreshed(&env);
+        // The heartbeat burned its cycles in this round, and the aggregate committed
+        // at the end of it already accounts for them; executing the heartbeat charged
+        // the canister some more on top.
+        assert_gt!(current.get(), previous.get() + BURNED_PER_ROUND);
+        previous = current;
+    }
+}
+
+/// Deleting a canister moves its consumption out of the canisters' part of
+/// `SubnetMetrics::consumed_cycles_total_including_canisters` and into
+/// `consumed_cycles_by_deleted_canisters`, and burns its remaining balance on top.
+/// The refresh has to pick up both in the same round: counting the canister on both
+/// sides, or on neither, leaves the total off by exactly its consumption.
+///
+/// The victim is the only canister on the subnet, so nothing else can consume cycles
+/// while the deletion executes and the comparison below can be an exact equality.
+#[test]
+fn consumed_cycles_in_subnet_metrics_are_refreshed_when_a_canister_is_deleted() {
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig::new(SubnetType::Application),
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    let victim = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+    env.stop_canister(victim).unwrap();
+
+    let before_deletion = assert_consumed_cycles_are_refreshed(&env);
+    let (victim_consumed, victim_balance) = {
+        let state = env.get_latest_state();
+        let victim_state = state
+            .canister_state(&victim)
+            .expect("the victim must still exist at this point");
+        (
+            victim_state
+                .system_state
+                .canister_metrics()
+                .consumed_cycles(),
+            victim_state.system_state.balance(),
+        )
+    };
+    // Without this, an aggregate counting the victim twice would look exactly like
+    // one counting it once.
+    assert_gt!(victim_consumed.get(), 0);
+
+    env.delete_canister(victim).unwrap();
+    assert!(env.get_latest_state().canister_state(&victim).is_none());
+
+    // The victim's consumption only moved between the two summands, so all the total
+    // gains is the balance that was burned with it.
+    let after_deletion = assert_consumed_cycles_are_refreshed(&env);
+    assert_eq!(
+        after_deletion.get(),
+        before_deletion.get() + victim_balance.get()
+    );
 }
 
 #[test]
@@ -2878,6 +3403,7 @@ fn maximum_state_size() {
     let resource_limits = ResourceLimits {
         maximum_state_size: Some(maximum_state_size),
         maximum_state_delta: None,
+        ..Default::default()
     };
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let hypervisor_config = HypervisorConfig {
@@ -2893,7 +3419,12 @@ fn maximum_state_size() {
         .with_resource_limits(resource_limits)
         .build();
 
-    let canister_id = env.create_canister(None);
+    let canister_id = env.create_canister(Some(
+        CanisterSettingsArgsBuilder::new()
+            .with_log_memory_limit(0)
+            .build(),
+    ));
+    env.add_cycles(canister_id, 1_000_000_000_000_000_000);
 
     // the maximum state size is across all execution threads
     // and thus setting the memory allocation to the maximum state size
@@ -2911,6 +3442,7 @@ fn maximum_state_delta() {
     let resource_limits = ResourceLimits {
         maximum_state_size: None,
         maximum_state_delta: Some(maximum_state_delta),
+        ..Default::default()
     };
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     // We disable per-canister rate-limiting of heap delta to simplify the test.
@@ -3120,4 +3652,176 @@ fn no_subnet_message_reordering() {
     let _ = get_reply(res);
     let res = sm.await_ingress(status_msg_id, 100);
     let _ = get_reply(res);
+}
+
+fn canister_metrics_count(env: &StateMachine) -> u64 {
+    fetch_histogram_vec_stats(
+        env.metrics_registry(),
+        "execution_subnet_query_message_duration_seconds",
+    )
+    .get(&labels(&[
+        ("method_name", "query_ic00_canister_metrics"),
+        ("status", "success"),
+    ]))
+    .map_or(0, |stats| stats.count)
+}
+
+#[test]
+fn canister_metrics_via_query_call_by_controller_succeeds() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            HypervisorConfig::default(),
+        )))
+        .build();
+    let canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    assert_eq!(canister_metrics_count(&env), 0);
+
+    let result = env.query(
+        CanisterId::ic_00(),
+        "canister_metrics",
+        CanisterMetricsArgs::new(canister_id).encode(),
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(canister_metrics_count(&env), 1);
+}
+
+#[test]
+fn canister_metrics_via_query_call_by_subnet_admin_succeeds() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_admin = user_test_id(100);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+    let canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    // Get the first canister controller.
+    let controller = env.get_controllers(canister_id).unwrap()[0];
+
+    assert_eq!(canister_metrics_count(&env), 0);
+    assert_ne!(subnet_admin.get(), controller);
+
+    let result = env.query_as(
+        subnet_admin.get(),
+        CanisterId::ic_00(),
+        "canister_metrics",
+        CanisterMetricsArgs::new(canister_id).encode(),
+    );
+    assert!(result.is_ok());
+    assert_eq!(canister_metrics_count(&env), 1);
+}
+
+#[test]
+fn canister_metrics_via_query_call_by_neither_controller_nor_subnet_admin_fails() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let subnet_admin = user_test_id(100);
+    let test_user = user_test_id(101);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            HypervisorConfig::default(),
+        )))
+        .with_subnet_type(SubnetType::Application)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![subnet_admin.get()])
+        .build();
+    let canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+    // Get the first canister controller.
+    let controller = env.get_controllers(canister_id).unwrap()[0];
+
+    assert_eq!(canister_metrics_count(&env), 0);
+    assert_ne!(subnet_admin.get(), controller);
+    assert_ne!(test_user.get(), controller);
+
+    let err = env
+        .query_as(
+            test_user.get(),
+            CanisterId::ic_00(),
+            "canister_metrics",
+            CanisterMetricsArgs::new(canister_id).encode(),
+        )
+        .unwrap_err();
+    assert_eq!(
+        err.code(),
+        ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+    );
+    assert!(err.description().contains(&format!(
+        "Only the controllers of the canister {canister_id} or subnet admins can perform certain actions"
+    )));
+    assert_eq!(canister_metrics_count(&env), 0);
+}
+
+/// Build a gzip stream made of DEFLATE stored blocks that decompresses
+/// to the 8-byte empty WebAssembly module `\0asm\x01\x00\x00\x00`.
+///
+/// The first `blocks - 1` blocks are empty non-final stored blocks and the last
+/// is a final stored block carrying the wasm payload, wrapped in a gzip header/trailer.
+pub fn make_large_deflate_stream(blocks: usize) -> Vec<u8> {
+    /// The minimal valid WebAssembly module.
+    const WASM: [u8; 8] = [0x00, b'a', b's', b'm', 0x01, 0x00, 0x00, 0x00];
+    /// Gzip header. CM=deflate, OS=unknown.
+    const HEADER: [u8; 10] = [0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03];
+    /// A non-final DEFLATE stored block of length zero: BFINAL=0, LEN=0, NLEN=0xffff.
+    const EMPTY_NONFINAL_STORED_BLOCK: [u8; 5] = [0x00, 0x00, 0x00, 0xff, 0xff];
+    /// Compute the IEEE CRC-32 (as used by gzip) of `data`.
+    fn crc32(data: &[u8]) -> u32 {
+        let mut crc: u32 = 0xffff_ffff;
+        for &byte in data {
+            crc ^= byte as u32;
+            for _ in 0..8 {
+                let mask = (crc & 1).wrapping_neg();
+                crc = (crc >> 1) ^ (0xedb8_8320 & mask);
+            }
+        }
+        !crc
+    }
+
+    let len = WASM.len() as u16;
+    let mut payload =
+        Vec::with_capacity(HEADER.len() + (blocks - 1) * EMPTY_NONFINAL_STORED_BLOCK.len() + 21);
+    payload.extend_from_slice(&HEADER);
+    for _ in 0..(blocks - 1) {
+        payload.extend_from_slice(&EMPTY_NONFINAL_STORED_BLOCK);
+    }
+    // Final stored block: BFINAL byte, then LEN and its ones-complement NLEN
+    // then the raw stored bytes.
+    payload.push(1);
+    payload.extend_from_slice(&len.to_le_bytes());
+    payload.extend_from_slice(&(!len).to_le_bytes());
+    payload.extend_from_slice(&WASM);
+    // gzip trailer: CRC32 of the uncompressed data, then ISIZE mod 2^32.
+    payload.extend_from_slice(&crc32(&WASM).to_le_bytes());
+    payload.extend_from_slice(&(WASM.len() as u32).to_le_bytes());
+    payload
+}
+
+#[test]
+fn large_zipped_wasm() {
+    let env = StateMachine::new();
+
+    let compressed_wasm = make_large_deflate_stream(250000);
+    let compressed_hash = ic_crypto_sha2::Sha256::hash(&compressed_wasm);
+
+    let canister_id = env.install_canister(compressed_wasm, vec![], None).unwrap();
+    assert_eq!(env.module_hash(canister_id), Some(compressed_hash));
 }

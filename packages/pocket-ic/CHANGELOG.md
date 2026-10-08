@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 16.0.0 - 2026-09-01
+
+### Added
+- Added the `SubnetCoolingDown` variant to the `ErrorCode` enum: ingress messages addressed to a subnet that is "cooling down" are rejected with this error code.
+- Added the `CanisterStatusAccessDenied` variant to the `ErrorCode` enum: a call to the `canister_status` endpoint of the management canister is rejected with this error code if the caller is not allowed to access the canister status according to the `status_visibility` canister setting.
+- The function `PocketIc::mock_flexible_canister_http_response` and the type `MockFlexibleCanisterHttpResponse` to mock the responses
+  of the committee nodes of a pending *flexible* canister HTTP outcall, i.e. one made through the `flexible_http_request`
+  management canister endpoint.
+- The field `replication` of type `CanisterHttpReplication` on `CanisterHttpRequest`, describing how a pending canister HTTP
+  outcall is replicated across the nodes of its subnet: `FullyReplicated`, `NonReplicated`, or `Flexible` with the outcall's
+  `total_requests`, `min_responses`, and `max_responses`. The committee size of a flexible outcall (`total_requests`)
+  is the number of responses `PocketIc::mock_flexible_canister_http_response` accepts.
+- The field `pricing_version` of type `CanisterHttpPricingVersion` on `CanisterHttpRequest`, reporting whether a pending
+  canister HTTP outcall is priced with the `Legacy` or the `PayAsYouGo` pricing model.
+- Enabling beta features (`IcpConfig::beta_features` passed to `PocketIcBuilder::with_icp_config`) now enables the
+  `flexible_http_request` management canister endpoint on subnets that charge for HTTP outcalls; without beta features that
+  endpoint is only available on subnets where HTTP outcalls are free (system subnets and subnets created with a free cycles
+  cost schedule). Beta features also enable the pay-as-you-go pricing model, which flexible outcalls are always priced with
+  and which an `http_request` can select through its `pricing_version` field.
+
+### Changed
+- The functions `PocketIc::auto_progress`, `PocketIc::make_live`, and their variants only return
+  after the certified time of the PocketIC instance has been updated for the first time
+  (the same applies to building an instance with automatic progress enabled).
+- No hard TTL is set on PocketIC servers started implicitly by the library (e.g. by `PocketIc::new` or `PocketIcBuilder::build`); previously a default of 10 minutes was used.
+  The hard TTL is an absolute deadline measured from the server's launch which is not extended by activity, so a test suite whose total runtime exceeded it had its server terminated while still serving requests, failing in-flight calls with `Connection reset by peer`.
+  Orphaned servers remain bounded by the (activity-based) soft TTL.
+  Callers who want a hard TTL can still set one explicitly via `StartServerParams::hard_ttl` and pass the resulting server URL to `PocketIcBuilder::with_server_url`.
+- Mocked canister HTTP responses report the cycles their node actually spent on the outcall, instead of reporting no spend at all.
+  This applies to both `PocketIc::mock_canister_http_response` and `PocketIc::mock_flexible_canister_http_response`.
+  The spend is derived from the size of the mocked response; unlike a real node, a mocked one is charged no response time, so
+  what a mocked outcall costs does not depend on how fast the machine running the test is.
+- Mocking a canister HTTP response whose reject message exceeds 1 KiB now fails. Such a response is not one any node could have
+  reported.
+- A node that cannot pay for gossiping its mocked reject reports an out-of-cycles reject instead of the mocked one, matching what
+  a node of a real subnet does under pay-as-you-go pricing.
+
+
+
+## 15.0.0 - 2026-06-26
+
+### Added
+- Added the `PATCH` variant to the `CanisterHttpMethod` enum (canister HTTPS outcalls). Note: `PATCH` outcalls are currently rejected by the execution layer until support has rolled out to all replicas.
+- The function `PocketIc::delete_subnet` to delete a subnet. Only non-named subnets (application, cloud engine, system, or verified application) can be deleted.
+
+
+
+## 14.0.0 - 2026-05-26
+
 ### Added
 - The function `PocketIcBuilder::disable_ingress_validation` to specify that ingress validation
   should be disabled for mainnet-like endpoints `/instances/<instance_id>/api/...` of the instance.
@@ -15,6 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PocketIc::query_call_with_effective_principal_and_sender_info`, and `PocketIc::query_call_with_sender_info`
   to make canister calls with sender info (additional information provided by the canister with which the sender principal is associated).
 - The function `PocketIcBuilder::with_test_threshold_keys_subnet` to create a test threshold keys subnet.
+- The function `PocketIc::create_canister_with_params` and supporting types `CreateCanisterParams` and `CreateCanisterPlacement` to create a canister with custom cycles, settings, and/or placement (specific subnet or canister ID).
+- Public reexport of `ic_management_canister_types::EnvironmentVariable`.
+
+### Changed
+- The functions `PocketIc::create_canister`, `PocketIc::create_canister_with_settings`, `PocketIc::create_canister_with_id`, and `PocketIc::create_canister_on_subnet` now create a canister with 100T cycles by default.
 
 
 

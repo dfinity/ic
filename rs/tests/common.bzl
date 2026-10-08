@@ -4,10 +4,68 @@ Common dependencies for system-tests.
 
 load("@mainnet_icos_versions//:defs.bzl", "MAINNET_APP", "MAINNET_NNS")
 
+# The number of CPUs to reserve minimally for system_tests using the local backend.
+MIN_LOCAL_CPUS = 1
+
+# This should equal DEFAULT_VCPUS_PER_VM in rs/tests/driver/src/driver/resource.rs.
+DEFAULT_VCPUS_PER_VM = 6
+
 MAINNET_ENV = {
     "MAINNET_NNS_GUESTOS_REVISION_ENV": MAINNET_NNS["version"],
     "MAINNET_APP_GUESTOS_REVISION_ENV": MAINNET_APP["version"],
 }
+
+def mainnet_binaries_runtime_deps(repo, prefix, binaries):
+    """Runtime dependencies on binaries published for a mainnet revision.
+
+    Only depend on the binaries a test actually uses: every runtime dependency ends
+    up in the test's runfiles (and, for colocated tests, in the tarball copied to
+    the driver's UVM), so an unused one costs both disk and time.
+
+    Args:
+      repo: the repository holding the binaries, e.g. "mainnet_nns_binaries".
+      prefix: env var prefix identifying the revision, e.g. "MAINNET_NNS".
+      binaries: names of the binaries to depend on.
+
+    Returns:
+      A dict from env var name (e.g. "MAINNET_NNS_IC_REPLAY_PATH") to label.
+    """
+    return {
+        "{}_{}_PATH".format(prefix, name.upper().replace("-", "_")): "@{}//:{}".format(repo, name)
+        for name in binaries
+    }
+
+MAINNET_NNS_REPLAY_RUNTIME_DEPS = mainnet_binaries_runtime_deps(
+    "mainnet_nns_binaries",
+    "MAINNET_NNS",
+    [
+        "canister_sandbox",
+        "compiler_sandbox",
+        "ic-replay",
+        "sandbox_launcher",
+    ],
+)
+
+MAINNET_TYPES_TEST_RUNTIME_DEPS = mainnet_binaries_runtime_deps(
+    "mainnet_nns_binaries",
+    "MAINNET_NNS",
+    ["types-test"],
+) | mainnet_binaries_runtime_deps(
+    "mainnet_app_binaries",
+    "MAINNET_APP",
+    ["types-test"],
+)
+
+# Used by //rs/tests/message_routing:queues_compatibility_test.
+MAINNET_QUEUES_COMPATIBILITY_RUNTIME_DEPS = mainnet_binaries_runtime_deps(
+    "mainnet_nns_binaries",
+    "MAINNET_NNS",
+    ["replicated-state-test", "state-layout-test"],
+) | mainnet_binaries_runtime_deps(
+    "mainnet_app_binaries",
+    "MAINNET_APP",
+    ["replicated-state-test", "state-layout-test"],
+)
 
 NNS_CANISTER_WASM_PROVIDERS = {
     "registry-canister_test": {
@@ -49,6 +107,10 @@ NNS_CANISTER_WASM_PROVIDERS = {
     "migration-canister": {
         "tip-of-branch": "//rs/migration_canister:migration-canister",
         "mainnet": "@mainnet_canisters//:migration.wasm.gz",
+    },
+    "engine-controller-canister": {
+        "tip-of-branch": "//rs/engine_controller:engine-controller-canister",
+        "mainnet": "@mainnet_canisters//:engine-controller.wasm.gz",
     },
 }
 
@@ -154,4 +216,9 @@ CANISTER_SANDBOX_RUNTIME_DEPS = {
     "SANDBOX_BINARY": "//rs/canister_sandbox:canister_sandbox",
     "LAUNCHER_BINARY": "//rs/canister_sandbox:sandbox_launcher",
     "COMPILER_BINARY": "//rs/canister_sandbox:compiler_sandbox",
+}
+
+MAINNET_NNS_SYSTEM_TEST_RUNTIME_DEPS = IC_GATEWAY_RUNTIME_DEPS | {
+    "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
+    "IC_REPLAY_PATH": "//rs/replay:ic-replay",
 }

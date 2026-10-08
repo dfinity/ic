@@ -62,6 +62,9 @@ if [[ -z "${INPUT_DIR:-}" || -z "${OUTPUT_FILE:-}" || -z "${LABEL:-}" ]]; then
     usage
 fi
 
+mkfs_fat="${MKFS_FAT:-/usr/sbin/mkfs.fat}"
+mcopy="${MCOPY:-mcopy}"
+
 tmp=$(mktemp)
 
 finalize() {
@@ -72,8 +75,13 @@ trap finalize EXIT
 
 size=$(du --bytes -s "$INPUT_DIR" | awk '{print $1}')
 size=$((2 * size + 1048576))
+# Round up to a multiple of 4096 so the raw image is block-aligned: QEMU opened
+# with cache='none' (O_DIRECT) refuses a writable raw image whose size is not a
+# multiple of the host block size. Block-aligning here keeps the image usable in
+# environments that require it.
+size=$(((size + 4095) / 4096 * 4096))
 echo "image size: $size"
 truncate -s $size "$tmp"
-/usr/sbin/mkfs.vfat -n "$LABEL" "$tmp"
-mcopy -i "$tmp" -sQ "$INPUT_DIR"/* ::
+"$mkfs_fat" -n "$LABEL" "$tmp"
+"$mcopy" -i "$tmp" -sQ "$INPUT_DIR"/* ::
 zstd --threads=0 -10 -i "$tmp" -o "$OUTPUT_FILE" --force

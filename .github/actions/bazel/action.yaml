@@ -23,7 +23,8 @@ inputs:
     default: ${{ github.job }}-${{ github.action }}-bep
     description: "The name of the Bazel Build Event Protocol (BEP) artifact."
   GPG_PASSPHRASE:
-    required: true
+    required: false
+    default: ""
     description: "GPG key to encrypt build events. Upload can be disabled by explicitly setting the input to an empty string."
 
 runs:
@@ -119,7 +120,8 @@ runs:
         # https://github.com/dfinity/execlog2csv/releases/latest
         if [[ $(uname -m) == "x86_64" ]]; then
           arch="amd64"
-        elif [[ $(uname -m) == "aarch64" ]]; then
+        # Linux reports aarch64 here, Darwin (Apple Silicon) reports arm64.
+        elif [[ $(uname -m) == "aarch64" || $(uname -m) == "arm64" ]]; then
           arch="arm64"
         else
           echo "unexpected architecture: '$(uname -m)'"
@@ -131,15 +133,41 @@ runs:
         elif [[ $(uname) == "Darwin" ]]; then
           os="darwin"
         else
-          echo "unexpected os: '$(uname -m)'"
+          echo "unexpected os: '$(uname)'"
           exit 1
         fi
 
         filename="execlog2csv_${version}_${os}_${arch}"
         echo "filename: $filename"
+
+        # sha256 of the release zips.
+        #
+        # GitHub release assets are mutable under an existing tag, so the download is
+        # only trustworthy when checked against a hash recorded here, in this repo.
+        # NOTE: these MUST be updated together with `version` above. Refresh with:
+        #   curl -fsSL "https://github.com/dfinity/execlog2csv/releases/download/v$version/execlog2csv_${version}_SHA256SUMS"
+        case "${os}_${arch}" in
+          linux_amd64)  sha256=cfbeeae1b2138742e3953ad0a7d55cbd11e0bf0dfe96d00e75b45c46e186244e ;;
+          linux_arm64)  sha256=f68aa6317becf85436db8983f76cd06fea7544ec25e0a75e71d8fc8178e2d2b2 ;;
+          darwin_amd64) sha256=095dcb5f07b1c6e8edb0293b6abad60c519dea1d0b25090dadc15bf42539700f ;;
+          darwin_arm64) sha256=1ca6ebc9b2b4a5e50fad9013978398c8f5cc7f33318cb1528e6fb0879f32b5c6 ;;
+          *)
+            echo "no pinned sha256 for '${os}_${arch}'"
+            exit 1
+            ;;
+        esac
+
         dl_url="https://github.com/dfinity/execlog2csv/releases/download/v$version/$filename.zip"
         echo "downloading '$dl_url'"
-        curl -SLO "$dl_url"
+        curl -fSLO --retry 7 "$dl_url"
+
+        # Verify the download before unpacking or executing any of it.
+        if command -v sha256sum >/dev/null; then
+          echo "$sha256  $filename.zip" | sha256sum --check
+        else
+          echo "$sha256  $filename.zip" | shasum -a 256 --check
+        fi
+
         unzip "$filename.zip"
         sudo mv "./execlog2csv_v$version" /usr/local/bin/execlog2csv
         rm "$filename.zip"
@@ -158,6 +186,9 @@ runs:
           ^@@rules_rust..crate.crate_index__cranelift-isle            # has a non reproducible isle_tests.rs in its OUT_DIR.
           ^@@rules_rust..crate.crate_index__secp256k1-sys             # has non reproducible object files, like lax_der_parsing.o, in it OUT_DIR.
           ^@@rules_rust..crate.crate_index__sev                       # build.rs depends on the presence of /dev/sev and /dev/sev-guest. See: https://github.com/virtee/sev/issues/315
+          # TODO: fix the following ASAP:
+          ^//ic-os/hostos/envs/prod:rootfs-tree.tar                   # became non-reproducible because of https://github.com/dfinity/ic/pull/10208
+          ^//ic-os/setupos/envs/prod:rootfs-tree.tar                  # idem
         )
         for execlog_zst in $(find '${{ steps.metrics-tmpdir.outputs.dir }}' -name 'execlog-*.zst'); do
           zstd -f -d "$execlog_zst" -o "$execlog"

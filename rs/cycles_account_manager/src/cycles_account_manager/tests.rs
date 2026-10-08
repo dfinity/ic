@@ -5,9 +5,8 @@ use ic_test_utilities_types::ids::subnet_test_id;
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
-fn create_cycles_account_manager(reference_subnet_size: usize) -> CyclesAccountManager {
-    let mut config = CyclesAccountManagerConfig::application_subnet();
-    config.reference_subnet_size = reference_subnet_size;
+fn create_cycles_account_manager() -> CyclesAccountManager {
+    let config = CyclesAccountManagerConfig::application_subnet();
 
     CyclesAccountManager {
         max_num_instructions: NumInstructions::from(1_000_000_000),
@@ -39,38 +38,80 @@ fn max_delayed_ingress_cost_payload_size_test() {
 #[test]
 fn test_scale_cost() {
     let reference_subnet_size = 13;
-    let cam = create_cycles_account_manager(reference_subnet_size);
+    let cam = create_cycles_account_manager();
 
     let cost = Cycles::new(13_000);
     assert_eq!(
-        cam.scale_cost::<Memory>(cost, 0, CanisterCyclesCostSchedule::Normal)
-            .real(),
+        cam.scale_cost::<Memory>(
+            cost,
+            CyclesAccountManagerSubnetConfig::new(
+                0,
+                CanisterCyclesCostSchedule::Normal,
+                reference_subnet_size
+            )
+        )
+        .real(),
         Cycles::new(0)
     );
     assert_eq!(
-        cam.scale_cost::<Memory>(cost, 1, CanisterCyclesCostSchedule::Normal)
-            .real(),
+        cam.scale_cost::<Memory>(
+            cost,
+            CyclesAccountManagerSubnetConfig::new(
+                1,
+                CanisterCyclesCostSchedule::Normal,
+                reference_subnet_size
+            )
+        )
+        .real(),
         Cycles::new(1_000)
     );
     assert_eq!(
-        cam.scale_cost::<Memory>(cost, 6, CanisterCyclesCostSchedule::Normal)
-            .real(),
+        cam.scale_cost::<Memory>(
+            cost,
+            CyclesAccountManagerSubnetConfig::new(
+                6,
+                CanisterCyclesCostSchedule::Normal,
+                reference_subnet_size
+            )
+        )
+        .real(),
         Cycles::new(6_000)
     );
     assert_eq!(
-        cam.scale_cost::<Memory>(cost, 13, CanisterCyclesCostSchedule::Normal)
-            .real(),
+        cam.scale_cost::<Memory>(
+            cost,
+            CyclesAccountManagerSubnetConfig::new(
+                13,
+                CanisterCyclesCostSchedule::Normal,
+                reference_subnet_size
+            )
+        )
+        .real(),
         Cycles::new(13_000)
     );
     assert_eq!(
-        cam.scale_cost::<Memory>(cost, 26, CanisterCyclesCostSchedule::Normal)
-            .real(),
+        cam.scale_cost::<Memory>(
+            cost,
+            CyclesAccountManagerSubnetConfig::new(
+                26,
+                CanisterCyclesCostSchedule::Normal,
+                reference_subnet_size
+            )
+        )
+        .real(),
         Cycles::new(26_000)
     );
 
     assert_eq!(
-        cam.scale_cost::<Memory>(cost, 26, CanisterCyclesCostSchedule::Free)
-            .real(),
+        cam.scale_cost::<Memory>(
+            cost,
+            CyclesAccountManagerSubnetConfig::new(
+                26,
+                CanisterCyclesCostSchedule::Free,
+                reference_subnet_size
+            )
+        )
+        .real(),
         Cycles::new(0)
     );
 
@@ -78,29 +119,14 @@ fn test_scale_cost() {
     assert_eq!(
         cam.scale_cost::<Memory>(
             Cycles::new(u128::MAX),
-            1_000_000,
-            CanisterCyclesCostSchedule::Normal
+            CyclesAccountManagerSubnetConfig::new(
+                1_000_000,
+                CanisterCyclesCostSchedule::Normal,
+                reference_subnet_size
+            )
         )
         .real(),
         Cycles::new(u128::MAX) / reference_subnet_size
-    );
-}
-
-#[test]
-fn test_reference_subnet_size_is_not_zero() {
-    // `reference_subnet_size` is used to scale cost according to a subnet size.
-    // It should never be equal to zero.
-    assert_ne!(
-        CyclesAccountManagerConfig::application_subnet().reference_subnet_size,
-        0
-    );
-    assert_ne!(
-        CyclesAccountManagerConfig::verified_application_subnet().reference_subnet_size,
-        0
-    );
-    assert_ne!(
-        CyclesAccountManagerConfig::system_subnet().reference_subnet_size,
-        0
     );
 }
 
@@ -109,7 +135,7 @@ fn http_requests_fee_scale() {
     let subnet_size: u64 = 34;
     let reference_subnet_size: u64 = 13;
     let request_size = NumBytes::from(17);
-    let cycles_account_manager = create_cycles_account_manager(reference_subnet_size as usize);
+    let cycles_account_manager = create_cycles_account_manager();
 
     // Check the fee for a 13-node subnet.
     assert_eq!(
@@ -117,8 +143,11 @@ fn http_requests_fee_scale() {
             .http_request_fee(
                 request_size,
                 None,
-                reference_subnet_size as usize,
-                CanisterCyclesCostSchedule::Normal,
+                CyclesAccountManagerSubnetConfig::new(
+                    reference_subnet_size as usize,
+                    CanisterCyclesCostSchedule::Normal,
+                    reference_subnet_size as usize,
+                ),
             )
             .real(),
         Cycles::from(1_603_786_800_u64) * reference_subnet_size
@@ -130,8 +159,11 @@ fn http_requests_fee_scale() {
             .http_request_fee(
                 request_size,
                 None,
-                subnet_size as usize,
-                CanisterCyclesCostSchedule::Normal,
+                CyclesAccountManagerSubnetConfig::new(
+                    subnet_size as usize,
+                    CanisterCyclesCostSchedule::Normal,
+                    reference_subnet_size as usize,
+                ),
             )
             .real(),
         Cycles::from(1_605_046_800_u64) * subnet_size
@@ -141,7 +173,7 @@ fn http_requests_fee_scale() {
 #[test]
 fn test_cycles_burn() {
     let subnet_size = 13;
-    let cycles_account_manager = create_cycles_account_manager(subnet_size);
+    let cycles_account_manager = create_cycles_account_manager();
     let initial_balance = Cycles::new(1_000_000_000);
     let mut balance = initial_balance;
     let amount_to_burn = Cycles::new(1_000_000);
@@ -155,8 +187,11 @@ fn test_cycles_burn() {
             0.into(),
             MessageMemoryUsage::ZERO,
             ComputeAllocation::default(),
-            13,
-            CanisterCyclesCostSchedule::Normal,
+            CyclesAccountManagerSubnetConfig::new(
+                13,
+                CanisterCyclesCostSchedule::Normal,
+                subnet_size
+            ),
             Cycles::new(0)
         ),
         amount_to_burn
@@ -174,8 +209,11 @@ fn test_cycles_burn() {
             0.into(),
             MessageMemoryUsage::ZERO,
             ComputeAllocation::default(),
-            13,
-            CanisterCyclesCostSchedule::Free,
+            CyclesAccountManagerSubnetConfig::new(
+                13,
+                CanisterCyclesCostSchedule::Free,
+                subnet_size
+            ),
             Cycles::new(0)
         ),
         amount_to_burn
@@ -187,8 +225,7 @@ fn test_cycles_burn() {
 
 #[test]
 fn test_convert_instructions_to_cycles() {
-    let subnet_size = 13;
-    let cycles_account_manager = create_cycles_account_manager(subnet_size);
+    let cycles_account_manager = create_cycles_account_manager();
 
     // Everything up to `u128::MAX / 4` should be converted as normal:
     // `(ten_update_instructions_execution_fee * num_instructions) / 10`

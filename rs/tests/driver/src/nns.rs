@@ -26,7 +26,7 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CA
 use ic_nns_governance_api::{
     BlessAlternativeGuestOsVersion, FulfillSubnetRentalRequest, MakeProposalRequest,
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction,
-    ProposalActionRequest, ProposalInfo, ProposalStatus, Vote,
+    ProposalActionRequest, ProposalInfo, ProposalStatus, UpdateStandardEngineReplicaVersion, Vote,
     manage_neuron::{NeuronIdOrSubaccount, RegisterVote},
     manage_neuron_response,
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
@@ -505,6 +505,7 @@ pub async fn execute_fulfill_subnet_rental_request(
     user: PrincipalId,
     node_ids: Vec<PrincipalId>,
     replica_version_id: String,
+    initial_dkg_subnet_id: Option<SubnetId>,
 ) -> ProposalId {
     // Gather the various pieces needed to assemble a request to
     // make/create/submit the new proposal.
@@ -530,6 +531,7 @@ pub async fn execute_fulfill_subnet_rental_request(
                 user,
                 node_ids,
                 replica_version_id,
+                initial_dkg_subnet_id: initial_dkg_subnet_id.map(|id| id.get()),
             },
         )),
     };
@@ -722,12 +724,34 @@ pub async fn submit_create_application_subnet_proposal(
     cost_schedule: Option<CanisterCyclesCostSchedule>,
     max_number_of_canisters: Option<u64>,
 ) -> ProposalId {
+    submit_create_application_subnet_proposal_with_initial_dkg_subnet(
+        governance,
+        node_ids,
+        replica_version,
+        cost_schedule,
+        max_number_of_canisters,
+        None,
+    )
+    .await
+}
+
+/// Submits a proposal for creating an application subnet and optionally
+/// selecting the subnet that handles initial DKG.
+pub async fn submit_create_application_subnet_proposal_with_initial_dkg_subnet(
+    governance: &Canister<'_>,
+    node_ids: Vec<NodeId>,
+    replica_version: ReplicaVersion,
+    cost_schedule: Option<CanisterCyclesCostSchedule>,
+    max_number_of_canisters: Option<u64>,
+    initial_dkg_subnet_id: Option<SubnetId>,
+) -> ProposalId {
     let config =
         subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
     let max_number_of_canisters = max_number_of_canisters.unwrap_or(0);
     let payload = CreateSubnetPayload {
         node_ids,
         subnet_id_override: None,
+        initial_dkg_subnet_id,
         max_ingress_bytes_per_message: config.max_ingress_bytes_per_message,
         max_ingress_bytes_per_block: Some(config.max_ingress_bytes_per_block),
         max_ingress_messages_per_block: config.max_ingress_messages_per_block,
@@ -1009,6 +1033,59 @@ pub async fn submit_bless_alternative_guest_os_version_proposal(
         .await
         .expect("Error calling the manage_neuron api.");
 
+    match response.command.unwrap() {
+        manage_neuron_response::Command::MakeProposal(resp) => {
+            ProposalId::from(resp.proposal_id.unwrap())
+        }
+        other => panic!("Unexpected response: {other:?}"),
+    }
+}
+
+/// Submits (but does not vote on) a proposal to change what replica
+/// version(s) Cloud Engines run, per `UpdateStandardEngineReplicaVersion`.
+///
+/// Returns the identifier of the newly submitted proposal.
+pub async fn submit_update_standard_engine_replica_version_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    new_replica_version_id: String,
+    old_replica_version_id: String,
+    deployment_progress: f64,
+) -> ProposalId {
+    // Assemble the request.
+    let proposal = MakeProposalRequest {
+        title: Some(format!(
+            "Update {:.1}% the Cloud Engine fleet to {new_replica_version_id}",
+            100.0 * deployment_progress,
+        )),
+        summary: "".to_string(),
+        url: "".to_string(),
+        action: Some(ProposalActionRequest::UpdateStandardEngineReplicaVersion(
+            UpdateStandardEngineReplicaVersion {
+                new_replica_version_id: Some(new_replica_version_id),
+                old_replica_version_id: Some(old_replica_version_id),
+                deployment_progress: Some(deployment_progress),
+            },
+        )),
+    };
+
+    // Send the request.
+    let response: ManageNeuronResponse = governance
+        .update_from_sender(
+            "manage_neuron",
+            candid_one,
+            ManageNeuronRequest {
+                id: None,
+                command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(proposal))),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id.into())),
+            },
+            &sender,
+        )
+        .await
+        .expect("Error calling the manage_neuron api.");
+
+    // Unpack the proposal ID from the response.
     match response.command.unwrap() {
         manage_neuron_response::Command::MakeProposal(resp) => {
             ProposalId::from(resp.proposal_id.unwrap())

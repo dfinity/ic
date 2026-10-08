@@ -268,10 +268,6 @@ fn wat_id<'a>(wat: &QuoteWat<'a>) -> Option<Id<'a>> {
     }
 }
 
-// False positive clippy lint.
-// Issue: https://github.com/rust-lang/rust-clippy/issues/12856
-// Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
-#[allow(clippy::needless_borrows_for_generic_args)]
 /// The tests seem to assume there is an existing `spectest` which provides
 /// these exports.
 fn define_spectest_exports(linker: &mut Linker<()>, mut store: &mut Store<()>) {
@@ -498,9 +494,11 @@ fn parse_and_encode(
             location(wat, text, path)
         )
     })?;
-    let mut module = wirm::Module::parse(&wasm, enable_multi_memory)
+    let module = wirm::Module::parse(&wasm, enable_multi_memory, false)
         .map_err(|e| format!("Parsing error: {:?} in {}", e, location(wat, text, path)))?;
-    module.encode();
+    module
+        .encode()
+        .map_err(|e| format!("Encoding error: {:?} in {}", e, location(wat, text, path)))?;
     Ok(wasm)
 }
 
@@ -704,7 +702,9 @@ fn run_directive<'a>(
         | WastDirective::Wait { .. }
         | WastDirective::ModuleDefinition(_)
         | WastDirective::ModuleInstance { .. }
-        | WastDirective::AssertSuspension { .. } => todo!(),
+        | WastDirective::AssertSuspension { .. }
+        | WastDirective::AssertInvalidCustom { .. }
+        | WastDirective::AssertMalformedCustom { .. } => todo!(),
     }
 }
 

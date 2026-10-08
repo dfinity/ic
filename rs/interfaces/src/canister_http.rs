@@ -1,6 +1,5 @@
 //! Canister Http related public interfaces.
 use crate::validation::ValidationError;
-use ic_base_types::RegistryVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     NodeId,
@@ -12,6 +11,7 @@ use ic_types::{
     crypto::{CryptoError, CryptoHashOf},
     messages::CallbackId,
 };
+use ic_types_cycles::Cycles;
 
 #[derive(Debug)]
 pub enum InvalidCanisterHttpPayloadReason {
@@ -47,21 +47,58 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// A timeout refers to a CallbackId that is unknown by the StateManager
     UnknownCallbackId(CallbackId),
+    /// An asynchronous receipt refers to a CallbackId that the StateManager does not
+    /// know as an already responded to request, i.e. one that is not among the
+    /// `delivered_canister_http_request_contexts`.
+    UnknownDeliveredCallbackId(CallbackId),
+    /// An asynchronous receipt refers to an already responded to request whose
+    /// delivered context has timed out, i.e. one that message routing settles and
+    /// drops in this very block, leaving nothing left to refund.
+    DeliveredCallbackTimedOut(CallbackId),
+    /// An asynchronous receipt reports a replica whose spend has already been
+    /// accounted for, either in the certified state or in a past payload.
+    AlreadyRefunded {
+        callback_id: CallbackId,
+        signer: NodeId,
+    },
     /// A CallbackId was included as a timeout, however the Request has not timed out at all
     NotTimedOut(CallbackId),
-    /// The registry version of a response does not match the validation context
-    RegistryVersionMismatch {
-        expected: RegistryVersion,
-        received: RegistryVersion,
-    },
     /// There was an error with a signature calculation
     SignatureError(Box<CryptoError>),
-    /// Some of the signatures in the canister http proof were not members of
-    /// the canister http committee.
-    SignersNotMembers {
-        committee: Vec<NodeId>,
-        invalid_signers: Vec<NodeId>,
-        valid_signers: Vec<NodeId>,
+    /// A payment receipt claims the replica spent more than it was allowed to:
+    /// the per-replica allowance derived from the request's payment on a
+    /// charging subnet, or the free-subnet maximum on a free subnet.
+    SpentExceedsLimit {
+        spent: Cycles,
+        limit: Cycles,
+    },
+    /// A share claims a `content_size` larger than the largest response the replica
+    /// could have produced, i.e. [`CanisterHttpRequestContext::max_http_outcall_content_size`].
+    ///
+    /// [`CanisterHttpRequestContext::max_http_outcall_content_size`]: ic_types::canister_http::CanisterHttpRequestContext::max_http_outcall_content_size
+    ContentSizeExceedsLimit {
+        callback_id: CallbackId,
+        content_size: u32,
+        limit: u64,
+    },
+    /// The collective initial spent cycles included in the payload do not match
+    /// the value recomputed from the request context's subnet size and the
+    /// signed per-replica receipts.
+    InitialSpentMismatch {
+        callback_id: CallbackId,
+        /// The initial spend received in the payload.
+        received: Cycles,
+        /// The initial spend the validator recomputed and expected.
+        expected: Cycles,
+    },
+    /// The collective initial spent cycles of a response exceed the collective
+    /// allowance of the replicas that contributed to it, i.e. the sum of their
+    /// per-replica allowances.
+    InitialSpentExceedsLimit {
+        callback_id: CallbackId,
+        initial_spent: Cycles,
+        per_replica_allowance: Cycles,
+        num_replicas: usize,
     },
     /// There were not enough signers in the canister http response proof
     NotEnoughSigners {
@@ -73,8 +110,9 @@ pub enum InvalidCanisterHttpPayloadReason {
     DuplicateResponse(CallbackId),
     DivergenceProofContainsMultipleCallbackIds,
     DivergenceProofDoesNotMeetDivergenceCriteria,
-    /// The callback_id in a flexible response group does not match a response or proof within it.
-    FlexibleCallbackIdMismatch {
+    /// The callback_id a share or response is signed for does not match the one of
+    /// the payload section it appears in.
+    ShareCallbackIdMismatch {
         callback_id: CallbackId,
         mismatched_id: CallbackId,
     },
@@ -85,13 +123,14 @@ pub enum InvalidCanisterHttpPayloadReason {
         min_responses: u32,
         max_responses: u32,
     },
-    /// A flexible response group has duplicate signers.
-    FlexibleDuplicateSigner {
+    /// A payload section carrying individual shares has more than one from the same
+    /// signer.
+    DuplicateShareSigner {
         callback_id: CallbackId,
         signer: NodeId,
     },
-    /// A signer in a flexible response group is not part of the flexible committee.
-    FlexibleSignerNotInCommittee {
+    /// A share is signed by a node that is not part of the request's committee.
+    ShareSignerNotInCommittee {
         callback_id: CallbackId,
         signer: NodeId,
     },
@@ -103,14 +142,21 @@ pub enum InvalidCanisterHttpPayloadReason {
     /// For example, a non-flexible response is not in the responses section
     /// or a flexible response is not in the flexible_responses section.
     InvalidPayloadSection(CallbackId),
-    /// A TooManyRequestErrors error does not carry enough rejects.
+    /// A TooManyRejects error does not carry enough rejects.
     FlexibleInsufficientRejectCount {
         callback_id: CallbackId,
         reject_count: usize,
         min_needed: usize,
     },
-    /// A TooManyRequestErrors entry contains a non-Reject response.
+    /// A TooManyRejects entry contains a non-Reject response.
     FlexibleRejectExpectedInErrorResponse(CallbackId),
+    /// A ResponsesTooLarge error has incorrect total_requests or min_responses.
+    FlexibleResponsesTooLargeParamMismatch {
+        callback_id: CallbackId,
+        field: &'static str,
+        expected: u32,
+        actual: u32,
+    },
     /// A ResponsesTooLarge error does not include enough OK shares to prove impossibility.
     FlexibleResponsesTooLargeInsufficientEvidence {
         callback_id: CallbackId,
@@ -119,6 +165,29 @@ pub enum InvalidCanisterHttpPayloadReason {
     },
     /// A ResponsesTooLarge error is invalid: the smallest responses actually fit.
     FlexibleResponsesNotTooLarge(CallbackId),
+    /// A figure an OutOfCycles error reports to the caller does not match the value
+    /// recomputed from the request context and the signed receipts.
+    OutOfCyclesFigureMismatch {
+        callback_id: CallbackId,
+        field: &'static str,
+        /// The figure received in the payload.
+        received: Cycles,
+        /// The figure the validator recomputed and expected.
+        expected: Cycles,
+    },
+    /// An OutOfCycles error is invalid: what is left of the committee's
+    /// per-replica allowances can still cover the cost of delivering a response.
+    NotOutOfCycles {
+        callback_id: CallbackId,
+        /// The committee's collective allowance that is still unspent, assuming
+        /// that every committee member that has not reported a spend yet has
+        /// spent nothing; or `None` if the outcall has no per-replica allowance to
+        /// spend in the first place, and so none to run out of.
+        unspent_allowance: Option<Cycles>,
+        /// The least it can cost to deliver a response, or `None` if no response
+        /// can be delivered any more, in which case there is no cost to cover.
+        min_cost: Option<Cycles>,
+    },
     /// The payload could not be deserialized
     DecodeError(ProxyDecodeError),
 }
@@ -128,8 +197,6 @@ pub enum InvalidCanisterHttpPayloadReason {
 pub enum CanisterHttpPayloadValidationFailure {
     /// The state was not available at the time of validation
     StateUnavailable,
-    /// The consensus registry version could not be retrieved from the summary
-    ConsensusRegistryVersionUnavailable,
     /// The feature is not enabled
     Disabled,
     /// Membership Issue
@@ -139,11 +206,27 @@ pub enum CanisterHttpPayloadValidationFailure {
 pub type CanisterHttpPayloadValidationError =
     ValidationError<InvalidCanisterHttpPayloadReason, CanisterHttpPayloadValidationFailure>;
 
+/// Whether the response of a share is passed on to peers: gossiped along with the
+/// share, and served to a peer that pulls the artifact later.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResponseVisibility {
+    /// The peers of an outcall that is not fully replicated cannot produce the
+    /// response themselves, so they need ours.
+    Publish,
+    /// Either every replica of a fully replicated outcall produces the response
+    /// itself, or the outcall has already been answered and its response is of no
+    /// use to anyone.
+    Withhold,
+}
+
 #[derive(Debug)]
 pub enum CanisterHttpChangeAction {
-    AddToValidated(CanisterHttpResponseShare, CanisterHttpResponse),
-    AddToValidatedAndGossipResponse(CanisterHttpResponseShare, CanisterHttpResponse),
-    MoveToValidated(CanisterHttpResponseShare),
+    AddToValidated(
+        CanisterHttpResponseShare,
+        CanisterHttpResponse,
+        ResponseVisibility,
+    ),
+    MoveToValidated(CanisterHttpResponseShare, ResponseVisibility),
     RemoveValidated(CanisterHttpResponseId),
     RemoveUnvalidated(CanisterHttpResponseId),
     RemoveContent(CryptoHashOf<CanisterHttpResponse>),
@@ -155,14 +238,16 @@ pub type CanisterHttpChangeSet = Vec<CanisterHttpChangeAction>;
 /// Artifact pool for the Canister HTTP messages (query interface)
 pub trait CanisterHttpPool: Send + Sync {
     fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_>;
+
     fn get_unvalidated_artifacts(
         &self,
     ) -> Box<dyn Iterator<Item = &CanisterHttpResponseArtifact> + '_>;
+
     fn get_unvalidated_artifact(
         &self,
         share: &CanisterHttpResponseShare,
     ) -> Option<&CanisterHttpResponseArtifact>;
-    // TODO: Likely not needed
+
     fn get_response_content_items(
         &self,
     ) -> Box<dyn Iterator<Item = (&CryptoHashOf<CanisterHttpResponse>, &CanisterHttpResponse)> + '_>;
@@ -170,7 +255,7 @@ pub trait CanisterHttpPool: Send + Sync {
     fn get_response_content_by_hash(
         &self,
         hash: &CryptoHashOf<CanisterHttpResponse>,
-    ) -> Option<CanisterHttpResponse>;
+    ) -> Option<&CanisterHttpResponse>;
 
     fn lookup_validated(
         &self,

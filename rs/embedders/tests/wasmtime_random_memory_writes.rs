@@ -1,8 +1,9 @@
 use ic_config::{
-    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
-    subnet_config::SchedulerConfig,
+    embedders::Config as EmbeddersConfig,
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::{DEFAULT_PAGE_OVERHEAD, DEFAULT_REFERENCE_SUBNET_SIZE, SchedulerConfig},
 };
-use ic_cycles_account_manager::ResourceSaturation;
+use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     WasmtimeEmbedder,
     wasm_utils::compile,
@@ -14,6 +15,7 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{
     ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
@@ -44,6 +46,15 @@ const STABLE_OP_BYTES: u64 = 37;
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
 const TEST_DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * 1024; // 4 KiB
+
+const OS_PAGES_PER_WASM_PAGE: usize =
+    ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES / ic_sys::PAGE_SIZE;
+
+/// Returns the per-Wasm-page instruction charge applied by the deterministic
+/// memory tracker.
+fn dsm_charge_per_wasm_page() -> u64 {
+    OS_PAGES_PER_WASM_PAGE as u64 * DEFAULT_PAGE_OVERHEAD.get()
+}
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
@@ -83,20 +94,17 @@ fn test_api_for_update(
     let static_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         *cycles_account_manager,
-        &NetworkTopology::default(),
-        match subnet_type {
-            SubnetType::Application => SchedulerConfig::application_subnet(),
-            SubnetType::System => SchedulerConfig::system_subnet(),
-            SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
-            SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
-        }
-        .dirty_page_overhead,
+        std::sync::Arc::new(NetworkTopology::default()),
         ComputeAllocation::default(),
         HypervisorConfig::default().subnet_callback_soft_limit as u64,
         Default::default(),
         Some(caller),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     );
     let canister_current_memory_usage = NumBytes::from(0);
     let canister_current_message_memory_usage = MessageMemoryUsage::ZERO;
@@ -741,7 +749,7 @@ mod tests {
 
             // Set maximum number of instructions to some low value to trap
             // Note: system API calls get charged per call, see system_api::charges
-            let max_num_instructions = NumInstructions::new(10_000);
+            let max_num_instructions = NumInstructions::new(200_000);
 
             // Consumes less than max_num_instructions.
             let instructions_consumed_without_data = get_num_instructions_consumed(
@@ -775,10 +783,7 @@ mod tests {
         //! stable API operations.  Each function contains a single stable read
         //! or write, in addition to 7 instructions required for setup.
 
-        use super::{
-            MAX_NUM_INSTRUCTIONS, STABLE_OP_BYTES, SubnetType, get_num_instructions_consumed,
-        };
-        use ic_config::subnet_config::SchedulerConfig;
+        use super::*;
         use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
         use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
         use ic_logger::replica_logger::no_op_logger;
@@ -825,13 +830,16 @@ mod tests {
             )
             .unwrap();
             // Read of `STABLE_OP_BYTES` should cost an additional instruction
-            // for each byte.
+            // for each byte, plus charges for accessing and dirtying the
+            // destination heap page.
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
                     + STABLE_OP_BYTES
+                    + dsm_charge_per_wasm_page()
+                    + dsm_charge_per_wasm_page()
             );
         }
 
@@ -846,13 +854,16 @@ mod tests {
             )
             .unwrap();
             // Read of `STABLE_OP_BYTES` should cost an additional instruction
-            // for each byte.
+            // for each byte, plus charges for accessing and dirtying the
+            // destination heap page.
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE64_READ
                         .get()
                     + STABLE_OP_BYTES
+                    + dsm_charge_per_wasm_page()
+                    + dsm_charge_per_wasm_page()
             );
         }
 
@@ -866,13 +877,16 @@ mod tests {
                 SubnetType::System,
             )
             .unwrap();
-            // Only the fixed cost is charged on system subnets.
+            // Fixed cost plus charges for accessing and dirtying the
+            // destination heap page.
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
                     + STABLE_OP_BYTES
+                    + dsm_charge_per_wasm_page()
+                    + dsm_charge_per_wasm_page()
             );
         }
 
@@ -886,17 +900,17 @@ mod tests {
                 SubnetType::Application,
             )
             .unwrap();
-            // Read of `STABLE_OP_BYTES` should cost an additional instruction
-            // for each byte and an extra charge for one dirty page.
+            // Write of `STABLE_OP_BYTES` should cost an additional instruction
+            // for each byte, a dirty page overhead charge, plus charges for
+            // accessing and dirtying the source heap page.
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
-                    + SchedulerConfig::application_subnet()
-                        .dirty_page_overhead
-                        .get()
+                    + dsm_charge_per_wasm_page()
+                    + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
             );
         }
 
@@ -910,14 +924,16 @@ mod tests {
                 SubnetType::System,
             )
             .unwrap();
-            // Only the extra charge for the dirty page.
+            // Dirty page overhead plus charges for accessing and dirtying the
+            // source heap page.
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
-                    + SchedulerConfig::system_subnet().dirty_page_overhead.get()
+                    + dsm_charge_per_wasm_page()
+                    + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
             );
         }
 
@@ -931,17 +947,17 @@ mod tests {
                 SubnetType::Application,
             )
             .unwrap();
-            // Read of `STABLE_OP_BYTES` should cost an additional instruction
-            // for each byte and an extra charge for one dirty page.
+            // Write of `STABLE_OP_BYTES` should cost an additional instruction
+            // for each byte, a dirty page overhead charge, plus charges for
+            // accessing and dirtying the source heap page.
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
-                    + SchedulerConfig::application_subnet()
-                        .dirty_page_overhead
-                        .get()
+                    + dsm_charge_per_wasm_page()
+                    + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
             );
         }
 
@@ -955,14 +971,16 @@ mod tests {
                 SubnetType::System,
             )
             .unwrap();
-            // Only the extra charge for the dirty page.
+            // Dirty page overhead plus charges for accessing and dirtying the
+            // source heap page.
             assert_eq!(
                 instructions_consumed.get(),
                 setup_instruction_overhead()
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
-                    + SchedulerConfig::system_subnet().dirty_page_overhead.get()
+                    + dsm_charge_per_wasm_page()
+                    + dsm_charge_per_wasm_page() + dsm_charge_per_wasm_page()
             );
         }
     }
@@ -977,26 +995,6 @@ mod tests {
             with_test_replica_logger(|log| {
                 let dst: u32 = 0;
 
-                let dirty_heap_cost = match EmbeddersConfig::default().metering_type {
-                    ic_config::embedders::MeteringType::New => match subnet_type {
-                        SubnetType::System => {
-                            SchedulerConfig::system_subnet().dirty_page_overhead.get()
-                        }
-                        SubnetType::Application => SchedulerConfig::application_subnet()
-                            .dirty_page_overhead
-                            .get(),
-                        SubnetType::VerifiedApplication => {
-                            SchedulerConfig::verified_application_subnet()
-                                .dirty_page_overhead
-                                .get()
-                        }
-                        SubnetType::CloudEngine => {
-                            SchedulerConfig::cloud_engine().dirty_page_overhead.get()
-                        }
-                    },
-                    _ => 0,
-                };
-
                 let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
                 payload.extend(random_payload());
                 let payload_size = payload.len() - 4;
@@ -1004,19 +1002,29 @@ mod tests {
                 let mut double_size_payload: Vec<u8> = payload.clone();
                 double_size_payload.extend(random_payload());
 
-                let (instructions_consumed_without_data, dry_run_stats) = run_and_get_stats(
-                    log.clone(),
-                    "write_bytes",
-                    dst.to_le_bytes().to_vec(),
-                    MAX_NUM_INSTRUCTIONS,
-                    subnet_type,
-                )
-                .unwrap();
-                let dry_run_dirty_heap = dry_run_stats.wasm_dirty_pages.len() as u64;
+                // The deterministic memory tracker charges at 64 KiB Wasm page
+                // granularity. Use InstanceStats to get the actual Wasm page
+                // counts and compute the exact tracker charge.
+                let tracker_charge =
+                    |stats: &ic_interfaces::execution_environment::InstanceStats| -> u64 {
+                        stats.wasm_accessed_wasm_pages_count as u64 * dsm_charge_per_wasm_page()
+                            + stats.wasm_dirty_wasm_pages_count as u64 * dsm_charge_per_wasm_page()
+                    };
+
+                let (instructions_consumed_without_data, _dry_run_stats, dry_run_instance_stats) =
+                    run_and_get_stats(
+                        log.clone(),
+                        "write_bytes",
+                        dst.to_le_bytes().to_vec(),
+                        MAX_NUM_INSTRUCTIONS,
+                        subnet_type,
+                    )
+                    .unwrap();
+                let dry_run_tracker = tracker_charge(&dry_run_instance_stats);
 
                 {
                     // Number of instructions consumed only for copying the payload.
-                    let (consumed_instructions, run_stats) = run_and_get_stats(
+                    let (consumed_instructions, _run_stats, _instance_stats) = run_and_get_stats(
                         log.clone(),
                         "write_bytes",
                         payload,
@@ -1024,34 +1032,33 @@ mod tests {
                         subnet_type,
                     )
                     .unwrap();
-                    let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
                     let consumed_instructions =
                         consumed_instructions - instructions_consumed_without_data;
                     assert_eq!(
-                        (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
-                        (payload_size / BYTES_PER_INSTRUCTION)
-                            - (dry_run_dirty_heap * dirty_heap_cost) as usize,
+                        (consumed_instructions.get()) as usize,
+                        (payload_size / BYTES_PER_INSTRUCTION),
                     );
                 }
 
                 {
                     // Number of instructions consumed increased with the size of the data.
-                    let (consumed_instructions, run_stats) = run_and_get_stats(
-                        log,
-                        "write_bytes",
-                        double_size_payload,
-                        MAX_NUM_INSTRUCTIONS,
-                        subnet_type,
-                    )
-                    .unwrap();
-                    let dirty_heap = run_stats.wasm_dirty_pages.len() as u64;
+                    let (consumed_instructions, _run_stats, double_run_instance_stats) =
+                        run_and_get_stats(
+                            log,
+                            "write_bytes",
+                            double_size_payload,
+                            MAX_NUM_INSTRUCTIONS,
+                            subnet_type,
+                        )
+                        .unwrap();
                     let consumed_instructions =
                         consumed_instructions - instructions_consumed_without_data;
 
+                    let double_run_tracker = tracker_charge(&double_run_instance_stats);
                     assert_eq!(
-                        (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
+                        (consumed_instructions.get() as usize),
                         (2 * payload_size / BYTES_PER_INSTRUCTION)
-                            - (dry_run_dirty_heap * dirty_heap_cost) as usize
+                            + (double_run_tracker - dry_run_tracker) as usize
                     );
                 }
             })
@@ -1064,18 +1071,25 @@ mod tests {
         payload: Vec<u8>,
         max_num_instructions: NumInstructions,
         subnet_type: SubnetType,
-    ) -> Result<(NumInstructions, ic_embedders::InstanceRunResult), HypervisorError> {
+    ) -> Result<
+        (
+            NumInstructions,
+            ic_embedders::InstanceRunResult,
+            ic_interfaces::execution_environment::InstanceStats,
+        ),
+        HypervisorError,
+    > {
         let wat = make_module_wat(2 * TEST_NUM_PAGES);
         let wasm = wat2wasm(&wat).unwrap();
 
         let config = EmbeddersConfig {
-            dirty_page_overhead: match subnet_type {
+            page_overhead: match subnet_type {
                 SubnetType::System => SchedulerConfig::system_subnet(),
                 SubnetType::Application => SchedulerConfig::application_subnet(),
                 SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
                 SubnetType::CloudEngine => SchedulerConfig::cloud_engine(),
             }
-            .dirty_page_overhead,
+            .page_overhead,
             ..EmbeddersConfig::default()
         };
         let embedder = WasmtimeEmbedder::new(config, log.clone());
@@ -1105,8 +1119,9 @@ mod tests {
             .system_api()
             .unwrap()
             .slice_instructions_executed(instruction_counter);
+        let stats = inst.get_stats();
 
-        Ok((instructions_executed, res))
+        Ok((instructions_executed, res, stats))
     }
 
     fn get_num_instructions_consumed(
@@ -1116,7 +1131,7 @@ mod tests {
         max_num_instructions: NumInstructions,
         subnet_type: SubnetType,
     ) -> Result<NumInstructions, HypervisorError> {
-        let (num_instructions, _) =
+        let (num_instructions, _, _) =
             run_and_get_stats(log, method, payload, max_num_instructions, subnet_type)?;
         Ok(num_instructions)
     }

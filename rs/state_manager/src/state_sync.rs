@@ -205,7 +205,7 @@ impl StateSync {
     }
 
     pub fn get(&self, msg_id: &StateSyncArtifactId) -> Option<StateSyncMessage> {
-        let mut file_group_to_populate: Option<Arc<FileGroupChunks>> = None;
+        let mut file_group_to_populate: Option<(Height, Arc<FileGroupChunks>)> = None;
 
         let state_sync_message = self
             .state_manager
@@ -229,7 +229,8 @@ impl StateSync {
                             // Note that this code path will be called at most once because the value is then populated.
                             let computed_file_group_chunks =
                                 Arc::new(build_file_group_chunks(manifest));
-                            file_group_to_populate = Some(computed_file_group_chunks.clone());
+                            file_group_to_populate =
+                                Some((*height, computed_file_group_chunks.clone()));
                             computed_file_group_chunks
                         }
                     };
@@ -248,13 +249,13 @@ impl StateSync {
                 }
             });
 
-        if let Some(state_sync_file_group) = file_group_to_populate
+        if let Some((height, state_sync_file_group)) = file_group_to_populate
             && let Some(metadata) = self
                 .state_manager
                 .states
                 .write()
                 .states_metadata
-                .get_mut(&msg_id.height)
+                .get_mut(&height)
         {
             metadata.state_sync_file_group = Some(state_sync_file_group);
         }

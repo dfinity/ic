@@ -3,7 +3,7 @@ use super::*;
 use crate::{
     governance::Environment,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
-    pb::v1::Subaccount,
+    pb::v1::{MaturityModulation, Subaccount},
     test_utils::{MockEnvironment, MockRandomness},
 };
 
@@ -537,15 +537,16 @@ fn set_governance_for_test(
     maturity_modulation: i32,
 ) {
     let mut governance = Governance::new(
-        GovernanceApi {
-            cached_daily_maturity_modulation_basis_points: Some(maturity_modulation),
-            ..Default::default()
-        },
+        GovernanceApi::default(),
         MOCK_ENVIRONMENT.with(|env| env.clone()),
         Arc::new(mock_ledger),
         Arc::new(MockCMC::default()),
         Box::new(MockRandomness::new()),
     );
+    governance.heap_data.maturity_modulation = Some(MaturityModulation {
+        current_value_permyriad: Some(maturity_modulation),
+        ..Default::default()
+    });
     for neuron in neurons {
         governance.neuron_store.add_neuron(neuron).unwrap();
     }
@@ -617,9 +618,7 @@ async fn test_finalize_maturity_disbursement_no_maturity_modulation() {
         DEFAULT_MATURITY_MODULATION_BASIS_POINTS,
     );
     TEST_GOVERNANCE.with_borrow_mut(|governance| {
-        governance
-            .heap_data
-            .cached_daily_maturity_modulation_basis_points = None;
+        governance.heap_data.maturity_modulation = None;
     });
 
     // Step 2: Initiate the maturity disbursement and advance to disbursement time.

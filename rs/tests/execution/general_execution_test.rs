@@ -12,6 +12,7 @@ use general_execution_tests::api_tests::{root_key_on_nns_subnet, root_key_on_non
 use general_execution_tests::big_stable_memory::*;
 use general_execution_tests::canister_heartbeat::*;
 use general_execution_tests::canister_lifecycle::*;
+use general_execution_tests::canister_snapshots::upload_and_load_snapshot_with_wasm_memory;
 use general_execution_tests::cycles_transfer::*;
 use general_execution_tests::ingress_rate_limiting::*;
 use general_execution_tests::input_deduplication::input_deduplication_test;
@@ -106,7 +107,8 @@ fn main() -> Result<()> {
                 ))
                 .add_test(systest!(stack_overflow))
                 .add_test(systest!(root_key_on_nns_subnet))
-                .add_test(systest!(root_key_on_non_nns_subnet)),
+                .add_test(systest!(root_key_on_non_nns_subnet))
+                .add_test(systest!(upload_and_load_snapshot_with_wasm_memory)),
         )
         .execute_from_args()?;
 

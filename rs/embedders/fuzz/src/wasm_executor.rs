@@ -1,9 +1,9 @@
 use crate::ic_wasm::{ICWasmModule, get_system_api_type_for_wasm_method};
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
-    subnet_config::SchedulerConfig,
+    subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE,
 };
-use ic_cycles_account_manager::ResourceSaturation;
+use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, WasmExecutionInput, WasmtimeEmbedder,
     wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
@@ -15,6 +15,7 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{
     ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
@@ -37,7 +38,7 @@ use ic_types::{
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
-use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
+use std::{collections::BTreeSet, sync::Arc};
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
@@ -76,7 +77,6 @@ pub fn run_fuzzer(module: ICWasmModule) {
 
     let result = wasm_executor.create_execution_state(
         canister_module,
-        PathBuf::new(),
         CanisterId::from_u64(1),
         compilation_cache.clone(),
     );
@@ -85,7 +85,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
         // Compilation can fail!
         return;
     }
-    let mut execution_state = result.unwrap().0;
+    let mut execution_state = result.unwrap().execution_state;
 
     // For determinism, all methods are executed
     for wasm_method in wasm_methods.iter() {
@@ -152,20 +152,22 @@ pub(crate) fn get_sandbox_safe_system_state(
     api_type: ApiType,
 ) -> SandboxSafeSystemState {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
     let network_topology = NetworkTopology::default();
 
     SandboxSafeSystemState::new_for_testing(
         system_state,
         cycles_account_manager,
-        &network_topology,
-        dirty_page_overhead,
+        Arc::new(network_topology),
         ComputeAllocation::default(),
         HypervisorConfig::default().subnet_callback_soft_limit as u64,
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
-        CanisterCyclesCostSchedule::Normal,
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
     )
 }
 

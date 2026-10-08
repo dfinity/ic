@@ -145,15 +145,20 @@ fn bench_create_transcript<M: Measurement, R: Rng + CryptoRng>(
     let bench_context = OnceCell::new();
 
     group.bench_function("create_transcript", |bench| {
-        bench.iter_batched_ref(
+        bench.iter_batched(
             || {
                 let (env, config, dealings, creator_node_id) = bench_context
                     .get_or_init(|| prepare_create_transcript_test_vectors(test_case, rng));
 
-                (config, dealings, creator_node_id, &env.crypto_components)
+                (
+                    config,
+                    dealings.clone(),
+                    creator_node_id,
+                    &env.crypto_components,
+                )
             },
             |(config, dealings, creator_node_id, crypto_components)| {
-                create_transcript(config, crypto_components, dealings, **creator_node_id)
+                create_transcript(config, crypto_components, dealings, *creator_node_id)
             },
             SmallInput,
         )

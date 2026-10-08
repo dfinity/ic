@@ -140,6 +140,7 @@ def main():
         "--populate-b-partitions",
         help="Whether to populate the B partition set with the same content as the A partition set "
         "(mostly for testing). The default behavior is to leave the B partitions empty.",
+        action="store_true",
     )
     parser.add_argument(
         "partitions",

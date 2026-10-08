@@ -1,17 +1,18 @@
 use crate::message_routing::{
-    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics, MessageRoutingMetrics,
+    CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics,
+    MessageRoutingMetrics,
 };
 use ic_error_types::RejectCode;
-use ic_logger::{ReplicaLogger, error, warn};
+use ic_logger::{ReplicaLogger, debug, error, warn};
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::{
     MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN, PeekableOutputIterator, ReplicatedStateMessageRouting,
 };
-use ic_replicated_state::{ReplicatedState, Stream};
+use ic_replicated_state::{ReplicatedState, StateError, Stream};
 use ic_types::messages::{
-    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, Payload, RejectContext,
-    Request, RequestOrResponse, Response, StreamMessage,
+    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload,
+    RejectContext, Request, RequestOrResponse, Response, StreamMessage,
 };
 use ic_types::{CountBytes, SubnetId};
 use ic_types_cycles::{CompoundCycles, Cycles};
@@ -41,8 +42,12 @@ struct StreamBuilderMetrics {
     pub routed_payload_sizes: Histogram,
     /// Misrouted messages currently in streams, by remote subnet.
     pub stream_misrouted_messages: IntGaugeVec,
-    /// Critical error counter for detected infinite loops while routing.
-    pub critical_error_infinite_loops: IntCounter,
+    /// Output queues skipped because this subnet or their destination subnet was
+    /// cooling down.
+    pub cooling_down_skipped_queues: IntCounter,
+    /// Refunds skipped because their destination subnet was cooling down while this
+    /// subnet was not.
+    pub cooling_down_skipped_refunds: IntCounter,
     /// Critical error for payloads above the maximum supported size.
     pub critical_error_payload_too_large: IntCounter,
     /// Critical error for responses dropped due to destination not found.
@@ -50,6 +55,10 @@ struct StreamBuilderMetrics {
     /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
     /// failures to induct responses.
     pub critical_error_induct_response_failed: IntCounter,
+    /// Critical error for messages that should never have reached an engine
+    /// boundary (e.g. a refund or a guaranteed-response/cycle-bearing response),
+    /// indicating that an earlier engine-boundary check failed.
+    pub critical_error_engine_message: IntCounter,
 }
 
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
@@ -60,6 +69,8 @@ const METRIC_SIGNALS_END: &str = "mr_signals_end";
 const METRIC_ROUTED_MESSAGES: &str = "mr_routed_message_count";
 const METRIC_ROUTED_PAYLOAD_SIZES: &str = "mr_routed_payload_size_bytes";
 const METRIC_STREAM_MISROUTED_MESSAGES: &str = "mr_stream_misrouted_messages";
+const METRIC_COOLING_DOWN_SKIPPED_QUEUES: &str = "mr_cooling_down_skipped_queues";
+const METRIC_COOLING_DOWN_SKIPPED_REFUNDS: &str = "mr_cooling_down_skipped_refunds";
 
 const LABEL_TYPE: &str = "type";
 const LABEL_STATUS: &str = "status";
@@ -71,8 +82,8 @@ const LABEL_VALUE_TYPE_REFUND: &str = "refund";
 const LABEL_VALUE_STATUS_SUCCESS: &str = "success";
 const LABEL_VALUE_STATUS_CANISTER_NOT_FOUND: &str = "canister_not_found";
 const LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE: &str = "payload_too_large";
+const LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED: &str = "engine_not_allowed";
 
-const CRITICAL_ERROR_INFINITE_LOOP: &str = "mr_stream_builder_infinite_loop";
 const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "mr_stream_builder_payload_too_large";
 const CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND: &str =
     "mr_stream_builder_response_destination_not_found";
@@ -99,7 +110,7 @@ impl StreamBuilderMetrics {
         );
         let stream_signals = metrics_registry.int_gauge_vec(
             METRIC_STREAM_SIGNALS,
-            "Signals currently enqueued in streams, by remote subnet.",
+            "Reject signals currently enqueued in streams, by remote subnet.",
             &[LABEL_REMOTE],
         );
         let signals_end = metrics_registry.int_gauge_vec(
@@ -123,14 +134,28 @@ impl StreamBuilderMetrics {
             "Count of misrouted messages in streams, by remote subnet. Only populated for subnets currently involved in a canister migration.",
             &[LABEL_REMOTE],
         );
-        let critical_error_infinite_loops =
-            metrics_registry.error_counter(CRITICAL_ERROR_INFINITE_LOOP);
+        let cooling_down_skipped_queues = metrics_registry.int_counter(
+            METRIC_COOLING_DOWN_SKIPPED_QUEUES,
+            "Output queues skipped because this subnet or their destination subnet was \
+            cooling down. Counted once per queue per round, so the same queue is counted \
+            repeatedly for as long as either subnet keeps cooling down.",
+        );
+        let cooling_down_skipped_refunds = metrics_registry.int_counter(
+            METRIC_COOLING_DOWN_SKIPPED_REFUNDS,
+            "Refunds skipped because their destination subnet was cooling down while this \
+            subnet was not. Counted once per refund per round, so the same refund is counted \
+            repeatedly for as long as that remains the case, i.e. until the destination subnet \
+            stops cooling down or this subnet starts.",
+        );
         let critical_error_payload_too_large =
             metrics_registry.error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE);
         let critical_error_response_destination_not_found =
             metrics_registry.error_counter(CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND);
         let critical_error_induct_response_failed = message_routing_metrics
             .critical_error_induct_response_failed
+            .clone();
+        let critical_error_engine_message = message_routing_metrics
+            .critical_error_engine_message
             .clone();
         // Initialize all `routed_messages` counters with zero, so they are all exported
         // from process start (`IntCounterVec` is really a map).
@@ -163,10 +188,12 @@ impl StreamBuilderMetrics {
             routed_messages,
             routed_payload_sizes,
             stream_misrouted_messages,
-            critical_error_infinite_loops,
+            cooling_down_skipped_queues,
+            cooling_down_skipped_refunds,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
             critical_error_induct_response_failed,
+            critical_error_engine_message,
         }
     }
 }
@@ -397,7 +424,7 @@ impl StreamBuilderImpl {
         // Tests whether a stream is over the message count limit, byte limit or (if
         // directed at a system subnet) over `2 * system_subnet_stream_msg_limit`.
         let is_at_limit = |stream: &btree_map::Entry<SubnetId, Stream>,
-                           destination_subnet_type: SubnetType|
+                           destination_subnet_type: Option<SubnetType>|
          -> bool {
             let stream = match stream {
                 btree_map::Entry::Occupied(occupied_entry) => occupied_entry.get(),
@@ -416,13 +443,14 @@ impl StreamBuilderImpl {
             // At limit if system subnet limit is hit. This is only enforced for non-local
             // streams to system subnets (i.e., excluding the loopback stream on system
             // subnets). And only applies to canister messages, not refunds.
-            destination_subnet_type == SubnetType::System
+            destination_subnet_type == Some(SubnetType::System)
                 && stream_messages_len - stream.refund_count()
                     >= 2 * self.system_subnet_stream_msg_limit
         };
 
         let mut streams = state.take_streams();
         let network_topology = state.metadata.network_topology.clone();
+        let own_subnet_type = state.metadata.own_subnet_type;
 
         // First, have up to `max_stream_messages / 2` refunds in each stream (including
         // already routed ones) while respecting stream message and byte limits.
@@ -437,11 +465,16 @@ impl StreamBuilderImpl {
         let refund_limit = self.max_stream_messages / 2;
         self.route_refunds(&mut state, refund_limit, &network_topology, &mut streams);
 
+        let own_subnet_is_cooling_down = network_topology.is_cooling_down(&self.subnet_id);
+
         let mut requests_to_reject = Vec::new();
         let mut oversized_requests = Vec::new();
+        let mut engine_requests_to_reject: Vec<Arc<Request>> = Vec::new();
+        let mut engine_response_dropped_cycles = Cycles::zero();
+        let mut dropped_response_cycles = Cycles::zero();
+        let own_cost_schedule = state.get_own_cost_schedule();
 
         let mut output_iter = state.output_into_iter();
-        let mut last_output_size = usize::MAX;
 
         // Route all messages into the appropriate stream or generate reject Responses
         // when unable to (no route to canister). When a stream's byte size reaches or
@@ -449,36 +482,46 @@ impl StreamBuilderImpl {
         while let Some(msg) = output_iter.peek() {
             // Cheap to clone, `RequestOrResponse` wraps `Arcs`.
             let msg = msg.clone();
-            // Safeguard to guarantee that iteration always terminates. Will always loop at
-            // least once, if messages are available.
-            let output_size = output_iter.size();
-            debug_assert!(output_size < last_output_size);
-            if output_size >= last_output_size {
-                error!(
-                    self.log,
-                    "{}: Infinite loop detected in StreamBuilder::build_streams @{}.",
-                    CRITICAL_ERROR_INFINITE_LOOP,
-                    output_size
-                );
-                self.metrics.critical_error_infinite_loops.inc();
-                break;
-            }
-            last_output_size = output_size;
+
+            // No canister can have the subnet's own principal as its canister ID, so this
+            // identifies the messages taken from the subnet's own output queues. Those are
+            // only ever responses, as the management canister makes no calls of its own.
+            let is_subnet_output_response = msg.sender().get() == self.subnet_id.get();
 
             match network_topology.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
-                    let dst_stream_entry = streams.entry(dst_subnet_id);
                     let is_loopback_stream = self.subnet_id == dst_subnet_id;
-                    if !is_loopback_stream
-                        && is_at_limit(
-                            &dst_stream_entry,
-                            network_topology
-                                .subnets()
-                                .get(&dst_subnet_id)
-                                .map_or(SubnetType::Application, |topology| topology.subnet_type),
-                        )
-                    {
+                    let dst_subnet_topology = network_topology.subnets().get(&dst_subnet_id);
+                    let dst_subnet_type = dst_subnet_topology.map(|topology| topology.subnet_type);
+
+                    let dst_subnet_is_cooling_down =
+                        dst_subnet_topology.is_some_and(|topology| topology.cooling_down);
+
+                    // No messages from canister output queues are routed while either this
+                    // subnet (the source) or the destination subnet is cooling down; not
+                    // even into the loopback stream.
+                    //
+                    // Subnet output queues of cooling down subnets (only holding responses) are
+                    // exempt, so they can deliver responses (before the subnet is deleted) to all
+                    // the calls they have already accepted.
+                    //
+                    // Retain the message (along with everything behind it in the same queue)
+                    // until the subnet that holds it back stops cooling down, rather than
+                    // rejecting or dropping it.
+                    let skip_while_cooling_down = if is_subnet_output_response {
+                        !own_subnet_is_cooling_down && dst_subnet_is_cooling_down
+                    } else {
+                        own_subnet_is_cooling_down || dst_subnet_is_cooling_down
+                    };
+                    if skip_while_cooling_down {
+                        self.metrics.cooling_down_skipped_queues.inc();
+                        output_iter.exclude_queue();
+                        continue;
+                    }
+
+                    let dst_stream_entry = streams.entry(dst_subnet_id);
+                    if !is_loopback_stream && is_at_limit(&dst_stream_entry, dst_subnet_type) {
                         // Stream full, skip all other messages to this destination.
                         output_iter.exclude_queue();
                         continue;
@@ -487,9 +530,70 @@ impl StreamBuilderImpl {
                     // We will route (or reject) the message, pop it.
                     let mut msg = validated_next(&mut output_iter, &msg);
 
+                    let is_engine_dst =
+                        !is_loopback_stream && dst_subnet_type == Some(SubnetType::CloudEngine);
+                    let is_engine_src =
+                        !is_loopback_stream && own_subnet_type == SubnetType::CloudEngine;
+
                     // Reject messages with oversized payloads, as they may
                     // cause streams to permanently stall.
                     match msg {
+                        // Request at an engine boundary: reject if unbounded-wait or carries cycles.
+                        RequestOrResponse::Request(req)
+                            if (is_engine_dst || is_engine_src)
+                                && (req.deadline == NO_DEADLINE
+                                    || req.payment > Cycles::zero()) =>
+                        {
+                            self.observe_message_type_status(
+                                LABEL_VALUE_TYPE_REQUEST,
+                                LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED,
+                            );
+                            engine_requests_to_reject.push(req);
+                        }
+
+                        // A response that should not exist at an engine boundary: a
+                        // guaranteed-response response, or one carrying cycles. A canister
+                        // can only produce such a response in reply to a guaranteed-response
+                        // or cycle-bearing request it received from across the boundary -- but
+                        // that request would itself have been rejected at the boundary. So
+                        // reaching here means an earlier engine-boundary check failed: a bug,
+                        // not something a canister can trigger on its own. Raise a critical
+                        // error and strip any attached cycles (so that none cross the boundary,
+                        // not even as anonymous refunds on the receiving side; they are lost).
+                        // A guaranteed response is then still routed, so the waiting caller is
+                        // not stranded forever; a best-effort response is dropped (the caller
+                        // will time out). Kept above the oversized-response arm so that the
+                        // cycle stripping always happens first.
+                        RequestOrResponse::Response(ref mut rep)
+                            if (is_engine_dst || is_engine_src)
+                                && (rep.deadline == NO_DEADLINE || rep.refund > Cycles::zero()) =>
+                        {
+                            error!(
+                                self.log,
+                                "{}: Illegal engine-boundary response (to {}): {:?}",
+                                CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE,
+                                dst_subnet_id,
+                                rep,
+                            );
+                            self.metrics.critical_error_engine_message.inc();
+                            self.observe_message_type_status(
+                                LABEL_VALUE_TYPE_RESPONSE,
+                                LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED,
+                            );
+                            let is_guaranteed_response = rep.deadline == NO_DEADLINE;
+                            // Strip any attached cycles; they are lost.
+                            engine_response_dropped_cycles += rep.refund;
+                            if rep.refund > Cycles::zero() {
+                                Arc::make_mut(rep).refund = Cycles::zero();
+                            }
+                            if is_guaranteed_response {
+                                // Still deliver the (now cycle-free) response so the caller is
+                                // not left hanging forever on our bug.
+                                dst_stream_entry.or_default().push(msg.into());
+                            }
+                            // Best-effort illegal responses are dropped (consumed here).
+                        }
+
                         // Remote request above the payload size limit.
                         RequestOrResponse::Request(req)
                             if dst_subnet_id != self.subnet_id
@@ -564,7 +668,11 @@ impl StreamBuilderImpl {
                     };
                 }
 
-                // Destination subnet not found.
+                // Destination subnet not found: process the message immediately.
+                // It is important to process the message immediately so that
+                // `generate_reject_responses_for_deleted_subnets` does not
+                // produce a response that would trigger a critical error in a subsequent
+                // `build_streams` that does not expect to deal with duplicate responses.
                 None => {
                     warn!(self.log, "No route to canister {}", msg.receiver());
                     self.observe_message_status(&msg, LABEL_VALUE_STATUS_CANISTER_NOT_FOUND);
@@ -575,21 +683,39 @@ impl StreamBuilderImpl {
                         }
                         RequestOrResponse::Response(rep) => {
                             // A Response: discard it.
-                            error!(
-                                self.log,
-                                "{}: Discarding response, destination not found: {:?}",
-                                CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND,
-                                rep
-                            );
-                            self.metrics
-                                .critical_error_response_destination_not_found
-                                .inc();
+                            if rep.is_best_effort() {
+                                // Bounded-wait responses can be discarded silently, e.g.,
+                                // when the destination subnet has been deleted.
+                                debug!(
+                                    self.log,
+                                    "Discarding bounded-wait response, destination not found: {:?}",
+                                    rep
+                                );
+                            } else {
+                                error!(
+                                    self.log,
+                                    "{}: Discarding unbounded-wait response, destination not found: {:?}",
+                                    CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND,
+                                    rep
+                                );
+                                self.metrics
+                                    .critical_error_response_destination_not_found
+                                    .inc();
+                            }
+                            dropped_response_cycles += rep.refund;
                         }
                     }
                 }
             };
         }
         drop(output_iter);
+
+        if !dropped_response_cycles.is_zero() {
+            state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                dropped_response_cycles,
+                own_cost_schedule,
+            ));
+        }
 
         for req in requests_to_reject {
             let dst_canister_id = req.receiver;
@@ -616,6 +742,24 @@ impl StreamBuilderImpl {
             );
         }
 
+        for req in engine_requests_to_reject {
+            self.reject_local_request(
+                &mut state,
+                &req,
+                RejectCode::SysFatal,
+                "Unbounded-wait calls and calls with cycles are not allowed to CloudEngine subnets"
+                    .to_string(),
+            );
+        }
+
+        if engine_response_dropped_cycles > Cycles::zero() {
+            let own_cost_schedule = state.get_own_cost_schedule();
+            state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                engine_response_dropped_cycles,
+                own_cost_schedule,
+            ));
+        }
+
         // Export the total number of enqueued messages and byte size, per stream.
         streams
             .iter()
@@ -625,12 +769,12 @@ impl StreamBuilderImpl {
                     stream.messages().len(),
                     stream.count_bytes(),
                     stream.messages_begin(),
-                    stream.signals_begin(),
+                    stream.reject_signals().len(),
                     stream.signals_end(),
                 )
             })
             .for_each(
-                |(subnet, len, size_bytes, begin, signals_begin, signals_end)| {
+                |(subnet, len, size_bytes, begin, reject_signal_count, signals_end)| {
                     self.metrics
                         .stream_messages
                         .with_label_values(&[&subnet])
@@ -646,7 +790,7 @@ impl StreamBuilderImpl {
                     self.metrics
                         .stream_signals
                         .with_label_values(&[&subnet])
-                        .set((signals_end - signals_begin).get() as i64);
+                        .set(reject_signal_count as i64);
                     self.metrics
                         .signals_end
                         .with_label_values(&[&subnet])
@@ -674,7 +818,8 @@ impl StreamBuilderImpl {
 
     /// Routes up to `refund_limit` refunds per stream from `state` into `streams`.
     ///
-    /// Refunds that could not be routed due to reaching the per stream limit are
+    /// Refunds that could not be routed due to reaching the per stream limit, or
+    /// because their destination subnet is cooling down while this subnet is not, are
     /// retained in `state`.
     fn route_refunds(
         &self,
@@ -685,11 +830,57 @@ impl StreamBuilderImpl {
     ) {
         let mut cycles_lost = Cycles::zero();
         let own_cost_schedule = state.get_own_cost_schedule();
+        let own_is_engine = state.metadata.own_subnet_type == SubnetType::CloudEngine;
+        let own_subnet_is_cooling_down = network_topology.is_cooling_down(&self.subnet_id);
         state.take_refunds(|refund| {
             match network_topology.route(refund.recipient().get()) {
                 Some(dst_subnet_id) => {
-                    let stream = streams.entry(dst_subnet_id).or_default();
                     let is_loopback_stream = dst_subnet_id == self.subnet_id;
+                    let dst_subnet_topology = network_topology.subnets().get(&dst_subnet_id);
+                    let dst_subnet_type = dst_subnet_topology.map(|topology| topology.subnet_type);
+
+                    // Refunds are routed under the same conditions as subnet output
+                    // responses: always, unless this subnet (the source) is not cooling down
+                    // while the destination subnet is. This way a cooling down subnet can
+                    // still hand back the cycles it holds (before it is deleted), while a
+                    // subnet that is not cooling down pushes no new cycles onto one that is.
+                    //
+                    // Retain the skipped refunds in the refund pool until this no longer holds
+                    // (the destination subnet stops cooling down, or this subnet starts),
+                    // rather than dropping them (which would lose their cycles).
+                    let dst_subnet_is_cooling_down =
+                        dst_subnet_topology.is_some_and(|topology| topology.cooling_down);
+                    if !own_subnet_is_cooling_down && dst_subnet_is_cooling_down {
+                        self.metrics.cooling_down_skipped_refunds.inc();
+                        return false;
+                    }
+
+                    let is_engine_dst =
+                        !is_loopback_stream && dst_subnet_type == Some(SubnetType::CloudEngine);
+                    let is_engine_src = !is_loopback_stream && own_is_engine;
+                    if is_engine_dst || is_engine_src {
+                        // A refund destined to cross the engine boundary should not exist: a
+                        // refund is only produced for a dropped cycle-bearing message, but a
+                        // cycle-bearing message would itself have been rejected at the
+                        // boundary. So reaching here means an earlier engine-boundary check
+                        // failed: a bug, not something a canister can trigger on its own. Drop
+                        // the refund (cycles lost) and raise a critical error.
+                        error!(
+                            self.log,
+                            "{}: Dropping engine-boundary refund (to {}): {:?}",
+                            CRITICAL_ERROR_ILLEGAL_ENGINE_MESSAGE,
+                            dst_subnet_id,
+                            refund,
+                        );
+                        self.metrics.critical_error_engine_message.inc();
+                        cycles_lost += refund.amount();
+                        self.observe_message_type_status(
+                            LABEL_VALUE_TYPE_REFUND,
+                            LABEL_VALUE_STATUS_ENGINE_NOT_ALLOWED,
+                        );
+                        return true;
+                    }
+                    let stream = streams.entry(dst_subnet_id).or_default();
                     if is_loopback_stream
                         || (stream.refund_count() < refund_limit
                             && stream.messages().len() < self.max_stream_messages
@@ -737,4 +928,89 @@ impl StreamBuilder for StreamBuilderImpl {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
         self.build_streams_impl(state)
     }
+}
+
+/// Generates synthetic reject responses for callbacks to deleted subnets.
+///
+/// Must be called after `build_streams()`: `build_streams()` unconditionally
+/// rejects any request in an output queue with no route (e.g. destined for a
+/// deleted subnet), never expecting to deal with duplicate responses. Producing
+/// a reject response for an unbounded-wait callback before `build_streams()` has
+/// had a chance to produce a reject response for the corresponding request would
+/// trigger a critical error in `build_streams()`.
+///
+/// Skipped if the subnet list in the network topology is unchanged since the
+/// last call that successfully inducted all of its reject responses (tracked via
+/// `subnet_ids_at_last_reject_generation`). On error, the subnet list is left
+/// unchanged, so generation is retried on the next call; already-enqueued
+/// responses are filtered out by `has_enqueued_response`, so only the callbacks
+/// that failed to be inducted are retried.
+pub(crate) fn generate_reject_responses_for_deleted_subnets(
+    state: &mut ReplicatedState,
+) -> Vec<StateError> {
+    let network_topology = &state.metadata.network_topology;
+    let current_subnet_ids: Vec<SubnetId> = network_topology.subnets().keys().cloned().collect();
+    if state.metadata.subnet_ids_at_last_reject_generation.as_ref() == Some(&current_subnet_ids) {
+        return Vec::new();
+    }
+
+    // Collect reject responses for callbacks whose respondent has no route in
+    // the current network topology (i.e. is on a deleted subnet, or is the
+    // management canister of a deleted subnet) and has no response enqueued yet.
+    let mut rejects = Vec::new();
+    for (canister_id, canister) in state.canister_states().all_iter() {
+        let Some(ccm) = canister.system_state.call_context_manager() else {
+            continue;
+        };
+        for (callback_id, callback) in ccm.callbacks().iter() {
+            let respondent = callback.respondent;
+            if network_topology.route(respondent.get()).is_none()
+                && !canister
+                    .system_state
+                    .queues()
+                    .has_enqueued_response(callback_id)
+            {
+                rejects.push(RequestOrResponse::Response(Arc::new(Response {
+                    originator: *canister_id,
+                    respondent,
+                    originator_reply_callback: *callback_id,
+                    refund: Cycles::zero(),
+                    // Use the same reject code and message as canister uninstallation, but do
+                    // not refund cycles here: the deleted subnet may have partially executed
+                    // the request and consumed some or all of the payment/refund cycles.
+                    // `RejectCode::DestinationInvalid` (as used by `build_streams()`) would not
+                    // be accurate: it implies that the request was never processed, whereas here
+                    // the deleted subnet may have already pulled the request from the stream
+                    // without yet signaling back.
+                    response_payload: Payload::Reject(
+                        RejectContext::new_with_message_length_limit(
+                            RejectCode::CanisterReject,
+                            "Canister has been uninstalled.",
+                            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                        ),
+                    ),
+                    deadline: callback.deadline,
+                })));
+            }
+        }
+    }
+
+    // Responses never consume guaranteed-response memory: guaranteed responses fill a slot
+    // reserved when the corresponding request was enqueued, and best-effort responses don't
+    // use guaranteed-response memory at all (see `can_push`). Since we only push responses
+    // here, the available-memory budget is never consulted, so a value of zero is safe.
+    let mut available_guaranteed_response_memory = 0;
+    let mut errors = Vec::new();
+    for response in rejects {
+        if let Err((error, _)) =
+            state.push_input(response, &mut available_guaranteed_response_memory)
+        {
+            errors.push(error);
+        }
+    }
+    // Only update the subnet list if all responses were successfully inducted.
+    if errors.is_empty() {
+        state.metadata.subnet_ids_at_last_reject_generation = Some(current_subnet_ids);
+    }
+    errors
 }

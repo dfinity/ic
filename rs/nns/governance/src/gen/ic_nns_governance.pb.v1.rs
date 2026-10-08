@@ -17,6 +17,8 @@
     ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NodeProvider {
@@ -38,6 +40,8 @@ pub struct NodeProvider {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct UpdateNodeProvider {
@@ -47,9 +51,9 @@ pub struct UpdateNodeProvider {
 }
 /// How did a neuron vote in the recent past? This data is used by
 /// other neurons to determine what neurons to follow.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BallotInfo {
     #[prost(message, optional, tag = "1")]
     pub proposal_id: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
@@ -64,6 +68,8 @@ pub struct BallotInfo {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NeuronStakeTransfer {
@@ -116,6 +122,8 @@ pub struct Followees {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct AbridgedNeuron {
@@ -169,6 +177,8 @@ pub mod abridged_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum DissolveState {
@@ -188,6 +198,8 @@ pub mod abridged_neuron {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ExecuteNnsFunction {
@@ -204,7 +216,7 @@ pub struct ExecuteNnsFunction {
 /// Internet Computer ecosystem.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Motion {
     /// The text of the motion. Maximum 100kib.
     #[prost(string, tag = "1")]
@@ -234,6 +246,8 @@ pub struct ApproveGenesisKyc {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct AddOrRemoveNodeProvider {
@@ -249,6 +263,8 @@ pub mod add_or_remove_node_provider {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Change {
@@ -269,6 +285,8 @@ pub mod add_or_remove_node_provider {
     ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct RewardNodeProvider {
@@ -286,23 +304,23 @@ pub mod reward_node_provider {
     /// This message specifies how to create a new neuron on behalf of
     /// the node provider.
     ///
-    /// - The controller of the new neuron is the node provider's
-    ///    principal.
+    /// * The controller of the new neuron is the node provider's
+    ///   principal.
     ///
-    /// - The account is chosen at random.
+    /// * The account is chosen at random.
     ///
-    /// - The stake of the new neuron is `amount_e8s`.
+    /// * The stake of the new neuron is `amount_e8s`.
     ///
-    /// - `dissolve_delay_seconds` is as specified in the proto.
+    /// * `dissolve_delay_seconds` is as specified in the proto.
     ///
-    /// - `kyc_verified` is set to true, as node providers are
-    ///    (implicitly) KYC'ed.
+    /// * `kyc_verified` is set to true, as node providers are
+    ///   (implicitly) KYC'ed.
     ///
-    /// - `not_for_profit` is set to false.
+    /// * `not_for_profit` is set to false.
     ///
-    /// - All other values are set as for other neurons: timestamp is
-    ///    now, following is set up per default, maturity is 0, neuron fee
-    ///    is 0.
+    /// * All other values are set as for other neurons: timestamp is
+    ///   now, following is set up per default, maturity is 0, neuron fee
+    ///   is 0.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -312,6 +330,8 @@ pub mod reward_node_provider {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct RewardToNeuron {
@@ -326,6 +346,8 @@ pub mod reward_node_provider {
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct RewardToAccount {
@@ -340,6 +362,8 @@ pub mod reward_node_provider {
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum RewardMode {
@@ -396,6 +420,8 @@ pub struct SetDefaultFollowees {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SetSnsTokenSwapOpenTimeWindow {
@@ -440,7 +466,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34, 35"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -559,6 +585,9 @@ pub mod proposal {
         /// Create a canister in a (possibly non-NNS) subnet and install code into it.
         #[prost(message, tag = "34")]
         CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCode),
+        /// Change what replica version(s) are run by Cloud Engines.
+        #[prost(message, tag = "35")]
+        UpdateStandardEngineReplicaVersion(super::UpdateStandardEngineReplicaVersion),
     }
 }
 /// Take a canister snapshot.
@@ -570,6 +599,8 @@ pub mod proposal {
     ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct TakeCanisterSnapshot {
@@ -590,6 +621,8 @@ pub struct TakeCanisterSnapshot {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Empty {}
@@ -635,6 +668,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct IncreaseDissolveDelay {
@@ -649,6 +684,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct StartDissolving {}
@@ -660,6 +697,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct StopDissolving {}
@@ -677,6 +716,8 @@ pub mod manage_neuron {
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct AddHotKey {
@@ -692,6 +733,8 @@ pub mod manage_neuron {
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct RemoveHotKey {
@@ -709,6 +752,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct SetDissolveTimestamp {
@@ -724,6 +769,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct JoinCommunityFund {}
@@ -736,6 +783,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct LeaveCommunityFund {}
@@ -752,6 +801,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct ChangeAutoStakeMaturity {
@@ -766,6 +817,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct SetVisibility {
@@ -782,6 +835,8 @@ pub mod manage_neuron {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Configure {
@@ -797,6 +852,8 @@ pub mod manage_neuron {
             comparable::Comparable,
             Clone,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Oneof,
         )]
         pub enum Operation {
@@ -831,6 +888,8 @@ pub mod manage_neuron {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Disburse {
@@ -852,6 +911,8 @@ pub mod manage_neuron {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct Amount {
@@ -871,6 +932,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Split {
@@ -891,6 +954,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Merge {
@@ -911,6 +976,8 @@ pub mod manage_neuron {
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Spawn {
@@ -937,6 +1004,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct MergeMaturity {
@@ -957,6 +1026,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct StakeMaturity {
@@ -975,6 +1046,8 @@ pub mod manage_neuron {
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct DisburseToNeuron {
@@ -1041,6 +1114,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct RegisterVote {
@@ -1057,6 +1132,8 @@ pub mod manage_neuron {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct ClaimOrRefresh {
@@ -1072,6 +1149,8 @@ pub mod manage_neuron {
             comparable::Comparable,
             Clone,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct MemoAndController {
@@ -1087,6 +1166,8 @@ pub mod manage_neuron {
             comparable::Comparable,
             Clone,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Oneof,
         )]
         pub enum By {
@@ -1118,6 +1199,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct RefreshVotingPower {}
@@ -1135,6 +1218,8 @@ pub mod manage_neuron {
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct DisburseMaturity {
@@ -1191,6 +1276,8 @@ pub mod manage_neuron {
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum NeuronIdOrSubaccount {
@@ -1244,7 +1331,7 @@ pub mod manage_neuron {
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GovernanceError {
     #[prost(enumeration = "governance_error::ErrorType", tag = "1")]
     pub error_type: i32,
@@ -1393,7 +1480,7 @@ pub mod governance_error {
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Ballot {
     #[prost(enumeration = "Vote", tag = "1")]
     pub vote: i32,
@@ -1403,7 +1490,7 @@ pub struct Ballot {
 /// A tally of votes.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Tally {
     /// When was this tally made
     #[prost(uint64, tag = "1")]
@@ -1537,12 +1624,14 @@ pub struct ProposalData {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SuccessfulProposalExecutionValue {
     #[prost(
         oneof = "successful_proposal_execution_value::ProposalType",
-        tags = "1"
+        tags = "1, 2"
     )]
     pub proposal_type: ::core::option::Option<successful_proposal_execution_value::ProposalType>,
 }
@@ -1555,11 +1644,15 @@ pub mod successful_proposal_execution_value {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum ProposalType {
         #[prost(message, tag = "1")]
         CreateCanisterAndInstallCode(super::CreateCanisterAndInstallCodeOk),
+        #[prost(message, tag = "2")]
+        TakeCanisterSnapshot(super::TakeCanisterSnapshotOk),
     }
 }
 #[derive(
@@ -1569,11 +1662,28 @@ pub mod successful_proposal_execution_value {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct CreateCanisterAndInstallCodeOk {
     #[prost(message, optional, tag = "1")]
     pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
+)]
+pub struct TakeCanisterSnapshotOk {
+    #[prost(bytes = "vec", tag = "1")]
+    pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(
@@ -1637,6 +1747,8 @@ pub struct NeuronsFundAuditInfo {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetNeuronsFundAuditInfoRequest {
@@ -1753,6 +1865,8 @@ pub struct NeuronsFundParticipation {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct IdealMatchedParticipationFunction {
@@ -1825,6 +1939,8 @@ pub mod neurons_fund_snapshot {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SwapParticipationLimits {
@@ -1840,14 +1956,14 @@ pub struct SwapParticipationLimits {
 /// This message has a couple of unusual features.
 ///
 /// 1. There is (currently) only one field. We expect that more fields will be
-///     (and possibly other clients) to be able to handle this information in a
-///     generic way, i.e. without having to change their code.
+///    (and possibly other clients) to be able to handle this information in a
+///    generic way, i.e. without having to change their code.
 ///
-/// 2. Fields that might be added later will probably be mutually exclusive with
-///     existing fields. Normally, this would be handled by putting all such
-///     fields into a oneof. However, Candid has a bug where variant is not
-///     handled correctly. Therefore, we refrain from using oneof until we believe
-///     that the fix is very imminent.
+/// 1. Fields that might be added later will probably be mutually exclusive with
+///    existing fields. Normally, this would be handled by putting all such
+///    fields into a oneof. However, Candid has a bug where variant is not
+///    handled correctly. Therefore, we refrain from using oneof until we believe
+///    that the fix is very imminent.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2007,6 +2123,8 @@ pub mod swap_background_information {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct WaitForQuietState {
@@ -2022,7 +2140,12 @@ pub struct WaitForQuietState {
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
 #[derive(
-    ic_nns_governance_derive_self_describing::SelfDescribing, Clone, PartialEq, ::prost::Message,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
 )]
 pub struct NetworkEconomics {
     /// The number of E8s (10E-8 of an ICP token) that a rejected
@@ -2087,6 +2210,8 @@ pub struct NetworkEconomics {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct VotingPowerEconomics {
@@ -2103,9 +2228,11 @@ pub struct VotingPowerEconomics {
     /// After a neuron has experienced voting power reduction for this amount of
     /// time, a couple of things happen:
     ///
-    ///      1. Deciding voting power reaches 0.
+    /// ```text
+    /// 1. Deciding voting power reaches 0.
     ///
-    ///      2. Its following on topics other than NeuronManagement are cleared.
+    /// 2. Its following on topics other than NeuronManagement are cleared.
+    /// ```
     ///
     /// Initially, set to 1/12 years.
     #[prost(uint64, optional, tag = "2")]
@@ -2132,6 +2259,8 @@ pub struct VotingPowerEconomics {
     ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NeuronsFundMatchedFundingCurveCoefficients {
@@ -2159,7 +2288,7 @@ pub struct NeuronsFundMatchedFundingCurveCoefficients {
 /// the Neurons' Fund depends on four factors:
 /// (1) Direct participation amount at the time of the swap's successful finalization.
 /// (2) Amount of maturity held by all eligible neurons that were members of the Neurons' Fund
-///      at the time of the CreateServiceNervousSystem proposal execution.
+/// at the time of the CreateServiceNervousSystem proposal execution.
 /// (3) Global Neurons' Fund participation thresholds, held in this structure (defined in XDR).
 /// (4) ICP/XDR conversion rate at the time of the CreateServiceNervousSystem proposal execution.
 #[derive(
@@ -2170,6 +2299,8 @@ pub struct NeuronsFundMatchedFundingCurveCoefficients {
     ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NeuronsFundEconomics {
@@ -2252,11 +2383,11 @@ pub struct RewardEvent {
     /// reasons that rewards might not be distributed in a given round.
     ///
     /// 1. "Missed" rounds: there was a long period when we did calculate rewards
-    ///     (longer than 1 round). (I.e. distribute_rewards was not called by
-    ///     heartbeat for whatever reason, most likely some kind of bug.)
+    ///    (longer than 1 round). (I.e. distribute_rewards was not called by
+    ///    heartbeat for whatever reason, most likely some kind of bug.)
     ///
-    /// 2. Rollover: We tried to distribute rewards, but there were no proposals
-    ///     settled to distribute rewards for.
+    /// 1. Rollover: We tried to distribute rewards, but there were no proposals
+    ///    settled to distribute rewards for.
     ///
     /// In both of these cases, the rewards purse rolls over into the next round.
     #[prost(uint64, optional, tag = "6")]
@@ -2269,6 +2400,8 @@ pub struct RewardEvent {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct KnownNeuron {
@@ -2278,9 +2411,9 @@ pub struct KnownNeuron {
     pub known_neuron_data: ::core::option::Option<KnownNeuronData>,
 }
 /// Known neurons have extra information (a name and optionally a description) that can be used to identify them.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct KnownNeuronData {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
@@ -2300,6 +2433,8 @@ pub struct KnownNeuronData {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct DeregisterKnownNeuron {
@@ -2314,6 +2449,8 @@ pub struct DeregisterKnownNeuron {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct OpenSnsTokenSwap {
@@ -2333,8 +2470,7 @@ pub struct OpenSnsTokenSwap {
 /// Therefore, most of the fields here have equivalents in SnsInitPayload.
 /// Please, consult the comments therein.
 ///
-/// Metadata
-/// --------
+/// ## Metadata
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2418,6 +2554,8 @@ pub mod create_service_nervous_system {
                 ic_nns_governance_derive_self_describing::SelfDescribing,
                 Clone,
                 PartialEq,
+                Eq,
+                Hash,
                 ::prost::Message,
             )]
             pub struct NeuronDistribution {
@@ -2444,6 +2582,8 @@ pub mod create_service_nervous_system {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct TreasuryDistribution {
@@ -2459,6 +2599,8 @@ pub mod create_service_nervous_system {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct SwapDistribution {
@@ -2474,6 +2616,8 @@ pub mod create_service_nervous_system {
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct SwapParameters {
@@ -2531,6 +2675,8 @@ pub mod create_service_nervous_system {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct NeuronBasketConstructionParameters {
@@ -2549,6 +2695,8 @@ pub mod create_service_nervous_system {
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct LedgerParameters {
@@ -2561,8 +2709,7 @@ pub mod create_service_nervous_system {
         #[prost(message, optional, tag = "4")]
         pub token_logo: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Image>,
     }
-    /// Proposal Parameters
-    /// -------------------
+    /// ## Proposal Parameters
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -2571,6 +2718,8 @@ pub mod create_service_nervous_system {
         ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct GovernanceParameters {
@@ -2620,6 +2769,8 @@ pub mod create_service_nervous_system {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct VotingRewardParameters {
@@ -2641,6 +2792,8 @@ pub mod create_service_nervous_system {
             ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct CustomProposalCriticality {
@@ -2656,6 +2809,8 @@ pub mod create_service_nervous_system {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct InstallCode {
@@ -2685,9 +2840,42 @@ pub struct InstallCode {
     /// The hash of the arg to pass to the canister. Calculated from `arg` when proposal is created.
     #[prost(bytes = "vec", optional, tag = "7")]
     pub arg_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Options that only apply when install_mode is upgrade.
+    #[prost(message, optional, tag = "8")]
+    pub canister_upgrade_options: ::core::option::Option<install_code::CanisterUpgradeOptions>,
 }
 /// Nested message and enum types in `InstallCode`.
 pub mod install_code {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Message,
+    )]
+    pub struct CanisterUpgradeOptions {
+        /// Whether to skip the canister's pre_upgrade hook. This would generally be
+        /// used in emergencies. See the corresponding field in the Management
+        /// canister API.
+        #[prost(bool, optional, tag = "1")]
+        pub skip_pre_upgrade: ::core::option::Option<bool>,
+        /// Whether to retain (keep) or drop (replace) the canister's Wasm main
+        /// memory across the upgrade. If the old WASM had a custom section named
+        /// "icp:private enhanced-orthogonal-persistence", then this must be set
+        /// (otherwise, the Management canister will block the upgrade). If keep is
+        /// used here, then the new WASM must also have the same custom section.
+        #[prost(
+            enumeration = "::ic_protobuf::types::v1::WasmMemoryPersistence",
+            optional,
+            tag = "2"
+        )]
+        pub wasm_memory_persistence: ::core::option::Option<i32>,
+    }
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -2742,6 +2930,8 @@ pub mod install_code {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct StopOrStartCanister {
@@ -2835,6 +3025,8 @@ pub struct CanisterSettings {
         tag = "8"
     )]
     pub snapshot_visibility: ::core::option::Option<i32>,
+    #[prost(uint64, optional, tag = "9")]
+    pub reserved_cycles_limit: ::core::option::Option<u64>,
 }
 /// Nested message and enum types in `CanisterSettings`.
 pub mod canister_settings {
@@ -2980,6 +3172,10 @@ pub struct FulfillSubnetRentalRequest {
     pub node_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(string, tag = "2")]
     pub replica_version_id: ::prost::alloc::string::String,
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    #[prost(message, optional, tag = "4")]
+    pub initial_dkg_subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 #[derive(
     candid::CandidType,
@@ -3001,6 +3197,25 @@ pub struct BlessAlternativeGuestOsVersion {
         ::ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements,
     >,
 }
+/// Changes what replica version(s) are run by Cloud Engines. See Registry's
+/// do_update_standard_engine_replica_version for what changes are allowed.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct UpdateStandardEngineReplicaVersion {
+    #[prost(string, tag = "1")]
+    pub new_replica_version_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub old_replica_version_id: ::prost::alloc::string::String,
+    #[prost(double, tag = "3")]
+    pub deployment_progress: f64,
+}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3009,6 +3224,8 @@ pub struct BlessAlternativeGuestOsVersion {
     ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct LoadCanisterSnapshot {
@@ -3027,6 +3244,8 @@ pub struct LoadCanisterSnapshot {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct WasmModule {
@@ -3046,6 +3265,8 @@ pub mod wasm_module {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Content {
@@ -3096,6 +3317,8 @@ pub struct CreateCanisterAndInstallCode {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NeuronDissolveStateSnapshot {
@@ -3112,6 +3335,8 @@ pub mod neuron_dissolve_state_snapshot {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum DissolveState {
@@ -3120,6 +3345,72 @@ pub mod neuron_dissolve_state_snapshot {
         #[prost(uint64, tag = "2")]
         WhenDissolvedTimestampSeconds(u64),
     }
+}
+/// A sampled price consisting of a timestamp and a permyriad rate.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
+)]
+pub struct SampledPrice {
+    /// Timestamp in seconds since Unix epoch. Each entry represents one calendar day; there is at most
+    /// one entry per day.
+    #[prost(uint64, tag = "1")]
+    pub timestamp_seconds: u64,
+    /// The ICP/XDR rate in permyriad. For example, 80000 means 1 ICP = 8 XDR.
+    #[prost(uint64, tag = "2")]
+    pub xdr_permyriad_per_icp: u64,
+}
+/// ICP price history from the Exchange Rate Canister (XRC).
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct IcpPriceHistory {
+    /// Daily ICP/XDR rates (up to 365 entries), sorted by timestamp_seconds (ascending).
+    #[prost(message, repeated, tag = "1")]
+    pub icp_xdr_rates: ::prost::alloc::vec::Vec<SampledPrice>,
+}
+/// The maturity modulation factor is applied when disbursing (unstaked) maturity to ICP.
+///
+/// When a neuron owner disburses maturity, the amount of ICP received is:
+/// maturity * (1 + current_value_permyriad / 10_000)
+///
+/// This factor stabilizes ICP price: it is positive when ICP is above its long-term average
+/// (encouraging selling pressure), and negative when below (discouraging selling).
+///
+/// This might be unpopulated, which indicates that no value is currently available.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    ::prost::Message,
+)]
+pub struct MaturityModulation {
+    /// Current maturity modulation in permyriad (0.01% per unit).
+    #[prost(int32, optional, tag = "1")]
+    pub current_value_permyriad: ::core::option::Option<i32>,
+    /// Day (days_since_epoch) when current_value_permyriad was last computed.
+    #[prost(uint64, optional, tag = "2")]
+    pub updated_at_days_since_epoch: ::core::option::Option<u64>,
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
@@ -3240,8 +3531,8 @@ pub struct Governance {
     /// Map of proposal IDs to their topics for those garbage collected.
     #[prost(map = "uint64, enumeration(Topic)", tag = "29")]
     pub topic_of_garbage_collected_proposals: ::std::collections::HashMap<u64, i32>,
-    /// Whether the eight year gang bonus base migration has run for all neurons.
-    /// This prevents the migration from running more than once.
+    /// Persisted-true sentinel: the one-time eight year gang bonus base migration ran on mainnet.
+    /// Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
     #[prost(bool, tag = "31")]
     pub eight_year_gang_bonus_migration_done: bool,
     /// Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
@@ -3249,6 +3540,16 @@ pub struct Governance {
     #[prost(map = "uint64, message", tag = "32")]
     pub neuron_id_to_pre_clamp_dissolve_state:
         ::std::collections::HashMap<u64, NeuronDissolveStateSnapshot>,
+    /// Persisted-true sentinel: the relaxed eight year gang member induction ran on mainnet.
+    /// Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
+    #[prost(bool, tag = "33")]
+    pub relaxed_eight_year_gang_bonus_migration_done: bool,
+    /// ICP price history from the Exchange Rate Canister (XRC), used for maturity modulation.
+    #[prost(message, optional, tag = "34")]
+    pub icp_price_history: ::core::option::Option<IcpPriceHistory>,
+    /// Maturity modulation state, updated daily from icp_price_history.
+    #[prost(message, optional, tag = "35")]
+    pub maturity_modulation: ::core::option::Option<MaturityModulation>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -3290,6 +3591,8 @@ pub mod governance {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct SyncCommand {}
@@ -3495,6 +3798,8 @@ pub mod governance {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct XdrConversionRate {
@@ -3544,6 +3849,8 @@ pub struct ListNodeProvidersResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct DateUtc {
@@ -3562,8 +3869,9 @@ pub struct DateUtc {
 /// for defining the covered period. In this case, `registry_version` is no longer set.
 ///
 /// Summary of field usage:
-/// - Before performance-based rewards: `registry_version` is Some; `start_date` and `end_date` are None.
-/// - After performance-based rewards:  `start_date` and `end_date` are Some; `registry_version` is None.
+///
+/// * Before performance-based rewards: `registry_version` is Some; `start_date` and `end_date` are None.
+/// * After performance-based rewards:  `start_date` and `end_date` are Some; `registry_version` is None.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3618,6 +3926,8 @@ pub struct MonthlyNodeProviderRewards {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SettleCommunityFundParticipation {
@@ -3644,6 +3954,8 @@ pub mod settle_community_fund_participation {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Committed {
@@ -3669,6 +3981,8 @@ pub mod settle_community_fund_participation {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Aborted {}
@@ -3681,6 +3995,8 @@ pub mod settle_community_fund_participation {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Result {
@@ -3695,18 +4011,19 @@ pub mod settle_community_fund_participation {
 /// When a swap ends, the Swap canister notifies the Neurons' Fund of the swap's ultimate result,
 /// which can be either `Committed` or `Aborted`. Note that currently, the Neurons' Fund is managed
 /// by the NNS Governance canister.
+///
 /// * If the result is `Committed`:
-///    - Neurons' Fund computes the "effective" participation amount for each of its neurons (as per
-///      the Matched Funding rules). This computation is based on the total direct participation
-///      amount, which is thus a field of `Committed`.
-///    - Neurons' Fund converts the "effective" amount of maturity into ICP by:
-///      - Requesting the ICP Ledger to mint an appropriate amount of ICP tokens and sending them
-///        to the SNS treasury.
-///      - Refunding whatever maturity is left over (the maximum possible maturity is reserved by
-///        the Neurons' Fund before the swap begins).
-///    - Neurons' Fund returns the Neurons' Fund participants back to the Swap canister
-///      (see SettleNeuronsFundParticipationResponse).
-///    - The Swap canister then creates SNS neurons for the Neurons' Fund participants.
+///   * Neurons' Fund computes the "effective" participation amount for each of its neurons (as per
+///     the Matched Funding rules). This computation is based on the total direct participation
+///     amount, which is thus a field of `Committed`.
+///   * Neurons' Fund converts the "effective" amount of maturity into ICP by:
+///     * Requesting the ICP Ledger to mint an appropriate amount of ICP tokens and sending them
+///       to the SNS treasury.
+///     * Refunding whatever maturity is left over (the maximum possible maturity is reserved by
+///       the Neurons' Fund before the swap begins).
+///   * Neurons' Fund returns the Neurons' Fund participants back to the Swap canister
+///     (see SettleNeuronsFundParticipationResponse).
+///   * The Swap canister then creates SNS neurons for the Neurons' Fund participants.
 /// * If the result is Aborted, the Neurons' Fund is refunded for all maturity reserved for this SNS.
 ///
 /// This design assumes trust between the Neurons' Fund and the SNS Swap canisters. In the one hand,
@@ -3731,6 +4048,8 @@ pub mod settle_community_fund_participation {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SettleNeuronsFundParticipationRequest {
@@ -3749,23 +4068,24 @@ pub struct SettleNeuronsFundParticipationRequest {
 pub mod settle_neurons_fund_participation_request {
     /// When this happens, the NNS Governance needs to do several things:
     /// (1) Compute the effective amount of ICP per neuron of the Neurons' Fund as a function of
-    ///      `total_direct_participation_icp_e8s`. The overall Neurons' Fund participation should
-    ///      equal `total_neurons_fund_contribution_icp_e8s`.
+    /// `total_direct_participation_icp_e8s`. The overall Neurons' Fund participation should
+    /// equal `total_neurons_fund_contribution_icp_e8s`.
     /// (2) Mint (via the ICP Ledger) and sent to the SNS governance the amount of
-    ///      `total_neurons_fund_contribution_icp_e8s`.
+    /// `total_neurons_fund_contribution_icp_e8s`.
     /// (3) Respond to this request with `SettleNeuronsFundParticipationResponse`, providing
-    ///      the set of `NeuronsFundParticipant`s with the effective amount of ICP per neuron,
-    ///      as computed in step (1).
+    /// the set of `NeuronsFundParticipant`s with the effective amount of ICP per neuron,
+    /// as computed in step (1).
     /// (4) Refund each neuron of the Neurons' Fund with (reserved - effective) amount of ICP.
     /// Effective amounts depend on `total_direct_participation_icp_e8s` and the participation limits
     /// of a particular SNS instance, namely, each participation must be between
     /// `min_participant_icp_e8s` and `max_participant_icp_e8s`.
-    /// - If a neuron of the Neurons' Fund has less than `min_participant_icp_e8s` worth of maturity,
-    ///    then it is ineligible to participate.
-    /// - If a neuron of the Neurons' Fund has more than `max_participant_icp_e8s` worth of maturity,
-    ///    then its participation amount is limited to `max_participant_icp_e8s`.
-    /// Reserved amounts are computed as the minimal upper bound on the effective amounts, i.e., when
-    /// the value `total_direct_participation_icp_e8s` reaches its theoretical maximum.
+    ///
+    /// * If a neuron of the Neurons' Fund has less than `min_participant_icp_e8s` worth of maturity,
+    ///   then it is ineligible to participate.
+    /// * If a neuron of the Neurons' Fund has more than `max_participant_icp_e8s` worth of maturity,
+    ///   then its participation amount is limited to `max_participant_icp_e8s`.
+    ///   Reserved amounts are computed as the minimal upper bound on the effective amounts, i.e., when
+    ///   the value `total_direct_participation_icp_e8s` reaches its theoretical maximum.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -3773,6 +4093,8 @@ pub mod settle_neurons_fund_participation_request {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Committed {
@@ -3797,6 +4119,8 @@ pub mod settle_neurons_fund_participation_request {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Aborted {}
@@ -3809,6 +4133,8 @@ pub mod settle_neurons_fund_participation_request {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Result {
@@ -3915,6 +4241,8 @@ pub mod settle_neurons_fund_participation_response {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct AuditEvent {
@@ -3934,6 +4262,8 @@ pub mod audit_event {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct ResetAging {
@@ -3964,6 +4294,8 @@ pub mod audit_event {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Oneof,
         )]
         pub enum NeuronDissolveState {
@@ -3981,6 +4313,8 @@ pub mod audit_event {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct RestoreAging {
@@ -4011,6 +4345,8 @@ pub mod audit_event {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Oneof,
         )]
         pub enum NeuronDissolveState {
@@ -4028,6 +4364,8 @@ pub mod audit_event {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct NormalizeDissolveStateAndAge {
@@ -4101,6 +4439,8 @@ pub mod audit_event {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Payload {
@@ -4143,6 +4483,8 @@ pub mod restore_aging_summary {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct RestoreAgingNeuronGroup {
@@ -4299,6 +4641,8 @@ pub struct ProposalVotingStateMachine {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Subaccount {
@@ -4315,6 +4659,8 @@ pub struct Subaccount {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Account {
@@ -4349,6 +4695,8 @@ pub struct RewardsDistributionInProgress {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct MaturityDisbursement {
@@ -4373,6 +4721,8 @@ pub mod maturity_disbursement {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Destination {
@@ -4411,6 +4761,8 @@ pub struct NeuronIdToVotingPowerMap {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct VotingPowerTotal {
@@ -4428,6 +4780,8 @@ pub struct VotingPowerTotal {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct FinalizeDisburseMaturity {
@@ -4654,8 +5008,8 @@ pub enum Topic {
     Kyc = 9,
     /// Topic for proposals to reward node providers.
     NodeProviderRewards = 10,
-    /// IC OS upgrade proposals
-    /// -----------------------
+    /// ## IC OS upgrade proposals
+    ///
     /// ICP runs on a distributed network of nodes grouped into subnets. Each node runs a stack of
     /// operating systems, including HostOS (runs on bare metal) and GuestOS (runs inside HostOS;
     /// contains, e.g., the ICP replica process). HostOS and GuestOS are distributed via separate disk
@@ -5029,13 +5383,14 @@ pub enum NnsFunction {
     /// the Wasm module of the target canister, the proposal can also set the
     /// authorization information and the allocations.
     NnsCanisterUpgrade = 4,
-    /// A proposal to bless a new version to which the replicas can be
+    /// (obsolete) A proposal to bless a new version to which the replicas can be
     /// upgraded.
     /// The proposal registers a replica version (identified by the hash of the
     /// installation image) in the registry. Besides creating a record for that
     /// version, the proposal also appends that version to the list of "blessed
     /// versions" that can be installed on a subnet. By itself, this proposal
     /// does not effect any upgrade.
+    /// Superseded by ReviseElectedGuestosVersions.
     BlessReplicaVersion = 5,
     /// Update a subnet's recovery CUP (used to recover subnets that have stalled).
     /// Nodes that find a recovery CUP for their subnet will load that CUP from
@@ -5132,16 +5487,16 @@ pub enum NnsFunction {
     UpdateSnsWasmSnsSubnetIds = 34,
     /// Update the SNS-wasm canister's list of allowed principals. This list guards which principals can deploy an SNS.
     UpdateAllowedPrincipals = 35,
-    /// A proposal to retire previously elected and unused replica versions.
+    /// (obsolete) A proposal to retire previously elected and unused replica versions.
     /// The specified versions are removed from the registry and the "blessed versions" record.
     /// This ensures that the replica cannot upgrade to these versions anymore.
+    /// Superseded by ReviseElectedGuestosVersions.
     RetireReplicaVersion = 36,
     /// Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
     InsertSnsWasmUpgradePathEntries = 37,
     /// A proposal to change the set of elected GuestOS versions. The version to elect (identified by
-    /// the hash of the installation image) is added to the registry. Besides creating a record for
-    /// that version, the proposal also appends that version to the list of elected versions that can
-    /// be installed on nodes of a subnet. Only elected GuestOS versions can be deployed.
+    /// the commit hash of the installation image) is added to the registry. This version can then be
+    /// used to upgrade nodes.
     ReviseElectedGuestosVersions = 38,
     BitcoinSetConfig = 39,
     /// OBSOLETE: use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead
@@ -5186,10 +5541,18 @@ pub enum NnsFunction {
     /// The proposal requests to split a subnet.
     SplitSubnet = 56,
     /// Delete a subnet. The subnet record, catch-up package, threshold signing key
-    /// and routing table entries are removed from the registry, and the subnet's
-    /// nodes become unassigned.
-    /// Currently limited to CloudEngine subnets.
+    /// and routing table entries are removed from the registry, the subnet is
+    /// removed from the subnet list, and the subnet's nodes become unassigned.
+    /// System subnets (e.g. the NNS or II subnet) cannot be deleted.
     DeleteSubnet = 57,
+    /// Set or unset the default subnet to which `SetupInitialDKG` management
+    /// canister calls are routed when no subnet is specified explicitly. If unset,
+    /// `SetupInitialDKG` requests without an explicit subnet id are routed to the
+    /// calling subnet (NNS).
+    SetDefaultInitialDkgSubnet = 58,
+    /// Merge a subnet into another subnet: in the routing table, reassigns all
+    /// canister ranges hosted by the source subnet to the destination subnet.
+    MergeSubnets = 59,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -5265,6 +5628,8 @@ impl NnsFunction {
             Self::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
             Self::SplitSubnet => "NNS_FUNCTION_SPLIT_SUBNET",
             Self::DeleteSubnet => "NNS_FUNCTION_DELETE_SUBNET",
+            Self::SetDefaultInitialDkgSubnet => "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET",
+            Self::MergeSubnets => "NNS_FUNCTION_MERGE_SUBNETS",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5347,6 +5712,8 @@ impl NnsFunction {
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             "NNS_FUNCTION_SPLIT_SUBNET" => Some(Self::SplitSubnet),
             "NNS_FUNCTION_DELETE_SUBNET" => Some(Self::DeleteSubnet),
+            "NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET" => Some(Self::SetDefaultInitialDkgSubnet),
+            "NNS_FUNCTION_MERGE_SUBNETS" => Some(Self::MergeSubnets),
             _ => None,
         }
     }

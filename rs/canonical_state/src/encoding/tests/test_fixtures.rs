@@ -12,8 +12,8 @@ use ic_types::{
 };
 use ic_types_cycles::Cycles;
 
-pub fn stream_header(_certification_version: CertificationVersion) -> StreamHeader {
-    let reject_signals = vec![
+pub fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
+    let mut reject_signals = vec![
         RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
         RejectSignal::new(RejectReason::CanisterNotFound, 200.into()),
         RejectSignal::new(RejectReason::OutOfMemory, 250.into()),
@@ -21,13 +21,25 @@ pub fn stream_header(_certification_version: CertificationVersion) -> StreamHead
         RejectSignal::new(RejectReason::CanisterStopped, 252.into()),
         RejectSignal::new(RejectReason::QueueFull, 253.into()),
         RejectSignal::new(RejectReason::Unknown, 254.into()),
-    ]
-    .into();
+    ];
+    // `EngineNotAllowed` signals are only encodable starting at V26.
+    if certification_version >= CertificationVersion::V26 {
+        reject_signals.push(RejectSignal::new(
+            RejectReason::EngineNotAllowed,
+            255.into(),
+        ));
+    }
     let flags = StreamFlags {
         deprecated_responses_only: true,
     };
 
-    StreamHeader::new(23.into(), 25.into(), 256.into(), reject_signals, flags)
+    StreamHeader::new(
+        23.into(),
+        25.into(),
+        256.into(),
+        reject_signals.into(),
+        flags,
+    )
 }
 
 pub fn request(_certification_version: CertificationVersion) -> StreamMessage {

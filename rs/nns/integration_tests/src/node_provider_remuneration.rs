@@ -586,8 +586,8 @@ fn test_automated_node_provider_remuneration() {
     // All success failure rate is 0
     let node_metrics_daily: Vec<NodeMetricsDailyRaw> = nodes
         .clone()
-        .into_iter()
-        .flat_map(|(_, node_ids)| {
+        .into_values()
+        .flat_map(|node_ids| {
             node_ids.into_iter().map(|node_id| NodeMetricsDailyRaw {
                 node_id,
                 num_blocks_failed: 0,
@@ -841,8 +841,8 @@ fn test_automated_node_provider_remuneration() {
     // All success failure rate is 0
     let node_metrics_daily: Vec<NodeMetricsDailyRaw> = nodes
         .clone()
-        .into_iter()
-        .flat_map(|(_, node_ids)| {
+        .into_values()
+        .flat_map(|node_ids| {
             node_ids.into_iter().map(|node_id| NodeMetricsDailyRaw {
                 node_id,
                 num_blocks_failed: 0,
@@ -957,8 +957,8 @@ fn test_automated_node_provider_remuneration() {
     // All success failure rate is 0
     let node_metrics_daily: Vec<NodeMetricsDailyRaw> = nodes
         .clone()
-        .into_iter()
-        .flat_map(|(_, node_ids)| {
+        .into_values()
+        .flat_map(|node_ids| {
             node_ids.into_iter().map(|node_id| NodeMetricsDailyRaw {
                 node_id,
                 num_blocks_failed: 0,

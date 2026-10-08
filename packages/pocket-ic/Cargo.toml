@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic"
-version = "13.0.0"
+version = "16.0.0"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
 repository = "https://github.com/dfinity/ic"
@@ -19,8 +19,11 @@ include = [
 authors.workspace = true
 edition.workspace = true
 
+[features]
+head_nns = []
+
 [dependencies]
-backoff = { workspace = true }
+backon = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
 flate2 = { workspace = true }
@@ -29,7 +32,7 @@ ic-certification = { workspace = true }
 ic-management-canister-types = { workspace = true }
 ic-transport-types = { workspace = true }
 reqwest = { workspace = true }
-schemars = "0.8.16"
+schemars = { workspace = true }
 semver = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
@@ -45,29 +48,27 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-[target.'cfg(windows)'.dependencies]
-wslpath = "0.0.2"
-
 [dev-dependencies]
 #TODO: try upgrading this to the latest bitcion crate
 bitcoin = { version = "0.28.2" }
-candid_parser = { workspace = true }
 cycles-minting-canister = { path = "../../rs/nns/cmc" }
 ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../rs/types/base_types" }
-ic-cdk = { workspace = true }
 ic-error-types = { path = "../ic-error-types" }
 ic-management-canister-types-private = { path = "../../rs/types/management_canister_types" }
 ic-migration-canister = { path = "../../rs/migration_canister" }
+ic-registry-subnet-type = { path = "../../rs/registry/subnet_type" }
 ic-nns-governance-api = { path = "../../rs/nns/governance/api" }
 ic-sns-wasm = { path = "../../rs/nns/sns-wasm" }
 ic-utils = { workspace = true }
 ic-vetkeys = { workspace = true }
 icrc-ledger-types = { path = "../icrc-ledger-types" }
 k256 = { workspace = true }
+p256 = { workspace = true }
 registry-canister = { path = "../../rs/registry/canister" }
+serde_bytes = { workspace = true }
 wat = { workspace = true }
 
 [target.'cfg(not(windows))'.dev-dependencies]
@@ -79,7 +80,7 @@ ic-registry-client = { path = "../../rs/registry/client" }
 ic-registry-client-helpers = { path = "../../rs/registry/helpers" }
 ic-registry-proto-data-provider = { path = "../../rs/registry/proto_data_provider" }
 ic-registry-transport = { path = "../../rs/registry/transport" }
-ic-types = { path = "../../rs/types/types" }
+ic-test-utilities-types = { path = "../../rs/test_utilities/types" }
 ic-universal-canister = { path = "../../rs/universal_canister/lib" }
-maplit = "1.0.2"
+maplit = { workspace = true }
 prost = { workspace = true }

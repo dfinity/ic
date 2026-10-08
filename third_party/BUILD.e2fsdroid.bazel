@@ -1,0 +1,11 @@
+"""
+e2fsdroid, taken from the prebuilt Android SDK platform-tools (r33.0.2).
+
+IC-OS uses it (in build_ext4_image.py) to populate an ext4 image from a directory
+tree while applying an Android-style fs_config (per-file uid/gid/mode, via `-C`),
+SELinux file contexts (`-S`), and deterministic timestamps (`-T 0`).
+"""
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["e2fsdroid"])

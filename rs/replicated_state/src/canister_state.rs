@@ -11,22 +11,19 @@ use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{
     ExecutionTask, SystemState, log_memory_store::LogMemoryStore,
 };
-use crate::{InputQueueType, StateError};
+use crate::{InputQueueType, OutputRequest, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
-use ic_interfaces::execution_environment::{
-    MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
-};
+use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
-    SnapshotVisibility,
+    SnapshotVisibility, StatusVisibility,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_types::messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response};
+use ic_types::messages::{CallbackId, CanisterMessage, Ingress, RequestOrResponse, Response};
 use ic_types::methods::{SystemMethod, WasmMethod};
 use ic_types::{
-    CanisterId, CanisterLog, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, Time,
+    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -111,6 +108,10 @@ impl CanisterState {
 
     pub fn snapshot_visibility(&self) -> &SnapshotVisibility {
         &self.system_state.snapshot_visibility
+    }
+
+    pub fn status_visibility(&self) -> &StatusVisibility {
+        &self.system_state.status_visibility
     }
 
     /// Returns the difference in time since the canister was last charged for resource allocations.
@@ -275,13 +276,60 @@ impl CanisterState {
         self.system_state.queues().has_output()
     }
 
+    /// Returns true if the canister must be present in the `SubnetSchedule`,
+    /// regardless of new inputs or accumulated priority.
+    ///
+    /// This is different from "should be scheduled in an iteration", which also
+    /// considers whether the canister has inputs / tasks or non-zero AP / priority
+    /// credit. It is strictly about ensuring that canisters are retained in the
+    /// subnet schedule for as long as they have long-running executions or heap
+    /// delta or install code debits.
+    pub fn must_be_in_schedule(&self) -> bool {
+        self.scheduler_state.heap_delta_debit.get() > 0
+            || self.scheduler_state.install_code_debit.get() > 0
+            || self.has_long_execution_or_install_code()
+    }
+
+    /// Returns true iff this canister can be safely placed in the "cold" pool of
+    /// `CanisterStates`, i.e. it has no work and nothing that requires attention.
+    ///
+    /// This is a conservative under-approximation: a `false` return does not imply
+    /// that the canister requires attention; it only means we cannot prove that it
+    /// doesn't.
+    ///
+    /// The predicate is a pure function of `CanisterState` and must remain so.
+    pub fn is_cold(&self) -> bool {
+        use self::system_state::CanisterStatus;
+        use ic_types::CanisterTimer;
+
+        let system_state = &self.system_state;
+        // No pending input or output.
+        !system_state.queues().has_input()
+            && !system_state.queues().has_output()
+            // No tasks (including paused/aborted executions, heartbeat/timer ticks and the on-low-wasm-memory hook)
+            && system_state.task_queue.is_empty()
+            // No `canister_heartbeat` or `canister_global_timer` to enqueue.
+            && !self.exports_heartbeat_method()
+            && matches!(system_state.global_timer, CanisterTimer::Inactive)
+            // `Stopping` canisters need to be processed each round (to drive the transition
+            // to `Stopped`); `Running` and `Stopped` canisters do not.
+            && !matches!(system_state.get_status(), CanisterStatus::Stopping { .. })
+            // No best-effort callback that might have to be timed out.
+            && !system_state.has_unexpired_callbacks()
+            // Not rate-limited by the scheduler.
+            && self.scheduler_state.heap_delta_debit.get() == 0
+            && self.scheduler_state.install_code_debit.get() == 0
+            // No pending ingress induction cycles debit.
+            && system_state.ingress_induction_cycles_debit().is_zero()
+    }
+
     /// See `SystemState::push_output_request` for documentation.
     pub fn push_output_request(
         &mut self,
-        msg: Arc<Request>,
+        request: OutputRequest,
         time: Time,
-    ) -> Result<(), (StateError, Arc<Request>)> {
-        self.system_state.push_output_request(msg, time)
+    ) -> Result<CallbackId, StateError> {
+        self.system_state.push_output_request(request, time)
     }
 
     /// See `SystemState::push_output_response` for documentation.
@@ -579,19 +627,16 @@ impl CanisterState {
 
     /// Clears the canister log.
     pub fn clear_log(&mut self) {
-        self.system_state.canister_log.clear();
         self.system_state.log_memory_store.clear();
     }
 
     /// Removes the canister log.
     pub fn remove_log(&mut self) {
-        self.system_state.canister_log.clear();
         self.system_state.log_memory_store.deallocate();
     }
 
     /// Sets the new canister log.
-    pub fn set_log(&mut self, (canister_log, log_memory_store): (CanisterLog, LogMemoryStore)) {
-        self.system_state.canister_log = canister_log;
+    pub fn set_log(&mut self, log_memory_store: LogMemoryStore) {
         self.system_state.log_memory_store = log_memory_store;
     }
 
@@ -630,26 +675,17 @@ impl CanisterState {
             .is_low_wasm_memory_hook_condition_satisfied(self.wasm_memory_usage())
     }
 
-    /// Adds a canister change to canister history and returns the change
-    /// of subnet available execution memory due to updating canister history.
-    #[must_use]
+    /// Adds a canister change to canister history.
+    ///
+    /// The additional canister history increases the canister's memory usage.
     pub fn add_canister_change(
         &mut self,
         timestamp_nanos: Time,
         change_origin: CanisterChangeOrigin,
         change_details: CanisterChangeDetails,
-    ) -> SubnetAvailableExecutionMemoryChange {
-        let old_allocated_bytes = self.memory_allocated_bytes();
+    ) {
         self.system_state
             .add_canister_change(timestamp_nanos, change_origin, change_details);
-        let new_allocated_bytes = self.memory_allocated_bytes();
-        if new_allocated_bytes >= old_allocated_bytes {
-            let allocated_bytes = new_allocated_bytes - old_allocated_bytes;
-            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes)
-        } else {
-            let deallocated_bytes = old_allocated_bytes - new_allocated_bytes;
-            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes)
-        }
     }
 }
 

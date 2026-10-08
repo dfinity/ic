@@ -10,6 +10,7 @@ source /opt/ic/bin/config.sh
 
 MICROCODE_FILE="/sys/devices/system/cpu/cpu0/microcode/version"
 GUESTOS_VERSION_FILE="/opt/ic/share/version.txt"
+REPLICA_VERSION_FILE="/opt/ic/share/replica_version.txt"
 STATE_ROOT_PATH="/var/lib/ic"
 
 function update_guestos_version_metric() {
@@ -25,6 +26,22 @@ function update_guestos_version_metric() {
         "{version=\"${GUESTOS_VERSION}\"}" \
         "${GUESTOS_VERSION_OK}" \
         "GuestOS version string" \
+        "gauge"
+}
+
+function update_replica_version_metric() {
+    if [ -r ${REPLICA_VERSION_FILE} ]; then
+        REPLICA_VERSION=$(cat ${REPLICA_VERSION_FILE})
+        REPLICA_VERSION_OK=1
+    else
+        REPLICA_VERSION="unknown"
+        REPLICA_VERSION_OK=0
+    fi
+    write_log "Replica version ${REPLICA_VERSION}"
+    write_metric_attr "replica_version" \
+        "{version=\"${REPLICA_VERSION}\"}" \
+        "${REPLICA_VERSION_OK}" \
+        "Replica version string" \
         "gauge"
 }
 
@@ -72,11 +89,12 @@ function update_tee_metrics() {
         "guestos_tee_active" \
         "Indicates whether the virtual machine is running in a Trusted Execution Environment (1 = TEE enabled, 0 = not in TEE)" \
         "gauge"
-    append_metric "$metric_family" "guestos_tee_active" "" "$SEV_ACTIVE"
+    append_metric "$metric_family" "guestos_tee_active" "" "$TEE_ENABLED"
 }
 
 function main() {
     update_guestos_version_metric
+    update_replica_version_metric
     update_guestos_boot_action_metric
     update_config_version_metric
     update_tee_metrics

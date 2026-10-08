@@ -59,11 +59,24 @@ fn create_unique_working_dir() -> PathBuf {
     path
 }
 
-fn execute_test_scenario_with_default_cmd(scenario_name: &str) -> Output {
-    let working_dir = create_unique_working_dir();
+/// Prepares a command running the test-driver binary on the given scenario.
+///
+/// `XML_OUTPUT_FILE` is dropped from the child's environment on purpose: the
+/// driver writes its JUnit XML report there, and these children are not the
+/// process Bazel launched as the test, so they would otherwise each overwrite
+/// the test.xml that Bazel expects *this* test to produce.
+fn driver_command(scenario_name: &str) -> Command {
     let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
     let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    cmd.env("TEST_SCENARIO_NAME", scenario_name)
+        .env_remove("XML_OUTPUT_FILE");
+    cmd
+}
+
+fn execute_test_scenario_with_default_cmd(scenario_name: &str) -> Output {
+    let working_dir = create_unique_working_dir();
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -126,9 +139,8 @@ fn test_scenario_with_test_panic_fails() {
 fn test_scenario_with_default_farm_url_succeeds() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_without_errors";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -154,9 +166,8 @@ fn test_scenario_with_default_farm_url_succeeds() {
 fn test_scenario_with_custom_farm_url_succeeds() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_without_errors";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -184,9 +195,8 @@ fn test_scenario_with_custom_farm_url_succeeds() {
 fn test_scenario_with_skipped_panic_test_succeeds() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_with_panic";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -213,9 +223,8 @@ fn test_scenario_with_skipped_panic_test_succeeds() {
 fn test_scenario_with_non_skipped_panic_test_fails() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_with_panic";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -246,9 +255,8 @@ fn test_scenario_with_non_skipped_panic_test_fails() {
 fn test_scenario_with_two_skipped_panic_tests_succeeds() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_with_two_panics";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -527,9 +535,8 @@ fn test_test_spawning_proc_gets_stopped() {
 fn test_setup_failure_file_written() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_without_errors";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",
@@ -554,9 +561,8 @@ fn test_setup_failure_file_written() {
 fn test_setup_failure_file_not_written() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_with_setup_panic";
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+    let mut cmd = driver_command(scenario_name);
+    cmd.args([
         "--working-dir",
         working_dir.to_str().unwrap(),
         "--group-base-name",

@@ -8,15 +8,12 @@ use axum::{
 };
 use http::Method;
 use ic_bn_lib::{
+    http::cache::{Bypasser, CacheError, CustomBypassReason, KeyExtractor},
+    tasks::Run,
+};
+use ic_bn_lib::{
     http::cache::{Cache, CacheBuilder},
     prometheus::Registry,
-};
-use ic_bn_lib_common::{
-    traits::{
-        Run,
-        http::{Bypasser, CustomBypassReason, KeyExtractor},
-    },
-    types::http::CacheError,
 };
 use strum::{Display, IntoStaticStr};
 use tokio_util::sync::CancellationToken;
@@ -56,9 +53,7 @@ impl CustomBypassReason for BypassReasonIC {}
 
 /// Decides if we need to bypass caching for the given request
 #[derive(Debug, Clone)]
-struct BypasserIC {
-    cache_non_anonymous: bool,
-}
+struct BypasserIC;
 
 impl Bypasser for BypasserIC {
     type BypassReason = BypassReasonIC;
@@ -77,8 +72,8 @@ impl Bypasser for BypasserIC {
         } else if ctx.nonce.is_some() {
             // Bypass cache if there's a nonce
             Some(BypassReasonIC::Nonce)
-        } else if ctx.is_anonymous() == Some(false) && !self.cache_non_anonymous {
-            // Bypass non-anonymous requests if not configured to cache them
+        } else if ctx.is_anonymous().is_some_and(|x| !x) {
+            // Bypass non-anonymous requests
             Some(BypassReasonIC::NonAnonymous)
         } else {
             None
@@ -92,11 +87,7 @@ pub struct CacheState {
 
 impl CacheState {
     pub fn new(cli: &cli::Cache, registry: &Registry) -> Result<Self, Error> {
-        let bypasser = BypasserIC {
-            cache_non_anonymous: cli.cache_non_anonymous,
-        };
-
-        let cache = CacheBuilder::new_with_bypasser(KeyExtractorContext, bypasser)
+        let cache = CacheBuilder::new_with_bypasser(KeyExtractorContext, BypasserIC)
             .cache_size(cli.cache_size.unwrap())
             .max_item_size(cli.cache_max_item_size)
             .ttl(cli.cache_ttl)
@@ -141,7 +132,7 @@ mod test {
     use candid::Principal;
     use http::StatusCode;
     use ic_bn_lib::http::cache::CacheStatus;
-    use ic_bn_lib_common::{principal, types::http::CacheBypassReason};
+    use ic_bn_lib::{http::cache::CacheBypassReason, principal};
     use tower::Service;
 
     use crate::{core::ANONYMOUS_PRINCIPAL, http::RequestType};
@@ -216,7 +207,6 @@ mod test {
             cache_size: Some(MAX_MEM_SIZE),
             cache_max_item_size: MAX_RESP_SIZE,
             cache_ttl: Duration::from_secs(3600),
-            cache_non_anonymous: false,
         };
 
         let cache_state = Arc::new(CacheState::new(&cli, &Registry::new()).unwrap());

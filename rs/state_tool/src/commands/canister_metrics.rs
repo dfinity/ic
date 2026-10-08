@@ -59,7 +59,7 @@ fn write_load_metrics_file(
      .map_err(|err| format!("Failed to write header: {err}"))?;
 
     // Write rows.
-    for (canister_id, canister_state) in replicated_state.canister_states() {
+    for (canister_id, canister_state) in replicated_state.canister_states().all_iter() {
         let instructions_executed = canister_state
             .system_state
             .canister_metrics()
@@ -95,7 +95,7 @@ fn write_connectivity_metrics_file(
         .map_err(|err| format!("Failed to write header: {err}"))?;
 
     // Write rows.
-    for (receiver_canister_id, canister_state) in replicated_state.canister_states() {
+    for (receiver_canister_id, canister_state) in replicated_state.canister_states().all_iter() {
         for (sender_canister_id, metrics) in canister_state
             .system_state
             .canister_metrics()

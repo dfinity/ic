@@ -56,6 +56,7 @@
 //!
 mod bitcoin;
 pub mod canister_state;
+mod canister_states;
 pub(crate) mod hash;
 pub mod metadata_state;
 pub mod metrics;
@@ -68,12 +69,13 @@ pub use canister_state::{
     num_bytes_try_from,
     system_state::{
         CallContext, CallContextAction, CallContextManager, CallOrigin, CanisterMetrics,
-        CanisterStatus, ExecutionTask, SystemState, memory_usage_of_request,
+        CanisterStatus, ExecutionTask, OutputRequest, SystemState,
     },
 };
+pub use canister_states::CanisterStates;
 pub use metadata_state::subnet_schedule::{CanisterPriority, SubnetSchedule};
 pub use metadata_state::{
-    FullTopology, IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,
+    IngressHistoryState, NetworkTopology, OwnSubnetInfo, Stream, SubnetTopology, SystemMetadata,
 };
 pub use page_map::{PageIndex, PageMap};
 pub use replicated_state::{InputQueueType, InputSource, ReplicatedState, StateError};
@@ -108,6 +110,7 @@ pub trait DroppedMessageMetrics {
 }
 
 pub mod testing {
+    pub use super::canister_state::system_state::testing::OutputRequestBuilder;
     pub use super::canister_state::system_state::testing::SystemStateTesting;
     pub use super::canister_state::testing::CanisterQueuesTesting;
     pub use super::metadata_state::testing::StreamTesting;
@@ -117,7 +120,7 @@ pub mod testing {
     use std::cell::RefCell;
     use std::collections::BTreeMap;
 
-    #[derive(Default, Debug)]
+    #[derive(Debug, Default)]
     pub struct FakeDropMessageMetrics {
         pub timed_out_messages:
             RefCell<BTreeMap<(&'static str, &'static str, &'static str), usize>>,

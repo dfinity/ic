@@ -1,9 +1,9 @@
 load("@aspect_bazel_lib//lib:tar.bzl", "tar")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
-load("@rules_distroless//distroless:defs.bzl", "passwd")
+load("@rules_distroless//distroless:defs.bzl", "cacerts", "flatten", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
-load("//bazel:defs.bzl", "write_info_file_var")
+load("//bazel:download.bzl", "download_file")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -12,27 +12,52 @@ exports_files([
     "counter.wat",
 ])
 
+# Universal VM and Prometheus VM disk images for the Local system-test backend
+# (rs/tests/driver/src/driver/local_backend.rs). They are the very artifacts the
+# Farm backend fetches itself, so the hashes must match
+# `DEFAULT_UNIVERSAL_VM_IMG_SHA256` (rs/tests/driver/src/driver/resource.rs) and
+# `DEFAULT_PROMETHEUS_VM_IMG_SHA256` (rs/tests/driver/src/driver/prometheus_vm.rs):
+# bump both places together. The images are downloaded at build time instead of
+# being `http_file` repositories, see //bazel:download.bzl. Keep the `.img.zst`
+# file names: the suffix is what makes `extract_image` in local_backend.rs unzstd
+# them.
+UNIVERSAL_VM_IMG_SHA256 = "ba8b49004163fa15f13c8ebac1e7cb99499043cda9f0a5dee00eca1b95187aee"
+
+download_file(
+    name = "universal_vm_img",
+    sha256 = UNIVERSAL_VM_IMG_SHA256,
+    url = "https://download.dfinity.systems/farm/universal-vm/%s/x86_64-linux/universal-vm.img.zst" % UNIVERSAL_VM_IMG_SHA256,
+)
+
+PROMETHEUS_VM_IMG_SHA256 = "6dc09a214f1975ce55a42a560b67b44ac58a61b52e3c3e9cf03dc2d7fbdd5f02"
+
+download_file(
+    name = "prometheus_vm_img",
+    sha256 = PROMETHEUS_VM_IMG_SHA256,
+    url = "https://download.dfinity.systems/farm/prometheus-vm/%s/x86_64-linux/prometheus-vm.img.zst" % PROMETHEUS_VM_IMG_SHA256,
+)
+
 # Packages we install into the image; see base image definition and its
 # 'manifest = ...' field for more information
 PACKAGES = [
-    "@noble//bash/amd64",
-    "@noble//ca-certificates/amd64",
-    "@noble//coreutils/amd64",
-    "@noble//libcryptsetup-dev/amd64",
-    "@noble//dmsetup/amd64",
-    "@noble//dosfstools/amd64",
-    "@noble//e2fsprogs/amd64",
-    "@noble//gawk/amd64",
-    "@noble//gzip/amd64",
-    "@noble//libssl3t64/amd64",
-    "@noble//libunwind8/amd64",
-    "@noble//mtools/amd64",
-    "@noble//openssh-client/amd64",
-    "@noble//rsync/amd64",
-    "@noble//tar/amd64",
-    "@noble//udev/amd64",
-    "@noble//xz-utils/amd64",
-    "@noble//zstd/amd64",
+    "@resolute//bash/amd64",
+    "@resolute//ca-certificates/amd64",
+    "@resolute//coreutils-from-uutils/amd64",
+    "@resolute//libcryptsetup-dev/amd64",
+    "@resolute//dmsetup/amd64",
+    "@resolute//dosfstools/amd64",
+    "@resolute//e2fsprogs/amd64",
+    "@resolute//gawk/amd64",
+    "@resolute//gzip/amd64",
+    "@resolute//libssl3t64/amd64",
+    "@resolute//libunwind8/amd64",
+    "@resolute//mtools/amd64",
+    "@resolute//openssh-client/amd64",
+    "@resolute//rsync/amd64",
+    "@resolute//tar/amd64",
+    "@resolute//udev/amd64",
+    "@resolute//xz-utils/amd64",
+    "@resolute//zstd/amd64",
 ]
 
 tar(
@@ -44,19 +69,19 @@ tar(
 )
 
 tar(
-    name = "mkfsvfat",
-    mtree = [
-        # symlink instead of updating the PATH
-        "./usr/bin/mkfs.vfat type=link link=/sbin/mkfs.vfat",
-    ],
-)
-
-tar(
     name = "awk",
     mtree = [
         # we install the GNU variant but call 'awk' so we symlink
         "./usr/bin/awk type=link link=/usr/bin/gawk",
     ],
+)
+
+# Needed because reqwest 0.13 switched to `rustls-platform-verifier`, which on Linux reads
+# from `/etc/ssl/certs/ca-certificates.crt`. This rule creates that bundle from the cert package;
+# the old `rustls-native-certs` (reqwest 0.12) could find individual cert files without it.
+cacerts(
+    name = "ca_certificates",
+    package = "@resolute//ca-certificates/amd64:data",
 )
 
 # Creates /var/lib/dpkg/status with installed package information.
@@ -91,39 +116,24 @@ UBUNTU_PACKAGES = [
 
     # symlinks
     ":awk",
-    ":mkfsvfat",
     ":sh",
 ] + PACKAGES
 
-# Squash all packages into a single tarball (there are too many to make each a separate layer)
-genrule(
+flatten(
     name = "ubuntu_packages_tar",
-    srcs = UBUNTU_PACKAGES,
-    outs = ["ubuntu_packages.tar"],
-    cmd = """
-        mkdir -p squash_tmp
-        trap "rm -rf squash_tmp" EXIT
-
-        for f in $(SRCS); do
-            tar -xf $$f -C squash_tmp
-        done
-
-        tar -cf $@ -C squash_tmp .
-    """,
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
+    deduplicate = True,
+    target_compatible_with = ["@platforms//os:linux"],
+    tars = UBUNTU_PACKAGES,
 )
 
 oci_image(
     name = "ubuntu_test_runtime_image_src",
     architecture = "amd64",
     os = "linux",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
+    target_compatible_with = ["@platforms//os:linux"],
     tars = [
         ":ubuntu_packages_tar",
+        ":ca_certificates",
     ],
 )
 
@@ -272,15 +282,12 @@ sh_binary(
 )
 
 # the STABLE_VERSION, suffixed with `-test`. Used in testing.
+# See also test_version_txt in ic-os/defs.bzl.
 genrule(
     name = "version-test",
     srcs = ["//bazel:version.txt"],
     outs = ["version-test.txt"],
-    cmd = "sed < $< 's/$$/-test/' > $@",
-)
-
-write_info_file_var(
-    name = "farm_metadata.txt",
-    varname = "STABLE_FARM_METADATA",
-    visibility = ["//visibility:public"],
+    # To generate the output file, appends "-test" to the end of each
+    # line of the input file. The input file has just one line though.
+    cmd = "sed 's/$$/-test/' < $< > $@",
 )

@@ -12,6 +12,7 @@ use ic_limits::{
     MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET, MAX_INGRESS_MESSAGES_PER_BLOCK,
     UNIT_DELAY_APP_SUBNET,
 };
+use ic_nervous_system_ids::is_potential_full_git_commit_id;
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID};
 use ic_nns_governance_derive_self_describing::SelfDescribing;
@@ -34,7 +35,7 @@ const ABSURDLY_LARGE_NUMBER_OF_NODES_IN_A_SUBNET: usize = 1000;
 /// * replica_version_id - Must be a potential full git commit ID (hexidecimal string of length 40).
 ///
 /// Note that `ValidFulfillSubnetRentalRequest::execute()` is not guaranteed to succeed. E.g. if
-/// replica_version_id is not a blessed replica version, then the proposal will fail at execution.
+/// replica_version_id is not an elected replica version, then the proposal will fail at execution.
 /// In principle, these things could be checked at proposal creation time, but they are not because
 /// that would require calling other canisters, which makes validation code fraught with peril.
 #[derive(Debug, Clone, PartialEq, SelfDescribing)]
@@ -42,6 +43,9 @@ pub(crate) struct ValidFulfillSubnetRentalRequest {
     user: PrincipalId,
     node_ids: Vec<PrincipalId>,
     replica_version_id: String,
+    /// Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+    /// If not set, handling defaults to the NNS subnet.
+    initial_dkg_subnet_id: Option<PrincipalId>,
 }
 
 impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
@@ -52,6 +56,7 @@ impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
             user,
             node_ids,
             replica_version_id,
+            initial_dkg_subnet_id,
         } = value;
 
         let mut defects = vec![];
@@ -93,6 +98,7 @@ impl TryFrom<FulfillSubnetRentalRequest> for ValidFulfillSubnetRentalRequest {
             user,
             node_ids,
             replica_version_id,
+            initial_dkg_subnet_id,
         })
     }
 }
@@ -239,6 +245,7 @@ impl ValidFulfillSubnetRentalRequest {
 
             subnet_type: SubnetType::Application,
             subnet_id_override: None,
+            initial_dkg_subnet_id: self.initial_dkg_subnet_id.map(SubnetId::from),
             start_as_nns: false,
             is_halted: false,
             chain_key_config: None,
@@ -367,15 +374,6 @@ impl ValidFulfillSubnetRentalRequest {
         // Let the caller know that all seems to have gone well.
         Ok(())
     }
-}
-
-/// Full git commit IDs are SHA-1s, which are hexidecimal strings of length 40.
-fn is_potential_full_git_commit_id(s: &str) -> bool {
-    if s.len() != 40 {
-        return false;
-    }
-
-    s.chars().all(|character| character.is_ascii_hexdigit())
 }
 
 #[cfg(test)]

@@ -540,6 +540,7 @@ pub fn install_nns(
         ),
         install_at_ids: false,
         registry_canister_init_payload: Default::default(),
+        engine_controller_init_args: None,
     };
 
     install_nns_with_customizations_and_check_progress(env.topology_snapshot(), nns_customizations);

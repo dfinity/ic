@@ -3,19 +3,28 @@ use std::{
     convert::TryFrom,
 };
 
-use crate::invariants::common::{
-    InvariantCheckError, RegistrySnapshot, get_node_record_from_snapshot,
-    get_subnet_ids_from_snapshot,
+use crate::invariants::{
+    common::{
+        InvariantCheckError, RegistrySnapshot, get_node_record_from_snapshot,
+        get_subnet_ids_from_snapshot, get_value_from_snapshot,
+    },
+    replica_version::has_launch_measurements,
 };
 
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId, subnet_id_try_from_protobuf};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::{
     node::v1::{NodeRecord, NodeRewardType},
     subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord, SubnetType},
 };
-use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_subnet_record_key};
+use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
+use ic_registry_keys::{
+    SUBNET_RECORD_KEY_PREFIX, make_default_initial_dkg_subnet_id_key, make_subnet_record_key,
+};
 use prost::Message;
+
+/// The maximum number of subnet admins a subnet may have.
+pub const MAX_SUBNET_ADMINS: usize = 10;
 
 /// Subnet invariants hold iff:
 ///    * Each SSH key access list does not contain more than 50 keys
@@ -30,7 +39,11 @@ use prost::Message;
 ///         * consist of nodes with reward type 4
 ///    * Conversely, only cloud engines can have nodes with reward type 4
 ///    * SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
-///    * Only rented subnets can have subnet admins set to a non-empty list
+///    * SEV-enabled subnets only run GuestOS versions that have launch measurements
+///    * Only rented subnets or cloud engines can have subnet admins set to a non-empty list
+///    * No subnet has more than `MAX_SUBNET_ADMINS` subnet admins
+///    * The default initial DKG subnet, if set, refers to a subnet that
+///      appears in the subnet list
 pub(crate) fn check_subnet_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
@@ -140,13 +153,13 @@ pub(crate) fn check_subnet_invariants(
             });
         }
 
-        check_node_type4_iff_cloud_engine(subnet_id, &subnet_record, &node_records)?;
+        check_node_type4_iff_cloud_engine(&subnet_record, &node_records, subnet_id)?;
 
         // SEV-enabled subnets invariants
         if let Some(features) = subnet_record.features.as_ref()
             && features.sev_enabled == Some(true)
         {
-            check_sev_subnet_invariants(subnet_id, subnet_members, snapshot)?;
+            check_sev_subnet_invariants(&subnet_record, snapshot, subnet_id)?;
         }
 
         check_subnet_admins_invariant(&subnet_record, subnet_id)?;
@@ -173,10 +186,46 @@ pub(crate) fn check_subnet_invariants(
     //    );
     //}
 
+    check_default_initial_dkg_subnet_invariant(snapshot)?;
+
     Ok(())
 }
 
-// Checks that only rented subnets or cloud engine subnets can have admins.
+/// Default initial DKG subnet invariant holds iff:
+///   * The `default_initial_dkg_subnet_id` record does not exist, OR
+///   * The record exists, decodes to a valid `SubnetId`, and that subnet
+///     appears in the subnet list.
+fn check_default_initial_dkg_subnet_invariant(
+    snapshot: &RegistrySnapshot,
+) -> Result<(), InvariantCheckError> {
+    let Some(subnet_id_proto) = get_value_from_snapshot::<SubnetIdProto>(
+        snapshot,
+        make_default_initial_dkg_subnet_id_key(),
+    ) else {
+        return Ok(());
+    };
+
+    let subnet_id =
+        subnet_id_try_from_protobuf(subnet_id_proto).map_err(|err| InvariantCheckError {
+            msg: format!("default_initial_dkg_subnet_id failed to decode: {err}"),
+            source: None,
+        })?;
+
+    if !get_subnet_ids_from_snapshot(snapshot).contains(&subnet_id) {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "default_initial_dkg_subnet_id is set to {subnet_id}, but that subnet \
+                does not appear in the subnet list"
+            ),
+            source: None,
+        });
+    }
+
+    Ok(())
+}
+
+// Checks that only rented subnets or cloud engine subnets can have admins, and
+// that no subnet has more than `MAX_SUBNET_ADMINS` admins.
 fn check_subnet_admins_invariant(
     subnet_record: &SubnetRecord,
     subnet_id: SubnetId,
@@ -202,6 +251,17 @@ fn check_subnet_admins_invariant(
             source: None,
         });
     }
+
+    if subnet_record.subnet_admins.len() > MAX_SUBNET_ADMINS {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "Subnet {subnet_id:} has {} subnet admins, which exceeds the maximum of {MAX_SUBNET_ADMINS}",
+                subnet_record.subnet_admins.len()
+            ),
+            source: None,
+        });
+    }
+
     Ok(())
 }
 
@@ -219,12 +279,19 @@ pub(crate) fn get_subnet_records_map(
     subnets
 }
 
-/// All nodes of a subnet must support SEV in order for SEV to be enabled on the subnet.
+/// SEV-enabled subnets must consist of SEV-supporting nodes only, and must run a
+/// GuestOS version that has launch measurements.
 fn check_sev_subnet_invariants(
-    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
-    subnet_members: HashSet<NodeId>,
+    subnet_record: &SubnetRecord,
     snapshot: &RegistrySnapshot,
+    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
 ) -> Result<(), InvariantCheckError> {
+    let subnet_members: HashSet<NodeId> = subnet_record
+        .membership
+        .iter()
+        .map(|v| NodeId::from(PrincipalId::try_from(v).unwrap()))
+        .collect();
+
     // SEV-enabled subnets consist of SEV-enabled nodes only (i.e. nodes with a chip ID in the node record)
     let nodes_missing_chip_id: Vec<NodeId> = subnet_members
         .iter()
@@ -259,18 +326,50 @@ fn check_sev_subnet_invariants(
         });
     }
 
+    // An SEV-enabled subnet must run only a GuestOS version that has launch measurements; otherwise
+    // its nodes cannot be attested, which defeats the purpose of enabling SEV.
+    //
+    // A CloudEngine is allowed to leave replica_version_id blank, and then runs the versions of the
+    // StandardEngineReplicaVersionRecord instead. Those are checked by the standard engine replica
+    // version invariants.
+    let subnet_replica_version_id = &subnet_record.replica_version_id;
+    if !subnet_replica_version_id.is_empty()
+        && !has_launch_measurements(subnet_replica_version_id, snapshot)
+    {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "Subnet {subnet_id} is SEV-enabled, but the GuestOS version that it \
+                 runs is missing guest launch measurements: {subnet_replica_version_id:?}"
+            ),
+            source: None,
+        });
+    }
+
     Ok(())
 }
 
 fn check_node_type4_iff_cloud_engine(
-    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
     subnet_record: &SubnetRecord,
     node_records: &[NodeRecord],
+    subnet_id: SubnetId, // only used for error messages, so we can report which subnet is non-compliant
 ) -> Result<(), InvariantCheckError> {
     let is_cloud_engine = subnet_record.subnet_type == i32::from(SubnetType::CloudEngine);
-    let is_node_type4 =
-        |node: &NodeRecord| node.node_reward_type == Some(i32::from(NodeRewardType::Type4));
-    let is_node_ok = |node: &NodeRecord| is_cloud_engine == is_node_type4(node);
+    let is_cloud_engine_node = |node: &NodeRecord| match node.node_reward_type() {
+        NodeRewardType::Unspecified
+        | NodeRewardType::Type0
+        | NodeRewardType::Type1
+        | NodeRewardType::Type2
+        | NodeRewardType::Type3
+        | NodeRewardType::Type3dot1
+        | NodeRewardType::Type1dot1 => false,
+        NodeRewardType::Type4
+        | NodeRewardType::Type4dot1
+        | NodeRewardType::Type4dot2
+        | NodeRewardType::Type4dot3
+        | NodeRewardType::Type4dot4
+        | NodeRewardType::Type4dot5 => true,
+    };
+    let is_node_ok = |node: &NodeRecord| is_cloud_engine == is_cloud_engine_node(node);
 
     let ok = node_records.iter().all(is_node_ok);
     if !ok {

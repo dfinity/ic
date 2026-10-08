@@ -107,7 +107,7 @@ fn decode_nat_to_u64(value: Nat) -> Result<u64, String> {
         [val] => Ok(*val),
         _ => Err(format!(
             "Nat value `{:?}` is too large, max supported value: {}",
-            &value,
+            value,
             u64::MAX,
         )),
     }

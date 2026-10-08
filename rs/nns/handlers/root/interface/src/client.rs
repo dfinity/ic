@@ -1,11 +1,10 @@
-#![allow(deprecated)]
 use crate::{
     ChangeCanisterControllersError, ChangeCanisterControllersRequest,
     ChangeCanisterControllersResponse, ChangeCanisterControllersResult,
 };
 use async_trait::async_trait;
 use ic_base_types::PrincipalId;
-use ic_cdk::call;
+use ic_cdk::call::{Call, Error as IcCdkCallError};
 use ic_nervous_system_clients::canister_status::MemoryMetrics;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -45,29 +44,40 @@ impl NnsRootCanisterClient for NnsRootCanisterClientImpl {
         &self,
         change_canister_controllers_request: ChangeCanisterControllersRequest,
     ) -> Result<ChangeCanisterControllersResponse, (Option<i32>, String)> {
-        call(
-            ROOT_CANISTER_ID.get().0,
-            "change_canister_controllers",
-            (change_canister_controllers_request,),
-        )
-        .await
-        .map(|(response,): (ChangeCanisterControllersResponse,)| response)
-        .map_err(|(code, message)| (Some(code as i32), message))
+        Call::unbounded_wait(ROOT_CANISTER_ID.get().0, "change_canister_controllers")
+            .with_arg(change_canister_controllers_request)
+            .await
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| {
+                response
+                    .candid::<ChangeCanisterControllersResponse>()
+                    .map_err(IcCdkCallError::from)
+            })
+            .map_err(into_reject_code_and_message)
     }
 
     async fn canister_status(
         &self,
         canister_id_record: CanisterIdRecord,
     ) -> Result<CanisterStatusResult, (Option<i32>, String)> {
-        call(
-            ROOT_CANISTER_ID.get().0,
-            "canister_status",
-            (canister_id_record,),
-        )
-        .await
-        .map(|(response,): (CanisterStatusResult,)| response)
-        .map_err(|(code, message)| (Some(code as i32), message))
+        Call::unbounded_wait(ROOT_CANISTER_ID.get().0, "canister_status")
+            .with_arg(canister_id_record)
+            .await
+            .map_err(IcCdkCallError::from)
+            .and_then(|response| {
+                response
+                    .candid::<CanisterStatusResult>()
+                    .map_err(IcCdkCallError::from)
+            })
+            .map_err(into_reject_code_and_message)
     }
+}
+
+/// Translates a failed call into the `(reject code, message)` pair that
+/// [`NnsRootCanisterClientImpl`] reports to its callers.
+fn into_reject_code_and_message(err: IcCdkCallError) -> (Option<i32>, String) {
+    let (code, message) = ic_nervous_system_runtime::into_reject_code_and_message(err);
+    (Some(code), message)
 }
 
 /// An example implementation of the NnsRootCanisterClient trait to be used in unit tests.

@@ -876,6 +876,8 @@ impl IDkgTranscript {
     /// * the transcript only contains dealings from nodes that are dealers
     ///   according to the params
     /// * the dealer indexes match
+    /// * the transcript ID embedded in each of the transcript's verified
+    ///   dealings matches the params' transcript ID
     /// * the signers of the transcript's verified dealings are eligible for
     ///   signing, i.e., they are receivers in the params
     pub fn verify_consistency_with_params(
@@ -952,6 +954,14 @@ impl IDkgTranscript {
             }
         }
         for (dealer_index, signed_dealing) in self.verified_dealings.as_ref() {
+            let dealing_transcript_id = signed_dealing.idkg_dealing().transcript_id;
+            if dealing_transcript_id != params.transcript_id() {
+                return Err(format!(
+                    "mismatching transcript IDs in dealing (dealer index {dealer_index}: \
+                     {dealing_transcript_id:?}) and params ({:?})",
+                    params.transcript_id(),
+                ));
+            }
             let signers: BTreeSet<NodeId> = signed_dealing.signers();
             let ineligible_signers: BTreeSet<NodeId> = signers
                 .difference(params.receivers.get())
@@ -1045,8 +1055,8 @@ impl Display for IDkgDealing {
 }
 
 impl SignedBytesWithoutDomainSeparator for IDkgDealing {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
@@ -1090,8 +1100,8 @@ impl Display for SignedIDkgDealing {
 }
 
 impl SignedBytesWithoutDomainSeparator for SignedIDkgDealing {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 

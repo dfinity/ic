@@ -114,10 +114,14 @@ impl v1::GuestLaunchMeasurementMetadata {
 
     /// Returns a list of defects (or Ok):
     ///
-    /// - kernel_cmdline can any value, including None, and Some(""). The only
+    /// - kernel_cmdline can have any value, including None, and Some(""). The only
     ///   restriction is that it must not exceed 100 KiB.
+    /// - vcpu_type can be None. If it's Some, it must be non-empty and not exceed 100 bytes.
     pub fn validate(&self) -> Result<(), Vec<String>> {
-        let Self { kernel_cmdline } = self;
+        let Self {
+            kernel_cmdline,
+            vcpu_type,
+        } = self;
 
         let mut defects = vec![];
 
@@ -132,6 +136,16 @@ impl v1::GuestLaunchMeasurementMetadata {
                 len as f64 / 1024.0,
                 Self::MAX_KERNEL_CMDLINE_LEN as f64 / 1024.0,
             ))
+        }
+
+        // vcpu must be None or non-empty and < 100 bytes
+        if let Some(vcpu_type) = vcpu_type {
+            if vcpu_type.is_empty() {
+                defects.push("vcpu_type must be None or non-empty".to_string());
+            }
+            if vcpu_type.len() > 100 {
+                defects.push("vcpu_type is longer than 100 bytes".to_string());
+            }
         }
 
         if defects.is_empty() {

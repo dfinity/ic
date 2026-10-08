@@ -1,12 +1,8 @@
-use std::time::Duration;
-
 use anyhow::Result;
 use futures::future::join_all;
-use slog::Logger;
-use tokio::runtime::{Builder, Runtime};
-
 use ic_consensus_system_test_upgrade_common::{
-    bless_target_version, get_chain_key_canister_and_public_key, upgrade,
+    ALLOWED_FAILURES, UP_DOWNGRADE_OVERALL_TIMEOUT, UP_DOWNGRADE_PER_TEST_TIMEOUT,
+    elect_target_version, get_chain_key_canister_and_public_key, upgrade,
 };
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg_with_retries, install_nns_and_check_progress,
@@ -32,14 +28,14 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{MessageCanister, block_on, get_app_subnet_and_node};
 use ic_types::Height;
+use slog::Logger;
 use slog::info;
+use std::time::Duration;
+use tokio::runtime::{Builder, Runtime};
 
 const SCHNORR_MSG_SIZE_BYTES: usize = 32;
 const DKG_INTERVAL: u64 = 29;
-const ALLOWED_FAILURES: usize = 1;
-const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
-const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(35 * 60);
-const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1;
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
 fn setup(env: TestEnv) {
@@ -74,10 +70,10 @@ fn setup(env: TestEnv) {
 // Tests an upgrade of the app subnet to the target version and a downgrade back to the initial version
 fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
-    let target_version = bless_target_version(&env, &nns_node);
+    let target_version = elect_target_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let key_ids = make_key_ids_for_all_schemes();
-    get_chain_key_canister_and_public_key(
+    let ecdsa_state = get_chain_key_canister_and_public_key(
         &env,
         &nns_node,
         &agent,
@@ -118,7 +114,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         &nns_node,
         &target_version,
         SubnetType::Application,
-        None,
+        Some(&ecdsa_state),
     );
     let initial_version = get_guestos_img_version();
     info!(logger, "Upgrading to initial version: {}", initial_version);
@@ -127,7 +123,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         &nns_node,
         &initial_version,
         SubnetType::Application,
-        None,
+        Some(&ecdsa_state),
     );
     info!(
         logger,

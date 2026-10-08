@@ -4,29 +4,37 @@ package(default_visibility = [
     "//rs/crypto:__subpackages__",
 ])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/temp_crypto",
-    "//rs/interfaces",
-    "//rs/registry/fake",
-    "//rs/registry/keys",
-    "//rs/registry/proto_data_provider",
-    "//rs/types/types",
-    "@crate_index//:rand",
-    "@crate_index//:rand_chacha",
-]
-
 rust_library(
     name = "multi_sigs",
     testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_test_utils_multi_sigs",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/temp_crypto",
+        "//rs/interfaces",
+        "//rs/registry/fake",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/types/types",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+    ],
 )
 
 rust_test(
     name = "multi_sigs_test",
     crate = ":multi_sigs",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/temp_crypto",
+        "//rs/interfaces",
+        "//rs/registry/fake",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/types/types",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+    ],
 )

@@ -1,7 +1,7 @@
 use crate::{
     DataLocation, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     cli::{
-        consent_given, print_height_info, read, read_optional, read_optional_data_location,
+        consent_given, print_height_info, read, read_data_location, read_optional,
         read_optional_node_ids, read_optional_subnet_id, read_optional_type, wait_for_confirmation,
     },
     error::{GracefulExpect, RecoveryError},
@@ -46,8 +46,8 @@ pub enum StepType {
     /// replica bug and not due to malicious actors, this step should not reveal any problems.
     MergeCertificationPools,
     /// In this step we will download all finalized consensus artifacts. For that we should use a
-    /// node, that is up to date with the highest finalization height because this node will contain
-    /// all required artifacts for the recovery.
+    /// node, that is up to date with the highest finalization and CUP height because this node
+    /// will contain all required artifacts for the recovery.
     DownloadConsensusPool,
     /// In this step we will download the subnet state from a node that is sufficiently up to date
     /// with the rest of the subnet, i.e. not behind by more than 1 DKG interval. To avoid
@@ -62,7 +62,10 @@ pub enum StepType {
     /// a "target replay height" in this step. This target height should be chosen such that it is
     /// below the height causing the panic, but above or equal to the height of the last certification
     /// (share). Specifying this parameter will instruct ic-replay to stop at the given height and
-    /// create a checkpoint, which will then be used to propose the recovery CUP.
+    /// create a checkpoint, which will then be used to propose the recovery CUP. This checkpoint
+    /// requires an additional batch and will thus be created one height above the specified target
+    /// height, unless the target height is a CUP height, in which case the checkpoint should
+    /// already exist.
     ICReplay,
     /// Now we want to verify that the height of the locally obtained execution state matches the
     /// highest finalized height, which was agreed upon by the subnet.
@@ -70,10 +73,10 @@ pub enum StepType {
     /// This step is only required if we want to deploy a new replica version to the troubled subnet
     /// before we resume its computation. Obviously, this step should not be skipped if the subnet
     /// has stalled due to a deterministic bug. You can continue with this step, if a problem was
-    /// already identified, fixed and a hotfix version is ready to be proposed as a blessed version.
-    /// If a version exists that does not need to be blessed, this step can be skipped, as the
+    /// already identified, fixed and a hotfix version is ready to be proposed as an elected version.
+    /// If a version exists that does not need to be elected, this step can be skipped, as the
     /// actual subnet upgrade will happen in the next step.
-    BlessVersion,
+    ElectVersion,
     /// This step issues an ic-admin command that will create an upgrade proposal for the troubled
     /// subnet. Note that the subnet nodes will only upgrade after we proposed the corresponding
     /// recovery CUP referencing the new registry version.
@@ -136,7 +139,8 @@ pub struct AppSubnetRecoveryArgs {
     pub replacement_nodes: Option<Vec<NodeId>>,
 
     #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
+    /// The replay will stop at this height and checkpoint the state replayed up to
+    /// it. That checkpoint sits one height above, unless this is a CUP height.
     pub replay_until_height: Option<u64>,
 
     /// Public ssh key to be deployed to the subnet for read only access
@@ -171,6 +175,10 @@ pub struct AppSubnetRecoveryArgs {
     #[clap(long)]
     pub keep_downloaded_state: Option<bool>,
 
+    /// Height of the checkpoint to download. If not provided, the latest checkpoint is used.
+    #[clap(long)]
+    pub download_state_height: Option<u64>,
+
     /// The method of uploading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the target node.
     /// Local recoveries allow us to skip a potentially expensive data transfer.
@@ -184,6 +192,11 @@ pub struct AppSubnetRecoveryArgs {
     /// Id of the chain key subnet used for resharing chain keys to the subnet to be recovered
     #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub chain_key_subnet_id: Option<SubnetId>,
+
+    /// Optional subnet used to run `setup_initial_dkg` during recovery CUP proposal.
+    /// If not set, the request is handled by the NNS subnet.
+    #[clap(long, value_parser=crate::util::subnet_id_from_str)]
+    pub initial_dkg_subnet_id: Option<SubnetId>,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
@@ -304,10 +317,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 wait_for_confirmation(&self.logger);
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::DownloadConsensusPool => {
                 if self.params.download_pool_node.is_none() {
-                    // We could pick a node with highest finalization height automatically, but we
-                    // might have a preference between nodes of the same finalization height.
+                    // We could pick a node with highest finalization and CUP height automatically,
+                    // but we might have a preference between nodes of same heights.
                     print_height_info(
                         &self.logger,
                         &self.recovery.registry_helper,
@@ -315,16 +329,16 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     );
 
                     self.params.download_pool_node =
-                        read_optional(&self.logger, "Enter consensus pool download IP:");
+                        Some(read(&self.logger, "Enter consensus pool download IP:"));
                 }
             }
 
             StepType::DownloadState => {
                 if self.params.download_state_method.is_none() {
-                    self.params.download_state_method = read_optional_data_location(
+                    self.params.download_state_method = Some(read_data_location(
                         &self.logger,
                         "Enter location of the subnet state to be recovered [local/<ipv6>]:",
-                    );
+                    ));
                 }
 
                 if self.params.keep_downloaded_state.is_none()
@@ -336,8 +350,16 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         "Preserve original downloaded state locally?",
                     ));
                 }
+
+                if self.params.download_state_height.is_none() {
+                    self.params.download_state_height = read_optional(
+                        &self.logger,
+                        "Enter the height of the checkpoint to download (leave empty for latest checkpoint):",
+                    );
+                }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::ICReplay => {
                 if self.params.replay_until_height.is_none() {
                     self.params.replay_until_height =
@@ -345,9 +367,21 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
-            StepType::BlessVersion => {
+            #[allow(clippy::collapsible_match)]
+            StepType::ElectVersion => {
                 if self.params.upgrade_version.is_none() {
-                    self.params.upgrade_version = read_optional(&self.logger, "Upgrade version: ");
+                    self.params.upgrade_version =
+                        read_optional(&self.logger, "Version to elect (and upgrade to): ");
+                }
+            }
+
+            #[allow(clippy::collapsible_match)]
+            StepType::UpgradeVersion => {
+                if self.params.upgrade_version.is_none() {
+                    self.params.upgrade_version = read_optional(
+                        &self.logger,
+                        "Version to upgrade to (WARN: it should already be elected): ",
+                    );
                 }
             }
 
@@ -364,17 +398,25 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         "Enter ID of subnet to reshare Chain keys from: ",
                     );
                 }
-            }
-
-            StepType::UploadState => {
-                if self.params.upload_method.is_none() {
-                    self.params.upload_method = read_optional_data_location(
+                if self.params.initial_dkg_subnet_id.is_none() {
+                    self.params.initial_dkg_subnet_id = read_optional_subnet_id(
                         &self.logger,
-                        "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
+                        "Enter ID of subnet to setup initial DKG on (default: NNS): ",
                     );
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
+            StepType::UploadState => {
+                if self.params.upload_method.is_none() {
+                    self.params.upload_method = Some(read_data_location(
+                        &self.logger,
+                        "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
+                    ));
+                }
+            }
+
+            #[allow(clippy::collapsible_match)]
             StepType::WaitForCUP => {
                 if self.params.wait_for_cup_node.is_none() {
                     if let Some(DataLocation::Remote(ip)) = self.params.upload_method {
@@ -453,9 +495,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::DownloadState => match self.params.download_state_method {
-                Some(DataLocation::Local) => {
-                    Ok(Box::new(self.recovery.get_copy_local_state_step()))
-                }
+                Some(DataLocation::Local) => Ok(Box::new(
+                    self.recovery
+                        .get_copy_local_state_step(self.params.download_state_height)?,
+                )),
                 Some(DataLocation::Remote(node_ip)) => {
                     let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
                         (SshUser::Readonly, self.params.readonly_key_file.clone())
@@ -468,6 +511,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         ssh_user,
                         key_file,
                         self.params.keep_downloaded_state == Some(true),
+                        self.params.download_state_height,
                     )?))
                 }
                 None => Err(RecoveryError::StepSkipped),
@@ -483,7 +527,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::ValidateReplayOutput => Ok(Box::new(
                 self.recovery
-                    .get_validate_replay_step(self.params.subnet_id, 0),
+                    .get_validate_replay_step(self.params.subnet_id),
             )),
 
             StepType::UploadState => {
@@ -502,7 +546,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
-            StepType::BlessVersion => {
+            StepType::ElectVersion => {
                 if let Some(upgrade_version) = &self.params.upgrade_version {
                     let params = self.params.clone();
                     let (url, hash, measurements_path) = match (
@@ -557,7 +601,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::ProposeCup => {
-                let state_params = self.recovery.get_replay_output()?;
+                let state_params = self.recovery.get_replay_output()?.state_params;
                 let recovery_height = Recovery::get_recovery_height(state_params.height);
                 let default = vec![];
                 Ok(Box::new(self.recovery.update_recovery_cup(
@@ -566,6 +610,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     state_params.hash,
                     self.params.replacement_nodes.as_ref().unwrap_or(&default),
                     None,
+                    self.params.initial_dkg_subnet_id,
                     self.params.chain_key_subnet_id,
                 )?))
             }

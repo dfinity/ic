@@ -8,10 +8,10 @@ use crate::canister_manager::types::{
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
-    CanisterMemoryHandling, InstallCodeHelper, MemoryHandling, OriginalContext,
-    PausedInstallCodeHelper, canister_layout, finish_err,
+    InstallCodeHelper, OriginalContext, PausedInstallCodeHelper, finish_err,
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
+use crate::hypervisor::MemorySource;
 use ic_base_types::PrincipalId;
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
@@ -90,13 +90,12 @@ pub(crate) fn execute_install(
             original,
             round,
             err,
-            helper.take_canister_log(),
+            helper.clone_log_memory_store(),
         );
     }
 
     // Stage 1: create a new execution state based on the new Wasm binary, clear certified data and canister logs, deactivate global timer, and bump canister version.
     let canister_id = helper.canister().canister_id();
-    let layout = canister_layout(&original.canister_layout_path, &canister_id);
     let context_sender = context.sender();
     let instructions_to_assemble = context.wasm_source.instructions_to_assemble();
     helper.charge_for_large_wasm_assembly(instructions_to_assemble);
@@ -110,26 +109,23 @@ pub(crate) fn execute_install(
                 original,
                 round,
                 err,
-                helper.take_canister_log(),
+                helper.clone_log_memory_store(),
             );
         }
     };
     let module_hash = wasm_module.module_hash();
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
         wasm_module,
-        layout.raw_path(),
         canister_id,
+        round.time,
         round_limits,
         original.compilation_cost_handling,
+        // Install and re-install replace both the stable memory and the main
+        // memory with the initial memories of the new module.
+        MemorySource::Fresh,
     );
     helper.charge_for_compilation(instructions_from_compilation);
-    if let Err(err) = helper.replace_execution_state_and_allocations(
-        result,
-        CanisterMemoryHandling {
-            stable_memory_handling: MemoryHandling::Replace,
-            main_memory_handling: MemoryHandling::Replace,
-        },
-    ) {
+    if let Err(err) = helper.replace_execution_state_and_allocations(result) {
         let instructions_left = helper.instructions_left();
         return finish_err(
             clean_canister,
@@ -137,7 +133,7 @@ pub(crate) fn execute_install(
             original,
             round,
             err,
-            helper.take_canister_log(),
+            helper.clone_log_memory_store(),
         );
     }
     helper.clear_certified_data();
@@ -174,8 +170,8 @@ pub(crate) fn execute_install(
             FuncRef::Method(method),
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
-            round.network_topology,
-            round.cost_schedule,
+            round.network_topology.clone(),
+            original.subnet_cycles_config,
         );
 
         match wasm_execution_result {
@@ -205,7 +201,7 @@ pub(crate) fn execute_install(
                     ingress_status_with_processing_state(&original.message, original.time);
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     context_sender,
                     context_arg: context.arg,
                     original,
@@ -251,7 +247,7 @@ fn install_stage_2a_process_start_result(
             original,
             round,
             err,
-            helper.take_canister_log(),
+            helper.clone_log_memory_store(),
         );
     }
 
@@ -296,8 +292,8 @@ fn install_stage_2b_continue_install_after_start(
         FuncRef::Method(method),
         RequestMetadata::for_new_call_tree(original.time),
         round_limits,
-        round.network_topology,
-        round.cost_schedule,
+        round.network_topology.clone(),
+        original.subnet_cycles_config,
     );
     match wasm_execution_result {
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
@@ -323,7 +319,7 @@ fn install_stage_2b_continue_install_after_start(
             let ingress_status =
                 ingress_status_with_processing_state(&original.message, original.time);
             let paused_execution = Box::new(PausedInitExecution {
-                paused_helper: helper.pause(),
+                paused_helper: helper.pause(slice.executed_instructions),
                 paused_wasm_execution,
                 original,
             });
@@ -363,7 +359,7 @@ fn install_stage_3_process_init_result(
             original,
             round,
             err,
-            helper.take_canister_log(),
+            helper.clone_log_memory_store(),
         );
     }
     helper.finish(clean_canister, original, round, round_limits)
@@ -441,7 +437,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
                 update_round_limits(round_limits, &slice);
                 let paused_execution = Box::new(PausedInitExecution {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     ..*self
                 });
                 DtsInstallCodeResult::Paused {
@@ -551,7 +547,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
                 );
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
                     paused_wasm_execution,
-                    paused_helper: helper.pause(),
+                    paused_helper: helper.pause(slice.executed_instructions),
                     ..*self
                 });
                 DtsInstallCodeResult::Paused {

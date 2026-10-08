@@ -134,13 +134,13 @@
 use super::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR,
-    farm::{DnsRecord, PlaynetCertificate},
-    test_setup::{GroupSetup, InfraProvider},
+    farm::{DemoCertificate, DnsRecord, HostFeature, PlaynetCertificate},
+    test_setup::{GroupSetup, SystemTestBackend},
 };
 use crate::{
     driver::{
         constants::{self, GROUP_TTL, SSH_USERNAME},
-        farm::{Farm, GroupSpec},
+        farm::{Farm, GroupSpec, VmAllocationMode},
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
     },
@@ -167,17 +167,19 @@ use ic_nns_test_utils::{
 };
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::{
-    node::v1 as pb_node,
-    replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    subnet::v1 as pb_subnet,
+    firewall::v1::FirewallRule, node::v1 as pb_node, replica_version::v1::ReplicaVersionRecord,
+    subnet::v1 as pb_subnet, unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_client_helpers::{
     api_boundary_node::ApiBoundaryNodeRegistry,
+    firewall::FirewallRegistry,
     node::NodeRegistry,
+    replica_version::ReplicaVersionRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
+    unassigned_nodes::UnassignedNodeRegistry,
 };
-use ic_registry_keys::REPLICA_VERSION_KEY_PREFIX;
+use ic_registry_keys::FirewallRulesScope;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -188,8 +190,6 @@ use ic_types::{
 };
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
-use itertools::Itertools;
-use prost::Message;
 use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, debug, info, warn};
@@ -234,8 +234,8 @@ const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehavior>>;
 
-pub(crate) const REPLICA_METRICS_PORT: u16 = 9090;
-pub(crate) const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
+pub const REPLICA_METRICS_PORT: u16 = 9090;
+pub const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
     let l = sha256.len();
@@ -304,7 +304,7 @@ impl std::fmt::Display for TopologySnapshot {
                 "\tNode id={}, ipv6={:<width$}, domain_name={}, index={}",
                 n.node_id,
                 n.get_ip_addr(),
-                n.get_domain().map_or("n/a".to_string(), |domain| domain),
+                n.get_domain().unwrap_or_else(|| "n/a".to_string()),
                 idx,
                 width = max_length_ipv6,
             )
@@ -403,15 +403,14 @@ impl TopologySnapshot {
     }
 
     pub fn subnets(&self) -> Box<dyn Iterator<Item = SubnetSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
         Box::new(
             self.local_registry
-                .get_subnet_ids(registry_version)
-                .unwrap_result(registry_version, "subnet_ids")
+                .get_subnet_ids(self.registry_version)
+                .unwrap_result(self.registry_version, "subnet_ids")
                 .into_iter()
                 .map(|subnet_id| SubnetSnapshot {
                     subnet_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -422,25 +421,23 @@ impl TopologySnapshot {
     }
 
     pub fn subnet_canister_ranges(&self, sub: SubnetId) -> Vec<CanisterIdRange> {
-        let registry_version = self.local_registry.get_latest_version();
         self.local_registry
-            .get_subnet_canister_ranges(registry_version, sub)
+            .get_subnet_canister_ranges(self.registry_version, sub)
             .expect("Could not deserialize optional routing table from local registry.")
             .expect("Optional routing table is None in local registry.")
     }
 
     pub fn unassigned_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
         let assigned_nodes: HashSet<_> = self
             .local_registry
-            .get_subnet_ids(registry_version)
-            .unwrap_result(registry_version, "subnet_ids")
+            .get_subnet_ids(self.registry_version)
+            .unwrap_result(self.registry_version, "subnet_ids")
             .into_iter()
             .flat_map(|subnet_id| {
                 self.local_registry
-                    .get_node_ids_on_subnet(subnet_id, registry_version)
+                    .get_node_ids_on_subnet(subnet_id, self.registry_version)
                     .unwrap_result(
-                        registry_version,
+                        self.registry_version,
                         &format!("node_ids_on_subnet(subnet_id={subnet_id})"),
                     )
             })
@@ -448,12 +445,12 @@ impl TopologySnapshot {
 
         let api_boundary_nodes = self
             .local_registry
-            .get_api_boundary_node_ids(registry_version)
+            .get_api_boundary_node_ids(self.registry_version)
             .unwrap();
 
         Box::new(
             self.local_registry
-                .get_node_ids(registry_version)
+                .get_node_ids(self.registry_version)
                 .unwrap()
                 .into_iter()
                 .filter(|node_id| {
@@ -461,7 +458,7 @@ impl TopologySnapshot {
                 })
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -472,16 +469,14 @@ impl TopologySnapshot {
     }
 
     pub fn api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
-
         Box::new(
             self.local_registry
-                .get_api_boundary_node_ids(registry_version)
+                .get_api_boundary_node_ids(self.registry_version)
                 .unwrap()
                 .into_iter()
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -492,16 +487,14 @@ impl TopologySnapshot {
     }
 
     pub fn system_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
-
         Box::new(
             self.local_registry
-                .get_system_api_boundary_node_ids(registry_version)
+                .get_system_api_boundary_node_ids(self.registry_version)
                 .unwrap()
                 .into_iter()
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -512,16 +505,14 @@ impl TopologySnapshot {
     }
 
     pub fn app_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.local_registry.get_latest_version();
-
         Box::new(
             self.local_registry
-                .get_app_api_boundary_node_ids(registry_version)
+                .get_app_api_boundary_node_ids(self.registry_version)
                 .unwrap()
                 .into_iter()
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                     ic_name: self.ic_name.clone(),
@@ -531,61 +522,26 @@ impl TopologySnapshot {
         )
     }
 
-    pub fn elected_replica_versions(&self) -> anyhow::Result<Vec<String>> {
-        Ok(self
-            .local_registry
-            .get_key_family(
-                "blessed_replica_versions",
-                self.local_registry.get_latest_version(),
-            )
-            .map_err(anyhow::Error::from)?
-            .iter()
-            .filter_map(|key| {
-                let r = self
-                    .local_registry
-                    .get_versioned_value(key, self.local_registry.get_latest_version())
-                    .unwrap_or_else(|_| {
-                        panic!("Failed to get entry {key} for blessed replica versions")
-                    });
-
-                r.as_ref().map(|v| {
-                    BlessedReplicaVersions::decode(v.as_slice()).expect("Invalid registry value")
-                })
-            })
-            .collect_vec()
-            .first()
-            .ok_or(anyhow::anyhow!(
-                "Failed to find any blessed replica versions"
-            ))?
-            .blessed_version_ids
-            .clone())
+    pub fn replica_version_records(&self) -> Result<Vec<(String, ReplicaVersionRecord)>> {
+        self.local_registry
+            .get_all_replica_version_records(self.registry_version)?
+            .context("get_all_replica_version_records always returns Some (and it did not)")
     }
 
-    pub fn replica_version_records(&self) -> anyhow::Result<Vec<(String, ReplicaVersionRecord)>> {
+    /// The firewall rules currently registered for `scope`, in their registered
+    /// order, or an empty vector when the scope has no rules.
+    ///
+    /// A test that proposes a change to a rule set needs these: the registry
+    /// canister rejects the proposal unless it carries a hash of the rule set
+    /// the change is meant to apply to. The set is not necessarily empty to
+    /// begin with — the local backend, for instance, seeds a global rule that
+    /// lets the test driver reach the nodes from outside their `/64`.
+    pub fn firewall_rules(&self, scope: &FirewallRulesScope) -> Result<Vec<FirewallRule>> {
         Ok(self
             .local_registry
-            .get_key_family(
-                REPLICA_VERSION_KEY_PREFIX,
-                self.local_registry.get_latest_version(),
-            )
-            .map_err(anyhow::Error::from)?
-            .iter()
-            .map(|key| {
-                let r = self
-                    .local_registry
-                    .get_versioned_value(key, self.local_registry.get_latest_version())
-                    .unwrap_or_else(|_| panic!("Failed to get entry for replica version {key}"));
-                (
-                    key[REPLICA_VERSION_KEY_PREFIX.len()..].to_string(),
-                    r.as_ref()
-                        .map(|v| {
-                            ReplicaVersionRecord::decode(v.as_slice())
-                                .expect("Invalid registry value")
-                        })
-                        .unwrap(),
-                )
-            })
-            .collect_vec())
+            .get_firewall_rules(scope, self.registry_version)?
+            .map(|rule_set| rule_set.entries)
+            .unwrap_or_default())
     }
 
     /// The subnet id of the root subnet.
@@ -608,6 +564,13 @@ impl TopologySnapshot {
             env: self.env.clone(),
             ic_name: self.ic_name.clone(),
         }
+    }
+
+    /// The unassigned nodes config record, if it exists.
+    pub fn unassigned_nodes_config(&self) -> Option<UnassignedNodesConfigRecord> {
+        self.local_registry
+            .get_unassigned_nodes_config(self.registry_version)
+            .expect("Could not deserialize unassigned nodes config from local registry.")
     }
 
     /// This method blocks and repeatedly fetches updates from the registry
@@ -925,17 +888,21 @@ impl IcNodeSnapshot {
         node_record.domain
     }
 
+    pub fn node_reward_type(&self) -> pb_node::NodeRewardType {
+        let node_record = self.raw_node_record();
+        node_record.node_reward_type()
+    }
+
     pub fn subnet_id(&self) -> Option<SubnetId> {
-        let registry_version = self.registry_version;
         self.local_registry
-            .get_subnet_ids(registry_version)
-            .unwrap_result(registry_version, "subnet_ids")
+            .get_subnet_ids(self.registry_version)
+            .unwrap_result(self.registry_version, "subnet_ids")
             .into_iter()
             .find(|subnet_id| {
                 self.local_registry
-                    .get_node_ids_on_subnet(*subnet_id, registry_version)
+                    .get_node_ids_on_subnet(*subnet_id, self.registry_version)
                     .unwrap_result(
-                        registry_version,
+                        self.registry_version,
                         &format!("node_ids_on_subnet(subnet_id={subnet_id})"),
                     )
                     .contains(&self.node_id)
@@ -943,9 +910,8 @@ impl IcNodeSnapshot {
     }
 
     pub fn is_api_boundary_node(&self) -> bool {
-        let registry_version = self.registry_version;
         self.local_registry
-            .get_api_boundary_node_ids(registry_version)
+            .get_api_boundary_node_ids(self.registry_version)
             .unwrap()
             .contains(&self.node_id)
     }
@@ -1186,10 +1152,21 @@ impl IcNodeSnapshot {
                 self.node_id
             );
             for (name, value) in metrics {
-                let max_value = metrics_to_check
-                    .get(name.split('(').next().unwrap())
-                    .copied()
-                    .unwrap_or_default();
+                // Assert the metrics to check are prefix-free. This allows to specify a metric name
+                // prefix to check all metrics with that prefix.
+                let mut metrics_to_check = metrics_to_check
+                    .iter()
+                    .filter(|(metric_name, _)| name.starts_with(**metric_name))
+                    .map(|(_, max_value)| *max_value);
+                let max_value = metrics_to_check.next().unwrap_or_default();
+                // Assert that the iterator only had one element, i.e. the metrics to check are
+                // prefix-free.
+                assert!(
+                    metrics_to_check.count() == 0,
+                    "The metric `{name}` is not prefix-free with respect to the other metrics to check. \
+                    This is not allowed. Please specify a prefix-free set of metrics to check."
+                );
+
                 assert!(
                     value[0] <= max_value,
                     "The metric `{name}` on node {} exceeded the maximum allowed value: \
@@ -1398,27 +1375,21 @@ impl<T: HasTopologySnapshot> GetFirstHealthyNodeSnapshot for T {
         })
     }
     fn get_first_healthy_nns_node_snapshot(&self) -> IcNodeSnapshot {
-        let root_subnet_id = get_root_subnet_id_from_snapshot(self);
+        let root_subnet_id = self.topology_snapshot().root_subnet_id();
         self.get_first_healthy_node_snapshot_where(|s| s.subnet_id == root_subnet_id)
     }
     fn get_first_healthy_non_nns_node_snapshot(&self) -> IcNodeSnapshot {
-        let root_subnet_id = get_root_subnet_id_from_snapshot(self);
+        let root_subnet_id = self.topology_snapshot().root_subnet_id();
         self.get_first_healthy_node_snapshot_where(|s| s.subnet_id != root_subnet_id)
     }
     fn get_first_healthy_system_but_not_nns_node_snapshot(&self) -> IcNodeSnapshot {
-        let root_subnet_id = get_root_subnet_id_from_snapshot(self);
+        let root_subnet_id = self.topology_snapshot().root_subnet_id();
         self.get_first_healthy_node_snapshot_where(|s| {
             s.subnet_type() == SubnetType::System && s.subnet_id != root_subnet_id
         })
     }
 }
 
-fn get_root_subnet_id_from_snapshot<T: HasTopologySnapshot>(env: &T) -> SubnetId {
-    let ts = env.topology_snapshot();
-    ts.local_registry
-        .get_root_subnet_id(ts.registry_version)
-        .unwrap_result(ts.registry_version, "root_subnet_id")
-}
 pub trait HasRegistryLocalStore {
     fn registry_local_store_path(&self, name: &str) -> Option<PathBuf>;
 }
@@ -1467,16 +1438,6 @@ pub fn get_mainnet_application_subnet_revision() -> Result<ReplicaVersion> {
     Ok(replica_version)
 }
 
-pub fn get_empty_disk_img_url() -> Result<Url> {
-    let url = Url::parse(&std::env::var("ENV_DEPS__EMPTY_DISK_IMG_URL")?)?;
-
-    Ok(url)
-}
-
-pub fn get_empty_disk_img_sha256() -> Result<String> {
-    Ok(std::env::var("ENV_DEPS__EMPTY_DISK_IMG_HASH")?)
-}
-
 pub fn get_build_setupos_config_image_tool() -> PathBuf {
     get_dependency_path_from_env("ENV_DEPS__SETUPOS_BUILD_CONFIG")
 }
@@ -1485,9 +1446,50 @@ pub trait HasGroupSetup {
     fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool);
 }
 
+/// Name of the environment variable that controls the VM allocation mode used
+/// when creating a Farm group. The value must match one of the serde rename
+/// strings of [`VmAllocationMode`] (e.g. `performanceOptimizedAllocation`).
+const VM_ALLOCATION_MODE_ENV_VAR: &str = "VM_ALLOCATION_MODE";
+
+fn vm_allocation_mode_from_env() -> Option<VmAllocationMode> {
+    let raw = match std::env::var(VM_ALLOCATION_MODE_ENV_VAR) {
+        Ok(v) if !v.is_empty() => v,
+        _ => return None,
+    };
+    let mode = serde_json::from_value::<VmAllocationMode>(serde_json::Value::String(raw.clone()))
+        .unwrap_or_else(|e| {
+            panic!(
+                "Invalid value {raw:?} for environment variable {VM_ALLOCATION_MODE_ENV_VAR}: {e}"
+            )
+        });
+    Some(mode)
+}
+
+/// Name of the environment variable that controls whether the Farm group is
+/// created with a required host feature restricting allocation to the local
+/// DC, i.e. the DC of the machine running the test as specified by the `DC`
+/// environment variable. Accepted values are `1`/`true` and `0`/`false`.
+const ALLOCATE_TESTNET_TO_LOCAL_DC_ENV_VAR: &str = "ALLOCATE_TESTNET_TO_LOCAL_DC";
+
+fn allocate_testnet_to_local_dc_from_env() -> bool {
+    let raw = match std::env::var(ALLOCATE_TESTNET_TO_LOCAL_DC_ENV_VAR) {
+        Ok(v) if !v.is_empty() => v,
+        _ => return false,
+    };
+    match raw.as_str() {
+        "1" | "true" => true,
+        "0" | "false" => false,
+        _ => panic!(
+            "Invalid value {raw:?} for environment variable {ALLOCATE_TESTNET_TO_LOCAL_DC_ENV_VAR}: \
+             accepted values are \"1\", \"true\", \"0\" and \"false\""
+        ),
+    }
+}
+
 impl HasGroupSetup for TestEnv {
     fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
         let log = self.logger();
+        let vm_allocation_mode = vm_allocation_mode_from_env();
         if GroupSetup::attribute_exists(self) {
             let group_setup = GroupSetup::read_attribute(self);
             info!(
@@ -1495,17 +1497,30 @@ impl HasGroupSetup for TestEnv {
                 "Group {} already set up.", group_setup.infra_group_name
             );
         } else {
-            // GROUP_TTL should be enough for the setup task to allocate the group on InfraProvider
+            // GROUP_TTL should be enough for the setup task to allocate the group on SystemTestBackend::Farm
             // Afterwards, the group's TTL should be bumped via a keepalive task
             let timeout = if no_group_ttl { None } else { Some(GROUP_TTL) };
             let group_setup = GroupSetup::new(group_base_name.clone(), timeout);
-            match InfraProvider::read_attribute(self) {
-                InfraProvider::Farm => {
+            match SystemTestBackend::read_attribute(self) {
+                SystemTestBackend::Farm => {
+                    let required_host_features = allocate_testnet_to_local_dc_from_env()
+                        .then(|| std::env::var("DC").ok())
+                        .flatten()
+                        .map(|dc| vec![HostFeature::DC(dc)])
+                        .unwrap_or_default();
+                    info!(
+                        log,
+                        "Creating group {} with required_host_features: {:?} and vm_allocation_mode: {:?} ...",
+                        group_setup.infra_group_name,
+                        required_host_features,
+                        vm_allocation_mode,
+                    );
+
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
                     let farm = Farm::new(farm_base_url.into(), self.logger());
                     let group_spec = GroupSpec {
-                        vm_allocation: None,
-                        required_host_features: vec![],
+                        vm_allocation_mode,
+                        required_host_features,
                         preferred_network: None,
                         metadata: None,
                     };
@@ -1516,6 +1531,17 @@ impl HasGroupSetup for TestEnv {
                         group_spec,
                     )
                     .unwrap();
+                }
+                SystemTestBackend::Local => {
+                    info!(
+                        log,
+                        "Creating local group {} ...", group_setup.infra_group_name,
+                    );
+                    let backend = crate::driver::local_backend::LocalBackend::from_test_env(self)
+                        .expect("LocalBackend::from_test_env failed");
+                    backend
+                        .create_group(&group_setup.infra_group_name)
+                        .expect("LocalBackend::create_group failed");
                 }
             };
             group_setup.write_attribute(self);
@@ -1653,6 +1679,13 @@ pub fn execute_bash_script_from_session(session: &Session, script: &str) -> Resu
     channel.read_to_string(&mut out)?;
     let mut err = String::new();
     channel.stderr().read_to_string(&mut err)?;
+    // The server may send the exit status after its EOF but always before closing the channel.
+    // Wait for the close, as otherwise exit_status() may return its default of 0.
+    channel.wait_close().map_err(|e| {
+        anyhow!(
+            "block_on_bash_script: failed to wait for the channel to close: {e}. Output: {out} Err: {err}"
+        )
+    })?;
     let exit_status = channel.exit_status()?;
     if exit_status != 0 {
         bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
@@ -1881,11 +1914,20 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
     }
 
     async fn await_status_is_healthy_async(&self) -> Result<()> {
+        self.await_status_is_healthy_with_retries_async(READY_WAIT_TIMEOUT, RETRY_BACKOFF)
+            .await
+    }
+
+    async fn await_status_is_healthy_with_retries_async(
+        &self,
+        timeout: Duration,
+        backoff: Duration,
+    ) -> Result<()> {
         retry_with_msg_async!(
             &format!("await_status_is_healthy of {}", self.get_public_url()),
             &self.test_env().logger(),
-            READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            timeout,
+            backoff,
             || async {
                 self.status_is_healthy_async()
                     .await
@@ -2043,6 +2085,10 @@ pub struct NnsCustomizations {
     pub neurons: Option<Vec<Neuron>>,
     pub install_at_ids: bool,
     pub registry_canister_init_payload: RegistryCanisterInitPayload,
+    /// Optional init args for the engine controller canister. When `Some`,
+    /// installed in place of the canister's hard-coded defaults.
+    pub engine_controller_init_args:
+        Option<ic_nns_test_utils::itest_helpers::EngineControllerInitArgs>,
 }
 
 impl NnsCustomizations {
@@ -2097,6 +2143,14 @@ impl NnsInstallationBuilder {
         self
     }
 
+    pub fn with_engine_controller_init_args(
+        mut self,
+        args: ic_nns_test_utils::itest_helpers::EngineControllerInitArgs,
+    ) -> Self {
+        self.customizations.engine_controller_init_args = Some(args);
+        self
+    }
+
     /// WARNING: Due to technical limitations, this does not actually cause
     /// Exchange Rate canister (XRC) to be created. Rather, this just makes the
     /// Cycles Minting canister aware of the XRC. Creating XRC is done outside
@@ -2120,10 +2174,13 @@ impl NnsInstallationBuilder {
             Some(v) => v,
             None => bail!("Prep Dir for IC {:?} does not exist.", ic_name),
         };
+        let nns_subnet_id = node
+            .subnet_id()
+            .expect("NNS installation node must belong to a subnet");
         info!(log, "Wait for node reporting healthy status");
         node.await_status_is_healthy().unwrap();
 
-        let install_future = install_nns_canisters(&log, url, &prep_dir, self);
+        let install_future = install_nns_canisters(&log, url, &prep_dir, self, nns_subnet_id);
         block_on(async {
             let timeout_result =
                 tokio::time::timeout(self.installation_timeout, install_future).await;
@@ -2222,12 +2279,11 @@ pub trait IcNodeContainer {
 
 impl IcNodeContainer for SubnetSnapshot {
     fn nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
-        let registry_version = self.registry_version;
         let node_ids = self
             .local_registry
-            .get_node_ids_on_subnet(self.subnet_id, registry_version)
+            .get_node_ids_on_subnet(self.subnet_id, self.registry_version)
             .unwrap_result(
-                registry_version,
+                self.registry_version,
                 &format!("node_ids_on_subnet(subnet_id={})", self.subnet_id),
             );
 
@@ -2237,7 +2293,7 @@ impl IcNodeContainer for SubnetSnapshot {
                 .map(|node_id| IcNodeSnapshot {
                     node_id,
                     ic_name: self.ic_name.clone(),
-                    registry_version,
+                    registry_version: self.registry_version,
                     local_registry: self.local_registry.clone(),
                     env: self.env.clone(),
                 })
@@ -2265,10 +2321,17 @@ pub trait VmControl {
     fn start(&self);
 }
 
-pub struct HostedVm {
-    farm: Farm,
-    group_name: String,
-    vm_name: String,
+pub enum HostedVm {
+    Farm {
+        farm: Farm,
+        group_name: String,
+        vm_name: String,
+    },
+    Local {
+        backend: Arc<crate::driver::local_backend::LocalBackend>,
+        group_name: String,
+        vm_name: String,
+    },
 }
 
 /// VmControl enables a user to interact with VMs, i.e. change their state.
@@ -2276,21 +2339,60 @@ pub struct HostedVm {
 /// unsuccessful.
 impl VmControl for HostedVm {
     fn kill(&self) {
-        self.farm
-            .destroy_vm(&self.group_name, &self.vm_name)
-            .expect("could not kill VM");
+        match self {
+            HostedVm::Farm {
+                farm,
+                group_name,
+                vm_name,
+            } => farm
+                .destroy_vm(group_name, vm_name)
+                .expect("could not kill VM"),
+            HostedVm::Local {
+                backend,
+                group_name,
+                vm_name,
+            } => backend
+                .destroy_vm(group_name, vm_name)
+                .expect("could not kill VM"),
+        }
     }
 
     fn reboot(&self) {
-        self.farm
-            .reboot_vm(&self.group_name, &self.vm_name)
-            .expect("could not reboot VM");
+        match self {
+            HostedVm::Farm {
+                farm,
+                group_name,
+                vm_name,
+            } => farm
+                .reboot_vm(group_name, vm_name)
+                .expect("could not reboot VM"),
+            HostedVm::Local {
+                backend,
+                group_name,
+                vm_name,
+            } => backend
+                .reboot_vm(group_name, vm_name)
+                .expect("could not reboot VM"),
+        }
     }
 
     fn start(&self) {
-        self.farm
-            .start_vm(&self.group_name, &self.vm_name)
-            .expect("could not start VM");
+        match self {
+            HostedVm::Farm {
+                farm,
+                group_name,
+                vm_name,
+            } => farm
+                .start_vm(group_name, vm_name)
+                .expect("could not start VM"),
+            HostedVm::Local {
+                backend,
+                group_name,
+                vm_name,
+            } => backend
+                .start_vm(group_name, vm_name)
+                .expect("could not start VM"),
+        }
     }
 }
 
@@ -2307,15 +2409,29 @@ where
     fn vm(&self) -> Box<dyn VmControl> {
         let env = self.test_env();
         let pot_setup = GroupSetup::read_attribute(&env);
-        let farm_base_url = self.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, env.logger());
-
         let vm_name = self.vm_name();
-        Box::new(HostedVm {
-            farm,
-            group_name: pot_setup.infra_group_name,
-            vm_name,
-        })
+        let group_name = pot_setup.infra_group_name;
+
+        match SystemTestBackend::read_attribute(&env) {
+            SystemTestBackend::Farm => {
+                let farm_base_url = self.get_farm_url().unwrap();
+                let farm = Farm::new(farm_base_url, env.logger());
+                Box::new(HostedVm::Farm {
+                    farm,
+                    group_name,
+                    vm_name,
+                })
+            }
+            SystemTestBackend::Local => {
+                let backend = crate::driver::local_backend::LocalBackend::from_test_env(&env)
+                    .expect("LocalBackend::from_test_env failed");
+                Box::new(HostedVm::Local {
+                    backend,
+                    group_name,
+                    vm_name,
+                })
+            }
+        }
     }
 }
 
@@ -2596,6 +2712,7 @@ pub async fn install_nns_canisters(
     url: Url,
     ic_prep_state_dir: &IcPrepStateDir,
     nns_installation_builder: &NnsInstallationBuilder,
+    nns_subnet_id: SubnetId,
 ) {
     info!(
         logger,
@@ -2607,9 +2724,25 @@ pub async fn install_nns_canisters(
         ledger_balances,
         neurons,
         mut registry_canister_init_payload,
+        engine_controller_init_args,
     } = nns_installation_builder.customizations.clone();
 
     let mut init_payloads = NnsInitPayloadsBuilder::new();
+
+    // If the caller did not supply explicit engine-controller init args, fall
+    // back to authorizing `TEST_NEURON_1_OWNER_PRINCIPAL` and pinning the
+    // initial DKG subnet to the NNS subnet we're installing on. This matches
+    // what the typical testnet setup wants and avoids every testnet repeating
+    // the same wiring.
+    let engine_controller_init_args = engine_controller_init_args.unwrap_or_else(|| {
+        ic_nns_test_utils::itest_helpers::EngineControllerInitArgs {
+            authorized_caller: Some(
+                ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL.0,
+            ),
+            initial_dkg_subnet_id: Some(nns_subnet_id.get().0),
+        }
+    });
+    init_payloads.with_engine_controller_init_args(engine_controller_init_args);
 
     if nns_installation_builder.is_subnet_rental_canister_enabled {
         init_payloads.with_subnet_rental_canister();
@@ -2689,6 +2822,12 @@ pub async fn install_nns_canisters(
         {
             builder.enable_swapping_feature_for_subnet(subnet);
         }
+        if registry_canister_init_payload
+            .is_subnet_splitting_enabled
+            .unwrap_or_default()
+        {
+            builder.enable_subnet_splitting();
+        }
 
         builder
     };
@@ -2720,6 +2859,11 @@ pub trait CreateDnsRecords {
     /// The records will be garbage collected some time after the group has expired.
     /// The suffix will be returned from this function such that the FQDNs can be constructed.
     fn create_dns_records(&self, dns_records: Vec<DnsRecord>) -> String;
+
+    /// Creates DNS records under the suffix: `.<domain>.demo.farm.dfinity.systems`.
+    /// The records will be garbage collected some time after the group has expired.
+    /// The suffix will be returned from this function such that the FQDNs can be constructed.
+    fn create_demo_dns_records(&self, domain: &str, dns_records: Vec<DnsRecord>) -> String;
 }
 
 impl<T> CreateDnsRecords for T
@@ -2729,12 +2873,38 @@ where
     fn create_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
+        if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
+            slog::warn!(
+                log,
+                "LocalBackend: create_dns_records is a no-op ({} records ignored)",
+                dns_records.len()
+            );
+            return "local.invalid".to_string();
+        }
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
         farm.create_dns_records(&group_name, dns_records)
             .expect("Failed to create DNS records")
+    }
+
+    fn create_demo_dns_records(&self, domain: &str, dns_records: Vec<DnsRecord>) -> String {
+        let env = self.test_env();
+        let log = env.logger();
+        if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
+            slog::warn!(
+                log,
+                "LocalBackend: create_demo_dns_records is a no-op for domain {domain}"
+            );
+            return "local.invalid".to_string();
+        }
+        let farm_base_url = self.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.infra_group_name;
+        farm.create_demo_dns_records(&group_name, domain, dns_records)
+            .unwrap_or_else(|_| panic!("Failed to create demo DNS records for domain {}", domain))
     }
 }
 
@@ -2754,6 +2924,14 @@ where
     fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
+        if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
+            slog::warn!(
+                log,
+                "LocalBackend: create_playnet_dns_records is a no-op ({} records ignored)",
+                dns_records.len()
+            );
+            return "local.invalid".to_string();
+        }
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
@@ -2776,12 +2954,39 @@ where
     fn acquire_playnet_certificate(&self) -> PlaynetCertificate {
         let env = self.test_env();
         let log = env.logger();
+        if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
+            panic!(
+                "LocalBackend: acquire_playnet_certificate is not supported (no TLS playnet); guard the caller with SystemTestBackend::Farm"
+            );
+        }
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
         farm.acquire_playnet_certificate(&group_name)
             .expect("Failed to acquire a certificate for a playnet")
+    }
+}
+
+pub trait AcquireDemoCertificate {
+    /// Get a certificate signed by Let's Encrypt from farm
+    /// for the domain `<domain>.demo.farm.dfinity.systems`.
+    fn acquire_demo_certificate(&self, domain: &str) -> DemoCertificate;
+}
+
+impl<T> AcquireDemoCertificate for T
+where
+    T: HasTestEnv,
+{
+    fn acquire_demo_certificate(&self, domain: &str) -> DemoCertificate {
+        let env = self.test_env();
+        let log = env.logger();
+        let farm_base_url = self.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.infra_group_name;
+        farm.acquire_demo_certificate(&group_name, domain)
+            .unwrap_or_else(|_| panic!("Failed to acquire a certificate for domain {}", domain))
     }
 }
 
@@ -2842,7 +3047,21 @@ pub fn scp_send_to(
     to_remote: &std::path::Path,
     mode: i32,
 ) {
-    let size = fs::metadata(from_local).unwrap().len();
+    try_scp_send_to(log, session, from_local, to_remote, mode).unwrap_or_else(|e| panic!("{e:#}"));
+}
+
+/// Copy a local file via SSH to a remote host, returning an `Err` on failure
+/// instead of panicking like [`scp_send_to`].
+pub fn try_scp_send_to(
+    log: Logger,
+    session: &Session,
+    from_local: &std::path::Path,
+    to_remote: &std::path::Path,
+    mode: i32,
+) -> Result<()> {
+    let size = fs::metadata(from_local)
+        .with_context(|| format!("Failed to read metadata for local path {from_local:?}"))?
+        .len();
     retry_with_msg!(
         format!("scp-ing local {from_local:?} of {size:?} B to remote {to_remote:?}"),
         log.clone(),
@@ -2865,9 +3084,7 @@ pub fn scp_send_to(
             Ok(())
         }
     )
-    .unwrap_or_else(|e| {
-        panic!("Failed to scp local {from_local:?} to remote {to_remote:?} because: {e}")
-    });
+    .with_context(|| format!("Failed to scp local {from_local:?} to remote {to_remote:?}"))
 }
 
 /// Copy a file from a remote host to a local file.

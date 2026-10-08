@@ -1,5 +1,8 @@
-use crate::DiskEncryptionKeyExchangeServerAgent;
+use crate::{DEFAULT_SUCCESS_TIMEOUT, DiskEncryptionKeyExchangeServerAgent};
 use anyhow::Context;
+use attestation::attestation_package::SevRootCertificateVerification;
+use guest_disk::DEFAULT_STORE_LUKS_HEADER_PATH;
+use guest_upgrade_shared::{DEFAULT_SERVER_PORT, STORE_DEVICE};
 use ic_interfaces_registry::RegistryClient;
 use std::sync::Arc;
 use tokio::runtime::Handle;
@@ -9,8 +12,8 @@ use {
     config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config},
     config_types::GuestOSConfig,
     sev::firmware::guest::Firmware,
-    sev_guest::is_sev_active,
-    vsock_lib::LinuxVSockClient,
+    sev_guest::is_tee_enabled,
+    vsock_lib::client::LinuxVsockClient,
 };
 
 /// Creates a new DiskEncryptionKeyExchangeServerAgent to be used by the Orchestrator.
@@ -20,12 +23,12 @@ pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
     handle: Handle,
     registry_client: Arc<dyn RegistryClient>,
 ) -> Option<DiskEncryptionKeyExchangeServerAgent> {
-    let is_sev_active = is_sev_active().unwrap_or_else(|err| {
+    let is_tee_enabled = is_tee_enabled().unwrap_or_else(|err| {
         eprintln!("Failed to check if SEV is active, assuming it is not active: {err:?}");
         false
     });
 
-    if !is_sev_active {
+    if !is_tee_enabled {
         return None;
     }
 
@@ -65,10 +68,15 @@ pub fn new_disk_encryption_key_exchange_server_agent_for_orchestrator(
 
     Some(DiskEncryptionKeyExchangeServerAgent::new(
         handle,
-        Box::new(LinuxVSockClient::default()),
+        Box::new(LinuxVsockClient::default()),
         sev_firmware_factory,
+        SevRootCertificateVerification::Verify,
         trusted_execution_config,
         registry_client,
+        STORE_DEVICE.into(),
+        DEFAULT_STORE_LUKS_HEADER_PATH.into(),
+        DEFAULT_SERVER_PORT,
+        DEFAULT_SUCCESS_TIMEOUT,
     ))
 }
 

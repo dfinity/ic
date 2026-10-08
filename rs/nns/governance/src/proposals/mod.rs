@@ -5,8 +5,8 @@ use crate::{
         CreateServiceNervousSystem, DeregisterKnownNeuron, GovernanceError, InstallCode,
         KnownNeuron, LoadCanisterSnapshot, ManageNeuron, Motion, NetworkEconomics, ProposalData,
         RewardNodeProvider, RewardNodeProviders, SelfDescribingProposalAction, StopOrStartCanister,
-        TakeCanisterSnapshot, Topic, UpdateCanisterSettings, Vote, governance_error::ErrorType,
-        proposal::Action,
+        TakeCanisterSnapshot, Topic, UpdateCanisterSettings, UpdateStandardEngineReplicaVersion,
+        Vote, governance_error::ErrorType, proposal::Action,
     },
     proposals::{
         add_or_remove_node_provider::ValidAddOrRemoveNodeProvider,
@@ -36,6 +36,7 @@ pub mod self_describing;
 pub mod stop_or_start_canister;
 pub mod take_canister_snapshot;
 pub mod update_canister_settings;
+pub mod update_standard_engine_replica_version;
 pub mod wasm_module;
 
 mod decode_candid_args_to_self_describing_value;
@@ -64,6 +65,7 @@ pub(crate) enum ValidProposalAction {
     TakeCanisterSnapshot(TakeCanisterSnapshot),
     LoadCanisterSnapshot(LoadCanisterSnapshot),
     CreateCanisterAndInstallCode(CreateCanisterAndInstallCode),
+    UpdateStandardEngineReplicaVersion(UpdateStandardEngineReplicaVersion),
 }
 
 impl TryFrom<Option<Action>> for ValidProposalAction {
@@ -133,6 +135,11 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             Action::CreateCanisterAndInstallCode(create_canister_and_install_code) => Ok(
                 ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code),
             ),
+            Action::UpdateStandardEngineReplicaVersion(update_standard_engine_replica_version) => {
+                Ok(ValidProposalAction::UpdateStandardEngineReplicaVersion(
+                    update_standard_engine_replica_version,
+                ))
+            }
 
             // Obsolete actions
             Action::SetDefaultFollowees(_) => Err(GovernanceError::new_with_message(
@@ -186,6 +193,9 @@ impl ValidProposalAction {
             ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
                 create_canister_and_install_code.valid_topic()?
             }
+            ValidProposalAction::UpdateStandardEngineReplicaVersion(
+                update_standard_engine_replica_version,
+            ) => update_standard_engine_replica_version.valid_topic(),
         };
         Ok(topic)
     }
@@ -282,6 +292,11 @@ impl ValidProposalAction {
                     create_canister_and_install_code.abridge(),
                 ))
             }
+            ValidProposalAction::UpdateStandardEngineReplicaVersion(
+                update_standard_engine_replica_version,
+            ) => Ok(SelfDescribingProposalAction::from(
+                update_standard_engine_replica_version.clone(),
+            )),
             ValidProposalAction::RewardNodeProvider(reward_node_provider) => Ok(
                 SelfDescribingProposalAction::from(reward_node_provider.clone()),
             ),

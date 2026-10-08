@@ -10,10 +10,10 @@ use ic_system_test_driver::{
     util::runtime_from_url,
 };
 
+use base64::prelude::*;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
 use ic_types::{NodeId, SubnetId};
-use openssh_keys::PublicKey;
 use registry_canister::mutations::{
     do_set_subnet_operational_level::{NodeSshAccess, SetSubnetOperationalLevelPayload},
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
@@ -55,10 +55,28 @@ fn private_key_to_pem_string(rsa: &rsa::RsaPrivateKey) -> String {
         .to_string()
 }
 
+/// Renders an RSA public key (big-endian `e` and `n`) as an OpenSSH
+/// `authorized_keys` line, `ssh-rsa <base64(blob)> <comment>`, where the blob
+/// is the SSH wire encoding `string("ssh-rsa") || mpint(e) || mpint(n)`
+/// (RFC 4253, section 6.6).
 fn public_key_to_string(e: Vec<u8>, n: Vec<u8>) -> String {
-    let mut key = PublicKey::from_rsa(e, n);
-    key.set_comment("ci@ci.ci");
-    key.to_string()
+    fn write_bytes(buf: &mut Vec<u8>, bytes: &[u8]) {
+        buf.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+        buf.extend_from_slice(bytes);
+    }
+    // An SSH `mpint` is a big-endian two's-complement integer, so a positive
+    // value whose most significant bit is set needs a leading zero byte.
+    fn write_mpint(buf: &mut Vec<u8>, mut num: Vec<u8>) {
+        if num.first().is_some_and(|b| b & 0x80 != 0) {
+            num.insert(0, 0);
+        }
+        write_bytes(buf, &num);
+    }
+    let mut blob = Vec::new();
+    write_bytes(&mut blob, b"ssh-rsa");
+    write_mpint(&mut blob, e);
+    write_mpint(&mut blob, n);
+    format!("ssh-rsa {} ci@ci.ci", BASE64_STANDARD.encode(&blob))
 }
 
 pub enum AuthMean {
@@ -81,10 +99,33 @@ impl Default for SshSession {
 
 impl SshSession {
     pub fn login(&mut self, ip: &IpAddr, username: &str, mean: &AuthMean) -> Result<(), String> {
+        // The SSH transport handshake (TCP connect + protocol banner and key
+        // exchange) is retried for a bounded time because it can fail transiently
+        // (e.g. with "Failed getting banner") when the node is briefly unresponsive,
+        // for instance right after the replica/orchestrator is restarted. Such
+        // transport-level failures are unrelated to whether the key grants access,
+        // which is what the callers actually test. The authentication step below is
+        // not retried, so an actual loss of access (e.g. a key being incorrectly
+        // removed) is still reported immediately.
         let ip_str = format!("[{ip}]:22");
-        let tcp = TcpStream::connect(ip_str).map_err(|err| err.to_string())?;
-        self.session.set_tcp_stream(tcp);
-        self.session.handshake().map_err(|err| err.to_string())?;
+        let start = std::time::Instant::now();
+        loop {
+            let handshake_result = TcpStream::connect(&ip_str)
+                .map_err(|err| err.to_string())
+                .and_then(|tcp| {
+                    self.session.set_tcp_stream(tcp);
+                    self.session.handshake().map_err(|err| err.to_string())
+                });
+            match handshake_result {
+                Ok(()) => break,
+                Err(_) if start.elapsed() < SSH_ACCESS_TIMEOUT => {
+                    std::thread::sleep(SSH_ACCESS_BACKOFF);
+                    // A failed handshake can leave the session unusable, so replace it.
+                    self.session = Session::new().unwrap();
+                }
+                Err(err) => return Err(err),
+            }
+        }
 
         match mean {
             AuthMean::PrivateKey(pk) => self
@@ -201,6 +242,7 @@ pub fn get_update_subnet_payload_with_keys(
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
+        cooling_down: None,
         features: None,
         resource_limits: None,
         chain_key_config: None,
@@ -209,6 +251,7 @@ pub fn get_update_subnet_payload_with_keys(
         max_number_of_canisters: None,
         ssh_readonly_access: readonly_keys,
         ssh_backup_access: backup_keys,
+        subnet_admins: None,
         // Deprecated/unused values follow
         max_artifact_streams_per_peer: None,
         max_chunk_wait_ms: None,
@@ -359,6 +402,14 @@ pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, S
     channel
         .read_to_string(&mut out)
         .map_err(|e| format!("Failed to read from the channel: {e}"))?;
+    // The server may send the exit status after its EOF but always before closing the channel.
+    // Wait for the close, as otherwise exit_status() may return its default of 0.
+    // Unread stderr stays buffered, so the error branches below can still read it.
+    channel.wait_close().map_err(|e| {
+        format!(
+            "Error in: {command}\nFailed to wait for the channel to close: {e}\nstdout: \n{out}"
+        )
+    })?;
     let mut err_str = String::new();
     match channel.exit_status() {
         Ok(status) => match status {

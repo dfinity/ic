@@ -80,6 +80,7 @@ rust_library(
         "//rs/bitcoin/replica_types",
         "//rs/protobuf",
         "//rs/types/base_types",
+        "//rs/types/cycles",
         "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",

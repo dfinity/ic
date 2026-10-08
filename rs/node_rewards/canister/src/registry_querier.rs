@@ -206,6 +206,13 @@ impl RegistryQuerier {
             let node_reward_type =
                 NodeRewardType::try_from(some_reward_type).expect("Invalid node_reward_type value");
 
+            // type4.5 nodes are rewarded as type1.1 nodes.
+            let node_reward_type = if node_reward_type == NodeRewardType::Type4dot5 {
+                NodeRewardType::Type1dot1
+            } else {
+                node_reward_type
+            };
+
             rewardable_nodes_per_provider
                 .entry(node_provider_id)
                 .or_default()

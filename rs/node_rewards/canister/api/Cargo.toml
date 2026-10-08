@@ -17,4 +17,4 @@ ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 ic-protobuf = { path = "../../../protobuf" }
 serde = { workspace = true }
 chrono = { workspace = true }
-rust_decimal = "1.37.1"
+rust_decimal = { workspace = true }

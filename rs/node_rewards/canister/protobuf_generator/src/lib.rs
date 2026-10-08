@@ -18,7 +18,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     for message_name in ["SubnetIdKey", "SubnetMetricsKey", "RewardableNodesKey"] {
         config.type_attribute(
             format!("ic_node_rewards.pb.v1.{message_name}"),
-            ["#[derive(PartialOrd, Ord, Eq)]"].join(" "),
+            ["#[derive(PartialOrd, Ord)]"].join(" "),
         );
     }
 

@@ -11,7 +11,12 @@ type CborMap = std::collections::BTreeMap<serde_cbor::Value, serde_cbor::Value>;
 enum CosePublicKey {
     EcdsaP256Sha256(Vec<u8>),
     RsaPkcs1v15Sha256(Vec<u8>),
+    Ed25519(Vec<u8>),
 }
+
+/// The maximum length of a CBOR-encoded COSE key. The largest supported key
+/// (RSA-8192) is ~1.1 KiB.
+pub const MAX_COSE_PUBLIC_KEY_LEN: usize = 4096;
 
 // see https://tools.ietf.org/html/rfc8152 section 8.1
 const COSE_PARAM_KTY: serde_cbor::Value = serde_cbor::Value::Integer(1);
@@ -37,6 +42,15 @@ const COSE_KTY_RSA: serde_cbor::Value = serde_cbor::Value::Integer(3);
 const COSE_PARAM_RSA_N: serde_cbor::Value = serde_cbor::Value::Integer(-1);
 const COSE_PARAM_RSA_E: serde_cbor::Value = serde_cbor::Value::Integer(-2);
 
+// see https://datatracker.ietf.org/doc/html/rfc8152#section-13.2
+const COSE_KTY_OKP: serde_cbor::Value = serde_cbor::Value::Integer(1);
+const COSE_PARAM_OKP_CRV: serde_cbor::Value = serde_cbor::Value::Integer(-1);
+const COSE_PARAM_OKP_X: serde_cbor::Value = serde_cbor::Value::Integer(-2);
+
+// see https://datatracker.ietf.org/doc/html/rfc8152#section-8.2
+const COSE_ALG_EDDSA: serde_cbor::Value = serde_cbor::Value::Integer(-8);
+const COSE_OKP_CRV_ED25519: serde_cbor::Value = serde_cbor::Value::Integer(6);
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 /// An error that occurred while parsing the COSE key
 enum CosePublicKeyParseError {
@@ -44,6 +58,8 @@ enum CosePublicKeyParseError {
     MalformedPublicKey(AlgorithmId),
     /// The key seems valid, but is for an algorithm that is not supported
     AlgorithmNotSupported,
+    /// The key is longer than [`MAX_COSE_PUBLIC_KEY_LEN`]
+    KeyTooLong,
 }
 
 impl CosePublicKey {
@@ -53,10 +69,15 @@ impl CosePublicKey {
     /// * `pk_cose` the CBOR-encoded COSE public key
     /// # Errors
     /// * `AlgorithmNotSupported` if some unsupported algorithm is used
+    /// * `KeyTooLong` if the public key is longer than
+    ///   [`MAX_COSE_PUBLIC_KEY_LEN`]
     /// * `MalformedPublicKey` if the public key could not be parsed
     /// # Returns
     /// The decoded public key
     pub fn from_cbor(pk_cose: &[u8]) -> Result<Self, CosePublicKeyParseError> {
+        if pk_cose.len() > MAX_COSE_PUBLIC_KEY_LEN {
+            return Err(CosePublicKeyParseError::KeyTooLong);
+        }
         let parsed_value: serde_cbor::value::Value = serde_cbor::from_slice(pk_cose)
             .map_err(|_| CosePublicKeyParseError::MalformedPublicKey(AlgorithmId::Unspecified))?;
 
@@ -78,6 +99,8 @@ impl CosePublicKey {
                 Self::parse_ecdsa_p256(&fields)
             } else if *kty == COSE_KTY_RSA && *alg == COSE_ALG_RS256 {
                 Self::parse_rsa_pkcs1_sha256(&fields)
+            } else if *kty == COSE_KTY_OKP && *alg == COSE_ALG_EDDSA {
+                Self::parse_eddsa_ed25519(&fields)
             } else {
                 // Some other algorithm
                 Err(CosePublicKeyParseError::AlgorithmNotSupported)
@@ -150,6 +173,44 @@ impl CosePublicKey {
         }
     }
 
+    /// Parse a COSE EdDSA / Ed25519 key
+    fn parse_eddsa_ed25519(fields: &CborMap) -> Result<Self, CosePublicKeyParseError> {
+        Self::verify_key_ops(fields)?;
+
+        let crv =
+            fields
+                .get(&COSE_PARAM_OKP_CRV)
+                .ok_or(CosePublicKeyParseError::MalformedPublicKey(
+                    AlgorithmId::Ed25519,
+                ))?;
+
+        if *crv != COSE_OKP_CRV_ED25519 {
+            // EdDSA over a curve we don't support (e.g. Ed448)
+            return Err(CosePublicKeyParseError::AlgorithmNotSupported);
+        }
+
+        let x =
+            fields
+                .get(&COSE_PARAM_OKP_X)
+                .ok_or(CosePublicKeyParseError::MalformedPublicKey(
+                    AlgorithmId::Ed25519,
+                ))?;
+
+        match x {
+            serde_cbor::Value::Bytes(x) => {
+                let pk = ic_ed25519::PublicKey::deserialize_raw(x).map_err(|_| {
+                    CosePublicKeyParseError::MalformedPublicKey(AlgorithmId::Ed25519)
+                })?;
+
+                let der = pk.serialize_rfc8410_der();
+                Ok(Self::Ed25519(der))
+            }
+            _ => Err(CosePublicKeyParseError::MalformedPublicKey(
+                AlgorithmId::Ed25519,
+            )),
+        }
+    }
+
     fn parse_rsa_pkcs1_sha256(fields: &CborMap) -> Result<Self, CosePublicKeyParseError> {
         Self::verify_key_ops(fields)?;
 
@@ -185,6 +246,7 @@ impl CosePublicKey {
         match self {
             Self::EcdsaP256Sha256(_) => AlgorithmId::EcdsaP256,
             Self::RsaPkcs1v15Sha256(_) => AlgorithmId::RsaSha256,
+            Self::Ed25519(_) => AlgorithmId::Ed25519,
         }
     }
 
@@ -193,6 +255,7 @@ impl CosePublicKey {
         match self {
             Self::EcdsaP256Sha256(der) => der.to_vec(),
             Self::RsaPkcs1v15Sha256(der) => der.to_vec(),
+            Self::Ed25519(der) => der.to_vec(),
         }
     }
 }
@@ -202,7 +265,8 @@ impl CosePublicKey {
 /// # Arguments
 /// * `pk_cose` the CBOR-encoded COSE key
 /// # Errors
-/// * `MalformedPublicKey` if the data could not be CBOR-decoded
+/// * `MalformedPublicKey` if the data is longer than
+///   [`MAX_COSE_PUBLIC_KEY_LEN`] or could not be CBOR-decoded
 /// * `AlgorithmNotSupported` if the key was decoded but is some unsupported
 ///   algorithm
 ///
@@ -224,5 +288,13 @@ pub fn parse_cose_public_key(pk_cose: &[u8]) -> CryptoResult<(AlgorithmId, Vec<u
                 reason: "Algorithm not supported in COSE parser".to_string(),
             })
         }
+        Err(CosePublicKeyParseError::KeyTooLong) => Err(CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::Unspecified,
+            key_bytes: Some(pk_cose.to_vec()),
+            internal_error: format!(
+                "COSE public key length {} exceeds the maximum of {MAX_COSE_PUBLIC_KEY_LEN}",
+                pk_cose.len()
+            ),
+        }),
     }
 }

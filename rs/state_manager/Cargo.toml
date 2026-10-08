@@ -38,12 +38,12 @@ prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-scoped_threadpool = "0.1.*"
+scoped_threadpool = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-slog = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
 uuid = { workspace = true }
 
@@ -53,7 +53,6 @@ bench = false
 [dev-dependencies]
 assert_matches = { workspace = true }
 criterion = { workspace = true }
-criterion-time = { path = "../criterion_time" }
 ic-canonical-state-tree-hash-test-utils = { path = "../canonical_state/tree_hash/test_utils" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-error-types = { path = "../../packages/ic-error-types" }
@@ -65,10 +64,11 @@ ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-io = { path = "../test_utilities/io" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
+ic-test-utilities-privileges = { path = "../test_utilities/privileges" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
-maplit = "1.0.2"
+maplit = { workspace = true }
 proptest = { workspace = true }
 strum = { workspace = true }
 test-strategy = "0.4.0"

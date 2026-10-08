@@ -19,8 +19,8 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         config.type_attribute(
             format!("ic_nns_common.pb.v1.{message_name}"),
             [
-                "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, Eq)]",
-                "#[derive(PartialOrd, Ord, std::hash::Hash)]",
+                "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+                "#[derive(PartialOrd, Ord)]",
                 "#[self_describing]",
             ]
             .join(" "),

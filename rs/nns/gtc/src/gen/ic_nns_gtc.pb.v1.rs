@@ -68,7 +68,7 @@ pub struct AccountState {
     #[prost(bool, tag = "11")]
     pub is_whitelisted_for_forwarding: bool,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TransferredNeuron {
     /// The ID of the transferred neuron
     #[prost(message, optional, tag = "1")]

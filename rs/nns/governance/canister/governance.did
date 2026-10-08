@@ -25,6 +25,7 @@ type Action = variant {
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
   CreateCanisterAndInstallCode : CreateCanisterAndInstallCode;
+  UpdateStandardEngineReplicaVersion : UpdateStandardEngineReplicaVersion;
 };
 
 type AddHotKey = record {
@@ -72,6 +73,7 @@ type CanisterSettings = record {
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
   wasm_memory_threshold : opt nat64;
+  reserved_cycles_limit : opt nat64;
 };
 
 type CanisterStatusResultV2 = record {
@@ -87,6 +89,11 @@ type CanisterStatusResultV2 = record {
 type CanisterSummary = record {
   status : opt CanisterStatusResultV2;
   canister_id : opt principal;
+};
+
+type CanisterUpgradeOptions = record {
+  skip_pre_upgrade : opt bool;
+  wasm_memory_persistence : opt int32;
 };
 
 type Change = variant {
@@ -251,8 +258,13 @@ type CreateCanisterAndInstallCodeOk = record {
   canister_id : opt principal;
 };
 
+type TakeCanisterSnapshotOk = record {
+  snapshot_id : blob;
+};
+
 type SuccessfulProposalExecutionValue = variant {
   CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeOk;
+  TakeCanisterSnapshot : TakeCanisterSnapshotOk;
 };
 
 type CreateServiceNervousSystem = record {
@@ -327,6 +339,17 @@ type Followees = record {
 
 type GetNeuronsFundAuditInfoRequest = record {
   nns_proposal_id : opt ProposalId;
+};
+
+type MaturityModulation = record {
+  current_value_permyriad : opt int32;
+  updated_at_timestamp_seconds : opt nat64;
+};
+
+type GetMaturityModulationRequest = record {};
+
+type GetMaturityModulationResponse = record {
+  maturity_modulation : opt MaturityModulation;
 };
 
 type GetNeuronsFundAuditInfoResponse = record {
@@ -455,6 +478,7 @@ type InstallCode = record {
   canister_id : opt principal;
   arg_hash : opt blob;
   install_mode : opt int32;
+  canister_upgrade_options : opt CanisterUpgradeOptions;
 };
 
 type InstallCodeRequest = record {
@@ -466,6 +490,7 @@ type InstallCodeRequest = record {
   skip_stopping_before_installing : opt bool;
   canister_id : opt principal;
   install_mode : opt int32;
+  canister_upgrade_options : opt CanisterUpgradeOptions;
 };
 
 type KnownNeuron = record {
@@ -905,6 +930,8 @@ type NeuronInfo = record {
   potential_voting_power : opt nat64;
   // See analogous field in Neuron.
   eight_year_gang_bonus_base_e8s : opt nat64;
+  // See analogous field in Neuron.
+  staked_maturity_e8s_equivalent : opt nat64;
 };
 
 type NeuronStakeTransfer = record {
@@ -1078,6 +1105,7 @@ type ProposalActionRequest = variant {
   TakeCanisterSnapshot : TakeCanisterSnapshot;
   LoadCanisterSnapshot : LoadCanisterSnapshot;
   CreateCanisterAndInstallCode : CreateCanisterAndInstallCodeRequest;
+  UpdateStandardEngineReplicaVersion : UpdateStandardEngineReplicaVersion;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental
@@ -1110,6 +1138,10 @@ type FulfillSubnetRentalRequest = record {
   //
   //     https://github.com/dfinity/ic/releases/latest
   replica_version_id : opt text;
+
+  // Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+  // If not set, handling defaults to the NNS subnet.
+  initial_dkg_subnet_id : opt principal;
 };
 
 // Declares an approved set of alternative replica virtual machine software for
@@ -1129,6 +1161,13 @@ type BlessAlternativeGuestOsVersion = record {
   // (Here, we refer to the version being replaced as the "base" version.)
   base_guest_launch_measurements : opt GuestLaunchMeasurements; };
 
+// Changes what replica version(s) are run by Cloud Engines.
+type UpdateStandardEngineReplicaVersion = record {
+  new_replica_version_id : opt text;
+  old_replica_version_id : opt text;
+  deployment_progress : opt float64;
+};
+
 type GuestLaunchMeasurements = record {
   guest_launch_measurements : opt vec GuestLaunchMeasurement;
 };
@@ -1144,6 +1183,8 @@ type GuestLaunchMeasurement = record {
 type GuestLaunchMeasurementMetadata = record {
   // Kernel command line used for this measurement.
   kernel_cmdline : opt text;
+  // Virtual CPU type used for this measurement.
+  vcpu_type : opt text;
 };
 
 type TakeCanisterSnapshot = record {
@@ -1588,6 +1629,9 @@ service : (Governance) -> {
       Result_2,
     ) query;
   get_latest_reward_event : () -> (RewardEvent) query;
+  get_maturity_modulation : (GetMaturityModulationRequest) -> (
+      GetMaturityModulationResponse,
+    ) query;
   get_metrics : () -> (Result_3) query;
   get_monthly_node_provider_rewards : () -> (Result_4);
   get_most_recent_monthly_node_provider_rewards : () -> (

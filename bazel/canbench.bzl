@@ -38,12 +38,12 @@ def rust_canbench(name, results_file, opt = "3", noise_threshold = None, data = 
 
     data = data + [
         ":{name}_wasm".format(name = name),
-        "@crate_index//:canbench__canbench",
+        "@canbench_bin//file",
         results_file,
         "//:pocket-ic-mainnet",
     ]
     env = env | {
-        "CANBENCH_BIN": "$(location @crate_index//:canbench__canbench)",
+        "CANBENCH_BIN": "$(location @canbench_bin//file)",
         "WASM_PATH": "$(location :{name}_wasm)".format(name = name),
         "CANBENCH_RESULTS_PATH": "$(rootpath {results_file})".format(results_file = results_file),
         "POCKET_IC_BIN": "$(rootpath //:pocket-ic-mainnet)",

@@ -24,12 +24,43 @@ impl LogRecord {
         8 + 8 + 4 + content_len
     }
 
+    /// Truncates the content so that the whole record fits within `data_capacity`.
+    ///
+    /// The "a single record fits the ring buffer" invariant is established when the
+    /// record is *created*: `CanisterLog::add_record` truncates the content against the
+    /// store's byte capacity at that moment. Nothing re-establishes it when the capacity
+    /// is lowered afterwards, which is what `update_settings` does when it shrinks
+    /// `log_memory_limit`: `LogMemoryStore::resize_impl` then migrates the already
+    /// stored records into a smaller ring buffer they no longer fit.
+    pub fn truncate_to_capacity(&mut self, data_capacity: usize) {
+        let max_content_len = data_capacity.saturating_sub(Self::estimate_bytes_len(0));
+        if self.content.len() > max_content_len {
+            self.content.truncate(max_content_len);
+            self.len = max_content_len as u32;
+        }
+    }
+
     pub fn matches(&self, filter: &FetchCanisterLogsFilter) -> bool {
         match filter {
             FetchCanisterLogsFilter::ByIdx(r) => r.start <= self.idx && self.idx < r.end,
             FetchCanisterLogsFilter::ByTimestampNanos(r) => {
                 r.start <= self.timestamp && self.timestamp < r.end
             }
+        }
+    }
+
+    /// Returns `true` if this record's filter key is at or beyond the filter
+    /// range's (exclusive) end, i.e. the record lies past the requested range.
+    ///
+    /// Records are scanned in ascending key order (both `idx` and `timestamp`
+    /// are expected to be non-decreasing with insertion order), so once a scan reaches a
+    /// record for which this holds, no later record can match the filter and the
+    /// scan can stop — even if it has not matched anything yet (e.g. a range that
+    /// lies entirely below the live records).
+    pub fn is_past_range_end(&self, filter: &FetchCanisterLogsFilter) -> bool {
+        match filter {
+            FetchCanisterLogsFilter::ByIdx(r) => self.idx >= r.end,
+            FetchCanisterLogsFilter::ByTimestampNanos(r) => self.timestamp >= r.end,
         }
     }
 }

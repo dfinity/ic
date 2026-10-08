@@ -66,10 +66,17 @@ pub const PRICING_VERSION_PAY_AS_YOU_GO: u32 = 2;
 /// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
 pub const DEFAULT_HTTP_OUTCALLS_PRICING_VERSION: u32 = PRICING_VERSION_LEGACY;
 
-/// A set of all allowed pricing versions for HTTP outcalls.
+/// The pricing versions an HTTP outcall may select on a subnet where the
+/// pay-as-you-go pricing model is *not* enabled.
 ///
 /// If the pricing version provided in the request is not in this set, the request will use the default pricing version.
 pub const ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS: &[u32] = &[PRICING_VERSION_LEGACY];
+
+/// The pricing versions an HTTP outcall may select on a subnet where the
+/// pay-as-you-go pricing model *is* enabled, i.e. one whose
+/// `flexible_http_requests` feature flag is on.
+pub const ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO: &[u32] =
+    &[PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO];
 
 /// HTTP headers bounded by total size.
 pub type BoundedHttpHeaders = BoundedVec<
@@ -85,7 +92,7 @@ pub type BoundedHttpHeaders = BoundedVec<
 ///   url : text;
 ///   max_response_bytes : opt nat64;
 ///   headers : vec http_header;
-///   method : variant { get; head; post; put; delete };
+///   method : variant { get; head; post; put; delete; patch };
 ///   body : opt blob;
 ///   transform : opt record {
 ///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
@@ -124,6 +131,7 @@ impl CanisterHttpRequestArgs {
 /// ```text
 /// record {
 ///   url : text;
+///   max_response_bytes : opt nat64;
 ///   headers : vec http_header;
 ///   method : variant { get; head; post };
 ///   body : opt blob;
@@ -141,6 +149,7 @@ impl CanisterHttpRequestArgs {
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct FlexibleCanisterHttpRequestArgs {
     pub url: String,
+    pub max_response_bytes: Option<u64>,
     pub headers: BoundedHttpHeaders,
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub body: Option<Vec<u8>>,
@@ -159,7 +168,7 @@ impl Payload<'_> for FlexibleCanisterHttpRequestArgs {}
 ///     total_requests: nat32;
 ///   };
 /// ```
-#[derive(CandidType, Deserialize, Debug, Clone, Default, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct ReplicationCounts {
     pub total_requests: u32,
     pub min_responses: u32,
@@ -359,7 +368,7 @@ fn test_http_header_data_size() {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum HttpMethod {
     #[serde(rename = "get")]
     GET,
@@ -371,6 +380,8 @@ pub enum HttpMethod {
     PUT,
     #[serde(rename = "delete")]
     DELETE,
+    #[serde(rename = "patch")]
+    PATCH,
 }
 
 /// Represents the response for a canister http request.
@@ -427,14 +438,14 @@ pub struct FlexibleHttpRequestErr {
 /// Why the flexible HTTP outcall failed globally.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum FlexibleHttpGlobalError {
-    #[serde(rename = "invalid_parameters")]
-    InvalidParameters(candid::Reserved),
     #[serde(rename = "timeout")]
     Timeout(candid::Reserved),
     #[serde(rename = "out_of_cycles")]
     OutOfCycles(candid::Reserved),
     #[serde(rename = "responses_too_large")]
     ResponsesTooLarge(candid::Reserved),
+    #[serde(rename = "too_many_rejects")]
+    TooManyRejects(candid::Reserved),
 }
 
 /// Per-node detail in a flexible HTTP outcall error.
@@ -464,7 +475,7 @@ pub struct FlexibleHttpNodeDetail {
 ///   cycles: opt variant { used: nat; exceeded: reserved };
 /// };
 /// ```
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct HttpRequestResourceReport {
     pub raw_response_bytes: Option<ResourceUsage<u64>>,
     pub http_roundtrip_time_ms: Option<ResourceUsage<u64>>,

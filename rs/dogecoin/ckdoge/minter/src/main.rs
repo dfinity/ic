@@ -18,6 +18,9 @@ use ic_ckdoge_minter::{
     updates,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
+use icrc_ledger_types::icrc21::errors::Icrc21Error;
+use icrc_ledger_types::icrc21::requests::ConsentMessageRequest;
+use icrc_ledger_types::icrc21::responses::ConsentInfo;
 
 #[init]
 fn init(args: MinterArg) {
@@ -211,12 +214,15 @@ fn get_minter_info() -> MinterInfo {
 }
 
 #[update]
-async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusResult {
-    ic_cdk::management_canister::canister_status(&ic_cdk::management_canister::CanisterStatusArgs {
-        canister_id: ic_cdk::api::canister_self(),
-    })
-    .await
-    .expect("failed to fetch canister status")
+async fn get_canister_status() -> ic_management_canister_types::CanisterStatusResult {
+    ic_cdk::call::Call::bounded_wait(candid::Principal::management_canister(), "canister_status")
+        .with_arg(ic_management_canister_types::CanisterIdRecord {
+            canister_id: ic_cdk::api::canister_self(),
+        })
+        .await
+        .expect("failed to call management canister for canister_status")
+        .candid::<ic_management_canister_types::CanisterStatusResult>()
+        .expect("failed to decode canister_status response")
 }
 
 #[query]
@@ -228,6 +234,18 @@ fn get_events(args: GetEventsArg) -> Vec<CkDogeMinterEvent> {
         .skip(args.start as usize)
         .take(MAX_EVENTS_PER_QUERY.min(args.length as usize))
         .collect()
+}
+
+#[update]
+fn icrc21_canister_call_consent_message(
+    consent_msg_request: ConsentMessageRequest,
+) -> Result<ConsentInfo, Icrc21Error> {
+    updates::icrc21::icrc21_canister_call_consent_message(consent_msg_request)
+}
+
+#[query]
+fn icrc10_supported_standards() -> Vec<updates::icrc21::StandardRecord> {
+    updates::icrc21::icrc10_supported_standards()
 }
 
 #[query(hidden = true)]

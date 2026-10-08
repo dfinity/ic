@@ -1,5 +1,4 @@
 use std::{
-    path::PathBuf,
     process::{Child, Command, Stdio},
     time::Duration,
 };
@@ -13,67 +12,56 @@ use tracing::info;
 /// Assigns IPv4 DHCP address to the interface and unassigns it when dropped
 #[derive(Debug)]
 struct DHCPConfig {
-    config_path: PathBuf,
     process: Child,
 }
 
 impl DHCPConfig {
-    /// Installs a temporary systemd-networkd config to obtain a DHCP lease
-    fn new(interface: String, systemd_network_dir: PathBuf) -> Result<Self, Error> {
-        std::fs::create_dir_all(&systemd_network_dir)
-            .context("unable to create the systemd-networkd dir")?;
-
-        let intf_config = indoc::formatdoc!(
-            r#"
-                [Match]
-                Name={interface}
-                Virtualization=!container
-
-                [Network]
-                DHCP=ipv4
-            "#,
-        );
-
-        // Write the config
-        let config_path = systemd_network_dir.join(format!("10-{interface}.network"));
-        std::fs::write(&config_path, intf_config)
-            .context("unable to write systemd network config")?;
-
-        // Fire up systemd-networkd
-        let process = Command::new("/usr/lib/systemd/systemd-networkd")
+    /// Starts dhcpcd to obtain a DHCP lease
+    fn new(interface: String) -> Result<Self, Error> {
+        // Fire up DHCP client.
+        // Avoid reading default config since it might contain unneeded options and they take precedence.
+        info!("Starting dhcpcd");
+        let process = Command::new("/usr/sbin/dhcpcd")
+            .args([
+                "--nobackground",
+                "--ipv4only",
+                "--noipv4ll",
+                "--config",
+                "/dev/null",
+                &interface,
+            ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .context("unable to execute systemd-networkd")?;
+            .context("unable to execute /usr/sbin/dhcpcd")?;
 
-        Ok(Self {
-            config_path,
-            process,
-        })
+        Ok(Self { process })
     }
 }
 
 impl Drop for DHCPConfig {
     fn drop(&mut self) {
-        // Tell systemd-networkd to shutdown & wait for it to happen
+        // Tell dhcpcd to shutdown & wait for it to happen
+        info!("Sending SIGTERM to dhcpcd");
         let _ = nix::sys::signal::kill(Pid::from_raw(self.process.id() as i32), SIGTERM);
         let _ = self.process.wait();
-
-        // Remove the config
-        let _ = std::fs::remove_file(&self.config_path);
+        info!("dhcpcd successfully stopped");
     }
 }
 
 /// Tries to obtain the GuestOS config from the cloud's metadata service
-pub fn obtain_guestos_config(systemd_network_dir: PathBuf) -> Result<GuestOSConfig, Error> {
+pub fn obtain_guestos_config() -> Result<GuestOSConfig, Error> {
+    info!("Figuring out the network interface to use...");
+
     // Find the network interface to work on, it might not be initialized yet so give it a few tries
-    let mut retries = 10;
+    let mut retries = 30;
     let intf = loop {
         match get_best_interface_name() {
             Ok(v) => break v,
             Err(e) => {
-                info!("unable to choose interface: {e:#}");
+                info!("Unable to choose interface: {e:#}");
+
                 retries -= 1;
                 if retries == 0 {
                     bail!("unable to choose interface: retries exhausted");
@@ -83,10 +71,10 @@ pub fn obtain_guestos_config(systemd_network_dir: PathBuf) -> Result<GuestOSConf
             }
         }
     };
+    info!("Interface found: {intf}");
 
     // Configure it with a DHCP
-    let _dhcp = DHCPConfig::new(intf.clone(), systemd_network_dir)
-        .context("unable to configure IPv4 DHCP")?;
+    let _dhcp = DHCPConfig::new(intf.clone()).context("unable to configure IPv4 DHCP")?;
     info!("DHCP on the interface {intf} configured");
 
     // Discover the cloud we're running in.
@@ -94,9 +82,21 @@ pub fn obtain_guestos_config(systemd_network_dir: PathBuf) -> Result<GuestOSConf
     info!("Cloud type detected: {cloud_type:?}");
 
     // Get the config from the MDS
-    let config = cloud_type
-        .obtain_config()
-        .context("unable to obtain GuestOS config")?;
+    let mut retries = 120;
+    let config = loop {
+        match cloud_type.obtain_config() {
+            Ok(v) => break v,
+            Err(e) => {
+                retries -= 1;
+                if retries == 0 {
+                    bail!("unable to obtain config: retries exhausted");
+                }
+
+                info!("Unable to obtain GuestOS config (retries left: {retries}): {e:#}");
+                std::thread::sleep(Duration::from_secs(1));
+            }
+        };
+    };
 
     Ok(config)
 }

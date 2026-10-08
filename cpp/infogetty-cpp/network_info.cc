@@ -17,7 +17,7 @@
 #include <sys/socket.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-#include <systemd/sd-journal.h>
+#include <syslog.h>
 #include <unistd.h>
 
 
@@ -41,7 +41,7 @@ check_panic_errno(int return_code, const char* info)
     }
 
     std::string message = std::string("infogetty: ") + info + ": " + strerror(errno);
-    sd_journal_print(LOG_ERR, "%s", message.c_str());
+    syslog(LOG_ERR, "%s", message.c_str());
     _exit(1);
 }
 

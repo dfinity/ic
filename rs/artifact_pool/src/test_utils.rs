@@ -13,7 +13,7 @@ use ic_interfaces::consensus_pool::{
 };
 use ic_logger::ReplicaLogger;
 use ic_test_utilities_consensus::{fake::*, make_genesis};
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
 use ic_types::{
     Height,
     artifact::ConsensusMessageId,
@@ -545,7 +545,7 @@ fn finalization_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
         let height = Height::from(i);
         let block_proposal = fake_block_proposal(height);
         let block = block_proposal.content.get_hash().clone();
-        let content = FinalizationContent::new(height, block);
+        let content = FinalizationContent::new(height, block, test_replica_version());
         let signature = MultiSignature::fake();
         let msg = ConsensusMessage::Finalization(Finalization { content, signature });
         ops.insert(ValidatedConsensusArtifact {
@@ -562,7 +562,7 @@ fn notarization_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
         let height = Height::from(i);
         let block_proposal = fake_block_proposal(height);
         let block = block_proposal.content.get_hash().clone();
-        let content = NotarizationContent::new(height, block);
+        let content = NotarizationContent::new(height, block, test_replica_version());
         let signature = MultiSignature::fake();
         let msg = ConsensusMessage::Notarization(Notarization { content, signature });
         ops.insert(ValidatedConsensusArtifact {
@@ -580,7 +580,7 @@ fn random_beacon_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
         for j in 0..3 {
             let random_beacon = fake_random_beacon(Height::from(i));
             let parent = ic_types::crypto::crypto_hash(&random_beacon);
-            let content = RandomBeaconContent::new(height, parent);
+            let content = RandomBeaconContent::new(height, parent, random_beacon.content.version);
             let signature = ThresholdSigShareOf::new(ThresholdSigShare(vec![]));
             let signer = node_test_id(j);
             let signature = ThresholdSignatureShare { signature, signer };
@@ -601,7 +601,7 @@ pub(crate) fn notarization_share_ops() -> PoolSectionOps<ValidatedConsensusArtif
         let block_proposal = fake_block_proposal(height);
         for j in 0..3 {
             let block = block_proposal.content.get_hash().clone();
-            let content = NotarizationContent::new(height, block);
+            let content = NotarizationContent::new(height, block, test_replica_version());
             let signature = MultiSignatureShare::fake(node_test_id(j));
             let msg = ConsensusMessage::NotarizationShare(NotarizationShare { content, signature });
             ops.insert(ValidatedConsensusArtifact {
@@ -620,7 +620,7 @@ pub(crate) fn finalization_share_ops() -> PoolSectionOps<ValidatedConsensusArtif
         let block_proposal = fake_block_proposal(height);
         for j in 0..3 {
             let block = block_proposal.content.get_hash().clone();
-            let content = FinalizationContent::new(height, block);
+            let content = FinalizationContent::new(height, block, test_replica_version());
             let signature = MultiSignatureShare::fake(node_test_id(j));
             let msg = ConsensusMessage::FinalizationShare(FinalizationShare { content, signature });
             ops.insert(ValidatedConsensusArtifact {
@@ -635,7 +635,10 @@ pub(crate) fn finalization_share_ops() -> PoolSectionOps<ValidatedConsensusArtif
 fn random_tape_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
     let mut ops = PoolSectionOps::new();
     for i in 3..19 {
-        let random_tape = RandomTape::fake(RandomTapeContent::new(Height::from(i)));
+        let random_tape = RandomTape::fake(RandomTapeContent::new(
+            Height::from(i),
+            test_replica_version(),
+        ));
         let msg = ConsensusMessage::RandomTape(random_tape);
         ops.insert(ValidatedConsensusArtifact {
             msg,
@@ -650,7 +653,7 @@ fn random_tape_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
     for i in 5..20 {
         let height = Height::from(i);
         for j in 0..3 {
-            let content = RandomTapeContent::new(height);
+            let content = RandomTapeContent::new(height, test_replica_version());
             let signature = ThresholdSigShareOf::new(ThresholdSigShare(vec![]));
             let signer = node_test_id(j);
             let signature = ThresholdSignatureShare { signature, signer };

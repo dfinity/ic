@@ -7,12 +7,14 @@ use dfn_core::call;
 use ic_base_types::SubnetId;
 use ic_management_canister_types_private::{SetupInitialDKGArgs, SetupInitialDKGResponse};
 use ic_protobuf::registry::subnet::v1::{
-    self as pb, CanisterCyclesCostSchedule, CatchUpPackageContents, SubnetRecord,
+    CanisterCyclesCostSchedule, CatchUpPackageContents, GenesisArgs, SubnetRecord,
+    SubnetSplittingArgs, catch_up_package_contents::CupType,
 };
 use ic_registry_keys::{
     make_canister_migrations_record_key, make_catch_up_package_contents_key,
     make_crypto_threshold_signing_pubkey_key, make_routing_table_record_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_standard_engine_replica_version_record_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, WellFormedError, is_subset_of};
 use ic_registry_subnet_type::SubnetType;
@@ -33,6 +35,7 @@ enum PayloadValidationError {
         pre_split_source_subnet_size: usize,
     },
     DisallowedSourceSubnetType(SubnetType),
+    CloudEngineFleetIsSplit,
     SourceSubnetIsSigningSubnet,
     UnhostedCanisterIds,
     SplitAlreadyInProgress,
@@ -43,6 +46,8 @@ enum PayloadValidationError {
     InvalidCanisterIdRanges(WellFormedError),
     SourceSubnetHalted,
     SourceSubnetIsRentalSubnet,
+    InitialDkgSubnetDoesNotExist(SubnetId),
+    InitialDkgSubnetMustNotBeSourceSubnet,
 }
 
 /// For now we only support splitting application subnets. Splitting system subnets is not allowed.
@@ -64,13 +69,14 @@ impl Registry {
     ///    subnet is being split.
     pub async fn split_subnet(&mut self, payload: SplitSubnetPayload) -> Result<(), String> {
         let pre_call_registry_version = self.latest_version();
+        let initial_dkg_subnet_id = payload.initial_dkg_subnet_id;
 
         let (mut source_subnet_record, ranges_to_migrate) = self
             .validate_subnet_splitting_payload(&payload, pre_call_registry_version)
             .map_err(|err| format!("Failed to validate the payload: {err}"))?;
 
         // Remove the migrated nodes from the source subnet
-        let source_nodes: Vec<NodeId> = source_subnet_record
+        let post_split_source_nodes: Vec<NodeId> = source_subnet_record
             .membership
             .iter()
             .map(|bytes| {
@@ -78,8 +84,10 @@ impl Registry {
             })
             .filter(|node_id| !payload.destination_node_ids.contains(node_id))
             .collect();
-        source_subnet_record.membership =
-            source_nodes.iter().map(|id| id.get().into_vec()).collect();
+        source_subnet_record.membership = post_split_source_nodes
+            .iter()
+            .map(|id| id.get().into_vec())
+            .collect();
         let destination_subnet_record = SubnetRecord {
             membership: payload
                 .destination_node_ids
@@ -107,15 +115,19 @@ impl Registry {
             start_as_nns: false,
             is_halted: false,
             halt_at_cup_height: false,
+            cooling_down: false,
             // We don't support splitting signing subnets (yet). If we are here then we know that
             // the source subnet being split is not signing (see the
             // `validate_subnet_splitting_payload`) method.
             chain_key_config: None,
         };
 
-        let create_cup_contents = |nodes| async {
-            let request =
-                SetupInitialDKGArgs::new(nodes, RegistryVersion::new(pre_call_registry_version));
+        let setup_initial_dkg = |nodes| async {
+            let request = SetupInitialDKGArgs::new(
+                nodes,
+                RegistryVersion::new(pre_call_registry_version),
+                initial_dkg_subnet_id,
+            );
             let raw_response = call(
                 CanisterId::ic_00(),
                 "setup_initial_dkg",
@@ -125,28 +137,42 @@ impl Registry {
             .await
             .unwrap();
 
-            let dkg_response = SetupInitialDKGResponse::decode(&raw_response).unwrap();
+            SetupInitialDKGResponse::decode(&raw_response).unwrap()
+        };
 
-            let cup_contents = CatchUpPackageContents {
+        let (source_dkg_response, destination_dkg_response) = futures::join!(
+            setup_initial_dkg(post_split_source_nodes),
+            setup_initial_dkg(payload.destination_node_ids),
+        );
+        let destination_subnet_id = destination_dkg_response.fresh_subnet_id;
+
+        let get_cup_contents =
+            |dkg_response: &SetupInitialDKGResponse, cup_type: CupType| CatchUpPackageContents {
                 initial_ni_dkg_transcript_low_threshold: Some(
                     dkg_response.low_threshold_transcript_record.clone(),
                 ),
                 initial_ni_dkg_transcript_high_threshold: Some(
                     dkg_response.high_threshold_transcript_record.clone(),
                 ),
-                ..CatchUpPackageContents::default()
+                cup_type: Some(cup_type),
+
+                height: 0,
+                time: 0,
+                state_hash: vec![],
+                registry_store_uri: None,
+                ecdsa_initializations: vec![],
+                chain_key_initializations: vec![],
             };
 
-            (cup_contents, dkg_response)
-        };
-
-        let (
-            (destination_cup_contents, destination_dkg_response),
-            (mut source_cup_contents, source_dkg_response),
-        ) = futures::join!(
-            create_cup_contents(payload.destination_node_ids.clone()),
-            create_cup_contents(source_nodes)
+        let source_cup_contents = get_cup_contents(
+            &source_dkg_response,
+            CupType::SubnetSplitting(SubnetSplittingArgs {
+                destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
+            }),
         );
+        let destination_cup_contents =
+            get_cup_contents(&destination_dkg_response, CupType::Genesis(GenesisArgs {}));
+
         let post_call_registry_version = self.latest_version();
 
         self.check_if_registry_changed_across_versions(
@@ -157,13 +183,6 @@ impl Registry {
         .map_err(|err| {
             format!("The registry was updated during the `setup_initial_dkg` calls: {err}")
         })?;
-
-        let destination_subnet_id = destination_dkg_response.fresh_subnet_id;
-        source_cup_contents.cup_type = Some(
-            pb::catch_up_package_contents::CupType::SubnetSplitting(pb::SubnetSplittingArgs {
-                destination_subnet_id: Some(subnet_id_into_protobuf(destination_subnet_id)),
-            }),
-        );
 
         let mut subnet_list_record = self.get_subnet_list_record();
 
@@ -241,6 +260,21 @@ impl Registry {
             return Err(PayloadValidationError::NotEnabled);
         }
 
+        if let Some(initial_dkg_subnet_id) = payload.initial_dkg_subnet_id {
+            if initial_dkg_subnet_id == payload.source_subnet_id {
+                return Err(PayloadValidationError::InitialDkgSubnetMustNotBeSourceSubnet);
+            }
+
+            if self
+                .get_subnet(initial_dkg_subnet_id, registry_version)
+                .is_err()
+            {
+                return Err(PayloadValidationError::InitialDkgSubnetDoesNotExist(
+                    initial_dkg_subnet_id,
+                ));
+            }
+        }
+
         let source_subnet_record = self
             .get_subnet(payload.source_subnet_id, registry_version)
             .map_err(PayloadValidationError::FailedToGetSourceSubnetRecord)?;
@@ -252,6 +286,27 @@ impl Registry {
             return Err(PayloadValidationError::DisallowedSourceSubnetType(
                 source_subnet_type,
             ));
+        }
+
+        if source_subnet_type == SubnetType::CloudEngine
+            && source_subnet_record.replica_version_id.is_empty()
+        {
+            let standard_engine_replica_version_record =
+                self.get_standard_engine_replica_version_record()
+                .expect("StandardEngineReplicaVersionRecord should exist if the subnet has no replica version");
+
+            // We want to reject a split if the source subnet is a cloud engine and a deployment of
+            // a new replica version is in progress. This is because the new destination subnet will
+            // have a new subnet ID which we do not know yet and could end up upgrading to a
+            // different version. We would like to avoid weird situations where both a split and an
+            // upgrade are scheduled at the same time, so we enforce that the cloud engine
+            // deployment is complete before allowing a split. In that case, it is guaranteed that
+            // both subnets will be on the same replica version after the split.
+            let fleet_is_split = 0.0 < standard_engine_replica_version_record.deployment_progress
+                && standard_engine_replica_version_record.deployment_progress < 1.0;
+            if fleet_is_split {
+                return Err(PayloadValidationError::CloudEngineFleetIsSplit);
+            }
         }
 
         let pre_split_source_nodes: HashSet<NodeId> = source_subnet_record
@@ -363,6 +418,12 @@ impl Registry {
             return Err("Subnet changed");
         }
 
+        // The replica version that the newly created subnet is going to run may be derived from
+        // this record, so it must not change under our feet either.
+        if record_changed_across_versions(make_standard_engine_replica_version_record_key()) {
+            return Err("Standard engine replica version changed");
+        }
+
         if record_changed_across_versions(make_crypto_threshold_signing_pubkey_key(
             source_subnet_id,
         )) {
@@ -388,12 +449,9 @@ impl Registry {
         &self,
         record_key: &str,
         version: Version,
-    ) -> Version {
+    ) -> Option<Version> {
         self.get(record_key.as_bytes(), version)
             .map(|record| record.version)
-            .unwrap_or_else(|| {
-                panic!("Record for {record_key} not found in registry");
-            })
     }
 }
 
@@ -402,6 +460,9 @@ pub struct SplitSubnetPayload {
     pub destination_canister_ranges: Vec<CanisterIdRange>,
     pub destination_node_ids: Vec<NodeId>,
     pub source_subnet_id: SubnetId,
+    /// Optional subnet that should handle `setup_initial_dkg`.
+    /// If not set, the request is handled by the NNS subnet.
+    pub initial_dkg_subnet_id: Option<SubnetId>,
 }
 
 impl std::fmt::Display for PayloadValidationError {
@@ -426,6 +487,13 @@ impl std::fmt::Display for PayloadValidationError {
             ),
             PayloadValidationError::DisallowedSourceSubnetType(subnet_type) => {
                 write!(f, "Subnets of type {subnet_type:?} may not be split")
+            }
+            PayloadValidationError::CloudEngineFleetIsSplit => {
+                write!(
+                    f,
+                    "The source subnet is a Cloud Engine subnet and the cloud engine \
+                    fleet is currently split between two replica versions"
+                )
             }
             PayloadValidationError::SourceSubnetIsSigningSubnet => {
                 write!(f, "Signing subnets may not be split")
@@ -464,6 +532,15 @@ impl std::fmt::Display for PayloadValidationError {
                     "The payload contains invalid canister ID ranges: {error:?}"
                 )
             }
+            PayloadValidationError::InitialDkgSubnetDoesNotExist(subnet_id) => {
+                write!(f, "Initial DKG subnet '{subnet_id}' does not exist")
+            }
+            PayloadValidationError::InitialDkgSubnetMustNotBeSourceSubnet => {
+                write!(
+                    f,
+                    "Initial DKG subnet must be different from the source subnet being split"
+                )
+            }
         }
     }
 }
@@ -488,6 +565,7 @@ mod tests {
     use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
     use ic_registry_routing_table::RoutingTable;
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
+    use ic_registry_transport::upsert;
     use ic_types_test_utils::ids::{
         NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5,
         canister_test_id,
@@ -722,6 +800,26 @@ mod tests {
         },
         Err(PayloadValidationError::SourceSubnetHalted)
     )]
+    #[case::initial_dkg_subnet_is_source_subnet(
+        SubnetInfo {
+            ..invariants_compliant_subnet_info()
+        },
+        SplitSubnetPayload {
+            initial_dkg_subnet_id: Some(SUBNET_1),
+            ..invariants_compliant_payload()
+        },
+        Err(PayloadValidationError::InitialDkgSubnetMustNotBeSourceSubnet)
+    )]
+    #[case::initial_dkg_subnet_does_not_exist(
+        SubnetInfo {
+            ..invariants_compliant_subnet_info()
+        },
+        SplitSubnetPayload {
+            initial_dkg_subnet_id: Some(SUBNET_2),
+            ..invariants_compliant_payload()
+        },
+        Err(PayloadValidationError::InitialDkgSubnetDoesNotExist(SUBNET_2))
+    )]
     fn payload_validation_test(
         #[case] source_subnet_info: SubnetInfo,
         #[case] payload: SplitSubnetPayload,
@@ -744,12 +842,79 @@ mod tests {
             destination_canister_ranges: payload.destination_canister_ranges,
             destination_node_ids: payload_node_ids,
             source_subnet_id: payload.source_subnet_id,
+            initial_dkg_subnet_id: payload.initial_dkg_subnet_id,
         };
 
         let validation_result = registry
             .validate_subnet_splitting_payload(&payload, registry.latest_version())
             .map(|_| ());
         assert_eq!(validation_result, expected_result);
+    }
+
+    /// Every record that `check_if_registry_changed_across_versions` guards, and the error that
+    /// it is expected to produce when it changes while the `setup_initial_dkg` calls are in
+    /// flight.
+    #[rstest]
+    #[case::source_subnet_record(make_subnet_record_key(SUBNET_1), "Subnet changed")]
+    #[case::standard_engine_replica_version_record(
+        make_standard_engine_replica_version_record_key(),
+        "Standard engine replica version changed"
+    )]
+    #[case::source_subnet_threshold_signing_public_key(
+        make_crypto_threshold_signing_pubkey_key(SUBNET_1),
+        "Threshold signing public key changed"
+    )]
+    #[case::source_subnet_cup_contents(make_catch_up_package_contents_key(SUBNET_1), "CUP changed")]
+    #[case::canister_migrations_record(
+        make_canister_migrations_record_key(),
+        "Canister migrations changed"
+    )]
+    #[case::routing_table_record(make_routing_table_record_key(), "Routing table changed")]
+    fn check_if_registry_changed_across_versions_should_fail_when_a_guarded_record_changed(
+        #[case] changed_record_key: String,
+        #[case] expected_error: &str,
+    ) {
+        // Step 1: Prepare the world.
+
+        let _guard = temporarily_enable_subnet_splitting();
+        // `set_up_registry` puts the source subnet at `SUBNET_1`, which is what the `#[case]`s
+        // above derive the subnet specific keys from.
+        let source_subnet_id = invariants_compliant_payload().source_subnet_id;
+        assert_eq!(source_subnet_id, SUBNET_1);
+        let (mut registry, _node_infos) = set_up_registry(invariants_compliant_subnet_info());
+
+        let pre_call_registry_version = registry.latest_version();
+
+        // Nothing has changed yet, so the check must pass.
+        assert_eq!(
+            registry.check_if_registry_changed_across_versions(
+                source_subnet_id,
+                pre_call_registry_version,
+                registry.latest_version(),
+            ),
+            Ok(())
+        );
+
+        // Simulate another proposal touching the record while the `setup_initial_dkg` calls are
+        // in flight. Rewriting the record as is (or creating it, if it isn't in the registry yet)
+        // is enough to bump its version, which is all that the check under test looks at. Note
+        // that we skip the invariant checks, since a record such as the standard engine replica
+        // version one cannot be created here without a lot of unrelated setup.
+        let value = registry
+            .get(changed_record_key.as_bytes(), pre_call_registry_version)
+            .map(|record| record.value)
+            .unwrap_or_default();
+        registry.apply_mutations_for_test(vec![upsert(changed_record_key.as_bytes(), value)]);
+
+        // Step 2: Run the code under test.
+        let check_result = registry.check_if_registry_changed_across_versions(
+            source_subnet_id,
+            pre_call_registry_version,
+            registry.latest_version(),
+        );
+
+        // Step 3: Verify result(s).
+        assert_eq!(check_result, Err(expected_error));
     }
 
     #[derive(Debug)]
@@ -788,6 +953,7 @@ mod tests {
             }],
             destination_node_ids: vec![NODE_2, NODE_3],
             source_subnet_id: SUBNET_1,
+            initial_dkg_subnet_id: None,
         }
     }
 

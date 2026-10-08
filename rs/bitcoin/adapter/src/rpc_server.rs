@@ -31,6 +31,7 @@ struct BtcServiceImpl<Network: BlockchainNetwork> {
 impl TryFrom<BtcServiceGetSuccessorsRequest> for GetSuccessorsRequest {
     type Error = Status;
 
+    #[allow(clippy::result_large_err)]
     fn try_from(request: BtcServiceGetSuccessorsRequest) -> Result<Self, Self::Error> {
         let anchor = BlockHash::from_slice(request.anchor.as_slice())
             .map_err(|_| Status::unknown("Failed to parse anchor hash!"))?;

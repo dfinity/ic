@@ -77,6 +77,7 @@ fn test_validate_base_guest_launch_measurements_valid() {
             measurement: vec![0_u8; 48],
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: Some("console=ttyS0".to_string()),
+                vcpu_type: None,
             }),
         }],
     };
@@ -93,6 +94,7 @@ fn test_validate_base_guest_launch_measurements_multiple_defects() {
                 measurement: vec![0_u8; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("console=ttyS0".to_string()),
+                    vcpu_type: None,
                 }),
             },
             // Wrong measurement size
@@ -100,6 +102,7 @@ fn test_validate_base_guest_launch_measurements_multiple_defects() {
                 measurement: vec![0_u8; 32],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("console=ttyS0".to_string()),
+                    vcpu_type: None,
                 }),
             },
             // Missing metadata. This is ok.
@@ -112,6 +115,7 @@ fn test_validate_base_guest_launch_measurements_multiple_defects() {
                 measurement: vec![0_u8; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("".to_string()),
+                    vcpu_type: None,
                 }),
             },
         ],
@@ -134,6 +138,7 @@ fn test_bless_alternative_guest_os_version_validate_valid() {
                 measurement: vec![0_u8; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("console=ttyS0".to_string()),
+                    vcpu_type: None,
                 }),
             }],
         }),
@@ -180,6 +185,7 @@ fn test_bless_alternative_guest_os_version_to_self_describing() {
                     measurement: vec![0x01; 48],
                     metadata: Some(GuestLaunchMeasurementMetadata {
                         kernel_cmdline: Some("console=ttyS0".to_string()),
+                        vcpu_type: Some("EPYC-Turin".to_string()),
                     }),
                 },
                 GuestLaunchMeasurement {
@@ -208,6 +214,7 @@ fn test_bless_alternative_guest_os_version_to_self_describing() {
                         "measurement".to_string() => SelfDescribingValue::from(vec![0x01; 48]),
                         "metadata".to_string() => SelfDescribingValue::Map(hashmap! {
                             "kernel_cmdline".to_string() => SelfDescribingValue::from("console=ttyS0"),
+                            "vcpu_type".to_string() => SelfDescribingValue::from("EPYC-Turin"),
                         }),
                     }),
                     SelfDescribingValue::Map(hashmap! {

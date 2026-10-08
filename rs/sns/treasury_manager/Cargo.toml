@@ -10,5 +10,4 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
-derivative = { version = "2.2" }
 serde = { workspace = true }

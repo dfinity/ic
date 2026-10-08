@@ -1,4 +1,4 @@
-use ic_cdk::api::stable::{StableReader, StableWriter};
+use ic_cdk::stable::{StableReader, StableWriter};
 use std::io::{Read, Write};
 
 /// Writes `content` to stable memory.

@@ -4,7 +4,7 @@ use super::testing::new_canister_output_queues_for_test;
 use super::*;
 use crate::canister_state::canister_snapshots::CanisterSnapshots;
 use crate::testing::FakeDropMessageMetrics;
-use crate::{CanisterState, InputQueueType::*, SchedulerState, SystemState};
+use crate::{CanisterState, CanisterStates, InputQueueType::*, SchedulerState, SystemState};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -95,7 +95,7 @@ impl CanisterQueuesFixture {
             CallbackId::from(self.last_callback_id),
             &self.other,
             &self.this,
-            &BTreeMap::new(),
+            &CanisterStates::default(),
         )
     }
 
@@ -148,7 +148,7 @@ impl CanisterQueuesFixture {
         self.queues.time_out_messages(
             Time::from_nanos_since_unix_epoch(u64::MAX),
             &self.this,
-            &BTreeMap::default(),
+            &CanisterStates::default(),
             &mut refunds,
             &FakeDropMessageMetrics::default(),
         );
@@ -239,7 +239,7 @@ fn time_out_messages(
     queues: &mut CanisterQueues,
     current_time: Time,
     own_canister_id: &CanisterId,
-    local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+    local_canisters: &CanisterStates,
 ) -> (usize, RefundPool) {
     let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
@@ -257,7 +257,7 @@ fn time_out_messages(
 fn shed_largest_message(
     queues: &mut CanisterQueues,
     own_canister_id: &CanisterId,
-    local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
+    local_canisters: &CanisterStates,
 ) -> (bool, RefundPool) {
     let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
@@ -647,7 +647,7 @@ fn test_try_push_deadline_expired_input_with_same_callback_id() {
             callback_id,
             &fixture.other,
             &fixture.this,
-            &BTreeMap::new(),
+            &CanisterStates::default(),
         )
     );
 
@@ -703,7 +703,7 @@ fn test_shed_largest_message() {
         .unwrap();
 
     // Shed the two requests.
-    let local_canisters = Default::default();
+    let local_canisters = CanisterStates::default();
     assert_eq!(
         (true, RefundPool::default()),
         shed_largest_message(&mut queues, &this, &local_canisters)
@@ -755,13 +755,13 @@ fn test_shed_inbound_response() {
     assert_eq!(3, queues.input_queues_response_count());
 
     let this = canister_test_id(13);
-    const NO_LOCAL_CANISTERS: BTreeMap<CanisterId, Arc<CanisterState>> = BTreeMap::new();
+    let no_local_canisters = CanisterStates::default();
 
     // Shed the largest response (callback ID 3).
     let memory_usage3 = queues.best_effort_message_memory_usage();
     assert_eq!(
         (true, refund_pool(&[(this, Cycles::new(10))])),
-        shed_largest_message(&mut queues, &this, &NO_LOCAL_CANISTERS)
+        shed_largest_message(&mut queues, &this, &no_local_canisters)
     );
     let memory_usage2 = queues.best_effort_message_memory_usage();
     assert!(memory_usage2 < memory_usage3);
@@ -769,7 +769,7 @@ fn test_shed_inbound_response() {
     // Shed the next largest response (callback ID 2).
     assert_eq!(
         (true, refund_pool(&[(this, Cycles::new(10))])),
-        shed_largest_message(&mut queues, &this, &NO_LOCAL_CANISTERS)
+        shed_largest_message(&mut queues, &this, &no_local_canisters)
     );
     let memory_usage1 = queues.best_effort_message_memory_usage();
     assert!(memory_usage1 < memory_usage2);
@@ -782,7 +782,7 @@ fn test_shed_inbound_response() {
     // There's nothing else to shed.
     assert_eq!(
         (false, RefundPool::default()),
-        shed_largest_message(&mut queues, &this, &NO_LOCAL_CANISTERS)
+        shed_largest_message(&mut queues, &this, &no_local_canisters)
     );
 
     // Peek then pop the response for callback ID 2.
@@ -829,7 +829,11 @@ fn test_shed_largest_message_generates_refunds() {
             true,
             refund_pool(&[(inbound_request.sender, inbound_request.payment)])
         ),
-        shed_largest_message(&mut canister_queues, &own_canister_id, &BTreeMap::new())
+        shed_largest_message(
+            &mut canister_queues,
+            &own_canister_id,
+            &CanisterStates::default()
+        )
     );
 
     // Inbound best-effort response: refund message enqueued.
@@ -845,7 +849,11 @@ fn test_shed_largest_message_generates_refunds() {
             true,
             refund_pool(&[(inbound_response.originator, inbound_response.refund)])
         ),
-        shed_largest_message(&mut canister_queues, &own_canister_id, &BTreeMap::new())
+        shed_largest_message(
+            &mut canister_queues,
+            &own_canister_id,
+            &CanisterStates::default()
+        )
     );
     assert_eq!(
         Some(CanisterInput::ResponseDropped(
@@ -860,7 +868,11 @@ fn test_shed_largest_message_generates_refunds() {
         .unwrap();
     assert_eq!(
         (true, RefundPool::default()),
-        shed_largest_message(&mut canister_queues, &own_canister_id, &BTreeMap::new())
+        shed_largest_message(
+            &mut canister_queues,
+            &own_canister_id,
+            &CanisterStates::default()
+        )
     );
     assert_matches!(
         canister_queues.pop_input(),
@@ -878,7 +890,11 @@ fn test_shed_largest_message_generates_refunds() {
             true,
             refund_pool(&[(outbound_response.originator, outbound_response.refund)])
         ),
-        shed_largest_message(&mut canister_queues, &own_canister_id, &BTreeMap::new())
+        shed_largest_message(
+            &mut canister_queues,
+            &own_canister_id,
+            &CanisterStates::default()
+        )
     );
 }
 
@@ -1053,7 +1069,7 @@ impl CanisterQueuesMultiFixture {
             &mut self.queues,
             Time::from_nanos_since_unix_epoch(u64::MAX),
             &self.this,
-            &BTreeMap::default(),
+            &CanisterStates::default(),
         )
     }
 
@@ -1245,9 +1261,9 @@ fn test_split_input_schedules() {
     // After the split we only have `other_1` (and `this`) on the subnet.
     let system_state =
         SystemState::new_running_for_testing(other_1, other_1.get(), Cycles::zero(), 0.into());
-    let local_canisters = btreemap! {
+    let local_canisters = CanisterStates::new(btreemap! {
         other_1 => Arc::new(CanisterState::new(system_state, None, SchedulerState::default(), CanisterSnapshots::default()))
-    };
+    });
 
     // Act.
     fixture
@@ -1441,7 +1457,7 @@ fn new_queues_with_stale_references() -> (CanisterQueues, Vec<Request>) {
     push_requests(&mut queues, LocalSubnet, &requests);
 
     let own_canister_id = canister_test_id(13);
-    let local_canisters = BTreeMap::new();
+    let local_canisters = CanisterStates::default();
 
     // Time out requests @0, @1 and @4 (deadlines 1000, 1001, 1002), including the
     // only request from canister 1; and the first and last request from canister 2.
@@ -2174,7 +2190,7 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
             4.into(),
             &canister_id,
             &canister_id,
-            &BTreeMap::new()
+            &CanisterStates::default()
         )
     );
 
@@ -2184,7 +2200,7 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
             true,
             refund_pool(&[(response3.originator, response3.refund)])
         ),
-        shed_largest_message(&mut queues, &canister_id, &BTreeMap::new())
+        shed_largest_message(&mut queues, &canister_id, &CanisterStates::default())
     );
     assert_eq!(
         Some(&CallbackId::from(3)),
@@ -2523,7 +2539,7 @@ fn test_stats_best_effort() {
     queues.time_out_messages(
         t20.into(),
         &request4.sender,
-        &BTreeMap::new(),
+        &CanisterStates::default(),
         &mut refunds,
         &metrics,
     );
@@ -2539,7 +2555,11 @@ fn test_stats_best_effort() {
             true,
             refund_pool(&[(response2.originator, response2.refund)])
         ),
-        shed_largest_message(&mut queues, &response2.respondent, &BTreeMap::new())
+        shed_largest_message(
+            &mut queues,
+            &response2.respondent,
+            &CanisterStates::default()
+        )
     );
 
     // Input queue slot reservation was consumed by reject response.
@@ -2700,7 +2720,7 @@ fn test_stats_guaranteed_response() {
     queues.time_out_messages(
         coarse_time(u32::MAX).into(),
         &request4.sender,
-        &BTreeMap::new(),
+        &CanisterStates::default(),
         &mut refunds,
         &metrics,
     );
@@ -2836,14 +2856,14 @@ fn test_stats_oversized_requests() {
     // Shed the outgoing best-effort request and time out the outgoing guaranteed one.
     assert_eq!(
         (true, RefundPool::default()),
-        shed_largest_message(&mut queues, &best_effort.sender, &BTreeMap::new())
+        shed_largest_message(&mut queues, &best_effort.sender, &CanisterStates::default())
     );
     let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
     queues.time_out_messages(
         coarse_time(u32::MAX).into(),
         &best_effort.sender,
-        &BTreeMap::new(),
+        &CanisterStates::default(),
         &mut refunds,
         &metrics,
     );
@@ -3127,7 +3147,7 @@ fn test_peek_output_with_stale_references() {
     }
 
     let own_canister_id = canister_test_id(13);
-    let local_canisters = BTreeMap::new();
+    let local_canisters = CanisterStates::default();
     // Time out the first two requests, including the only request to canister 2.
     time_out_messages(
         &mut queues,
@@ -3411,7 +3431,7 @@ fn output_into_iter_peek_with_stale_references(
 ) {
     let (mut canister_queues, _raw_requests) = test;
     let own_canister_id = canister_test_id(13);
-    let local_canisters = BTreeMap::new();
+    let local_canisters = CanisterStates::default();
     // Time out some messages.
     time_out_messages(
         &mut canister_queues,
@@ -3440,7 +3460,7 @@ fn output_into_iter_pop_with_stale_references(
 ) {
     let (mut canister_queues, _raw_requests) = test;
     let own_canister_id = canister_test_id(13);
-    let local_canisters = BTreeMap::new();
+    let local_canisters = CanisterStates::default();
     // Time out some messages.
     time_out_messages(
         &mut canister_queues,
@@ -3553,7 +3573,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
             .unwrap();
     }
 
-    let local_canisters = maplit::btreemap! {
+    let local_canisters = CanisterStates::new(maplit::btreemap! {
         local_canister_id => {
             let scheduler_state = SchedulerState::default();
             let system_state = SystemState::new_running_for_testing(
@@ -3565,7 +3585,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
             let canister_snapshots = CanisterSnapshots::default();
             Arc::new(CanisterState::new(system_state, None, scheduler_state, canister_snapshots))
         }
-    };
+    });
 
     // 3 messages dropped. Zero cycles lost (all were refunded).
     let current_time = t0 + REQUEST_LIFETIME + Duration::from_secs(1);
@@ -3732,7 +3752,7 @@ fn time_out_messages_produces_refunds() {
     canister_queues.time_out_messages(
         current_time,
         &own_canister_id,
-        &BTreeMap::new(),
+        &CanisterStates::default(),
         &mut refunds,
         &metrics,
     );

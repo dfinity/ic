@@ -4,12 +4,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use bytes::Bytes;
 use http::{Method, Request, Response, Version};
+use ic_limits::MAX_MESSAGE_SIZE_BYTES;
 use ic_protobuf::transport::v1 as pb;
 use prost::Message;
 use quinn::Connection;
 
 use crate::{
-    ConnId, MAX_MESSAGE_SIZE_BYTES, MessagePriority, P2PError, ResetStreamOnDrop,
+    ConnId, MessagePriority, P2PError, ResetStreamOnDrop,
     metrics::{
         INFALIBBLE, QuicTransportMetrics, observe_conn_error, observe_read_to_end_error,
         observe_stopped_error, observe_write_error,

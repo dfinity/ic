@@ -39,8 +39,17 @@ impl Registry {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
+        // Subnet deletion is (currently) a manual process and we don't expect to actually delete
+        // a subnet while a canister migration is ongoing (instead we expect to disable the
+        // canister migration API first and only delete a subnet once there's no ongoing canister
+        // migration). However, e.g., if a subnet is permanently stuck, it might be impossible to
+        // successfully complete an ongoing canister migration and in this case, we'd like to still
+        // be able to delete such a subnet. In this case, the outcome should be as if the migration
+        // completed before the subnet got deleted, i.e., the canister should be removed from the
+        // source subnet's canister ranges and not added to the (deleted) target subnet's canister
+        // ranges.
+        // Hence, we intentionally do not validate that the target subnet exists here.
         let target_subnet_id = SubnetId::new(target_subnet_id);
-        self.get_subnet(target_subnet_id, self.latest_version())?;
 
         Ok((canister_ids, target_subnet_id))
     }
@@ -75,7 +84,8 @@ mod test {
     #[test]
     fn test_basic_migrate_canisters() {
         // We create an invariant compliant registry, then we migrate a single canister
-        // to a new subnet, and we check that the Routing table has the correct ranges at that point.
+        // to a new subnet, and we check that the Routing table has the correct ranges
+        // at that point.
 
         let mut registry = invariant_compliant_registry(0);
         let system_subnet =
@@ -88,6 +98,9 @@ mod test {
         let target_subnet_id =
             registry_create_subnet_with_nodes(&mut registry, &node_ids_and_dkg_pks, &[0, 1, 2, 3]);
 
+        // The target subnet must already appear in the routing table for the migration to keep
+        // it assigned; give it a dedicated range (256–256) in addition to the system subnet's
+        // range.
         let mut initial_routing_table = RoutingTable::new();
         initial_routing_table
             .insert(
@@ -96,6 +109,15 @@ mod test {
                     end: CanisterId::from(255),
                 },
                 system_subnet.into(),
+            )
+            .unwrap();
+        initial_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(256),
+                    end: CanisterId::from_u64(256),
+                },
+                target_subnet_id,
             )
             .unwrap();
 
@@ -114,7 +136,6 @@ mod test {
 
         let response = registry.do_migrate_canisters(request);
 
-        // currently just empty response.
         assert_eq!(
             MigrateCanistersResponse {
                 registry_version: registry.latest_version()
@@ -124,8 +145,8 @@ mod test {
 
         let updated_routing_table = registry.get_routing_table_or_panic(registry.latest_version());
 
-        // We expect the range to be split into 3 ranges, with the middle one being a single-canister-id range
-        // and the others pointing at the system subnet as before.
+        // We expect the system subnet's range to be split around canister 100, with canister 100
+        // now assigned to the target subnet alongside its pre-existing range 256–256.
         let mut expected_routing_table = RoutingTable::new();
         expected_routing_table
             .insert(
@@ -152,6 +173,152 @@ mod test {
                     end: CanisterId::from_u64(255),
                 },
                 system_subnet.into(),
+            )
+            .unwrap();
+        expected_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(256),
+                    end: CanisterId::from_u64(256),
+                },
+                target_subnet_id,
+            )
+            .unwrap();
+        assert_eq!(updated_routing_table, expected_routing_table);
+    }
+
+    #[test]
+    fn test_migrate_canisters_succeeds_if_source_subnet_deleted() {
+        // Verify that migrate_canisters succeeds when the source subnet has been deleted
+        // (has no key in subnet_list and no ranges in routing_table).
+        //
+        // We simulate this by using a subnet ID that is not in the routing table to begin with:
+        // the source subnet for canister 100 simply has no routing_table ranges (gap at 100).
+
+        let mut registry = invariant_compliant_registry(0);
+        let system_subnet_id =
+            PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
+                .unwrap();
+
+        // Set up routing table: system subnet covers 0–99 and 101–255; canister 100 is
+        // unrouted, as if its source subnet has been deleted.
+        let mut initial_routing_table = RoutingTable::new();
+        initial_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(0),
+                    end: CanisterId::from_u64(99),
+                },
+                system_subnet_id.into(),
+            )
+            .unwrap();
+        initial_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(101),
+                    end: CanisterId::from_u64(255),
+                },
+                system_subnet_id.into(),
+            )
+            .unwrap();
+        registry.apply_mutations_for_test(routing_table_into_registry_mutation(
+            &registry,
+            initial_routing_table,
+        ));
+
+        // Migrate canister 100 (not in routing table) to the system subnet.
+        // The system subnet is in the routing table, so the endpoint must succeed.
+        let response = registry.do_migrate_canisters(MigrateCanistersPayload {
+            canister_ids: vec![PrincipalId::from(CanisterId::from_u64(100))],
+            target_subnet_id: system_subnet_id,
+        });
+        assert_eq!(
+            MigrateCanistersResponse {
+                registry_version: registry.latest_version()
+            },
+            response
+        );
+
+        // Canister 100 was unrouted (gap); assigning it to the system subnet fills the gap,
+        // and optimize() merges 0–99, 100–100, 101–255 into a single range.
+        let updated_routing_table = registry.get_routing_table_or_panic(registry.latest_version());
+        let mut expected_routing_table = RoutingTable::new();
+        expected_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(0),
+                    end: CanisterId::from_u64(255),
+                },
+                system_subnet_id.into(),
+            )
+            .unwrap();
+        assert_eq!(updated_routing_table, expected_routing_table);
+    }
+
+    // Verify that migrate_canisters succeeds when the target subnet does not exist
+    // (has no key in subnet_list and no ranges in routing_table), e.g.,
+    // after the target subnet has been deleted.
+    #[test]
+    fn test_migrate_canisters_succeeds_if_target_subnet_does_not_exist() {
+        let mut registry = invariant_compliant_registry(0);
+        let system_subnet_id =
+            PrincipalId::try_from(registry.get_subnet_list_record().subnets.first().unwrap())
+                .unwrap();
+
+        // Set up routing table: system subnet covers canister 0–255.
+        let mut initial_routing_table = RoutingTable::new();
+        initial_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(0),
+                    end: CanisterId::from_u64(255),
+                },
+                system_subnet_id.into(),
+            )
+            .unwrap();
+        registry.apply_mutations_for_test(routing_table_into_registry_mutation(
+            &registry,
+            initial_routing_table,
+        ));
+
+        // We simulate a deleted subnet by using a subnet ID
+        // that is not in the routing table to begin with.
+        let non_existent_subnet_id = PrincipalId::new_user_test_id(42);
+
+        // Migrate canister 100 to a non-existent target subnet.
+        // The target subnet is not in the routing table, so the endpoint must succeed
+        // without adding any range for the target subnet.
+        let response = registry.do_migrate_canisters(MigrateCanistersPayload {
+            canister_ids: vec![PrincipalId::from(CanisterId::from_u64(100))],
+            target_subnet_id: non_existent_subnet_id,
+        });
+        assert_eq!(
+            MigrateCanistersResponse {
+                registry_version: registry.latest_version()
+            },
+            response
+        );
+
+        // Canister 100 was removed from the system subnet's range and not assigned to
+        // any other subnet (as target subnet is absent from routing table), leaving a gap at 100.
+        let updated_routing_table = registry.get_routing_table_or_panic(registry.latest_version());
+        let mut expected_routing_table = RoutingTable::new();
+        expected_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(0),
+                    end: CanisterId::from_u64(99),
+                },
+                system_subnet_id.into(),
+            )
+            .unwrap();
+        expected_routing_table
+            .insert(
+                CanisterIdRange {
+                    start: CanisterId::from_u64(101),
+                    end: CanisterId::from_u64(255),
+                },
+                system_subnet_id.into(),
             )
             .unwrap();
         assert_eq!(updated_routing_table, expected_routing_table);

@@ -70,7 +70,7 @@ impl LogsState {
 /// Handles websocket requests for canister logs
 pub async fn logs_canister(
     ws: WebSocketUpgrade,
-    #[cfg(not(test))] Extension(conn_info): Extension<Arc<ic_bn_lib_common::types::http::ConnInfo>>,
+    #[cfg(not(test))] Extension(conn_info): Extension<Arc<ic_bn_lib::http::server::conn::ConnInfo>>,
     #[cfg(test)] ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(canister_id): Path<CanisterId>,
     State(state): State<Arc<LogsState>>,
@@ -206,6 +206,7 @@ pub async fn status(
     let status = HttpStatusResponse {
         root_key: rk.root_key().map(|x| x.into()),
         impl_version: None,
+        guestos_version: None,
         impl_hash: None,
         replica_health_status: Some(health),
         certified_height: None,
@@ -271,8 +272,8 @@ pub async fn handle_subnet(
 mod test {
     use axum::{Router, routing::any};
     use futures_util::StreamExt;
+    use ic_bn_lib::principal;
     use ic_bn_lib::pubsub::BrokerBuilder;
-    use ic_bn_lib_common::principal;
     use tokio_tungstenite::tungstenite;
 
     use super::*;

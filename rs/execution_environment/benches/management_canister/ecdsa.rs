@@ -110,7 +110,7 @@ fn ecdsa_public_key_benchmark(c: &mut Criterion) {
             expect_error(
                 result,
                 ErrorCode::CanisterCalledTrap,
-                "Deserialize error: The number of elements exceeds maximum allowed 255",
+                "Deserialize error: The number of elements exceeds maximum allowed 254",
             )
         },
     );
@@ -123,7 +123,7 @@ fn ecdsa_public_key_benchmark(c: &mut Criterion) {
             expect_error(
                 result,
                 ErrorCode::CanisterCalledTrap,
-                "Deserialize error: The number of elements exceeds maximum allowed 255",
+                "Deserialize error: The number of elements exceeds maximum allowed 254",
             );
         },
     );
@@ -165,7 +165,7 @@ fn sign_with_ecdsa_benchmark(c: &mut Criterion) {
             expect_error(
                 result,
                 ErrorCode::CanisterCalledTrap,
-                "Deserialize error: The number of elements exceeds maximum allowed 255",
+                "Deserialize error: The number of elements exceeds maximum allowed 254",
             );
         },
     );
@@ -178,7 +178,7 @@ fn sign_with_ecdsa_benchmark(c: &mut Criterion) {
             expect_error(
                 result,
                 ErrorCode::CanisterCalledTrap,
-                "Deserialize error: The number of elements exceeds maximum allowed 255",
+                "Deserialize error: The number of elements exceeds maximum allowed 254",
             );
         },
     );

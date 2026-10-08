@@ -24,7 +24,7 @@ use ic_registry_subnet_features::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
-use ic_types::ReplicaVersion;
+use ic_test_utilities_types::ids::test_replica_version;
 use prost::Message;
 use registry_canister::mutations::do_update_subnet::{ChainKeyConfig, KeyConfig};
 use registry_canister::{
@@ -70,11 +70,13 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
+            cooling_down: None,
             features: None,
             resource_limits: None,
             max_number_of_canisters: Some(10),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -143,13 +145,14 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
+            cooling_down: false,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -200,11 +203,13 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
+            cooling_down: None,
             features: None,
             resource_limits: None,
             max_number_of_canisters: Some(100),
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -272,13 +277,14 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             max_block_payload_size: 4 * 1024 * 1024,
                             unit_delay_millis: 500,
                             initial_notary_delay_millis: 1500,
-                            replica_version_id: ReplicaVersion::default().into(),
+                            replica_version_id: test_replica_version().to_string(),
                             dkg_interval_length: 0,
                             dkg_dealings_per_block: 1,
                             start_as_nns: false,
                             subnet_type: SubnetType::Application.into(),
                             is_halted: false,
                             halt_at_cup_height: false,
+                            cooling_down: false,
                             features: None,
                             max_number_of_canisters: 0,
                             ssh_readonly_access: vec![],
@@ -322,11 +328,13 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             subnet_type: Some(SubnetType::Application),
             is_halted: Some(true),
             halt_at_cup_height: Some(true),
+            cooling_down: None,
             features: None,
             resource_limits: None,
             max_number_of_canisters: Some(42),
             ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
             ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -370,13 +378,14 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 max_ingress_messages_per_block: 1000,
                 unit_delay_millis: 100,
                 initial_notary_delay_millis: 1500,
-                replica_version_id: ReplicaVersion::default().into(),
+                replica_version_id: test_replica_version().to_string(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
                 halt_at_cup_height: true,
+                cooling_down: false,
                 features: None,
                 max_number_of_canisters: 42,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
@@ -457,13 +466,14 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id: test_replica_version().to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
             halt_at_cup_height: false,
+            cooling_down: false,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -519,6 +529,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
 
         // update payload message
         let mut payload = UpdateSubnetPayload {
+            subnet_admins: None,
             chain_key_config: Some(chain_key_config.clone()),
             chain_key_signing_enable: Some(vec![key_id.clone()]),
             ..empty_update_subnet_payload(subnet_id)
@@ -548,6 +559,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
 
         // Change one field at a time in this payload
         payload = UpdateSubnetPayload {
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: Some(vec![key_id.clone()]),
             ..empty_update_subnet_payload(subnet_id)
@@ -587,6 +599,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         // First call:
         {
             let payload_1 = UpdateSubnetPayload {
+                subnet_admins: None,
                 chain_key_config: Some(chain_key_config.clone()),
                 ..empty_update_subnet_payload(subnet_id)
             };
@@ -620,6 +633,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         {
             // This update should enable signing on our subnet for the given key.
             let payload_2 = UpdateSubnetPayload {
+                subnet_admins: None,
                 chain_key_signing_enable: Some(vec![key_id.clone()]),
                 ..empty_update_subnet_payload(subnet_id)
             };
@@ -679,11 +693,13 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
+        cooling_down: None,
         features: None,
         resource_limits: None,
         max_number_of_canisters: None,
         ssh_readonly_access: None,
         ssh_backup_access: None,
+        subnet_admins: None,
         chain_key_config: None,
         chain_key_signing_enable: None,
         chain_key_signing_disable: None,

@@ -2,11 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:test-strategy",
-]
-
 rust_library(
     name = "tokens_u64",
     srcs = ["src/lib.rs"],
@@ -26,7 +21,10 @@ rust_library(
 rust_test(
     name = "test",
     srcs = ["tests/tests.rs"],
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
     deps = [
         # Keep sorted.
         ":tokens_u64",

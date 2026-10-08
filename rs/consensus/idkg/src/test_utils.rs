@@ -3,12 +3,11 @@ use crate::{
     complaints::{IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus},
     pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder},
     signer::ThresholdSignerImpl,
-    utils::build_thread_pool,
 };
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_mocks::{Dependencies, dependencies};
-use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+use ic_consensus_utils::{build_thread_pool, crypto::ConsensusCrypto};
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,
@@ -398,7 +397,8 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto_and_threads(
     threads: usize,
 ) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
+    let Dependencies { pool, crypto, .. } =
+        DependenciesBuilder::new(pool_config.clone(), 1).build();
 
     // need to make sure subnet matches the transcript
     let pre_signer = IDkgPreSignerImpl::new(
@@ -420,7 +420,8 @@ pub(crate) fn create_pre_signer_dependencies_and_pool(
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, IDkgPreSignerImpl, TestConsensusPool) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
+    let Dependencies { pool, crypto, .. } =
+        DependenciesBuilder::new(pool_config.clone(), 1).build();
 
     let pre_signer = IDkgPreSignerImpl::new(
         NODE_1,
@@ -453,22 +454,23 @@ pub(crate) fn create_pre_signer_dependencies_with_threads(
 }
 
 // Sets up the dependencies and creates the signer
-pub(crate) fn create_signer_dependencies_with_crypto(
+pub(crate) fn create_signer_dependencies_with_crypto_and_threads(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
+    threads: usize,
 ) -> (IDkgPoolImpl, ThresholdSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
         crypto,
         state_manager,
         ..
-    } = dependencies(pool_config.clone(), 1);
+    } = DependenciesBuilder::new(pool_config.clone(), 1).build();
 
     let signer = ThresholdSignerImpl::new(
         NODE_1,
         consensus_crypto.unwrap_or(crypto),
-        build_thread_pool(MAX_IDKG_THREADS),
+        build_thread_pool(threads),
         state_manager as Arc<_>,
         metrics_registry.clone(),
         logger.clone(),
@@ -478,12 +480,33 @@ pub(crate) fn create_signer_dependencies_with_crypto(
     (idkg_pool, signer)
 }
 
+pub(crate) fn create_signer_dependencies_with_crypto(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
+) -> (IDkgPoolImpl, ThresholdSignerImpl) {
+    create_signer_dependencies_with_crypto_and_threads(
+        pool_config,
+        logger,
+        consensus_crypto,
+        MAX_IDKG_THREADS,
+    )
+}
+
 // Sets up the dependencies and creates the signer
 pub(crate) fn create_signer_dependencies(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, ThresholdSignerImpl) {
     create_signer_dependencies_with_crypto(pool_config, logger, None)
+}
+
+pub(crate) fn create_signer_dependencies_with_threads(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    threads: usize,
+) -> (IDkgPoolImpl, ThresholdSignerImpl) {
+    create_signer_dependencies_with_crypto_and_threads(pool_config, logger, None, threads)
 }
 
 pub(crate) fn create_signer_dependencies_and_state_manager(
@@ -495,7 +518,7 @@ pub(crate) fn create_signer_dependencies_and_state_manager(
         crypto,
         state_manager,
         ..
-    } = dependencies(pool_config.clone(), 1);
+    } = DependenciesBuilder::new(pool_config.clone(), 1).build();
 
     let signer = ThresholdSignerImpl::new(
         NODE_1,
@@ -523,7 +546,7 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
         crypto,
         state_manager,
         ..
-    } = dependencies(pool_config.clone(), 1);
+    } = DependenciesBuilder::new(pool_config.clone(), 1).build();
 
     let complaint_handler = IDkgComplaintHandlerImpl::new(
         node_id,
@@ -549,7 +572,7 @@ pub(crate) fn create_complaint_dependencies_and_pool(
         crypto,
         state_manager,
         ..
-    } = dependencies(pool_config.clone(), 1);
+    } = DependenciesBuilder::new(pool_config.clone(), 1).build();
 
     state_manager
         .get_mut()
@@ -711,7 +734,7 @@ pub(crate) fn create_valid_transcript<R: Rng + CryptoRng>(
         .filter_by_dealers(&params)
         .next()
         .expect("Empty dealers");
-    let idkg_transcript = dealer.create_transcript_or_panic(&params, &dealings);
+    let idkg_transcript = dealer.create_transcript_or_panic(&params, dealings);
     (dealer.id(), params, idkg_transcript)
 }
 
@@ -743,8 +766,8 @@ pub(crate) fn get_dealings_and_support(
 ) -> (BTreeMap<NodeId, SignedIDkgDealing>, Vec<IDkgDealingSupport>) {
     let dealings = env.nodes.create_and_verify_signed_dealings(params);
     let supports = dealings
-        .iter()
-        .flat_map(|(_, dealing)| {
+        .values()
+        .flat_map(|dealing| {
             env.nodes.filter_by_receivers(&params).map(|signer| {
                 let c: Arc<dyn ConsensusCrypto> = signer.crypto();
                 let sig_share = c

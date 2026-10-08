@@ -407,8 +407,11 @@ fn create_db_env(path: &Path, read_only: bool, max_dbs: c_uint) -> Environment {
         // canister sandbox process. Details in NODE-166
         let mut fd: lmdb_sys::mdb_filehandle_t = lmdb_sys::mdb_filehandle_t::default();
         lmdb_sys::mdb_env_get_fd(db_env.env(), &mut fd);
-        nix::fcntl::fcntl(fd, nix::fcntl::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC))
-            .expect("Unable to mark FD_CLOEXEC");
+        nix::fcntl::fcntl(
+            std::os::fd::BorrowedFd::borrow_raw(fd),
+            nix::fcntl::F_SETFD(nix::fcntl::FdFlag::FD_CLOEXEC),
+        )
+        .expect("Unable to mark FD_CLOEXEC");
     };
     db_env
 }

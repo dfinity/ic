@@ -13,7 +13,7 @@ use ic_sys::PAGE_SIZE;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{NumBytes, NumInstructions, NumOsPages};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::assert_gt;
 use std::time::Duration;
@@ -186,8 +186,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(a_id),
         )
         .real();
@@ -279,8 +278,7 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(canister_id),
         )
         .real();
@@ -376,8 +374,7 @@ fn dts_update_concurrent_cycles_change_fails() {
             canister.memory_usage() + NumBytes::from(bytes_to_grow as u64),
             canister.message_memory_usage(),
             canister.compute_allocation(),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             Cycles::zero(),
         );
 
@@ -385,8 +382,7 @@ fn dts_update_concurrent_cycles_change_fails() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(canister_id),
         )
         .real();
@@ -485,8 +481,7 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(canister_id),
         )
         .real();
@@ -726,67 +721,6 @@ fn hitting_access_limit_fails_non_replicated_query() {
 }
 
 #[test]
-fn dts_replicated_execution_resume_fails_due_to_cycles_change() {
-    with_update_and_replicated_query(|method| {
-        // Test steps:
-        // 1. Canister A starts running the update|query method.
-        // 2. While canister A is paused, we change its cycles balance.
-        // 3. The update|query method resumes, detects the cycles balance mismatch, and
-        //    fails.
-        let instruction_limit = 1_000_000;
-        let mut test = ExecutionTestBuilder::new()
-            .with_instruction_limit(instruction_limit)
-            .with_slice_instruction_limit(10_000)
-            .with_manual_execution()
-            .build();
-
-        let a_id = test.universal_canister().unwrap();
-
-        let a = wasm()
-            .stable64_grow(1)
-            .stable64_fill(0, 0, 10_000)
-            .stable64_fill(0, 0, 10_000)
-            .build();
-
-        let (ingress_id, _) = test.ingress_raw(a_id, method, a);
-
-        test.execute_slice(a_id);
-        assert_eq!(
-            test.canister_state(a_id).next_execution(),
-            NextExecution::ContinueLong,
-        );
-
-        // Change the cycles balance of the clean canister.
-        let balance = test.canister_state(a_id).system_state.balance();
-        test.canister_state_mut(a_id)
-            .system_state
-            .add_cycles(balance + Cycles::new(1));
-
-        test.execute_slice(a_id);
-
-        assert_eq!(
-            test.canister_state(a_id).next_execution(),
-            NextExecution::None,
-        );
-
-        let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
-        let message = if method == "update" {
-            "an update call"
-        } else {
-            "a replicated query"
-        };
-        err.assert_contains(
-            ErrorCode::CanisterWasmEngineError,
-            &format!(
-                "Error from Canister {a_id}: Canister encountered a Wasm engine error: \
-             Failed to apply system changes: Mismatch in cycles \
-             balance when resuming {message}"
-            ),
-        );
-    });
-}
-
-#[test]
 fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
     with_update_and_replicated_query(|method| {
         // Test steps:
@@ -797,7 +731,7 @@ fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
         let instruction_limit = 1_000_000;
         let mut test = ExecutionTestBuilder::new()
             .with_instruction_limit(instruction_limit)
-            .with_slice_instruction_limit(10_000)
+            .with_slice_instruction_limit(200_000)
             .with_manual_execution()
             .build();
 
@@ -805,8 +739,14 @@ fn dts_replicated_execution_resume_fails_due_to_call_context_change() {
 
         let a = wasm()
             .stable64_grow(1)
-            .stable64_fill(0, 0, 10_000)
-            .stable64_fill(0, 0, 10_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
             .build();
 
         let (ingress_id, _) = test.ingress_raw(a_id, method, a);
@@ -1085,7 +1025,7 @@ fn dts_uninstall_with_aborted_replicated_execution() {
         let instruction_limit = 1_000_000;
         let mut test = ExecutionTestBuilder::new()
             .with_instruction_limit(instruction_limit)
-            .with_slice_instruction_limit(10_000)
+            .with_slice_instruction_limit(200_000)
             .with_manual_execution()
             .build();
 
@@ -1093,10 +1033,14 @@ fn dts_uninstall_with_aborted_replicated_execution() {
 
         let wasm_payload = wasm()
             .stable64_grow(1)
-            .stable64_fill(0, 0, 10_000)
-            .stable64_fill(0, 0, 10_000)
-            .stable64_fill(0, 0, 10_000)
-            .stable64_fill(0, 0, 10_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
+            .stable64_fill(0, 0, 50_000)
             .build();
 
         let (message_id, _) = test.ingress_raw(canister_id, method, wasm_payload);

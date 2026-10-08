@@ -21,10 +21,10 @@ use ic_ledger_suite_in_memory_ledger::{
     AllowancesRecentlyPurged, InMemoryLedger, verify_ledger_state,
 };
 use ic_ledger_suite_state_machine_helpers::{
-    AllowanceProvider, balance_of, fee, get_archive_blocks, get_archive_remaining_capacity,
-    get_archive_transaction, get_archive_transactions, get_blocks, get_canister_info,
-    get_transactions, icrc3_get_blocks, icrc21_consent_message, list_archives, metadata,
-    minting_account, parse_metric, send_approval, send_transfer, send_transfer_from,
+    AllowanceProvider, balance_of, fee, get_all_ledger_and_archive_blocks, get_archive_blocks,
+    get_archive_remaining_capacity, get_archive_transaction, get_archive_transactions, get_blocks,
+    get_canister_info, get_transactions, icrc3_get_blocks, icrc21_consent_message, list_archives,
+    metadata, minting_account, parse_metric, send_approval, send_transfer, send_transfer_from,
     supported_block_types, supported_standards, total_supply, transfer,
 };
 use ic_ledger_suite_state_machine_tests_constants::{
@@ -73,6 +73,7 @@ use std::{
 };
 
 mod allowances;
+mod block_schema;
 pub mod fee_collector;
 pub mod icrc_106;
 pub mod metrics;
@@ -379,7 +380,10 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
         },
-        feature_flags: Some(FeatureFlags { icrc2: true }),
+        feature_flags: Some(FeatureFlags {
+            icrc2: true,
+            icrc152: false,
+        }),
         index_principal: None,
     }
 }
@@ -1369,6 +1373,174 @@ pub fn test_archive_duplicate_controllers(ledger_wasm: Vec<u8>) {
     test_controllers(vec![p100], &ledger_wasm, encode_init_args);
 }
 
+pub fn test_change_trigger_threshold_before_archive_spawned<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    const UNREACHABLE_TRIGGER_THRESHOLD: usize = 1_000_000_000;
+    assert!(
+        UNREACHABLE_TRIGGER_THRESHOLD as u64 > ARCHIVE_TRIGGER_THRESHOLD * 10,
+        "UNREACHABLE_TRIGGER_THRESHOLD shall be at least 10x larger than ARCHIVE_TRIGGER_THRESHOLD"
+    );
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let (env, ledger_id) = setup(
+        ledger_wasm.clone(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+
+    for i in 0..(ARCHIVE_TRIGGER_THRESHOLD - 2) {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
+    }
+    assert_eq!(
+        list_archives(&env, ledger_id),
+        vec![],
+        "no archive should have been spawned yet"
+    );
+
+    let raise_threshold = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(UNREACHABLE_TRIGGER_THRESHOLD),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(
+        ledger_id,
+        ledger_wasm.clone(),
+        Encode!(&raise_threshold).unwrap(),
+    )
+    .expect("failed to raise trigger_threshold before an archive was spawned");
+
+    for i in 0..(2 * ARCHIVE_TRIGGER_THRESHOLD) {
+        transfer(&env, ledger_id, p1.0, p2.0, 20_000 + i).expect("transfer failed");
+    }
+    assert_eq!(
+        list_archives(&env, ledger_id),
+        vec![],
+        "archiving should be suppressed by the raised trigger_threshold"
+    );
+    let blocks = icrc3_get_blocks(&env, ledger_id, 0, 4 * ARCHIVE_TRIGGER_THRESHOLD as usize);
+    assert!(
+        blocks.archived_blocks.is_empty(),
+        "no block should have been archived, got {:?}",
+        blocks.archived_blocks
+    );
+    assert_eq!(
+        blocks.blocks.len() as u64,
+        1 + (ARCHIVE_TRIGGER_THRESHOLD - 2) + 2 * ARCHIVE_TRIGGER_THRESHOLD,
+        "every block should still be held by the ledger"
+    );
+
+    let restore_threshold = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(ARCHIVE_TRIGGER_THRESHOLD as usize),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&restore_threshold).unwrap())
+        .expect("failed to restore trigger_threshold");
+
+    transfer(&env, ledger_id, p1.0, p2.0, 30_000).expect("transfer failed");
+    assert_eq!(
+        list_archives(&env, ledger_id).len(),
+        1,
+        "restoring the trigger threshold should archive the accumulated backlog"
+    );
+}
+
+/// Verify that all the blocks of a ledger can be retrieved also when the ledger itself holds more
+/// blocks than it returns in a single `get_blocks` response, e.g., since archiving was disabled by
+/// raising the archiving trigger threshold.
+pub fn test_get_all_blocks_with_archiving_disabled<T, Tokens>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+    Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
+{
+    // The maximum number of blocks returned in a single ledger `get_blocks` response.
+    const MAX_BLOCKS_PER_LEDGER_RESPONSE: u64 = 2_000;
+    const UNREACHABLE_TRIGGER_THRESHOLD: usize = 1_000_000_000;
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let (env, ledger_id) = setup(
+        ledger_wasm.clone(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 1_000_000_000_000)],
+    );
+
+    // Generate enough blocks to trigger archiving, so that the blocks end up being spread over
+    // both the archive and the ledger.
+    for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
+    }
+    assert_eq!(
+        list_archives(&env, ledger_id).len(),
+        1,
+        "an archive should have been spawned"
+    );
+
+    // Suppress archiving, so that all the following blocks are retained by the ledger itself.
+    let raise_threshold = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(UNREACHABLE_TRIGGER_THRESHOLD),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&raise_threshold).unwrap())
+        .expect("failed to raise trigger_threshold");
+
+    // Generate more blocks than the ledger returns in a single `get_blocks` response.
+    for i in 0..=MAX_BLOCKS_PER_LEDGER_RESPONSE {
+        transfer(&env, ledger_id, p1.0, p2.0, 20_000 + i).expect("transfer failed");
+    }
+    let archives = list_archives(&env, ledger_id);
+    let num_archived_blocks = archives
+        .iter()
+        .map(|archive| archive.block_range_end.0.to_u64().unwrap() + 1)
+        .max()
+        .expect("an archive should have been spawned");
+    let chain_length = get_blocks(&env, Principal::from(ledger_id), 0, 0).chain_length;
+    let blocks_in_ledger = chain_length - num_archived_blocks;
+    assert!(
+        blocks_in_ledger > MAX_BLOCKS_PER_LEDGER_RESPONSE,
+        "the ledger should hold more blocks ({blocks_in_ledger}) than it returns in a single \
+         response ({MAX_BLOCKS_PER_LEDGER_RESPONSE})"
+    );
+
+    // Retrieving all the blocks should require multiple calls to the ledger.
+    let blocks = get_all_ledger_and_archive_blocks::<Tokens>(&env, ledger_id, None, None);
+    assert_eq!(
+        blocks.len() as u64,
+        chain_length,
+        "not all the ledger and archive blocks were retrieved"
+    );
+    // The same should hold when retrieving a sub-range of the blocks.
+    let num_blocks = chain_length - 1;
+    let blocks =
+        get_all_ledger_and_archive_blocks::<Tokens>(&env, ledger_id, Some(1), Some(num_blocks));
+    assert_eq!(
+        blocks.len() as u64,
+        num_blocks,
+        "not all the requested ledger and archive blocks were retrieved"
+    );
+
+    // Reconstruct the ledger state from all the retrieved blocks, and verify it against the state
+    // of the ledger itself. This catches any blocks that were retrieved more than once, or not at
+    // all.
+    verify_ledger_state::<Tokens>(&env, ledger_id, None, AllowancesRecentlyPurged::No);
+}
+
 pub fn test_upgrade_archive_options<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
@@ -1612,7 +1784,7 @@ where
     let mut prev_hash = None;
 
     // Check that the hash chain is correct.
-    for block in archived_blocks.into_iter().chain(resp.blocks.into_iter()) {
+    for block in archived_blocks.into_iter().chain(resp.blocks) {
         assert_eq!(
             prev_hash,
             get_phash(&block).expect("cannot get the hash of the previous block")
@@ -1626,29 +1798,27 @@ where
     assert_eq!(0, missing_blocks_reply.archived_blocks.len());
 }
 
-// Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
+// Generate random blocks and check that their CBOR encoding complies with the
+// ledger block CBOR schema (see the `block_schema` module).
 pub fn block_encoding_agrees_with_the_schema<Tokens: TokensType>() {
-    use std::path::PathBuf;
-
-    let block_cddl_path =
-        PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("block.cddl");
-    let block_cddl =
-        String::from_utf8(std::fs::read(block_cddl_path).expect("failed to read block.cddl file"))
-            .unwrap();
-
     let mut runner = TestRunner::default();
     runner
         .run(&arb_block::<Tokens>(), |block| {
-            let cbor_bytes = block.encode().into_vec();
-            cddl::validate_cbor_from_slice(&block_cddl, &cbor_bytes, None).map_err(|e| {
+            let encoded_block = block.encode();
+            block_schema::validate(&encoded_block).map_err(|e| {
                 TestCaseError::fail(format!(
                     "Failed to validate CBOR: {} (inspect it on https://cbor.me), error: {}",
-                    hex::encode(&cbor_bytes),
+                    hex::encode(encoded_block.as_slice()),
                     e
                 ))
             })
         })
         .unwrap();
+}
+
+// Check that the ledger block CBOR schema validator rejects malformed blocks.
+pub fn block_encoding_schema_catches_malformed_blocks() {
+    block_schema::assert_catches_malformed_blocks();
 }
 
 pub fn block_encoding_agreed_with_the_icrc3_schema<Tokens: TokensType>() {
@@ -2066,7 +2236,7 @@ pub fn icrc1_test_block_transformation<T, Tokens>(
     for (block_pre_upgrade, block_post_upgrade) in resp_pre_upgrade
         .blocks
         .into_iter()
-        .zip(resp_post_upgrade.blocks.into_iter())
+        .zip(resp_post_upgrade.blocks)
     {
         assert!(
             equivalent_values(&block_pre_upgrade, &block_post_upgrade),
@@ -3256,7 +3426,10 @@ where
     );
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
-        feature_flags: Some(FeatureFlags { icrc2: true }),
+        feature_flags: Some(FeatureFlags {
+            icrc2: true,
+            icrc152: false,
+        }),
         ..UpgradeArgs::default()
     }));
 
@@ -3390,6 +3563,117 @@ where
     assert_eq!(block_index, 1);
     assert_eq!(balance_of(&env, canister_id, from.0), 60_000);
     assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
+}
+
+/// A spend needs no allowance only when the spender *is* the account it spends from — which the
+/// ledger decides on the whole account, subaccount included. Owning the principal is not enough,
+/// so a caller holding funds under a subaccount must name that subaccount to reach them.
+pub fn test_transfer_from_self_subaccount<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    const SUBACCOUNT: [u8; 32] = [42; 32];
+
+    let owner = PrincipalId::new_user_test_id(1);
+    let to = PrincipalId::new_user_test_id(2);
+    let from = Account {
+        owner: owner.0,
+        subaccount: Some(SUBACCOUNT),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![(from, 100_000)]);
+
+    // Same owner, but the spender is {owner, None} while the funds are under {owner, SUBACCOUNT}:
+    // two different accounts, so this needs an allowance it does not have.
+    let mut transfer_from_args = default_transfer_from_args(from, to.0, 30_000);
+    transfer_from_args.spender_subaccount = None;
+    assert_eq!(
+        send_transfer_from(&env, canister_id, owner.0, &transfer_from_args),
+        Err(TransferFromError::InsufficientAllowance {
+            allowance: Nat::from(0_u8)
+        })
+    );
+    assert_eq!(balance_of(&env, canister_id, from), 100_000);
+    assert_eq!(balance_of(&env, canister_id, to.0), 0);
+
+    // Naming the account's own subaccount makes it a self-spend, which needs no allowance.
+    transfer_from_args.spender_subaccount = Some(SUBACCOUNT);
+    let block_index = send_transfer_from(&env, canister_id, owner.0, &transfer_from_args)
+        .expect("transfer_from failed");
+    assert_eq!(
+        block_index, 1,
+        "the rejected spend must not have written a block"
+    );
+    assert_eq!(balance_of(&env, canister_id, from), 100_000 - 30_000 - FEE);
+    assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
+}
+
+/// Burns from `{P, Some(s)}` with the spender naming that same subaccount, and reports what the
+/// ledger made of it — the two ledgers disagree, so the caller states which outcome its own owes.
+///
+/// ICRC ledgers accept it: burning is how an account holding tokens under a subaccount gives them
+/// up, and naming the account's own subaccount makes it a self-spend. The ICP ledger rejects it,
+/// because `Operation::Burn` (`rs/ledger_suite/icp/src/lib.rs`) checks an allowance for any spender
+/// — exempting the self-spend only when *consuming* one, not when checking.
+///
+/// Either way the books must stay consistent, which is asserted here: an accepted burn is fee-free
+/// and reduces the supply, a rejected one moves nothing at all.
+pub fn test_transfer_from_self_subaccount_burn<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) -> Result<BlockIndex, TransferFromError>
+where
+    T: CandidType,
+{
+    const SUBACCOUNT: [u8; 32] = [42; 32];
+    const INITIAL_BALANCE: u64 = 100_000;
+    const BURN_AMOUNT: u64 = 20_000;
+
+    let owner = PrincipalId::new_user_test_id(1);
+    let from = Account {
+        owner: owner.0,
+        subaccount: Some(SUBACCOUNT),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![(from, INITIAL_BALANCE)]);
+
+    let minter = minting_account(&env, canister_id).expect("the ledger has a minting account");
+    let supply_before = total_supply(&env, canister_id);
+    let mut burn_args = default_transfer_from_args(from, minter, BURN_AMOUNT);
+    burn_args.spender_subaccount = Some(SUBACCOUNT);
+    burn_args.fee = None;
+
+    let result = send_transfer_from(&env, canister_id, owner.0, &burn_args);
+
+    match result {
+        Ok(_) => {
+            assert_eq!(
+                balance_of(&env, canister_id, from),
+                INITIAL_BALANCE - BURN_AMOUNT,
+                "a burn is fee-free, so only the burned amount leaves the account"
+            );
+            assert_eq!(
+                total_supply(&env, canister_id),
+                supply_before - BURN_AMOUNT,
+                "burning must reduce the supply rather than move the tokens"
+            );
+        }
+        Err(_) => {
+            assert_eq!(
+                balance_of(&env, canister_id, from),
+                INITIAL_BALANCE,
+                "a rejected burn must not move funds"
+            );
+            assert_eq!(
+                total_supply(&env, canister_id),
+                supply_before,
+                "a rejected burn must not change the supply"
+            );
+        }
+    }
+    result
 }
 
 pub fn test_transfer_from_minter<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -5071,7 +5355,23 @@ pub mod archiving {
         }
 
         // Install a ledger with a lot of initial balances
-        let env = StateMachine::new();
+        let mut subnet_config = SubnetConfig::new(SubnetType::System);
+        // Set max_instructions_per_round to max(max_instructions_per_slice, max_instructions_per_install_code_slice)
+        // to ensure that at most one canister message can be executed per round.
+        subnet_config.scheduler_config.max_instructions_per_round = subnet_config
+            .scheduler_config
+            .max_instructions_per_slice
+            .max(
+                subnet_config
+                    .scheduler_config
+                    .max_instructions_per_install_code_slice,
+            );
+        let env = StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                subnet_config,
+                HypervisorConfig::default(),
+            )))
+            .build();
         let args = encode_init_args(InitArgs {
             archive_options: ArchiveOptions {
                 trigger_threshold: TRIGGER_THRESHOLD,
@@ -5111,7 +5411,22 @@ pub mod archiving {
             env.tick();
             archive_info = get_archives(&env, ledger_id);
         }
-        // Verify that the ledger reports block `0` to be present only in the ledger
+        // Keep retrieving the block `0` from the archive and calling env.tick()
+        // until the block is archived.
+        let archive_id = archive_info
+            .first()
+            .expect("should return one archive info");
+        let archive_canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from(*archive_id));
+        let mut get_blocks_res = archive_get_blocks_fn(&env, archive_canister_id, 0, 1);
+        while get_blocks_res.blocks.is_empty() {
+            env.tick();
+            get_blocks_res = archive_get_blocks_fn(&env, archive_canister_id, 0, 1);
+        }
+        // Since the archiving is done in chunks, the archiving is not yet completed,
+        // so the ledger reports the block `0` to be present only
+        // in the ledger, even though it is also present in the archive by now.
+        // Verify that the ledger reports block `0` to be present only in the ledger.
         let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
         assert!(
             !ledger_reports_first_block_in_two_places(0, &get_blocks_res),
@@ -5119,22 +5434,6 @@ pub mod archiving {
         );
         // Verify that the ledger response contained no archive info.
         assert!(get_blocks_res.archived_ranges.is_empty());
-        // Verify that the block was already archived. Since the archiving is done in chunks, the
-        // archiving is not yet completed, so the ledger reports the block `0` to be present only
-        // in the ledger, even though it is also present in the archive by now.
-        let archive_id = archive_info
-            .first()
-            .expect("should return one archive info");
-        let get_blocks_res = archive_get_blocks_fn(
-            &env,
-            CanisterId::unchecked_from_principal(PrincipalId::from(*archive_id)),
-            0,
-            1,
-        );
-        assert!(
-            !get_blocks_res.blocks.is_empty(),
-            "archive should contain at least one block"
-        );
 
         // Tick until the transfer completes, meaning the archiving also completes.
         const MAX_TICKS: usize = 500;
@@ -6092,5 +6391,588 @@ pub fn test_http_request_decoding_quota(env: &StateMachine, canister_id: Caniste
             || err
                 .description()
                 .contains("Decoding cost exceeds the limit")
+    );
+}
+
+use icrc_ledger_types::icrc152::{
+    Icrc152BurnArgs, Icrc152BurnError, Icrc152MintArgs, Icrc152MintError,
+};
+
+// ---------------------------------------------------------------------------
+// ICRC-152 test helpers
+// ---------------------------------------------------------------------------
+
+fn icrc152_mint(
+    env: &StateMachine,
+    ledger: CanisterId,
+    caller: PrincipalId,
+    args: &Icrc152MintArgs,
+) -> Result<Nat, Icrc152MintError> {
+    Decode!(
+        &env.execute_ingress_as(caller, ledger, "icrc152_mint", Encode!(args).unwrap())
+            .expect("failed to call icrc152_mint")
+            .bytes(),
+        Result<Nat, Icrc152MintError>
+    )
+    .expect("failed to decode icrc152_mint response")
+}
+
+fn icrc152_burn(
+    env: &StateMachine,
+    ledger: CanisterId,
+    caller: PrincipalId,
+    args: &Icrc152BurnArgs,
+) -> Result<Nat, Icrc152BurnError> {
+    Decode!(
+        &env.execute_ingress_as(caller, ledger, "icrc152_burn", Encode!(args).unwrap())
+            .expect("failed to call icrc152_burn")
+            .bytes(),
+        Result<Nat, Icrc152BurnError>
+    )
+    .expect("failed to decode icrc152_burn response")
+}
+
+fn setup_icrc152<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    initial_balances: Vec<(Account, u64)>,
+) -> (StateMachine, CanisterId)
+where
+    T: CandidType,
+{
+    let env = StateMachine::new();
+    let args = encode_init_args(InitArgs {
+        feature_flags: Some(FeatureFlags {
+            icrc2: true,
+            icrc152: true,
+        }),
+        ..init_args(initial_balances)
+    });
+    let args = Encode!(&args).unwrap();
+    let canister_id = env.install_canister(ledger_wasm, args, None).unwrap();
+    (env, canister_id)
+}
+
+fn now_nanos(env: &StateMachine) -> u64 {
+    env.time()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64
+}
+
+// ---------------------------------------------------------------------------
+// ICRC-152 integration tests — error cases
+// ---------------------------------------------------------------------------
+
+pub fn test_icrc152_feature_flag_disabled<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // Default setup has icrc152: false
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+    let p1 = PrincipalId::new_user_test_id(1);
+
+    let mint_args = Icrc152MintArgs {
+        to: Account::from(p1.0),
+        amount: Nat::from(1_000_000_u64),
+        created_at_time: now_nanos(&env),
+        reason: None,
+    };
+    let result = icrc152_mint(&env, canister_id, controller, &mint_args);
+    match result {
+        Err(Icrc152MintError::GenericError { message, .. }) => {
+            assert!(
+                message.contains("not enabled"),
+                "expected 'not enabled' message, got: {message}"
+            );
+        }
+        other => panic!("expected GenericError for disabled flag, got: {other:?}"),
+    }
+
+    let burn_args = Icrc152BurnArgs {
+        from: Account::from(p1.0),
+        amount: Nat::from(1_000_u64),
+        created_at_time: now_nanos(&env),
+        reason: None,
+    };
+    let result = icrc152_burn(&env, canister_id, controller, &burn_args);
+    match result {
+        Err(Icrc152BurnError::GenericError { message, .. }) => {
+            assert!(
+                message.contains("not enabled"),
+                "expected 'not enabled' message, got: {message}"
+            );
+        }
+        other => panic!("expected GenericError for disabled flag, got: {other:?}"),
+    }
+}
+
+pub fn test_icrc152_unauthorized<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup_icrc152(ledger_wasm, encode_init_args, vec![]);
+    let non_controller = PrincipalId::new_user_test_id(42);
+    let p1 = PrincipalId::new_user_test_id(1);
+
+    let mint_args = Icrc152MintArgs {
+        to: Account::from(p1.0),
+        amount: Nat::from(1_000_000_u64),
+        created_at_time: now_nanos(&env),
+        reason: None,
+    };
+    let result = icrc152_mint(&env, canister_id, non_controller, &mint_args);
+    match result {
+        Err(Icrc152MintError::Unauthorized(_)) => {}
+        other => panic!("expected Unauthorized for mint, got: {other:?}"),
+    }
+
+    let burn_args = Icrc152BurnArgs {
+        from: Account::from(p1.0),
+        amount: Nat::from(1_000_u64),
+        created_at_time: now_nanos(&env),
+        reason: None,
+    };
+    let result = icrc152_burn(&env, canister_id, non_controller, &burn_args);
+    match result {
+        Err(Icrc152BurnError::Unauthorized(_)) => {}
+        other => panic!("expected Unauthorized for burn, got: {other:?}"),
+    }
+}
+
+pub fn test_icrc152_validation<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc152(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+    let controller = PrincipalId::new_anonymous();
+
+    // --- Zero amount ---
+    let result = icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: Account::from(p1.0),
+            amount: Nat::from(0_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152MintError::GenericError { message, .. }) => {
+            assert!(message.contains("greater than 0"), "got: {message}");
+        }
+        other => panic!("expected GenericError for zero mint amount, got: {other:?}"),
+    }
+
+    let result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account::from(p1.0),
+            amount: Nat::from(0_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152BurnError::GenericError { message, .. }) => {
+            assert!(message.contains("greater than 0"), "got: {message}");
+        }
+        other => panic!("expected GenericError for zero burn amount, got: {other:?}"),
+    }
+
+    // --- Invalid account: anonymous principal ---
+    let result = icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: Account {
+                owner: Principal::anonymous(),
+                subaccount: None,
+            },
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152MintError::InvalidAccount(_)) => {}
+        other => panic!("expected InvalidAccount for anonymous mint target, got: {other:?}"),
+    }
+
+    let result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account {
+                owner: Principal::anonymous(),
+                subaccount: None,
+            },
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152BurnError::InvalidAccount(_)) => {}
+        other => panic!("expected InvalidAccount for anonymous burn source, got: {other:?}"),
+    }
+
+    // --- Invalid account: minting account ---
+    let result = icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: MINTER,
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152MintError::InvalidAccount(_)) => {}
+        other => panic!("expected InvalidAccount for minting account mint, got: {other:?}"),
+    }
+
+    let result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: MINTER,
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152BurnError::InvalidAccount(_)) => {}
+        other => panic!("expected InvalidAccount for minting account burn, got: {other:?}"),
+    }
+
+    // --- Reason too long (> 1024 bytes) ---
+    let long_reason = "x".repeat(1025);
+    let result = icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: Account::from(p1.0),
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: Some(long_reason.clone()),
+        },
+    );
+    match result {
+        Err(Icrc152MintError::GenericError { message, .. }) => {
+            assert!(message.contains("1024"), "got: {message}");
+        }
+        other => panic!("expected GenericError for long reason (mint), got: {other:?}"),
+    }
+
+    let result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account::from(p1.0),
+            amount: Nat::from(1_000_u64),
+            created_at_time: now_nanos(&env),
+            reason: Some(long_reason),
+        },
+    );
+    match result {
+        Err(Icrc152BurnError::GenericError { message, .. }) => {
+            assert!(message.contains("1024"), "got: {message}");
+        }
+        other => panic!("expected GenericError for long reason (burn), got: {other:?}"),
+    }
+
+    // --- Insufficient balance for burn ---
+    let result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account::from(p1.0),
+            amount: Nat::from(999_999_999_u64),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    );
+    match result {
+        Err(Icrc152BurnError::InsufficientBalance { .. }) => {}
+        other => panic!("expected InsufficientBalance, got: {other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ICRC-152 integration tests — happy path
+// ---------------------------------------------------------------------------
+
+pub fn test_icrc152_mint_and_burn<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc152(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+
+    let supply_before = total_supply(&env, canister_id);
+    assert_eq!(supply_before, 0);
+
+    // --- Mint ---
+    let mint_amount = 5_000_000_u64;
+    let mint_result = icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: Account::from(p1.0),
+            amount: Nat::from(mint_amount),
+            created_at_time: now_nanos(&env),
+            reason: Some("test mint".to_string()),
+        },
+    );
+    let mint_block_idx = mint_result.expect("icrc152_mint should succeed");
+    assert_eq!(mint_block_idx, Nat::from(0_u64));
+
+    assert_eq!(balance_of(&env, canister_id, p1.0), mint_amount);
+    assert_eq!(total_supply(&env, canister_id), mint_amount);
+
+    // Verify block type via icrc3_get_blocks
+    let blocks = icrc3_get_blocks(&env, canister_id, 0, 1);
+    assert_eq!(blocks.blocks.len(), 1);
+    let btype = match &blocks.blocks[0].block {
+        ICRC3Value::Map(m) => m
+            .iter()
+            .find(|(k, _)| k.as_str() == "btype")
+            .map(|(_, v)| v.clone()),
+        other => panic!("expected Map block, got: {other:?}"),
+    };
+    assert_eq!(
+        btype,
+        Some(ICRC3Value::Text("122mint".to_string())),
+        "mint block should have btype 122mint"
+    );
+
+    // --- Burn ---
+    let burn_amount = 2_000_000_u64;
+    let burn_result = icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account::from(p1.0),
+            amount: Nat::from(burn_amount),
+            created_at_time: now_nanos(&env),
+            reason: Some("test burn".to_string()),
+        },
+    );
+    let burn_block_idx = burn_result.expect("icrc152_burn should succeed");
+    assert_eq!(burn_block_idx, Nat::from(1_u64));
+
+    assert_eq!(
+        balance_of(&env, canister_id, p1.0),
+        mint_amount - burn_amount
+    );
+    assert_eq!(total_supply(&env, canister_id), mint_amount - burn_amount);
+
+    // Verify burn block type
+    let blocks = icrc3_get_blocks(&env, canister_id, 1, 1);
+    assert_eq!(blocks.blocks.len(), 1);
+    let btype = match &blocks.blocks[0].block {
+        ICRC3Value::Map(m) => m
+            .iter()
+            .find(|(k, _)| k.as_str() == "btype")
+            .map(|(_, v)| v.clone()),
+        other => panic!("expected Map block, got: {other:?}"),
+    };
+    assert_eq!(
+        btype,
+        Some(ICRC3Value::Text("122burn".to_string())),
+        "burn block should have btype 122burn"
+    );
+}
+
+pub fn test_icrc152_deduplication<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc152(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+    let controller = PrincipalId::new_anonymous();
+    let ts = now_nanos(&env);
+
+    // First mint succeeds
+    let mint_args = Icrc152MintArgs {
+        to: Account::from(p1.0),
+        amount: Nat::from(1_000_u64),
+        created_at_time: ts,
+        reason: None,
+    };
+    let first = icrc152_mint(&env, canister_id, controller, &mint_args);
+    assert!(first.is_ok(), "first mint should succeed");
+
+    // Duplicate mint (same created_at_time, same args) returns Duplicate
+    let dup = icrc152_mint(&env, canister_id, controller, &mint_args);
+    match dup {
+        Err(Icrc152MintError::Duplicate { .. }) => {}
+        other => panic!("expected Duplicate for repeated mint, got: {other:?}"),
+    }
+
+    // Mint with different created_at_time succeeds
+    let mint_args2 = Icrc152MintArgs {
+        to: Account::from(p1.0),
+        amount: Nat::from(1_000_u64),
+        created_at_time: ts + 1,
+        reason: None,
+    };
+    let second = icrc152_mint(&env, canister_id, controller, &mint_args2);
+    assert!(second.is_ok(), "mint with different ts should succeed");
+
+    // Burn deduplication
+    let burn_args = Icrc152BurnArgs {
+        from: Account::from(p1.0),
+        amount: Nat::from(500_u64),
+        created_at_time: ts + 2,
+        reason: None,
+    };
+    let first_burn = icrc152_burn(&env, canister_id, controller, &burn_args);
+    assert!(first_burn.is_ok(), "first burn should succeed");
+
+    let dup_burn = icrc152_burn(&env, canister_id, controller, &burn_args);
+    match dup_burn {
+        Err(Icrc152BurnError::Duplicate { .. }) => {}
+        other => panic!("expected Duplicate for repeated burn, got: {other:?}"),
+    }
+}
+
+pub fn test_icrc152_supported_standards<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // With icrc152 disabled (default setup)
+    let (env, canister_id_disabled) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+    let standards_disabled: Vec<String> = supported_standards(&env, canister_id_disabled)
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    assert!(
+        !standards_disabled.contains(&"ICRC-152".to_string()),
+        "ICRC-152 should NOT be in supported_standards when disabled"
+    );
+    let block_types_disabled: Vec<String> = supported_block_types(&env, canister_id_disabled)
+        .into_iter()
+        .map(|bt| bt.block_type)
+        .collect();
+    assert!(
+        !block_types_disabled.contains(&"122mint".to_string()),
+        "122mint should NOT be in supported_block_types when disabled"
+    );
+    assert!(
+        !block_types_disabled.contains(&"122burn".to_string()),
+        "122burn should NOT be in supported_block_types when disabled"
+    );
+
+    // With icrc152 enabled
+    let (env, canister_id_enabled) = setup_icrc152(ledger_wasm, encode_init_args, vec![]);
+    let standards_enabled: Vec<String> = supported_standards(&env, canister_id_enabled)
+        .into_iter()
+        .map(|s| s.name)
+        .collect();
+    assert!(
+        standards_enabled.contains(&"ICRC-152".to_string()),
+        "ICRC-152 should be in supported_standards when enabled, got: {standards_enabled:?}"
+    );
+    let block_types_enabled: Vec<String> = supported_block_types(&env, canister_id_enabled)
+        .into_iter()
+        .map(|bt| bt.block_type)
+        .collect();
+    assert!(
+        block_types_enabled.contains(&"122mint".to_string()),
+        "122mint should be in supported_block_types when enabled, got: {block_types_enabled:?}"
+    );
+    assert!(
+        block_types_enabled.contains(&"122burn".to_string()),
+        "122burn should be in supported_block_types when enabled, got: {block_types_enabled:?}"
+    );
+}
+
+pub fn test_icrc152_total_volume<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    use ic_ledger_suite_state_machine_helpers::parse_metric;
+
+    const TOTAL_VOLUME_METRIC: &str = "total_volume";
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup_icrc152(ledger_wasm, encode_init_args, vec![]);
+    let controller = PrincipalId::new_anonymous();
+
+    // No transactions yet — total volume should be 0
+    assert_eq!(0, parse_metric(&env, canister_id, TOTAL_VOLUME_METRIC));
+
+    // Mint 1B (enough to register as >= 1 in the total_volume metric after dividing by 10^decimals)
+    let mint_amount = 1_000_000_000_u64;
+    icrc152_mint(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152MintArgs {
+            to: Account::from(p1.0),
+            amount: Nat::from(mint_amount),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("mint failed");
+
+    let volume_after_mint = parse_metric(&env, canister_id, TOTAL_VOLUME_METRIC);
+    assert!(
+        volume_after_mint > 0,
+        "total_volume should increase after authorized mint, got {volume_after_mint}"
+    );
+
+    // Burn 300M
+    let burn_amount = 300_000_000_u64;
+    icrc152_burn(
+        &env,
+        canister_id,
+        controller,
+        &Icrc152BurnArgs {
+            from: Account::from(p1.0),
+            amount: Nat::from(burn_amount),
+            created_at_time: now_nanos(&env),
+            reason: None,
+        },
+    )
+    .expect("burn failed");
+
+    let volume_after_burn = parse_metric(&env, canister_id, TOTAL_VOLUME_METRIC);
+    assert!(
+        volume_after_burn > volume_after_mint,
+        "total_volume should increase after authorized burn, got {volume_after_burn} (was {volume_after_mint})"
     );
 }

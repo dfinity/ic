@@ -57,6 +57,11 @@ pub(crate) const QUERY_EXECUTION_THREADS_PER_CANISTER: usize = 2;
 pub(crate) const DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION: NumInstructions =
     NumInstructions::new(6_000);
 
+/// Fixed base cost charged per `create_execution_state` call, independent of
+/// module size. Accounts for ~10ms of constant compilation overhead.
+pub const DEFAULT_CREATE_EXECUTION_STATE_BASE_COST: NumInstructions =
+    NumInstructions::new(20_000_000);
+
 /// The number of rayon threads used by wasmtime to compile wasm binaries
 const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
 
@@ -80,9 +85,6 @@ pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GIB as u
 
 /// Scheduling overhead for copying dirty pages, in instructions.
 pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::new(3_000);
-
-/// The overhead for dirty pages in Wasm64.
-pub const WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER: u64 = 4;
 
 const KIB: u64 = 1024;
 const GIB: u64 = KIB * KIB * KIB;
@@ -120,15 +122,12 @@ pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
     pub rate_limiting_of_debug_prints: FlagStatus,
-    /// Use deterministic memory tracker.
-    pub deterministic_memory_tracker: FlagStatus,
 }
 
 impl FeatureFlags {
     const fn const_default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            deterministic_memory_tracker: FlagStatus::Disabled,
         }
     }
 }
@@ -185,6 +184,10 @@ pub struct Config {
     /// this many instructions.
     pub cost_to_compile_wasm_instruction: NumInstructions,
 
+    /// Fixed base cost charged per `create_execution_state` call, independent
+    /// of module size.
+    pub create_execution_state_base_cost: NumInstructions,
+
     /// The number of rayon threads used by wasmtime to compile wasm binaries
     pub num_rayon_compilation_threads: usize,
 
@@ -219,11 +222,12 @@ pub struct Config {
     /// overridden at runtime by the registry's `maximum_state_delta`.
     pub default_subnet_heap_delta_capacity: NumBytes,
 
-    /// Dirty page overhead. The number of instructions to charge for each dirty
-    /// page created by a write to stable memory. The default value should be
+    /// The number of instructions to charge for every OS page of heap or stable
+    /// memory that a message touches: once when the page is first accessed and
+    /// once more when it is first written to. The default value should be
     /// replaced with the correct value at runtime when the hypervisor is
     /// created.
-    pub dirty_page_overhead: NumInstructions,
+    pub page_overhead: NumInstructions,
 
     /// If this flag is enabled, then execution of a slice will produce a log
     /// entry with the number of executed instructions and the duration.
@@ -235,9 +239,6 @@ pub struct Config {
 
     /// The dirty page copying overhead, in instructions.
     pub dirty_page_copy_overhead: NumInstructions,
-
-    /// The dirty page overhead factor for Wasm64.
-    pub wasm64_dirty_page_overhead_multiplier: u64,
 
     /// The maximum allowed size for an uncompressed canister Wasm module.
     pub wasm_max_size: NumBytes,
@@ -263,6 +264,7 @@ impl Config {
             max_number_exported_functions: MAX_NUMBER_EXPORTED_FUNCTIONS,
             max_sum_exported_function_name_lengths: MAX_SUM_EXPORTED_FUNCTION_NAME_LENGTHS,
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
+            create_execution_state_base_cost: DEFAULT_CREATE_EXECUTION_STATE_BASE_COST,
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             num_rayon_page_allocator_threads: DEFAULT_PAGE_ALLOCATOR_THREADS,
             feature_flags: FeatureFlags::const_default(),
@@ -280,7 +282,7 @@ impl Config {
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
             default_subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            dirty_page_overhead: NumInstructions::new(0),
+            page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,
             max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,
             dirty_page_copy_overhead: DIRTY_PAGE_COPY_OVERHEAD,
@@ -288,7 +290,6 @@ impl Config {
             max_wasm_memory_size: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
             max_wasm64_memory_size: NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
             max_stable_memory_size: NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES),
-            wasm64_dirty_page_overhead_multiplier: WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER,
         }
     }
 }

@@ -16,7 +16,7 @@ use futures::{
     future::{join_all, select_all, try_join_all},
 };
 use ic_agent::{
-    Agent, AgentError, Identity, Signature,
+    Agent, AgentError, Identity, RequestId, Signature,
     agent::{
         CallResponse, EnvelopeContent, RejectCode, RejectResponse,
         http_transport::reqwest_transport::reqwest,
@@ -26,7 +26,7 @@ use ic_agent::{
     identity::BasicIdentity,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
-use ic_cdk::management_canister::{
+use ic_cdk_management_canister::{
     SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
 use ic_config::{ConfigOptional, ConfigSource};
@@ -54,7 +54,13 @@ use ic_types::{
 };
 use ic_types_cycles::Cycles;
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
-use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
+use ic_utils::{
+    call::SyncCall,
+    interfaces::{
+        ManagementCanister,
+        management_canister::{CanisterLogRecord, FetchCanisterLogsArgs},
+    },
+};
 use icp_ledger::{
     AccountBalanceArgs, AccountIdentifier, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount,
     Tokens, tokens_from_proto,
@@ -290,9 +296,11 @@ impl<'a> UniversalCanister<'a> {
 
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let mut create_builder = mgr.create_canister();
+        if let Some(ca) = compute_allocation {
+            create_builder = create_builder.with_compute_allocation(ca);
+        }
+        let canister_id = create_builder
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -585,6 +593,30 @@ impl<'a> UniversalCanister<'a> {
             .call_and_wait()
             .await
     }
+
+    /// Submits `payload` as an ingress message to the canister's `update`
+    /// method without waiting for the call to complete, and returns the ID of
+    /// the submitted message, so that its status can be polled later. `None` if
+    /// the call happened to complete before the submission returned, in which
+    /// case there is nothing left to poll for.
+    ///
+    /// Useful for update calls that are not expected to complete for a long
+    /// time, or at all.
+    pub async fn submit_update<P: Into<Vec<u8>>>(
+        &self,
+        payload: P,
+    ) -> Result<Option<RequestId>, AgentError> {
+        let response = self
+            .agent
+            .update(&self.canister_id, "update")
+            .with_arg(payload.into())
+            .call()
+            .await?;
+        Ok(match response {
+            CallResponse::Response(_) => None,
+            CallResponse::Poll(request_id) => Some(request_id),
+        })
+    }
 }
 
 /// Provides an abstraction to the message canister.
@@ -660,9 +692,11 @@ impl<'a> MessageCanister<'a> {
     ) -> Result<MessageCanister<'a>, String> {
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let mut create_builder = mgr.create_canister();
+        if let Some(ca) = compute_allocation {
+            create_builder = create_builder.with_compute_allocation(ca);
+        }
+        let canister_id = create_builder
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -726,6 +760,14 @@ impl<'a> MessageCanister<'a> {
     /// Forwards a message to the `receiver` that calls
     /// `receiver.method(payload)` along with the specified amount of cycles
     /// and returns the result.
+    ///
+    /// If the receiver rejects the call, the message canister re-rejects it via
+    /// `msg_reject(err.to_string())`. The caller therefore always observes the
+    /// reject code `CanisterReject` and a reject message of the form
+    /// `"call rejected: <code> - <message>"` (ic-cdk's `CallRejected` `Display`),
+    /// where `<code>` and `<message>` are the receiver's original reject code and
+    /// message. Don't rely on the observed reject code or on a prefix of the
+    /// message when classifying such errors.
     pub async fn forward_with_cycles_to(
         &self,
         receiver: &Principal,
@@ -750,6 +792,9 @@ impl<'a> MessageCanister<'a> {
 
     /// Forwards a message to the `receiver` that calls
     /// `receiver.method(payload)` and returns the result.
+    ///
+    /// See [`Self::forward_with_cycles_to`] for how rejects of the receiver are
+    /// reported.
     pub async fn forward_to(
         &self,
         receiver: &Principal,
@@ -795,6 +840,19 @@ impl<'a> MessageCanister<'a> {
             .await
             .unwrap_or_else(|err| panic!("Could not read message: {err}"))
     }
+
+    pub async fn fetch_logs(&self) -> Vec<CanisterLogRecord> {
+        let mgr = ManagementCanister::create(self.agent);
+        mgr.fetch_canister_logs(&FetchCanisterLogsArgs {
+            canister_id: self.canister_id,
+            filter: None,
+        })
+        .call()
+        .await
+        .unwrap_or_else(|err| panic!("Could not fetch canister logs: {err}"))
+        .0
+        .canister_log_records
+    }
 }
 
 /// Provides an abstraction to the signer canister.
@@ -831,9 +889,11 @@ impl<'a> SignerCanister<'a> {
     ) -> SignerCanister<'a> {
         // Create a canister.
         let mgr = ManagementCanister::create(agent);
-        let canister_id = mgr
-            .create_canister()
-            .with_optional_compute_allocation(compute_allocation)
+        let mut create_builder = mgr.create_canister();
+        if let Some(ca) = compute_allocation {
+            create_builder = create_builder.with_compute_allocation(ca);
+        }
+        let canister_id = create_builder
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
@@ -996,14 +1056,10 @@ pub async fn agent_with_client_identity(
 
 // Creates an identity to be used with `Agent`.
 pub fn random_ed25519_identity() -> BasicIdentity {
-    let rng = ring::rand::SystemRandom::new();
-    let key_pair = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng)
-        .expect("Could not generate a key pair.");
-
-    BasicIdentity::from_key_pair(
-        ring::signature::Ed25519KeyPair::from_pkcs8(key_pair.as_ref())
-            .expect("Could not read the key pair."),
-    )
+    use rand::RngCore;
+    let mut raw_key = [0_u8; 32];
+    rand::thread_rng().fill_bytes(&mut raw_key);
+    BasicIdentity::from_raw_key(&raw_key)
 }
 
 pub fn get_nns_node(topo_snapshot: &TopologySnapshot) -> IcNodeSnapshot {
@@ -1294,7 +1350,8 @@ pub async fn get_balance(canister_id: &Principal, agent: &Agent) -> u128 {
     let mgr = ManagementCanister::create(agent);
     let canister_status = mgr
         .canister_status(canister_id)
-        .call_and_wait()
+        .as_update()
+        .call()
         .await
         .unwrap_or_else(|err| panic!("Could not get canister status: {err}"))
         .0;
@@ -1339,7 +1396,7 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
         }
         Err(_) => {
             let rt = {
-                let cpus = num_cpus::get();
+                let cpus = crate::driver::group::available_parallelism();
                 let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
                 Builder::new_multi_thread()
                     .worker_threads(workers)
@@ -1468,7 +1525,8 @@ pub fn to_principal_id(principal: &Principal) -> PrincipalId {
 pub async fn agent_observes_canister_module(agent: &Agent, canister_id: &Principal) -> bool {
     ManagementCanister::create(agent)
         .canister_status(canister_id)
-        .call_and_wait()
+        .as_update()
+        .call()
         .await
         .is_ok_and(|s| s.0.module_hash.is_some())
 }
@@ -1551,6 +1609,8 @@ pub fn get_config() -> ConfigOptional {
         domain_name: "".to_string(),
         node_reward_type: "".to_string(),
         malicious_behavior: "null".to_string(),
+        extra_api_boundary_node_trust_anchors_pem: "null".to_string(),
+        peer_guest_vm_address: None,
     };
 
     let ic_json =
@@ -2118,6 +2178,7 @@ pub fn sign_query(content: &HttpQueryContent, identity: &impl Identity) -> Signa
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: None,
+        sender_info: None,
     };
     identity.sign(&msg).unwrap()
 }
@@ -2131,6 +2192,7 @@ pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signa
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: content.nonce.clone().map(|blob| blob.0),
+        sender_info: None,
     };
     identity.sign(&msg).unwrap()
 }

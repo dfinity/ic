@@ -2,7 +2,6 @@
 //! initial payloads and install nns canisters in a fresh IC.
 //! Was used at genesis, but now only used to install the nns in testnets.
 
-use canister_test::Wasm;
 use ic_canister_client::Sender;
 use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_nns_constants::NNS_CANISTER_WASMS;
@@ -154,12 +153,13 @@ pub fn set_up_env_vars_for_all_canisters<P: AsRef<Path>>(wasm_dir: P) {
             let mut path = wasm_dir.as_ref().to_path_buf();
             path.push(file_part.as_str());
             if path.is_file() {
-                // Sets up the env var following the pattern expected by
+                // Set the env var in a way that is expected by
                 // WASM::from_location_specified_by_env_var
                 // TODO: Audit that the environment access only happens in single-threaded code.
-                unsafe {
-                    std::env::set_var(Wasm::env_var_name(canister, &[]), path.to_str().unwrap())
-                };
+                let env_var = format!("{}_WASM_PATH", canister)
+                    .replace('-', "_")
+                    .to_uppercase();
+                unsafe { std::env::set_var(env_var, path.to_str().unwrap()) };
                 continue 'outer;
             }
         }

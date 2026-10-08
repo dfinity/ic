@@ -134,7 +134,10 @@ pub fn test(env: TestEnv) {
             .with_minting_account(minting_account)
             .with_initial_balance(account1, 1_000_000_000_u64)
             .with_transfer_fee(1_000_u16)
-            .with_feature_flags(FeatureFlags { icrc2: true })
+            .with_feature_flags(FeatureFlags {
+                icrc2: true,
+                icrc152: false,
+            })
             .with_archive_options(ArchiveOptions {
                 trigger_threshold: 2,
                 num_blocks_to_archive: 4,

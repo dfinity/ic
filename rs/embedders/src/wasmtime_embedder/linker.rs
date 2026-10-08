@@ -12,7 +12,7 @@ use ic_config::{
     flag_status::FlagStatus,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, PerformanceCounterType, StableGrowOutcome, SystemApi,
+    Heap, HypervisorError, HypervisorResult, PerformanceCounterType, StableGrowOutcome, SystemApi,
     TrapCode,
 };
 use ic_logger::error;
@@ -32,6 +32,9 @@ use std::convert::TryFrom;
 /// from wasm sandbox to the replica execution environment.
 const BYTE_TRANSMISSION_COST_FACTOR: usize = 50;
 
+/// For the signing costs, the user provides a name. Bound the allowed length.
+const MAX_KEY_NAME_LENGTH: usize = 256;
+
 fn unexpected_err(s: String) -> HypervisorError {
     HypervisorError::WasmEngineError(WasmEngineError::Unexpected(s))
 }
@@ -43,13 +46,13 @@ fn process_err(
     add_backtrace(&mut e, &store);
     match store.as_context_mut().data_mut().system_api_mut() {
         Ok(api) => {
-            let result = wasmtime::Error::msg(format! {"{e}"});
+            let result = wasmtime::Error::msg(format!("{e}"));
             api.set_execution_error(e);
             result
         }
-        Err(_) => wasmtime::Error::msg(
-            format! {"Failed to access system api while processing error: {e}"},
-        ),
+        Err(_) => wasmtime::Error::msg(format!(
+            "Failed to access system api while processing error: {e}"
+        )),
     }
 }
 
@@ -259,9 +262,12 @@ pub fn syscalls<
         f(caller).map_err(|e| process_err(caller, e))
     }
 
+    /// Runs `f` with the system API and the Wasm heap. This is the only place
+    /// that hands heap memory to host code; it goes through [`Heap`] so that
+    /// every access is checked before the first byte is touched.
     fn with_memory_and_system_api<T>(
         mut caller: &mut Caller<'_, StoreData>,
-        f: impl Fn(&mut SystemApiImpl, &mut [u8]) -> HypervisorResult<T>,
+        f: impl Fn(&mut SystemApiImpl, &mut Heap<'_>) -> HypervisorResult<T>,
     ) -> Result<T, wasmtime::Error> {
         caller
             .get_export(WASM_HEAP_MEMORY_NAME)
@@ -275,12 +281,11 @@ pub fn syscalls<
                     })
             })
             .and_then(|mem| {
-                // False positive clippy lint.
-                // Issue: https://github.com/rust-lang/rust-clippy/issues/12856
-                // Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
-                #[allow(clippy::needless_borrows_for_generic_args)]
                 let (mem, store) = mem.data_and_store_mut(&mut caller);
-                f(store.system_api_mut()?, mem)
+                // TODO(heap page limit): replace with `Heap::new` and a check
+                // against the memory tracker once the accessed page limit lands.
+                let mut heap = Heap::unchecked(mem);
+                f(store.system_api_mut()?, &mut heap)
             })
             .map_err(|e| process_err(&mut caller, e))
     }
@@ -1019,6 +1024,15 @@ pub fn syscalls<
         })
         .unwrap();
 
+    linker
+        .func_wrap("ic0", "subnet_self_node_count", {
+            move |mut caller: Caller<'_, StoreData>| {
+                charge_for_cpu(&mut caller, overhead::SUBNET_SELF_NODE_COUNT)?;
+                with_system_api(&mut caller, |s| s.ic0_subnet_self_node_count())
+            }
+        })
+        .unwrap();
+
     match main_memory_type {
         WasmMemoryType::Wasm32 => {
             linker
@@ -1295,7 +1309,19 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, src: I, size: I, curve: u32, dst: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
-                charge_for_cpu_and_mem(&mut caller, overhead::COST_ECDSA, size)?;
+                charge_for_cpu_and_mem(&mut caller, overhead::COST_ECDSA, usize::min(size, MAX_KEY_NAME_LENGTH))?;
+                if size > MAX_KEY_NAME_LENGTH {
+                    return Err(process_err(
+                        &mut caller,
+                        HypervisorError::UserContractViolation {
+                            error: format!(
+                                "ic0.cost_sign_with_ecdsa: key name is too large: {size} bytes (maximum {MAX_KEY_NAME_LENGTH})"
+                            ),
+                            suggestion: "".to_string(),
+                            doc_link: "".to_string(),
+                        },
+                    ));
+                }
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_sign_with_ecdsa(src, size, curve, dst, memory)
@@ -1310,7 +1336,23 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, src: I, size: I, algorithm: u32, dst: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
-                charge_for_cpu_and_mem(&mut caller, overhead::COST_SCHNORR, size)?;
+                charge_for_cpu_and_mem(
+                    &mut caller,
+                    overhead::COST_SCHNORR,
+                    usize::min(size, MAX_KEY_NAME_LENGTH),
+                )?;
+                if size > MAX_KEY_NAME_LENGTH {
+                    return Err(process_err(
+                        &mut caller,
+                        HypervisorError::UserContractViolation {
+                            error: format!(
+                                "ic0.cost_sign_with_schnorr: key name is too large: {size} bytes (maximum {MAX_KEY_NAME_LENGTH})"
+                            ),
+                            suggestion: "".to_string(),
+                            doc_link: "".to_string(),
+                        },
+                    ));
+                }
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_sign_with_schnorr(src, size, algorithm, dst, memory)
@@ -1327,7 +1369,19 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, src: I, size: I, curve: u32, dst: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");
                 let size: usize = size.try_into().expect("Failed to convert I to usize");
-                charge_for_cpu_and_mem(&mut caller, overhead::COST_VETKD, size)?;
+                charge_for_cpu_and_mem(&mut caller, overhead::COST_VETKD, usize::min(size, MAX_KEY_NAME_LENGTH))?;
+                if size > MAX_KEY_NAME_LENGTH {
+                    return Err(process_err(
+                        &mut caller,
+                        HypervisorError::UserContractViolation {
+                            error: format!(
+                                "ic0.cost_vetkd_derive_key: key name is too large: {size} bytes (maximum {MAX_KEY_NAME_LENGTH})"
+                            ),
+                            suggestion: "".to_string(),
+                            doc_link: "".to_string(),
+                        },
+                    ));
+                }
                 with_memory_and_system_api(&mut caller, |s, memory| {
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_vetkd_derive_key(src, size, curve, dst, memory)

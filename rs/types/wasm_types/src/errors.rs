@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 /// Create a link to this section of the Execution Errors documentation.
 pub fn doc_ref(section: &str) -> String {
-    format!("https://internetcomputer.org/docs/current/references/execution-errors#{section}")
+    format!("https://docs.internetcomputer.org/references/execution-errors#{section}")
 }
 
 pub enum ErrorHelp {
@@ -50,7 +50,7 @@ pub trait AsErrorHelp {
 }
 
 /// Represents an error that can happen when parsing or encoding a Wasm module
-#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, DeterministicHeapBytes, Serialize)]
 pub struct WasmError(String);
 
 impl WasmError {
@@ -67,7 +67,7 @@ impl std::fmt::Display for WasmError {
 }
 
 /// Different errors that be returned by `validate_wasm_binary`
-#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, DeterministicHeapBytes, Serialize)]
 pub enum WasmValidationError {
     /// wasmtime::Module::validate() failed
     WasmtimeValidation(String),
@@ -139,6 +139,12 @@ pub enum WasmValidationError {
         size: usize,
         allowed: usize,
         name: String,
+    },
+    /// A function contains too many locals.
+    TooManyLocals {
+        index: usize,
+        defined: usize,
+        allowed: usize,
     },
     /// The code section is too large.
     CodeSectionTooLarge {
@@ -263,6 +269,15 @@ impl std::fmt::Display for WasmValidationError {
                 "Wasm module contains a function at index {index} \
                     with name '{name}' of size {size} bytes that exceeds the maximum allowed size of {allowed} bytes.",
             ),
+            Self::TooManyLocals {
+                index,
+                defined,
+                allowed,
+            } => write!(
+                f,
+                "Wasm module contains a function at index {index} \
+                    with {defined} locals that exceeds the maximum allowed number of locals {allowed}"
+            ),
             Self::CodeSectionTooLarge { size, allowed } => write!(
                 f,
                 "Wasm module code section size of {size} \
@@ -340,6 +355,10 @@ impl AsErrorHelp for WasmValidationError {
                 suggestion: "Try using shorter function names.".to_string(),
                 doc_link: doc_ref("wasm-module-function-name-too-large"),
             },
+            WasmValidationError::TooManyLocals { .. } => ErrorHelp::UserError {
+                suggestion: "Try different optimizer settings.".to_string(),
+                doc_link: doc_ref("wasm-module-too-many-locals"),
+            },
             WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
                 suggestion: "Try shrinking the module code section using tools like \
                 `ic-wasm` or splitting the logic across multiple canisters."
@@ -361,7 +380,7 @@ impl AsErrorHelp for WasmValidationError {
 }
 
 /// Different errors that can be returned by `instrument`
-#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, DeterministicHeapBytes, Serialize)]
 pub enum WasmInstrumentationError {
     /// Failure in deserialization the wasm module
     WasmDeserializeError(WasmError),
@@ -414,7 +433,7 @@ impl AsErrorHelp for WasmInstrumentationError {
 }
 
 /// Different errors that be returned by the Wasm engine
-#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, DeterministicHeapBytes, Serialize)]
 pub enum WasmEngineError {
     FailedToInitializeEngine,
     FailedToInstantiateModule(String),

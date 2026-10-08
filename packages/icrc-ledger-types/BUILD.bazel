@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 alias(
     name = "icrc-ledger-types",
-    actual = ":icrc_ledger_types",
+    actual = ":icrc_ledger_types_storable",
 )
 
 [
@@ -21,7 +21,6 @@ alias(
         deps = [
             # Keep sorted.
             "//packages/icrc-cbor",
-            "@crate_index//:base32",
             "@crate_index//:candid",
             "@crate_index//:crc32fast",
             "@crate_index//:hex",
@@ -38,15 +37,15 @@ alias(
     for (name_suffix, features, extra_deps) in [
         (
             "",
+            [],
+            [],
+        ),
+        (
+            "_storable",
             ["storable"],
             [
                 "@crate_index//:ic-stable-structures",
             ],
-        ),
-        (
-            "_no_storable",
-            [],
-            [],
         ),
     ]
 ]
@@ -67,15 +66,15 @@ alias(
     for (name_suffix, features, extra_deps) in [
         (
             "",
+            [],
+            [],
+        ),
+        (
+            "_storable",
             ["storable"],
             [
                 "@crate_index//:ic-stable-structures",
             ],
-        ),
-        (
-            "_no_storable",
-            [],
-            [],
         ),
     ]
 ]

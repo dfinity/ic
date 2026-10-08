@@ -71,6 +71,11 @@ pub fn setup(
 fn create_ic(env: &TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
+        // `install_rosetta` runs `ic-rosetta-api --ic-url http://[node]:8080` on
+        // a universal VM. On the local backend the nodes' firewall only opens
+        // `:8080` to the test driver and to the other nodes in the registry, so
+        // the VM needs the group's addresses whitelisted to reach the replica.
+        .with_group_wide_firewall_whitelist()
         .setup_and_start(env)
         .expect("Failed to setup IC under test");
     check_nodes_health(env);

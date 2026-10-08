@@ -13,6 +13,7 @@ rust_library(
         ":build_script",
         "@crate_index//:prost",
         "@crate_index//:tonic",
+        "@crate_index//:tonic-prost",
     ],
 )
 
@@ -20,7 +21,7 @@ cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
     build_script_env = {
-        "PROTOC": "$(execpath @protobuf//:protoc)",
+        "PROTOC": "$(execpath //bazel:protoc)",
         "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_rustfmt_files)",
     },
     data = [
@@ -28,11 +29,11 @@ cargo_build_script(
         "@rules_rust//rust/toolchain:current_rustfmt_files",
     ],
     tools = [
-        "@protobuf//:protoc",
+        "//bazel:protoc",
     ],
     deps = [
         # Keep sorted.
         "@crate_index//:prost-build",
-        "@crate_index//:tonic-build",
+        "@crate_index//:tonic-prost-build",
     ],
 )

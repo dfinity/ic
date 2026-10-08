@@ -1,15 +1,15 @@
-use super::{sandbox_safe_system_state::SandboxSafeSystemState, valid_subslice};
-use ic_base_types::InternalAddress;
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use super::sandbox_safe_system_state::SandboxSafeSystemState;
+use ic_interfaces::execution_environment::{Heap, HypervisorError, HypervisorResult};
 use ic_logger::ReplicaLogger;
+use ic_replicated_state::OutputRequest;
 use ic_types::Time;
 use ic_types::{
     CanisterId, NumBytes, PrincipalId,
-    messages::{CallContextId, NO_DEADLINE, Request},
-    methods::{Callback, WasmClosure},
+    messages::{CallContextId, NO_DEADLINE},
+    methods::WasmClosure,
     time::CoarseTime,
 };
-use ic_types_cycles::{CompoundCycles, Cycles, Instructions, RequestAndResponseTransmission};
+use ic_types_cycles::Cycles;
 use ic_wasm_types::doc_ref;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
@@ -68,7 +68,7 @@ impl RequestInPrep {
         callee_size: usize,
         method_name_src: usize,
         method_name_len: usize,
-        heap: &[u8],
+        heap: &Heap<'_>,
         on_reply: WasmClosure,
         on_reject: WasmClosure,
         max_size_remote_subnet: NumBytes,
@@ -106,22 +106,13 @@ impl RequestInPrep {
                     doc_link: doc_ref(LARGE_NAME_LINK),
                 });
             }
-            let method_name = valid_subslice(
-                "ic0.call_new method_name",
-                InternalAddress::new(method_name_src),
-                InternalAddress::new(method_name_len),
-                heap,
-            )?;
+            let method_name =
+                heap.get("ic0.call_new method_name", method_name_src, method_name_len)?;
             String::from_utf8_lossy(method_name).to_string()
         };
 
         let callee = {
-            let bytes = valid_subslice(
-                "ic0.call_new callee_src",
-                InternalAddress::new(callee_src),
-                InternalAddress::new(callee_size),
-                heap,
-            )?;
+            let bytes = heap.get("ic0.call_new callee_src", callee_src, callee_size)?;
             PrincipalId::try_from(bytes).map_err(HypervisorError::InvalidPrincipalId)?
         };
 
@@ -160,7 +151,7 @@ impl RequestInPrep {
         &mut self,
         src: usize,
         size: usize,
-        heap: &[u8],
+        heap: &Heap<'_>,
     ) -> HypervisorResult<()> {
         let current_size = self.method_name.len() + self.method_payload.len();
         let max_size_local_subnet =
@@ -178,12 +169,7 @@ impl RequestInPrep {
                 doc_link: doc_ref(PAYLOAD_SIZE_LINK),
             })
         } else {
-            let data = valid_subslice(
-                "ic0.call_data_append",
-                InternalAddress::new(src),
-                InternalAddress::new(size),
-                heap,
-            )?;
+            let data = heap.get("ic0.call_data_append", src, size)?;
             self.method_payload.extend_from_slice(data);
             Ok(())
         }
@@ -202,15 +188,9 @@ impl RequestInPrep {
     }
 }
 
-pub(crate) struct RequestWithPrepayment {
-    pub request: Request,
-    pub prepayment_for_response_execution: CompoundCycles<Instructions>,
-    pub prepayment_for_response_transmission: CompoundCycles<RequestAndResponseTransmission>,
-}
-
-/// Turns a `RequestInPrep` into a `Request`.
+/// Turns a `RequestInPrep` into an `OutputRequest`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn into_request(
+pub(crate) fn into_output_request(
     RequestInPrep {
         sender,
         callee,
@@ -228,7 +208,7 @@ pub(crate) fn into_request(
     sandbox_safe_system_state: &mut SandboxSafeSystemState,
     _logger: &ReplicaLogger,
     time: Time,
-) -> HypervisorResult<RequestWithPrepayment> {
+) -> HypervisorResult<OutputRequest> {
     let destination_canister = CanisterId::unchecked_from_principal(callee);
 
     let payload_size = (method_name.len() + method_payload.len()) as u64;
@@ -249,6 +229,8 @@ pub(crate) fn into_request(
         sandbox_safe_system_state.prepayment_for_response_execution();
     let prepayment_for_response_transmission =
         sandbox_safe_system_state.prepayment_for_response_transmission();
+    let prepayment_for_call_transmission =
+        sandbox_safe_system_state.xnet_total_transmission_fee(NumBytes::from(payload_size));
 
     let deadline = if let Some(timeout_seconds) = timeout_seconds {
         match time.checked_add(Duration::from_secs(timeout_seconds.into())) {
@@ -268,29 +250,23 @@ pub(crate) fn into_request(
         NO_DEADLINE
     };
 
-    let callback_id = sandbox_safe_system_state.register_callback(Callback::new(
+    let req = OutputRequest {
+        receiver: destination_canister,
+        payment: cycles,
+        deadline,
+        sender,
+        method_name,
+        method_payload,
+        metadata: sandbox_safe_system_state.request_metadata.clone(),
         call_context_id,
-        destination_canister,
-        cycles,
         prepayment_for_response_execution,
         prepayment_for_response_transmission,
+        prepayment_for_call_transmission,
         on_reply,
         on_reject,
         on_cleanup,
-        deadline,
-    ))?;
-
-    let req = Request {
-        sender,
-        receiver: destination_canister,
-        method_name,
-        method_payload,
-        sender_reply_callback: callback_id,
-        payment: cycles,
-        metadata: sandbox_safe_system_state.request_metadata.clone(),
-        deadline,
     };
-    // We cannot call `Request::payload_size_bytes()` before constructing the
+    // We cannot call `OutputRequest::payload_size_bytes()` before constructing the
     // request, so ensure our separate calculation matches the actual size.
     debug_assert_eq!(
         req.payload_size_bytes().get(),
@@ -298,11 +274,7 @@ pub(crate) fn into_request(
         "Inconsistent request payload size calculation"
     );
 
-    Ok(RequestWithPrepayment {
-        request: req,
-        prepayment_for_response_execution,
-        prepayment_for_response_transmission,
-    })
+    Ok(req)
 }
 
 #[cfg(test)]

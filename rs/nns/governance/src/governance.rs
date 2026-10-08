@@ -78,6 +78,9 @@ use crate::{
         sum_weighted_voting_power,
     },
     storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store, with_voting_history_store_mut},
+    timer_tasks::{
+        MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70, MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70,
+    },
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -87,9 +90,9 @@ use disburse_maturity::initiate_maturity_disbursement;
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
-use ic_cdk::spawn;
+use ic_cdk::futures::spawn_017_compat;
+use ic_cdk::println;
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
@@ -108,8 +111,9 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-    GetNeuronIndexRequest, GetPendingProposalsRequest, ListNeuronVotesRequest, ListNeurons,
-    ListNeuronsResponse, ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronResponse,
+    GetMaturityModulationResponse, GetNeuronIndexRequest, GetPendingProposalsRequest,
+    ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse, ListProposalInfoRequest,
+    ListProposalInfoResponse, ManageNeuronResponse, MaturityModulation as ApiMaturityModulation,
     NeuronIndexData, NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation::{
@@ -269,7 +273,9 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 /// canisters). (Such rewards come in the form of minted ICP.)
 pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = ONE_MONTH_SECONDS;
 
-const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
+const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> =
+    MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70 as i32
+        ..=MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70 as i32;
 
 /// Maximum allowed number of Neurons' Fund participants that may participate in an SNS swap. Given
 /// the maximum number of SNS neurons per swap participant (a.k.a. neuron basket count), this
@@ -535,6 +541,9 @@ impl Action {
             Action::TakeCanisterSnapshot(_) => "ACTION_TAKE_CANISTER_SNAPSHOT",
             Action::LoadCanisterSnapshot(_) => "ACTION_LOAD_CANISTER_SNAPSHOT",
             Action::CreateCanisterAndInstallCode(_) => "ACTION_CREATE_CANISTER_AND_INSTALL_CODE",
+            Action::UpdateStandardEngineReplicaVersion(_) => {
+                "ACTION_UPDATE_STANDARD_ENGINE_REPLICA_VERSION"
+            }
         }
     }
 }
@@ -1196,7 +1205,7 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
                 Err(vec!["Request.nns_proposal_id is unspecified.".to_string()])
             }
         };
-        let request_str = format!("{:#?}", &request);
+        let request_str = format!("{:#?}", request);
         // Validate request.result
         let swap_result = if let Some(result) = request.result {
             SwapResult::try_from(result).map_err(|err| vec![err])
@@ -1241,7 +1250,7 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
 fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     #[cfg(target_arch = "wasm32")]
     {
-        spawn(future);
+        spawn_017_compat(future);
     }
     // This is needed for tests
     #[cfg(not(target_arch = "wasm32"))]
@@ -1352,9 +1361,6 @@ impl Governance {
             rate_limiter: new_rate_limiter(),
         };
 
-        // A one-time data migration.
-        governance.maybe_set_eight_year_gang_bonus_base();
-
         // Clamp all neuron dissolve delays to the Mission 70 maximum exactly once.
         // The snapshot serves as the idempotency guard: if it's already populated,
         // clamping has already run and we must not overwrite the pre-clamp record.
@@ -1373,17 +1379,6 @@ impl Governance {
         }
 
         governance
-    }
-
-    fn maybe_set_eight_year_gang_bonus_base(&mut self) {
-        if self.heap_data.eight_year_gang_bonus_migration_done {
-            return;
-        }
-
-        self.neuron_store
-            .set_eight_year_gang_bonus_base_e8s_for_all_neurons_or_panic();
-
-        self.heap_data.eight_year_gang_bonus_migration_done = true;
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -2217,20 +2212,17 @@ impl Governance {
 
         let from_subaccount = parent_neuron.subaccount();
 
-        let to_subaccount_bytes = if let Some(memo) = memo {
-            ledger::compute_neuron_split_subaccount_bytes(parent_neuron.controller(), memo)
-        } else {
-            self.randomness.random_byte_array()?
-        };
-        let to_subaccount = Subaccount(to_subaccount_bytes);
-
-        // Make sure there isn't already a neuron with the same sub-account.
-        if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "There is already a neuron with the same subaccount.",
+        let to_subaccount = if let Some(memo) = memo {
+            let to_subaccount = Subaccount(ledger::compute_neuron_split_subaccount_bytes(
+                parent_neuron.controller(),
+                memo,
             ));
-        }
+            self.neuron_store
+                .ensure_subaccount_available(to_subaccount)?
+        } else {
+            self.neuron_store
+                .new_neuron_subaccount(&mut *self.randomness)?
+        };
 
         let in_flight_command = NeuronInFlightCommand {
             timestamp: created_timestamp_seconds,
@@ -2685,21 +2677,18 @@ impl Governance {
 
         let child_nid = self.neuron_store.new_neuron_id(&mut *self.randomness)?;
 
-        // use provided sub-account if any, otherwise generate a random one.
+        // Use provided sub-account if any, otherwise generate a random one.
         let to_subaccount = match spawn.nonce {
-            None => Subaccount(self.randomness.random_byte_array()?),
+            None => self
+                .neuron_store
+                .new_neuron_subaccount(&mut *self.randomness)?,
             Some(nonce_val) => {
-                ledger::compute_neuron_staking_subaccount(child_controller, nonce_val)
+                let to_subaccount =
+                    ledger::compute_neuron_staking_subaccount(child_controller, nonce_val);
+                self.neuron_store
+                    .ensure_subaccount_available(to_subaccount)?
             }
         };
-
-        // Make sure there isn't already a neuron with the same sub-account.
-        if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "There is already a neuron with the same subaccount.",
-            ));
-        }
 
         let created_timestamp_seconds = self.env.now();
         let dissolve_and_spawn_at_timestamp_seconds =
@@ -2987,14 +2976,8 @@ impl Governance {
             child_controller,
             disburse_to_neuron.nonce,
         ));
-
-        // Make sure there isn't already a neuron with the same sub-account.
-        if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "There is already a neuron with the same subaccount.",
-            ));
-        }
+        self.neuron_store
+            .ensure_subaccount_available(to_subaccount)?;
 
         let in_flight_command = NeuronInFlightCommand {
             timestamp: created_timestamp_seconds,
@@ -4302,6 +4285,12 @@ impl Governance {
                 self.perform_call_canister(pid, create_canister_and_install_code)
                     .await;
             }
+            ValidProposalAction::UpdateStandardEngineReplicaVersion(
+                update_standard_engine_replica_version,
+            ) => {
+                self.perform_call_canister(pid, update_standard_engine_replica_version)
+                    .await;
+            }
         }
     }
 
@@ -4680,6 +4669,7 @@ impl Governance {
                     ));
                 }
             }
+            #[allow(clippy::collapsible_match)]
             Command::Follow(follow) => {
                 if follow.followees.len() > MAX_FOLLOWEES_PER_TOPIC {
                     return Err(GovernanceError::new_with_message(
@@ -4939,6 +4929,9 @@ impl Governance {
             ValidProposalAction::CreateCanisterAndInstallCode(create_canister_and_install_code) => {
                 create_canister_and_install_code.validate()
             }
+            ValidProposalAction::UpdateStandardEngineReplicaVersion(
+                update_standard_engine_replica_version,
+            ) => update_standard_engine_replica_version.validate(),
         }
     }
 
@@ -4975,6 +4968,7 @@ impl Governance {
                 Self::validate_add_or_remove_data_centers_payload(&update.payload)
                     .map_err(invalid_proposal_error)?;
             }
+            #[allow(clippy::collapsible_match)]
             ValidNnsFunction::SplitSubnet => {
                 if !are_subnet_splitting_proposals_enabled() {
                     return Err(invalid_proposal_error(String::from(
@@ -5024,13 +5018,22 @@ impl Governance {
             }
         };
 
-        if decoded_payload.node_provider_principal_id.is_none() {
+        let Some(node_provider_id_of_node_operator) = decoded_payload.node_provider_principal_id
+        else {
             return Err("The payload's node_provider_principal_id field was None".to_string());
-        }
+        };
 
-        let is_registered = node_providers
-            .iter()
-            .any(|np| np.id.unwrap() == decoded_payload.node_provider_principal_id.unwrap());
+        let is_registered = node_providers.iter().any(|np| {
+            let Some(np_id) = np.id else {
+                println!(
+                    "{}Skipping node provider with no id while checking registration.",
+                    LOG_PREFIX,
+                );
+                return false;
+            };
+
+            np_id == node_provider_id_of_node_operator
+        });
         if !is_registered {
             return Err("The node provider specified in the payload is not registered".to_string());
         }
@@ -6047,13 +6050,53 @@ impl Governance {
         // Get the balance of the neuron's subaccount from ledger canister.
         let account = neuron_subaccount(subaccount);
         tla_log_locals! { account: tla::account_to_tla(account), neuron_id: nid.id };
-        let balance = self.ledger.account_balance(account).await?;
+        let balance = match self.ledger.account_balance(account).await {
+            Ok(balance) => balance,
+
+            Err(err) => {
+                // Before returning Err, clean up the incomplete neuron.
+                match self.remove_neuron(neuron) {
+                    Ok(()) => (),
+                    Err(cleanup_err) => {
+                        // If you dig into remove_neuron, the only way this could happen is if
+                        // the neuron is not there. Theoretically, that can't happen, but if it
+                        // does, it's not so bad, because we have achieved the desired end state:
+                        // no zombie neuron. Moreover, the more interesting failure is the one
+                        // from account_balance. Therefore, we do not return this error. Instead,
+                        // just log.
+                        println!(
+                            "{}ERROR: Failed to clean up neuron {:?} during claim_neuron after \
+                             failing to get balance of Governance subaccount {}: {}",
+                            LOG_PREFIX, nid, subaccount, cleanup_err
+                        );
+                    }
+                }
+
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Failed to get account balance for neuron subaccount: {:?}",
+                        err
+                    ),
+                ));
+            }
+        };
+
         let min_stake = self.economics().neuron_minimum_stake_e8s;
         if balance.get_e8s() < min_stake {
-            // To prevent this method from creating non-staked
-            // neurons, we must also remove the neuron that was
-            // previously created.
-            self.remove_neuron(neuron)?;
+            // Before returning Err, clean up the incomplete neuron.
+            match self.remove_neuron(neuron) {
+                Ok(()) => (),
+                Err(cleanup_err) => {
+                    // For similar reasons as above, just log remove_neuron failure.
+                    println!(
+                        "{}ERROR: Failed to clean up neuron {:?} during claim_neuron after \
+                         noticing insufficient funds (in Governance subaccount {}): {}",
+                        LOG_PREFIX, nid, subaccount, cleanup_err
+                    );
+                }
+            }
+
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
@@ -6444,7 +6487,11 @@ impl Governance {
         }
 
         let now_seconds = self.env.now();
-        let maturity_modulation = match self.heap_data.cached_daily_maturity_modulation_basis_points
+        let maturity_modulation = match self
+            .heap_data
+            .maturity_modulation
+            .as_ref()
+            .and_then(|m| m.current_value_permyriad)
         {
             None => return,
             Some(value) => value,
@@ -6453,8 +6500,11 @@ impl Governance {
         // Sanity check that the maturity modulation returned is within bounds.
         if !VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE.contains(&maturity_modulation) {
             println!(
-                "{}Maturity modulation (in basis points) out-of-bounds. Should be in range [-500, 500], actually is: {}",
-                LOG_PREFIX, maturity_modulation
+                "{}Maturity modulation (in basis points) out-of-bounds. Should be in range [{}, {}], actually is: {}",
+                LOG_PREFIX,
+                MATURITY_MODULATION_MIN_PERMYRIAD_MISSION_70,
+                MATURITY_MODULATION_MAX_PERMYRIAD_MISSION_70,
+                maturity_modulation
             );
             return;
         }
@@ -8035,6 +8085,16 @@ impl Governance {
 
     pub fn get_restore_aging_summary(&self) -> Option<RestoreAgingSummary> {
         self.heap_data.restore_aging_summary.clone()
+    }
+
+    /// Returns the current maturity modulation, as defined by Mission 70.
+    pub fn get_maturity_modulation(&self) -> GetMaturityModulationResponse {
+        GetMaturityModulationResponse {
+            maturity_modulation: self
+                .heap_data
+                .maturity_modulation
+                .map(ApiMaturityModulation::from),
+        }
     }
 }
 

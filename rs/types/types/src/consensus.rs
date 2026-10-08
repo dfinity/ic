@@ -32,6 +32,9 @@ pub mod hashed;
 pub mod idkg;
 mod payload;
 pub mod thunk;
+pub mod upgrade;
+
+pub use upgrade::{UpgradeAuthorizationShare, UpgradePermitRequest};
 
 pub use catchup::*;
 use hashed::Hashed;
@@ -287,9 +290,10 @@ impl Block {
         height: Height,
         rank: Rank,
         context: ValidationContext,
+        version: ReplicaVersion,
     ) -> Self {
         Block {
-            version: ReplicaVersion::default(),
+            version,
             parent,
             payload,
             height,
@@ -300,8 +304,8 @@ impl Block {
 }
 
 impl SignedBytesWithoutDomainSeparator for BlockMetadata {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
@@ -429,9 +433,9 @@ pub struct NotarizationContent {
 
 impl NotarizationContent {
     /// Create a new notarization content from a height and a block hash
-    pub fn new(height: Height, block: CryptoHashOf<Block>) -> Self {
+    pub fn new(height: Height, block: CryptoHashOf<Block>, version: ReplicaVersion) -> Self {
         NotarizationContent {
-            version: ReplicaVersion::default(),
+            version,
             height,
             block,
         }
@@ -439,8 +443,8 @@ impl NotarizationContent {
 }
 
 impl SignedBytesWithoutDomainSeparator for NotarizationContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
@@ -529,9 +533,9 @@ pub struct FinalizationContent {
 }
 
 impl FinalizationContent {
-    pub fn new(height: Height, block: CryptoHashOf<Block>) -> Self {
+    pub fn new(height: Height, block: CryptoHashOf<Block>, version: ReplicaVersion) -> Self {
         FinalizationContent {
-            version: ReplicaVersion::default(),
+            version,
             height,
             block,
         }
@@ -539,8 +543,8 @@ impl FinalizationContent {
 }
 
 impl SignedBytesWithoutDomainSeparator for FinalizationContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
@@ -637,9 +641,13 @@ pub type HashedRandomBeacon = Hashed<CryptoHashOf<RandomBeacon>, RandomBeacon>;
 impl RandomBeaconContent {
     /// Create a new RandomBeaconContent with a given height and parent
     /// RandomBeacon
-    pub fn new(height: Height, parent: CryptoHashOf<RandomBeacon>) -> Self {
+    pub fn new(
+        height: Height,
+        parent: CryptoHashOf<RandomBeacon>,
+        version: ReplicaVersion,
+    ) -> Self {
         Self {
-            version: ReplicaVersion::default(),
+            version,
             height,
             parent,
         }
@@ -647,8 +655,8 @@ impl RandomBeaconContent {
 }
 
 impl SignedBytesWithoutDomainSeparator for RandomBeaconContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
@@ -734,18 +742,15 @@ pub struct RandomTapeContent {
 }
 
 impl SignedBytesWithoutDomainSeparator for RandomTapeContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
 impl RandomTapeContent {
     /// Create a new RandomTapeContent from a given height
-    pub fn new(height: Height) -> Self {
-        RandomTapeContent {
-            version: ReplicaVersion::default(),
-            height,
-        }
+    pub fn new(height: Height, version: ReplicaVersion) -> Self {
+        RandomTapeContent { version, height }
     }
 }
 
@@ -1267,8 +1272,6 @@ pub enum Committee {
     /// Notarization indicates the committee that creates notarization and
     /// finalization artifacts by using multi-signatures.
     Notarization,
-    /// CanisterHttp indicates the committee for canister http.
-    CanisterHttp,
 }
 
 /// Threshold indicates how many replicas of a committee need to create a
@@ -1298,6 +1301,7 @@ impl From<&Block> for pb::Block {
             canister_http_payload_bytes,
             query_stats_payload_bytes,
             chain_key_payload_bytes,
+            upgrade_payload_bytes,
             idkg_payload,
         ) = if payload.is_summary() {
             (
@@ -1305,6 +1309,7 @@ impl From<&Block> for pb::Block {
                 None,
                 None,
                 None,
+                vec![],
                 vec![],
                 vec![],
                 vec![],
@@ -1320,6 +1325,7 @@ impl From<&Block> for pb::Block {
                 batch.canister_http.clone(),
                 batch.query_stats.clone(),
                 batch.chain_key.clone(),
+                batch.upgrade.clone(),
                 payload.as_data().idkg.as_ref().map(|idkg| idkg.into()),
             )
         };
@@ -1338,6 +1344,7 @@ impl From<&Block> for pb::Block {
             canister_http_payload_bytes,
             query_stats_payload_bytes,
             chain_key_payload_bytes,
+            upgrade_payload_bytes,
             idkg_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
@@ -1369,6 +1376,7 @@ impl TryFrom<pb::Block> for Block {
             canister_http: block.canister_http_payload_bytes,
             query_stats: block.query_stats_payload_bytes,
             chain_key: block.chain_key_payload_bytes,
+            upgrade: block.upgrade_payload_bytes,
         };
 
         let payload = match dkg_payload {

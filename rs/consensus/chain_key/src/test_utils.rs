@@ -130,7 +130,7 @@ pub(super) fn fake_signature_request_context(
     nonce: Option<[u8; 32]>,
 ) -> SignWithThresholdContext {
     SignWithThresholdContext {
-        request: RequestBuilder::new().build(),
+        request: RequestBuilder::new().build_arc(),
         args: fake_signature_request_args(
             key_id,
             Height::from(100),
@@ -139,7 +139,6 @@ pub(super) fn fake_signature_request_context(
         ),
         derivation_path: Arc::new(vec![vec![]]),
         batch_time: UNIX_EPOCH,
-        deprecated_pseudo_random_id: Some([0; 32]),
         nonce,
     }
 }

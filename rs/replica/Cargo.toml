@@ -10,12 +10,12 @@ documentation.workspace = true
 clap = { workspace = true }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
+ic-consensus = { path = "../consensus" }
 ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-nns-delegation-manager = { path = "../http_endpoints/nns_delegation_manager" }
 ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
-ic-consensus = { path = "../consensus" }
 ic-consensus-certification = { path = "../consensus/certification" }
 ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-crypto = { path = "../crypto" }
@@ -48,12 +48,10 @@ ic-types = { path = "../types/types" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
 libc = { workspace = true }
 nix = { workspace = true }
-num_cpus = { workspace = true }
 pprof = { workspace = true, optional = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
-slog = { workspace = true }
 tempfile = { workspace = true }
 tikv-jemalloc-ctl = { workspace = true }
 tikv-jemallocator = { workspace = true }
@@ -66,11 +64,7 @@ tracing-subscriber = { workspace = true }
 assert_cmd = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
-ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
-ic-management-canister-types-private = { path = "../types/management_canister_types" }
-ic-test-utilities = { path = "../test_utilities" }
 predicates = { workspace = true }
-wat = { workspace = true }
 
 [[bench]]
 name = "calls"

@@ -8,6 +8,7 @@ use candid::Encode;
 use dfn_core::call;
 use ic_base_types::{
     CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId, subnet_id_into_protobuf,
+    subnet_id_try_from_protobuf,
 };
 use ic_cdk::println;
 use ic_management_canister_types_private::{
@@ -18,9 +19,10 @@ use ic_protobuf::registry::{
     crypto::v1::ChainKeyEnabledSubnetList,
     subnet::v1::{CatchUpPackageContents, ChainKeyInitialization, SubnetListRecord, SubnetRecord},
 };
+use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_default_initial_dkg_subnet_id_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_transport::{
@@ -76,6 +78,22 @@ impl Registry {
                 "{LOG_PREFIX}set_subnet_membership_mutation: subnet list record not found in the registry.",
             ),
         }
+    }
+
+    /// Returns the configured default initial DKG subnet, if any. `SetupInitialDKG`
+    /// management canister calls without an explicit subnet id are routed to this
+    /// subnet (and fall back to the calling subnet when no default is configured).
+    pub fn get_default_initial_dkg_subnet_id(&self) -> Option<SubnetId> {
+        let registry_value = self.get(
+            make_default_initial_dkg_subnet_id_key().as_bytes(),
+            self.latest_version(),
+        )?;
+        let proto = SubnetIdProto::decode(registry_value.value.as_slice()).unwrap_or_else(|err| {
+            panic!("{LOG_PREFIX}default_initial_dkg_subnet_id record failed to decode: {err}")
+        });
+        Some(subnet_id_try_from_protobuf(proto).unwrap_or_else(|err| {
+            panic!("{LOG_PREFIX}default_initial_dkg_subnet_id failed to decode: {err}")
+        }))
     }
 
     /// Replace the given subnet record's membership with `new_membership`.

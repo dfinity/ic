@@ -13,7 +13,7 @@ use ic_nns_common::types::NeuronId;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::SubnetFeatures;
-use ic_types::SubnetId;
+use ic_types::{PrincipalId, SubnetId};
 use registry_canister::mutations::do_update_subnet;
 use std::collections::BTreeMap;
 use std::{collections::HashSet, path::PathBuf};
@@ -90,6 +90,12 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     /// blocks
     #[clap(long)]
     pub halt_at_cup_height: Option<bool>,
+
+    /// If set, the subnet will start (`true`) or stop (`false`) "cooling down".
+    /// See `ic_replicated_state::SubnetTopology::cooling_down` for the exact
+    /// semantics.
+    #[clap(long)]
+    pub cooling_down: Option<bool>,
 
     #[clap(long)]
     /// Configuration for chain key:
@@ -174,6 +180,12 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     /// on the NNS subnet.
     #[clap(long, num_args(1..))]
     ssh_backup_access: Option<Vec<String>>,
+
+    /// If set, replaces the subnet's admin list with the given principals
+    /// (passing zero principals clears the list). When unset, the existing
+    /// admin list is left unchanged.
+    #[clap(long, num_args(0..))]
+    pub subnet_admins: Option<Vec<PrincipalId>>,
 
     /// If set, the created proposal will contain a desired override of that
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
@@ -336,20 +348,9 @@ impl ProposeToUpdateSubnetCmd {
             }
         }
 
-        let resource_limits = self.resource_limits.map(|resource_limits| {
-            let ResourceLimits {
-                maximum_state_size,
-                maximum_state_delta,
-            } = resource_limits;
-            let maximum_state_size =
-                maximum_state_size.or(subnet_record.resource_limits.maximum_state_size);
-            let maximum_state_delta =
-                maximum_state_delta.or(subnet_record.resource_limits.maximum_state_delta);
-            ResourceLimits {
-                maximum_state_size,
-                maximum_state_delta,
-            }
-        });
+        let resource_limits = self
+            .resource_limits
+            .map(|resource_limits| resource_limits.inherit_from(&subnet_record.resource_limits));
 
         do_update_subnet::UpdateSubnetPayload {
             subnet_id,
@@ -369,11 +370,13 @@ impl ProposeToUpdateSubnetCmd {
 
             is_halted: self.is_halted,
             halt_at_cup_height: self.halt_at_cup_height,
+            cooling_down: self.cooling_down,
             features: self.features.map(|v| v.into()),
             resource_limits: resource_limits.map(|v| v.into()),
 
             ssh_readonly_access: self.ssh_readonly_access.clone(),
             ssh_backup_access: self.ssh_backup_access.clone(),
+            subnet_admins: self.subnet_admins.clone(),
             max_number_of_canisters: self.max_number_of_canisters,
 
             chain_key_config,
@@ -410,7 +413,7 @@ mod tests {
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
-    use ic_types::{NumBytes, PrincipalId};
+    use ic_types::{NumBytes, NumInstructions, PrincipalId};
 
     use super::*;
 
@@ -438,11 +441,13 @@ mod tests {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
+            cooling_down: None,
             features: None,
             resource_limits: None,
             max_number_of_canisters: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             chain_key_config: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -471,6 +476,7 @@ mod tests {
             start_as_nns: None,
             is_halted: None,
             halt_at_cup_height: None,
+            cooling_down: None,
             chain_key_configs_to_generate: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,
@@ -481,6 +487,7 @@ mod tests {
             resource_limits: None,
             ssh_readonly_access: None,
             ssh_backup_access: None,
+            subnet_admins: None,
             max_number_of_canisters: None,
         }
     }
@@ -556,6 +563,7 @@ mod tests {
         assert_eq!(
             cmd.new_payload_for_subnet(subnet_id, subnet_record),
             do_update_subnet::UpdateSubnetPayload {
+                subnet_admins: None,
                 chain_key_config: Some(do_update_subnet::ChainKeyConfig {
                     // Note the order is not important so long as it is deterministic. As a matter
                     // of fact, the order is lexicographic, as the implementation uses `BTreeSet`.
@@ -666,6 +674,7 @@ mod tests {
         assert_eq!(
             cmd.new_payload_for_subnet(subnet_id, subnet_record),
             do_update_subnet::UpdateSubnetPayload {
+                subnet_admins: None,
                 chain_key_config: Some(do_update_subnet::ChainKeyConfig {
                     key_configs: vec![
                         do_update_subnet::KeyConfig {
@@ -757,6 +766,7 @@ mod tests {
         assert_eq!(
             cmd.new_payload_for_subnet(subnet_id, subnet_record),
             do_update_subnet::UpdateSubnetPayload {
+                subnet_admins: None,
                 chain_key_config: Some(do_update_subnet::ChainKeyConfig {
                     key_configs: vec![
                         // Existed before, now being updated.
@@ -847,6 +857,7 @@ mod tests {
             do_update_subnet::UpdateSubnetPayload {
                 resource_limits: expected_resource_limits
                     .map(|resource_limits| resource_limits.into()),
+                subnet_admins: None,
                 ..make_empty_update_payload(subnet_id)
             },
         );
@@ -857,6 +868,7 @@ mod tests {
         let initial_resource_limits = ResourceLimits {
             maximum_state_size: Some(NumBytes::new(42)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         };
 
         let resource_limits_mutation = None;
@@ -876,17 +888,20 @@ mod tests {
         let initial_resource_limits = ResourceLimits {
             maximum_state_size: Some(NumBytes::new(42)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         };
 
         let resource_limits_mutation = Some(ResourceLimits {
             maximum_state_size: None,
             maximum_state_delta: None,
+            ..Default::default()
         });
 
         // `expected_resource_limits` are `None` if and only if `resource_limits_mutation` is None
         let expected_resource_limits = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(42)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         });
 
         assert_expected_resource_limits_eq(
@@ -901,11 +916,13 @@ mod tests {
         let initial_resource_limits = ResourceLimits {
             maximum_state_size: Some(NumBytes::new(42)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         };
 
         let resource_limits_mutation = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: None,
+            ..Default::default()
         });
 
         // `maximum_state_size` is overriden according to `resource_limits_mutation`,
@@ -914,6 +931,7 @@ mod tests {
         let expected_resource_limits = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         });
 
         assert_expected_resource_limits_eq(
@@ -928,11 +946,13 @@ mod tests {
         let initial_resource_limits = ResourceLimits {
             maximum_state_size: None,
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         };
 
         let resource_limits_mutation = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: None,
+            ..Default::default()
         });
 
         // `maximum_state_size` is overriden according to `resource_limits_mutation`,
@@ -941,6 +961,7 @@ mod tests {
         let expected_resource_limits = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         });
 
         assert_expected_resource_limits_eq(
@@ -955,16 +976,67 @@ mod tests {
         let initial_resource_limits = ResourceLimits {
             maximum_state_size: Some(NumBytes::new(42)),
             maximum_state_delta: Some(NumBytes::new(64)),
+            ..Default::default()
         };
 
         let resource_limits_mutation = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: Some(NumBytes::new(256)),
+            ..Default::default()
         });
 
         let expected_resource_limits = Some(ResourceLimits {
             maximum_state_size: Some(NumBytes::new(128)),
             maximum_state_delta: Some(NumBytes::new(256)),
+            ..Default::default()
+        });
+
+        assert_expected_resource_limits_eq(
+            initial_resource_limits,
+            resource_limits_mutation,
+            expected_resource_limits,
+        );
+    }
+
+    #[test]
+    fn cli_to_payload_conversion_works_for_maximum_query_instructions() {
+        // Override an existing `maximum_query_instructions` value.
+        let initial_resource_limits = ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::new(42)),
+            ..Default::default()
+        };
+
+        let resource_limits_mutation = Some(ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::new(128)),
+            ..Default::default()
+        });
+
+        let expected_resource_limits = Some(ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::new(128)),
+            ..Default::default()
+        });
+
+        assert_expected_resource_limits_eq(
+            initial_resource_limits,
+            resource_limits_mutation,
+            expected_resource_limits,
+        );
+
+        // A mutation that does not set `maximum_query_instructions` leaves the existing value.
+        let initial_resource_limits = ResourceLimits {
+            maximum_query_instructions: Some(NumInstructions::new(42)),
+            ..Default::default()
+        };
+
+        let resource_limits_mutation = Some(ResourceLimits {
+            maximum_state_size: Some(NumBytes::new(128)),
+            ..Default::default()
+        });
+
+        let expected_resource_limits = Some(ResourceLimits {
+            maximum_state_size: Some(NumBytes::new(128)),
+            maximum_query_instructions: Some(NumInstructions::new(42)),
+            ..Default::default()
         });
 
         assert_expected_resource_limits_eq(

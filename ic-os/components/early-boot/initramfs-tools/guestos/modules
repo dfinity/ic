@@ -21,3 +21,6 @@ vmw_pvscsi
 mptsas
 mptspi
 sd_mod
+xen_blkfront
+xen_netfront
+xen_platform_pci

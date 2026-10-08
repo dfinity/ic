@@ -10,10 +10,11 @@ use super::state::{
 };
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
-    CanisterSnapshotDownload, CanisterSnapshotUpload, DashboardRequest, GetCanisterHttp,
-    GetControllers, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology,
-    IngressMessageStatus, MockCanisterHttp, PubKey, Query, QueryRequest, SetCertifiedTime,
-    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, SubnetReadStateRequest, Tick,
+    CanisterSnapshotDownload, CanisterSnapshotUpload, DashboardRequest, DeleteSubnet,
+    GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime,
+    GetTopology, IngressMessageStatus, MockCanisterHttp, MockFlexibleCanisterHttp, PubKey, Query,
+    QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    SubnetReadStateRequest, Tick,
 };
 use crate::{
     BlobStore, InstanceId, OpId, Operation, SubnetBlockmakers, async_trait, pocket_ic::PocketIc,
@@ -34,22 +35,22 @@ use axum::{
 };
 use axum_extra::headers;
 use axum_extra::headers::HeaderMapExt;
-use backoff::backoff::Backoff;
-use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
+use backon::{BackoffBuilder, ExponentialBuilder};
+use base64::prelude::*;
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
 use ic_registry_routing_table::RoutingTable;
 use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::{CanisterId, SnapshotId, SubnetId};
+use ic_types::{CanisterId, PrincipalId, SnapshotId, SubnetId};
 use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, IcpConfig, IcpFeatures, InitialTime, InstanceConfig,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCanisterSnapshotDownload, RawCanisterSnapshotId,
-    RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs, RawMessageId,
-    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTickConfigs, RawTime, Topology,
+    MockCanisterHttpResponse, MockFlexibleCanisterHttpResponse, RawAddCycles, RawCanisterCall,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCanisterSnapshotDownload,
+    RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs,
+    RawMessageId, RawMockCanisterHttpResponse, RawMockFlexibleCanisterHttpResponse, RawPrincipalId,
+    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTickConfigs, RawTime, Topology,
 };
 use serde::Serialize;
 use slog::Level;
@@ -139,6 +140,10 @@ where
         .directory_route("/tick", post(handler_tick))
         .directory_route("/mock_canister_http", post(handler_mock_canister_http))
         .directory_route(
+            "/mock_flexible_canister_http",
+            post(handler_mock_flexible_canister_http),
+        )
+        .directory_route(
             "/canister_snapshot_download",
             post(handler_canister_snapshot_download),
         )
@@ -146,6 +151,7 @@ where
             "/canister_snapshot_upload",
             post(handler_canister_snapshot_upload),
         )
+        .directory_route("/delete_subnet", post(handler_delete_subnet))
 }
 
 async fn handle_limit_error(req: Request, next: Next) -> Response {
@@ -208,6 +214,12 @@ where
                 .layer(axum::middleware::from_fn(handle_limit_error)),
         )
         .directory_route(
+            "/subnet/{sid}/query",
+            post(handler_query_subnet_v3)
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
+        )
+        .directory_route(
             "/canister/{ecid}/read_state",
             post(handler_canister_read_state_v3)
                 .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
@@ -226,12 +238,19 @@ where
     S: Clone + Send + Sync + 'static,
     AppState: extract::FromRef<S>,
 {
-    ApiRouter::new().directory_route(
-        "/canister/{ecid}/call",
-        post(handler_call_v4)
-            .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
-            .layer(axum::middleware::from_fn(handle_limit_error)),
-    )
+    ApiRouter::new()
+        .directory_route(
+            "/canister/{ecid}/call",
+            post(handler_call_v4)
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
+        )
+        .directory_route(
+            "/subnet/{sid}/call",
+            post(handler_call_subnet_v4)
+                .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_SIZE))
+                .layer(axum::middleware::from_fn(handle_limit_error)),
+        )
 }
 
 pub fn instances_routes<S>() -> ApiRouter<S>
@@ -273,6 +292,8 @@ where
         // Configures an IC instance to make progress automatically,
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
+        // Only returns after the certified time of the IC instance
+        // has been updated for the first time.
         .api_route("/{id}/auto_progress", post(auto_progress))
         // Returns whether automatic progress is enabled for an IC instance.
         .api_route("/{id}/auto_progress", get(get_auto_progress))
@@ -306,11 +327,13 @@ async fn run_operation<T: Serialize + FromOpOut>(
 ) -> (StatusCode, ApiResponse<T>) {
     let retry_if_busy = op.retry_if_busy();
     let op = Arc::new(op);
-    let mut retry_policy: ExponentialBackoff = ExponentialBackoffBuilder::new()
-        .with_initial_interval(Duration::from_millis(10))
-        .with_max_interval(Duration::from_secs(1))
-        .with_multiplier(2.0)
-        .with_max_elapsed_time(Some(Duration::from_secs(RETRY_TIMEOUT_S)))
+    let mut retry_policy = ExponentialBuilder::new()
+        .with_min_delay(Duration::from_millis(10))
+        .with_max_delay(Duration::from_secs(1))
+        .with_factor(2.0)
+        .with_jitter()
+        .with_total_delay(Some(Duration::from_secs(RETRY_TIMEOUT_S)))
+        .without_max_times()
         .build();
     loop {
         match api_state
@@ -332,7 +355,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                         break (
                             StatusCode::ACCEPTED,
                             ApiResponse::Started {
-                                state_label: base64::encode_config(state_label.0, base64::URL_SAFE),
+                                state_label: BASE64_URL_SAFE.encode(state_label.0),
                                 op_id: op_id.0.to_string(),
                             },
                         );
@@ -344,7 +367,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                                 "run_operation::retry_busy instance_id={} state_label={:?} op_id={}",
                                 instance_id, state_label, op_id.0
                             );
-                            match retry_policy.next_backoff() {
+                            match retry_policy.next() {
                                 Some(duration) => tokio::time::sleep(duration).await,
                                 None => {
                                     break (
@@ -360,10 +383,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                             break (
                                 StatusCode::CONFLICT,
                                 ApiResponse::Busy {
-                                    state_label: base64::encode_config(
-                                        state_label.0,
-                                        base64::URL_SAFE,
-                                    ),
+                                    state_label: BASE64_URL_SAFE.encode(state_label.0),
                                     op_id: op_id.0.to_string(),
                                 },
                             );
@@ -694,6 +714,24 @@ pub async fn handler_mock_canister_http(
     (code, Json(response))
 }
 
+pub async fn handler_mock_flexible_canister_http(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(raw_mock_flexible_canister_http_response): axum::extract::Json<
+        RawMockFlexibleCanisterHttpResponse,
+    >,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let mock_flexible_canister_http_response: MockFlexibleCanisterHttpResponse =
+        raw_mock_flexible_canister_http_response.into();
+    let op = MockFlexibleCanisterHttp {
+        mock_flexible_canister_http_response,
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
+}
+
 pub async fn handler_get_controllers(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
@@ -793,6 +831,21 @@ pub async fn handler_pub_key(
         &subnet_id,
     )));
     let op = PubKey { subnet_id };
+    let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(res))
+}
+
+pub async fn handler_delete_subnet(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(instance_id): Path<InstanceId>,
+    headers: HeaderMap,
+    extract::Json(RawSubnetId { subnet_id }): extract::Json<RawSubnetId>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let subnet_id = ic_types::SubnetId::new(ic_types::PrincipalId(candid::Principal::from_slice(
+        &subnet_id,
+    )));
+    let op = DeleteSubnet { subnet_id };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }
@@ -908,12 +961,12 @@ pub async fn handler_status(
 
 async fn handler_call(
     State(AppState { api_state, .. }): State<AppState>,
-    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    NoApi(Path((instance_id, effective_principal_id))): NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
     version: CallRequestVersion,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = CallRequest {
-        effective_canister_id,
+        effective_principal_id,
         bytes,
         version,
     };
@@ -922,7 +975,7 @@ async fn handler_call(
 
 pub async fn handler_call_v2(
     state: State<AppState>,
-    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    path: NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     handler_call(state, path, bytes, CallRequestVersion::V2).await
@@ -930,7 +983,7 @@ pub async fn handler_call_v2(
 
 pub async fn handler_call_v3(
     state: State<AppState>,
-    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    path: NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     handler_call(state, path, bytes, CallRequestVersion::V3).await
@@ -938,20 +991,46 @@ pub async fn handler_call_v3(
 
 pub async fn handler_call_v4(
     state: State<AppState>,
-    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    path: NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     handler_call(state, path, bytes, CallRequestVersion::V4).await
 }
 
+pub async fn handler_query_subnet_v3(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, PrincipalId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = QueryRequest {
+        effective_principal_id: subnet_id,
+        bytes,
+        version: query::Version::SubnetV3,
+    };
+    handle_raw(api_state, instance_id, op).await
+}
+
+pub async fn handler_call_subnet_v4(
+    State(AppState { api_state, .. }): State<AppState>,
+    NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, PrincipalId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = CallRequest {
+        effective_principal_id: subnet_id,
+        bytes,
+        version: CallRequestVersion::SubnetV4,
+    };
+    handle_raw(api_state, instance_id, op).await
+}
+
 async fn handler_query(
     State(AppState { api_state, .. }): State<AppState>,
-    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    NoApi(Path((instance_id, effective_principal_id))): NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
     version: query::Version,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = QueryRequest {
-        effective_canister_id,
+        effective_principal_id,
         bytes,
         version,
     };
@@ -960,7 +1039,7 @@ async fn handler_query(
 
 pub async fn handler_query_v2(
     state: State<AppState>,
-    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    path: NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     handler_query(state, path, bytes, query::Version::V2).await
@@ -968,7 +1047,7 @@ pub async fn handler_query_v2(
 
 pub async fn handler_query_v3(
     state: State<AppState>,
-    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    path: NoApi<Path<(InstanceId, PrincipalId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     handler_query(state, path, bytes, query::Version::V3).await
@@ -978,7 +1057,7 @@ async fn handler_canister_read_state(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
-    version: read_state::canister::Version,
+    version: read_state::Version,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = CanisterReadStateRequest {
         effective_canister_id,
@@ -993,7 +1072,7 @@ pub async fn handler_canister_read_state_v2(
     path: NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    handler_canister_read_state(state, path, bytes, read_state::canister::Version::V2).await
+    handler_canister_read_state(state, path, bytes, read_state::Version::V2).await
 }
 
 pub async fn handler_canister_read_state_v3(
@@ -1001,14 +1080,14 @@ pub async fn handler_canister_read_state_v3(
     path: NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    handler_canister_read_state(state, path, bytes, read_state::canister::Version::V3).await
+    handler_canister_read_state(state, path, bytes, read_state::Version::V3).await
 }
 
 pub async fn handler_subnet_read_state(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, SubnetId)>>,
     bytes: Bytes,
-    version: read_state::subnet::Version,
+    version: read_state::Version,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = SubnetReadStateRequest {
         subnet_id,
@@ -1023,7 +1102,7 @@ pub async fn handler_subnet_read_state_v2(
     path: NoApi<Path<(InstanceId, SubnetId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    handler_subnet_read_state(state, path, bytes, read_state::subnet::Version::V2).await
+    handler_subnet_read_state(state, path, bytes, read_state::Version::V2).await
 }
 
 pub async fn handler_subnet_read_state_v3(
@@ -1031,7 +1110,7 @@ pub async fn handler_subnet_read_state_v3(
     path: NoApi<Path<(InstanceId, SubnetId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    handler_subnet_read_state(state, path, bytes, read_state::subnet::Version::V3).await
+    handler_subnet_read_state(state, path, bytes, read_state::Version::V3).await
 }
 
 async fn handle_raw<T: Operation + Send + Sync + 'static>(
@@ -1173,7 +1252,7 @@ pub async fn handler_read_graph(
     // TODO: type state label and op id correctly but such that axum can handle it
     Path((state_label_str, op_id_str)): Path<(String, String)>,
 ) -> Response {
-    let Ok(vec) = base64::decode_config(state_label_str.as_bytes(), base64::URL_SAFE) else {
+    let Ok(vec) = BASE64_URL_SAFE.decode(state_label_str.as_bytes()) else {
         return (StatusCode::BAD_REQUEST, "Malformed state label.").into_response();
     };
     if let Ok(state_label) = StateLabel::try_from(vec) {
@@ -1208,7 +1287,7 @@ pub async fn handler_prune_graph(
     State(AppState { api_state, .. }): State<AppState>,
     Path((state_label_str, op_id_str)): Path<(String, String)>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
-    let Ok(vec) = base64::decode_config(state_label_str.as_bytes(), base64::URL_SAFE) else {
+    let Ok(vec) = BASE64_URL_SAFE.decode(state_label_str.as_bytes()) else {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::Error {

@@ -9,8 +9,8 @@ use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
     create_new_subnet_with_keys, empty_subnet_update, enable_chain_key_signing,
     execute_update_subnet_proposal, get_public_key_and_test_signature, get_public_key_with_retries,
-    get_signature_with_logger, make_bip340_key_id, make_ecdsa_key_id, make_eddsa_key_id,
-    scale_cycles, setup_without_ecdsa_on_nns,
+    get_signature_with_logger, make_bip340_key_id, make_ecdsa_secp256k1_key_id,
+    make_ecdsa_secp256r1_key_id, make_eddsa_key_id, scale_cycles, setup_without_ecdsa_on_nns,
 };
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -75,18 +75,19 @@ fn test(env: TestEnv) {
     let nns_node = topology_snapshot.root_subnet().nodes().next().unwrap();
     let nns_agent = nns_node.build_default_agent();
     block_on(async move {
-        let key_id1 = make_ecdsa_key_id();
+        let key_id1 = make_ecdsa_secp256k1_key_id();
         let key_id2 = make_eddsa_key_id();
         let key_id3 = make_bip340_key_id();
         let key_id4 = make_vetkd_key_id("initial");
         let key_id5 = make_vetkd_key_id("later");
+        let key_id6 = make_ecdsa_secp256r1_key_id();
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         // Keys that are deployed to the subnet from the start
         let initial_key_ids = vec![key_id1.clone(), key_id2.clone(), key_id4.clone()];
         let initial_key_ids_as_string = format!("[{key_id1}, {key_id2}, {key_id4}]");
         // Keys that will be added later
-        let later_key_ids = vec![key_id3.clone(), key_id5.clone()];
+        let later_key_ids = vec![key_id3.clone(), key_id5.clone(), key_id6.clone()];
         // All key IDs
         let mut all_key_ids = later_key_ids.clone();
         all_key_ids.extend(initial_key_ids.iter().cloned());
@@ -128,7 +129,7 @@ fn test(env: TestEnv) {
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
-                    "Unable to route management canister request {method_name}: \
+                    "call rejected: 3 - Unable to route management canister request {method_name}: \
                         ChainKeyError(\"Requested unknown threshold key: {key_id}, existing keys: {initial_key_ids_as_string}\")",
                 ),
                 error_code: Some("IC0406".to_string()),
@@ -150,7 +151,7 @@ fn test(env: TestEnv) {
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
-                    "Unable to route management canister request {method_name}: \
+                    "call rejected: 3 - Unable to route management canister request {method_name}: \
                         ChainKeyError(\"Requested unknown or disabled threshold key: {key_id}, \
                         existing enabled keys: {initial_key_ids_as_string}\")",
                 ),
@@ -227,6 +228,7 @@ fn test(env: TestEnv) {
         let disable_signing_payload = UpdateSubnetPayload {
             subnet_id: app_subnet.subnet_id,
             chain_key_signing_disable: Some(all_key_ids.clone()),
+            subnet_admins: None,
             ..empty_subnet_update()
         };
         execute_update_subnet_proposal(
@@ -255,7 +257,7 @@ fn test(env: TestEnv) {
                     let expected_reject = RejectResponse {
                         reject_code: RejectCode::CanisterReject,
                         reject_message: format!(
-                            "Unable to route management canister request {method_name}: \
+                            "call rejected: 3 - Unable to route management canister request {method_name}: \
                                 ChainKeyError(\"Requested unknown or disabled threshold key: {key_id}, \
                                 existing enabled keys: []\")",
                         ),
@@ -284,6 +286,7 @@ fn test(env: TestEnv) {
         let proposal_payload = UpdateSubnetPayload {
             subnet_id: new_subnet_id,
             chain_key_signing_enable: Some(all_key_ids.clone()),
+            subnet_admins: None,
             ..empty_subnet_update()
         };
         execute_update_subnet_proposal(

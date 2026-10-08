@@ -1,12 +1,17 @@
 use super::subnet_call_context_manager::{
-    EcdsaArguments, EcdsaMatchedPreSignature, InstallCodeCall, PreSignatureStash, RawRandContext,
-    SchnorrArguments, SchnorrMatchedPreSignature, SignWithThresholdContext, StopCanisterCall,
+    BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext,
+    DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT, EcdsaArguments, EcdsaMatchedPreSignature,
+    InstallCodeCall, PreSignatureStash, RawRandContext, ReshareChainKeyContext, SchnorrArguments,
+    SchnorrMatchedPreSignature, SetupInitialDkgContext, SignWithThresholdContext, StopCanisterCall,
     SubnetCallContext, SubnetCallContextManager, ThresholdArguments,
 };
 use super::*;
-use crate::InputQueueType;
+use crate::metadata_state::testing::SystemMetadataTesting;
+use crate::metrics::ReplicatedStateMetrics;
 use crate::testing::{CanisterQueuesTesting, StreamTesting};
+use crate::{CanisterPriority, InputQueueType, ReplicatedState};
 use assert_matches::assert_matches;
+use ic_btc_replica_types::{GetSuccessorsRequestInitial, Network, SendTransactionRequest};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
     generate_key_transcript, setup_unmasked_random_params,
@@ -14,13 +19,18 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_error_types::{ErrorCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
+use ic_logger::no_op_logger;
 use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, IC_00, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::CanisterIdRange;
+use ic_test_utilities_metrics::{
+    MetricVec, fetch_gauge, fetch_int_gauge_vec, metric_vec, nonzero_values,
+};
 use ic_test_utilities_types::ids::{
     SUBNET_0, SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id, subnet_test_id,
     user_test_id,
@@ -36,11 +46,12 @@ use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSign
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::canister_threshold_sig::SchnorrPreSignatureTranscript;
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
 use ic_types::time::{CoarseTime, current_time};
-use ic_types::{ExecutionRound, Height};
-use ic_types_cycles::{Cycles, NominalCyclesTesting};
+use ic_types::{ExecutionRound, Height, NumberOfNodes, RegistryVersion};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, NominalCyclesTesting};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -180,7 +191,7 @@ fn init_allocation_ranges_if_empty() {
     };
 
     let mut system_metadata = SystemMetadata::new(own_subnet_id, SubnetType::Application);
-    system_metadata.network_topology = network_topology;
+    system_metadata.network_topology = Arc::new(network_topology);
 
     assert_eq!(
         CanisterIdRanges::try_from(vec![]).unwrap(),
@@ -202,12 +213,12 @@ fn init_allocation_ranges_if_empty() {
 }
 
 #[test]
-fn generate_new_canister_id_no_allocation_ranges() {
-    let mut system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
+fn peek_new_canister_id_no_allocation_ranges() {
+    let system_metadata = SystemMetadata::new(SUBNET_0, SubnetType::Application);
 
     assert_eq!(
         Err("Canister ID allocation was consumed".into()),
-        system_metadata.generate_new_canister_id()
+        system_metadata.peek_new_canister_id()
     );
     assert_eq!(None, system_metadata.last_generated_canister_id);
 }
@@ -219,7 +230,7 @@ fn generate_new_canister_id_no_allocation_ranges() {
 ///          \ canister_migrations.ranges()
 /// ```
 #[test]
-fn generate_new_canister_id() {
+fn peek_and_commit_new_canister_id() {
     fn range(start: u64, end: u64) -> CanisterIdRange {
         CanisterIdRange {
             start: start.into(),
@@ -261,7 +272,7 @@ fn generate_new_canister_id() {
         nns_subnet_id: other_subnet_id,
         ..Default::default()
     };
-    system_metadata.network_topology = network_topology;
+    system_metadata.network_topology = Arc::new(network_topology);
 
     assert_eq!(None, system_metadata.last_generated_canister_id);
     assert_eq!(2, system_metadata.canister_allocation_ranges.len());
@@ -269,10 +280,9 @@ fn generate_new_canister_id() {
     /// Asserts that the next generated canister ID is the expected one.
     /// And that `last_generated_canister_id` is updated accordingly.
     fn assert_next_generated(expected: u64, system_metadata: &mut SystemMetadata) {
-        assert_eq!(
-            Ok(expected.into()),
-            system_metadata.generate_new_canister_id()
-        );
+        let canister_id = system_metadata.peek_new_canister_id().unwrap();
+        assert_eq!(CanisterId::from(expected), canister_id);
+        system_metadata.commit_new_canister_id(canister_id);
         assert_eq!(
             Some(expected.into()),
             system_metadata.last_generated_canister_id
@@ -300,7 +310,7 @@ fn generate_new_canister_id() {
     // No more canister IDs can be generated.
     assert_eq!(
         Err("Canister ID allocation was consumed".into()),
-        system_metadata.generate_new_canister_id()
+        system_metadata.peek_new_canister_id()
     );
     // But last generated is the same.
     assert_eq!(Some(30.into()), system_metadata.last_generated_canister_id);
@@ -347,39 +357,68 @@ fn system_metadata_roundtrip_encoding() {
         routing_table,
         canister_migrations,
         nns_subnet_id: other_subnet_id,
+        api_boundary_nodes: btreemap! {
+            node_test_id(1) => ApiBoundaryNodeEntry {
+                domain: "api-example.com".to_string(),
+                ipv4_address: Some("127.0.0.1".to_string()),
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                pubkey: None,
+            },
+        },
         ..Default::default()
     };
-    system_metadata.network_topology = network_topology;
+    system_metadata.network_topology = Arc::new(network_topology);
 
     use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
     let pk_der = ic_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
         .unwrap()
         .serialize_rfc8410_der();
 
-    system_metadata.node_public_keys = btreemap! {
+    std::sync::Arc::make_mut(&mut system_metadata.own_subnet_info).node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
     };
-    system_metadata.api_boundary_nodes = btreemap! {
-        node_test_id(1) => ApiBoundaryNodeEntry {
-            domain: "api-example.com".to_string(),
-            ipv4_address: Some("127.0.0.1".to_string()),
-            ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
-            pubkey: None,
-        },
-    };
+    std::sync::Arc::make_mut(&mut system_metadata.own_subnet_info).resource_limits =
+        ResourceLimits {
+            maximum_state_size: Some(NumBytes::new(1 << 30)),
+            maximum_state_delta: Some(NumBytes::new(1 << 20)),
+            maximum_query_instructions: Some(ic_types::NumInstructions::new(7_000_000_000)),
+            maximum_query_walltime_seconds: Some(15),
+        };
     system_metadata.bitcoin_get_successors_follow_up_responses =
         btreemap! { 10.into() => vec![vec![1], vec![2]] };
+
+    // Observe two `BlockmakerMetrics` on successive days.
+    system_metadata.blockmaker_metrics_time_series.observe(
+        Time::from_nanos_since_unix_epoch(0),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(1),
+            failed_blockmakers: vec![node_test_id(2)],
+        },
+    );
+    system_metadata.blockmaker_metrics_time_series.observe(
+        Time::from_nanos_since_unix_epoch(0) + Duration::from_secs(24 * 3600),
+        &BlockmakerMetrics {
+            blockmaker: node_test_id(3),
+            failed_blockmakers: vec![node_test_id(4)],
+        },
+    );
+
+    // Add scheduling priority for a canister.
+    *system_metadata
+        .subnet_schedule
+        .get_mut(CanisterId::from_u64(1)) = CanisterPriority {
+        accumulated_priority: 100.into(),
+        executed_rounds: 2,
+        long_execution_start_round: Some(3.into()),
+        last_full_execution_round: 4.into(),
+    };
 
     // Validates that a roundtrip encode-decode results in the same `SystemMetadata`.
     fn validate_roundtrip_encoding(system_metadata: &SystemMetadata) {
         let proto = pb::SystemMetadata::from(system_metadata);
         assert_eq!(
             *system_metadata,
-            (
-                proto,
-                system_metadata.subnet_schedule.clone(),
-                &DummyMetrics as &dyn CheckpointLoadingMetrics
-            )
+            (proto, &DummyMetrics as &dyn CheckpointLoadingMetrics)
                 .try_into()
                 .unwrap()
         );
@@ -398,30 +437,6 @@ fn system_metadata_roundtrip_encoding() {
 
     // Set `last_generated_canister_id` to valid, but migrated canister ID.
     system_metadata.last_generated_canister_id = Some(15.into());
-    validate_roundtrip_encoding(&system_metadata);
-
-    // Observe two `BlockmakerMetrics` on successive days.
-    system_metadata.blockmaker_metrics_time_series.observe(
-        Time::from_nanos_since_unix_epoch(0),
-        &BlockmakerMetrics {
-            blockmaker: node_test_id(1),
-            failed_blockmakers: vec![node_test_id(2)],
-        },
-    );
-    system_metadata.blockmaker_metrics_time_series.observe(
-        Time::from_nanos_since_unix_epoch(0) + Duration::from_secs(24 * 3600),
-        &BlockmakerMetrics {
-            blockmaker: node_test_id(3),
-            failed_blockmakers: vec![node_test_id(4)],
-        },
-    );
-    validate_roundtrip_encoding(&system_metadata);
-
-    // Add scheduling priority for a canister.
-    system_metadata
-        .subnet_schedule
-        .get_mut(CanisterId::from_u64(1))
-        .accumulated_priority = 1.into();
     validate_roundtrip_encoding(&system_metadata);
 }
 
@@ -451,17 +466,11 @@ fn network_topology_roundtrip_encoding() {
         public_key: vec![4, 5, 6],
         nodes: [node_test_id(3)].into_iter().collect(),
         subnet_type: SubnetType::CloudEngine,
+        cooling_down: true,
         ..Default::default()
     };
 
-    let filtered_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            range(10, 19) => app_subnet_id,
-        })
-        .unwrap(),
-    );
-
-    let full_routing_table = Arc::new(
+    let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             range(10, 19) => app_subnet_id,
             range(20, 29) => engine_subnet_id,
@@ -487,43 +496,24 @@ fn network_topology_roundtrip_encoding() {
     let bitcoin_testnet_canister_id = Some(canister_test_id(100));
     let bitcoin_mainnet_canister_id = Some(canister_test_id(101));
 
-    // NetworkTopology without full_topology (non-NNS subnet).
     let network_topology = NetworkTopology::new(
-        btreemap! { app_subnet_id => app_subnet_topo.clone() },
-        filtered_routing_table.clone(),
-        canister_migrations.clone(),
-        nns_subnet_id,
-        chain_key_enabled_subnets.clone(),
-        bitcoin_testnet_canister_id,
-        bitcoin_mainnet_canister_id,
-        None,
-    );
-
-    let proto = pb::NetworkTopology::from(&network_topology);
-    let round_trip = NetworkTopology::try_from(proto).unwrap();
-    assert_eq!(network_topology, round_trip);
-
-    // NetworkTopology with full_topology (NNS subnet).
-    let network_topology_with_full = NetworkTopology::new(
-        btreemap! { app_subnet_id => app_subnet_topo.clone() },
-        filtered_routing_table,
+        btreemap! {
+            app_subnet_id => app_subnet_topo,
+            engine_subnet_id => engine_subnet_topo,
+        },
+        routing_table,
         canister_migrations,
         nns_subnet_id,
         chain_key_enabled_subnets,
         bitcoin_testnet_canister_id,
         bitcoin_mainnet_canister_id,
-        Some(FullTopology {
-            subnets: btreemap! {
-                app_subnet_id => app_subnet_topo,
-                engine_subnet_id => engine_subnet_topo,
-            },
-            routing_table: full_routing_table,
-        }),
+        Some(app_subnet_id),
+        Default::default(),
     );
 
-    let proto = pb::NetworkTopology::from(&network_topology_with_full);
+    let proto = pb::NetworkTopology::from(&network_topology);
     let round_trip = NetworkTopology::try_from(proto).unwrap();
-    assert_eq!(network_topology_with_full, round_trip);
+    assert_eq!(network_topology, round_trip);
 }
 
 #[test]
@@ -749,7 +739,9 @@ fn system_metadata_online_split() {
     system_metadata.last_generated_canister_id = Some(CANISTER_2);
     system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
     system_metadata.batch_time = current_time();
-    system_metadata.network_topology.routing_table = Arc::new(routing_table);
+    system_metadata.modify_network_topology(|network_topology| {
+        network_topology.routing_table = Arc::new(routing_table);
+    });
     system_metadata.subnet_metrics = SubnetMetrics {
         consumed_cycles_by_deleted_canisters: NominalCycles::new(2197),
         ..Default::default()
@@ -843,6 +835,282 @@ fn system_metadata_online_split() {
     assert_eq!(expected, metadata_b);
 }
 
+const SUBNET_CALL_CONTEXTS: &str = "replicated_state_subnet_call_contexts";
+
+/// Observes the replicated state metrics of `state` into a fresh registry.
+fn observe(state: &ReplicatedState) -> MetricsRegistry {
+    let registry = MetricsRegistry::new();
+    ReplicatedStateMetrics::new(&registry).observe(
+        state.metadata.own_subnet_id,
+        state,
+        0.into(),
+        &no_op_logger(),
+    );
+    registry
+}
+
+/// Tests that each subnet call type is counted under its own label value: pushing
+/// one call of a given type bumps that label value to 1 (and no other), while
+/// removing it again drops it back to 0.
+#[test]
+fn subnet_call_contexts_metric() {
+    let fresh_state = || ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    let request = || {
+        RequestBuilder::default()
+            .sender(canister_test_id(1))
+            .receiver(CanisterId::ic_00())
+            .build()
+    };
+    let call = || CanisterCall::Request(Arc::new(request()));
+    let canister_http_request_context = || CanisterHttpRequestContext {
+        request: Arc::new(request()),
+        url: "https://".to_string(),
+        max_response_bytes: None,
+        headers: Arc::new(Vec::new()),
+        body: None,
+        http_method: CanisterHttpMethod::GET,
+        transform: None,
+        time: UNIX_EPOCH,
+        replication: Replication::FullyReplicated,
+        pricing_version: PricingVersion::Legacy,
+        refund_status: RefundStatus::default(),
+        registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
+    };
+
+    // A state with no subnet calls exports a zero for every call type.
+    assert_eq!(
+        metric_vec(&[
+            (&[("type", "setup_initial_dkg")], 0),
+            (&[("type", "sign_with_threshold")], 0),
+            (&[("type", "canister_http_request")], 0),
+            (&[("type", "delivered_canister_http_request")], 0),
+            (&[("type", "reshare_chain_key")], 0),
+            (&[("type", "bitcoin_get_successors")], 0),
+            (&[("type", "bitcoin_send_transaction_internal")], 0),
+            (&[("type", "raw_rand")], 0),
+            (&[("type", "install_code")], 0),
+            (&[("type", "stop_canister")], 0),
+        ]),
+        fetch_int_gauge_vec(&observe(&fresh_state()), SUBNET_CALL_CONTEXTS)
+    );
+
+    // All the call types that are pushed and retrieved by callback ID.
+    for (call_type, context) in [
+        (
+            "setup_initial_dkg",
+            SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
+                request: request(),
+                nodes_in_target_subnet: BTreeSet::new(),
+                target_id: NiDkgTargetId::new([0_u8; 32]),
+                registry_version: RegistryVersion::from(1),
+                time: UNIX_EPOCH,
+            }),
+        ),
+        (
+            "sign_with_threshold",
+            SubnetCallContext::SignWithThreshold(SignWithThresholdContext {
+                request: Arc::new(request()),
+                args: ThresholdArguments::Ecdsa(EcdsaArguments {
+                    key_id: make_key_id(),
+                    message_hash: [0_u8; 32],
+                    pre_signature: None,
+                }),
+                derivation_path: Arc::new(vec![]),
+                batch_time: UNIX_EPOCH,
+                nonce: None,
+            }),
+        ),
+        (
+            "canister_http_request",
+            SubnetCallContext::CanisterHttpRequest(canister_http_request_context()),
+        ),
+        (
+            "reshare_chain_key",
+            SubnetCallContext::ReshareChainKey(ReshareChainKeyContext {
+                request: request(),
+                key_id: MasterPublicKeyId::Ecdsa(make_key_id()),
+                nodes: BTreeSet::new(),
+                registry_version: RegistryVersion::from(1),
+                time: UNIX_EPOCH,
+                target_id: NiDkgTargetId::new([0_u8; 32]),
+            }),
+        ),
+        (
+            "bitcoin_get_successors",
+            SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
+                request: request(),
+                payload: GetSuccessorsRequestInitial {
+                    network: Network::BitcoinMainnet,
+                    anchor: vec![1, 2, 3],
+                    processed_block_hashes: vec![],
+                },
+                time: UNIX_EPOCH,
+            }),
+        ),
+        (
+            "bitcoin_send_transaction_internal",
+            SubnetCallContext::BitcoinSendTransactionInternal(
+                BitcoinSendTransactionInternalContext {
+                    request: request(),
+                    payload: SendTransactionRequest {
+                        network: Network::BitcoinMainnet,
+                        transaction: vec![1, 2, 3],
+                    },
+                    time: UNIX_EPOCH,
+                },
+            ),
+        ),
+    ] {
+        let mut state = fresh_state();
+        assert_eq!(
+            MetricVec::new(),
+            nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+        );
+
+        let callback_id = state
+            .metadata
+            .subnet_call_context_manager
+            .push_context(context);
+        assert_eq!(
+            metric_vec(&[(&[("type", call_type)], 1)]),
+            nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+        );
+
+        assert!(
+            state
+                .metadata
+                .subnet_call_context_manager
+                .retrieve_context(callback_id, UNIX_EPOCH, &no_op_logger())
+                .is_some()
+        );
+        assert_eq!(
+            MetricVec::new(),
+            nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+        );
+    }
+
+    // Delivered canister HTTP requests are only ever moved here from
+    // `canister_http_request_contexts`, and are dropped once they time out.
+    let mut state = fresh_state();
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    state
+        .metadata
+        .subnet_call_context_manager
+        .delivered_canister_http_request_contexts
+        .insert(CallbackId::new(1), canister_http_request_context());
+    assert_eq!(
+        metric_vec(&[(&[("type", "delivered_canister_http_request")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    assert_eq!(
+        1,
+        state
+            .metadata
+            .subnet_call_context_manager
+            .time_out_delivered_canister_http_request_contexts(
+                UNIX_EPOCH + DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT
+            )
+            .len()
+    );
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+
+    // `RawRand` requests are popped off the front of the queue and executed at the
+    // beginning of every round.
+    let mut state = fresh_state();
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    state
+        .metadata
+        .subnet_call_context_manager
+        .push_raw_rand_request(request(), ExecutionRound::from(1), UNIX_EPOCH);
+    assert_eq!(
+        metric_vec(&[(&[("type", "raw_rand")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    assert!(
+        state
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .pop_front()
+            .is_some()
+    );
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+
+    // Install code calls are removed by call ID.
+    let mut state = fresh_state();
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    let call_id = state
+        .metadata
+        .subnet_call_context_manager
+        .push_install_code_call(InstallCodeCall {
+            call: call(),
+            time: UNIX_EPOCH,
+            effective_canister_id: canister_test_id(2),
+        });
+    assert_eq!(
+        metric_vec(&[(&[("type", "install_code")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    assert!(
+        state
+            .metadata
+            .subnet_call_context_manager
+            .remove_install_code_call(call_id)
+            .is_some()
+    );
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+
+    // As are stop canister calls.
+    let mut state = fresh_state();
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    let call_id = state
+        .metadata
+        .subnet_call_context_manager
+        .push_stop_canister_call(StopCanisterCall {
+            call: call(),
+            time: UNIX_EPOCH,
+            effective_canister_id: canister_test_id(2),
+        });
+    assert_eq!(
+        metric_vec(&[(&[("type", "stop_canister")], 1)]),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+    assert!(
+        state
+            .metadata
+            .subnet_call_context_manager
+            .remove_stop_canister_call(call_id)
+            .is_some()
+    );
+    assert_eq!(
+        MetricVec::new(),
+        nonzero_values(fetch_int_gauge_vec(&observe(&state), SUBNET_CALL_CONTEXTS))
+    );
+}
+
 #[test]
 fn subnet_call_contexts_deserialization() {
     let url = "https://".to_string();
@@ -858,17 +1126,20 @@ fn subnet_call_contexts_deserialization() {
         request: RequestBuilder::default()
             .sender(canister_test_id(1))
             .receiver(canister_test_id(2))
-            .build(),
+            .build_arc(),
         url: url.clone(),
         max_response_bytes: None,
-        headers: Vec::new(),
+        headers: Arc::new(Vec::new()),
         body: None,
         http_method: CanisterHttpMethod::GET,
-        transform: Some(transform.clone()),
+        transform: Some(Arc::new(transform.clone())),
         time: UNIX_EPOCH,
         replication: Replication::FullyReplicated,
         pricing_version: PricingVersion::Legacy,
         refund_status: RefundStatus::default(),
+        registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -932,7 +1203,10 @@ fn subnet_call_contexts_deserialization() {
         deserialized_http_request_context.http_method,
         CanisterHttpMethod::GET
     );
-    assert_eq!(deserialized_http_request_context.transform, Some(transform));
+    assert_eq!(
+        deserialized_http_request_context.transform,
+        Some(Arc::new(transform))
+    );
 
     // Check install code call deserialization.
     assert_eq!(
@@ -964,6 +1238,139 @@ fn subnet_call_contexts_deserialization() {
             time: UNIX_EPOCH,
         }]
     )
+}
+
+/// A `CanisterHttpRequestContext` from `canister_test_id(1)` with the given
+/// pricing version, made at `time`.
+fn canister_http_request_context(
+    pricing_version: PricingVersion,
+    time: Time,
+) -> CanisterHttpRequestContext {
+    CanisterHttpRequestContext {
+        request: RequestBuilder::default()
+            .sender(canister_test_id(1))
+            .receiver(IC_00)
+            .method_payload(vec![1, 2, 3])
+            .build_arc(),
+        url: "https://example.com".into(),
+        max_response_bytes: None,
+        headers: Arc::new(vec![]),
+        body: Some(Arc::new(vec![4, 5, 6])),
+        http_method: CanisterHttpMethod::GET,
+        transform: Some(Arc::new(Transform {
+            method_name: "transform".into(),
+            context: vec![7, 8, 9],
+        })),
+        time,
+        replication: Replication::FullyReplicated,
+        pricing_version,
+        refund_status: RefundStatus {
+            refundable_cycles: Cycles::new(13_000),
+            per_replica_allowance: Cycles::new(1_000),
+            refunded_cycles: Cycles::zero(),
+            refunding_nodes: BTreeSet::new(),
+        },
+        registry_version: RegistryVersion::from(1),
+        subnet_size: NumberOfNodes::from(13),
+        cost_schedule: CanisterCyclesCostSchedule::Normal,
+    }
+}
+
+/// Retrieving the response for a pay-as-you-go priced HTTP outcall retains the
+/// context for refund accounting; a legacy priced one is not retained. The
+/// retained copy is stamped with the delivery time, while the returned context
+/// keeps the time the request was made.
+#[test]
+fn retrieve_canister_http_context_retains_pay_as_you_go_contexts() {
+    const REQUEST_TIME: Time = UNIX_EPOCH;
+    let delivery_time = REQUEST_TIME + Duration::from_secs(7);
+
+    for (pricing_version, retained) in [
+        (PricingVersion::PayAsYouGo, true),
+        (PricingVersion::Legacy, false),
+    ] {
+        let mut manager = SubnetCallContextManager::default();
+        let context = canister_http_request_context(pricing_version, REQUEST_TIME);
+        let callback_id =
+            manager.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
+
+        match manager.retrieve_context(callback_id, delivery_time, &no_op_logger()) {
+            Some(SubnetCallContext::CanisterHttpRequest(retrieved)) => {
+                assert_eq!(context, retrieved)
+            }
+            _ => panic!("Expected a `CanisterHttpRequest` context"),
+        }
+        // The context is always removed from the in-flight contexts.
+        assert!(manager.canister_http_request_contexts.is_empty());
+
+        let delivered = manager.delivered_canister_http_request_contexts;
+        if retained {
+            // Identical to the original context, except for the `time`, which is
+            // restamped with the delivery time.
+            let expected = CanisterHttpRequestContext {
+                time: delivery_time,
+                ..context
+            };
+            assert_eq!(btreemap! { callback_id => expected }, delivered);
+        } else {
+            assert!(delivered.is_empty());
+        }
+    }
+}
+
+/// Delivered contexts are timed out (and returned along with their callback IDs)
+/// once `DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT` has elapsed since their
+/// response was delivered, and retained until then.
+#[test]
+fn time_out_delivered_canister_http_request_contexts() {
+    let mut manager = SubnetCallContextManager::default();
+    // Two contexts, both made at `UNIX_EPOCH` but delivered 1 second apart. The
+    // retention timeout runs from the delivery time, so the delivered contexts
+    // carry that time rather than the request time.
+    let contexts: Vec<_> = [0, 1]
+        .iter()
+        .map(|i| {
+            let delivery_time = UNIX_EPOCH + Duration::from_secs(*i);
+            let context = canister_http_request_context(PricingVersion::PayAsYouGo, UNIX_EPOCH);
+            let callback_id =
+                manager.push_context(SubnetCallContext::CanisterHttpRequest(context.clone()));
+            manager.retrieve_context(callback_id, delivery_time, &no_op_logger());
+            (
+                callback_id,
+                CanisterHttpRequestContext {
+                    time: delivery_time,
+                    ..context
+                },
+            )
+        })
+        .collect();
+    assert_eq!(2, manager.delivered_canister_http_request_contexts.len());
+
+    // One nanosecond before the first context times out, nothing is timed out.
+    let before =
+        UNIX_EPOCH + (DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT - Duration::from_nanos(1));
+    assert!(
+        manager
+            .time_out_delivered_canister_http_request_contexts(before)
+            .is_empty()
+    );
+    assert_eq!(2, manager.delivered_canister_http_request_contexts.len());
+
+    // Exactly at its timeout, only the first context is timed out.
+    let at_first_timeout = UNIX_EPOCH + DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
+    assert_eq!(
+        vec![contexts[0].clone()],
+        manager.time_out_delivered_canister_http_request_contexts(at_first_timeout)
+    );
+    assert_eq!(1, manager.delivered_canister_http_request_contexts.len());
+
+    // And a second later, the second one.
+    let at_second_timeout = at_first_timeout + Duration::from_secs(1);
+    assert_eq!(
+        vec![contexts[1].clone()],
+        manager.time_out_delivered_canister_http_request_contexts(at_second_timeout)
+    );
+    assert!(manager.delivered_canister_http_request_contexts.is_empty());
 }
 
 pub fn generate_pre_signature(
@@ -1138,10 +1545,9 @@ fn sign_with_threshold_context_roundtrip() {
             contexts.insert(
                 CallbackId::new(id),
                 SignWithThresholdContext {
-                    request: RequestBuilder::new().build(),
+                    request: RequestBuilder::new().build_arc(),
                     args,
                     derivation_path: Arc::new(vec![]),
-                    deprecated_pseudo_random_id: Some([1; 32]),
                     batch_time: UNIX_EPOCH,
                     nonce: Some([3; 32]),
                 },
@@ -1203,11 +1609,11 @@ fn network_topology_ecdsa_subnets() {
 }
 
 #[test]
-fn network_topology_route_uses_filtered_topology() {
+fn network_topology_routing() {
     let subnet_a = subnet_test_id(1);
     let subnet_b = subnet_test_id(2);
 
-    // The filtered routing table only contains subnet_a's range.
+    // The routing table only contains subnet_a's range.
     let routing_table = Arc::new(
         RoutingTable::try_from(btreemap! {
             CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
@@ -1215,8 +1621,7 @@ fn network_topology_route_uses_filtered_topology() {
         .unwrap(),
     );
 
-    // The filtered subnets map only contains subnet_a.
-    // subnet_b exists in the network but is not visible to this subnet.
+    // The subnets map only contains subnet_a.
     let network_topology = NetworkTopology {
         subnets: btreemap! {
             subnet_a => SubnetTopology::default(),
@@ -1229,101 +1634,20 @@ fn network_topology_route_uses_filtered_topology() {
 
     // --- Canister ID routing ---
 
-    // Canister on subnet_a: resolvable via the filtered routing table.
+    // Canister on subnet_a: resolvable via the routing table.
     assert_eq!(
         network_topology.route(canister_test_id(50).get()),
         Some(subnet_a),
     );
-    // Canister 150 is not in the filtered routing table at all.
+    // Canister 150 is not in the routing table at all.
     assert_eq!(network_topology.route(canister_test_id(150).get()), None);
 
     // --- Subnet ID routing ---
 
-    // subnet_a is in the filtered subnets map.
+    // subnet_a is in the subnets map.
     assert_eq!(network_topology.route(subnet_a.get()), Some(subnet_a));
-    // subnet_b is NOT in the filtered subnets map.
+    // subnet_b is NOT in the subnets map.
     assert_eq!(network_topology.route(subnet_b.get()), None);
-}
-
-#[test]
-fn subnets_for_certification_falls_back_to_filtered() {
-    let subnet_a = subnet_test_id(1);
-
-    let routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-        })
-        .unwrap(),
-    );
-
-    let network_topology = NetworkTopology {
-        subnets: btreemap! {
-            subnet_a => SubnetTopology::default(),
-        },
-        routing_table: routing_table.clone(),
-        ..Default::default()
-    };
-
-    // Without full_topology, subnets_for_certification returns the filtered map.
-    assert_eq!(
-        network_topology.subnets_for_certification(),
-        network_topology.subnets()
-    );
-    assert_eq!(network_topology.routing_table(), &routing_table);
-    assert_eq!(
-        network_topology.routing_table_for_certification(),
-        network_topology.routing_table()
-    );
-}
-
-#[test]
-fn subnets_for_certification_returns_full_topology_when_set() {
-    use crate::metadata_state::testing::NetworkTopologyTesting;
-
-    let subnet_a = subnet_test_id(1);
-    let subnet_b = subnet_test_id(2); // e.g., a cloud engine
-
-    let full_subnets = btreemap! {
-        subnet_a => SubnetTopology::default(),
-        subnet_b => SubnetTopology::default(),
-    };
-    let full_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-            CanisterIdRange { start: CanisterId::from(100_u64), end: CanisterId::from(199_u64) } => subnet_b,
-        })
-        .unwrap(),
-    );
-
-    let filtered_subnets = btreemap! {
-        subnet_a => SubnetTopology::default(),
-    };
-    let filtered_routing_table = Arc::new(
-        RoutingTable::try_from(btreemap! {
-            CanisterIdRange { start: CanisterId::from(0_u64), end: CanisterId::from(99_u64) } => subnet_a,
-        })
-        .unwrap(),
-    );
-
-    let mut network_topology = NetworkTopology {
-        subnets: filtered_subnets.clone(),
-        routing_table: filtered_routing_table.clone(),
-        ..Default::default()
-    };
-    network_topology.set_full_topology(Some(FullTopology {
-        subnets: full_subnets.clone(),
-        routing_table: full_routing_table.clone(),
-    }));
-
-    // subnets() and routing_table() return the filtered view.
-    assert_eq!(network_topology.subnets(), &filtered_subnets);
-    assert_eq!(network_topology.routing_table(), &filtered_routing_table);
-    // subnets_for_certification() and routing_table_for_certification() return the full view.
-    assert_eq!(network_topology.subnets_for_certification(), &full_subnets);
-    assert_eq!(
-        network_topology.routing_table_for_certification(),
-        &full_routing_table
-    );
 }
 
 /// Test fixture that will produce an ingress status of type completed or failed,
@@ -1358,6 +1682,21 @@ fn test_status_done(i: u64) -> IngressStatus {
         time: Time::from_nanos_since_unix_epoch(i),
         state: IngressState::Done,
     }
+}
+
+#[test]
+#[should_panic(expected = "Attempted to record `IngressStatus::Unknown`")]
+fn ingress_history_insert_unknown_status_panics() {
+    let mut ingress_history = IngressHistoryState::new();
+    // `IngressStatus::Unknown` stands for the absence of an entry, so recording one
+    // is a bug.
+    ingress_history.insert(
+        message_test_id(1),
+        IngressStatus::Unknown,
+        UNIX_EPOCH,
+        NumBytes::from(u64::MAX),
+        |_| {},
+    );
 }
 
 #[test]
@@ -1460,7 +1799,6 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
             state: IngressState::Received,
         },
         test_status_done(4),
-        IngressStatus::Unknown,
     ];
     statuses.into_iter().enumerate().for_each(|(i, status)| {
         ingress_history_limit.insert(
@@ -1502,7 +1840,7 @@ fn ingress_history_respects_limits() {
     let run_test = |num_statuses, max_num_terminal| {
         let mut ingress_history = IngressHistoryState::default();
 
-        assert_eq!(ingress_history.memory_usage, 0);
+        assert_eq!(ingress_history.stats.memory_usage, 0);
 
         let terminal_size =
             NumBytes::from(max_num_terminal * test_status_terminal(0).payload_bytes() as u64);
@@ -2120,6 +2458,82 @@ fn stream_discard_signals_before_drops_all_signals() {
 }
 
 #[test]
+fn stream_next_reject_signal_index() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+
+    // With no reject signals, `None` is returned for any `from_index`.
+    assert_eq!(None, stream.next_reject_signal_index(0.into()));
+    assert_eq!(None, stream.next_reject_signal_index(153.into()));
+
+    stream.reject_signals = VecDeque::from([
+        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::QueueFull, 139.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 142.into()),
+    ]);
+
+    // Before the first reject signal: the first reject signal.
+    assert_eq!(Some(138.into()), stream.next_reject_signal_index(0.into()));
+    assert_eq!(
+        Some(138.into()),
+        stream.next_reject_signal_index(137.into())
+    );
+    // At a reject signal: that same reject signal.
+    assert_eq!(
+        Some(138.into()),
+        stream.next_reject_signal_index(138.into())
+    );
+    assert_eq!(
+        Some(139.into()),
+        stream.next_reject_signal_index(139.into())
+    );
+    assert_eq!(
+        Some(142.into()),
+        stream.next_reject_signal_index(142.into())
+    );
+    // Between reject signals: the following reject signal.
+    assert_eq!(
+        Some(142.into()),
+        stream.next_reject_signal_index(140.into())
+    );
+    // Past all reject signals: `None`.
+    assert_eq!(None, stream.next_reject_signal_index(143.into()));
+    assert_eq!(None, stream.next_reject_signal_index(153.into()));
+}
+
+#[test]
+fn stream_has_reject_signal_between() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+    stream.reject_signals = VecDeque::from([
+        RejectSignal::new(RejectReason::CanisterMigrating, 138.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 142.into()),
+    ]);
+
+    // Inclusive of `from`, exclusive of `to`.
+    assert!(stream.has_reject_signal_between(138.into(), 139.into()));
+    assert!(!stream.has_reject_signal_between(137.into(), 138.into()));
+    // Between reject signals.
+    assert!(!stream.has_reject_signal_between(139.into(), 142.into()));
+    assert!(stream.has_reject_signal_between(139.into(), 143.into()));
+    // Empty ranges.
+    assert!(!stream.has_reject_signal_between(138.into(), 138.into()));
+    assert!(!stream.has_reject_signal_between(142.into(), 0.into()));
+    // Past all reject signals.
+    assert!(!stream.has_reject_signal_between(143.into(), 153.into()));
+}
+
+#[test]
 fn stream_pushing_signals_increments_signals_end() {
     let mut stream = generate_stream(
         MessageConfig {
@@ -2179,7 +2593,6 @@ fn stream_roundtrip_encoding() {
 
     let mut stream = Stream::with_signals(
         messages,
-        130.into(),
         153.into(),
         [RejectSignal::new(
             RejectReason::CanisterMigrating,
@@ -2201,7 +2614,6 @@ fn deserializing_stream_fails_for_bad_signals() {
     let stream = pb_queues::Stream {
         messages_begin: 0,
         messages: Vec::new(),
-        signals_begin: 150,
         signals_end: 153,
         reject_signals: Vec::new(),
         reverse_stream_flags: None,
@@ -2246,15 +2658,6 @@ fn deserializing_stream_fails_for_bad_signals() {
         "reject signals not strictly sorted, received [151, 150]",
     );
 
-    // Deserializing a stream with reject signals before `signals_begin` should fail.
-    assert_invalid_reject_signals(
-        vec![pb_queues::RejectSignal {
-            reason: 1,
-            index: 149,
-        }],
-        "first reject signal RejectSignal { reason: CanisterMigrating, index: 149 } before signals_begin 150",
-    );
-
     // Deserializing a stream with reject signals after `signals_end` should fail.
     assert_invalid_reject_signals(
         vec![pb_queues::RejectSignal {
@@ -2263,14 +2666,6 @@ fn deserializing_stream_fails_for_bad_signals() {
         }],
         "reject signals not strictly sorted, received [153, 153]",
     );
-
-    let bad_stream = pb_queues::Stream {
-        signals_begin: 153,
-        signals_end: 150,
-        ..stream
-    };
-    let deserialized_result: Result<Stream, _> = bad_stream.try_into();
-    assert_matches!(deserialized_result, Err(ProxyDecodeError::Other(err_msg)) if err_msg == "signals_begin 153 after signals_end 150");
 }
 
 #[test]
@@ -2289,7 +2684,7 @@ fn compatibility_for_reject_reason() {
         RejectReason::iter()
             .map(|reason| reason as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7]
+        [1, 2, 3, 4, 5, 6, 7, 8]
     );
 }
 
@@ -2380,26 +2775,182 @@ fn stream_responses_tracking() {
 
 #[test]
 fn consumed_cycles_total_calculates_the_right_amount() {
+    // Each entry gets a distinct power of two so that the resulting total is a
+    // bitmask: any use case that is miscategorized (added when it should be
+    // skipped, or vice versa) changes the total by a unique amount that cannot
+    // be masked by other entries cancelling out.
     let mut consumed_cycles_by_use_case = BTreeMap::new();
-    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(5));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(12));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(30));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::new(100));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::new(50));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::new(40));
-    consumed_cycles_by_use_case.insert(CyclesUseCase::NonConsumed, NominalCycles::new(10));
+    // Covered by the deleted canisters scalar metric below; must not be added to
+    // the total again (otherwise the cycles consumed by deleted canisters would
+    // be double counted).
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
+    // Subnet-level outcall use cases; added to the total.
+    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(2));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(4));
+    // Canister-level use cases that only ever enter the map when a canister is
+    // deleted; already covered by the deleted canisters scalar, so not added to
+    // the total.
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Memory, NominalCycles::new(8));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::ComputeAllocation, NominalCycles::new(16));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::IngressInduction, NominalCycles::new(32));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Instructions, NominalCycles::new(64));
+    consumed_cycles_by_use_case.insert(
+        CyclesUseCase::RequestAndResponseTransmission,
+        NominalCycles::new(128),
+    );
+    consumed_cycles_by_use_case.insert(CyclesUseCase::Uninstall, NominalCycles::new(256));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::CanisterCreation, NominalCycles::new(512));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::BurnedCycles, NominalCycles::new(1024));
+    // Subnet-level use cases not covered by any scalar metric; these are added
+    // to the total.
+    consumed_cycles_by_use_case.insert(CyclesUseCase::SchnorrOutcalls, NominalCycles::new(2048));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::VetKd, NominalCycles::new(4096));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DroppedMessages, NominalCycles::new(8192));
+
+    // Every use case must be exercised above, so that adding a new variant
+    // forces this test (and the categorization in `consumed_cycles_total`) to
+    // be revisited.
+    for use_case in CyclesUseCase::iter() {
+        assert!(
+            consumed_cycles_by_use_case.contains_key(&use_case),
+            "use case {use_case:?} is not covered by this test"
+        );
+    }
 
     let subnet_metrics = SubnetMetrics {
-        consumed_cycles_by_deleted_canisters: NominalCycles::new(10),
-        consumed_cycles_http_outcalls: NominalCycles::new(20),
-        consumed_cycles_ecdsa_outcalls: NominalCycles::new(30),
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(16384),
         consumed_cycles_by_use_case,
         ..Default::default()
     };
 
+    // 16384 (deleted canisters) + 2 (HTTP outcalls) + 4 (ECDSA outcalls)
+    // + 2048 (Schnorr outcalls) + 4096 (VetKd) + 8192 (dropped messages).
     assert_eq!(
         subnet_metrics.consumed_cycles_total(),
-        NominalCycles::new(250)
+        NominalCycles::new(30726)
+    );
+
+    // The legacy computation additionally sums the per-use-case entries that a
+    // deleted canister contributes to the map (already covered by the deleted
+    // canisters scalar), hence the double counting. On top of the 30726 from
+    // the fixed `consumed_cycles_total` above:
+    // 30726 + 8 (memory) + 16 (compute allocation) + 32 (ingress induction)
+    // + 64 (instructions) + 128 (request and response transmission)
+    // + 256 (uninstall) + 512 (canister creation) + 1024 (burned cycles).
+    assert_eq!(
+        subnet_metrics.consumed_cycles_total_v28(),
+        NominalCycles::new(32766)
+    );
+}
+
+/// The `replicated_state_consumed_cycles_since_replica_started` gauge is set in
+/// `ReplicatedStateMetrics::observe` from
+/// [`SubnetMetrics::consumed_cycles_total_including_canisters`]. This test
+/// exercises every subnet-level use case that contributes to the total, so that
+/// omitting any of them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use
+/// cases once were) would change the reported value and fail the assertion, plus
+/// the canisters' part of the total. Distinct powers of two are used so that a
+/// missing contribution is always detectable in the total.
+#[test]
+fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
+    // `DeletedCanisters` (the leftover balances of deleted canisters) is already
+    // included in the `consumed_cycles_by_deleted_canisters` scalar below, which
+    // additionally covers the cycles those canisters had consumed; so the gauge
+    // counts the scalar and skips this entry. The scalar (64) is set higher than
+    // the entry (1), as for a deleted canister that consumed 63 cycles and had 1
+    // cycle left, so that counting the entry instead of (or on top of) the scalar
+    // would change the total. The remaining subnet-level use cases live only in
+    // the map.
+    let mut consumed_cycles_by_use_case = BTreeMap::new();
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::new(1));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::ECDSAOutcalls, NominalCycles::new(2));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::HTTPOutcalls, NominalCycles::new(4));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::SchnorrOutcalls, NominalCycles::new(8));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::VetKd, NominalCycles::new(16));
+    consumed_cycles_by_use_case.insert(CyclesUseCase::DroppedMessages, NominalCycles::new(32));
+
+    // The canister-level use cases are also present in the by-use-case map (in
+    // production they end up there via deleted canisters), but the gauge derives
+    // their contribution from the canisters' part of the stored aggregate and the
+    // `consumed_cycles_by_deleted_canisters` scalar rather than from the map.
+    // Insert them with a large value to ensure they are *not* double-counted
+    // into the gauge total from the map.
+    for use_case in [
+        CyclesUseCase::Memory,
+        CyclesUseCase::ComputeAllocation,
+        CyclesUseCase::IngressInduction,
+        CyclesUseCase::Instructions,
+        CyclesUseCase::RequestAndResponseTransmission,
+        CyclesUseCase::Uninstall,
+        CyclesUseCase::CanisterCreation,
+        CyclesUseCase::BurnedCycles,
+    ] {
+        consumed_cycles_by_use_case.insert(use_case, NominalCycles::new(1024));
+    }
+
+    let mut subnet_metrics = SubnetMetrics {
+        consumed_cycles_by_deleted_canisters: NominalCycles::new(64),
+        consumed_cycles_by_use_case,
+        ..Default::default()
+    };
+    // The canisters' monotonic part only feeds the monotonic total, never the
+    // gauge.
+    subnet_metrics.refresh_consumed_cycles(NominalCycles::new(128), NominalCycles::new(256));
+
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    state.metadata.subnet_metrics = subnet_metrics;
+
+    let registry = MetricsRegistry::new();
+    let metrics = ReplicatedStateMetrics::new(&registry);
+    metrics.observe(
+        state.metadata.own_subnet_id,
+        &state,
+        Height::new(0),
+        &no_op_logger(),
+    );
+
+    // Deleted canisters (64) + ECDSA (2) + HTTP (4) + Schnorr (8) + VetKd (16)
+    // + dropped messages (32) + the canisters' part (128) = 254. The
+    // canister-level use cases inserted into the map above (each worth 1024)
+    // must not appear in the total.
+    let gauge = fetch_gauge(
+        &registry,
+        "replicated_state_consumed_cycles_since_replica_started",
+    )
+    .unwrap();
+    assert_eq!(gauge, 254.0);
+
+    // The monotonic total shares the subnet-level part (126) but adds the
+    // canisters' monotonic part (256) instead.
+    assert_eq!(
+        state
+            .metadata
+            .subnet_metrics
+            .consumed_cycles_total_including_canisters_monotonic(),
+        NominalCycles::new(382)
+    );
+}
+
+#[test]
+fn subnet_metrics_round_instructions_total_decodes_as_zero_when_absent() {
+    let populated = SubnetMetrics {
+        round_instructions_total: 42,
+        ..Default::default()
+    };
+    let proto = pb_metadata::SubnetMetrics::from(&populated);
+    assert_eq!(proto.round_instructions_total, Some(42));
+
+    // Checkpoints written before the field existed carry no field 13, and must
+    // still load.
+    let without_field = pb_metadata::SubnetMetrics {
+        round_instructions_total: None,
+        ..proto
+    };
+    assert_eq!(
+        SubnetMetrics::try_from(without_field)
+            .unwrap()
+            .round_instructions_total,
+        0
     );
 }
 
@@ -2497,7 +3048,7 @@ fn blockmaker_metrics_time_series_check_observe_works() {
             .is_none()
     );
 
-    // Check `observe()` does nothing with a batch time before the last obseration.
+    // Check `observe()` does nothing with a batch time before the last observation.
     let metrics_before = metrics.clone();
     metrics.observe(
         batch_time,
@@ -2843,7 +3394,7 @@ fn compatibility_for_cycles_use_case() {
         CyclesUseCase::iter()
             .map(|x| x as i32)
             .collect::<Vec<i32>>(),
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15]
     );
 }
 
@@ -2918,4 +3469,120 @@ fn blockmaker_metrics_check_soft_invariants(
     }
 
     prop_assert!(metrics.check_soft_invariants().is_ok());
+}
+
+fn make_network_topology_with_subnet(
+    subnet_id: SubnetId,
+    subnet_type: SubnetType,
+    sev_enabled: bool,
+) -> NetworkTopology {
+    let subnet_topology = SubnetTopology {
+        subnet_type,
+        subnet_features: SubnetFeatures {
+            sev_enabled,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    NetworkTopology {
+        subnets: btreemap! { subnet_id => subnet_topology },
+        ..Default::default()
+    }
+}
+
+#[test]
+fn network_topology_is_cooling_down() {
+    let cooling_down_subnet_id = subnet_test_id(1);
+    let other_subnet_id = subnet_test_id(2);
+    let unknown_subnet_id = subnet_test_id(3);
+
+    let network_topology = NetworkTopology {
+        subnets: btreemap! {
+            cooling_down_subnet_id => SubnetTopology {
+                cooling_down: true,
+                ..Default::default()
+            },
+            other_subnet_id => SubnetTopology::default(),
+        },
+        ..Default::default()
+    };
+
+    assert!(network_topology.is_cooling_down(&cooling_down_subnet_id));
+    assert!(!network_topology.is_cooling_down(&other_subnet_id));
+    // An unknown subnet is not considered to be cooling down.
+    assert!(!network_topology.is_cooling_down(&unknown_subnet_id));
+}
+
+#[test]
+fn network_topology_application_sev_disabled_uses_default_reference_subnet_size() {
+    use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
+    let subnet_id = subnet_test_id(1);
+    let topology = make_network_topology_with_subnet(subnet_id, SubnetType::Application, false);
+    assert_eq!(
+        topology.get_reference_subnet_size(&subnet_id),
+        Some(DEFAULT_REFERENCE_SUBNET_SIZE)
+    );
+}
+
+#[test]
+fn network_topology_application_sev_enabled_uses_sev_reference_subnet_size() {
+    use ic_config::subnet_config::SEV_REFERENCE_SUBNET_SIZE;
+    let subnet_id = subnet_test_id(1);
+    let topology = make_network_topology_with_subnet(subnet_id, SubnetType::Application, true);
+    assert_eq!(
+        topology.get_reference_subnet_size(&subnet_id),
+        Some(SEV_REFERENCE_SUBNET_SIZE)
+    );
+}
+
+#[test]
+fn network_topology_verified_application_sev_enabled_uses_sev_reference_subnet_size() {
+    use ic_config::subnet_config::SEV_REFERENCE_SUBNET_SIZE;
+    let subnet_id = subnet_test_id(1);
+    let topology =
+        make_network_topology_with_subnet(subnet_id, SubnetType::VerifiedApplication, true);
+    assert_eq!(
+        topology.get_reference_subnet_size(&subnet_id),
+        Some(SEV_REFERENCE_SUBNET_SIZE)
+    );
+}
+
+#[test]
+fn network_topology_system_ignores_sev_flag() {
+    use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
+    let subnet_id = subnet_test_id(1);
+    let topology_sev = make_network_topology_with_subnet(subnet_id, SubnetType::System, true);
+    let topology_no_sev = make_network_topology_with_subnet(subnet_id, SubnetType::System, false);
+    assert_eq!(
+        topology_sev.get_reference_subnet_size(&subnet_id),
+        Some(DEFAULT_REFERENCE_SUBNET_SIZE)
+    );
+    assert_eq!(
+        topology_no_sev.get_reference_subnet_size(&subnet_id),
+        Some(DEFAULT_REFERENCE_SUBNET_SIZE)
+    );
+}
+
+#[test]
+fn network_topology_reference_subnet_size_is_never_zero() {
+    use ic_config::subnet_config::{DEFAULT_REFERENCE_SUBNET_SIZE, SEV_REFERENCE_SUBNET_SIZE};
+    // reference_subnet_size is used as a divisor in scale_cost; it must never be zero.
+    assert_ne!(DEFAULT_REFERENCE_SUBNET_SIZE, 0);
+    assert_ne!(SEV_REFERENCE_SUBNET_SIZE, 0);
+
+    let subnet_id = subnet_test_id(1);
+    for subnet_type in [
+        SubnetType::Application,
+        SubnetType::VerifiedApplication,
+        SubnetType::System,
+    ] {
+        for sev_enabled in [false, true] {
+            let topology = make_network_topology_with_subnet(subnet_id, subnet_type, sev_enabled);
+            assert_ne!(
+                topology.get_reference_subnet_size(&subnet_id).unwrap(),
+                0,
+                "reference_subnet_size must not be zero for {subnet_type:?} sev={sev_enabled}"
+            );
+        }
+    }
 }

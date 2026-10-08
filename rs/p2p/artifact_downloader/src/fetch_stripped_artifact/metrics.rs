@@ -1,5 +1,5 @@
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets_with_zero};
-use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGaugeVec};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGaugeVec};
 
 use crate::fetch_stripped_artifact::types::StrippedMessageType;
 
@@ -14,6 +14,7 @@ pub(super) struct FetchStrippedConsensusArtifactMetrics {
     pub(super) total_block_assembly_duration: Histogram,
     pub(super) active_stripped_message_downloads: IntGaugeVec,
     pub(super) total_stripped_message_download_errors: IntCounterVec,
+    pub(super) aborted_block_assemblies: IntCounter,
 }
 
 #[derive(Copy, Clone)]
@@ -69,6 +70,11 @@ impl FetchStrippedConsensusArtifactMetrics {
                     missing stripped messages",
                     &["error", STRIPPED_MESSAGE_TYPE_LABEL],
             ),
+            aborted_block_assemblies: metrics_registry.int_counter(
+                    "ic_stripped_consensus_artifact_aborted_block_assemblies_total",
+                    "The total number of block assemblies aborted because the block proposal \
+                    became unwanted before all of its missing stripped messages were downloaded",
+            ),
         }
     }
 
@@ -91,6 +97,10 @@ impl FetchStrippedConsensusArtifactMetrics {
         self.stripped_messages_in_a_block_count
             .with_label_values(&[source.as_str(), message_type.as_str()])
             .observe(count as f64)
+    }
+
+    pub(super) fn report_aborted_block_assembly(&self) {
+        self.aborted_block_assemblies.inc()
     }
 
     pub(super) fn report_download_error(&self, label: &str, message_type: StrippedMessageType) {

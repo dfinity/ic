@@ -29,6 +29,11 @@ pub struct IcConfigTemplate {
     pub domain_name: String,
     pub node_reward_type: String,
     pub malicious_behavior: String,
+    /// Already JSON-encoded: either `null` or a quoted string.
+    pub extra_api_boundary_node_trust_anchors_pem: String,
+    /// IPv6 address of the peer Guest VM (the Upgrade VM inside the Default VM
+    /// and vice versa).
+    pub peer_guest_vm_address: Option<Ipv6Addr>,
 }
 
 /// Generate IC configuration from template and guestos config
@@ -186,6 +191,18 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         .map(|mb| serde_json::to_string(mb).unwrap_or_default())
         .unwrap_or_default();
 
+    let extra_api_boundary_node_trust_anchors_pem = match &guestos_config
+        .guestos_settings
+        .guestos_dev_settings
+        .extra_api_boundary_node_trust_anchors_pem
+    {
+        // A PEM spans several lines, so it has to be JSON-encoded rather than
+        // interpolated verbatim.
+        Some(pem) => serde_json::to_string(pem)
+            .context("Failed to encode the extra API boundary node trust anchors")?,
+        None => "null".to_string(),
+    };
+
     Ok(IcConfigTemplate {
         // TODO https://dfinity.atlassian.net/browse/NODE-1909
         ipv6_prefix,
@@ -199,6 +216,8 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<IcConfigTemplate> {
         domain_name,
         node_reward_type,
         malicious_behavior: with_default(malicious_behavior, "null"),
+        extra_api_boundary_node_trust_anchors_pem,
+        peer_guest_vm_address: guestos_config.upgrade_config.peer_guest_vm_address,
     })
 }
 
@@ -328,6 +347,12 @@ mod tests {
         assert!(!output_content.contains("{{ query_stats_epoch_length }}"));
         assert!(!output_content.contains("{{ node_reward_type }}"));
         assert!(!output_content.contains("{{ jaeger_addr }}"));
+        assert!(!output_content.contains("{{ peer_guest_vm_address }}"));
+
+        // Without a peer Guest VM address in the config, the disk encryption
+        // key exchange port rule is omitted entirely, leaving the port closed.
+        // (19522 still appears in the ic-http-adapter output blacklist.)
+        assert!(!output_content.contains("tcp dport { 19522 }"));
 
         // Verify that the expected values were substituted
         assert!(output_content.contains("public_address: \"\""));
@@ -367,6 +392,21 @@ mod tests {
 
         let tracing_config = parsed_config.tracing.as_ref().unwrap();
         assert_eq!(tracing_config.jaeger_addr, Some("".to_string()));
+    }
+
+    #[test]
+    fn test_template_substitution_with_peer_guest_vm_address() {
+        let mut guestos_config = create_test_guestos_config();
+        guestos_config.upgrade_config.peer_guest_vm_address =
+            Some("2001:db8::6802:94ff:feef:2978".parse().unwrap());
+        let template = get_config_vars(&guestos_config).unwrap();
+        let output_content = render_ic_config(template).unwrap();
+
+        // With a peer Guest VM address in the config, the disk encryption key
+        // exchange port is opened to exactly that address.
+        assert!(output_content.contains(
+            "ip6 saddr { 2001:db8::6802:94ff:feef:2978 } ct state { new } tcp dport { 19522 } accept"
+        ));
     }
 
     fn create_test_guestos_config() -> GuestOSConfig {

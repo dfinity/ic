@@ -8,6 +8,7 @@ import "ic_nervous_system/pb/v1/nervous_system.proto";
 import "ic_nns_common/pb/v1/types.proto";
 import "ic_sns_swap/pb/v1/swap.proto";
 import "registry/replica_version/v1/replica_version.proto";
+import "types/v1/management_canister_types.proto";
 
 // The entity that owns the nodes that run the network.
 //
@@ -324,13 +325,14 @@ enum NnsFunction {
   // the Wasm module of the target canister, the proposal can also set the
   // authorization information and the allocations.
   NNS_FUNCTION_NNS_CANISTER_UPGRADE = 4;
-  // A proposal to bless a new version to which the replicas can be
+  // (obsolete) A proposal to bless a new version to which the replicas can be
   // upgraded.
   // The proposal registers a replica version (identified by the hash of the
   // installation image) in the registry. Besides creating a record for that
   // version, the proposal also appends that version to the list of "blessed
   // versions" that can be installed on a subnet. By itself, this proposal
   // does not effect any upgrade.
+  // Superseded by ReviseElectedGuestosVersions.
   NNS_FUNCTION_BLESS_REPLICA_VERSION = 5;
   // Update a subnet's recovery CUP (used to recover subnets that have stalled).
   // Nodes that find a recovery CUP for their subnet will load that CUP from
@@ -427,16 +429,16 @@ enum NnsFunction {
   NNS_FUNCTION_UPDATE_SNS_WASM_SNS_SUBNET_IDS = 34;
   // Update the SNS-wasm canister's list of allowed principals. This list guards which principals can deploy an SNS.
   NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS = 35;
-  // A proposal to retire previously elected and unused replica versions.
+  // (obsolete) A proposal to retire previously elected and unused replica versions.
   // The specified versions are removed from the registry and the "blessed versions" record.
   // This ensures that the replica cannot upgrade to these versions anymore.
+  // Superseded by ReviseElectedGuestosVersions.
   NNS_FUNCTION_RETIRE_REPLICA_VERSION = 36;
   // Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
   NNS_FUNCTION_INSERT_SNS_WASM_UPGRADE_PATH_ENTRIES = 37;
   // A proposal to change the set of elected GuestOS versions. The version to elect (identified by
-  // the hash of the installation image) is added to the registry. Besides creating a record for
-  // that version, the proposal also appends that version to the list of elected versions that can
-  // be installed on nodes of a subnet. Only elected GuestOS versions can be deployed.
+  // the commit hash of the installation image) is added to the registry. This version can then be
+  // used to upgrade nodes.
   NNS_FUNCTION_REVISE_ELECTED_GUESTOS_VERSIONS = 38;
 
   NNS_FUNCTION_BITCOIN_SET_CONFIG = 39;
@@ -501,10 +503,20 @@ enum NnsFunction {
   NNS_FUNCTION_SPLIT_SUBNET = 56;
 
   // Delete a subnet. The subnet record, catch-up package, threshold signing key
-  // and routing table entries are removed from the registry, and the subnet's
-  // nodes become unassigned.
-  // Currently limited to CloudEngine subnets.
+  // and routing table entries are removed from the registry, the subnet is
+  // removed from the subnet list, and the subnet's nodes become unassigned.
+  // System subnets (e.g. the NNS or II subnet) cannot be deleted.
   NNS_FUNCTION_DELETE_SUBNET = 57;
+
+  // Set or unset the default subnet to which `SetupInitialDKG` management
+  // canister calls are routed when no subnet is specified explicitly. If unset,
+  // `SetupInitialDKG` requests without an explicit subnet id are routed to the
+  // calling subnet (NNS).
+  NNS_FUNCTION_SET_DEFAULT_INITIAL_DKG_SUBNET = 58;
+
+  // Merge a subnet into another subnet: in the routing table, reassigns all
+  // canister ranges hosted by the source subnet to the destination subnet.
+  NNS_FUNCTION_MERGE_SUBNETS = 59;
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -723,6 +735,8 @@ message Proposal {
     LoadCanisterSnapshot load_canister_snapshot = 33;
     // Create a canister in a (possibly non-NNS) subnet and install code into it.
     CreateCanisterAndInstallCode create_canister_and_install_code = 34;
+    // Change what replica version(s) are run by Cloud Engines.
+    UpdateStandardEngineReplicaVersion update_standard_engine_replica_version = 35;
   }
 }
 
@@ -1261,11 +1275,16 @@ message ProposalData {
 message SuccessfulProposalExecutionValue {
   oneof proposal_type {
     CreateCanisterAndInstallCodeOk create_canister_and_install_code = 1;
+    TakeCanisterSnapshotOk take_canister_snapshot = 2;
   }
 }
 
 message CreateCanisterAndInstallCodeOk {
   ic_base_types.pb.v1.PrincipalId canister_id = 1;
+}
+
+message TakeCanisterSnapshotOk {
+  bytes snapshot_id = 1;
 }
 
 // This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
@@ -1921,6 +1940,23 @@ message InstallCode {
   optional bytes wasm_module_hash = 6;
   // The hash of the arg to pass to the canister. Calculated from `arg` when proposal is created.
   optional bytes arg_hash = 7;
+
+  message CanisterUpgradeOptions {
+    // Whether to skip the canister's pre_upgrade hook. This would generally be
+    // used in emergencies. See the corresponding field in the Management
+    // canister API.
+    optional bool skip_pre_upgrade = 1;
+
+    // Whether to retain (keep) or drop (replace) the canister's Wasm main
+    // memory across the upgrade. If the old WASM had a custom section named
+    // "icp:private enhanced-orthogonal-persistence", then this must be set
+    // (otherwise, the Management canister will block the upgrade). If keep is
+    // used here, then the new WASM must also have the same custom section.
+    optional types.v1.WasmMemoryPersistence wasm_memory_persistence = 2;
+  }
+
+  // Options that only apply when install_mode is upgrade.
+  optional CanisterUpgradeOptions canister_upgrade_options = 8;
 }
 
 message StopOrStartCanister {
@@ -1973,6 +2009,7 @@ message CanisterSettings {
   optional uint64 wasm_memory_limit = 6;
   optional uint64 wasm_memory_threshold = 7;
   optional SnapshotVisibility snapshot_visibility = 8;
+  optional uint64 reserved_cycles_limit = 9;
 }
 
 message UpdateCanisterSettings {
@@ -1987,12 +2024,23 @@ message FulfillSubnetRentalRequest {
   ic_base_types.pb.v1.PrincipalId user = 1;
   repeated ic_base_types.pb.v1.PrincipalId node_ids = 3;
   string replica_version_id = 2;
+  // Optional subnet that should handle `setup_initial_dkg` for subnet creation.
+  // If not set, handling defaults to the NNS subnet.
+  optional ic_base_types.pb.v1.PrincipalId initial_dkg_subnet_id = 4;
 }
 
 message BlessAlternativeGuestOsVersion {
   repeated bytes chip_ids = 1;
   string rootfs_hash = 2;
   registry.replica_version.v1.GuestLaunchMeasurements base_guest_launch_measurements = 3;
+}
+
+// Changes what replica version(s) are run by Cloud Engines. See Registry's
+// do_update_standard_engine_replica_version for what changes are allowed.
+message UpdateStandardEngineReplicaVersion {
+  string new_replica_version_id = 1;
+  string old_replica_version_id = 2;
+  double deployment_progress = 3;
 }
 
 message LoadCanisterSnapshot {
@@ -2044,6 +2092,39 @@ message NeuronDissolveStateSnapshot {
     uint64 dissolve_delay_seconds = 1;
     uint64 when_dissolved_timestamp_seconds = 2;
   }
+}
+
+// A sampled price consisting of a timestamp and a permyriad rate.
+message SampledPrice {
+  // Timestamp in seconds since Unix epoch. Each entry represents one calendar day; there is at most
+  // one entry per day.
+  uint64 timestamp_seconds = 1;
+
+  // The ICP/XDR rate in permyriad. For example, 80000 means 1 ICP = 8 XDR.
+  uint64 xdr_permyriad_per_icp = 2;
+}
+
+// ICP price history from the Exchange Rate Canister (XRC).
+message IcpPriceHistory {
+  // Daily ICP/XDR rates (up to 365 entries), sorted by timestamp_seconds (ascending).
+  repeated SampledPrice icp_xdr_rates = 1;
+}
+
+// The maturity modulation factor is applied when disbursing (unstaked) maturity to ICP.
+//
+// When a neuron owner disburses maturity, the amount of ICP received is:
+//   maturity * (1 + current_value_permyriad / 10_000)
+//
+// This factor stabilizes ICP price: it is positive when ICP is above its long-term average
+// (encouraging selling pressure), and negative when below (discouraging selling).
+//
+// This might be unpopulated, which indicates that no value is currently available.
+message MaturityModulation {
+  // Current maturity modulation in permyriad (0.01% per unit).
+  optional int32 current_value_permyriad = 1;
+
+  // Day (days_since_epoch) when current_value_permyriad was last computed.
+  optional uint64 updated_at_days_since_epoch = 2;
 }
 
 // This represents the whole NNS governance system. It contains all
@@ -2282,13 +2363,23 @@ message Governance {
   // Map of proposal IDs to their topics for those garbage collected.
   map<uint64, Topic> topic_of_garbage_collected_proposals = 29;
 
-  // Whether the eight year gang bonus base migration has run for all neurons.
-  // This prevents the migration from running more than once.
+  // Persisted-true sentinel: the one-time eight year gang bonus base migration ran on mainnet.
+  // Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
   bool eight_year_gang_bonus_migration_done = 31;
 
   // Snapshot of each neuron's dissolve state taken while clamping to the Mission 70 maximum
   // dissolve delay. Enables restoring original dissolve states if the maximum is reversed.
   map<uint64, NeuronDissolveStateSnapshot> neuron_id_to_pre_clamp_dissolve_state = 32;
+
+  // Persisted-true sentinel: the relaxed eight year gang member induction ran on mainnet.
+  // Retained as a rollback guard; if a previous release sees this as true, it skips the migration.
+  bool relaxed_eight_year_gang_bonus_migration_done = 33;
+
+  // ICP price history from the Exchange Rate Canister (XRC), used for maturity modulation.
+  optional IcpPriceHistory icp_price_history = 34;
+
+  // Maturity modulation state, updated daily from icp_price_history.
+  optional MaturityModulation maturity_modulation = 35;
 
   reserved 30;
   reserved "first_proposal_id_to_record_voting_history";

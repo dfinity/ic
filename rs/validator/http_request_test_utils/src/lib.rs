@@ -7,9 +7,9 @@ use ic_crypto_tree_hash::Path;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{CanisterSig, Signable};
 use ic_types::messages::{
-    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, Query,
-    RawSignedSenderInfo, ReadState, SignedDelegation, SignedIngressContent,
+    Blob, Delegation, DelegationPermissions, HttpCallContent, HttpCanisterUpdate, HttpQueryContent,
+    HttpReadState, HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery,
+    MessageId, Query, RawSignedSenderInfo, ReadState, SignedDelegation, SignedIngressContent,
 };
 use ic_types::time::GENESIS;
 use ic_types::{CanisterId, PrincipalId, Time};
@@ -527,7 +527,21 @@ impl DirectAuthenticationScheme {
         expiration: Time,
         targets: Vec<CanisterId>,
     ) -> SignedDelegation {
-        let delegation = Delegation::new_with_targets(other.public_key_der(), expiration, targets);
+        let delegation = Delegation::new(other.public_key_der(), expiration).with_targets(targets);
+        let signature = self.sign(&delegation);
+        SignedDelegation::new(delegation, signature)
+    }
+
+    /// Creates a delegation that restricts the kinds of calls the delegate
+    /// may make.
+    fn delegate_to_with_permissions(
+        &self,
+        other: &DirectAuthenticationScheme,
+        expiration: Time,
+        permissions: DelegationPermissions,
+    ) -> SignedDelegation {
+        let delegation =
+            Delegation::new(other.public_key_der(), expiration).with_permissions(permissions);
         let signature = self.sign(&delegation);
         SignedDelegation::new(delegation, signature)
     }
@@ -591,6 +605,19 @@ impl DelegationChainBuilder {
         let current_end = self.end.unwrap_or_else(|| self.start.clone());
         self.signed_delegations
             .push(current_end.delegate_to_with_targets(&new_end, expiration, targets));
+        self.end = Some(new_end);
+        self
+    }
+
+    pub fn delegate_to_with_permissions(
+        mut self,
+        new_end: DirectAuthenticationScheme,
+        expiration: Time,
+        permissions: DelegationPermissions,
+    ) -> Self {
+        let current_end = self.end.unwrap_or_else(|| self.start.clone());
+        self.signed_delegations
+            .push(current_end.delegate_to_with_permissions(&new_end, expiration, permissions));
         self.end = Some(new_end);
         self
     }
@@ -684,7 +711,7 @@ impl SignedDelegationBuilder {
     pub fn build(self) -> SignedDelegation {
         let delegation = match self.targets {
             Some(canister_ids) => {
-                Delegation::new_with_targets(self.pubkey, self.expiration, canister_ids)
+                Delegation::new(self.pubkey, self.expiration).with_targets(canister_ids)
             }
             None => Delegation::new(self.pubkey, self.expiration),
         };

@@ -13,6 +13,7 @@ CANISTERS = {
     "canister-creator-canister.wasm.gz": "//rs/rust_canisters/canister_creator:canister_creator_canister",
     "load_simulator_canister.wasm.gz": "//rs/rust_canisters/load_simulator:load_simulator_canister",
     "cycles-minting-canister.wasm.gz": "//rs/nns/cmc:cycles-minting-canister",
+    "engine-controller-canister.wasm.gz": "//rs/engine_controller:engine-controller-canister",
     "genesis-token-canister.wasm.gz": "//rs/nns/gtc:genesis-token-canister",
     "governance-canister.wasm.gz": "//rs/nns/governance:governance-canister",
     "governance-canister_test.wasm.gz": "//rs/nns/governance:governance-canister-test",
@@ -85,14 +86,15 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # Size when constraint addded: 447_593 bytes
     "ic-btc-checker.wasm.gz": 6,
     # Size when constraint addded: 802_894 bytes
-    "ic-ckbtc-minter.wasm.gz": 9,
+    # Size is currently at 923_414 bytes.
+    "ic-ckbtc-minter.wasm.gz": 10,
     # Size when constraint addded: 1_230_630 bytes
     "ic-cketh-minter.wasm.gz": 13,
     # The orchestrator needs to embed 3 wasms at compile time
     # (ICRC1 index, ICRC1 ledger, and ICRC1 archive) and size is
     # therefore strictly controlled.
     # Size when constraint addded: 1_704_979 bytes
-    "ic-ledger-suite-orchestrator-canister.wasm.gz": 18,
+    "ic-ledger-suite-orchestrator-canister.wasm.gz": 19,
 
     # -- BN team --
     # Size when constraint addded: 540_349 bytes
@@ -152,7 +154,6 @@ artifact_bundle(
         testonly = True,
         src = target + ".didfile",
         out = name + ".did",
-        allow_symlink = False,
     )
     for (name, target) in CANISTERS.items()
     if (

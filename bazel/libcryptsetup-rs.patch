@@ -28,3 +28,18 @@ diff --git a/src/settings.rs b/src/settings.rs
              time_ms: v.time_ms,
              iterations: v.iterations,
              max_memory_kb: v.max_memory_kb,
+
+# Fixes CryptLuks2TokenHandle::is_assigned() handling of libcryptsetup's negative errno return
+# Upstream fix in https://github.com/stratis-storage/libcryptsetup-rs/pull/483
+diff --git a/src/luks2/token.rs b/src/luks2/token.rs
+--- a/src/luks2/token.rs
++++ b/src/luks2/token.rs
+@@ -222,7 +222,7 @@ impl<'a> CryptLuks2TokenHandle<'a> {
+         ));
+         if rc == 0 {
+             Ok(true)
+-        } else if rc == libc::ENOENT {
++        } else if rc == -libc::ENOENT {
+             Ok(false)
+         } else {
+             Err(LibcryptErr::IOError(std::io::Error::from_raw_os_error(-rc)))

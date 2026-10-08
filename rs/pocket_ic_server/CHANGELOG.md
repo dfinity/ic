@@ -12,6 +12,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- Threshold ECDSA keys over the curve secp256r1: the PocketIC II and fiduciary subnets hold such a key with name `key_1`
+  and the PocketIC test threshold keys subnet holds such keys with names `test_key_1` and `dfx_test_key`.
+  Unlike PocketIC, the ICP mainnet does not hold secp256r1 keys with names `key_1` or `test_key_1` yet.
+
+
+
+## 16.0.0 - 2026-09-01
+
+### Added
+- The endpoint `/instances/<instance_id>/update/mock_flexible_canister_http` to mock the responses of the committee nodes
+  of a pending *flexible* canister HTTP outcall, i.e. one made through the `flexible_http_request` management canister endpoint.
+- The endpoint `/instances/<instance_id>/read/get_canister_http` reports two additional fields for every pending canister HTTP
+  outcall: `replication`, describing how the outcall is replicated across the nodes of its subnet (`FullyReplicated`,
+  `NonReplicated`, or `Flexible` with the outcall's `total_requests`, `min_responses`, and `max_responses`), and
+  `pricing_version`, reporting whether it is priced with the `Legacy` or the `PayAsYouGo` pricing model.
+- Enabling beta features (the field `beta_features` of `icp_config` when creating an instance) now enables the
+  `flexible_http_request` management canister endpoint on subnets that charge for HTTP outcalls; without beta features that
+  endpoint is only available on subnets where HTTP outcalls are free (system subnets and subnets with a free cycles cost
+  schedule). Beta features also enable the pay-as-you-go pricing model, which flexible outcalls are always priced with and
+  which an `http_request` can select through its `pricing_version` field.
+
+### Changed
+- The endpoint `/instances/<instance_id>/auto_progress` (and creating an instance with automatic progress enabled)
+  only returns after the certified time of the PocketIC instance has been updated for the first time.
+- Mocked canister HTTP responses report the cycles their node actually spent on the outcall, instead of reporting no spend at
+  all. This applies to `/instances/<instance_id>/update/mock_canister_http` and
+  `/instances/<instance_id>/update/mock_flexible_canister_http`. The spend is derived from the size of the mocked response;
+  unlike a real node, a mocked one is charged no response time, so what a mocked outcall costs does not depend on how fast the
+  machine running the test is.
+- Mocking a canister HTTP response whose reject message exceeds 1 KiB now fails. Such a response is not one any node could have
+  reported.
+- A node that cannot pay for gossiping its mocked reject reports an out-of-cycles reject instead of the mocked one, matching
+  what a node of a real subnet does under pay-as-you-go pricing.
+
+
+
+## 15.0.0 - 2026-06-26
+
+### Added
+- The endpoint `/instances/<instance_id>/update/delete_subnet` to delete a subnet (non-named subnets only: application, cloud engine, system, or verified application subnets).
+  If a state directory is configured for the instance, the deleted subnet's state directory is removed from disk.
+
+### Changed
+- Canister IDs allocated to newly created canisters without a specified canister ID.
+
+
+
+## 14.0.0 - 2026-05-26
+
+### Added
 - The endpoint `/instances/` takes an additional optional field `disable_ingress_validation` specifying that
   ingress validation is disabled for mainnet-like endpoints `/instances/<instance_id>/api/...` of the instance.
 - Support for canister signatures produced by the ICP mainnet in mainnet-like endpoints `/instances/<instance_id>/api/...`.

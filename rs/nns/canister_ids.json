@@ -62,5 +62,9 @@
   "migration": {
     "local": "sbzkb-zqaaa-aaaaa-aaaiq-cai",
     "mainnet": "sbzkb-zqaaa-aaaaa-aaaiq-cai"
+  },
+  "engine-controller": {
+    "local": "si2b5-pyaaa-aaaaa-aaaja-cai",
+    "mainnet": "si2b5-pyaaa-aaaaa-aaaja-cai"
   }
 }

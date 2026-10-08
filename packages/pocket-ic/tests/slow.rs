@@ -23,10 +23,10 @@ fn execute_many_instructions(
     assert_eq!(t1, t0 + Duration::from_nanos(1)); // canister creation should take one round, i.e., 1ns
 
     // Charge the canister with 200T cycles.
+    let cycles_before = pic.cycle_balance(can_id);
     pic.add_cycles(can_id, INIT_CYCLES);
-
-    let initial_cycles = pic.cycle_balance(can_id);
-    assert_eq!(initial_cycles, INIT_CYCLES);
+    let cycles_after = pic.cycle_balance(can_id);
+    assert_eq!(cycles_after, cycles_before + INIT_CYCLES);
 
     // Install the test canister wasm on the canister.
     pic.install_canister(can_id, test_canister_wasm(), vec![], None);
@@ -46,7 +46,7 @@ fn execute_many_instructions(
 
     if system_subnet {
         let cycles = pic.cycle_balance(can_id);
-        assert_eq!(cycles, initial_cycles);
+        assert_eq!(cycles, cycles_after);
     }
 
     res

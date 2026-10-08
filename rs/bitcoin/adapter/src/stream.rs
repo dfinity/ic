@@ -383,8 +383,6 @@ pub fn handle_stream<
 #[cfg(test)]
 pub mod test {
 
-    use std::net::{IpAddr, Ipv4Addr};
-
     use crate::common::DEFAULT_CHANNEL_BUFFER_SIZE;
 
     use super::*;
@@ -456,11 +454,13 @@ pub mod test {
         let (_adapter_tx, adapter_rx) = tokio::sync::mpsc::unbounded_channel();
         let (stream_tx, _) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
 
-        // Try to connect to a non routable IP address to force a timeout to happen. If a routable IP is used,
-        // then the connection either succeeds or other errors are generated.
-        // https://stackoverflow.com/questions/100841/artificially-create-a-connection-timeout-error
-        // The chosen ephemeral port is random and should not affect the test.
-        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 2, 0)), 55535);
+        // Connect to a loopback listener whose accept queue is saturated, so
+        // the connect hangs until the stream's timeout fires. This exercises
+        // the connect-timeout path using only loopback, so the test does not
+        // require network egress. `_saturated` must stay alive for the duration
+        // of the test to keep the address unconnectable.
+        let _saturated = ic_test_utilities_net::saturated_loopback_listener().await;
+        let address = _saturated.addr();
 
         let stream_config = StreamConfig {
             address,

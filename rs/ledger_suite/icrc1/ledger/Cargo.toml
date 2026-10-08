@@ -12,7 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 assert_matches = { workspace = true, optional = true }
-async-trait = { workspace = true }
 canbench-rs = { workspace = true, optional = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
@@ -20,7 +19,6 @@ hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-cdk = { workspace = true }
-ic-cdk-timers = { workspace = true }
 ic-certification = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-icrc1 = { path = ".." }
@@ -29,7 +27,7 @@ ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
 ic-ledger-core = { path = "../../common/ledger_core" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
-ic-metrics-encoder = "1.1.1"
+ic-metrics-encoder = { workspace = true }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types", features = ["storable"] }
 minicbor = { workspace = true }
@@ -41,7 +39,6 @@ leb128 = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
-cddl = "0.9.4"
 ciborium = { workspace = true }
 ic-agent = { workspace = true }
 ic-cbor = { workspace = true }
@@ -53,7 +50,6 @@ ic-ledger-suite-state-machine-tests-constants = { path = "../../tests/sm-tests/c
 ic-icrc1-test-utils = { path = "../test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
-num-bigint = { workspace = true }
 proptest = { workspace = true }
 test-strategy = "0.4.0"
 

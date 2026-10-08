@@ -5,11 +5,10 @@ use super::super::*;
 use super::zero_instruction_overhead_config;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_registry_subnet_type::SubnetType;
-use ic_test_utilities_types::messages::RequestBuilder;
+use ic_replicated_state::testing::OutputRequestBuilder;
 use ic_types::messages::MAX_RESPONSE_COUNT_BYTES;
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types_test_utils::ids::canister_test_id;
-use std::sync::Arc;
 
 const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
@@ -158,7 +157,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
         let source = test.create_canister();
         let dest = test.create_canister();
         let request_to = |canister: CanisterId, deadline: CoarseTime| {
-            RequestBuilder::default()
+            OutputRequestBuilder::default()
                 .sender(source)
                 .receiver(canister)
                 .deadline(deadline)
@@ -168,23 +167,23 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
         let source_canister = test.canister_state_mut(source);
         // First, best-effort messages to `source` and `dest`.
         source_canister
-            .push_output_request(request_to(source, SOME_DEADLINE).into(), UNIX_EPOCH)
+            .push_output_request(request_to(source, SOME_DEADLINE), UNIX_EPOCH)
             .unwrap();
         source_canister
-            .push_output_request(request_to(dest, SOME_DEADLINE).into(), UNIX_EPOCH)
+            .push_output_request(request_to(dest, SOME_DEADLINE), UNIX_EPOCH)
             .unwrap();
         // Then a couple of guaranteed response messages to each of `source` and `dest`.
         source_canister
-            .push_output_request(request_to(source, NO_DEADLINE).into(), UNIX_EPOCH)
+            .push_output_request(request_to(source, NO_DEADLINE), UNIX_EPOCH)
             .unwrap();
         source_canister
-            .push_output_request(request_to(source, NO_DEADLINE).into(), UNIX_EPOCH)
+            .push_output_request(request_to(source, NO_DEADLINE), UNIX_EPOCH)
             .unwrap();
         source_canister
-            .push_output_request(request_to(dest, NO_DEADLINE).into(), UNIX_EPOCH)
+            .push_output_request(request_to(dest, NO_DEADLINE), UNIX_EPOCH)
             .unwrap();
         source_canister
-            .push_output_request(request_to(dest, NO_DEADLINE).into(), UNIX_EPOCH)
+            .push_output_request(request_to(dest, NO_DEADLINE), UNIX_EPOCH)
             .unwrap();
         test.induct_messages_on_same_subnet();
 
@@ -233,12 +232,10 @@ fn induct_messages_on_same_subnet_destination_not_found() {
         Some(test.state().metadata.own_subnet_id)
     );
 
-    let request = Arc::new(
-        RequestBuilder::default()
-            .sender(source)
-            .receiver(dest)
-            .build(),
-    );
+    let request = OutputRequestBuilder::default()
+        .sender(source)
+        .receiver(dest)
+        .build();
     test.canister_state_mut(source)
         .push_output_request(request, UNIX_EPOCH)
         .unwrap();

@@ -22,7 +22,7 @@ use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
     SubnetRecordBuilder, add_subnet_record, insert_initial_dkg_transcript,
 };
-use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::{subnet_test_id, test_platform_version};
 use ic_types::{
     CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId, malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
@@ -101,6 +101,7 @@ pub(crate) fn setup() -> (
     let replica_config = ReplicaConfig {
         node_id: NodeId::from(PrincipalId::new_node_test_id(27)),
         subnet_id,
+        platform_version: test_platform_version(),
     };
 
     let metrics_registry = MetricsRegistry::new();
@@ -116,11 +117,13 @@ pub(crate) fn setup() -> (
         Arc::new(FakeVerifier::new()),
         replica_config.subnet_id,
         subnet_type,
-        log.clone().into(),
-        &metrics_registry,
         &config.state_manager,
         None,
         ic_types::malicious_flags::MaliciousFlags::default(),
+        tokio::sync::watch::channel(ic_types::Height::from(0)).0,
+        None,
+        &metrics_registry,
+        log.clone().into(),
     ));
 
     let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);

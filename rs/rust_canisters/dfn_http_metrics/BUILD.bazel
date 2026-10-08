@@ -11,20 +11,17 @@ package(default_visibility = [
     "//rs/rust_canisters:__subpackages__",
 ])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-http-types",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_http",
-    "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:serde_bytes",
-]
-
 rust_library(
     name = "dfn_http_metrics",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "dfn_http_metrics",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-http-types",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/dfn_core",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:serde_bytes",
+    ],
 )

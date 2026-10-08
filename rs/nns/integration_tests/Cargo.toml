@@ -97,21 +97,24 @@ ic-sns-init = { path = "../../sns/init" }
 ic-sns-wasm = { path = "../sns-wasm" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types-cycles = { path = "../../types/cycles" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-ic-xrc-types = "1.0.0"
+ic-xrc-types = { workspace = true }
 itertools = { workspace = true }
-maplit = "1.0.2"
+maplit = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 phantom_newtype = { path = "../../phantom_newtype" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
-rustc-hash = "1.1.0"
+rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
+regex = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
 wat = { workspace = true }
 xrc-mock = { path = "../../rust_canisters/xrc_mock" }

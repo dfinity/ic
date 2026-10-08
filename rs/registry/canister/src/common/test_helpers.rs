@@ -4,24 +4,31 @@ use crate::mutations::node_management::do_add_node::connection_endpoint_from_str
 use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_test_utils::registry::{
-    create_subnet_threshold_signing_pubkey_and_cup_mutations, invariant_compliant_mutation,
-    new_node_keys_and_node_id,
+    TEST_ID, create_subnet_threshold_signing_pubkey_and_cup_mutations,
+    invariant_compliant_mutation, new_node_keys_and_node_id,
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::node::v1::{IPv4InterfaceConfig, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
-use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_protobuf::registry::replica_version::v1::{
+    GuestLaunchMeasurement, GuestLaunchMeasurements, ReplicaVersionRecord,
+};
+use ic_protobuf::registry::subnet::v1::{
+    CanisterCyclesCostSchedule, SubnetListRecord, SubnetRecord,
+};
 use ic_registry_keys::make_node_operator_record_key;
+use ic_registry_keys::make_replica_version_key;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_keys::make_subnet_record_key;
+use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::{
     RegistryAtomicMutateRequest, RegistryMutation, registry_mutation::Type,
 };
 use ic_registry_transport::{insert, upsert};
 use ic_test_utilities_types::ids::subnet_test_id;
-use ic_types::ReplicaVersion;
+use ic_test_utilities_types::ids::test_replica_version;
+use lazy_static::lazy_static;
 use prost::Message;
 use std::collections::BTreeMap;
 
@@ -30,6 +37,48 @@ pub fn invariant_compliant_registry(mutation_id: u8) -> Registry {
     let mutations = invariant_compliant_mutation(mutation_id);
     registry.maybe_apply_mutation_internal(mutations);
     registry
+}
+
+lazy_static! {
+    /// Launch measurements that a test can give an elected GuestOS version.
+    ///
+    /// A SEV-enabled subnet may only run a version that has launch measurements,
+    /// and so may the versions of the StandardEngineReplicaVersionRecord (see
+    /// the SEV subnet and standard engine replica version invariants).
+    pub static ref GUEST_LAUNCH_MEASUREMENTS: GuestLaunchMeasurements = GuestLaunchMeasurements {
+        guest_launch_measurements: vec![GuestLaunchMeasurement {
+            // An SEV-SNP measurement is exactly 48 bytes long. The value itself does not matter here.
+            measurement: vec![0x42; 48],
+            metadata: None,
+        }],
+    };
+}
+
+/// Gives the already elected GuestOS version launch measurements.
+///
+/// Call this when a test builds a SEV-enabled subnet: such a subnet may only run
+/// a version that has launch measurements (see the SEV subnet invariants).
+/// Versions elected by `invariant_compliant_registry` have none, because that is
+/// what versions elected before launch measurements existed look like.
+pub fn add_guest_launch_measurements_to_replica_version(
+    registry: &mut Registry,
+    replica_version_id: &str,
+) {
+    let key = make_replica_version_key(replica_version_id);
+
+    let registry_value = registry
+        .get(key.as_bytes(), registry.latest_version())
+        .unwrap_or_else(|| panic!("Version {replica_version_id} is not elected"));
+
+    let mut replica_version_record =
+        ReplicaVersionRecord::decode(registry_value.value.as_slice()).unwrap();
+
+    replica_version_record.guest_launch_measurements = Some(GUEST_LAUNCH_MEASUREMENTS.clone());
+
+    registry.maybe_apply_mutation_internal(vec![upsert(
+        key.as_bytes(),
+        replica_version_record.encode_to_vec(),
+    )]);
 }
 
 pub fn empty_mutation() -> Vec<u8> {
@@ -87,7 +136,7 @@ pub fn get_invariant_compliant_subnet_record(node_ids: Vec<NodeId>) -> SubnetRec
         gossip_max_duplicity: 1,
         gossip_max_chunk_wait_ms: 200,
         gossip_max_artifact_streams_per_peer: 1,
-        replica_version_id: ReplicaVersion::default().into(),
+        replica_version_id: test_replica_version().to_string(),
         node_ids,
         ..Default::default()
     }
@@ -122,7 +171,8 @@ pub fn prepare_registry_with_nodes_and_node_operator_id(
     )
 }
 
-/// Same as above, just with the possibility to have a chip_id.
+/// Same as above, just with chip IDs on every node — used to seed nodes that satisfy the
+/// SEV invariant (SEV-enabled subnets may only contain nodes with a chip ID).
 pub fn prepare_registry_with_nodes_and_chip_id(
     start_mutation_id: u8,
     nodes: u64,
@@ -201,6 +251,76 @@ pub fn prepare_registry_raw(
         preconditions: vec![],
     };
     (mutate_request, node_ids_and_dkg_pks)
+}
+
+/// Prepares the mutations that add a CloudEngine subnet to a registry that was
+/// initialized with [`invariant_compliant_mutation`] / [`invariant_compliant_registry`].
+///
+/// This first creates `node_count` fresh type-4 nodes (CloudEngine subnets may
+/// only contain type-4 nodes) and then a CloudEngine subnet record made up of
+/// those nodes, on the `Free` cost schedule (both required for CloudEngine
+/// subnets). The returned request is meant to be pushed as an additional init
+/// mutate request on top of the invariant-compliant base; it also returns the
+/// id of the new CloudEngine subnet.
+pub fn prepare_registry_with_cloud_engine_subnet(
+    node_count: u64,
+    starting_mutation_id: u8,
+) -> (RegistryAtomicMutateRequest, SubnetId) {
+    // CloudEngine subnets may only contain type-4 nodes (enforced by the
+    // `check_node_type4_iff_cloud_engine` invariant).
+    let (nodes_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes_and_reward_type(
+        starting_mutation_id,
+        node_count,
+        NodeRewardType::Type4,
+    );
+    let mut mutations = nodes_request.mutations;
+
+    // CloudEngine subnets are not charged cycles, i.e. they use the `Free` cost
+    // schedule.
+    let subnet_record = SubnetRecord {
+        membership: node_ids_and_dkg_pks
+            .keys()
+            .map(|node_id| node_id.get().to_vec())
+            .collect(),
+        subnet_type: i32::from(SubnetType::CloudEngine),
+        canister_cycles_cost_schedule: i32::from(CanisterCyclesCostSchedule::Free),
+        replica_version_id: test_replica_version().to_string(),
+        unit_delay_millis: 600,
+        ..Default::default()
+    };
+
+    // The invariant-compliant base contains a single system subnet (`TEST_ID`);
+    // append the new CloudEngine subnet to the subnet list.
+    let cloud_engine_subnet_id = subnet_test_id(TEST_ID + 1);
+    let subnet_list_record = SubnetListRecord {
+        subnets: vec![
+            subnet_test_id(TEST_ID).get().to_vec(),
+            cloud_engine_subnet_id.get().to_vec(),
+        ],
+    };
+
+    mutations.push(upsert(
+        make_subnet_list_record_key().as_bytes(),
+        subnet_list_record.encode_to_vec(),
+    ));
+    mutations.push(upsert(
+        make_subnet_record_key(cloud_engine_subnet_id).as_bytes(),
+        subnet_record.encode_to_vec(),
+    ));
+    mutations.append(
+        &mut create_subnet_threshold_signing_pubkey_and_cup_mutations(
+            cloud_engine_subnet_id,
+            &node_ids_and_dkg_pks,
+        ),
+    );
+
+    (
+        RegistryAtomicMutateRequest {
+            mutations,
+            preconditions: vec![],
+        },
+        cloud_engine_subnet_id,
+    )
 }
 
 pub fn registry_create_subnet_with_nodes(

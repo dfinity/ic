@@ -1,0 +1,43 @@
+# Packages used by our ubuntu base, adapted from:
+#  https://github.com/GoogleContainerTools/rules_distroless/blob/2ce7b477def75579c49bab25266f953f30275c88/examples/ubuntu_snapshot/BUILD.bazel
+#
+#  Anytime this file is changed, the lockfile needs to be regenerated. See MODULE
+#  for instructions.
+version: 1
+
+# Various channels used to pull packages from
+sources:
+  - channel: resolute main
+    url: https://snapshot.ubuntu.com/ubuntu/20260422T000000Z
+  - channel: resolute universe
+    url: https://snapshot.ubuntu.com/ubuntu/20260422T000000Z
+  - channel: resolute-security main
+    url: https://snapshot.ubuntu.com/ubuntu/20260422T000000Z
+  - channel: resolute-updates main
+    url: https://snapshot.ubuntu.com/ubuntu/20260422T000000Z
+archs:
+  - "amd64"
+
+packages:
+  - "apt"
+  - "bash"
+  - "ca-certificates"
+  - "coreutils" # for chmod
+  - "dmsetup"
+  - "dosfstools"
+  - "dpkg" # for apt list --installed
+  - "e2fsprogs" # for mkfs.ext4 used in ICOS device tests
+  - "gawk" # for build-bootstrap-config-image
+  - "gzip" # for tar-ing up ic regsitry store in systests
+  - "libcryptsetup-dev"
+  - "libssl3t64"
+  - "libunwind8"
+  - "libvirt0" # so colocated test binaries linking libvirt.so.0 can load (see rs/tests/driver/src/driver/local_backend.rs)
+  - "mtools"
+  - "openssh-client" # used to SSH into image
+  - "perl"
+  - "rsync"
+  - "tar"
+  - "udev" # for device-mapper tests
+  - "xz-utils"
+  - "zstd"

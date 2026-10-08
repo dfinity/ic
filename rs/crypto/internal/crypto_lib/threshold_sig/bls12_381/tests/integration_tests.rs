@@ -102,7 +102,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         .map(|i| {
             println!("generating key pair {i}...");
             let key_pair = kgen(KEY_GEN_ASSOCIATED_DATA, sys, rng);
-            println!("{:#?}", &key_pair.0);
+            println!("{:#?}", key_pair.0);
             key_pair
         })
         .collect();

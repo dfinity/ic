@@ -40,7 +40,6 @@ cargo_build_script(
 
 rust_binary(
     name = "ic-admin",
-    testonly = True,
     srcs = glob(["bin/**/*.rs"]),
     proc_macro_deps = [
         # Keep sorted.
@@ -69,10 +68,10 @@ rust_binary(
         "//rs/nns/constants",
         "//rs/nns/governance/api",
         "//rs/nns/governance/conversions",
+        "//rs/nns/handlers/lifeline/interface",
         "//rs/nns/handlers/root/impl:root",
         "//rs/nns/init",
         "//rs/nns/sns-wasm",
-        "//rs/nns/test_utils",
         "//rs/prep",
         "//rs/protobuf",
         "//rs/registry/canister",
@@ -157,10 +156,14 @@ rust_test(
         "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/registry/canister/api",
         "//rs/registry/local_store",
+        "//rs/rust_canisters/canister_test",
         "//rs/types/base_types",
         "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:serde_json",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
         "@crate_index//:url",
+        "@crate_index//:wat",
     ],
 )

@@ -87,6 +87,14 @@ require_read_proc_sys_kernel(systemd_detect_virt_t)
 require_read_efivarfs_files(systemd_resolved_t)
 # it wants to read certificates
 miscfiles_read_generic_certs(systemd_resolved_t)
+# systemd-resolved connects to systemd-networkd's varlink "resolve hook"
+# socket (/run/systemd/resolve.hook/io.systemd.Network) to obtain per-link DNS
+# configuration. When this is denied, resolved logs "Failed to connect to
+# resolve.hook: Permission denied" and can end up without any DNS servers for
+# the lifetime of the boot ("Failed to start query: Permission denied" for
+# every lookup), which for example makes the orchestrator unable to download
+# GuestOS upgrade images.
+allow systemd_resolved_t systemd_networkd_t : unix_stream_socket { connectto };
 
 ###############################################################################
 # systemd-cryptsetup
@@ -128,7 +136,12 @@ relabelfrom_dirs_pattern(systemd_tmpfiles_t, { tmpfs_t unlabeled_t }, { tmpfs_t 
 list_dirs_pattern(systemd_tmpfiles_t, unlabeled_t, unlabeled_t)
 
 # A tempfile is used as part of setting up machine-id
+require { type systemd_machine_id_setup_t; }
 read_files_pattern(systemd_tmpfiles_t, tmpfs_t, tmpfs_t)
+rw_files_pattern(systemd_machine_id_setup_t, tmpfs_t, tmpfs_t)
+
+# A tempfile is used as part of setting up systemd-networkd
+list_dirs_pattern(systemd_networkd_t, tmpfs_t, tmpfs_t)
 
 ###############################################################################
 # systemd-generator

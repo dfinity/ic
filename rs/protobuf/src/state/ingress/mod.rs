@@ -28,6 +28,7 @@ pub mod v1 {
                 ErrorCodePublic::CanisterHeapDeltaRateLimited => {
                     ErrorCode::CanisterHeapDeltaRateLimited
                 }
+                ErrorCodePublic::SubnetCoolingDown => ErrorCode::SubnetCoolingDown,
                 ErrorCodePublic::CanisterNotFound => ErrorCode::CanisterNotFound,
                 ErrorCodePublic::CanisterSnapshotNotFound => ErrorCode::CanisterSnapshotNotFound,
                 ErrorCodePublic::CanisterSnapshotImmutable => ErrorCode::CanisterSnapshotImmutable,
@@ -56,6 +57,9 @@ pub mod v1 {
                 ErrorCodePublic::CanisterInvalidController => ErrorCode::CanisterInvalidController,
                 ErrorCodePublic::CanisterInvalidControllerOrSubnetAdmin => {
                     ErrorCode::CanisterInvalidControllerOrSubnetAdmin
+                }
+                ErrorCodePublic::CanisterStatusAccessDenied => {
+                    ErrorCode::CanisterStatusAccessDenied
                 }
                 ErrorCodePublic::CanisterFunctionNotFound => ErrorCode::CanisterFunctionNotFound,
                 ErrorCodePublic::CanisterNonEmpty => ErrorCode::CanisterNonEmpty,
@@ -144,6 +148,7 @@ pub mod v1 {
                 ErrorCode::CanisterHeapDeltaRateLimited => {
                     Ok(ErrorCodePublic::CanisterHeapDeltaRateLimited)
                 }
+                ErrorCode::SubnetCoolingDown => Ok(ErrorCodePublic::SubnetCoolingDown),
                 ErrorCode::CanisterNotFound => Ok(ErrorCodePublic::CanisterNotFound),
                 ErrorCode::CanisterSnapshotNotFound => {
                     Ok(ErrorCodePublic::CanisterSnapshotNotFound)
@@ -188,6 +193,9 @@ pub mod v1 {
                 }
                 ErrorCode::CanisterInvalidControllerOrSubnetAdmin => {
                     Ok(ErrorCodePublic::CanisterInvalidControllerOrSubnetAdmin)
+                }
+                ErrorCode::CanisterStatusAccessDenied => {
+                    Ok(ErrorCodePublic::CanisterStatusAccessDenied)
                 }
                 ErrorCode::CanisterFunctionNotFound => {
                     Ok(ErrorCodePublic::CanisterFunctionNotFound)

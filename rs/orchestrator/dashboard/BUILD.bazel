@@ -2,37 +2,32 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:tokio",
-    "@crate_index//:tokio-util",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "dashboard",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_dashboard",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+    ],
 )
 
 rust_test(
     name = "dashboard_test",
-    aliases = ALIASES,
     crate = ":dashboard",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+    ],
 )

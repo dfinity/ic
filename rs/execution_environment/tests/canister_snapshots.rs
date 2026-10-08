@@ -1,15 +1,17 @@
 use candid::{Decode, Reserved};
 use canister_test::WasmResult;
+use ic_base_types::PrincipalId;
 use ic_base_types::SnapshotId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterIdRecord, CanisterSettingsArgsBuilder,
-    CanisterSnapshotDataOffset, Global, GlobalTimer, LoadCanisterSnapshotArgs,
-    OnLowWasmMemoryHookStatus, ReadCanisterSnapshotMetadataArgs,
-    ReadCanisterSnapshotMetadataResponse, SnapshotSource, TakeCanisterSnapshotArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    CanisterChangeDetails, CanisterIdRecord, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
+    CanisterSnapshotDataOffset, CanisterUpgradeOptions, Global, GlobalTimer, IC_00,
+    InstallCodeArgsV2, LoadCanisterSnapshotArgs, Method, OnLowWasmMemoryHookStatus, Payload,
+    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse, SnapshotSource,
+    TakeCanisterSnapshotArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadChunkArgs, WasmMemoryPersistence,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
@@ -479,6 +481,221 @@ fn upload_and_load_snapshot_with_invalid_wasm() {
     let err = env.load_canister_snapshot(load_snapshot_args).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterInvalidWasm);
     assert!(err.description().contains("Canister's Wasm module is not valid: Failed to decode wasm module: unsupported canister module format."));
+}
+
+#[test]
+fn upload_and_load_snapshot_with_wasm_memory() {
+    let env = StateMachineBuilder::new().build();
+
+    let canister_id = env.create_canister(None);
+
+    const MIB_2: u64 = 2 * 1024 * 1024;
+    let wat = r#"
+(module
+  (import "ic0" "msg_reply" (func $msg_reply))
+  (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
+  (func $read
+    (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+    (call $msg_reply)
+  )
+  (func $write
+    (i32.store
+      (i32.const 0)
+      (i32.add (i32.load (i32.const 0)) (i32.const 1))
+    )
+    (call $read)
+  )
+  (memory 1 1)
+  (export "canister_query read" (func $read))
+  (export "canister_update inc" (func $write))
+)"#;
+    let wasm = wat::parse_str(wat).unwrap();
+
+    // Encode counter value 42 at address 0 in the heap.
+    let mut heap = vec![0_u8; MIB_2 as usize];
+    heap[..4].copy_from_slice(&42_u32.to_le_bytes());
+
+    let upload_args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,              /* replace_snapshot */
+        wasm.len() as u64, /* wasm_module_size */
+        vec![],            /* globals */
+        MIB_2,             /* wasm_memory_size */
+        0,                 /* stable_memory_size */
+        vec![],            /* certified_data */
+        None,              /* global_timer */
+        None,              /* on_low_wasm_memory_hook_status */
+    );
+    let snapshot_id = env
+        .upload_canister_snapshot_metadata(&upload_args)
+        .unwrap()
+        .snapshot_id;
+
+    env.upload_snapshot_module(canister_id, snapshot_id, &wasm, None, None)
+        .unwrap();
+    env.upload_snapshot_heap(canister_id, snapshot_id, &heap, None, None)
+        .unwrap();
+
+    let load_args = LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+    env.load_canister_snapshot(load_args).unwrap();
+
+    // Execution fails gracefully: the (memory 1 1) module's declared max of 1 page
+    // cannot be grown to the snapshot's 32 pages (2 MiB).
+    let err = env.execute_ingress(canister_id, "inc", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmEngineError);
+    assert!(err.description().contains(
+        "Failed to grow wasm memory by 31 page(s) to 32 page(s): exceeds module's declared maximum"
+    ));
+}
+
+// Once a metadata-upload snapshot has been loaded onto a canister it becomes
+// immutable and rejects further `upload_canister_snapshot_data`, no matter
+// whether it was loaded onto the canister owning it or onto another one.
+// Being immutable does not prevent it from being loaded again, though.
+fn upload_snapshot_data_rejected_after_load(load_onto_other_canister: bool) {
+    let env = StateMachineBuilder::new().build();
+
+    let canister_id = env.create_canister(None);
+
+    // The canister is never executed, so the module only has to be loadable:
+    // it declares no globals, matching the `globals` of the uploaded metadata.
+    const PAGES: u64 = 32;
+    const HEAP_SIZE: u64 = PAGES * 64 * 1024;
+    let wasm = wat::parse_str(format!("(module (memory {PAGES} {PAGES}))")).unwrap();
+    let heap = vec![7_u8; HEAP_SIZE as usize];
+
+    let upload_args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,              /* replace_snapshot */
+        wasm.len() as u64, /* wasm_module_size */
+        vec![],            /* globals */
+        HEAP_SIZE,         /* wasm_memory_size */
+        0,                 /* stable_memory_size */
+        vec![],            /* certified_data */
+        None,              /* global_timer */
+        None,              /* on_low_wasm_memory_hook_status */
+    );
+    let snapshot_id = env
+        .upload_canister_snapshot_metadata(&upload_args)
+        .unwrap()
+        .snapshot_id;
+
+    env.upload_snapshot_module(canister_id, snapshot_id, &wasm, None, None)
+        .unwrap();
+
+    // Before the snapshot is loaded it is mutable: uploading wasm memory succeeds.
+    let write_memory =
+        |env: &StateMachine| env.upload_snapshot_heap(canister_id, snapshot_id, &heap, None, None);
+    write_memory(&env).unwrap();
+
+    let target_canister_id = if load_onto_other_canister {
+        // Loading onto another canister copies the snapshot's memories, which
+        // requires them to have been flushed to disk first.
+        env.checkpointed_tick();
+        env.create_canister(None)
+    } else {
+        canister_id
+    };
+    let load_args = LoadCanisterSnapshotArgs::new(target_canister_id, snapshot_id, None);
+    env.load_canister_snapshot(load_args).unwrap();
+
+    // The snapshot is now immutable: the same upload is rejected.
+    let err = write_memory(&env).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterSnapshotImmutable);
+    assert_eq!(
+        err.description(),
+        "Only canister snapshots created by metadata upload can be mutated, and only until they are loaded onto a canister."
+    );
+
+    // The `restored` flag persists across a checkpoint, so the rejection holds.
+    env.checkpointed_tick();
+    let err = write_memory(&env).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterSnapshotImmutable);
+
+    // The snapshot can still be loaded again, onto the canister it was already
+    // loaded onto as well as onto a canister that has never seen it.
+    let another_canister_id = env.create_canister(None);
+    for target_canister_id in [target_canister_id, another_canister_id] {
+        let load_args = LoadCanisterSnapshotArgs::new(target_canister_id, snapshot_id, None);
+        env.load_canister_snapshot(load_args).unwrap();
+    }
+}
+
+#[test]
+fn upload_snapshot_data_rejected_after_load_onto_own_canister() {
+    upload_snapshot_data_rejected_after_load(false);
+}
+
+#[test]
+fn upload_snapshot_data_rejected_after_load_onto_other_canister() {
+    upload_snapshot_data_rejected_after_load(true);
+}
+
+#[test]
+fn upgrade_with_keep_heap_exceeds_module_max_fails_gracefully() {
+    // The custom section marks the module as supporting enhanced orthogonal
+    // persistence, which is required to use wasm_memory_persistence: Keep.
+    const COUNTER_WAT: &str = r#"
+(module
+  (import "ic0" "msg_reply" (func $msg_reply))
+  (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param i32 i32)))
+  (func $read
+    (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+    (call $msg_reply)
+  )
+  (func $write
+    (i32.store
+      (i32.const 0)
+      (i32.add (i32.load (i32.const 0)) (i32.const 1))
+    )
+    (call $read)
+  )
+  (memory {MAX} {MAX})
+  (export "canister_query read" (func $read))
+  (export "canister_update inc" (func $write))
+  (@custom "icp:private enhanced-orthogonal-persistence" "")
+)"#;
+
+    let env = StateMachineBuilder::new().build();
+    let canister_id = env
+        .install_canister(
+            wat::parse_str(COUNTER_WAT.replace("{MAX}", "20")).unwrap(),
+            vec![],
+            None,
+        )
+        .unwrap();
+
+    // Call inc before upgrade: counter goes from 0 to 1.
+    let result = env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(result, WasmResult::Reply(1_u32.to_le_bytes().to_vec()));
+
+    // Upgrade to (memory 1 1) while keeping the heap (orthogonal persistence).
+    // The heap retains 20 pages but the new module declares max=1 page.
+    env.execute_ingress_as(
+        PrincipalId::new_anonymous(),
+        IC_00,
+        Method::InstallCode,
+        InstallCodeArgsV2 {
+            mode: CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+            })),
+            canister_id: canister_id.get(),
+            wasm_module: wat::parse_str(COUNTER_WAT.replace("{MAX}", "1")).unwrap(),
+            arg: vec![],
+            sender_canister_version: None,
+        }
+        .encode(),
+    )
+    .unwrap();
+
+    // After the upgrade, calling inc must fail gracefully (not panic): the
+    // retained 20-page heap exceeds the new module's declared maximum of 1 page.
+    let err = env.execute_ingress(canister_id, "inc", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmEngineError);
+    assert!(err.description().contains(
+        "Failed to grow wasm memory by 19 page(s) to 20 page(s): exceeds module's declared maximum"
+    ));
 }
 
 #[test]

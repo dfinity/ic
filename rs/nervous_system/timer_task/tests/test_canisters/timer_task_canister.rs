@@ -1,6 +1,5 @@
-#![allow(deprecated)]
 use async_trait::async_trait;
-use ic_cdk::{init, query};
+use ic_cdk::{api::canister_self, init, query};
 use ic_metrics_encoder::MetricsEncoder;
 use ic_nervous_system_timer_task::{
     PeriodicAsyncTask, PeriodicSyncTask, RecurringAsyncTask, RecurringSyncTask,
@@ -86,7 +85,7 @@ fn get_metrics() -> String {
 fn __self_call() {}
 
 async fn invoke_self_call() {
-    let () = ic_cdk::call(ic_cdk::api::id(), "__self_call", ())
+    ic_cdk::call::Call::unbounded_wait(canister_self(), "__self_call")
         .await
         .unwrap();
 }

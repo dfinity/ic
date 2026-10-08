@@ -1031,9 +1031,7 @@ fn test_neuron_permission_list_display_impl() {
     let neuron_permission_list = NeuronPermissionList::all();
     assert_eq!(
         format!("permissions: {neuron_permission_list}"),
-        format!(
-            "permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission]"
-        )
+        "permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission]"
     );
 }
 

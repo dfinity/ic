@@ -10,7 +10,6 @@ use ic_system_test_driver::{
             AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet,
             VmResourceOverrides,
         },
-        prometheus_vm::HasPrometheus,
         simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
@@ -34,7 +33,6 @@ const PAYLOAD_SIZE_BYTES: usize = 1024 * 1024;
 const WORKLOAD_RUNTIME: Duration = Duration::from_secs(30 * 60);
 const NNS_SUBNET_MAX_SIZE: usize = 1;
 const APP_SUBNET_MAX_SIZE: usize = 13;
-const DOWNLOAD_PROMETHEUS_DATA: bool = true;
 // Timeout parameters
 const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
@@ -48,9 +46,6 @@ const APP_DURATION_THRESHOLD: Duration = Duration::from_secs(60);
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
 
 const JAEGER_VM_NAME: &str = "jaeger-vm";
-
-// 5 minutes
-const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(60 * 60);
 
 pub fn setup(
     env: TestEnv,
@@ -128,13 +123,7 @@ pub fn setup(
 // Run a test with configurable number of update requests per second,
 // size of the payload, duration of the test. The requests are sent
 // to the replica.
-pub fn test(
-    env: TestEnv,
-    rps: usize,
-    payload_size_bytes: usize,
-    duration: Duration,
-    download_prometheus_data: bool,
-) {
+pub fn test(env: TestEnv, rps: usize, payload_size_bytes: usize, duration: Duration) {
     let log = env.logger();
     info!(
         &log,
@@ -237,17 +226,6 @@ pub fn test(
             load_metrics_app.failure_calls(),
         );
     }
-
-    // Download Prometheus data if required.
-    if download_prometheus_data {
-        info!(
-            &log,
-            "Waiting {:?} before download.", DOWNLOAD_PROMETHEUS_WAIT_TIME
-        );
-        std::thread::sleep(DOWNLOAD_PROMETHEUS_WAIT_TIME);
-        info!(&log, "Downloading p8s data");
-        env.download_prometheus_data_dir_if_exists();
-    }
 }
 
 fn create_agents_for_subnet(log: &Logger, subnet: &SubnetSnapshot) -> Vec<Agent> {
@@ -277,15 +255,7 @@ fn main() -> Result<()> {
             None,
         )
     };
-    let test = |env| {
-        test(
-            env,
-            RPS,
-            PAYLOAD_SIZE_BYTES,
-            WORKLOAD_RUNTIME,
-            DOWNLOAD_PROMETHEUS_DATA,
-        )
-    };
+    let test = |env| test(env, RPS, PAYLOAD_SIZE_BYTES, WORKLOAD_RUNTIME);
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test))

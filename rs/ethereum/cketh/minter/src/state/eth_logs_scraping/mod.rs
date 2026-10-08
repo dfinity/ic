@@ -31,11 +31,7 @@ impl LogScrapings {
         self.scrapings.iter()
     }
 
-    pub fn set_contract_address(
-        &mut self,
-        id: LogScrapingId,
-        contract_address: Address,
-    ) -> Result<(), LogScrapingStateError> {
+    pub fn set_contract_address(&mut self, id: LogScrapingId, contract_address: Address) {
         self.get_mut(id).set_contract_address(contract_address)
     }
 
@@ -118,11 +114,6 @@ impl Display for LogScrapingId {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
-pub enum LogScrapingStateError {
-    InvalidContractAddress(String),
-}
-
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(u8)]
 pub enum LogScrapingStatus {
@@ -159,17 +150,8 @@ impl LogScrapingState {
         }
     }
 
-    pub fn set_contract_address(
-        &mut self,
-        contract_address: Address,
-    ) -> Result<(), LogScrapingStateError> {
-        if contract_address == Address::ZERO {
-            return Err(LogScrapingStateError::InvalidContractAddress(
-                "contract address must not be zero".to_string(),
-            ));
-        }
+    pub fn set_contract_address(&mut self, contract_address: Address) {
         self.contract_address = Some(contract_address);
-        Ok(())
     }
 
     pub fn set_last_scraped_block_number(&mut self, block_number: BlockNumber) {

@@ -32,6 +32,7 @@ pub fn setup(env: TestEnv) {
     let resource_limits = ResourceLimits {
         maximum_state_size: Some(maximum_state_size()),
         maximum_state_delta: None,
+        ..Default::default()
     };
     InternetComputer::new()
         .add_subnet(

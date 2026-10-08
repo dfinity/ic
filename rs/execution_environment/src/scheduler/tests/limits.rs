@@ -4,7 +4,7 @@ use super::super::test_utilities::{
     SchedulerTestBuilder, TestInstallCode, ingress, instructions, on_response, other_side,
 };
 use super::super::*;
-use super::{zero_instruction_messages, zero_instruction_overhead_config};
+use super::zero_instruction_overhead_config;
 use crate::scheduler::test_utilities::EMPTY_WASM;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_replicated_state::testing::CanisterQueuesTesting;
@@ -93,12 +93,7 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
     let metrics = &test.scheduler().metrics;
     assert_eq!(metrics.execute_round_called.get(), 1);
     assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 1);
-    assert_eq!(
-        metrics
-            .inner_loop_consumed_non_zero_instructions_count
-            .get(),
-        1
-    );
+    assert_eq!(metrics.inner_loop_processed_non_zero_inputs_count.get(), 1);
 
     assert_eq!(
         test.state()
@@ -123,7 +118,7 @@ fn test_message_limit_from_message_overhead() {
         max_instructions_per_slice: NumInstructions::from(5_000_000_000),
         max_instructions_per_install_code_slice: NumInstructions::from(5_000_000_000),
         max_instructions_per_round: NumInstructions::from(7_000_000_000),
-        instruction_overhead_per_execution: NumInstructions::from(2_000_000),
+        instruction_overhead_per_execution: NumInstructions::from(1_999_999),
         instruction_overhead_per_canister: NumInstructions::from(0),
         instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
         ..SchedulerConfig::application_subnet()
@@ -147,7 +142,7 @@ fn test_message_limit_from_message_overhead() {
         + 1;
 
     let mut callee = canister0;
-    let mut call = other_side(callee, 0);
+    let mut call = other_side(callee, 1);
 
     for _ in 0..expected_number_of_messages * 3 {
         callee = if callee == canister1 {
@@ -155,26 +150,28 @@ fn test_message_limit_from_message_overhead() {
         } else {
             canister1
         };
-        call = other_side(callee, 0).call(call, on_response(0));
+        call = other_side(callee, 1).call(call, on_response(1));
     }
 
-    let message = ingress(0).call(call, on_response(0));
+    let message = ingress(1).call(call, on_response(1));
     test.send_ingress(canister0, message);
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    // All messages are zero instruction messages.
+    // The expected number of messages were executed.
     assert_eq!(
-        zero_instruction_messages(test.metrics_registry()),
+        test.scheduler()
+            .metrics
+            .msg_execution_duration
+            .get_sample_count(),
         expected_number_of_messages
     );
-
     assert_eq!(
         test.state()
             .metadata
             .subnet_metrics
             .update_transactions_total,
-        0
+        expected_number_of_messages
     );
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 2);
 }
@@ -271,7 +268,7 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
         let system_state = &canister_state.system_state;
         assert_eq!(system_state.queues().ingress_queue_size(), 1);
         assert!(!test.was_fully_executed(canister_state.canister_id()));
-        assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
+        assert_eq!(system_state.canister_metrics().rounds_scheduled(), 0);
         assert_eq!(system_state.canister_metrics().executed(), 0);
         assert_eq!(
             system_state
@@ -617,9 +614,7 @@ fn finalization_overhead_per_canister_reduces_instruction_budget() {
 
         let metrics = &test.scheduler().metrics;
         assert_eq!(
-            metrics
-                .inner_loop_consumed_non_zero_instructions_count
-                .get(),
+            metrics.inner_loop_processed_non_zero_inputs_count.get(),
             expected_iterations,
         );
         assert_eq!(
@@ -899,12 +894,7 @@ fn subnet_available_memory_is_refreshed_between_iterations() {
     //   iter 1 — A processes 2 ingress (20 instr on core 0)
     //   iter 2 — A processes 2 calls, B processes 2 calls (20 instr per core)
     let metrics = &test.scheduler().metrics;
-    assert_eq!(
-        metrics
-            .inner_loop_consumed_non_zero_instructions_count
-            .get(),
-        2
-    );
+    assert_eq!(metrics.inner_loop_processed_non_zero_inputs_count.get(), 2);
 
     // 6 messages executed in total: 2 ingress + 4 calls (2 succeed, 2 fail).
     assert_eq!(metrics.round_inner.messages.get_sample_sum(), 6.0);

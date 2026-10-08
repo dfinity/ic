@@ -167,6 +167,11 @@ impl PeerCounter {
             Entry::Vacant(_) => false,
         }
     }
+
+    /// Removes all references to `node`, regardless of its counter value.
+    pub(crate) fn remove_all(&mut self, node: NodeId) -> bool {
+        self.0.remove(&node).is_some()
+    }
 }
 
 pub(crate) struct ConsensusManagerReceiver<
@@ -558,8 +563,13 @@ where
         });
 
         for peers_sender in self.active_assembles.values() {
-            peers_sender
-                .send_if_modified(|set| nodes_leaving_topology.iter().any(|n| set.remove(*n)));
+            peers_sender.send_if_modified(|set| {
+                let mut modified = false;
+                for node in &nodes_leaving_topology {
+                    modified |= set.remove_all(*node);
+                }
+                modified
+            });
         }
         debug_assert!(
             self.slot_table.len() <= self.topology_watcher.borrow().iter().count(),
@@ -610,7 +620,7 @@ mod tests {
     use ic_p2p_test_utils::{consensus::U64Artifact, mocks::MockArtifactAssembler};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{RegistryVersion, artifact::IdentifiableArtifact};
-    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
     use tokio::time::timeout;
     use tower::util::ServiceExt;
 
@@ -1291,6 +1301,214 @@ mod tests {
                 .unwrap()
                 .unwrap()
                 .1,
+            0
+        );
+    }
+
+    fn make_done_artifact_assembler() -> MockArtifactAssembler {
+        let mut artifact_assembler = MockArtifactAssembler::default();
+        artifact_assembler
+            .expect_assemble_message()
+            .returning(|id, _, _: PeerWatcher| {
+                Box::pin(async move {
+                    AssembleResult::Done {
+                        message: U64Artifact::id_to_msg(id, 100),
+                        peer_id: NODE_1,
+                    }
+                })
+            });
+        artifact_assembler
+    }
+
+    /// Verify that if multiple peers advertising the *same* artifact leave the subnet in a
+    /// single topology update, the shared assemble task is informed and finishes.
+    #[tokio::test]
+    async fn topology_update_multiple_peers_leave_same_artifact() {
+        let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
+            .with_artifact_assembler_maker(make_done_artifact_assembler)
+            .with_topology_watcher(pfn_rx)
+            .build();
+        let cancellation = CancellationToken::new();
+        // Two different peers advertise the same artifact (id 0), so they share a single
+        // `PeerCounter` and assemble task.
+        mgr.handle_slot_update_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Id(0),
+            },
+            NODE_1,
+            ConnId::from(1),
+            cancellation.clone(),
+        );
+        mgr.handle_slot_update_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Id(0),
+            },
+            NODE_2,
+            ConnId::from(1),
+            cancellation.clone(),
+        );
+        assert_eq!(mgr.active_assembles.len(), 1);
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        // Both peers leave the subnet in the same topology update.
+        pfn_tx
+            .send(SubnetTopology::new(
+                vec![],
+                RegistryVersion::from(1),
+                RegistryVersion::from(1),
+            ))
+            .unwrap();
+        mgr.handle_topology_update();
+        // The shared assemble task must finish now that all advertising peers left.
+        assert_eq!(
+            timeout(
+                PROCESS_ARTIFACT_TIMEOUT,
+                mgr.artifact_processor_tasks.join_next(),
+            )
+            .await
+            .expect("Assemble task did not finish after all advertising peers left the topology")
+            .unwrap()
+            .unwrap()
+            .1,
+            0
+        );
+    }
+
+    /// Verify that if a peer that advertised the same artifact on multiple slots leaves the
+    /// subnet, all of its references are removed and the assemble task finishes.
+    #[tokio::test]
+    async fn topology_update_peer_with_multiple_slots_leaves() {
+        let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
+            .with_artifact_assembler_maker(make_done_artifact_assembler)
+            .with_topology_watcher(pfn_rx)
+            .build();
+        let cancellation = CancellationToken::new();
+        // A single peer advertises the same artifact (id 0) on two different slots, so its
+        // reference count in the artifact's `PeerCounter` is 2.
+        mgr.handle_slot_update_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Id(0),
+            },
+            NODE_1,
+            ConnId::from(1),
+            cancellation.clone(),
+        );
+        mgr.handle_slot_update_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(2),
+                commit_id: CommitId::from(2),
+                update: Update::Id(0),
+            },
+            NODE_1,
+            ConnId::from(1),
+            cancellation.clone(),
+        );
+        assert_eq!(mgr.active_assembles.len(), 1);
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        // The peer leaves the subnet.
+        pfn_tx
+            .send(SubnetTopology::new(
+                vec![],
+                RegistryVersion::from(1),
+                RegistryVersion::from(1),
+            ))
+            .unwrap();
+        mgr.handle_topology_update();
+        // The assemble task must finish even though the peer held multiple references.
+        assert_eq!(
+            timeout(
+                PROCESS_ARTIFACT_TIMEOUT,
+                mgr.artifact_processor_tasks.join_next(),
+            )
+            .await
+            .expect("Assemble task did not finish after the peer left the topology")
+            .unwrap()
+            .unwrap()
+            .1,
+            0
+        );
+    }
+
+    /// Verify that when only *some* of the peers advertising a shared artifact leave the
+    /// subnet, the departed peers are pruned while a staying peer is kept, so the assemble
+    /// task stays alive until the last peer leaves. This guards against over-pruning, i.e.
+    /// dropping a peer that is still a subnet member.
+    #[tokio::test]
+    async fn topology_update_keeps_staying_peer_on_shared_artifact() {
+        let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
+            .with_artifact_assembler_maker(make_done_artifact_assembler)
+            .with_topology_watcher(pfn_rx)
+            .build();
+        let cancellation = CancellationToken::new();
+        let addr = "127.0.0.1:8080".parse().unwrap();
+        // Three peers advertise the same artifact (id 0), sharing a single `PeerCounter`.
+        for node in [NODE_1, NODE_2, NODE_3] {
+            mgr.handle_slot_update_receive(
+                SlotUpdate {
+                    slot_number: SlotNumber::from(1),
+                    commit_id: CommitId::from(1),
+                    update: Update::Id(0),
+                },
+                node,
+                ConnId::from(1),
+                cancellation.clone(),
+            );
+        }
+        assert_eq!(mgr.active_assembles.len(), 1);
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        // NODE_1 and NODE_2 leave the subnet; NODE_3 stays.
+        pfn_tx
+            .send(SubnetTopology::new(
+                vec![(NODE_3, addr)],
+                RegistryVersion::from(1),
+                RegistryVersion::from(1),
+            ))
+            .unwrap();
+        mgr.handle_topology_update();
+        // Only the departed peers are pruned; the staying peer remains in the counter.
+        let remaining: HashSet<NodeId> = mgr
+            .active_assembles
+            .get(&0)
+            .expect("assemble task should still be active")
+            .borrow()
+            .peers()
+            .copied()
+            .collect();
+        assert_eq!(remaining, HashSet::from([NODE_3]));
+        // The assemble task must not finish while a peer still advertises the artifact.
+        timeout(
+            Duration::from_millis(100),
+            mgr.artifact_processor_tasks.join_next(),
+        )
+        .await
+        .expect_err("Assemble task must stay alive while a peer still advertises the artifact");
+        // Now the last peer leaves too and the task finishes.
+        pfn_tx
+            .send(SubnetTopology::new(
+                vec![],
+                RegistryVersion::from(1),
+                RegistryVersion::from(1),
+            ))
+            .unwrap();
+        mgr.handle_topology_update();
+        assert_eq!(
+            timeout(
+                PROCESS_ARTIFACT_TIMEOUT,
+                mgr.artifact_processor_tasks.join_next(),
+            )
+            .await
+            .expect("Assemble task did not finish after the last peer left the topology")
+            .unwrap()
+            .unwrap()
+            .1,
             0
         );
     }

@@ -10,6 +10,29 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(target_os = "linux")]
 use thiserror::Error;
 
+/// Converts the return value of a libc call that signals failure by returning
+/// `-1` into an `io::Result`, capturing `errno` on failure (like the `cvt`
+/// helper in `libstd`).
+#[cfg(target_family = "unix")]
+pub fn cvt<T: Copy + PartialEq + From<i8>>(ret: T) -> io::Result<T> {
+    if ret == T::from(-1) {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(ret)
+    }
+}
+
+/// Like [`cvt`], but retries the call as long as it fails with `EINTR`.
+#[cfg(target_family = "unix")]
+pub fn cvt_r<T: Copy + PartialEq + From<i8>>(mut f: impl FnMut() -> T) -> io::Result<T> {
+    loop {
+        match cvt(f()) {
+            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+            other => return other,
+        }
+    }
+}
+
 /// Represents an action that should be run when this objects runs out of scope,
 /// unless it's explicitly deactivated.
 ///
@@ -67,7 +90,7 @@ where
 }
 
 /// Whether the destination file may be overwritten.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum Clobber {
     Yes,
     No,
@@ -163,7 +186,6 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
         return copy_file_sparse_portable(from, to);
     }
 
-    use cvt::*;
     use fs::OpenOptions;
     use io::{ErrorKind, Read};
     use libc::{ftruncate64, lseek64};
@@ -622,13 +644,12 @@ pub fn copy_file_range_all(
     mut dst_offset: i64,
     len: usize,
 ) -> Result<(), CopyFileRangeAllError> {
-    use std::os::unix::io::AsRawFd;
     let mut copied_total = 0;
     while copied_total < len {
         let copied = nix::fcntl::copy_file_range(
-            src.as_raw_fd(),
+            src,
             Some(&mut src_offset),
-            dst.as_raw_fd(),
+            dst,
             Some(&mut dst_offset),
             len - copied_total,
         );
@@ -782,6 +803,29 @@ mod tests {
     use std::fs;
     use std::io::{ErrorKind, Write};
     use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[cfg(target_family = "unix")]
+    #[test]
+    fn cvt_captures_errno_and_cvt_r_retries_on_eintr() {
+        use super::{cvt, cvt_r};
+        use nix::errno::Errno;
+
+        assert_eq!(cvt(42_i64).unwrap(), 42);
+        Errno::EBADF.set();
+        assert_eq!(cvt(-1_i32).unwrap_err().raw_os_error(), Some(libc::EBADF));
+
+        let mut calls = 0;
+        let result = cvt_r(|| {
+            calls += 1;
+            if calls < 3 {
+                Errno::EINTR.set();
+                -1_i32
+            } else {
+                5
+            }
+        });
+        assert_eq!((result.unwrap(), calls), (5, 3));
+    }
 
     #[test]
     fn test_write_success() {
@@ -1197,7 +1241,12 @@ mod tests {
             );
         }
 
+        // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get
+        // the permission denial this test expects, drop that capability for
+        // the duration of the test (test actions run as root under Bazel
+        // remote execution).
         #[test]
+        #[ic_test_utilities_privileges::enforce_file_permissions]
         fn should_return_error_if_permission_is_denied() {
             let temp_dir =
                 tempfile::TempDir::new().expect("failed to create a temporary directory");
@@ -1263,7 +1312,12 @@ mod tests {
             );
         }
 
+        // Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get
+        // the permission denial this test expects, drop that capability for
+        // the duration of the test (test actions run as root under Bazel
+        // remote execution).
         #[test]
+        #[ic_test_utilities_privileges::enforce_file_permissions]
         fn should_return_error_if_permission_is_denied() {
             let temp_dir =
                 tempfile::TempDir::new().expect("failed to create a temporary directory");

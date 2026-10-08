@@ -121,14 +121,8 @@ impl State {
         let other_state = other.0.lock().unwrap();
         other_state
             .chunks
-            .iter()
-            .filter_map(|(k, _)| {
-                if !this_state.chunks.contains_key(k) {
-                    Some(k)
-                } else {
-                    None
-                }
-            })
+            .keys()
+            .filter(|k| !this_state.chunks.contains_key(k))
             .cloned()
             .collect()
     }

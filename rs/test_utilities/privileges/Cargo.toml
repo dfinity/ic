@@ -1,0 +1,16 @@
+[package]
+name = "ic-test-utilities-privileges"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-test-utilities-privileges-macros = { path = "macros" }
+libc = { workspace = true }
+static_assertions = { workspace = true }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

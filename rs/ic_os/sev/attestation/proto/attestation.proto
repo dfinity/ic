@@ -61,6 +61,8 @@ message VerificationError {
     VerificationErrorDescription invalid_measurement = 7;
     // The signature in the attestation report is not by the VCEK
     VerificationErrorDescription invalid_signature = 8;
+    // The policy is invalid
+    VerificationErrorDescription invalid_policy = 9;
   }
 }
 

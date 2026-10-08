@@ -1,4 +1,5 @@
 use crate::units::GIB as ONE_GIB;
+use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;
@@ -8,18 +9,22 @@ use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs,
     CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterStatusResultV2,
     CanisterStatusType, CreateCanisterArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
-    FetchCanisterLogsRequest, HttpMethod, IC_00, LogVisibilityV2, MasterPublicKeyId, Method,
+    FetchCanisterLogsRequest, FlexibleCanisterHttpRequestArgs, HttpMethod, IC_00, LogVisibilityV2,
+    MasterPublicKeyId, Method, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc,
-    UploadChunkArgs, VetKdCurve, VetKdKeyId,
+    ReplicationCounts, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext,
+    TransformFunc, UploadChunkArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_u64};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterStatus, ReplicatedState, SystemState,
-    canister_state::{DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES},
+    CanisterStatus, ExecutionTask, ReplicatedState, SystemState,
+    canister_state::{
+        DEFAULT_QUEUE_CAPACITY, NextExecution, WASM_PAGE_SIZE_IN_BYTES,
+        execution_state::WasmExecutionMode,
+    },
     metadata_state::subnet_call_context_manager::PreSignatureStash,
-    metadata_state::testing::NetworkTopologyTesting,
+    metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
     testing::{CanisterQueuesTesting, SystemStateTesting},
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
@@ -28,15 +33,17 @@ use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, expect_canister_did_not_reply,
     get_reject, get_reply,
 };
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
+use ic_test_utilities_metrics::{
+    fetch_histogram_vec_count, fetch_int_counter_vec, metric_vec, nonzero_values,
+};
 use ic_types::{
-    CanisterId, CountBytes, PrincipalId, RegistryVersion,
-    canister_http::{CanisterHttpMethod, Transform},
+    CanisterId, CountBytes, NumInstructions, PrincipalId, RegistryVersion,
+    canister_http::{CanisterHttpMethod, PricingVersion, Replication, Transform},
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
-        RequestOrResponse, Response,
+        CallbackId, CanisterTask, MAX_RESPONSE_COUNT_BYTES, MessageId, NO_DEADLINE, Payload,
+        RejectContext, RequestOrResponse, Response,
     },
     time::UNIX_EPOCH,
 };
@@ -829,10 +836,16 @@ fn get_canister_status_from_another_canister_when_memory_low() {
             * seconds_per_day
             * test
                 .cycles_account_manager()
-                .gib_storage_per_second_fee(test.subnet_size(), CanisterCyclesCostSchedule::Normal)
+                .gib_storage_per_second_fee(test.get_own_subnet_cycles_config())
                 .real()
                 .get())
             / one_gib
+            + test
+                .cycles_account_manager()
+                .base_per_second_fee(test.get_own_subnet_cycles_config())
+                .real()
+                .get()
+                * seconds_per_day
     );
 }
 
@@ -1427,6 +1440,175 @@ fn stop_canister_creates_entry_in_subnet_call_context_manager() {
 }
 
 #[test]
+fn stop_canister_nonexistent_no_orphan_stop_canister_call() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let nonexistent_canister_id = canister_test_id(99);
+
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(nonexistent_canister_id)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+}
+
+#[test]
+fn stop_canister_not_controller_no_orphan_stop_canister_call() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create a canister but do not make caller_canister its controller.
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    assert!(
+        !test
+            .canister_state(canister_id)
+            .system_state
+            .controllers
+            .contains(&caller_canister.get())
+    );
+
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+}
+
+#[test]
+fn stop_canister_already_stopped_no_orphan_stop_canister_call() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id, controllers)
+        .unwrap();
+
+    // Stop the canister first.
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        CanisterStatusType::Stopped,
+        test.canister_state(canister_id).status()
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+
+    // Stopping an already stopped canister yields an immediate reply
+    // and must not leave an orphan StopCanisterCall.
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    assert_eq!(
+        CanisterStatusType::Stopped,
+        test.canister_state(canister_id).status()
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+}
+
+#[test]
+fn stop_canister_running_creates_stop_canister_call() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id, controllers)
+        .unwrap();
+
+    assert_eq!(
+        CanisterStatusType::Running,
+        test.canister_state(canister_id).status()
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id).status()
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+}
+
+#[test]
 fn clean_in_progress_stop_canister_calls_from_subnet_call_context_manager() {
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
@@ -1651,14 +1833,14 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     // A no-op subnet split (no canisters migrated).
     test.state_mut()
         .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_1, own_subnet_id);
-    test.state_mut()
-        .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_2, own_subnet_id);
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_1, own_subnet_id);
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_2, own_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Retains the `StopCanisterCall` and does not produce a response.
@@ -1674,9 +1856,11 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     // Simulate a subnet split that migrates canister 1 to another subnet.
     test.state_mut()
         .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_1, other_subnet_id);
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_1, other_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `StopCanisterCall` and produced a reject response.
@@ -1732,9 +1916,11 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
     // Simulate a subnet split that migrates canister 2 to another subnet.
     test.state_mut()
         .metadata
-        .network_topology
-        .routing_table_mut()
-        .assign_canister(canister_id_2, other_subnet_id);
+        .modify_network_topology(|network_topology| {
+            network_topology
+                .routing_table_mut()
+                .assign_canister(canister_id_2, other_subnet_id);
+        });
     test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `StopCanisterCall` and set the ingress state to `Failed`.
@@ -2116,7 +2302,9 @@ fn management_canister_xnet_to_nns_called_from_non_nns() {
         .with_nns_subnet_id(own_subnet)
         .with_caller(other_subnet, other_canister)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
@@ -2150,7 +2338,9 @@ fn http_request_bound_holds() {
         // set number of max in-flight calls to 10
         .with_max_canister_http_requests_in_flight(10)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
 
     // Create payload of the request.
     let url = "https://".to_string();
@@ -2215,7 +2405,9 @@ fn management_canister_xnet_called_from_non_nns() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(other_subnet, other_canister)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = true;
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
@@ -2273,6 +2465,7 @@ fn create_canister_xnet_called_from_nns() {
 fn setup_initial_dkg_sender_on_nns() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
+    let other_subnet = subnet_test_id(3);
     let nns_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
@@ -2281,12 +2474,15 @@ fn setup_initial_dkg_sender_on_nns() {
         .with_caller(nns_subnet, nns_canister)
         .build();
     let nodes = vec![node_test_id(1)];
-    let args = ic00::SetupInitialDKGArgs::new(nodes, RegistryVersion::new(1));
-    test.inject_call_to_ic00(
-        Method::SetupInitialDKG,
-        args.encode(),
-        test.canister_creation_fee().real(),
-    );
+    for subnet_id in [None, Some(own_subnet), Some(other_subnet), Some(nns_subnet)] {
+        let args =
+            ic00::SetupInitialDKGArgs::new(nodes.clone(), RegistryVersion::new(1), subnet_id);
+        test.inject_call_to_ic00(
+            Method::SetupInitialDKG,
+            args.encode(),
+            test.canister_creation_fee().real(),
+        );
+    }
     test.execute_all();
     assert_eq!(0, test.xnet_messages().len());
 }
@@ -2303,33 +2499,38 @@ fn setup_initial_dkg_sender_not_on_nns() {
         .with_caller(other_subnet, other_canister)
         .build();
     let nodes = vec![node_test_id(1)];
-    let args = ic00::SetupInitialDKGArgs::new(nodes, RegistryVersion::new(1));
-    test.inject_call_to_ic00(
-        Method::SetupInitialDKG,
-        args.encode(),
-        test.canister_creation_fee().real(),
-    );
+    for subnet_id in [None, Some(own_subnet), Some(other_subnet), Some(nns_subnet)] {
+        let args =
+            ic00::SetupInitialDKGArgs::new(nodes.clone(), RegistryVersion::new(1), subnet_id);
+        test.inject_call_to_ic00(
+            Method::SetupInitialDKG,
+            args.encode(),
+            test.canister_creation_fee().real(),
+        );
+    }
     test.execute_all();
-    let response = test.xnet_messages()[0].clone();
-    assert_eq!(
-        response,
-        Response {
-            originator: other_canister,
-            respondent: CanisterId::from(own_subnet),
-            originator_reply_callback: CallbackId::new(0),
-            refund: test.canister_creation_fee().real(),
-            response_payload: Payload::Reject(RejectContext::new(
-                RejectCode::CanisterError,
-                format!(
-                    "{} is called by {}. It can only be called by NNS.",
-                    ic00::Method::SetupInitialDKG,
-                    other_canister,
-                )
-            )),
-            deadline: NO_DEADLINE,
-        }
-        .into()
-    );
+    assert_eq!(test.xnet_messages().len(), 4);
+    for response in test.xnet_messages().iter() {
+        assert_eq!(
+            response.clone(),
+            Response {
+                originator: other_canister,
+                respondent: CanisterId::from(own_subnet),
+                originator_reply_callback: CallbackId::new(0),
+                refund: test.canister_creation_fee().real(),
+                response_payload: Payload::Reject(RejectContext::new(
+                    RejectCode::CanisterError,
+                    format!(
+                        "{} is called by {}. It can only be called by NNS.",
+                        ic00::Method::SetupInitialDKG,
+                        other_canister,
+                    )
+                )),
+                deadline: NO_DEADLINE,
+            }
+            .into()
+        );
+    }
 }
 
 #[test]
@@ -2500,6 +2701,33 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
         Cycles::new(1_000),
         test.canister_state(id).system_state.balance()
     );
+}
+
+/// Tests that the ingress filter rejects all ingress messages with
+/// `RejectCode::SysTransient` while the subnet is cooling down.
+#[test]
+fn ingress_message_to_cooling_down_subnet_is_rejected() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+
+    // Sanity check: the message is accepted while the subnet is not cooling down.
+    test.should_accept_ingress_message(canister, "update", vec![])
+        .unwrap();
+
+    test.set_cooling_down(true);
+
+    // Both canister-addressed and subnet-addressed messages are now rejected.
+    let err = test
+        .should_accept_ingress_message(canister, "update", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::SubnetCoolingDown, err.code());
+    assert_eq!(RejectCode::SysTransient, err.reject_code());
+
+    let payload = Encode!(&CanisterIdRecord::from(canister)).unwrap();
+    let err = test
+        .should_accept_ingress_message(CanisterId::ic_00(), Method::CanisterStatus, payload)
+        .unwrap_err();
+    assert_eq!(ErrorCode::SubnetCoolingDown, err.code());
 }
 
 #[test]
@@ -2862,7 +3090,7 @@ fn management_message_with_invalid_sender_is_not_accepted_without_subnet_admins(
     let err = test
         .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterInvalidController, err.code());
+    assert_eq!(ErrorCode::CanisterStatusAccessDenied, err.code());
 }
 
 #[test]
@@ -2882,10 +3110,7 @@ fn management_message_with_invalid_sender_is_not_accepted_with_subnet_admins() {
     let err = test
         .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
         .unwrap_err();
-    assert_eq!(
-        ErrorCode::CanisterInvalidControllerOrSubnetAdmin,
-        err.code()
-    );
+    assert_eq!(ErrorCode::CanisterStatusAccessDenied, err.code());
 }
 
 #[test]
@@ -3003,86 +3228,151 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
 
 #[test]
 fn execute_canister_http_request() {
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(10);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_caller(own_subnet, caller_canister)
-        .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let own_subnet = subnet_test_id(1);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_cost_schedule(cost_schedule)
+            .with_manual_execution()
+            .build();
 
-    // Create payload of the request.
-    let url = "https://".to_string();
-    let response_size_limit = 1000_u64;
-    let transform_method_name = "transform".to_string();
-    let transform_context = vec![0, 1, 2];
-    let args = CanisterHttpRequestArgs {
-        url: url.clone(),
-        max_response_bytes: Some(response_size_limit),
-        headers: BoundedHttpHeaders::new(vec![]),
-        body: None,
-        method: HttpMethod::GET,
-        transform: Some(TransformContext {
-            function: TransformFunc(candid::Func {
-                principal: caller_canister.get().0,
-                method: transform_method_name.clone(),
+        let caller_canister = test.universal_canister().unwrap();
+        // Create payload of the request.
+        let url = "https://".to_string();
+        let response_size_limit = 1000_u64;
+        let transform_method_name = "transform".to_string();
+        let transform_context = vec![0, 1, 2];
+        let args = CanisterHttpRequestArgs {
+            url: url.clone(),
+            max_response_bytes: Some(response_size_limit),
+            headers: BoundedHttpHeaders::new(vec![]),
+            body: None,
+            method: HttpMethod::GET,
+            transform: Some(TransformContext {
+                function: TransformFunc(candid::Func {
+                    principal: caller_canister.get().0,
+                    method: transform_method_name.clone(),
+                }),
+                context: transform_context.clone(),
             }),
-            context: transform_context.clone(),
-        }),
-        is_replicated: None,
-        pricing_version: None,
-    };
+            is_replicated: None,
+            pricing_version: None,
+        };
 
-    // Create request to HTTP_REQUEST method.
-    let payment = Cycles::new(1_000_000_000);
-    let payload = args.encode();
-    test.inject_call_to_ic00(Method::HttpRequest, payload, payment);
-    test.execute_all();
-    // Check that the SubnetCallContextManager contains the request.
-    let canister_http_request_contexts = &test
-        .state()
-        .metadata
-        .subnet_call_context_manager
-        .canister_http_request_contexts;
-    assert_eq!(canister_http_request_contexts.len(), 1);
+        // Create request to HTTP_REQUEST method.
+        let payment = Cycles::new(1_000_000_000);
+        let payload = args.encode();
+        let call_to_management_canister = wasm()
+            .call_with_cycles(
+                IC_00,
+                Method::HttpRequest,
+                call_args().other_side(payload.clone()),
+                payment,
+            )
+            .build();
 
-    let http_request_context = canister_http_request_contexts
-        .get(&CallbackId::from(0))
-        .unwrap();
-    assert_eq!(http_request_context.url, url);
-    assert_eq!(
-        http_request_context.transform,
-        Some(Transform {
-            method_name: transform_method_name,
-            context: transform_context,
-        })
-    );
-    assert_eq!(http_request_context.http_method, CanisterHttpMethod::GET);
-    assert_eq!(http_request_context.request.sender, caller_canister);
-    let fee = test.http_request_fee(
-        http_request_context.variable_parts_size(),
-        Some(NumBytes::from(response_size_limit)),
-    );
-    assert_eq!(http_request_context.request.payment, payment - fee.real());
-
-    assert_eq!(
-        fee.nominal(),
-        test.state()
-            .metadata
-            .subnet_metrics
-            .get_consumed_cycles_http_outcalls()
-    );
-
-    assert_eq!(
-        fee.nominal(),
-        *test
+        let (message_id, _) =
+            test.ingress_raw(caller_canister, "update", call_to_management_canister);
+        test.execute_all();
+        // Check that the SubnetCallContextManager contains the request
+        // and the ingress message is in processing state.
+        let canister_http_request_contexts = &test
             .state()
             .metadata
-            .subnet_metrics
-            .get_consumed_cycles_by_use_case()
-            .get(&CyclesUseCase::HTTPOutcalls)
-            .unwrap()
-    );
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+        assert_eq!(canister_http_request_contexts.len(), 1);
+        assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
+
+        let http_request_context = canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap();
+        assert_eq!(http_request_context.url, url);
+        assert_eq!(
+            http_request_context.transform,
+            Some(Arc::new(Transform {
+                method_name: transform_method_name,
+                context: transform_context,
+            }))
+        );
+        assert_eq!(http_request_context.http_method, CanisterHttpMethod::GET);
+        assert_eq!(http_request_context.request.sender, caller_canister);
+        let fee = test.http_request_fee(
+            http_request_context.variable_parts_size(),
+            Some(NumBytes::from(response_size_limit)),
+        );
+        assert_eq!(http_request_context.request.payment, payment - fee.real());
+
+        // Legacy pricing populates the refund status from the base fee: the
+        // refundable cycles are everything beyond the base fee (zero on a free
+        // cost schedule), split across the refunding nodes (the whole subnet for
+        // a fully replicated request).
+        assert_eq!(
+            http_request_context.replication,
+            Replication::FullyReplicated
+        );
+        let base_fee = test.http_request_base_fee(
+            http_request_context.variable_parts_size(),
+            &http_request_context.replication,
+        );
+        let node_count = test.subnet_size();
+        let refundable_payment = match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            CanisterCyclesCostSchedule::Normal => payment - base_fee.real(),
+        };
+        let expected_allowance = refundable_payment / node_count;
+        assert_eq!(
+            http_request_context.refund_status.per_replica_allowance,
+            expected_allowance
+        );
+        assert_eq!(
+            http_request_context.refund_status.refundable_cycles,
+            expected_allowance * node_count
+        );
+        assert_eq!(
+            http_request_context.refund_status.refunded_cycles,
+            Cycles::new(0)
+        );
+        assert!(
+            http_request_context
+                .refund_status
+                .refunding_nodes
+                .is_empty()
+        );
+
+        assert_eq!(
+            fee.nominal(),
+            test.state()
+                .metadata
+                .subnet_metrics
+                .get_consumed_cycles_http_outcalls()
+        );
+
+        assert_eq!(
+            fee.nominal(),
+            *test
+                .state()
+                .metadata
+                .subnet_metrics
+                .get_consumed_cycles_by_use_case()
+                .get(&CyclesUseCase::HTTPOutcalls)
+                .unwrap()
+        );
+
+        assert_eq!(
+            fee.nominal(),
+            *test
+                .canister_state(caller_canister)
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases_monotonic()
+                .get(&CyclesUseCase::HTTPOutcalls)
+                .unwrap()
+        );
+    }
 }
 
 #[test]
@@ -3093,7 +3383,9 @@ fn execute_canister_http_request_disabled() {
         .with_own_subnet_id(own_subnet)
         .with_caller(own_subnet, caller_canister)
         .build();
-    test.state_mut().metadata.own_subnet_features.http_requests = false;
+    std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+        .subnet_features
+        .http_requests = false;
 
     // Create payload of the request.
     let url = "https://".to_string();
@@ -3124,6 +3416,1036 @@ fn execute_canister_http_request_disabled() {
         .subnet_call_context_manager
         .canister_http_request_contexts;
     assert_eq!(canister_http_request_contexts.len(), 0);
+}
+
+/// The two ways HTTP outcalls come for free: a free cost schedule, and a system
+/// subnet, which charges nothing for outcalls despite its normal schedule.
+#[derive(Copy, Clone, Debug)]
+enum FreeOutcalls {
+    FreeCostSchedule,
+    SystemSubnet,
+}
+
+#[test]
+fn execute_canister_http_request_free_subnet_accepts_zero_cycles() {
+    // Where HTTP outcalls are free nothing is charged for them, so a caller must
+    // not have to attach any cycles — under pay-as-you-go just as under legacy
+    // pricing, and for flexible outcalls (always pay-as-you-go) just as for
+    // fully replicated ones.
+    //
+    // Both flavours of free are covered because they used to differ: outcalls are
+    // priced off the cost schedule pinned in the request context, and a system
+    // subnet reaches that through a mapping (normal schedule, free outcalls)
+    // rather than by carrying a free schedule to begin with.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let build_test = |free: FreeOutcalls| {
+        let builder = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_caller(own_subnet, caller_canister);
+        match free {
+            FreeOutcalls::FreeCostSchedule => {
+                builder.with_cost_schedule(CanisterCyclesCostSchedule::Free)
+            }
+            FreeOutcalls::SystemSubnet => builder.with_subnet_type(SubnetType::System),
+        }
+        .build()
+    };
+    let http_request_args = |pricing_version| CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes: Some(1_000_000),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        is_replicated: None,
+        pricing_version,
+    };
+
+    for free in [FreeOutcalls::FreeCostSchedule, FreeOutcalls::SystemSubnet] {
+        let calls: [(&str, Method, Vec<u8>); 3] = [
+            (
+                "legacy",
+                Method::HttpRequest,
+                http_request_args(Some(PRICING_VERSION_LEGACY)).encode(),
+            ),
+            (
+                "pay-as-you-go",
+                Method::HttpRequest,
+                http_request_args(Some(PRICING_VERSION_PAY_AS_YOU_GO)).encode(),
+            ),
+            (
+                "flexible",
+                Method::FlexibleHttpRequest,
+                flexible_http_request_args(caller_canister).encode(),
+            ),
+        ];
+        for (label, method, payload) in calls {
+            let mut test = build_test(free);
+            test.inject_call_to_ic00(method, payload, Cycles::zero());
+            test.execute_all();
+
+            let contexts = &test
+                .state()
+                .metadata
+                .subnet_call_context_manager
+                .canister_http_request_contexts;
+            assert_eq!(
+                contexts.len(),
+                1,
+                "a {label} outcall with no cycles attached was not accepted on {free:?}: {:?}",
+                test.xnet_messages()
+                    .first()
+                    .cloned()
+                    .map(get_reject_message),
+            );
+            // Nothing is charged, so nothing is withheld as an allowance and the
+            // whole (empty) payment is left to be refunded with the response.
+            let context = contexts.get(&CallbackId::from(0)).unwrap();
+            assert_eq!(
+                context.request.payment,
+                Cycles::zero(),
+                "a {label} outcall on {free:?} charged something out of an empty payment",
+            );
+            assert_eq!(
+                context.refund_status.per_replica_allowance,
+                Cycles::zero(),
+                "a {label} outcall on {free:?} withheld an allowance out of an empty payment",
+            );
+        }
+    }
+}
+
+#[test]
+fn execute_canister_http_request_insufficient_payment() {
+    // Under legacy pricing the *full* request fee is charged upfront, not just
+    // the (smaller) base fee. A payment that covers the base fee but not the
+    // full legacy fee must therefore still be rejected. This pins the legacy
+    // threshold to the legacy fee and guards against it being accidentally
+    // lowered to the base fee.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let legacy_http_request_args = || CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        // A large response limit makes the legacy fee (which has a response-size
+        // term) strictly exceed the base fee (which has none).
+        max_response_bytes: Some(1_000_000),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        is_replicated: None,
+        pricing_version: None,
+    };
+    let build_test = || {
+        ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_caller(own_subnet, caller_canister)
+            .build()
+    };
+
+    // Probe with ample payment to learn the base and legacy fees for these args.
+    let (base_fee_real, legacy_fee_real) = {
+        let mut probe = build_test();
+        probe.inject_call_to_ic00(
+            Method::HttpRequest,
+            legacy_http_request_args().encode(),
+            Cycles::new(100_000_000_000),
+        );
+        probe.execute_all();
+        let context = probe
+            .state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap();
+        let size = context.variable_parts_size();
+        let base_fee = probe.http_request_base_fee(size, &context.replication);
+        let legacy_fee = probe.http_request_fee(size, context.max_response_bytes);
+        (base_fee.real(), legacy_fee.real())
+    };
+    // The test is only meaningful if the legacy fee strictly exceeds the base
+    // fee, so that a payment equal to the base fee discriminates between the two
+    // thresholds.
+    assert!(base_fee_real < legacy_fee_real);
+
+    // A payment equal to the base fee covers the base fee but not the legacy
+    // fee, so legacy pricing must reject it without adding a context.
+    let mut test = build_test();
+    test.inject_call_to_ic00(
+        Method::HttpRequest,
+        legacy_http_request_args().encode(),
+        base_fee_real,
+    );
+    test.execute_all();
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts
+            .len(),
+        0
+    );
+    assert!(get_reject_message(test.xnet_messages()[0].clone()).contains("cycles are required"));
+}
+
+#[test]
+fn execute_canister_http_request_non_replicated_refund_status() {
+    // A non-replicated legacy request has a single participating replica, so its
+    // per-replica allowance equals the full refundable amount (divisor of 1).
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let args = CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes: Some(1000),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        is_replicated: Some(false),
+        pricing_version: None,
+    };
+    // A payment the outcall could conceivably spend in full
+    let payment = Cycles::new(100_000_000);
+    test.inject_call_to_ic00(Method::HttpRequest, args.encode(), payment);
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    assert!(matches!(
+        http_request_context.replication,
+        Replication::NonReplicated(_)
+    ));
+
+    let base_fee = test.http_request_base_fee(
+        http_request_context.variable_parts_size(),
+        &http_request_context.replication,
+    );
+    let expected_refundable = payment - base_fee.real();
+    // Sanity check that these args actually exercise the un-capped split: if the
+    // worst case ever drops below the payment, this test would silently start
+    // asserting the cap instead (which
+    // `execute_canister_http_request_caps_allowance_at_worst_case_cost` covers).
+    assert!(
+        expected_refundable
+            <= test.max_http_request_usage_fee(
+                &http_request_context.replication,
+                http_request_context.max_response_bytes,
+                http_request_context.subnet_size,
+            )
+    );
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        expected_refundable
+    );
+    // A single participating replica means the allowance is the full refundable
+    // amount.
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        expected_refundable
+    );
+}
+
+fn flexible_http_request_args(caller_canister: CanisterId) -> FlexibleCanisterHttpRequestArgs {
+    FlexibleCanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes: None,
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        replication: None,
+    }
+}
+
+#[test]
+fn execute_flexible_canister_http_request() {
+    for cost_schedule in [
+        CanisterCyclesCostSchedule::Normal,
+        CanisterCyclesCostSchedule::Free,
+    ] {
+        let own_subnet = subnet_test_id(1);
+        let caller_canister = canister_test_id(10);
+        let mut test = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_caller(own_subnet, caller_canister)
+            .with_cost_schedule(cost_schedule)
+            .with_flexible_http_requests_enabled()
+            .build();
+
+        let args = flexible_http_request_args(caller_canister);
+        let payment = Cycles::new(1_000_000_000);
+        test.inject_call_to_ic00(Method::FlexibleHttpRequest, args.encode(), payment);
+        test.execute_all();
+
+        let canister_http_request_contexts = &test
+            .state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+        assert_eq!(canister_http_request_contexts.len(), 1);
+
+        let http_request_context = canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap();
+        // With the `flexible_http_requests` feature flag enabled, the flexible
+        // endpoint uses pay-as-you-go pricing on every subnet (free or paying)
+        // and flexible replication.
+        assert_eq!(
+            http_request_context.pricing_version,
+            PricingVersion::PayAsYouGo
+        );
+        let committee_size = match &http_request_context.replication {
+            Replication::Flexible { committee, .. } => committee.len(),
+            other => panic!("expected flexible replication, got {other:?}"),
+        };
+
+        // Pay-as-you-go takes out the base fee plus the per-replica allowances
+        // upfront (unless the cost schedule is free), refunding everything beyond
+        // the base fee per replica.
+        let base_fee = test.http_request_base_fee(
+            http_request_context.variable_parts_size(),
+            &http_request_context.replication,
+        );
+        let refundable_payment = match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            CanisterCyclesCostSchedule::Normal => payment - base_fee.real(),
+        };
+        let expected_allowance = refundable_payment / committee_size.max(1);
+        assert_eq!(
+            http_request_context.refund_status.per_replica_allowance,
+            expected_allowance
+        );
+        assert_eq!(
+            http_request_context.refund_status.refundable_cycles,
+            expected_allowance * committee_size.max(1)
+        );
+        // Whatever the payment covers beyond the base fee and the allowances stays
+        // in the payment, to be refunded along with the response.
+        let expected_payment = match cost_schedule {
+            CanisterCyclesCostSchedule::Free => payment,
+            CanisterCyclesCostSchedule::Normal => {
+                refundable_payment - expected_allowance * committee_size.max(1)
+            }
+        };
+        assert_ne!(expected_payment, Cycles::new(0));
+        assert_eq!(http_request_context.request.payment, expected_payment);
+        assert_eq!(
+            http_request_context.refund_status.refunded_cycles,
+            Cycles::new(0)
+        );
+        assert!(
+            http_request_context
+                .refund_status
+                .refunding_nodes
+                .is_empty()
+        );
+    }
+}
+
+#[test]
+fn execute_canister_http_request_refunds_truncated_allowance_remainder() {
+    // Regression test: the payment beyond the base fee does not generally divide
+    // evenly into per-replica allowances, and the truncated remainder must not be
+    // lost. It is not taken out of the payment, so that it is refunded along with
+    // the response.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_enabled()
+        .build();
+
+    // A payment far below what the committee can possibly spend on this outcall, so
+    // that the payment — rather than the worst-case cost — is split into allowances.
+    let payment = Cycles::new(1_000_000_000);
+    test.inject_call_to_ic00(
+        Method::FlexibleHttpRequest,
+        flexible_http_request_args(caller_canister).encode(),
+        payment,
+    );
+    test.execute_all();
+
+    let http_request_context = test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    let committee_size = match &http_request_context.replication {
+        Replication::Flexible { committee, .. } => committee.len(),
+        other => panic!("expected flexible replication, got {other:?}"),
+    };
+    let base_fee = test.http_request_base_fee(
+        http_request_context.variable_parts_size(),
+        &http_request_context.replication,
+    );
+    let allowance = (payment - base_fee.real()) / committee_size;
+    let remainder = payment - base_fee.real() - allowance * committee_size;
+    // Sanity checks that these args actually exercise a truncated split: the payment
+    // is shared by more than one replica and does not divide evenly among them.
+    assert!(committee_size > 1);
+    assert_ne!(remainder, Cycles::new(0));
+
+    // `refundable_cycles` covers exactly the per-replica allowances, ...
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        allowance
+    );
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        allowance * committee_size
+    );
+    // ... and the remainder that no allowance covers was never taken out of the
+    // payment, so it is refunded when the response is delivered.
+    assert_eq!(http_request_context.request.payment, remainder);
+    // Nothing disappears from the cycles accounting: the base fee, the allowances
+    // and what is left of the payment add up to what the caller paid.
+    assert_eq!(
+        base_fee.real()
+            + http_request_context.refund_status.refundable_cycles
+            + http_request_context.request.payment,
+        payment
+    );
+    // Only the base fee is charged (and reported as consumed) upfront.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_http_outcalls(),
+        base_fee.nominal()
+    );
+    assert_eq!(
+        *test
+            .state()
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_by_use_case()
+            .get(&CyclesUseCase::HTTPOutcalls)
+            .unwrap(),
+        base_fee.nominal()
+    );
+}
+
+#[test]
+fn execute_canister_http_request_caps_allowance_at_worst_case_cost() {
+    // A replica can never spend more than the worst-case cost of the outcall, so
+    // whatever the payment covers beyond that is not held back as allowance but
+    // refunded along with the response.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_enabled()
+        .build();
+
+    // A payment far beyond what the committee can possibly spend on this outcall.
+    let payment = Cycles::new(1_000_000_000_000_000);
+    test.inject_call_to_ic00(
+        Method::FlexibleHttpRequest,
+        flexible_http_request_args(caller_canister).encode(),
+        payment,
+    );
+    test.execute_all();
+
+    let http_request_context = test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    let committee_size = match &http_request_context.replication {
+        Replication::Flexible { committee, .. } => committee.len(),
+        other => panic!("expected flexible replication, got {other:?}"),
+    };
+    let base_fee = test.http_request_base_fee(
+        http_request_context.variable_parts_size(),
+        &http_request_context.replication,
+    );
+    let max_usage_fee = test.max_http_request_usage_fee(
+        &http_request_context.replication,
+        http_request_context.max_response_bytes,
+        http_request_context.subnet_size,
+    );
+    let refundable_payment = payment - base_fee.real();
+    // The payment covers more than the outcall can possibly spend, so the worst case
+    // — rather than the payment — is what gets split into allowances.
+    assert!(max_usage_fee < refundable_payment);
+    let expected_allowance = max_usage_fee / committee_size;
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        expected_allowance
+    );
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        expected_allowance * committee_size
+    );
+    // Everything the payment covers beyond the base fee and the allowances stays in
+    // the payment, to be refunded along with the response.
+    assert_eq!(
+        http_request_context.request.payment,
+        refundable_payment - expected_allowance * committee_size
+    );
+}
+
+fn http_request_args_with_pricing_version(
+    caller_canister: CanisterId,
+    pricing_version: Option<u32>,
+) -> CanisterHttpRequestArgs {
+    CanisterHttpRequestArgs {
+        url: "https://example.com".to_string(),
+        max_response_bytes: Some(1024),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: "transform".to_string(),
+            }),
+            context: vec![0, 1, 2],
+        }),
+        is_replicated: None,
+        pricing_version,
+    }
+}
+
+/// Which pricing model an `http_request` ends up with, as a function of the
+/// `pricing_version` it asks for and of the `flexible_http_requests` feature flag
+/// that gates the pay-as-you-go pricing model:
+///  * the default is legacy pricing, whether or not the flag is enabled;
+///  * pay-as-you-go pricing is honored once the flag is enabled, and falls back to
+///    the default until then;
+///  * an unknown pricing version falls back to the default, either way.
+#[test]
+fn execute_canister_http_request_pricing_version() {
+    const UNKNOWN_PRICING_VERSION: u32 = 42;
+    for pricing_version in [
+        None,
+        Some(PRICING_VERSION_PAY_AS_YOU_GO),
+        Some(UNKNOWN_PRICING_VERSION),
+    ] {
+        for flexible_http_requests_enabled in [false, true] {
+            let expected = if pricing_version == Some(PRICING_VERSION_PAY_AS_YOU_GO)
+                && flexible_http_requests_enabled
+            {
+                PricingVersion::PayAsYouGo
+            } else {
+                PricingVersion::Legacy
+            };
+
+            let own_subnet = subnet_test_id(1);
+            let caller_canister = canister_test_id(10);
+            let builder = ExecutionTestBuilder::new()
+                .with_own_subnet_id(own_subnet)
+                .with_caller(own_subnet, caller_canister);
+            let builder = if flexible_http_requests_enabled {
+                builder.with_flexible_http_requests_enabled()
+            } else {
+                builder.with_flexible_http_requests_disabled()
+            };
+            let mut test = builder.build();
+            std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+                .subnet_features
+                .http_requests = true;
+
+            let args = http_request_args_with_pricing_version(caller_canister, pricing_version);
+            test.inject_call_to_ic00(
+                Method::HttpRequest,
+                args.encode(),
+                Cycles::new(1_000_000_000),
+            );
+            test.execute_all();
+
+            let canister_http_request_contexts = &test
+                .state()
+                .metadata
+                .subnet_call_context_manager
+                .canister_http_request_contexts;
+            assert_eq!(canister_http_request_contexts.len(), 1);
+            let http_request_context = canister_http_request_contexts
+                .get(&CallbackId::from(0))
+                .unwrap();
+            assert_eq!(
+                http_request_context.pricing_version, expected,
+                "unexpected pricing version for pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
+
+            // The outcall is only counted once its response is delivered, so the
+            // counter is still zero here. Every (pricing version, replication)
+            // series is registered nonetheless, so none of them read as missing.
+            let delivered = fetch_int_counter_vec(
+                test.metrics_registry(),
+                "execution_http_outcalls_delivered_total",
+            );
+            assert_eq!(
+                delivered.len(),
+                6,
+                "unexpected delivered series for pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
+            assert!(
+                nonzero_values(delivered).is_empty(),
+                "admitting an outcall should not count it as delivered, for \
+                 pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
+
+            // Delivering the response counts the outcall under the version it was
+            // priced with. It is fully replicated, `is_replicated` being unset above.
+            test.deliver_consensus_response(CallbackId::from(0), Payload::Data(vec![]));
+            assert_eq!(
+                nonzero_values(fetch_int_counter_vec(
+                    test.metrics_registry(),
+                    "execution_http_outcalls_delivered_total"
+                )),
+                metric_vec(&[(
+                    &[
+                        ("pricing_version", expected.as_str()),
+                        ("replication", "fully_replicated"),
+                    ],
+                    1
+                )]),
+                "unexpected delivered metric for pricing_version={pricing_version:?} with \
+                 flexible_http_requests enabled={flexible_http_requests_enabled}"
+            );
+        }
+    }
+}
+
+#[test]
+fn execute_flexible_canister_http_request_free_subnet_uses_pay_as_you_go() {
+    // With the `flexible_http_requests` feature flag enabled, pay-as-you-go
+    // applies to every subnet, free ones included. Pricing is moot there — a free
+    // subnet charges nothing — but the request is still routed through the new
+    // pricing model rather than the legacy fallback.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_flexible_http_requests_enabled()
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    let payment = Cycles::new(1_000_000_000);
+    test.inject_call_to_ic00(Method::FlexibleHttpRequest, args.encode(), payment);
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    assert_eq!(
+        http_request_context.pricing_version,
+        PricingVersion::PayAsYouGo
+    );
+    assert!(
+        matches!(
+            http_request_context.replication,
+            Replication::Flexible { .. }
+        ),
+        "expected flexible replication, got {:?}",
+        http_request_context.replication
+    );
+
+    // A free subnet charges nothing whatever the pricing model: the full payment
+    // is retained (to be refunded when the response is delivered) and there is no
+    // allowance to spend, hence nothing to refund out of one.
+    assert_eq!(http_request_context.request.payment, payment);
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        Cycles::new(0)
+    );
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        Cycles::new(0)
+    );
+}
+
+#[test]
+fn execute_flexible_canister_http_request_system_subnet_uses_pay_as_you_go() {
+    // System subnets charge nothing for HTTP outcalls despite a normal cost
+    // schedule. Like a free subnet, they are still routed through pay-as-you-go
+    // once the `flexible_http_requests` feature flag is enabled.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_subnet_type(SubnetType::System)
+        .with_flexible_http_requests_enabled()
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    let payment = Cycles::new(1_000_000_000);
+    test.inject_call_to_ic00(Method::FlexibleHttpRequest, args.encode(), payment);
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+    assert_eq!(
+        http_request_context.pricing_version,
+        PricingVersion::PayAsYouGo
+    );
+    assert!(
+        matches!(
+            http_request_context.replication,
+            Replication::Flexible { .. }
+        ),
+        "expected flexible replication, got {:?}",
+        http_request_context.replication
+    );
+
+    // A system subnet charges nothing for HTTP outcalls despite its normal cost
+    // schedule, so `try_add_http_context_to_replicated_state` treats it as free
+    // just like a free-cost-schedule subnet: the full payment is retained (to be
+    // refunded when the response is delivered) and there is no allowance to
+    // spend, hence nothing to refund out of one.
+    assert_eq!(http_request_context.request.payment, payment);
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        Cycles::new(0)
+    );
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        Cycles::new(0)
+    );
+}
+
+#[test]
+fn execute_flexible_canister_http_request_explicit_replication() {
+    // An explicit replication request with total_requests < subnet_size yields a
+    // committee smaller than the subnet, so the per-replica allowance is split
+    // across the committee rather than the whole subnet.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_enabled()
+        .build();
+
+    let total_requests = 4;
+    let mut args = flexible_http_request_args(caller_canister);
+    args.replication = Some(ReplicationCounts {
+        total_requests,
+        min_responses: 2,
+        max_responses: 4,
+    });
+    let payment = Cycles::new(1_000_000_000);
+    test.inject_call_to_ic00(Method::FlexibleHttpRequest, args.encode(), payment);
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+
+    let (committee_size, min_responses, max_responses) = match &http_request_context.replication {
+        Replication::Flexible {
+            committee,
+            min_responses,
+            max_responses,
+        } => (committee.len(), *min_responses, *max_responses),
+        other => panic!("expected flexible replication, got {other:?}"),
+    };
+    assert_eq!(committee_size, total_requests as usize);
+    assert!(committee_size < test.subnet_size());
+    assert_eq!(min_responses, 2);
+    assert_eq!(max_responses, 4);
+
+    // Pay-as-you-go takes the base fee plus the per-replica allowances upfront and
+    // splits the refundable payment across the committee.
+    let base_fee = test.http_request_base_fee(
+        http_request_context.variable_parts_size(),
+        &http_request_context.replication,
+    );
+    let refundable_payment = payment - base_fee.real();
+    let expected_allowance = refundable_payment / committee_size.max(1);
+    assert_eq!(
+        http_request_context.refund_status.per_replica_allowance,
+        expected_allowance
+    );
+    assert_eq!(
+        http_request_context.refund_status.refundable_cycles,
+        expected_allowance * committee_size.max(1)
+    );
+    assert_eq!(
+        http_request_context.request.payment,
+        refundable_payment - expected_allowance * committee_size.max(1)
+    );
+}
+
+#[test]
+fn execute_flexible_canister_http_request_insufficient_payment() {
+    // Pay-as-you-go rejects a request whose payment does not cover the base fee.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_enabled()
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    test.inject_call_to_ic00(Method::FlexibleHttpRequest, args.encode(), Cycles::new(1));
+    test.execute_all();
+
+    // The request is rejected and no context is added.
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 0);
+}
+
+#[test]
+fn execute_flexible_canister_http_request_disabled() {
+    // On a paying subnet, flexible outcalls under pay-as-you-go pricing are
+    // gated behind the `flexible_http_requests` feature flag: with the flag
+    // disabled they are not offered at all.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_flexible_http_requests_disabled()
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    test.inject_call_to_ic00(
+        Method::FlexibleHttpRequest,
+        args.encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_all();
+
+    // No context is added and the request is rejected specifically because the
+    // feature is not available on this subnet (as opposed to any other
+    // rejection reason).
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 0);
+    assert_eq!(
+        get_reject_message(test.xnet_messages()[0].clone()),
+        "This API is not enabled on this subnet"
+    );
+}
+
+#[test]
+fn execute_flexible_canister_http_request_disabled_falls_back_to_legacy_when_free() {
+    // A disabled flag does not take flexible outcalls away from subnets where
+    // they are free: there they fall back to legacy pricing, which is moot when
+    // nothing is charged. These fallbacks are what still distinguishes the flag
+    // being off from it being on.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_flexible_http_requests_disabled()
+        .build();
+
+    let args = flexible_http_request_args(caller_canister);
+    test.inject_call_to_ic00(
+        Method::FlexibleHttpRequest,
+        args.encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+    assert_eq!(
+        canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap()
+            .pricing_version,
+        PricingVersion::Legacy
+    );
+}
+
+#[test]
+fn execute_flexible_canister_http_request_disabled_falls_back_to_legacy_on_system_subnet() {
+    // Same fallback as on a free cost schedule, via a different route: a system
+    // subnet keeps a normal cost schedule but charges zero for HTTP outcalls, so
+    // it is treated as free here. Flexible outcalls therefore remain available
+    // with the flag disabled, under legacy pricing.
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(10);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_caller(own_subnet, caller_canister)
+        .with_subnet_type(SubnetType::System)
+        .with_flexible_http_requests_disabled()
+        .build();
+    assert_eq!(
+        test.state().get_own_cost_schedule(),
+        CanisterCyclesCostSchedule::Normal
+    );
+
+    let args = flexible_http_request_args(caller_canister);
+    test.inject_call_to_ic00(
+        Method::FlexibleHttpRequest,
+        args.encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_all();
+
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+    assert_eq!(
+        canister_http_request_contexts
+            .get(&CallbackId::from(0))
+            .unwrap()
+            .pricing_version,
+        PricingVersion::Legacy
+    );
+}
+
+#[test]
+fn execute_flexible_canister_http_request_disabled_by_subnet_feature() {
+    /// The configurations in which flexible outcalls would be available if the
+    /// `http_requests` subnet feature were enabled.
+    #[derive(Copy, Clone, Debug)]
+    enum Available {
+        /// The `flexible_http_requests` feature flag is enabled.
+        FeatureFlag,
+        /// The subnet is on a free cost schedule, so pricing is moot.
+        FreeCostSchedule,
+        /// A system subnet charges nothing for outcalls despite a normal
+        /// cost schedule.
+        SystemSubnet,
+    }
+
+    // Just like non-flexible outcalls, flexible outcalls are unavailable on a
+    // subnet where the `http_requests` subnet feature is disabled — in every
+    // configuration that would otherwise offer them.
+    for available in [
+        Available::FeatureFlag,
+        Available::FreeCostSchedule,
+        Available::SystemSubnet,
+    ] {
+        let own_subnet = subnet_test_id(1);
+        let caller_canister = canister_test_id(10);
+        let builder = ExecutionTestBuilder::new()
+            .with_own_subnet_id(own_subnet)
+            .with_caller(own_subnet, caller_canister);
+        let mut test = match available {
+            Available::FeatureFlag => builder.with_flexible_http_requests_enabled(),
+            Available::FreeCostSchedule => {
+                builder.with_cost_schedule(CanisterCyclesCostSchedule::Free)
+            }
+            Available::SystemSubnet => builder.with_subnet_type(SubnetType::System),
+        }
+        .build();
+        std::sync::Arc::make_mut(&mut test.state_mut().metadata.own_subnet_info)
+            .subnet_features
+            .http_requests = false;
+
+        let args = flexible_http_request_args(caller_canister);
+        test.inject_call_to_ic00(
+            Method::FlexibleHttpRequest,
+            args.encode(),
+            Cycles::new(1_000_000_000),
+        );
+        test.execute_all();
+
+        // No context is added and the request is rejected specifically because
+        // the feature is not available on this subnet (as opposed to any other
+        // rejection reason).
+        let canister_http_request_contexts = &test
+            .state()
+            .metadata
+            .subnet_call_context_manager
+            .canister_http_request_contexts;
+        assert_eq!(
+            canister_http_request_contexts.len(),
+            0,
+            "unexpected context for {available:?}"
+        );
+        assert_eq!(
+            get_reject_message(test.xnet_messages()[0].clone()),
+            "This API is not enabled on this subnet",
+            "unexpected rejection message for {available:?}"
+        );
+    }
 }
 
 fn get_reject_message(response: RequestOrResponse) -> String {
@@ -3879,6 +5201,14 @@ fn replicated_query_can_burn_cycles() {
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+    let burned_cycles_monotonic = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases_monotonic()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles_monotonic, burned_cycles);
 }
 
 #[test]
@@ -3919,6 +5249,282 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
             .get(&CyclesUseCase::BurnedCycles)
             .is_none()
     );
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::BurnedCycles)
+            .is_none()
+    );
+}
+
+#[test]
+fn canister_init_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.create_canister(initial_cycles);
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    let init_payload = wasm().cycles_burn128(cycles_to_burn).build();
+    test.install_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), init_payload)
+        .unwrap();
+
+    // Canister loses `cycles_to_burn` from its balance (in addition to execution cost).
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
+    );
+
+    // The burned cycles are accounted for in the canister's metrics.
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn canister_post_upgrade_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.create_canister(initial_cycles);
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.install_canister_with_args(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![])
+        .unwrap();
+    let post_upgrade_payload = wasm().cycles_burn128(cycles_to_burn).build();
+    test.upgrade_canister_with_args(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        post_upgrade_payload,
+    )
+    .unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
+    );
+
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn canister_pre_upgrade_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_pre_upgrade(wasm().cycles_burn128(cycles_to_burn))
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
+    );
+
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn reply_callback_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let caller_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let callee_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.ingress(
+        caller_id,
+        "update",
+        wasm()
+            .inter_update(
+                callee_id,
+                call_args()
+                    .other_side(wasm().reply())
+                    .on_reply(wasm().cycles_burn128(cycles_to_burn).reply()),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    let use_cases = test
+        .canister_state(caller_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .clone();
+    let transmission_cost = Cycles::new(
+        use_cases
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .map(|c| c.get())
+            .unwrap_or(0),
+    );
+    assert_eq!(
+        test.canister_state(caller_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(caller_id).real()
+            - transmission_cost
+            - cycles_to_burn
+    );
+
+    let burned_cycles = *use_cases.get(&CyclesUseCase::BurnedCycles).unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn reject_callback_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let caller_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let callee_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.ingress(
+        caller_id,
+        "update",
+        wasm()
+            .inter_update(
+                callee_id,
+                call_args()
+                    .other_side(wasm().trap())
+                    .on_reject(wasm().cycles_burn128(cycles_to_burn).reply()),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    let use_cases = test
+        .canister_state(caller_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .clone();
+    let transmission_cost = Cycles::new(
+        use_cases
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .map(|c| c.get())
+            .unwrap_or(0),
+    );
+    assert_eq!(
+        test.canister_state(caller_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(caller_id).real()
+            - transmission_cost
+            - cycles_to_burn
+    );
+
+    let burned_cycles = *use_cases.get(&CyclesUseCase::BurnedCycles).unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn cleanup_callback_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let caller_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let callee_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    // The reply callback traps, triggering the cleanup callback.
+    // The ingress fails because the reply callback trapped.
+    test.ingress(
+        caller_id,
+        "update",
+        wasm()
+            .inter_update(
+                callee_id,
+                call_args()
+                    .other_side(wasm().reply())
+                    .on_reply(wasm().trap())
+                    .on_cleanup(wasm().cycles_burn128(cycles_to_burn)),
+            )
+            .build(),
+    )
+    .unwrap_err();
+
+    let use_cases = test
+        .canister_state(caller_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .clone();
+    let transmission_cost = Cycles::new(
+        use_cases
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .map(|c| c.get())
+            .unwrap_or(0),
+    );
+    assert_eq!(
+        test.canister_state(caller_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(caller_id).real()
+            - transmission_cost
+            - cycles_to_burn
+    );
+
+    let burned_cycles = *use_cases.get(&CyclesUseCase::BurnedCycles).unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
+}
+
+#[test]
+fn heartbeat_can_burn_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let canister_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let cycles_to_burn = Cycles::new(10_000_000_u128);
+
+    test.ingress(
+        canister_id,
+        "update",
+        wasm()
+            .set_heartbeat(wasm().cycles_burn128(cycles_to_burn))
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    test.canister_task(canister_id, CanisterTask::Heartbeat);
+
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(canister_id).real() - cycles_to_burn
+    );
+
+    let burned_cycles = *test
+        .canister_state(canister_id)
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::BurnedCycles)
+        .unwrap();
+    assert_eq!(burned_cycles, NominalCycles::new(cycles_to_burn.get()));
 }
 
 #[test]
@@ -3951,9 +5557,31 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             )
             .build();
 
+        let instruction_consumption_initial_counters = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap();
+        let execution_cost_initial = test.canister_execution_cost(a_id);
+
         let (message_id, _) = test.ingress_raw(a_id, "update", a_payload);
         // Canister A sends the message to canister B.
         test.execute_message(a_id);
+        let instruction_consumption_after_message_execution_counters = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap();
+        let execution_cost_after_message = test.canister_execution_cost(a_id);
+        assert_eq!(
+            instruction_consumption_after_message_execution_counters,
+            instruction_consumption_initial_counters
+                + (execution_cost_after_message - execution_cost_initial).nominal(),
+        );
         test.induct_messages();
         test.execute_message(b_id);
 
@@ -3977,7 +5605,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         }
 
         // Get consumption for 'RequestAndResponseTransmission' and 'Instructions'
-        // before receiving a response on canister A.
+        // before receiving a response on canister A for gauges.
         let transmission_consumption_before_response = *test
             .canister_state(a_id)
             .system_state
@@ -3996,6 +5624,32 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         assert_gt!(transmission_consumption_before_response.get(), 0);
         assert_gt!(instruction_consumption_before_response.get(), 0);
 
+        // // Get consumption for 'RequestAndResponseTransmission' and 'Instructions'
+        // before receiving a response on canister A for counters.
+        let transmission_consumption_before_response_counters = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap();
+        let instruction_consumption_before_response_counters = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap();
+
+        assert_eq!(
+            transmission_consumption_before_response_counters,
+            NominalCycles::zero()
+        );
+        assert_eq!(
+            instruction_consumption_after_message_execution_counters,
+            instruction_consumption_before_response_counters,
+        );
+
         // Canister A executed the response.
         test.induct_messages();
         test.execute_message(a_id);
@@ -4013,12 +5667,15 @@ fn test_consumed_cycles_by_use_case_with_refund() {
 
         let transmission_cost = test.call_fee("update", &b_callback) + test.reply_fee(&b_callback);
 
-        let execution_cost = test.canister_execution_cost(a_id);
+        let execution_cost_after_response = test.canister_execution_cost(a_id);
 
         // Check that canister A's balance is updated correctly.
         assert_eq!(
             test.canister_state(a_id).system_state.balance(),
-            initial_cycles - execution_cost.real() - transmission_cost.real() - transferred_cycles
+            initial_cycles
+                - execution_cost_after_response.real()
+                - transmission_cost.real()
+                - transferred_cycles
         );
 
         assert_eq!(
@@ -4045,6 +5702,21 @@ fn test_consumed_cycles_by_use_case_with_refund() {
             .get(&CyclesUseCase::Instructions)
             .unwrap();
 
+        let transmission_consumption_after_response_counters = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap();
+        let instruction_consumption_after_response_counters = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::Instructions)
+            .unwrap();
+
         // Check that consumed cycles are correct for both use cases.
         assert_eq!(
             transmission_consumption_after_response,
@@ -4053,7 +5725,7 @@ fn test_consumed_cycles_by_use_case_with_refund() {
 
         assert_eq!(
             instruction_consumption_after_response,
-            execution_cost.nominal(),
+            execution_cost_after_response.nominal(),
         );
 
         // Consumed cycles after the response should be smaller than before
@@ -4065,6 +5737,28 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         assert_lt!(
             instruction_consumption_after_response,
             instruction_consumption_before_response
+        );
+
+        // Check that consumed cycles are correct for both use cases for counter metrics.
+        assert_eq!(
+            transmission_consumption_after_response_counters,
+            transmission_consumption_before_response_counters + transmission_cost.nominal(),
+        );
+
+        assert_eq!(
+            instruction_consumption_after_response_counters,
+            instruction_consumption_before_response_counters
+                + (execution_cost_after_response - execution_cost_after_message).nominal(),
+        );
+
+        // Both the gauge and counter metrics should show the same consumption.
+        assert_eq!(
+            transmission_consumption_after_response,
+            transmission_consumption_after_response_counters,
+        );
+        assert_eq!(
+            instruction_consumption_after_response,
+            instruction_consumption_after_response_counters,
         );
 
         // Check that canister B's balance is updated correctly.
@@ -4133,7 +5827,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
 fn test_canister_settings_log_visibility_default_controllers() {
     // Arrange.
     let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     // Act.
     let canister_status = test.canister_status(canister_id).unwrap();
     // Assert.
@@ -4150,7 +5844,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
     // Act.
     let canister_id = test
         .create_canister_with_settings(
-            Cycles::new(1_000_000_000),
+            Cycles::new(1_000_000_000_000),
             ic00::CanisterSettingsArgsBuilder::new()
                 .with_log_visibility(LogVisibilityV2::Public)
                 .build(),
@@ -4168,7 +5862,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
 fn test_canister_settings_log_visibility_set_to_public() {
     // Arrange.
     let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.create_canister(Cycles::new(1_000_000_000));
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     // Act.
     test.set_log_visibility(canister_id, LogVisibilityV2::Public)
         .unwrap();
@@ -4854,4 +6548,479 @@ fn stopping_canister_not_controlled_by_caller_refunds_cycles() {
     );
     let res = stop_canister_refunds_cycles(&mut test, proxy, canister_id);
     let _ = get_reject(res);
+}
+
+// `list_canisters` can only be called via an inter-canister call; an ingress
+// message is rejected by the ingress filter before execution, since
+// `list_canisters` is not among the ic00 methods allowed via ingress, even if
+// the caller is a subnet admin.
+#[test]
+fn list_canisters_via_ingress_fails_at_ingress_filter() {
+    let admin = user_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+    test.set_user_id(admin);
+
+    let result =
+        test.should_accept_ingress_message(IC_00, Method::ListCanisters, EmptyBlob.encode());
+    assert_eq!(
+        result,
+        Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            "ic00 method list_canisters can not be called via ingress messages"
+        ))
+    );
+}
+
+// Even if an ingress message reaches `execute_subnet_message`, `list_canisters`
+// is still rejected: it can only be called via an inter-canister call, even by
+// a subnet admin.
+#[test]
+fn list_canisters_via_ingress_fails_at_execution() {
+    let admin = user_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+        .with_subnet_admins(vec![admin.get()])
+        .build();
+    test.set_user_id(admin);
+
+    let err = test
+        .subnet_message(Method::ListCanisters, EmptyBlob.encode())
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+    assert!(
+        err.description()
+            .contains("list_canisters cannot be called by a user")
+    );
+}
+
+/// Snapshot of the cycles and instruction counters of a canister that are needed
+/// to check the accounting of a paused execution that fails to resume.
+#[derive(Clone, Copy)]
+struct ExecutionAccounting {
+    /// The counter metric is used because it only records the cycles consumed
+    /// for instructions when the prepaid execution cycles are refunded at the
+    /// end of a message execution: unlike the gauge metric, which is bumped
+    /// already by the prepayment, it thus does not depend on whether the
+    /// snapshot is taken before or after the prepayment.
+    consumed_cycles: NominalCycles,
+    /// The instructions executed by all the slices of the canister, including
+    /// slices of an execution that was paused and did not finish (yet).
+    executed_instructions: NumInstructions,
+}
+
+impl ExecutionAccounting {
+    fn take(test: &ExecutionTest, canister_id: CanisterId) -> Self {
+        Self {
+            consumed_cycles: test
+                .canister_state(canister_id)
+                .system_state
+                .canister_metrics()
+                .consumed_cycles_by_use_cases_monotonic()
+                .get(&CyclesUseCase::Instructions)
+                .cloned()
+                .unwrap_or_default(),
+            executed_instructions: test.canister_executed_instructions(canister_id),
+        }
+    }
+}
+
+/// Executes the first slice of the next execution of the given canister, which
+/// must pause, then decreases the cycles balance of that canister and resumes
+/// the execution, which must fail.
+///
+/// Asserts that the canister is charged for exactly the instructions that the
+/// slices of the failed execution had executed.
+fn paused_execution_fails_to_resume_after_cycles_decrease(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+) {
+    let before = ExecutionAccounting::take(test, canister_id);
+
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(Cycles::new(1));
+
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+
+    let after = ExecutionAccounting::take(test, canister_id);
+
+    // The cycles consumed for instructions, which the execution derives from the
+    // instructions it reports as used, match the cost of the instructions
+    // executed by the slices: resuming failed before resuming the Wasm
+    // execution, so no further instructions were executed after the last pause.
+    let executed_instructions = after.executed_instructions - before.executed_instructions;
+    let expected_cost = test
+        .cycles_account_manager()
+        .execution_cost(
+            executed_instructions,
+            test.get_own_subnet_cycles_config(),
+            WasmExecutionMode::Wasm32,
+        )
+        .nominal();
+    assert_eq!(
+        after.consumed_cycles - before.consumed_cycles,
+        expected_cost
+    );
+}
+
+/// A canister that is about to start a long-running execution: the first slice
+/// of that execution exceeds the slice instruction limit and hence pauses.
+///
+/// Shared by the tests that decrease and increase the cycles balance of the
+/// canister while its execution is paused.
+struct LongRunningExecution {
+    test: ExecutionTest,
+    /// The canister whose long-running execution pauses.
+    canister_id: CanisterId,
+    /// The ingress message whose status reflects the outcome of the long-running
+    /// execution; `None` for canister tasks, which have no ingress status.
+    ingress_id: Option<MessageId>,
+}
+
+/// Sets up a long-running update call, or a long-running replicated query if
+/// `replicated_query` is set.
+fn long_running_call(replicated_query: bool) -> LongRunningExecution {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(200_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        .instruction_counter_is_at_least(200_000)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let method = if replicated_query { "query" } else { "update" };
+    let (ingress_id, _) = test.ingress_raw(a_id, method, a);
+
+    LongRunningExecution {
+        test,
+        canister_id: a_id,
+        ingress_id: Some(ingress_id),
+    }
+}
+
+/// Sets up a long-running response callback, or a long-running cleanup callback
+/// if `cleanup` is set. In the latter case the response callback traps, so that
+/// the long-running callback is the cleanup one.
+fn long_running_callback(cleanup: bool) -> LongRunningExecution {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm().message_payload().append_and_reply().build();
+
+    let long_execution = wasm()
+        .instruction_counter_is_at_least(1_000_000)
+        .message_payload()
+        .append_and_reply()
+        .build();
+    let call_args = if cleanup {
+        call_args()
+            .other_side(b)
+            .on_reply(wasm().trap())
+            .on_cleanup(long_execution)
+    } else {
+        call_args().other_side(b).on_reply(long_execution)
+    };
+    let a = wasm().call_simple(b_id, "update", call_args).build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B, which replies.
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    LongRunningExecution {
+        test,
+        canister_id: a_id,
+        ingress_id: Some(ingress_id),
+    }
+}
+
+/// Sets up a long-running canister task: the heartbeat. It grows the stable
+/// memory before the execution is paused, so that its state changes can be
+/// checked to be either dropped or kept, depending on whether resuming the
+/// execution fails or succeeds.
+fn long_running_heartbeat() -> LongRunningExecution {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+    let (ingress_id, _) = test.ingress_raw(
+        canister_id,
+        "update",
+        wasm()
+            .set_heartbeat(
+                wasm()
+                    .stable_grow(1)
+                    .instruction_counter_is_at_least(1_000_000)
+                    .build(),
+            )
+            .reply()
+            .build(),
+    );
+    test.execute_message(canister_id);
+    check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+
+    test.canister_state_mut(canister_id)
+        .system_state
+        .task_queue
+        .enqueue(ExecutionTask::Heartbeat);
+
+    LongRunningExecution {
+        test,
+        canister_id,
+        ingress_id: None,
+    }
+}
+
+/// Every kind of paused execution re-creates its helper from the current clean
+/// canister state when it is resumed, so it relies on the cycles balance of that
+/// state not decreasing while the execution is paused. This test covers all of
+/// them: update calls, replicated queries, response callbacks, cleanup
+/// callbacks, and canister tasks (heartbeat). The `install_code` case is covered
+/// by `dts_install_code_resume_fails_due_to_cycles_decrease`.
+#[test]
+fn dts_resume_fails_due_to_cycles_decrease() {
+    // 1. Update calls and replicated queries.
+    for replicated_query in [false, true] {
+        let LongRunningExecution {
+            mut test,
+            canister_id,
+            ingress_id,
+        } = long_running_call(replicated_query);
+
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, canister_id);
+
+        let err = check_ingress_status(test.ingress_status(&ingress_id.unwrap())).unwrap_err();
+        let message = if replicated_query {
+            "a replicated query"
+        } else {
+            "an update call"
+        };
+        err.assert_contains(
+            ErrorCode::CanisterWasmEngineError,
+            &format!(
+                "Error from Canister {canister_id}: Canister encountered a Wasm engine error: \
+                 Failed to apply system changes: Mismatch in cycles \
+                 balance when resuming {message}"
+            ),
+        );
+    }
+
+    // 2. Response and cleanup callbacks.
+    for cleanup in [false, true] {
+        let LongRunningExecution {
+            mut test,
+            canister_id,
+            ingress_id,
+        } = long_running_callback(cleanup);
+
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, canister_id);
+
+        let err = check_ingress_status(test.ingress_status(&ingress_id.unwrap())).unwrap_err();
+        let code = if cleanup {
+            // The error of the trapping response callback takes precedence.
+            ErrorCode::CanisterCalledTrap
+        } else {
+            ErrorCode::CanisterWasmEngineError
+        };
+        assert_eq!(err.code(), code);
+        assert!(
+            err.description().contains(
+                "Failed to apply system changes: Mismatch in cycles \
+                 balance when resuming a response call"
+            ),
+            "unexpected error: {err}"
+        );
+    }
+
+    // 3. Canister tasks, e.g. the heartbeat.
+    {
+        let LongRunningExecution {
+            mut test,
+            canister_id,
+            ..
+        } = long_running_heartbeat();
+        let stable_memory_size = test.execution_state(canister_id).stable_memory.size;
+
+        paused_execution_fails_to_resume_after_cycles_decrease(&mut test, canister_id);
+
+        // A canister task has no ingress status and the failure is not recorded
+        // in the canister log, but the state changes of the heartbeat must have
+        // been dropped along with the failed execution.
+        assert_eq!(
+            test.execution_state(canister_id).stable_memory.size,
+            stable_memory_size
+        );
+    }
+}
+
+/// The cycles added to the cycles balance of a canister while its execution is
+/// paused.
+const CYCLES_ADDED_WHILE_PAUSED: Cycles = Cycles::new(1_234_567_890);
+
+/// Executes the first slice of the next execution of the given canister, which
+/// must pause, then adds `CYCLES_ADDED_WHILE_PAUSED` to the cycles balance of
+/// that canister if `add_cycles` is set, and finally executes all the remaining
+/// slices of that execution.
+///
+/// Asserts that resuming the paused execution did not fail: a failed resume
+/// aborts the paused Wasm execution without executing any further instructions,
+/// so the instructions executed by the remaining slices witness that the Wasm
+/// execution was resumed.
+///
+/// Returns the cycles balance of the canister after the execution has finished.
+fn paused_execution_resumes_after_cycles_increase(
+    test: &mut ExecutionTest,
+    canister_id: CanisterId,
+    add_cycles: bool,
+) -> Cycles {
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+    let executed_instructions_when_paused = test.canister_executed_instructions(canister_id);
+
+    if add_cycles {
+        test.canister_state_mut(canister_id)
+            .system_state
+            .add_cycles(CYCLES_ADDED_WHILE_PAUSED);
+    }
+
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
+        test.execute_slice(canister_id);
+    }
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+    assert_gt!(
+        test.canister_executed_instructions(canister_id),
+        executed_instructions_when_paused
+    );
+
+    test.canister_state(canister_id).system_state.balance()
+}
+
+/// Counterpart of `dts_resume_fails_due_to_cycles_decrease`: while resuming a
+/// paused execution fails if the cycles balance of the canister decreased in the
+/// meantime, an increase of that balance is tolerated and the additional cycles
+/// are not lost when the execution completes. This test covers the same kinds of
+/// paused executions; the `install_code` case is covered by
+/// `dts_install_code_resume_succeeds_after_cycles_increase`.
+///
+/// Every scenario is executed twice, once without adding any cycles and once
+/// with adding `CYCLES_ADDED_WHILE_PAUSED` while the execution is paused. The
+/// two runs are identical otherwise, so the final cycles balances must differ by
+/// exactly the added cycles.
+#[test]
+fn dts_resume_succeeds_after_cycles_increase() {
+    // 1. Update calls and replicated queries.
+    for replicated_query in [false, true] {
+        let mut balances = vec![];
+        for add_cycles in [false, true] {
+            let LongRunningExecution {
+                mut test,
+                canister_id,
+                ingress_id,
+            } = long_running_call(replicated_query);
+
+            balances.push(paused_execution_resumes_after_cycles_increase(
+                &mut test,
+                canister_id,
+                add_cycles,
+            ));
+
+            // The execution completed successfully.
+            let result = check_ingress_status(test.ingress_status(&ingress_id.unwrap())).unwrap();
+            assert_matches!(result, WasmResult::Reply(_));
+        }
+        assert_eq!(balances[1], balances[0] + CYCLES_ADDED_WHILE_PAUSED);
+    }
+
+    // 2. Response and cleanup callbacks.
+    for cleanup in [false, true] {
+        let mut balances = vec![];
+        for add_cycles in [false, true] {
+            let LongRunningExecution {
+                mut test,
+                canister_id,
+                ingress_id,
+            } = long_running_callback(cleanup);
+
+            balances.push(paused_execution_resumes_after_cycles_increase(
+                &mut test,
+                canister_id,
+                add_cycles,
+            ));
+
+            let status = check_ingress_status(test.ingress_status(&ingress_id.unwrap()));
+            if cleanup {
+                // The response callback traps, but the cleanup callback resumed
+                // and completed successfully.
+                let err = status.unwrap_err();
+                assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+            } else {
+                assert_matches!(status.unwrap(), WasmResult::Reply(_));
+            }
+        }
+        assert_eq!(balances[1], balances[0] + CYCLES_ADDED_WHILE_PAUSED);
+    }
+
+    // 3. Canister tasks, e.g. the heartbeat.
+    {
+        let mut balances = vec![];
+        for add_cycles in [false, true] {
+            let LongRunningExecution {
+                mut test,
+                canister_id,
+                ..
+            } = long_running_heartbeat();
+            let stable_memory_size = test.execution_state(canister_id).stable_memory.size;
+
+            balances.push(paused_execution_resumes_after_cycles_increase(
+                &mut test,
+                canister_id,
+                add_cycles,
+            ));
+
+            // A canister task has no ingress status, but the state changes of
+            // the heartbeat must have been kept.
+            assert_gt!(
+                test.execution_state(canister_id).stable_memory.size,
+                stable_memory_size
+            );
+        }
+        assert_eq!(balances[1], balances[0] + CYCLES_ADDED_WHILE_PAUSED);
+    }
 }

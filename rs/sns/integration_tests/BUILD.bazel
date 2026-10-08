@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types_storable",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
@@ -37,7 +37,6 @@ BASE_DEPENDENCIES = [
     "//rs/universal_canister/lib",
     "@crate_index//:candid",
     "@crate_index//:maplit",
-    "@crate_index//:pretty-bytes",
     "@crate_index//:proptest",
     "@crate_index//:prost",
     "@crate_index//:rand",
@@ -53,11 +52,6 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/test_utils:test_utils--test_feature",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
 ]
 
 BASE_DEV_DEPENDENCIES = [
@@ -89,22 +83,17 @@ TEST_DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
     "//rs/nns/test_utils:test_utils--test_feature",
 ]
 
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:rust_decimal_macros",
-]
-
-ALIASES = {}
-
 rust_library(
     name = "lib",
     testonly = True,
     srcs = glob(
         ["src/**"],
     ),
-    aliases = ALIASES,
     crate_name = "ic_sns_integration_tests",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
@@ -126,14 +115,13 @@ rust_canister(
     service_file = ":test_canisters/empty.did",
     deps = [
         # Keep sorted.
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ledger_suite/icrc1",
         "//rs/nervous_system/common",
         "//rs/rust_canisters/dfn_core",
         "//rs/sns/governance",
         "//rs/types/base_types",
         "@crate_index//:ic-stable-structures",
-        "@crate_index//:pretty-bytes",
         "@crate_index//:prost",
         "@crate_index//:rand",
     ],
@@ -143,6 +131,7 @@ DATA_DEPS = [
     # Keep sorted.
     ":sns-governance-mem-test-canister",
     ":sns-test-dapp-canister",
+    "//rs/engine_controller:engine-controller-canister",
     "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
     "//rs/ledger_suite/icrc1/archive:archive_canister",
     "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
@@ -158,6 +147,7 @@ DATA_DEPS = [
     "//rs/node_rewards/canister:node-rewards-canister",
     "//rs/registry/canister:registry-canister",
     "//rs/registry/canister:registry-canister-test",
+    "//rs/sns/governance:sns-governance-canister.wasm.gz",
     "//rs/sns/governance:sns-governance-canister-test.wasm.gz",
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
@@ -179,7 +169,8 @@ ENV = {
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
-    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test.wasm.gz)",
+    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister.wasm.gz)",
+    "SNS_GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test.wasm.gz)",
     "SNS_GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-governance-mem-test-canister)",
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
@@ -189,6 +180,7 @@ ENV = {
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     "MAINNET_IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath @mainnet_canisters//:sns_ledger.wasm.gz)",
     "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
+    "ENGINE_CONTROLLER_CANISTER_WASM_PATH": "$(rootpath //rs/engine_controller:engine-controller-canister)",
 }
 
 rust_ic_test_suite_with_extra_srcs(
@@ -203,7 +195,6 @@ rust_ic_test_suite_with_extra_srcs(
             "src/neuron.rs",  # there's a dedicated :neuron_test target for this test below.
         ],
     ),
-    aliases = ALIASES,
     args = [
         "--test-threads",
         "7",
@@ -211,9 +202,13 @@ rust_ic_test_suite_with_extra_srcs(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
+    exec_properties = {"test.cpu": "8"},
     extra_srcs = [],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = ["cpu:8"],
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+    ],
     deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
 )
 
@@ -228,9 +223,13 @@ rust_ic_test(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
-    #proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    exec_properties = {"test.cpu": "8"},
+    #proc_macro_deps = [
+    #    # Keep sorted.
+    #    "@crate_index//:async-trait",
+    #    "@crate_index//:rust_decimal_macros",
+    #],
     tags = [
-        "cpu:8",
         "long_test",  # The P90 duration of this test is over 6 minutes for the week starting on 2025-08-21.
     ],
     deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
@@ -247,9 +246,13 @@ rust_ic_test(
     crate_features = ["test"],
     data = DATA_DEPS,
     env = ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    exec_properties = {"test.cpu": "8"},
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+    ],
     tags = [
-        "cpu:8",
         "long_test",  # The P90 duration of this test is 6 minutes for the month starting on 2026-01-16.
     ],
     deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
@@ -283,7 +286,6 @@ rust_ic_test_suite_with_extra_srcs(
     srcs = [
         "src/golden_state_swap_upgrade_twice.rs",
     ],
-    aliases = ALIASES,
     args = [
         "--test-threads",
         "7",
@@ -295,10 +297,19 @@ rust_ic_test_suite_with_extra_srcs(
     env = dict(ENV.items() + [
         ("MAINNET_SNS_SWAP_CANISTER_WASM_PATH", "$(rootpath @mainnet_canisters//:swap.wasm.gz)"),
     ]),
+    exec_properties = {
+        "test.cpu": "8",
+        # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
+        # so we need this Namespace.so-specific execution property to open up the network on RBE:
+        "namespace_requires_network": "true",
+    },
     extra_srcs = [],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+        "@crate_index//:rust_decimal_macros",
+    ],
     tags = [
-        "cpu:8",
         "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).

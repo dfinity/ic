@@ -8,10 +8,30 @@
         "editor.defaultFormatter": "StackBuild.bazel-stack-vscode",
         "editor.formatOnSave": true
     },
-    "bazel.buildifierExecutable": "@buildifier",
+    "bazel.buildifier.executable": "@buildifier_prebuilt//:buildifier",
     "cSpell.words": [
+        "blockmaker",
+        "blockmakers",
+        "btreemap",
+        "cbor",
+        "checkpointing",
+        "condvar",
+        "demux",
+        "Deque",
+        "errmsg",
         "followee",
-        "followees"
+        "followees",
+        "idkg",
+        "monomorphization",
+        "newtype",
+        "outcall",
+        "outcalls",
+        "reshare",
+        "sandboxing",
+        "Schnorr",
+        "unflushed",
+        "walltime",
+        "wasms"
     ],
     "files.associations": {
         "PULL_REQUEST_BAZEL_TARGETS": "ignore"

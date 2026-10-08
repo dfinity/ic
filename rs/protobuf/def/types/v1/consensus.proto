@@ -8,6 +8,7 @@ import "messaging/xnet/v1/certification.proto";
 import "messaging/xnet/v1/certified_stream_slice.proto";
 import "registry/subnet/v1/subnet.proto";
 import "types/v1/artifact.proto";
+import "types/v1/canister_http.proto";
 import "types/v1/dkg.proto";
 import "types/v1/idkg.proto";
 import "types/v1/types.proto";
@@ -69,6 +70,7 @@ message Block {
   bytes canister_http_payload_bytes = 15;
   bytes query_stats_payload_bytes = 16;
   bytes chain_key_payload_bytes = 17;
+  bytes upgrade_payload_bytes = 18;
   bytes payload_hash = 11;
 }
 
@@ -252,6 +254,17 @@ message GetIDkgDealingInBlockResponse {
   registry.subnet.v1.IDkgSignedDealingTuple signed_dealing = 1;
 }
 
+message GetCanisterHttpResponseInBlockRequest {
+  // The hash of the stripped `CanisterHttpResponse`, i.e. the `content_hash` that
+  // the block's own metadata for that response carries.
+  bytes content_hash = 1;
+  ConsensusMessageId block_proposal_id = 2;
+}
+
+message GetCanisterHttpResponseInBlockResponse {
+  CanisterHttpResponse response = 1;
+}
+
 message StrippedBlockProposal {
   // The original block proposal proto but all [`Strippable`] data is removed.
   BlockProposal pruned_block_proposal = 1;
@@ -261,6 +274,15 @@ message StrippedBlockProposal {
   ConsensusMessageId unstripped_consensus_message_id = 3;
   // The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
   repeated StrippedIDkgDealing stripped_idkg_dealings = 4;
+  // The stripped canister HTTP responses, i.e. the response contents that were pruned from the
+  // canister HTTP payload of the block proposal. Deduplicated: two committee members of a flexible
+  // outcall that produced the very same response share one entry.
+  repeated StrippedCanisterHttpResponse stripped_canister_http_responses = 5;
+}
+
+message StrippedCanisterHttpResponse {
+  // The hash of the response content that was pruned from the canister HTTP payload.
+  bytes content_hash = 1;
 }
 
 message StrippedIDkgDealing {

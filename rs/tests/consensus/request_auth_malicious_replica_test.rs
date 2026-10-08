@@ -549,9 +549,11 @@ async fn test_request_with_delegation<T: Identity + 'static>(
     // A delegation from identity to identity2 for the specific canister ID.
     let delegation = match delegation_targets {
         Some(targets) => {
-            Delegation::new_with_targets(
+            Delegation::new(
                 signature.public_key.clone().unwrap(), // public key of identity2
                 Time::from_nanos_since_unix_epoch(delegation_expiry),
+            )
+            .with_targets(
                 targets
                     .into_iter()
                     .map(|principal| CanisterId::try_from(principal.as_slice()).unwrap())
@@ -598,7 +600,7 @@ async fn test_request_with_delegation<T: Identity + 'static>(
 
 fn sign_delegation(delegation: Delegation, identity: &impl Identity) -> SignedDelegation {
     let mut msg = b"\x1Aic-request-auth-delegation".to_vec();
-    msg.extend(&delegation.as_signed_bytes_without_domain_separator());
+    delegation.write_signed_bytes_without_domain_separator(&mut msg);
     let signature = identity.sign_arbitrary(&msg).unwrap();
 
     SignedDelegation::new(delegation, signature.signature.unwrap())

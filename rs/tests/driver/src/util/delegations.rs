@@ -49,6 +49,7 @@ fn to_agent_signed_delegation(d: CandidSignedDelegation) -> ic_agent::identity::
             pubkey: d.delegation.pubkey.into_vec(),
             expiration: d.delegation.expiration,
             targets: d.delegation.targets,
+            permissions: None,
         },
         signature: d.signature.into_vec(),
     }
@@ -178,16 +179,38 @@ struct CaptchaConfig {
 }
 
 #[derive(CandidType, Serialize)]
+pub struct DummyAuthConfig {
+    pub prompt_for_index: bool,
+}
+
+#[derive(CandidType, Serialize)]
 struct InternetIdentityInit {
     pub captcha_config: Option<CaptchaConfig>,
+    pub dummy_auth: Option<Option<DummyAuthConfig>>,
+}
+
+pub fn build_dummy_internet_identity_backend_install_arg() -> Vec<u8> {
+    build_ii_backend_install_arg_inner(true)
 }
 
 pub fn build_internet_identity_backend_install_arg() -> Vec<u8> {
+    build_ii_backend_install_arg_inner(false)
+}
+
+fn build_ii_backend_install_arg_inner(dummy_auth: bool) -> Vec<u8> {
+    let dummy_auth = if dummy_auth {
+        Some(Some(DummyAuthConfig {
+            prompt_for_index: true,
+        }))
+    } else {
+        None
+    };
     candid::encode_one(&InternetIdentityInit {
         captcha_config: Some(CaptchaConfig {
             max_unsolved_captchas: 50,
             captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
         }),
+        dummy_auth,
     })
     .unwrap()
 }

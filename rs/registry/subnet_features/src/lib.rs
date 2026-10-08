@@ -118,13 +118,19 @@ impl TryFrom<pb::KeyConfig> for KeyConfig {
 
     fn try_from(value: pb::KeyConfig) -> Result<Self, Self::Error> {
         let key_id: MasterPublicKeyId = try_from_option_field(value.key_id, "KeyConfig::key_id")?;
-        if key_id.requires_pre_signatures() && value.pre_signatures_to_create_in_advance.is_none() {
-            return Err(ProxyDecodeError::MissingField(
-                "KeyConfig::pre_signatures_to_create_in_advance",
-            ));
+        let pre_sigs = value.pre_signatures_to_create_in_advance;
+        let requires_pre_signatures = key_id.requires_pre_signatures();
+        if requires_pre_signatures && (pre_sigs.is_none() || pre_sigs == Some(0)) {
+            return Err(ProxyDecodeError::Other(format!(
+                "KeyConfig::pre_signatures_to_create_in_advance for key {key_id} should be non-zero, but got {pre_sigs:?}.",
+            )));
+        } else if !requires_pre_signatures && pre_sigs.is_some() {
+            return Err(ProxyDecodeError::Other(format!(
+                "KeyConfig::pre_signatures_to_create_in_advance for key {key_id} should be None, but got {pre_sigs:?}.",
+            )));
         }
         Ok(KeyConfig {
-            pre_signatures_to_create_in_advance: value.pre_signatures_to_create_in_advance,
+            pre_signatures_to_create_in_advance: pre_sigs,
             key_id,
             max_queue_size: try_from_option_field(
                 value.max_queue_size,
@@ -242,7 +248,7 @@ mod tests {
                         curve: VetKdCurve::Bls12_381_G2,
                         name: "test_key2".to_string(),
                     }),
-                    pre_signatures_to_create_in_advance: Some(0),
+                    pre_signatures_to_create_in_advance: None,
                     max_queue_size: 30,
                 },
             ],
@@ -277,7 +283,7 @@ mod tests {
                             },
                         )),
                     }),
-                    pre_signatures_to_create_in_advance: Some(0),
+                    pre_signatures_to_create_in_advance: None,
                     max_queue_size: Some(30),
                 },
             ],
@@ -292,5 +298,99 @@ mod tests {
             ChainKeyConfig::try_from(chain_key_config_pb).expect("Deserialization should succeed.");
 
         assert_eq!(chain_key_config, chain_key_config_after_deser,);
+    }
+
+    #[test]
+    fn test_key_config_try_from_errors() {
+        let ecdsa_key_id = Some(pb_types::MasterPublicKeyId {
+            key_id: Some(pb_types::master_public_key_id::KeyId::Ecdsa(
+                pb_types::EcdsaKeyId {
+                    curve: 1,
+                    name: "ecdsa_test_key".to_string(),
+                },
+            )),
+        });
+        let vetkd_key_id = Some(pb_types::MasterPublicKeyId {
+            key_id: Some(pb_types::master_public_key_id::KeyId::Vetkd(
+                pb_types::VetKdKeyId {
+                    curve: 1,
+                    name: "vetkd_test_key".to_string(),
+                },
+            )),
+        });
+
+        // Branch: missing key_id => MissingField.
+        let err = KeyConfig::try_from(pb::KeyConfig {
+            key_id: None,
+            pre_signatures_to_create_in_advance: Some(1),
+            max_queue_size: Some(10),
+        })
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            ProxyDecodeError::MissingField("KeyConfig::key_id")
+        ));
+
+        // Branch: key requires pre-signatures and field is missing => Other.
+        let err = KeyConfig::try_from(pb::KeyConfig {
+            key_id: ecdsa_key_id.clone(),
+            pre_signatures_to_create_in_advance: None,
+            max_queue_size: Some(10),
+        })
+        .unwrap_err();
+        assert!(matches!(err, ProxyDecodeError::Other(err) if err.contains("should be non-zero")));
+
+        // Branch: key requires pre-signatures and field is zero => Other.
+        let err = KeyConfig::try_from(pb::KeyConfig {
+            key_id: ecdsa_key_id.clone(),
+            pre_signatures_to_create_in_advance: Some(0),
+            max_queue_size: Some(10),
+        })
+        .unwrap_err();
+        assert!(matches!(err, ProxyDecodeError::Other(err) if err.contains("should be non-zero")));
+
+        // Branch: key does not require pre-signatures and field is present => Other.
+        let err = KeyConfig::try_from(pb::KeyConfig {
+            key_id: vetkd_key_id.clone(),
+            pre_signatures_to_create_in_advance: Some(1),
+            max_queue_size: Some(10),
+        })
+        .unwrap_err();
+        assert!(matches!(err, ProxyDecodeError::Other(err) if err.contains("should be None")));
+
+        // Branch: missing max_queue_size => MissingField.
+        let err = KeyConfig::try_from(pb::KeyConfig {
+            key_id: ecdsa_key_id.clone(),
+            pre_signatures_to_create_in_advance: Some(1),
+            max_queue_size: None,
+        })
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            ProxyDecodeError::MissingField("KeyConfig::max_queue_size")
+        ));
+
+        // Success branch: key requiring pre-signatures with a present value.
+        let ecdsa_key_config = KeyConfig::try_from(pb::KeyConfig {
+            key_id: ecdsa_key_id,
+            pre_signatures_to_create_in_advance: Some(5),
+            max_queue_size: Some(25),
+        })
+        .expect("ECDSA key config should decode.");
+        assert_eq!(
+            ecdsa_key_config.pre_signatures_to_create_in_advance,
+            Some(5)
+        );
+        assert_eq!(ecdsa_key_config.max_queue_size, 25);
+
+        // Success branch: key not requiring pre-signatures with no value.
+        let vetkd_key_config = KeyConfig::try_from(pb::KeyConfig {
+            key_id: vetkd_key_id,
+            pre_signatures_to_create_in_advance: None,
+            max_queue_size: Some(30),
+        })
+        .expect("VetKD key config should decode.");
+        assert_eq!(vetkd_key_config.pre_signatures_to_create_in_advance, None);
+        assert_eq!(vetkd_key_config.max_queue_size, 30);
     }
 }

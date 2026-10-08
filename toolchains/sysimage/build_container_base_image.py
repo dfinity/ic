@@ -46,7 +46,7 @@ class Args:
 def get_storage_dir_args():
     if "PODMAN_STORAGE_DIR" in os.environ:
         base = os.environ.get("PODMAN_STORAGE_DIR")
-        return f"--root {base}/root --runroot {base}/runroot"
+        return f"--root {base}/root --runroot {base}/runroot --tmpdir {base}/tmpdir"
     else:
         return ""
 
@@ -57,7 +57,7 @@ def build_image(image_tag: str, dockerfile: str, context_dir: str, build_args: L
     storage_args = get_storage_dir_args()
 
     log.info("Building image...")
-    cmd = f"podman {storage_args} build --squash-all --tag {image_tag} {build_arg_strings_joined} --file {dockerfile} {context_dir}"
+    cmd = f"podman {storage_args} build --timestamp 0 --squash-all --tag {image_tag} {build_arg_strings_joined} --file {dockerfile} {context_dir}"
     invoke.run(cmd)
     log.info("Image built successfully")
 

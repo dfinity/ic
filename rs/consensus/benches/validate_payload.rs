@@ -49,7 +49,7 @@ use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
-    ids::{canister_test_id, node_test_id, subnet_test_id},
+    ids::{canister_test_id, node_test_id, subnet_test_id, test_replica_version},
     messages::SignedIngressBuilder,
 };
 use ic_types::{
@@ -99,11 +99,13 @@ where
             Arc::new(FakeVerifier::new()),
             subnet_test_id(0),
             SubnetType::Application,
-            no_op_logger(),
-            &metrics_registry,
             &StateManagerConfig::new(tmpdir.path().to_path_buf()),
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(ic_types::Height::from(0)).0,
+            None,
+            &metrics_registry,
+            no_op_logger(),
         );
         setup_ingress_state(now, &mut state_manager);
         let state_manager = Arc::new(state_manager);
@@ -115,6 +117,7 @@ where
         let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
             subnet_test_id(0),
+            &test_replica_version(),
             make_genesis(summary).into(),
             pool_config.clone(),
             ic_metrics::MetricsRegistry::new(),
@@ -171,6 +174,7 @@ where
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
+            Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             metrics_registry,

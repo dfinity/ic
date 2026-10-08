@@ -30,6 +30,9 @@ use ic_ckbtc_minter::{
 };
 use ic_http_types::{HttpRequest, HttpResponse};
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc21::errors::Icrc21Error;
+use icrc_ledger_types::icrc21::requests::ConsentMessageRequest;
+use icrc_ledger_types::icrc21::responses::ConsentInfo;
 
 #[init]
 fn init(args: MinterArg) {
@@ -197,8 +200,8 @@ async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, Upda
 }
 
 #[update]
-async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusResult {
-    ic_cdk::management_canister::canister_status(&ic_cdk::management_canister::CanisterStatusArgs {
+async fn get_canister_status() -> ic_cdk_management_canister::CanisterStatusResult {
+    ic_cdk_management_canister::canister_status(&ic_cdk_management_canister::CanisterStatusArgs {
         canister_id: ic_cdk::api::canister_self(),
     })
     .await
@@ -263,6 +266,18 @@ fn get_deposit_fee() -> u64 {
 #[query]
 fn decode_ledger_memo(arg: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
     ic_ckbtc_minter::queries::decode_ledger_memo(arg)
+}
+
+#[update]
+fn icrc21_canister_call_consent_message(
+    consent_msg_request: ConsentMessageRequest,
+) -> Result<ConsentInfo, Icrc21Error> {
+    updates::icrc21::icrc21_canister_call_consent_message(consent_msg_request)
+}
+
+#[query]
+fn icrc10_supported_standards() -> Vec<updates::icrc21::StandardRecord> {
+    updates::icrc21::icrc10_supported_standards()
 }
 
 #[query(hidden = true)]

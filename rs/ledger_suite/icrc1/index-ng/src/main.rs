@@ -1,7 +1,7 @@
-#![allow(deprecated)]
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_canister_log::{export as export_logs, log};
 use ic_canister_profiler::{SpanName, SpanStats, measure_span};
+use ic_cdk::call::Call;
 use ic_cdk::trap;
 use ic_cdk::{init, post_upgrade, query};
 use ic_crypto_sha2::Sha256;
@@ -317,6 +317,11 @@ fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
 
 #[init]
 fn init(index_arg: Option<IndexArg>) {
+    // `InitArg::retrieve_blocks_from_ledger_interval_seconds` is itself
+    // `#[deprecated]` (see `lib.rs`); we still observe it here so
+    // `parse_timer_configuration_options` can enforce the backwards-compat
+    // rule that it cannot be set alongside the new `min_`/`max_` fields.
+    #[allow(deprecated)]
     let InitArg {
         ledger_id,
         retrieve_blocks_from_ledger_interval_seconds,
@@ -372,7 +377,7 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
     // storage scheme. This trick allows SNSes to update the legacy
     // index to index-ng.
     if let Ok(old_state) = ciborium::de::from_reader::<LegacyIndexState, _>(
-        ic_cdk::api::stable::StableReader::default().take(MAX_LEGACY_STATE_BYTES),
+        ic_cdk::stable::StableReader::default().take(MAX_LEGACY_STATE_BYTES),
     ) {
         log!(
             P1,
@@ -388,6 +393,12 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
         Some(IndexArg::Upgrade(upgrade)) => {
             log!(P1, "Possible upgrade configuration changes: {:#?}", upgrade,);
 
+            // `UpgradeArg::retrieve_blocks_from_ledger_interval_seconds` is
+            // itself `#[deprecated]` (see `lib.rs`); we still observe it here
+            // so `parse_timer_configuration_options` can enforce the
+            // backwards-compat rule that it cannot be set alongside the new
+            // `min_`/`max_` fields.
+            #[allow(deprecated)]
             let UpgradeArg {
                 ledger_id,
                 retrieve_blocks_from_ledger_interval_seconds,
@@ -515,14 +526,15 @@ async fn get_supported_standards_from_ledger() -> Vec<String> {
         P1,
         "[get_supported_standards_from_ledger]: making the call..."
     );
-    let res = ic_cdk::api::call::call::<_, (Vec<StandardRecord>,)>(
-        ledger_id,
-        "icrc1_supported_standards",
-        (),
-    )
-    .await;
+    let res: Result<Vec<StandardRecord>, String> =
+        match Call::unbounded_wait(ledger_id, "icrc1_supported_standards").await {
+            Ok(response) => response
+                .candid::<Vec<StandardRecord>>()
+                .map_err(|err| err.to_string()),
+            Err(err) => Err(err.to_string()),
+        };
     match res {
-        Ok((res,)) => {
+        Ok(res) => {
             let supported_standard_names = res.into_iter().map(|s| s.name).collect::<Vec<_>>();
             log!(
                 P1,
@@ -532,14 +544,13 @@ async fn get_supported_standards_from_ledger() -> Vec<String> {
             );
             supported_standard_names
         }
-        Err((code, msg)) => {
+        Err(err) => {
             // log the error but do not propagate it
             log!(
                 P0,
-                "[get_supported_standards_from_ledger]: failed to call get_supported_standards_from_ledger on ledger {}. Error code: {:?} message: {}",
+                "[get_supported_standards_from_ledger]: failed to call icrc1_supported_standards on ledger {}: {}",
                 ledger_id,
-                code,
-                msg
+                err,
             );
             vec![]
         }
@@ -559,9 +570,11 @@ where
 {
     let req = measure_span(&PROFILING_DATA, encode_span_name, || Encode!(i))
         .map_err(|err| format!("failed to candid encode the input {i:?}: {err}"))?;
-    let res = ic_cdk::api::call::call_raw(id, method, &req, 0)
+    let res = Call::unbounded_wait(id, method)
+        .take_raw_args(req)
         .await
-        .map_err(|(code, str)| format!("code: {code:#?} message: {str}"))?;
+        .map(|response| response.into_bytes())
+        .map_err(|err| format!("{err}"))?;
     measure_span(&PROFILING_DATA, decode_span_name, || Decode!(&res, O))
         .map_err(|err| format!("failed to candid decode the output: {err}"))
 }
@@ -933,6 +946,7 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) -> Result<(), SyncError> {
     // the index of the next block that we
     // are going to append
     let mut block_index = with_blocks(|blocks| blocks.len());
+    #[allow(clippy::explicit_counter_loop)]
     for block in new_blocks {
         append_block(block_index, block)?;
         block_index += 1;
@@ -1113,6 +1127,12 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
             } => {
                 // Does not affect the balance
             }
+            Operation::AuthorizedMint { to, amount, .. } => {
+                credit(block_index, to, amount);
+            }
+            Operation::AuthorizedBurn { from, amount, .. } => {
+                debit(block_index, from, amount);
+            }
         },
     );
 }
@@ -1156,6 +1176,8 @@ fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
         }
         Operation::Approve { from, .. } => vec![from],
         Operation::FeeCollector { .. } => vec![],
+        Operation::AuthorizedMint { to, .. } => vec![to],
+        Operation::AuthorizedBurn { from, .. } => vec![from],
     }
 }
 
@@ -1203,7 +1225,7 @@ fn account_block_ids_key(account: Account, block_index: BlockIndex64) -> Account
     (account_sha256(account), Reverse(block_index))
 }
 
-fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> GenericBlock {
+fn decode_icrc1_block(bytes: Vec<u8>) -> GenericBlock {
     let encoded_block = EncodedBlock::from(bytes);
     encoded_block_to_generic_block(&encoded_block)
 }
@@ -1222,12 +1244,12 @@ fn get_blocks(req: GetBlocksRequest) -> ic_icrc1_index_ng::GetBlocksResponse {
     }
 }
 
-fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>) -> R) -> Vec<R> {
+fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(Vec<u8>) -> R) -> Vec<R> {
     let length = length.min(with_state(|opts| opts.max_blocks_per_response));
     with_blocks(|blocks| {
         let limit = blocks.len().min(start.saturating_add(length));
         (start..limit)
-            .map(|i| decoder(start + i, blocks.get(i).unwrap()))
+            .map(|i| decoder(blocks.get(i).unwrap()))
             .collect()
     })
 }
@@ -1396,12 +1418,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "index_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        (ic_cdk::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
@@ -1410,7 +1432,7 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 
-    let cycle_balance = ic_cdk::api::canister_balance128() as f64;
+    let cycle_balance = ic_cdk::api::canister_cycle_balance() as f64;
     w.encode_gauge(
         "index_cycle_balance",
         cycle_balance,

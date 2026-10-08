@@ -60,10 +60,18 @@ fn test_statesync_test_canisters() {
 }
 
 #[test]
-fn test_create_many_canisters() {
+fn test_create_and_update_many_canisters() {
     let env = StateMachine::new();
 
     let seed_canister_id = deploy_state_sync_test_canister(&env);
+
+    // Canister version of a canister created/controlled by the seed canister.
+    let canister_version = |canister_id| {
+        env.canister_status_query_as(seed_canister_id.into(), canister_id)
+            .unwrap()
+            .unwrap()
+            .version()
+    };
 
     let canister_creation_status = || {
         let result = env
@@ -160,6 +168,57 @@ fn test_create_many_canisters() {
 
     // We created `num_canisters` in addition to the seed canister.
     assert_eq!(env.num_running_canisters(), num_canisters + 1);
+
+    let created_canister_ids: Vec<CanisterId> = match canister_creation_status() {
+        CanisterCreationStatus::Done(ids) => ids
+            .into_iter()
+            .map(|canister_candid_principal| {
+                CanisterId::unchecked_from_principal(PrincipalId::from(canister_candid_principal))
+            })
+            .collect(),
+        s => panic!("Expected Done, got {s:?}"),
+    };
+    assert_eq!(created_canister_ids.len(), num_canisters as usize);
+
+    // Kick off canister state updates for the created canisters.
+    // The call returns immediately, but keeps cycling through
+    // the created canisters in the background and bumping their
+    // freezing threshold so that their canister state keeps changing
+    // and, consequently, their canister "version" keeps increasing.
+    let result = env
+        .execute_ingress(
+            seed_canister_id,
+            "update_many_canisters",
+            Encode!(&()).unwrap(),
+        )
+        .unwrap();
+    let _ = assert_reply(result);
+
+    // Capture the current canister version as the baseline version
+    // to check increase against.
+    let baseline_versions: Vec<(_, u64)> = created_canister_ids
+        .iter()
+        .copied()
+        .map(|canister_id| (canister_id, canister_version(canister_id)))
+        .collect();
+
+    // Execute rounds until the canister version of all created canisters increases
+    // by at least 2 w.r.t. the baseline version observed above.
+    // This property ensures that the created canisters are indeed being
+    // updated repeatedly in the background.
+    loop {
+        let all_versions_increased =
+            baseline_versions
+                .iter()
+                .copied()
+                .all(|(canister_id, baseline_version)| {
+                    canister_version(canister_id) >= baseline_version + 2
+                });
+        if all_versions_increased {
+            break;
+        }
+        env.tick();
+    }
 }
 
 fn assert_reply(res: WasmResult) -> Vec<u8> {

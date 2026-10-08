@@ -30,9 +30,6 @@ DEFAULT_RUSTC_FLAGS = [
 # NOTE: make sure this stays in sync with bazel/rust.MODULE.bazel
 DEFAULT_SANITIZERS = [
     "-Zsanitizer=address",
-    # zig doesn't like how rustc pushes the sanitizers, so do it ourselves.
-    "-Zexternal-clangrt",
-    "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
 ]
 
 # This flag will be used by third party crates and internal rust_libraries during fuzzing
@@ -102,6 +99,12 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
     """
 
     RUSTC_FLAGS_AFL = DEFAULT_RUSTC_FLAGS + [
+        # afl-clang-lto is a Clang wrapper, so it understands -fsanitize=fuzzer
+        # and -fsanitize=address. We route through a thin wrapper script because
+        # rustc unconditionally injects -pass-exit-codes (a GCC-only flag) when
+        # using a gcc-flavor linker driver; the wrapper strips it before
+        # forwarding to afl-clang-lto.
+        "-Clinker=$(location //bin/fuzzing:afl_clang_lto_linker)",
         "-Cllvm-args=-sanitizer-coverage-trace-pc-guard",
         "-Clink-arg=-fuse-ld=lld",
         "-Clink-arg=-fsanitize=fuzzer",
@@ -122,6 +125,7 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
         crate_features = crate_features + ["fuzzing"],
         proc_macro_deps = proc_macro_deps,
         deps = deps,
+        compile_data = ["//bin/fuzzing:afl_clang_lto_linker"],
         rustc_flags = rustc_flags + RUSTC_FLAGS_AFL,
         tags = [
             # Makes sure this target is not run in normal CI builds. It would fail due to non-nightly Rust toolchain.

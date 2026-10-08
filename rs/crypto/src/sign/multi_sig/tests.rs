@@ -102,6 +102,7 @@ mod test_multi_sig_verification {
 
     #[test]
     fn should_not_combine_zero_individual_sigs() {
+        let rng = reproducible_rng();
         let (_, pk_1, _, _, _) = multi_bls12_381::testvec(STABILITY_1);
         let pk_rec_1 = committee_signing_record_with(
             NODE_1,
@@ -115,6 +116,7 @@ mod test_multi_sig_verification {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_with_records(vec![pk_rec_1]),
+            rng,
         );
 
         assert_matches!(
@@ -126,6 +128,7 @@ mod test_multi_sig_verification {
 
     #[test]
     fn should_not_verify_with_empty_signers() {
+        let rng = reproducible_rng();
         let (_, pk_1, _, msg_1, _) = multi_bls12_381::testvec(STABILITY_1);
         let (_, pk_2, _, msg_2, _) = multi_bls12_381::testvec(STABILITY_2);
         assert_eq!(msg_1, msg_2);
@@ -149,6 +152,7 @@ mod test_multi_sig_verification {
         let crypto = crypto_component_with_csp(
             MockAllCryptoServiceProvider::new(),
             registry_with_records(vec![pk_rec_1, pk_rec_2]),
+            rng,
         );
 
         assert_matches!(

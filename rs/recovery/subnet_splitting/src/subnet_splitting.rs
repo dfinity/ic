@@ -1,16 +1,10 @@
 use crate::{
-    admin_helper::{
-        get_halt_subnet_at_cup_height_command, get_propose_to_complete_canister_migration_command,
-        get_propose_to_prepare_canister_migration_command,
-        get_propose_to_reroute_canister_ranges_command,
-    },
     layout::Layout,
     steps::{
-        ComputeExpectedManifestsStep, CopyWorkDirStep, ReadRegistryStep, SplitStateStep,
-        StateSplitStrategy, ValidateCUPStep, WaitForCUPStep,
+        ComputeExpectedManifestsStep, CopyWorkDirStep, SplitStateStep, StateSplitStrategy,
+        ValidateCUPStep, WaitForCUPStep,
     },
     target_subnet::TargetSubnet,
-    utils::get_state_hash,
 };
 
 use clap::Parser;
@@ -18,7 +12,7 @@ use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
     CUPS_DIR, IC_STATE_DIR, NeuronArgs, Recovery, RecoveryArgs,
-    cli::{consent_given, read_optional, wait_for_confirmation},
+    cli::{consent_given, read_optional},
     error::{RecoveryError, RecoveryResult},
     get_available_nodes_heights_from_metrics,
     recovery_iterator::RecoveryIterator,
@@ -26,16 +20,24 @@ use ic_recovery::{
     registry_helper::RegistryPollingStrategy,
     ssh_helper::SshHelper,
     steps::{AdminStep, Step, UploadStateAndRestartStep},
-    util::{DataLocation, SshUser},
+    util::{CheckpointHeight, DataLocation, ExecutionMode, SshUser},
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_subnet_tools::{
+    admin_helper::{
+        get_halt_subnet_at_cup_height_command, get_propose_to_complete_canister_migration_command,
+        get_propose_to_prepare_canister_migration_command,
+        get_propose_to_reroute_canister_ranges_command,
+    },
+    steps::ReadRegistryStep,
+    utils::{get_state_hash, print_url_and_ask_for_confirmation},
+};
 use ic_types::Height;
 use serde::{Deserialize, Serialize};
-use slog::{Logger, error, warn};
+use slog::{Logger, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
-use url::Url;
 
 use std::{collections::HashMap, iter::Peekable, net::IpAddr, path::PathBuf};
 
@@ -326,6 +328,7 @@ impl SubnetSplitting {
             state_hash,
             /*replacement_nodes=*/ &[],
             /*registry_params=*/ None,
+            /*initial_dkg_subnet_id=*/ None,
             /*chain_key_subnet_id=*/ None,
         )
     }
@@ -444,6 +447,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 ));
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::UploadStateToSourceSubnet => {
                 if self.params.upload_node_source.is_none() {
                     self.params.upload_node_source = read_optional(
@@ -453,6 +457,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::UploadStateToDestinationSubnet => {
                 if self.params.upload_node_destination.is_none() {
                     self.params.upload_node_destination = read_optional(
@@ -584,7 +589,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     self.recovery.ssh_confirmation,
                     key_file,
                 );
-                let mut includes = Recovery::get_ic_state_includes(Some(&ssh_helper))?;
+                let mut includes = Recovery::get_ic_state_includes(
+                    &self.recovery.logger,
+                    ExecutionMode::Remote(&ssh_helper),
+                    CheckpointHeight::Latest,
+                )?;
                 includes.push(PathBuf::from(CUPS_DIR));
 
                 self.recovery
@@ -681,22 +690,5 @@ impl HasRecoveryState for SubnetSplitting {
             neuron_args: self.neuron_args.clone(),
             subcommand_args: self.params.clone(),
         })
-    }
-}
-
-fn print_url_and_ask_for_confirmation(
-    logger: &Logger,
-    url: String,
-    text_to_display: impl std::fmt::Display,
-) {
-    match Url::parse(&url) {
-        Ok(url) => {
-            warn!(logger, "{}", text_to_display);
-            warn!(logger, "{}", url);
-            wait_for_confirmation(logger);
-        }
-        Err(err) => {
-            error!(logger, "Failed to parse url {}: {}", url, err);
-        }
     }
 }

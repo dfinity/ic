@@ -1,3 +1,4 @@
+use super::allowed_panics::panic_sandboxed_execution_controller_reply_channel_closed;
 use crate::compiler_sandbox::WasmCompilerProxy;
 use crate::controller_launcher_service::ControllerLauncherService;
 use crate::launcher_service::LauncherService;
@@ -9,8 +10,9 @@ use crate::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{
-    CanisterStateChanges, ExecutionStateChanges, PausedWasmExecution, SliceExecutionOutput,
-    WasmExecutionResult, WasmExecutor, get_wasm_reserved_pages, wasm_execution_error,
+    CanisterStateChanges, CreatedExecutionState, ExecutionStateChanges, PausedWasmExecution,
+    SliceExecutionOutput, WasmExecutionResult, WasmExecutor, get_wasm_reserved_pages,
+    wasm_execution_error,
 };
 use ic_embedders::{
     CompilationCache, CompilationResult, WasmExecutionInput, wasm_utils::WasmImportsDetails,
@@ -40,7 +42,6 @@ use std::collections::{HashMap, VecDeque};
 #[cfg(target_os = "linux")]
 use std::convert::TryInto;
 use std::os::fd::AsRawFd;
-use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::sync::Weak;
 use std::sync::mpsc::Receiver;
@@ -49,6 +50,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::active_execution_state_registry::{ActiveExecutionStateRegistry, CompletionResult};
+use super::allowed_panics::panic_launcher_exited_due_to_signal;
 use super::controller_service_impl::ControllerServiceImpl;
 use super::launch_as_process::{create_sandbox_process, spawn_launcher_process};
 use super::process_exe_and_args::{
@@ -146,8 +148,6 @@ struct SandboxedExecutionMetrics {
     accessed_wasm_pages: HistogramVec,
     dirty_pages: HistogramVec,
     dirty_wasm_pages: HistogramVec,
-    read_before_write_count: HistogramVec,
-    direct_write_count: HistogramVec,
     allocated_pages: IntGauge,
     sigsegv_count: HistogramVec,
     mmap_count: HistogramVec,
@@ -355,20 +355,6 @@ impl SandboxedExecutionMetrics {
                 exponential_buckets(1.0, 2.0, 22),
                 &["api_type", "memory_type"],
             ),
-            read_before_write_count: metrics_registry.histogram_vec(
-                "sandboxed_execution_read_before_write_count",
-                "Number of write accesses handled where the page had already been read \
-                    by type of memory (wasm, stable) and api type.",
-                exponential_buckets(1.0, 2.0, 22),
-                &["api_type", "memory_type"],
-            ),
-            direct_write_count: metrics_registry.histogram_vec(
-                "sandboxed_execution_direct_write_count",
-                "Number of write accesses handled where the page had not yet been read \
-                    by type of memory (wasm, stable) and api type.",
-                exponential_buckets(1.0, 2.0, 22),
-                &["api_type", "memory_type"],
-            ),
             allocated_pages: metrics_registry.int_gauge(
                 "sandboxed_execution_allocated_pages",
                 "Total number of currently allocated pages.",
@@ -441,12 +427,6 @@ impl SandboxedExecutionMetrics {
         self.dirty_wasm_pages
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_dirty_wasm_pages_count as f64);
-        self.read_before_write_count
-            .with_label_values(&[api_type_label, "wasm"])
-            .observe(instance_stats.wasm_read_before_write_count as f64);
-        self.direct_write_count
-            .with_label_values(&[api_type_label, "wasm"])
-            .observe(instance_stats.wasm_direct_write_count as f64);
         self.sigsegv_count
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_sigsegv_count as f64);
@@ -470,12 +450,6 @@ impl SandboxedExecutionMetrics {
         self.dirty_pages
             .with_label_values(&[api_type_label, "stable"])
             .observe(instance_stats.stable_dirty_pages as f64);
-        self.read_before_write_count
-            .with_label_values(&[api_type_label, "stable"])
-            .observe(instance_stats.stable_read_before_write_count as f64);
-        self.direct_write_count
-            .with_label_values(&[api_type_label, "stable"])
-            .observe(instance_stats.stable_direct_write_count as f64);
         self.sigsegv_count
             .with_label_values(&[api_type_label, "stable"])
             .observe(instance_stats.stable_sigsegv_count as f64);
@@ -1027,7 +1001,7 @@ impl WasmExecutor for SandboxedExecutionController {
         // Wait for completion.
         let result = rx
             .recv()
-            .expect("Sandboxed_execution_controller reply channel closed unexpectedly");
+            .unwrap_or_else(|_| panic_sandboxed_execution_controller_reply_channel_closed());
         drop(wait_timer);
         let _finish_timer = self
             .metrics
@@ -1054,10 +1028,9 @@ impl WasmExecutor for SandboxedExecutionController {
     fn create_execution_state(
         &self,
         canister_module: CanisterModule,
-        canister_root: PathBuf,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
-    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
+    ) -> HypervisorResult<CreatedExecutionState> {
         let _create_exe_state_timer = self
             .metrics
             .sandboxed_execution_replica_create_exe_state_duration
@@ -1236,8 +1209,10 @@ impl WasmExecutor for SandboxedExecutionController {
 
         let initial_state_data = serialized_module.initial_state_data();
         let execution_state = ExecutionState {
-            canister_root,
             wasm_binary,
+            // The install timestamp is a deployment-round value that the embedder
+            // does not know; it is stamped by `Hypervisor::create_execution_state`.
+            last_install_timestamp: None,
             exports: ExportedFunctions::new(initial_state_data.exported_functions),
             wasm_memory,
             stable_memory,
@@ -1248,11 +1223,12 @@ impl WasmExecutor for SandboxedExecutionController {
             wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64),
         };
 
-        Ok((
+        Ok(CreatedExecutionState {
             execution_state,
-            serialized_module.compilation_cost,
+            compilation_cost: serialized_module.compilation_cost,
             compilation_result,
-        ))
+            declares_wasm_memory: serialized_module.declares_wasm_memory,
+        })
     }
 }
 
@@ -1508,7 +1484,7 @@ impl SandboxedExecutionController {
             .get_ref()
             .resource_limits()
             .maximum_state_delta
-            .and_then(|d| if d.get() != 0 { Some(d) } else { None })
+            .filter(|&d| d.get() != 0)
             .unwrap_or(self.default_subnet_heap_delta_capacity);
         heap_delta_capacity / MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO
     }
@@ -2069,11 +2045,7 @@ fn evict_sandbox_processes(
         Backend::Empty => false,
     });
 
-    let scheduler_priorities = state_reader
-        .get_latest_state()
-        .get_ref()
-        .canister_accumulated_priorities();
-
+    let state = state_reader.get_latest_state();
     let min_scheduler_priority = AccumulatedPriority::new(i64::MIN);
 
     let candidates: Vec<_> = backends
@@ -2083,10 +2055,12 @@ fn evict_sandbox_processes(
                 id: *id,
                 last_used: stats.last_used,
                 rss: stats.rss,
-                scheduler_priority: *scheduler_priorities
-                    .get(id)
-                    // This should happen only if the canister is deleted.
-                    .unwrap_or(&min_scheduler_priority),
+                scheduler_priority: if state.get_ref().canister_state(id).is_some() {
+                    state.get_ref().canister_priority(id).accumulated_priority
+                } else {
+                    // Canister was deleted.
+                    min_scheduler_priority
+                },
             }),
             Backend::Evicted { .. } | Backend::Empty => None,
         })
@@ -2182,9 +2156,7 @@ pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
         Some(code) => {
             panic!("Error from launcher process, pid {pid} exited with status code: {code}")
         }
-        None => panic!(
-            "Error from launcher process, pid {pid} exited due to signal! In test environments (e.g., PocketIC), you can safely ignore this message."
-        ),
+        None => panic_launcher_exited_due_to_signal(pid),
     }
 }
 
@@ -2226,6 +2198,7 @@ mod tests {
     use std::{
         collections::BTreeMap,
         fs::{self, File},
+        path::PathBuf,
     };
 
     use super::*;
@@ -2309,7 +2282,6 @@ mod tests {
         controller
             .create_execution_state(
                 canister_module,
-                PathBuf::new(),
                 canister_id,
                 Arc::new(CompilationCacheBuilder::new().build()),
             )

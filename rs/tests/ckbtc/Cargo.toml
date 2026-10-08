@@ -48,6 +48,9 @@ serde_bytes = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 
+[dev-dependencies]
+ic-cdk = { workspace = true }
+
 [[bin]]
 name = "ic-systest-ckbtc-minter-basics-test"
 path = "ckbtc_minter_basics_test.rs"

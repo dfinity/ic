@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ids",
+    srcs = glob(
+        ["src/**/*.rs"],
+        # Ensures that we do not need to rebuild just because a _test.rs file
+        # changed.
+        exclude = ["**/*tests.rs"],
+    ),
+    crate_name = "ic_nervous_system_ids",
+    version = "0.0.1",
+)
+
+rust_test(
+    name = "ids_test",
+    srcs = glob(["src/**/*.rs"]),
+)

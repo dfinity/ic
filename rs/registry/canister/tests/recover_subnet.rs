@@ -19,7 +19,8 @@ use ic_protobuf::registry::{
     crypto::v1::ChainKeyEnabledSubnetList,
     subnet::v1::{
         CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, EcdsaInitialization,
-        KeyConfig as KeyConfigPb, SubnetListRecord, SubnetRecord,
+        KeyConfig as KeyConfigPb, RecoveryArgs, SubnetListRecord, SubnetRecord,
+        catch_up_package_contents::CupType,
     },
 };
 use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
@@ -34,7 +35,7 @@ use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, upsert}
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
-    Height, RegistryVersion, ReplicaVersion,
+    Height, RegistryVersion,
     crypto::{
         AlgorithmId, BasicSig, BasicSigOf,
         canister_threshold_sig::idkg::{
@@ -161,6 +162,7 @@ fn test_recover_subnet_with_replacement_nodes() {
 
             let payload = RecoverSubnetPayload {
                 subnet_id: subnet_id.get(),
+                initial_dkg_subnet_id: None,
                 height: 10,
                 time_ns: 1200,
                 state_hash: vec![10, 20, 30],
@@ -202,6 +204,14 @@ fn test_recover_subnet_with_replacement_nodes() {
             assert_eq!(payload.height, updated_cup_contents.height);
             assert_eq!(payload.time_ns, updated_cup_contents.time);
             assert_eq!(payload.state_hash, updated_cup_contents.state_hash);
+            assert_eq!(
+                updated_cup_contents.cup_type,
+                Some(CupType::Recovery(RecoveryArgs {
+                    height: payload.height,
+                    time: payload.time_ns,
+                    state_hash: payload.state_hash,
+                }))
+            );
 
             // DKG should have been changed
             assert_ne!(
@@ -221,6 +231,7 @@ fn test_recover_subnet_with_replacement_nodes() {
 fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
     let ic_config = get_ic_config();
     let (config, _tmpdir) = Config::temp_config();
+    let replica_version_id = ic_config.initial_replica_version_id.to_string();
     canister_test_with_config_async(config, ic_config, |local_runtime| async move {
         let data_provider = local_runtime.registry_data_provider.clone();
         let fake_client = local_runtime.registry_client.clone();
@@ -241,7 +252,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
             gossip_max_duplicity: 1,
             gossip_max_chunk_wait_ms: 200,
             gossip_max_artifact_streams_per_peer: 1,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id,
             ..CreateSubnetPayload::default()
         }
         .into();
@@ -371,6 +382,7 @@ fn test_recover_subnet_gets_chain_keys_when_needed(key_id: MasterPublicKeyId) {
         let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
+            initial_dkg_subnet_id: Some(system_subnet_id),
             height: 10,
             time_ns: 1200,
             state_hash: vec![10, 20, 30],
@@ -471,6 +483,7 @@ fn test_recover_subnet_gets_vetkd_keys_when_needed() {
 fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: MasterPublicKeyId) {
     let ic_config = get_ic_config();
     let (config, _tmpdir) = Config::temp_config();
+    let replica_version = ic_config.initial_replica_version_id.clone();
     canister_test_with_config_async(config, ic_config, |local_runtime| async move {
         let data_provider = local_runtime.registry_data_provider.clone();
         let fake_client = local_runtime.registry_client.clone();
@@ -481,8 +494,11 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         let mut node_ids: Vec<NodeId> = node_ids_and_valid_pks.keys().cloned().collect();
 
         let subnet_to_recover_nodes = vec![node_ids.pop().unwrap()];
-        let subnet_to_recover =
-            get_subnet_holding_chain_keys(vec![key_id.clone()], subnet_to_recover_nodes.clone());
+        let subnet_to_recover = get_subnet_holding_chain_keys(
+            vec![key_id.clone()],
+            subnet_to_recover_nodes.clone(),
+            replica_version,
+        );
 
         // Here we discover the IC's subnet ID (from our test harness)
         // and then modify it to hold the key and sign for it.
@@ -623,6 +639,7 @@ fn test_recover_subnet_without_chain_key_removes_it_from_signing_list(key_id: Ma
         let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
+            initial_dkg_subnet_id: None,
             height: 10,
             time_ns: 1200,
             state_hash: vec![10, 20, 30],
@@ -710,6 +727,7 @@ fn test_recover_subnet_without_vetkd_removes_it_from_signing_list() {
 fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
     let ic_config = get_ic_config();
     let (config, _tmpdir) = Config::temp_config();
+    let replica_version_id = ic_config.initial_replica_version_id.to_string();
     canister_test_with_config_async(config, ic_config, |local_runtime| async move {
         let data_provider = local_runtime.registry_data_provider.clone();
         let fake_client = local_runtime.registry_client.clone();
@@ -729,7 +747,7 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
             gossip_max_duplicity: 1,
             gossip_max_chunk_wait_ms: 200,
             gossip_max_artifact_streams_per_peer: 1,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id,
             node_ids: subnet_to_recover_nodes.clone(),
             ..Default::default()
         }
@@ -798,6 +816,7 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
 
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
+            initial_dkg_subnet_id: None,
             height: 10,
             time_ns: 1200,
             state_hash: vec![10, 20, 30],
@@ -920,6 +939,7 @@ fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
 fn test_recover_subnet_resets_cup_contents() {
     let ic_config = get_ic_config();
     let (config, _tmpdir) = Config::temp_config();
+    let replica_version_id = ic_config.initial_replica_version_id.to_string();
     canister_test_with_config_async(config, ic_config, |local_runtime| async move {
         let data_provider = local_runtime.registry_data_provider.clone();
         let fake_client = local_runtime.registry_client.clone();
@@ -945,7 +965,7 @@ fn test_recover_subnet_resets_cup_contents() {
             gossip_max_duplicity: 1,
             gossip_max_chunk_wait_ms: 200,
             gossip_max_artifact_streams_per_peer: 1,
-            replica_version_id: ReplicaVersion::default().into(),
+            replica_version_id,
             ..CreateSubnetPayload::default()
         }
         .into();
@@ -1102,6 +1122,7 @@ fn test_recover_subnet_resets_cup_contents() {
         let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
         let payload = RecoverSubnetPayload {
             subnet_id: subnet_to_recover_subnet_id.get(),
+            initial_dkg_subnet_id: None,
             height: 10,
             time_ns: 1200,
             state_hash: vec![10, 20, 30],

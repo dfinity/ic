@@ -36,11 +36,12 @@ use serde_with::{DisplayFromStr, serde_as};
 use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::num::NonZeroU8;
 use std::str::FromStr;
 use strum::{Display, EnumString};
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.15.0";
+pub const CONFIG_VERSION: &str = "1.16.0";
 
 /// List of field paths that have been removed and should not be reused.
 pub static RESERVED_FIELD_PATHS: &[&str] = &[
@@ -132,7 +133,7 @@ pub struct GuestOSConfig {
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, securefmt::Debug, PartialEq, Eq, Clone, Default)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Default)]
 pub struct ICOSSettings {
     /// The node reward type determines node rewards
     pub node_reward_type: Option<String>,
@@ -144,8 +145,7 @@ pub struct ICOSSettings {
     pub deployment_environment: DeploymentEnvironment,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
-    /// PEM-encoded Node Operator private key
-    #[sensitive]
+    /// PEM-encoded Node Operator private key. Redacted by the `Debug` impl below.
     pub node_operator_private_key: Option<String>,
     /// Whether SEV-SNP should be enabled. This is configured when the machine is deployed.
     /// If the value is enabled, we check during deployment that SEV-SNP is supported
@@ -153,8 +153,9 @@ pub struct ICOSSettings {
     /// SEV-SNP.
     ///
     /// IMPORTANT: This field only controls whether TEE is enabled in config.
-    /// In GuestOS code, check the $SEV_ACTIVE environment variable or use the `is_sev_active()`
-    /// wrapper from the `ic_sev` crate, as this cannot be faked by a malicious HostOS.
+    /// In GuestOS code, check the dfinity.tee kernel command line argument or the `TEE_ENABLED`
+    /// environment variable, or use the `is_tee_enabled()` wrapper from the `ic_sev` crate, as this
+    /// cannot be faked by a malicious HostOS.
     #[serde(default)]
     pub enable_trusted_execution_environment: bool,
     /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`, `recovery`.
@@ -166,6 +167,25 @@ pub struct ICOSSettings {
     /// use_ssh_authorized_keys triggers the use of the ssh keys directory
     pub use_ssh_authorized_keys: bool,
     pub icos_dev_settings: ICOSDevSettings,
+}
+
+/// Hand-written so that the sensitive `node_operator_private_key` is never printed.
+impl std::fmt::Debug for ICOSSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ICOSSettings")
+            .field("node_reward_type", &self.node_reward_type)
+            .field("mgmt_mac", &self.mgmt_mac)
+            .field("deployment_environment", &self.deployment_environment)
+            .field("nns_urls", &self.nns_urls)
+            .field("node_operator_private_key", &format_args!("<redacted>"))
+            .field(
+                "enable_trusted_execution_environment",
+                &self.enable_trusted_execution_environment,
+            )
+            .field("use_ssh_authorized_keys", &self.use_ssh_authorized_keys)
+            .field("icos_dev_settings", &self.icos_dev_settings)
+            .finish()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
@@ -192,8 +212,7 @@ pub struct HostOSDevSettings {
 }
 
 impl Default for HostOSDevSettings {
-    /// These currently match the defaults for nested tests on Farm:
-    /// (`HOSTOS_VCPUS_PER_VM / 2`, `HOSTOS_MEMORY_KIB_PER_VM / 2`)
+    /// Fallback for a `deployment.json` that omits the field.
     fn default() -> Self {
         HostOSDevSettings {
             vm_memory: 16,
@@ -247,6 +266,16 @@ pub struct GuestOSDevSettings {
     /// Pre-generated TLS certificate and key for ic-boundary.
     #[serde(default)]
     pub ic_boundary_tls_cert: Option<IcBoundaryTlsCert>,
+    /// PEM-encoded certificates to trust, in addition to the public roots
+    /// compiled into the replica, when connecting to an API boundary node.
+    ///
+    /// A cloud engine subnet fetches its NNS delegation from an API boundary
+    /// node over TLS. In a testnet that node's certificate comes from a
+    /// throw-away CA rather than a public one, so that CA has to be handed to
+    /// the replica. Left unset in production, where the public roots are the
+    /// only trust anchors. To be used in system tests only.
+    #[serde(default)]
+    pub extra_api_boundary_node_trust_anchors_pem: Option<String>,
     /// PEM-encoded NNS public key.
     /// Overrides the hardcoded NNS public key on the rootfs.
     pub nns_pub_key_override: Option<String>,
@@ -342,11 +371,49 @@ pub struct FixedIpv6Config {
     pub gateway: Ipv6Addr,
 }
 
+#[derive(Copy, Clone)]
+pub enum VmSlot {
+    Plain,
+    Multi(NonZeroU8),
+}
+
+impl VmSlot {
+    pub fn new(slot: u8) -> Self {
+        match slot {
+            0 => VmSlot::Plain,
+            v => VmSlot::Multi(NonZeroU8::new(v).unwrap()),
+        }
+    }
+
+    pub fn to_suffix(&self) -> String {
+        match self {
+            VmSlot::Plain => String::new(),
+            VmSlot::Multi(v) => format!("{}", v),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::Value;
     use std::collections::HashSet;
+
+    #[test]
+    fn icos_settings_debug_redacts_node_operator_private_key() {
+        let settings = ICOSSettings {
+            node_operator_private_key: Some("-----BEGIN PRIVATE KEY-----".to_string()),
+            ..Default::default()
+        };
+        let debug = format!("{settings:?}");
+        assert!(
+            debug.contains("node_operator_private_key: <redacted>"),
+            "{debug}"
+        );
+        assert!(!debug.contains("BEGIN PRIVATE KEY"), "{debug}");
+        // The remaining fields are still printed.
+        assert!(debug.contains("deployment_environment: "), "{debug}");
+    }
 
     #[test]
     fn test_guest_vm_type_forward_compatibility() -> Result<(), Box<dyn std::error::Error>> {

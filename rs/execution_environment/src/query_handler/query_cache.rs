@@ -37,6 +37,7 @@ pub(crate) struct QueryCacheMetrics {
     pub invalidated_entries_by_canister_version: IntCounter,
     pub invalidated_entries_by_canister_balance: IntCounter,
     pub invalidated_entries_by_transient_error: IntCounter,
+    pub invalidated_entries_by_ic00_call: IntCounter,
     pub invalidated_entries_duration: Histogram,
     pub count_bytes: IntGauge,
     pub len: IntGauge,
@@ -100,6 +101,10 @@ impl QueryCacheMetrics {
                 "execution_query_cache_invalidated_entries_by_transient_error_total",
                 "The total number of invalidated entries due to a transient error",
             ),
+            invalidated_entries_by_ic00_call: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_by_ic00_call_total",
+                "The total number of invalidated entries due to a call to the management canister",
+            ),
             invalidated_entries_duration: duration_histogram(
                 "execution_query_cache_invalidated_entries_duration_seconds",
                 "The duration of invalidated cache entries in seconds",
@@ -130,7 +135,7 @@ impl QueryCacheMetrics {
 ///
 /// The key is to distinguish query cache entries, i.e. entries with different
 /// keys are (almost) completely independent from each other.
-#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, DeterministicHeapBytes)]
 pub(crate) struct EntryKey {
     /// Query source.
     pub source: UserId,
@@ -170,7 +175,7 @@ impl DiskBytes for EntryKey {}
 ///
 /// The cache entry is valid as long as the metadata is unchanged,
 /// or it can be proven that the query does not depend on the change.
-#[derive(DeterministicHeapBytes, PartialEq)]
+#[derive(PartialEq, DeterministicHeapBytes)]
 pub(crate) struct EntryEnv {
     /// The consensus-determined time when the query is executed.
     pub batch_time: Time,
@@ -434,6 +439,7 @@ impl QueryCache {
         system_api_counters: &SystemApiCallCounters,
         evaluated_stats: &BTreeMap<CanisterId, QueryStats>,
         transient_errors: usize,
+        ic00_calls: usize,
     ) {
         let now = state.metadata.batch_time;
         // Push is always a cache miss.
@@ -445,6 +451,19 @@ impl QueryCache {
             self.metrics.invalidated_entries.inc();
             self.metrics.invalidated_entries_duration.observe(0_f64);
             self.metrics.invalidated_entries_by_transient_error.inc();
+            return;
+        }
+
+        // The result should not be saved if the management canister was called:
+        // such a result might depend on parts of the canister state which are
+        // not covered by the cache entry environment, e.g. the canister
+        // balance of a canister other than the queried one.
+        if ic00_calls > 0 {
+            // Because of the call to the management canister,
+            // the cache entry is immediately invalidated.
+            self.metrics.invalidated_entries.inc();
+            self.metrics.invalidated_entries_duration.observe(0_f64);
+            self.metrics.invalidated_entries_by_ic00_call.inc();
             return;
         }
 

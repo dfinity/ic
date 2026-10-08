@@ -27,7 +27,7 @@ lazy_static! {
 
 #[test]
 fn test_small_valuation_upper_bound() {
-    // In XDR, this is is well under 100_000; thus, a treasury like this would be considered
+    // In XDR, this is well under 100_000; thus, a treasury like this would be considered
     // "small" for the purposes of treasury transfer limits.
     let valuation = {
         let mut valuation = *VALUATION;
@@ -46,7 +46,7 @@ fn test_small_valuation_upper_bound() {
 
 #[test]
 fn test_medium_valuation_upper_bound() {
-    // In XDR, this is is approximately 500_000; thus, a treasury like this would be considered
+    // In XDR, this is approximately 500_000; thus, a treasury like this would be considered
     // "medium" for the purposes of treasury transfer limits.
     let valuation = {
         let mut valuation = *VALUATION;
@@ -71,7 +71,7 @@ fn test_medium_valuation_upper_bound() {
 
 #[test]
 fn test_large_valuation_upper_bound() {
-    // In XDR, this is is approximately 3_000_000, a treasury like this would be considered
+    // In XDR, this is approximately 3_000_000, a treasury like this would be considered
     // "large" for the purposes of treasury transfer limits.
     let valuation = {
         let mut valuation = *VALUATION;

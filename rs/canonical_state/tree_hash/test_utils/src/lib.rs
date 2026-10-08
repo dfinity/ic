@@ -25,7 +25,7 @@ const EMPTY_HASH: Digest = Digest([
 ///
 /// Also check that the new and old way of computing hash trees are equivalent.
 pub fn test_membership_witness<R: Rng + CryptoRng>(full_tree: &LabeledTree<Vec<u8>>, rng: &mut R) {
-    let hash_tree = hash_lazy_tree(&as_lazy(full_tree)).unwrap();
+    let hash_tree = hash_lazy_tree(&as_lazy(full_tree), None).unwrap();
     let witness_gen = build_witness_gen(full_tree);
 
     let paths = partial_trees_to_leaves_and_empty_subtrees(full_tree);

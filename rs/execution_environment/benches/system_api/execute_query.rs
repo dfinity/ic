@@ -11,11 +11,14 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use execution_environment_bench::{common, wat::*};
+use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_execution_environment::{
     ExecutionEnvironment, NonReplicatedQueryKind, RoundLimits, as_num_instructions,
     as_round_instructions, execution::nonreplicated_query::execute_non_replicated_query,
 };
 use ic_interfaces::execution_environment::ExecutionMode;
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::PrincipalId;
 use ic_types::methods::WasmMethod;
 use ic_types_cycles::CanisterCyclesCostSchedule;
@@ -126,11 +129,15 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 Some(vec![0; 256]),
                 time,
                 execution_parameters,
-                &network_topology,
+                network_topology,
                 exec_env.hypervisor_for_testing(),
                 &mut round_limits,
                 exec_env.state_changes_error(),
-                CanisterCyclesCostSchedule::Normal,
+                CyclesAccountManagerSubnetConfig::new(
+                    SMALL_APP_SUBNET_MAX_SIZE,
+                    CanisterCyclesCostSchedule::Normal,
+                    DEFAULT_REFERENCE_SUBNET_SIZE,
+                ),
             )
             .2;
             let executed_instructions =

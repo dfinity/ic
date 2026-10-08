@@ -1,6 +1,6 @@
 use crate::invariants::common::{
-    InvariantCheckError, RegistrySnapshot, get_node_records_from_snapshot,
-    get_subnet_ids_from_snapshot, get_value_from_snapshot,
+    InvariantCheckError, RegistrySnapshot, get_all_node_records, get_subnet_ids_from_snapshot,
+    get_value_from_snapshot,
 };
 
 use std::{
@@ -36,7 +36,7 @@ pub(crate) fn check_firewall_invariants(
 ) -> Result<(), InvariantCheckError> {
     validate_firewall_rule_principals(snapshot)?;
 
-    for node_id in get_node_records_from_snapshot(snapshot).keys() {
+    for node_id in get_all_node_records(snapshot).keys() {
         let node_ruleset = get_node_firewall_rules(snapshot, node_id);
         validate_firewall_ruleset(node_ruleset)?;
     }
@@ -46,11 +46,14 @@ pub(crate) fn check_firewall_invariants(
         validate_firewall_ruleset(subnet_ruleset)?;
     }
 
-    let replica_node_ruleset = get_replica_nodes_firewall_rules(snapshot);
-    validate_firewall_ruleset(replica_node_ruleset)?;
-
     let boundary_node_ruleset = get_boundary_nodes_firewall_rules(snapshot);
     validate_firewall_ruleset(boundary_node_ruleset)?;
+
+    let cloud_engine_ruleset = get_cloud_engines_firewall_rules(snapshot);
+    validate_firewall_ruleset(cloud_engine_ruleset)?;
+
+    let replica_node_ruleset = get_replica_nodes_firewall_rules(snapshot);
+    validate_firewall_ruleset(replica_node_ruleset)?;
 
     let global_ruleset = get_global_firewall_rules(snapshot);
     validate_firewall_ruleset(global_ruleset)?;
@@ -63,7 +66,7 @@ pub(crate) fn check_firewall_invariants(
 fn validate_firewall_rule_principals(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    let mut principal_ids: BTreeSet<PrincipalId> = get_node_records_from_snapshot(snapshot)
+    let mut principal_ids: BTreeSet<PrincipalId> = get_all_node_records(snapshot)
         .keys()
         .map(|s| s.get())
         .collect();
@@ -235,6 +238,13 @@ fn get_global_firewall_rules(snapshot: &RegistrySnapshot) -> Option<FirewallRule
 /// nodes (if it exists).
 fn get_replica_nodes_firewall_rules(snapshot: &RegistrySnapshot) -> Option<FirewallRuleSet> {
     let firewall_record_key = make_firewall_rules_record_key(&FirewallRulesScope::ReplicaNodes);
+    get_firewall_rules(snapshot, firewall_record_key)
+}
+
+/// A helper function that returns the firewall ruleset specific for the cloud
+/// engine nodes (if it exists).
+fn get_cloud_engines_firewall_rules(snapshot: &RegistrySnapshot) -> Option<FirewallRuleSet> {
+    let firewall_record_key = make_firewall_rules_record_key(&FirewallRulesScope::CloudEngines);
     get_firewall_rules(snapshot, firewall_record_key)
 }
 

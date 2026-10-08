@@ -38,7 +38,7 @@ pub fn lookup_or_else_create_canisters(
         }
     };
 
-    println!("SNS canister IDs:\n{:?}", &sns_canister_ids);
+    println!("SNS canister IDs:\n{:?}", sns_canister_ids);
     sns_canister_ids
 }
 
@@ -80,7 +80,7 @@ pub fn get_canister_id(
     verbose: bool,
     network: &String,
 ) -> Option<PrincipalId> {
-    println!("dfx canister --network {} id {}", &network, canister_name);
+    println!("dfx canister --network {} id {}", network, canister_name);
     let output = call_dfx(&["canister", "--network", network, "id", canister_name]);
 
     let canister_id = String::from_utf8(output.stdout)
@@ -128,7 +128,7 @@ where
         value
     } else {
         modified_contents = serde_json::from_str(&contents)?;
-        json_patch::merge(&mut modified_contents, value);
+        json_merge_patch(&mut modified_contents, value);
         &modified_contents
     };
     // Truncate the file and write the new contents.
@@ -136,7 +136,7 @@ where
     file.seek(SeekFrom::Start(0))?;
 
     let mut writer = BufWriter::new(file);
-    writeln!(&mut writer, "{}", &serde_json::to_string_pretty(&new_json)?)?;
+    writeln!(&mut writer, "{}", serde_json::to_string_pretty(&new_json)?)?;
     writer.flush()?;
     Ok(())
 }
@@ -401,7 +401,7 @@ impl DirectSnsDeployerForTests {
         if !output.status.success() {
             panic!(
                 "Failed to add {} as a controller of {}",
-                &controller, canister_name
+                controller, canister_name
             );
         }
     }
@@ -474,5 +474,102 @@ impl DirectSnsDeployerForTests {
             &wasm.into_os_string().into_string().unwrap(),
             sns_canister_name,
         ]);
+    }
+}
+
+/// Applies a JSON Merge Patch (RFC 7396) `patch` to `doc`.
+///
+/// Objects are merged recursively, `null` values in the patch remove the
+/// corresponding key from the document, and any other value replaces the
+/// document at that position.
+fn json_merge_patch(doc: &mut JsonValue, patch: &JsonValue) {
+    let Some(patch) = patch.as_object() else {
+        *doc = patch.clone();
+        return;
+    };
+    if !doc.is_object() {
+        *doc = JsonValue::Object(Default::default());
+    }
+    let map = doc.as_object_mut().unwrap();
+    for (key, value) in patch {
+        if value.is_null() {
+            map.remove(key.as_str());
+        } else {
+            json_merge_patch(map.entry(key.as_str()).or_insert(JsonValue::Null), value);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use tempfile::NamedTempFile;
+
+    /// Writes `initial` to a fresh temp file, merges `patch` into it via
+    /// `merge_into_json_file`, and returns the resulting JSON. This exercises
+    /// `merge_into_json_file` and, through it, `json_merge_patch`.
+    fn merge_via_file(initial: &JsonValue, patch: &JsonValue) -> JsonValue {
+        let temp_file = NamedTempFile::new().expect("Failed to create tmp file");
+        std::fs::write(temp_file.path(), serde_json::to_string(initial).unwrap())
+            .expect("Failed to write initial contents");
+
+        merge_into_json_file(temp_file.path(), patch).expect("merge_into_json_file failed");
+
+        let contents =
+            std::fs::read_to_string(temp_file.path()).expect("Failed to read back tmp file");
+        serde_json::from_str(&contents).expect("tmp file did not contain valid JSON")
+    }
+
+    #[test]
+    fn test_merge_into_json_file_merges_nested_objects_recursively() {
+        // Step 1: Prepare the world.
+        let doc = json!({"a": {"x": 1, "y": 2}, "b": 1});
+        let patch = json!({"a": {"y": 3, "z": 4}});
+
+        // Step 2: Run the code under test.
+        let result = merge_via_file(&doc, &patch);
+
+        // Step 3: Verify result(s).
+        assert_eq!(result, json!({"a": {"x": 1, "y": 3, "z": 4}, "b": 1}));
+    }
+
+    #[test]
+    fn test_merge_into_json_file_null_value_deletes_key() {
+        // Step 1: Prepare the world.
+        let doc = json!({"a": 1, "b": 2});
+        let patch = json!({"a": null});
+
+        // Step 2: Run the code under test.
+        let result = merge_via_file(&doc, &patch);
+
+        // Step 3: Verify result(s).
+        assert_eq!(result, json!({"b": 2}));
+    }
+
+    #[test]
+    fn test_merge_into_json_file_scalar_replaces_object() {
+        // Step 1: Prepare the world.
+        let doc = json!({"a": {"x": 1}});
+        let patch = json!({"a": 5});
+
+        // Step 2: Run the code under test.
+        let result = merge_via_file(&doc, &patch);
+
+        // Step 3: Verify result(s).
+        assert_eq!(result, json!({"a": 5}));
+    }
+
+    #[test]
+    fn test_merge_into_json_file_non_object_patch_replaces_whole_document() {
+        // Step 1: Prepare the world.
+        let doc = json!({"a": 1, "b": 2});
+        let patch = json!([1, 2, 3]);
+
+        // Step 2: Run the code under test.
+        let result = merge_via_file(&doc, &patch);
+
+        // Step 3: Verify result(s).
+        assert_eq!(result, json!([1, 2, 3]));
     }
 }

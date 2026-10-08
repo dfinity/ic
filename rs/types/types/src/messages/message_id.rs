@@ -69,8 +69,8 @@ impl MessageId {
 }
 
 impl SignedBytesWithoutDomainSeparator for MessageId {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        self.0.to_vec()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        bytes.extend_from_slice(&self.0);
     }
 }
 

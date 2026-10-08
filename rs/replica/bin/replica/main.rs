@@ -12,7 +12,7 @@ use ic_tracing::ReloadHandles;
 use ic_tracing_jaeger_exporter::jaeger_exporter;
 use ic_tracing_logging_layer::logging_layer;
 use ic_types::{
-    PrincipalId, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
+    PlatformVersion, PrincipalId, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
     replica_version::REPLICA_BINARY_HASH,
 };
 use nix::unistd::{Pid, setpgid};
@@ -56,6 +56,14 @@ fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
     Ok((replica_binary_path, hex::encode(hasher.finish())))
 }
 
+/// Returns the number of CPUs available to this process, falling back to 1
+/// if it cannot be determined.
+fn available_parallelism() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+}
+
 fn main() -> io::Result<()> {
     // We do not support 32 bits architectures and probably never will.
     #[cfg(not(target_pointer_width = "64"))]
@@ -92,7 +100,7 @@ fn main() -> io::Result<()> {
 
     // Async components usually spend most of their time awaiting for I/O operations.
     // Ideally async components are not CPU intensive so they should not need many OS threads.
-    let rt_worker_threads = std::cmp::max(num_cpus::get() / 4, 2);
+    let rt_worker_threads = std::cmp::max(available_parallelism() / 4, 2);
 
     // The runtime is use for inter process communication - crypto, networking adapters, etc.
     let rt_main = tokio::runtime::Builder::new_multi_thread()
@@ -182,16 +190,33 @@ fn main() -> io::Result<()> {
         .as_ref()
         .map(|proto| CatchUpPackage::try_from(proto).expect("deserializing CUP failed"));
 
-    // Set the replica version and report as metric
-    setup::set_replica_version(&replica_args, &logger);
+    const UNKNOWN_REPLICA_VERSION: &str = "unknown_replica_version";
+    let replica_version = replica_args.as_ref().map_or_else(
+        |_| ReplicaVersion::try_from(UNKNOWN_REPLICA_VERSION).unwrap(),
+        |args| args.replica_version.clone(),
+    );
+    let guestos_version = replica_args.as_ref().map_or_else(
+        |_| ReplicaVersion::try_from(UNKNOWN_REPLICA_VERSION).unwrap(),
+        |args| args.guestos_version.clone(),
+    );
+    let platform_version = PlatformVersion {
+        guestos_version,
+        replica_version,
+    };
+    // Report replica version metric
     {
         let g = metrics_registry.int_gauge_vec(
             "ic_replica_info",
             "version info for the internet computer replica running.",
-            &["ic_active_version", "ic_replica_binary_hash"],
+            &[
+                "ic_active_version",
+                "ic_guestos_version",
+                "ic_replica_binary_hash",
+            ],
         );
         g.with_label_values(&[
-            ReplicaVersion::default().as_ref(),
+            platform_version.replica_version.as_ref(),
+            platform_version.guestos_version.as_ref(),
             &get_replica_binary_hash()
                 .map(|x| x.1)
                 .unwrap_or_else(|_| "na".to_string()),
@@ -284,6 +309,7 @@ fn main() -> io::Result<()> {
             config.clone(),
             node_id,
             subnet_id,
+            platform_version,
             registry,
             crypto,
             cup_proto,
@@ -351,7 +377,7 @@ fn frames_post_processor() -> impl Fn(&mut pprof::Frames) {
 #[cfg(feature = "profiler")]
 fn finalize_report(guard: &ProfilerGuard) {
     if let Ok(report) = guard.report().build() {
-        println!("report: {:?}", &report);
+        println!("report: {:?}", report);
 
         let file = File::create("flamegraph.svg").unwrap();
         report.flamegraph(file).unwrap();
@@ -363,7 +389,7 @@ fn finalize_report(guard: &ProfilerGuard) {
         profile.encode(&mut content).unwrap();
         file.write_all(&content).unwrap();
 
-        println!("report: {:?}", &report);
+        println!("report: {:?}", report);
     };
 
     if let Ok(report) = guard

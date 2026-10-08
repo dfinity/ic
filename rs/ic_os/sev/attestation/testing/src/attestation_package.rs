@@ -4,6 +4,7 @@ use attestation::attestation_package::{
     ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
 use attestation::custom_data::EncodeSevCustomData;
+use sev::firmware::guest::GuestPolicy;
 use std::fmt::Debug;
 
 /// Helper for building SEV attestation packages for testing.
@@ -59,6 +60,13 @@ impl ParsedSevAttestationPackageBuilder {
 
     pub fn with_chip_id(mut self, chip_id: [u8; 64]) -> Self {
         self.attestation_report_builder = self.attestation_report_builder.with_chip_id(chip_id);
+        self
+    }
+
+    pub fn with_guest_policy(mut self, guest_policy: GuestPolicy) -> Self {
+        self.attestation_report_builder = self
+            .attestation_report_builder
+            .with_guest_policy(guest_policy);
         self
     }
 

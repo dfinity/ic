@@ -19,8 +19,14 @@ const SUBNET_LIST_KEY: &str = "subnet_list";
 /// far, the root subnet happens to host the NNS canisters and the registry in
 /// particular.
 pub const ROOT_SUBNET_ID_KEY: &str = "nns_subnet_id";
+/// The subnet id of the subnet to which `SetupInitialDKG` management canister
+/// calls are routed by default (i.e., when no subnet id is specified
+/// explicitly in the request). If unset, `SetupInitialDKG` requests without
+/// an explicit subnet id are routed to the calling subnet (NNS).
+pub const DEFAULT_INITIAL_DKG_SUBNET_ID_KEY: &str = "default_initial_dkg_subnet_id";
 pub const NODE_REWARDS_TABLE_KEY: &str = "node_rewards_table";
 const UNASSIGNED_NODES_CONFIG_RECORD_KEY: &str = "unassigned_nodes_config";
+const STANDARD_ENGINE_REPLICA_VERSION_RECORD_KEY: &str = "standard_engine_replica_version";
 
 pub const API_BOUNDARY_NODE_RECORD_KEY_PREFIX: &str = "api_boundary_node_";
 pub const NODE_RECORD_KEY_PREFIX: &str = "node_record_";
@@ -35,6 +41,7 @@ pub const DATA_CENTER_KEY_PREFIX: &str = "data_center_record_";
 pub const ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX: &str = "key_id_";
 pub const CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX: &str = "master_public_key_id_";
 pub const CANISTER_RANGES_PREFIX: &str = "canister_ranges_";
+pub const CATCH_UP_PACKAGE_CONTENTS_KEY_PREFIX: &str = "catch_up_package_contents_";
 
 pub fn get_ecdsa_key_id_from_signing_subnet_list_key(
     signing_subnet_list_key: &str,
@@ -87,6 +94,16 @@ pub fn make_unassigned_nodes_config_record_key() -> String {
     UNASSIGNED_NODES_CONFIG_RECORD_KEY.to_string()
 }
 
+pub fn make_standard_engine_replica_version_record_key() -> String {
+    STANDARD_ENGINE_REPLICA_VERSION_RECORD_KEY.to_string()
+}
+
+/// Returns the key whose payload is the [`SubnetId`] of the subnet to which
+/// `SetupInitialDKG` management canister calls are routed by default.
+pub fn make_default_initial_dkg_subnet_id_key() -> String {
+    DEFAULT_INITIAL_DKG_SUBNET_ID_KEY.to_string()
+}
+
 /// Makes a key for a ReplicaVersion registry entry.
 pub fn make_replica_version_key<S: AsRef<str>>(replica_version_id: S) -> String {
     format!(
@@ -105,11 +122,6 @@ pub fn make_hostos_version_key<S: AsRef<str>>(hostos_version_id: S) -> String {
     )
 }
 
-/// Returns the only key whose payload is the list of blessed replica versions.
-pub fn make_blessed_replica_versions_key() -> String {
-    "blessed_replica_versions".to_string()
-}
-
 pub fn make_routing_table_record_key() -> String {
     "routing_table".to_string()
 }
@@ -126,6 +138,7 @@ pub fn make_firewall_config_record_key() -> String {
 const FIREWALL_RULES_RECORD_KEY_PREFIX: &str = "firewall_rules_";
 const FIREWALL_RULES_SCOPE_GLOBAL: &str = "global";
 const FIREWALL_RULES_SCOPE_REPLICA_NODES: &str = "replica_nodes";
+const FIREWALL_RULES_SCOPE_CLOUD_ENGINES: &str = "cloud_engines";
 const FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES: &str = "api_boundary_nodes";
 const FIREWALL_RULES_SCOPE_SUBNET_PREFIX: &str = "subnet";
 const FIREWALL_RULES_SCOPE_NODE_PREFIX: &str = "node";
@@ -136,6 +149,7 @@ pub enum FirewallRulesScope {
     Node(NodeId),
     Subnet(SubnetId),
     ApiBoundaryNodes,
+    CloudEngines,
     ReplicaNodes,
     Global,
 }
@@ -155,13 +169,16 @@ impl fmt::Display for FirewallRulesScope {
                 FIREWALL_RULES_SCOPE_SUBNET_PREFIX,
                 subnet_id.get()
             )?,
+            FirewallRulesScope::ApiBoundaryNodes => {
+                write!(fmt, "{FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES}")?
+            }
+            FirewallRulesScope::CloudEngines => {
+                write!(fmt, "{FIREWALL_RULES_SCOPE_CLOUD_ENGINES}")?
+            }
             FirewallRulesScope::ReplicaNodes => {
                 write!(fmt, "{FIREWALL_RULES_SCOPE_REPLICA_NODES}")?
             }
             FirewallRulesScope::Global => write!(fmt, "{FIREWALL_RULES_SCOPE_GLOBAL}")?,
-            FirewallRulesScope::ApiBoundaryNodes => {
-                write!(fmt, "{FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES}")?
-            }
         };
         Ok(())
     }
@@ -178,6 +195,7 @@ impl FromStr for FirewallRulesScope {
         match parts[0].to_lowercase().as_str() {
             FIREWALL_RULES_SCOPE_GLOBAL => Ok(FirewallRulesScope::Global),
             FIREWALL_RULES_SCOPE_REPLICA_NODES => Ok(FirewallRulesScope::ReplicaNodes),
+            FIREWALL_RULES_SCOPE_CLOUD_ENGINES => Ok(FirewallRulesScope::CloudEngines),
             FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES => Ok(FirewallRulesScope::ApiBoundaryNodes),
             FIREWALL_RULES_SCOPE_SUBNET_PREFIX => Ok(FirewallRulesScope::Subnet(SubnetId::from(
                 PrincipalId::from_str(parts[1]).unwrap(),
@@ -312,7 +330,7 @@ pub fn maybe_parse_crypto_threshold_signing_pubkey_key(key: &str) -> Option<Subn
 
 /// Makes a key for a record for the catch up package contents.
 pub fn make_catch_up_package_contents_key(subnet_id: SubnetId) -> String {
-    format!("catch_up_package_contents_{subnet_id}")
+    format!("{CATCH_UP_PACKAGE_CONTENTS_KEY_PREFIX}{subnet_id}")
 }
 
 /// Makes a key for a SubnetRecord registry entry.
@@ -553,6 +571,10 @@ mod tests {
             FIREWALL_RULES_SCOPE_REPLICA_NODES
         );
         assert_eq!(
+            format!("{}", FirewallRulesScope::CloudEngines),
+            FIREWALL_RULES_SCOPE_CLOUD_ENGINES
+        );
+        assert_eq!(
             format!("{}", FirewallRulesScope::ApiBoundaryNodes),
             FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES
         );
@@ -572,6 +594,10 @@ mod tests {
         assert_eq!(
             FirewallRulesScope::from_str(FIREWALL_RULES_SCOPE_REPLICA_NODES).unwrap(),
             FirewallRulesScope::ReplicaNodes
+        );
+        assert_eq!(
+            FirewallRulesScope::from_str(FIREWALL_RULES_SCOPE_CLOUD_ENGINES).unwrap(),
+            FirewallRulesScope::CloudEngines
         );
         assert_eq!(
             FirewallRulesScope::from_str(FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES).unwrap(),

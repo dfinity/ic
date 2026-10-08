@@ -2,6 +2,14 @@
 // a self signed certificate.
 // We use `hyper-rustls` which uses Rustls, which supports the SSL_CERT_FILE variable.
 mod test {
+    use axum::{
+        Router,
+        body::Body,
+        http::{HeaderValue, StatusCode},
+        response::Response,
+        routing::{delete, get, head, patch, post, put},
+    };
+    use axum_server::tls_rustls::RustlsConfig;
     use bytes::Bytes;
     use http_body_util::Full;
     use hyper::Request;
@@ -14,21 +22,21 @@ mod test {
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use once_cell::sync::OnceCell;
     use rstest::rstest;
     use rustls::ServerConfig;
-    use std::{convert::TryFrom, env, io::Write, path::Path, sync::Arc};
+    use std::{
+        convert::TryFrom,
+        env,
+        io::Write,
+        path::Path,
+        sync::{Arc, OnceLock},
+    };
     use tempfile::TempDir;
     use tokio::net::{TcpSocket, UnixStream};
     use tokio_rustls::TlsAcceptor;
     use tonic::transport::{Channel, Endpoint, Uri};
     use tower::service_fn;
     use uuid::Uuid;
-    use warp::{
-        Filter,
-        filters::BoxedFilter,
-        http::{Response, StatusCode, header::HeaderValue},
-    };
 
     #[cfg(feature = "http")]
     use socks5_impl::protocol::{
@@ -110,7 +118,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     // This is a oncecell because we don't want each test to call
     // `generate_certs` and generate a race on the SSL_CERT_FILE
     // environment variable and the cert/key file.
-    static CERT_INIT: OnceCell<TempDir> = OnceCell::new();
+    static CERT_INIT: OnceLock<TempDir> = OnceLock::new();
 
     fn generate_certs() -> TempDir {
         let dir = tempfile::tempdir().unwrap();
@@ -134,61 +142,66 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         dir
     }
 
-    fn warp_server() -> BoxedFilter<(impl warp::Reply,)> {
-        let basic_post = warp::post()
-            .and(warp::path("post"))
-            .and(warp::body::json())
-            .map(|req: u64| Response::builder().body(req.to_string()));
+    async fn handle_post(body: Bytes) -> Bytes {
+        body
+    }
 
-        let basic_get = warp::get()
-            .and(warp::path("get"))
-            .map(|| warp::reply::json(&"Hello"));
-        let invalid_header = warp::get().and(warp::path("invalid")).map(|| unsafe {
-            Response::builder()
-                .header(
-                    INVALID_HEADER_KEY,
-                    HeaderValue::from_maybe_shared_unchecked(INVALID_HEADER_VALUE.as_bytes()),
-                )
-                .header(
-                    VALID_HEADER_KEY,
-                    HeaderValue::from_maybe_shared_unchecked(VALID_HEADER_VALUE.as_bytes()),
-                )
-                .body("hi")
-        });
+    async fn handle_get() -> axum::Json<&'static str> {
+        axum::Json("Hello")
+    }
 
-        let get_response_size = warp::get()
-            .and(warp::path("size"))
-            .and(warp::body::json())
-            .map(|req: usize| Response::builder().body(vec![0_u8; req]));
+    async fn handle_invalid() -> Response {
+        // The test deliberately emits a header whose value is not valid ASCII to
+        // exercise the adapter's handling of it, hence `_unchecked`.
+        let invalid_value =
+            unsafe { HeaderValue::from_maybe_shared_unchecked(INVALID_HEADER_VALUE.as_bytes()) };
+        let valid_value =
+            unsafe { HeaderValue::from_maybe_shared_unchecked(VALID_HEADER_VALUE.as_bytes()) };
+        Response::builder()
+            .header(INVALID_HEADER_KEY, invalid_value)
+            .header(VALID_HEADER_KEY, valid_value)
+            .body(Body::from("hi"))
+            .unwrap()
+    }
 
-        let get_delay = warp::get()
-            .and(warp::path("delay"))
-            .and(warp::body::json())
-            .and_then(|req: u64| async move {
-                tokio::time::sleep(std::time::Duration::from_secs(req)).await;
-                Ok::<_, warp::Rejection>(warp::reply::reply())
-            });
+    async fn handle_size(body: String) -> Vec<u8> {
+        let size = body.parse::<usize>().unwrap();
+        vec![0_u8; size]
+    }
 
-        let basic_head = warp::head().and(warp::path("head")).map(warp::reply::reply);
+    async fn handle_delay(body: String) -> StatusCode {
+        let delay = body.parse::<u64>().unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+        StatusCode::OK
+    }
 
-        let basic_put = warp::put()
-            .and(warp::path("put"))
-            .and(warp::body::bytes())
-            .map(|body: Bytes| Response::builder().body(body));
+    async fn handle_head() -> StatusCode {
+        StatusCode::OK
+    }
 
-        let basic_delete = warp::delete()
-            .and(warp::path("delete"))
-            .map(|| Response::builder().body("deleted"));
+    async fn handle_put(body: Bytes) -> Bytes {
+        body
+    }
 
-        basic_post
-            .or(basic_get)
-            .or(basic_head)
-            .or(basic_put)
-            .or(basic_delete)
-            .or(get_response_size)
-            .or(get_delay)
-            .or(invalid_header)
-            .boxed()
+    async fn handle_delete() -> &'static str {
+        "deleted"
+    }
+
+    async fn handle_patch(body: Bytes) -> Bytes {
+        body
+    }
+
+    fn router() -> Router {
+        Router::new()
+            .route("/post", post(handle_post))
+            .route("/get", get(handle_get))
+            .route("/invalid", get(handle_invalid))
+            .route("/size", get(handle_size))
+            .route("/delay", get(handle_delay))
+            .route("/head", head(handle_head))
+            .route("/put", put(handle_put))
+            .route("/delete", delete(handle_delete))
+            .route("/patch", patch(handle_patch))
     }
 
     fn cert_path(cert_dir: &TempDir) -> impl AsRef<Path> + use<> {
@@ -304,21 +317,39 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     }
 
     fn start_server(cert_dir: &TempDir) -> String {
-        let (addr, fut) = warp::serve(warp_server())
-            .tls()
-            .cert_path(cert_path(cert_dir))
-            .key_path(key_path(cert_dir))
-            .bind_ephemeral(([127, 0, 0, 1], 0));
+        // Bind synchronously so the ephemeral port is known before returning.
+        let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
 
-        tokio::spawn(fut);
-        format!("localhost:{}", addr.port())
+        let cert_path = cert_path(cert_dir);
+        let key_path = key_path(cert_dir);
+        tokio::spawn(async move {
+            // `from_pem_file` advertises h2 and http/1.1 via ALPN.
+            let tls_config = RustlsConfig::from_pem_file(cert_path, key_path)
+                .await
+                .unwrap();
+            axum_server::from_tcp_rustls(listener, tls_config)
+                .serve(router().into_make_service())
+                .await
+                .unwrap();
+        });
+
+        format!("localhost:{}", port)
     }
 
     #[cfg(feature = "http")]
     fn start_http_server(ip: IpAddr) -> String {
-        let (addr, fut) = warp::serve(warp_server()).bind_ephemeral((ip, 0));
+        let listener = std::net::TcpListener::bind((ip, 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let addr = listener.local_addr().unwrap();
 
-        tokio::spawn(fut);
+        tokio::spawn(async move {
+            let listener = tokio::net::TcpListener::from_std(listener).unwrap();
+            axum::serve(listener, router().into_make_service())
+                .await
+                .unwrap();
+        });
+
         format!("{}:{}", ip, addr.port())
     }
 
@@ -346,7 +377,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
         // Make a request without socks proxy.
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("http://{}/get", &unreachable_url),
+            url: format!("http://{}/get", unreachable_url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -360,7 +391,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
         // Make a request with socks proxy/
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("http://{}/get", &unreachable_url),
+            url: format!("http://{}/get", unreachable_url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -450,7 +481,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("http://{}/get", &url),
+            url: format!("http://{}/get", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -479,7 +510,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("http://{}/get", &url),
+            url: format!("http://{}/get", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -503,7 +534,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/post", &url),
+            url: format!("https://{}/post", url),
             headers: Vec::new(),
             method: HttpMethod::Post as i32,
             body: "420".to_string().as_bytes().to_vec(),
@@ -529,7 +560,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/head", &url),
+            url: format!("https://{}/head", url),
             headers: Vec::new(),
             method: HttpMethod::Head as i32,
             body: "".to_string().as_bytes().to_vec(),
@@ -596,6 +627,33 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     }
 
     #[tokio::test]
+    async fn test_canister_http_server_patch() {
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
+        let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
+            ..Default::default()
+        };
+
+        let url = start_server(CERT_INIT.get_or_init(generate_certs));
+        let mut client = spawn_grpc_server(server_config);
+
+        let body = b"patch-body";
+        let request = tonic::Request::new(HttpsOutcallRequest {
+            url: format!("https://{url}/patch"),
+            headers: Vec::new(),
+            method: HttpMethod::Patch as i32,
+            body: body.to_vec(),
+            max_response_size_bytes: 512,
+            ..Default::default()
+        });
+
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
+        assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+        assert_eq!(http_response.content, body);
+    }
+
+    #[tokio::test]
     async fn test_response_limit_exceeded() {
         // Check if response with higher than allowed response limit is rejected.
         let response_limit: u64 = 512;
@@ -609,7 +667,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/size", &url),
+            url: format!("https://{}/size", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: format!("{}", response_limit + 1).as_bytes().to_vec(),
@@ -640,7 +698,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/size", &url),
+            url: format!("https://{}/size", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: format!("{response_size}").as_bytes().to_vec(),
@@ -667,7 +725,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/delay", &url),
+            url: format!("https://{}/delay", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: format!("{delay}").as_bytes().to_vec(),
@@ -690,7 +748,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[tokio::test]
     async fn test_connect_timeout() {
-        // Test that adapter hits connect timeout when connecting to unreachable host.
+        // Test that adapter hits connect timeout when connecting to a host that
+        // accepts no new connections (simulates an unreachable host).
         let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
             http_connect_timeout_secs: 1,
@@ -700,12 +759,19 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ..Default::default()
         };
 
-        let _url = start_server(CERT_INIT.get_or_init(generate_certs));
+        // Connect to a loopback listener whose accept queue is saturated, so
+        // the connect hangs until the adapter's timeout fires. This exercises
+        // the connect-timeout path using only loopback, so the test does not
+        // require network egress. `_saturated` must stay alive for the duration
+        // of the test to keep the address unconnectable.
+        let _saturated = ic_test_utilities_net::saturated_loopback_listener().await;
+        let addr = _saturated.addr();
+
         let mut client = spawn_grpc_server(server_config);
 
-        // Non routable address that causes a connect timeout.
+        // Connecting to the saturated listener hangs and triggers the connect timeout.
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: "https://10.255.255.1".to_string(),
+            url: format!("https://{addr}"),
             headers: Vec::new(),
             method: HttpMethod::Head as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -718,11 +784,16 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert_eq!(error.kind, CanisterHttpErrorKind::Connection as i32);
 
         let actual_error_message = error.message;
-        let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Custom { kind: TimedOut, error: Elapsed(()) }))";
+        // Newer `hyper_util` versions embed the target socket address in the
+        // `ConnectError`, so we only check the stable prefix and suffix.
+        let expected_error_message_prefix = "Error(Connect, ConnectError(\"tcp connect error\", ";
+        let expected_error_message_suffix = "Custom { kind: TimedOut, error: Elapsed(()) }))";
 
         assert!(
-            actual_error_message.contains(expected_error_message),
-            "Expected error message to contain, {expected_error_message}, got: {actual_error_message}"
+            actual_error_message.contains(expected_error_message_prefix)
+                && actual_error_message.contains(expected_error_message_suffix),
+            "Expected error message to contain {expected_error_message_prefix} and \
+             {expected_error_message_suffix}, got: {actual_error_message}"
         );
     }
 
@@ -739,7 +810,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/invalid", &url),
+            url: format!("https://{}/invalid", url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".as_bytes().to_vec(),

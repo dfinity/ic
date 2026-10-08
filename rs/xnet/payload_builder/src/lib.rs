@@ -10,23 +10,27 @@ mod tests;
 #[cfg(test)]
 mod xnet_client_tests;
 
+pub use crate::proximity::{GenRangeFn, ProximityMap};
+
 use crate::certified_slice_pool::{
-    CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes,
+    CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes, decode_slice_header,
 };
 use async_trait::async_trait;
 use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::{TokioExecutor, TokioTimer};
-use ic_config::message_routing::MAX_STREAM_MESSAGES;
+use ic_config::message_routing::{ADVERT_MAX_BODY_BYTES, MAX_STREAM_MESSAGES};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ErrorReproducibility;
 use ic_interfaces::messaging::{
-    InvalidXNetPayload, XNetPayloadBuilder, XNetPayloadValidationError,
-    XNetPayloadValidationFailure,
+    InvalidXNetPayload, XNetAdvertError, XNetAdvertHandler, XNetAdvertOutcome, XNetPayloadBuilder,
+    XNetPayloadValidationError, XNetPayloadValidationFailure,
 };
 use ic_interfaces::validation::ValidationError;
-use ic_interfaces_certified_stream_store::CertifiedStreamStore;
+use ic_interfaces_certified_stream_store::{
+    CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
@@ -35,80 +39,82 @@ use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
-use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetListRegistry};
+use ic_registry_client_helpers::node::{NodeRecord, NodeRegistry};
+use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, replicated_state::ReplicatedStateMessageRouting};
 use ic_types::batch::{ValidationContext, XNetPayload};
+use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
 use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
-use ic_types::xnet::{CertifiedStreamSlice, RejectSignal, StreamIndex};
+use ic_types::xnet::{CertifiedStreamSlice, RejectSignal, StreamHeader, StreamIndex};
 use ic_types::{Height, NodeId, NumBytes, RegistryVersion, SubnetId};
 use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
-pub use proximity::{GenRangeFn, ProximityMap};
-use rand::{Rng, rngs::StdRng, thread_rng};
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use rand::{Rng, thread_rng};
 use std::collections::{BTreeMap, VecDeque};
 use std::net::SocketAddr;
 use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use thiserror::Error;
-use tokio::{runtime, sync::mpsc};
+use tokio::runtime;
+use tokio::sync::{mpsc, watch};
 
-/// Message and signal indices into a XNet stream or stream slice.
+/// A `StreamIndex` past every index a stream can reasonably hold, used as a
+/// bound that nothing reaches.
+pub const STREAM_INDEX_MAX: StreamIndex = StreamIndex::new(u64::MAX);
+
+/// Message, signal and `header.begin()` indices into a XNet stream or stream
+/// slice.
 ///
 /// Used when computing the expected indices of a stream during payload building
-/// and validation. Or as cutoff points when dealing with stream slices.
-#[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Default)]
+/// and validation. And as cutoff points when trimming pooled stream slices.
+///
+/// The first two are the next indices we expect, the third the last one we have
+/// no use for.
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ExpectedIndices {
+    /// Next expected message index. This is the most recent `messages.end()` in
+    /// past payloads, when present; else `signals_end` of our outgoing stream.
     pub message_index: StreamIndex,
+
+    /// Next expected signal index. This is the most recent `signals_end` in past
+    /// payloads, when present; else `messages_begin()` of our outgoing stream.
     pub signal_index: StreamIndex,
+
+    /// Highest `header.begin()` that would not let us garbage collect any reject
+    /// signal: the index of the first reject signal we would still hold, after
+    /// inducting the past payloads; `STREAM_INDEX_MAX` if we would hold none.
+    ///
+    /// A slice with a `header.begin()` past this is worth inducting even with no
+    /// messages and no new signals.
+    pub max_no_gc_header_begin: StreamIndex,
 }
 
-/// Interface for a pool of incoming `CertifiedStreamSlices`.
-pub trait XNetSlicePool: Send + Sync {
-    /// Takes a sub-slice of the stream from `subnet_id` starting at `begin`,
-    /// respecting the given message count and byte limits; or, if the provided
-    /// `byte_limit` is too small for a header-only slice, returns `Ok(None)`.
-    ///
-    /// If all messages are taken, the slice is removed from the pool.
-    ///
-    /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` and drops
-    /// the pooled slice if malformed. Returns `Err(TakeBeforeSliceBegin)` and
-    /// drops the pooled slice if `begin`'s `message_index` is before the
-    /// first pooled message.
-    fn take_slice(
-        &self,
-        subnet_id: SubnetId,
-        begin: Option<&ExpectedIndices>,
-        msg_limit: Option<usize>,
-        byte_limit: Option<usize>,
-    ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>>;
-
-    /// Observes the total size of all pooled slices.
-    fn observe_pool_size_bytes(&self);
-
-    /// Garbage collects all messages and signals before the given stream
-    /// positions. Slices from subnets not present in the provided map are all
-    /// dropped.
-    fn garbage_collect(&self, new_stream_positions: BTreeMap<SubnetId, ExpectedIndices>);
-
-    /// Garbage collects all messages and signals before the given stream
-    /// position for the given slice.
-    fn garbage_collect_slice(&self, subnet_id: SubnetId, stream_position: ExpectedIndices);
+impl Default for ExpectedIndices {
+    fn default() -> Self {
+        Self {
+            message_index: StreamIndex::from(0),
+            signal_index: StreamIndex::from(0),
+            // No reject signals to garbage collect.
+            max_no_gc_header_begin: STREAM_INDEX_MAX,
+        }
+    }
 }
 
 pub struct XNetPayloadBuilderMetrics {
     /// Records the time it took to build the payload, by status.
     pub build_payload_duration: HistogramVec,
-    /// Records pull attempts, by status. Orthogonal to to slice queries, as some
+    /// Records pull attempts, by status. Orthogonal to slice queries, as some
     /// attempts may fail before querying (e.g. due to registry errors) and
     /// some successful queries may produce invalid slices.
     pub pull_attempt_count: IntCounterVec,
     /// Records the time it took to query a slice to be included into the
-    /// payload, by status. Orthogonal to to pull attempts, as some attempts may
+    /// payload, by status. Orthogonal to pull attempts, as some attempts may
     /// fail before querying (e.g. due to registry errors) and some successful
     /// queries may produce invalid slices.
     pub query_slice_duration: HistogramVec,
@@ -120,6 +126,15 @@ pub struct XNetPayloadBuilderMetrics {
     pub validate_payload_duration: HistogramVec,
     /// Track outstanding background query tasks
     pub outstanding_queries: IntGauge,
+    /// Count of pulled slices larger than the requested size.
+    pub pull_size_too_large: IntCounter,
+    /// Temporary: completed pulls, by remote subnet; whether advert-driven pulling
+    /// would have scheduled them; and whether they pooled anything.
+    ///
+    /// Not fully independent of the sweep: pulled headers are recorded too, so a
+    /// pull extending an already pooled prefix counts as scheduled even without an
+    /// advert. Unscheduled pulls that pool something point to missed adverts.
+    pub shadow_pulls: IntCounterVec,
     /// Critical error: failed `count_bytes()` on valid slice.
     pub critical_error_slice_count_bytes_failed: IntCounter,
     /// Critical error: mismatch between the byte sizes computed by `take_slice()`,
@@ -135,12 +150,19 @@ pub const METRIC_SLICE_MESSAGES: &str = "xnet_builder_slice_messages";
 pub const METRIC_SLICE_PAYLOAD_SIZE: &str = "xnet_builder_slice_payload_size_bytes";
 pub const METRIC_VALIDATE_PAYLOAD_DURATION: &str = "xnet_builder_validate_payload_duration_seconds";
 pub const METRIC_OUTSTANDING_XNET_QUERIES: &str = "xnet_builder_outstanding_queries";
+pub const METRIC_ADVERTS_SENT: &str = "xnet_builder_adverts_sent_total";
+pub const METRIC_SEND_ADVERT_DURATION: &str = "xnet_builder_advert_send_duration_seconds";
+pub const METRIC_OUTSTANDING_ADVERTS: &str = "xnet_builder_outstanding_adverts";
+pub const METRIC_SHADOW_PULLS: &str = "xnet_builder_shadow_pulls_total";
 
 pub const CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED: &str = "xnet_slice_count_bytes_failed";
 pub const CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES: &str = "xnet_slice_count_bytes_invalid";
 
 pub const LABEL_STATUS: &str = "status";
 pub const LABEL_PROXIMITY: &str = "proximity";
+pub const LABEL_REMOTE: &str = "remote";
+pub const LABEL_SCHEDULED: &str = "scheduled";
+pub const LABEL_POOLED: &str = "pooled";
 
 pub const STATUS_SUCCESS: &str = "success";
 pub const STATUS_DECODE_ERROR: &str = "ProxyDecodeError";
@@ -195,6 +217,15 @@ impl XNetPayloadBuilderMetrics {
                 METRIC_OUTSTANDING_XNET_QUERIES,
                 "Number of xnet queries that have not finished",
             ),
+            pull_size_too_large: metrics_registry.int_counter(
+                "xnet_builder_pull_size_too_large_count",
+                "Count of pulled slices larger than the requested size",
+            ),
+            shadow_pulls: metrics_registry.int_counter_vec(
+                METRIC_SHADOW_PULLS,
+                "Completed pulls, by remote subnet; whether advert-driven pulling would have scheduled them; and whether they pooled anything.",
+                &[LABEL_REMOTE, LABEL_SCHEDULED, LABEL_POOLED],
+            ),
             critical_error_slice_count_bytes_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED),
             critical_error_slice_count_bytes_invalid: metrics_registry
@@ -227,6 +258,17 @@ impl XNetPayloadBuilderMetrics {
             .with_label_values(&[status])
             .observe(since.elapsed().as_secs_f64());
     }
+
+    /// Records a completed pull from `subnet_id`.
+    fn observe_shadow_pull(&self, subnet_id: SubnetId, scheduled: bool, pooled: bool) {
+        self.shadow_pulls
+            .with_label_values(&[
+                &subnet_id.to_string(),
+                &scheduled.to_string(),
+                &pooled.to_string(),
+            ])
+            .inc();
+    }
 }
 
 /// The maximum number of signals a stream header can have before pulling messages from the reverse
@@ -243,8 +285,9 @@ impl XNetPayloadBuilderMetrics {
 /// diverge too far.
 pub const MAX_SIGNALS: usize = MAX_STREAM_MESSAGES;
 
-/// Implementation of `XNetPayloadBuilder` that uses a `StateManager`,
-/// `RegistryClient` and `XNetClient` to build and validate `XNetPayloads`.
+/// Implementation of `XNetPayloadBuilder` that uses a `StateManager`;
+/// `RegistryClient`; and a slice pool populated by background tasks; to build
+/// and validate `XNetPayloads`.
 pub struct XNetPayloadBuilderImpl {
     /// Used for retrieving the execution state, for both payload building and
     /// validation.
@@ -253,13 +296,14 @@ pub struct XNetPayloadBuilderImpl {
     /// Used for decoding certified streams.
     certified_stream_store: Arc<dyn CertifiedStreamStore>,
 
-    /// Used for retrieving a subnet's nodes, in order to poll their
-    /// `XNetEndpoints` for `CertifiedStreamSlices` to be included into
-    /// `XNetPayloads`.
+    /// Used for retrieving the registered subnets and their types.
     registry: Arc<dyn RegistryClient>,
 
     /// A pool of slices, filled in the background by an async task.
-    slice_pool: Box<dyn XNetSlicePool>,
+    slice_pool: Arc<Mutex<CertifiedSlicePool>>,
+
+    /// Advert handling logic, shared by `XNetEndpoint` and `AdvertTask`.
+    advert_handler: Arc<XNetAdvertHandlerImpl>,
 
     /// Handle to the pool refill task, used to asynchronously trigger refill.
     refill_task_handle: RefillTaskHandle,
@@ -276,8 +320,8 @@ pub struct XNetPayloadBuilderImpl {
     /// Always `SLICE_BYTE_SIZE_MIN` in production, can be overridden for testing.
     slice_byte_size_min: usize,
 
-    /// A deterministic pseudo-random number generator.
-    deterministic_rng_for_testing: Arc<Option<Mutex<StdRng>>>,
+    /// A deterministic pseudo-random number generator, for testing only.
+    deterministic_rng_for_testing: Option<Mutex<StdRng>>,
 
     metrics: Arc<XNetPayloadBuilderMetrics>,
 
@@ -318,7 +362,10 @@ pub struct EndpointLocator {
 
 impl XNetPayloadBuilderImpl {
     /// Creates a new `XNetPayloadBuilderImpl` for a node on `subnet_id`, using
-    /// the given `StateManager`, `CertifiedStreamStore` and`RegistryClient`.
+    /// the given `StateManager`, `CertifiedStreamStore` and `RegistryClient`.
+    ///
+    /// Also starts the refill task; and the advert task, advertising on every
+    /// certified height received from `max_certified_height_rx`.
     ///
     /// # Panics
     ///
@@ -328,11 +375,12 @@ impl XNetPayloadBuilderImpl {
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        tls_handshake: Arc<dyn TlsConfig>,
+        tls_config: Arc<dyn TlsConfig>,
         registry: Arc<dyn RegistryClient>,
         runtime_handle: runtime::Handle,
         node_id: NodeId,
         subnet_id: SubnetId,
+        max_certified_height_rx: watch::Receiver<Height>,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> XNetPayloadBuilderImpl {
@@ -344,83 +392,88 @@ impl XNetPayloadBuilderImpl {
         ));
         let xnet_client: Arc<dyn XNetClient> = Arc::new(XNetClientImpl::new(
             metrics_registry,
-            tls_handshake,
+            tls_config,
             proximity_map.clone(),
         ));
 
-        let deterministic_rng_for_testing = Arc::new(None);
-        let certified_slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
-            Arc::clone(&certified_stream_store),
+        let slice_pool = Arc::new(Mutex::new(CertifiedSlicePool::new(
             metrics_registry,
+            log.clone(),
         )));
-        let slice_pool = Box::new(XNetSlicePoolImpl::new(certified_slice_pool.clone()));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(metrics_registry));
-        let endpoint_resolver = XNetEndpointResolver::new(
+        let endpoint_resolver = Arc::new(XNetEndpointResolver::new(
             Arc::clone(&registry),
             node_id,
             subnet_id,
             proximity_map,
             log.clone(),
-        );
+        ));
         let refill_task_handle = PoolRefillTask::start(
-            Arc::clone(&certified_slice_pool),
-            endpoint_resolver,
+            Arc::clone(&slice_pool),
+            Arc::clone(&endpoint_resolver),
             Arc::clone(&xnet_client),
-            runtime_handle,
+            Arc::clone(&certified_stream_store),
+            runtime_handle.clone(),
             Arc::clone(&metrics),
             log.clone(),
         );
-        Self::new_from_components(
+        let payload_builder = Self::new_from_components(
             state_manager,
             certified_stream_store,
             registry,
-            deterministic_rng_for_testing,
-            None,
             slice_pool,
             refill_task_handle,
             metrics,
+            log.clone(),
+        );
+        AdvertTask::new(
+            Arc::clone(&payload_builder.advert_handler),
+            endpoint_resolver,
+            xnet_client,
+            metrics_registry,
             log,
         )
+        .start(max_certified_height_rx, &runtime_handle);
+
+        payload_builder
     }
 
-    /// Same as `new` except that this constructor uses the provided `slice_pool`
-    /// instead of constructing a fresh one.
-    #[allow(clippy::too_many_arguments)]
+    /// Same as `new` except that this constructor uses the provided `slice_pool`;
+    /// and starts no refill or advert tasks.
     pub fn new_from_components(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         registry: Arc<dyn RegistryClient>,
-        deterministic_rng_for_testing: Arc<Option<Mutex<StdRng>>>,
-        slice_byte_size_min_override: Option<usize>,
-        slice_pool: Box<dyn XNetSlicePool>,
+        slice_pool: Arc<Mutex<CertifiedSlicePool>>,
         refill_task_handle: RefillTaskHandle,
         metrics: Arc<XNetPayloadBuilderMetrics>,
         log: ReplicaLogger,
     ) -> XNetPayloadBuilderImpl {
+        let advert_handler = Arc::new(XNetAdvertHandlerImpl::new(
+            Arc::clone(&state_manager),
+            Arc::clone(&certified_stream_store),
+            Arc::clone(&registry),
+            Arc::clone(&slice_pool),
+            log.clone(),
+        ));
         Self {
             state_manager,
             certified_stream_store,
             registry,
-            deterministic_rng_for_testing,
-            slice_byte_size_min: slice_byte_size_min_override.unwrap_or(SLICE_BYTE_SIZE_MIN),
             slice_pool,
+            advert_handler,
             refill_task_handle,
             count_bytes_fn: certified_slice_count_bytes,
+            slice_byte_size_min: SLICE_BYTE_SIZE_MIN,
+            deterministic_rng_for_testing: None,
             metrics,
             log,
         }
     }
 
-    /// Testing only: replaces the function to be used for calculating
-    /// `CertifiedStreamSlice` byte sizes with the provided one.
-    #[doc(hidden)]
-    #[allow(dead_code)]
-    pub(crate) fn with_count_bytes_fn(
-        mut self,
-        certified_slice_count_bytes: fn(&CertifiedStreamSlice) -> CertifiedSliceResult<usize>,
-    ) -> Self {
-        self.count_bytes_fn = certified_slice_count_bytes;
-        self
+    /// The handler for adverts posted to the `XNetEndpoint`.
+    pub fn advert_handler(&self) -> Arc<dyn XNetAdvertHandler> {
+        Arc::clone(&self.advert_handler) as Arc<_>
     }
 
     /// Calculates the next expected message and signal indices for a given
@@ -433,7 +486,10 @@ impl XNetPayloadBuilderImpl {
     /// when that exists; or `messages_begin()` of the outgoing `Stream` to
     /// `subnet_id` in `state`.
     ///
-    /// Returns the default value `(0, 0)` when no stream or slices from the
+    /// The maximum no-GC `header.begin()` is the first reject signal at or beyond
+    /// the most recent `header.begin()` from `subnet_id` in `payloads`.
+    ///
+    /// Returns `ExpectedIndices::default()` when no stream to or slices from the
     /// given subnet exist.
     fn expected_indices_for_stream(
         &self,
@@ -446,6 +502,13 @@ impl XNetPayloadBuilderImpl {
         // signal index, if present.
         let mut most_recent_signal_index = None;
 
+        // For the maximum no-GC `header.begin()`, start with the most recent (max)
+        // `header.begin()` of any slice from `payloads` (or else, zero). Then find the
+        // first reject signal at or beyond that index, if any.
+        let mut max_header_begin = StreamIndex::from(0);
+
+        let stream = state.streams().get(&subnet_id);
+
         // Look for the most recent stream slice from `subnet_id`, if any.
         for payload in payloads.iter() {
             if let Some(certified_stream) = payload.stream_slices.get(&subnet_id) {
@@ -453,52 +516,45 @@ impl XNetPayloadBuilderImpl {
                     .certified_stream_store
                     .decode_valid_certified_stream_slice(certified_stream)
                     .expect("failed to decode past certified stream");
+                most_recent_signal_index.get_or_insert_with(|| slice.header().signals_end());
+                max_header_begin = max_header_begin.max(slice.header().begin());
                 if let Some(messages) = slice.messages() {
                     return ExpectedIndices {
                         message_index: messages.end(),
-                        signal_index: most_recent_signal_index
-                            .unwrap_or_else(|| slice.header().signals_end()),
+                        signal_index: most_recent_signal_index.unwrap(),
+                        max_no_gc_header_begin: stream
+                            .and_then(|s| s.next_reject_signal_index(max_header_begin))
+                            .unwrap_or(STREAM_INDEX_MAX),
                     };
                 }
-                most_recent_signal_index.get_or_insert_with(|| slice.header().signals_end());
             }
         }
 
         // No stream slice from `subnet_id` in `payloads`, look in `state`.
-        state
-            .streams()
-            .get(&subnet_id)
-            .map(|stream| ExpectedIndices {
-                message_index: stream.signals_end(),
-                signal_index: most_recent_signal_index.unwrap_or_else(|| stream.messages_begin()),
-            })
-            .unwrap_or_default()
+        let Some(stream) = stream else {
+            return ExpectedIndices::default();
+        };
+        ExpectedIndices {
+            message_index: stream.signals_end(),
+            signal_index: most_recent_signal_index.unwrap_or_else(|| stream.messages_begin()),
+            max_no_gc_header_begin: stream
+                .next_reject_signal_index(max_header_begin)
+                .unwrap_or(STREAM_INDEX_MAX),
+        }
     }
 
-    /// Computes the expected message and signal indices for every known subnet
-    /// except cloud engines.
+    /// Computes the expected message and signal indices for every known subnet.
     fn expected_stream_indices(
         &self,
         validation_context: &ValidationContext,
         state: &ReplicatedState,
         past_payloads: &[&XNetPayload],
     ) -> Result<BTreeMap<SubnetId, ExpectedIndices>, Error> {
-        let all_subnet_ids = self
+        let subnet_ids = self
             .registry
             .get_subnet_ids(validation_context.registry_version)
             .map_err(Error::RegistryGetSubnetsFailed)?
             .unwrap_or_default();
-
-        let subnet_ids: Vec<_> = all_subnet_ids
-            .into_iter()
-            .filter(|subnet_id| {
-                self.registry
-                    .get_subnet_type(*subnet_id, validation_context.registry_version)
-                    .is_ok_and(|maybe_t| {
-                        maybe_t.is_some_and(|t| t != SubnetType::CloudEngine.into())
-                    })
-            })
-            .collect();
 
         let expected_indices = subnet_ids
             .into_iter()
@@ -524,10 +580,9 @@ impl XNetPayloadBuilderImpl {
     ///  2. signals must only refer to past and current messages, i.e.
     ///     `signals_end <= stream.messages_end()`;
     ///
-    ///  3. `signals_end - reject_signals[0] <= MAX_STREAM_MESSAGES`; and
+    ///  3. `signals_end - reject_signals[0] <= 2 * MAX_SIGNALS`; and
     ///
     ///  4. `concat(reject_signals, [signals_end])` must be strictly increasing.
-    ///     and
     ///
     /// Because this code is used both for validating slices before inclusion into a
     /// payload; and for validating proposed payloads; validation errors are logged
@@ -541,7 +596,7 @@ impl XNetPayloadBuilderImpl {
         state: &ReplicatedState,
         log_level: slog::Level,
     ) -> SignalsValidationResult {
-        // `messages_end()` of the outgoing stream.
+        // `messages_begin()` and `messages_end()` of the outgoing stream.
         let (self_messages_begin, self_messages_end) = state
             .streams()
             .get(&subnet_id)
@@ -641,18 +696,11 @@ impl XNetPayloadBuilderImpl {
             );
         }
 
-        // Do not accept slices from CloudEngine subnets or subnets whose type
-        // cannot be determined.
+        // Do not accept slices from subnets whose type cannot be determined.
         match self
             .registry
             .get_subnet_type(subnet_id, validation_context.registry_version)
         {
-            Ok(Some(subnet_type)) if subnet_type == SubnetType::CloudEngine.into() => {
-                return SliceValidationResult::Invalid(format!(
-                    "Slice from CloudEngine subnet {}",
-                    subnet_id
-                ));
-            }
             Ok(Some(_)) => {}
             Ok(None) => {
                 return SliceValidationResult::Invalid(format!(
@@ -724,10 +772,14 @@ impl XNetPayloadBuilderImpl {
             ));
         }
 
-        if slice.messages().is_none() && slice.header().signals_end() == expected.signal_index {
-            // Empty slice: no messages and no additional signals (in addition to what we
-            // have in state and any intervening payloads). Not actually invalid, but
-            // we don't want it in a payload.
+        if slice.messages().is_none()
+            && slice.header().signals_end() == expected.signal_index
+            && slice.header().begin() <= expected.max_no_gc_header_begin
+        {
+            // Empty slice: no messages, no additional signals and no newly GC-ed messages
+            // that would allow us to GC any reject signals (in addition to what we have in
+            // the intervening payloads). Not actually invalid, but we don't want it in a
+            // payload.
             return SliceValidationResult::Empty;
         }
 
@@ -831,6 +883,11 @@ impl XNetPayloadBuilderImpl {
                     .messages()
                     .map_or(expected.message_index, |messages| messages.end()),
                 signals_end: slice.header().signals_end(),
+                max_no_gc_header_begin: state
+                    .streams()
+                    .get(&subnet_id)
+                    .and_then(|stream| stream.next_reject_signal_index(slice.header().begin()))
+                    .unwrap_or(STREAM_INDEX_MAX),
                 message_count: slice.messages().map_or(0, |messages| messages.len()),
                 byte_size,
             },
@@ -844,8 +901,7 @@ impl XNetPayloadBuilderImpl {
     /// Shuffles the provided `Vec` using `self.deterministic_rng_for_testing` when
     /// set, `thread_rng()` otherwise.
     fn random_shuffle<T>(&self, vec: &mut [T]) {
-        use rand::seq::SliceRandom;
-        match *self.deterministic_rng_for_testing {
+        match self.deterministic_rng_for_testing {
             None => vec.shuffle(&mut thread_rng()),
             Some(ref rng) => vec.shuffle(rng.lock().unwrap().deref_mut()),
         }
@@ -870,11 +926,6 @@ impl XNetPayloadBuilderImpl {
             })?
             .take();
 
-        // CloudEngine subnets do not participate in XNet.
-        if state.metadata.own_subnet_type == SubnetType::CloudEngine {
-            return Ok((XNetPayload::default(), 0.into()));
-        }
-
         // Build the payload based on indices computed from state + past payloads.
         let stream_positions =
             self.expected_stream_indices(validation_context, &state, past_payloads)?;
@@ -891,18 +942,22 @@ impl XNetPayloadBuilderImpl {
         let mut stream_slices = BTreeMap::new();
 
         {
-            self.slice_pool.observe_pool_size_bytes();
+            let mut slice_pool = self.slice_pool.lock().unwrap();
+            slice_pool.observe_pool_size_bytes();
 
             // Trim off messages in the state or past payloads.
-            self.slice_pool.garbage_collect(stream_positions);
+            slice_pool.garbage_collect(stream_positions);
+            slice_pool.schedule_pending_pulls(state.streams());
+        }
 
+        {
             // Takes from the pool a slice of the stream from `subnet_id` starting at
             // `begin`, of at most `msg_limit` messages and `byte_limit` bytes.
             //
             // If the slice is valid, returns it, its message count and its byte size.
             // If no slice is available or the slice is empty / invalid, returns `None`.
             let take_valid_slice = |subnet_id, begin, msg_limit, byte_limit| {
-                let (slice, slice_bytes) = match self.slice_pool.take_slice(
+                let (slice, slice_bytes) = match self.slice_pool.lock().unwrap().take_slice(
                     subnet_id,
                     Some(&begin),
                     msg_limit,
@@ -1077,21 +1132,23 @@ pub fn max_message_index(stream_begin: StreamIndex) -> StreamIndex {
     stream_begin + (MAX_SIGNALS as u64).into()
 }
 
-/// Resolves a stream index and byte limit to an `EndpointLocator`, consisting
-/// of URL, node ID and proximity.
+/// Selects nodes on peer subnets based on proximity and health; and resolves
+/// stream and advert XNet endpoints to `EndpointLocators`, consisting of URL,
+/// node ID and proximity.
 pub struct XNetEndpointResolver {
     /// Used for retrieving a subnet's nodes, in order to poll their
     /// `XNetEndpoints` for `CertifiedStreamSlices` to be included into
     /// `XNetPayloads`.
     registry: Arc<dyn RegistryClient>,
 
-    // This node's subnet ID.
+    /// This node's subnet ID.
     subnet_id: SubnetId,
 
-    // This node's operator ID.
+    /// This node's operator ID.
     node_operator_id: Vec<u8>,
 
-    /// Proximity map to use for probabilistically selecting nearby replicas.
+    /// Used for probabilistically selecting uniformly random or proximity-weighted
+    /// healthy replicas.
     proximity_map: Arc<ProximityMap>,
 }
 
@@ -1123,16 +1180,16 @@ impl XNetEndpointResolver {
         }
     }
 
-    /// Returns the `/api/v1/stream` `XNetEndpoint` URL of a slice of at most
-    /// `byte_limit` bytes beginning at `msg_begin`, with a witness beginning at
-    /// `witness_begin`, for an arbitrary node on `subnet_id`.
+    /// Returns the `/api/v1/stream` `XNetEndpoint` URL of a random
+    /// proximity-weighted node on `subnet_id`, for a slice of at most `byte_limit`
+    /// bytes beginning at `msg_begin`, with a witness beginning at `witness_begin`.
     ///
     /// # Errors
     ///
     /// Returns an error if retrieving the node registry entry fails; if the
     /// requested subnet is missing or has no nodes; or if the node address
     /// is invalid.
-    pub fn xnet_endpoint_url(
+    pub fn xnet_stream_url(
         &self,
         subnet_id: SubnetId,
         witness_begin: StreamIndex,
@@ -1143,6 +1200,46 @@ impl XNetEndpointResolver {
 
         let version = self.registry.get_latest_version();
         let (node, node_record) = self.proximity_map.pick_node(subnet_id, version)?;
+
+        self.endpoint_locator(
+            node,
+            node_record,
+            version,
+            &format!(
+                "stream/{}?msg_begin={}&witness_begin={}&byte_limit={}",
+                self.subnet_id, msg_begin, witness_begin, byte_limit
+            ),
+        )
+    }
+
+    /// Returns the `/api/v1/advert` `XNetEndpoint` URL of the given node, for
+    /// advertising our certified header to.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if retrieving the node registry entry fails; or if the
+    /// node address is invalid.
+    pub fn xnet_advert_url(&self, node: NodeId) -> Result<EndpointLocator, Error> {
+        let version = self.registry.get_latest_version();
+        let node_record = get_node_record(node, self.registry.as_ref(), version)?;
+
+        self.endpoint_locator(
+            node,
+            node_record,
+            version,
+            &format!("advert/{}", self.subnet_id),
+        )
+    }
+
+    /// Resolves `node` to the `XNetEndpoint` URL of `path`, e.g.
+    /// `stream/{SubnetId}?msg_begin=...`, at the given registry version.
+    fn endpoint_locator(
+        &self,
+        node: NodeId,
+        node_record: NodeRecord,
+        version: RegistryVersion,
+        path: &str,
+    ) -> Result<EndpointLocator, Error> {
         let proximity = if node_record.node_operator_id == self.node_operator_id {
             PeerLocation::Local
         } else {
@@ -1166,10 +1263,7 @@ impl XNetEndpointResolver {
             address: socket_addr,
         };
 
-        let url = format!(
-            "http://{}/api/v1/stream/{}?msg_begin={}&witness_begin={}&byte_limit={}",
-            authority, self.subnet_id, msg_begin, witness_begin, byte_limit
-        );
+        let url = format!("http://{authority}/api/v1/{path}");
 
         url.parse::<Uri>()
             .map_err(|e| {
@@ -1180,6 +1274,25 @@ impl XNetEndpointResolver {
                 url,
                 proximity,
             })
+    }
+
+    /// Picks `advert_target_count()` nodes of `subnet_id` to advertise to, sampled
+    /// uniformly (not by proximity, to avoid bias) from among the healthy ones,
+    /// unless too few are.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if reading the registry fails; or if either subnet is
+    /// missing or has no nodes.
+    pub fn advert_targets(&self, subnet_id: SubnetId) -> Result<Vec<NodeId>, Error> {
+        // No `ValidationContext` here, so go with the latest.
+        let version = self.registry.get_latest_version();
+        let own_subnet_size =
+            get_subnet_nodes(self.subnet_id, self.registry.as_ref(), version)?.len();
+        let nodes = get_subnet_nodes(subnet_id, self.registry.as_ref(), version)?;
+
+        let count = advert_target_count(own_subnet_size, nodes.len());
+        Ok(self.proximity_map.uniform_sample(count, nodes))
     }
 }
 
@@ -1235,16 +1348,6 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
             }
         };
 
-        if state.metadata.own_subnet_type == SubnetType::CloudEngine
-            && !payload.stream_slices.is_empty()
-        {
-            return Err(ValidationError::InvalidArtifact(
-                InvalidXNetPayload::InvalidSlice(
-                    "CloudEngine subnets do not accept XNet payloads".to_string(),
-                ),
-            ));
-        }
-
         // For every slice in `payload`, check certification and gaps/duplicates.
         let mut new_stream_positions = Vec::new();
         let mut payload_byte_size = 0;
@@ -1282,6 +1385,7 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 SliceValidationResult::Valid {
                     messages_end,
                     signals_end,
+                    max_no_gc_header_begin,
                     message_count,
                     byte_size,
                 } => {
@@ -1289,7 +1393,12 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                     self.metrics
                         .slice_payload_size
                         .observe(certified_slice.payload.len() as f64);
-                    new_stream_positions.push((*subnet_id, messages_end, signals_end));
+                    new_stream_positions.push((
+                        *subnet_id,
+                        messages_end,
+                        signals_end,
+                        max_no_gc_header_begin,
+                    ));
                     payload_byte_size += byte_size;
                 }
             }
@@ -1297,17 +1406,22 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
 
         // Garbage collect payload contents from the pool.
         {
-            self.slice_pool.observe_pool_size_bytes();
+            let mut slice_pool = self.slice_pool.lock().unwrap();
+            slice_pool.observe_pool_size_bytes();
 
-            for (subnet_id, message_index, signal_index) in new_stream_positions {
-                self.slice_pool.garbage_collect_slice(
+            for (subnet_id, message_index, signal_index, max_no_gc_header_begin) in
+                new_stream_positions
+            {
+                slice_pool.garbage_collect_slice(
                     subnet_id,
                     ExpectedIndices {
                         message_index,
                         signal_index,
+                        max_no_gc_header_begin,
                     },
                 );
             }
+            slice_pool.schedule_pending_pulls(state.streams());
         }
         // And trigger a pool refill.
         self.refill_task_handle
@@ -1319,29 +1433,233 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
     }
 }
 
+/// Handles the adverts peers post to us, and any headers they reply to ours
+/// with; and decides which subnets we owe an advert to. Has no state of its
+/// own, it shares the slice pool with `XNetPayloadBuilderImpl`.
+struct XNetAdvertHandlerImpl {
+    /// Used for reading the certified state: to classify adverts against, and to
+    /// decide which adverts we owe.
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+
+    /// Used for verifying adverts and encoding our own certified headers.
+    certified_stream_store: Arc<dyn CertifiedStreamStore>,
+
+    /// Used for retrieving the registry version to verify adverts against.
+    registry: Arc<dyn RegistryClient>,
+
+    /// Classifies adverts against the pooled slices and stream positions; and
+    /// holds the recorded headers.
+    slice_pool: Arc<Mutex<CertifiedSlicePool>>,
+
+    log: ReplicaLogger,
+}
+
+impl XNetAdvertHandlerImpl {
+    fn new(
+        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
+        registry: Arc<dyn RegistryClient>,
+        slice_pool: Arc<Mutex<CertifiedSlicePool>>,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            state_manager,
+            certified_stream_store,
+            registry,
+            slice_pool,
+            log,
+        }
+    }
+
+    /// Classifies an advertised header by the strongest statement we can make
+    /// about its content; see `XNetAdvertOutcome`.
+    fn classify_advert(&self, source_subnet: SubnetId, header: &StreamHeader) -> XNetAdvertOutcome {
+        // Only a certified header proves that there is nothing new, so the test for
+        // whether to reply must come from the certified state, same as the reply.
+        let state = self.state_manager.get_latest_certified_state();
+        let own_stream = state
+            .as_ref()
+            .and_then(|state| state.get_ref().streams().get(&source_subnet));
+
+        if let Some(stream) = own_stream {
+            // `NothingNew` if our certified stream has signals for all advertised messages;
+            // no messages before the advertised `signals_end`; and no reject signals before
+            // the advertised `begin`.
+            if header.end() <= stream.signals_end()
+                && header.signals_end() <= stream.messages_begin()
+                && !stream.has_reject_signal_between(StreamIndex::from(0), header.begin())
+            {
+                return XNetAdvertOutcome::NothingNew;
+            }
+        }
+
+        self.slice_pool
+            .lock()
+            .unwrap()
+            .classify_advert(source_subnet, header, own_stream)
+    }
+
+    /// Returns the certified headers for every subnet we owe an advert to.
+    fn adverts_owed(&self) -> Vec<(SubnetId, CertifiedStreamSlice)> {
+        self.subnets_owed_adverts()
+            .into_iter()
+            .filter_map(|subnet_id| Some((subnet_id, self.certified_header(subnet_id)?)))
+            .collect()
+    }
+
+    /// Returns the subnets we owe an advert to, as of our latest certified state:
+    /// those whose stream holds messages; and those that we have signals for,
+    /// relative to the recorded header.
+    fn subnets_owed_adverts(&self) -> Vec<SubnetId> {
+        let Some(state) = self.state_manager.get_latest_certified_state() else {
+            return Vec::new();
+        };
+        let state = state.get_ref();
+        let slice_pool = self.slice_pool.lock().unwrap();
+
+        state
+            .streams()
+            .iter()
+            // The loopback stream is not routed through XNet.
+            .filter(|(subnet_id, _)| **subnet_id != state.metadata.own_subnet_id)
+            .filter(|(subnet_id, stream)| {
+                let peer_begin = slice_pool
+                    .peer_header(**subnet_id)
+                    .map_or(StreamIndex::from(0), |header| header.begin());
+                !stream.messages().is_empty() || stream.signals_end() > peer_begin
+            })
+            .map(|(subnet_id, _)| *subnet_id)
+            .collect()
+    }
+}
+
+impl XNetAdvertHandler for XNetAdvertHandlerImpl {
+    fn handle_advert(
+        &self,
+        source_subnet: SubnetId,
+        advert: CertifiedStreamSlice,
+    ) -> Result<XNetAdvertOutcome, XNetAdvertError> {
+        // Decode without verifying: classifying the claimed header is cheap, and the
+        // outcomes that do not act (due to no new content) don't need verification.
+        let claimed = decode_slice_header(&advert.payload)
+            .map_err(|err| XNetAdvertError::DecodeError(err.to_string()))?;
+        let outcome = self.classify_advert(source_subnet, &claimed);
+        match outcome {
+            // Valid or not, there is nothing for us to see here.
+            XNetAdvertOutcome::InPayload | XNetAdvertOutcome::Pooled => return Ok(outcome),
+
+            // A duplicate of a previously recorded header: re-enqueue _the recorded header_
+            // for a pull, in case we tried and failed before.
+            XNetAdvertOutcome::Duplicate => {
+                self.slice_pool.lock().unwrap().schedule_pull(source_subnet);
+                return Ok(outcome);
+            }
+
+            // Verify that the header is signed by `source_subnet` before recording the
+            // header or replying to it.
+            XNetAdvertOutcome::NothingNew | XNetAdvertOutcome::Actionable => {}
+        }
+
+        // Use the latest registry version for validation. There is a potential race
+        // condition here, but it's benign: our and the peer's views of the subnet
+        // record will converge eventually, and unblock validation.
+        let registry_version = self.registry.get_latest_version();
+        let slice = self
+            .certified_stream_store
+            .decode_certified_stream_slice(source_subnet, registry_version, &advert)
+            .map_err(|err| match err {
+                DecodeStreamError::InvalidSignature(_) => XNetAdvertError::InvalidSignature,
+                _ => XNetAdvertError::DecodeError(err.to_string()),
+            })?;
+        debug_assert_eq!(slice.header(), &claimed, "Inconsistent slice decoding");
+
+        {
+            let mut slice_pool = self.slice_pool.lock().unwrap();
+            if outcome == XNetAdvertOutcome::Actionable {
+                slice_pool.schedule_pull(source_subnet);
+            }
+
+            // Record every verified header: the recorded header shows how far the peer has
+            // garbage collected its messages, which is what tells us whether we still owe
+            // it an advert.
+            slice_pool.record_peer_header(source_subnet, slice.header());
+        }
+
+        Ok(outcome)
+    }
+
+    fn certified_header(&self, subnet_id: SubnetId) -> Option<CertifiedStreamSlice> {
+        match self.certified_stream_store.encode_certified_stream_slice(
+            subnet_id,
+            None,
+            None,
+            Some(0),
+            None,
+        ) {
+            Ok(slice) => Some(slice),
+
+            Err(EncodeStreamError::NoStreamForSubnet(_)) => None,
+
+            Err(err @ EncodeStreamError::InvalidSliceBegin { .. })
+            | Err(err @ EncodeStreamError::InvalidSliceIndices { .. }) => {
+                error!(
+                    self.log,
+                    "Unreachable: failed to encode certified stream slice for subnet {subnet_id}: {err}"
+                );
+                debug_assert!(false);
+                None
+            }
+        }
+    }
+}
+
 /// Retrieves the given node's operator ID at the given registry version.
 ///
 /// Returns `None` if the node record does not exist or the registry read
 /// failed.
 fn get_node_operator_id(
-    node_id: &NodeId,
+    node: &NodeId,
     registry: &dyn RegistryClient,
     registry_version: &RegistryVersion,
     log: &ReplicaLogger,
 ) -> Option<Vec<u8>> {
     registry
-        .get_node_record(*node_id, *registry_version)
+        .get_node_record(*node, *registry_version)
         .unwrap_or_else(|_| {
-            info!(
-                log,
-                "Failed to retrieve registry record for node {}", node_id
-            );
+            info!(log, "Failed to retrieve registry record for node {node}");
             None
         })
         .map(|r| r.node_operator_id)
 }
 
-/// Maps `StateManagerErrors` to their `XNetPayloadError` namesakes.
+/// Retrieves the given node's `NodeRecord` at the given registry version.
+fn get_node_record(
+    node: NodeId,
+    registry: &dyn RegistryClient,
+    version: RegistryVersion,
+) -> Result<NodeRecord, Error> {
+    registry
+        .get_node_record(node, version)
+        .map_err(|e| Error::RegistryGetNodeInfoFailed(node, e))?
+        .ok_or(Error::MissingXNetEndpoint(node))
+}
+
+/// Retrieves the nodes of the given subnet at the given registry version.
+///
+/// Returns an error if the subnet is missing or has no nodes.
+fn get_subnet_nodes(
+    subnet: SubnetId,
+    registry: &dyn RegistryClient,
+    version: RegistryVersion,
+) -> Result<Vec<NodeId>, Error> {
+    registry
+        .get_node_ids_on_subnet(subnet, version)
+        .map_err(|e| Error::RegistryGetSubnetInfoFailed(subnet, e))?
+        .filter(|nodes| !nodes.is_empty())
+        .ok_or(Error::MissingSubnet(subnet))
+}
+
+/// Maps `StateManagerErrors` to the equivalent `XNetPayloadValidationError`.
 fn from_state_manager_error(e: StateManagerError) -> XNetPayloadValidationError {
     match e {
         StateManagerError::StateRemoved(height) => {
@@ -1356,11 +1674,18 @@ fn from_state_manager_error(e: StateManagerError) -> XNetPayloadValidationError 
 /// Slice pool soft upper limit in bytes. Actual size may go over this limit, as
 /// we're polling multiple subnets in parallel and we don't want to discard
 /// slices that we've already pulled.
-pub const POOL_BYTE_SIZE_SOFT_CAP: usize = 10 << 20;
+pub const POOL_BYTE_SIZE_SOFT_CAP: usize = 128 << 20;
 
-/// Hard maximum slice size in bytes. We only pool up to 4 MB from any one
-/// stream.
-pub const POOL_SLICE_BYTE_SIZE_MAX: usize = 4 << 20;
+/// Hard maximum slice size in bytes. We only pool up to 8 MB (two blocks' worth
+/// of payload) from any one stream.
+pub const POOLED_SLICE_BYTE_SIZE_MAX: usize = 8 << 20;
+
+/// Divisor applied to the space left in the pool to obtain the maximum size of
+/// a pooled slice, so that a few backlogged streams cannot take over the pool.
+/// Yields `POOLED_SLICE_BYTE_SIZE_MAX` while the pool is empty, less as it
+/// fills up.
+pub const POOLED_SLICE_BYTE_SIZE_DIVISOR: usize =
+    POOL_BYTE_SIZE_SOFT_CAP / POOLED_SLICE_BYTE_SIZE_MAX;
 
 /// Conservative minimum slice size in bytes. We stop trying to add slices to
 /// the payload once we're this close to the payload size limit.
@@ -1374,88 +1699,331 @@ pub struct RefillStreamSliceIndices {
     pub byte_limit: usize,
 }
 
-/// Computes `RefillStreamSliceIndices` for every subnet whose stream slices should be refilled
-/// in the given certified slice pool owned by the given subnet.
+/// Reduces `slice_byte_size` to account for overhead in the `XNetEndpoint`
+/// request, which only counts message bytes (measured: 350 bytes for
+/// certification plus base witness, 2% for large payloads).
+pub fn adjusted_byte_limit(slice_byte_size: usize) -> usize {
+    slice_byte_size.saturating_sub(350) * 98 / 100
+}
+
+/// Computes `RefillStreamSliceIndices` for every subnet with a cached stream
+/// position in `pool`, except `own_subnet_id`.
 pub fn refill_stream_slice_indices(
-    pool_lock: Arc<Mutex<CertifiedSlicePool>>,
+    pool: &CertifiedSlicePool,
     own_subnet_id: SubnetId,
-) -> impl Iterator<Item = (SubnetId, RefillStreamSliceIndices)> {
-    let mut result: BTreeMap<SubnetId, RefillStreamSliceIndices> = BTreeMap::new();
+) -> Vec<(SubnetId, RefillStreamSliceIndices)> {
+    pool.peers()
+        // Skip our own subnet, the loopback stream is routed separately.
+        .filter(|&&subnet_id| subnet_id != own_subnet_id)
+        .filter_map(|&subnet_id| Some((subnet_id, pull_indices(pool, subnet_id)?)))
+        .collect()
+}
 
-    let pool_slice_stats = {
-        let pool = pool_lock.lock().unwrap();
-
-        if pool.byte_size() > POOL_BYTE_SIZE_SOFT_CAP {
-            // Abort if pool is already full.
-            return result.into_iter();
-        }
-
-        pool.peers()
-            // Skip our own subnet, the loopback stream is routed separately.
-            .filter(|&&subnet_id| subnet_id != own_subnet_id)
-            .map(|&subnet_id| (subnet_id, pool.slice_stats(subnet_id)))
-            .collect::<BTreeMap<_, _>>()
+/// Computes the `RefillStreamSliceIndices` for pulling a slice from `subnet_id`
+/// into `pool`; or `None` if `pool` has no cached stream position for it.
+//
+// TODO(DSM-148): Once pulls are advert-driven, make this a `CertifiedSlicePool`
+// method; and move the pool sizing constants and `adjusted_byte_limit()` with
+// it.
+pub fn pull_indices(
+    pool: &CertifiedSlicePool,
+    subnet_id: SubnetId,
+) -> Option<RefillStreamSliceIndices> {
+    // No cached stream position, no pooling / refill necessary.
+    let (Some(stream_position), messages_begin, msg_count, byte_size) = pool.slice_stats(subnet_id)
+    else {
+        return None;
     };
 
-    for (subnet_id, slice_stats) in pool_slice_stats {
-        let (stream_position, messages_begin, msg_count, byte_size) = match slice_stats {
-            // Have a cached stream position.
-            (Some(stream_position), messages_begin, msg_count, byte_size) => {
-                (stream_position, messages_begin, msg_count, byte_size)
-            }
+    // Maximum byte size of any one pooled slice, applied uniformly across slices:
+    // as the pool fills up, we aim to fill what is left of it with (more, but)
+    // smaller slices.
+    let slice_byte_size_max =
+        POOL_BYTE_SIZE_SOFT_CAP.saturating_sub(pool.byte_size()) / POOLED_SLICE_BYTE_SIZE_DIVISOR;
 
-            // No cached stream position, no pooling / refill necessary.
-            (None, _, _, _) => continue,
-        };
+    let (witness_begin, msg_begin, slice_byte_limit) = match messages_begin {
+        // Existing pooled stream, pull partial slice and append.
+        Some(messages_begin) if messages_begin == stream_position.message_index => (
+            stream_position.message_index,
+            stream_position.message_index + (msg_count as u64).into(),
+            slice_byte_size_max.saturating_sub(byte_size),
+        ),
 
-        let (witness_begin, msg_begin, slice_byte_limit) = match messages_begin {
-            // Existing pooled stream, pull partial slice and append.
-            Some(messages_begin) if messages_begin == stream_position.message_index => (
-                stream_position.message_index,
-                stream_position.message_index + (msg_count as u64).into(),
-                POOL_SLICE_BYTE_SIZE_MAX.saturating_sub(byte_size),
-            ),
+        // No pooled stream, or pooled stream does not begin at cached stream position, pull
+        // complete slice from cached stream position.
+        _ => (
+            stream_position.message_index,
+            stream_position.message_index,
+            slice_byte_size_max,
+        ),
+    };
 
-            // No pooled stream, or pooled stream does not begin at cached stream position, pull
-            // complete slice from cached stream position.
-            _ => (
-                stream_position.message_index,
-                stream_position.message_index,
-                POOL_SLICE_BYTE_SIZE_MAX,
-            ),
-        };
+    // Pull regardless of how low `slice_byte_limit` is:
+    //  * A header-only suffix may usefully replace the pooled slice's.
+    //  * A complete slice will always include the first message, if any. We rely on
+    //    this to avoid stalling streams indefinitely behind large messages.
+    Some(RefillStreamSliceIndices {
+        witness_begin,
+        msg_begin,
+        byte_limit: adjusted_byte_limit(slice_byte_limit),
+    })
+}
 
-        if slice_byte_limit < SLICE_BYTE_SIZE_MIN {
-            // No more space left in the pool for this slice, bail out.
-            continue;
+/// Expected number of copies of an advert that each node of the destination
+/// subnet should receive; from which the number of targets advertised to by
+/// each source node is derived.
+const ADVERTS_PER_NODE: usize = 3;
+
+/// Advertises our streams to their respective destination subnets.
+///
+/// The counterpart of `PoolRefillTask`, for sending adverts. On every new
+/// certified height, advertises our stream for each subnet that may not have
+/// seen all of it, to a few of that subnet's nodes, picked at random.
+struct AdvertTask {
+    /// Decides which subnets we owe an advert to; and handles the headers that
+    /// peers reply with, as it handles the adverts they post to us.
+    advert_handler: Arc<XNetAdvertHandlerImpl>,
+
+    /// Picks the nodes to advertise to and resolves their URLs.
+    endpoint_resolver: Arc<XNetEndpointResolver>,
+
+    /// Async client for posting adverts to `XNetEndpoints`.
+    xnet_client: Arc<dyn XNetClient>,
+
+    metrics: AdvertTaskMetrics,
+
+    log: ReplicaLogger,
+}
+
+impl AdvertTask {
+    fn new(
+        advert_handler: Arc<XNetAdvertHandlerImpl>,
+        endpoint_resolver: Arc<XNetEndpointResolver>,
+        xnet_client: Arc<dyn XNetClient>,
+        metrics_registry: &MetricsRegistry,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            advert_handler,
+            endpoint_resolver,
+            xnet_client,
+            metrics: AdvertTaskMetrics::new(metrics_registry),
+            log,
         }
-
-        result.insert(
-            subnet_id,
-            RefillStreamSliceIndices {
-                witness_begin,
-                msg_begin,
-                // XNetEndpoint only counts message bytes, allow some overhead (measuread: 350
-                // bytes for certification plus base witness, 2% for large payloads).
-                byte_limit: (slice_byte_limit.saturating_sub(350)) * 98 / 100,
-            },
-        );
     }
 
-    result.into_iter()
+    /// Starts an async task advertising streams with new content on every change of
+    /// `max_certified_height_rx`. It ends once the sender is dropped.
+    fn start(
+        self,
+        mut max_certified_height_rx: watch::Receiver<Height>,
+        runtime_handle: &runtime::Handle,
+    ) {
+        let task = Arc::new(self);
+        runtime_handle.spawn(async move {
+            while max_certified_height_rx.changed().await.is_ok() {
+                task.advertise().await;
+            }
+        });
+    }
+
+    /// Posts our certified header to the chosen targets, for every subnet we owe an
+    /// advert to. Does not wait for the posts to complete.
+    async fn advertise(self: &Arc<Self>) {
+        let task = Arc::clone(self);
+        let adverts = match tokio::task::spawn_blocking(move || task.adverts_to_send()).await {
+            Ok(adverts) => adverts,
+            Err(err) => {
+                warn!(self.log, "Failed to join advert blocking thread: {}", err);
+                return;
+            }
+        };
+
+        for (subnet_id, advert, targets) in adverts {
+            for node in targets {
+                let task = Arc::clone(self);
+                let advert = advert.clone();
+                tokio::spawn(async move { task.advertise_to(subnet_id, node, advert).await });
+            }
+        }
+    }
+
+    /// Returns our certified header and the nodes to post it to, for every subnet
+    /// we owe an advert to.
+    fn adverts_to_send(&self) -> Vec<(SubnetId, CertifiedStreamSlice, Vec<NodeId>)> {
+        self.advert_handler
+            .adverts_owed()
+            .into_iter()
+            .filter_map(|(subnet_id, advert)| {
+                match self.endpoint_resolver.advert_targets(subnet_id) {
+                    Ok(targets) => Some((subnet_id, advert, targets)),
+                    Err(err) => {
+                        log!(
+                            self.log,
+                            err.log_level(),
+                            "Failed to advertise to {subnet_id}: {err}"
+                        );
+                        self.metrics
+                            .adverts_sent
+                            .with_label_values(&[&subnet_id.to_string(), err.to_label_value()])
+                            .inc();
+                        None
+                    }
+                }
+            })
+            .collect()
+    }
+
+    /// Calls `post_advert()`, to send `advert` and handle any response; and
+    /// records the outcome.
+    async fn advertise_to(&self, subnet_id: SubnetId, node: NodeId, advert: CertifiedStreamSlice) {
+        let since = Instant::now();
+        let status = match self.post_advert(subnet_id, node, advert).await {
+            // Advert delivered and accepted.
+            Ok(None) => STATUS_SUCCESS.to_string(),
+
+            // Peer had already processed our stream and responded with its header as proof.
+            // This is the outcome of us having processed that header.
+            Ok(Some(outcome)) => outcome.as_str().to_string(),
+
+            // A bad reply implicates the node, which only the log names, so always log.
+            Err(err @ AdvertError::HandleReply(_)) => {
+                warn!(
+                    self.log,
+                    "Failed to handle advert response for {subnet_id} from node {node}: {err}"
+                );
+                err.to_label_value()
+            }
+
+            // Advert could not be delivered.
+            Err(err) => {
+                if pass_log_sampling() {
+                    info!(
+                        self.log,
+                        "Failed to advertise to {subnet_id} at node {node}: {err}"
+                    );
+                }
+                err.to_label_value()
+            }
+        };
+
+        self.metrics
+            .adverts_sent
+            .with_label_values(&[&subnet_id.to_string(), &status])
+            .inc();
+        self.metrics
+            .send_advert_duration
+            .with_label_values(&[&status])
+            .observe(since.elapsed().as_secs_f64());
+    }
+
+    /// Posts `advert` to `node` of `subnet_id` and feeds a header returned in the
+    /// reply, if any, back to the advert handler.
+    async fn post_advert(
+        &self,
+        subnet_id: SubnetId,
+        node: NodeId,
+        advert: CertifiedStreamSlice,
+    ) -> Result<Option<XNetAdvertOutcome>, AdvertError> {
+        let endpoint = self.endpoint_resolver.xnet_advert_url(node)?;
+
+        self.metrics.outstanding_adverts.inc();
+        let result = self.xnet_client.post_advert(&endpoint, advert).await;
+        self.metrics.outstanding_adverts.dec();
+
+        let Some(reply) = result? else {
+            return Ok(None);
+        };
+
+        // The peer already had the advertised content and it replied with a certified
+        // header proving it. `handle_advert()` verifies the threshold signature,
+        // so offload it to a blocking task.
+        let advert_handler = Arc::clone(&self.advert_handler);
+        let outcome =
+            tokio::task::spawn_blocking(move || advert_handler.handle_advert(subnet_id, reply))
+                .await
+                .expect("Handling an advert reply panicked")?;
+        Ok(Some(outcome))
+    }
+}
+
+/// Number of nodes of a subnet of `peer_subnet_size` nodes that each of our
+/// nodes should advertise to, for each of the peer's nodes to receive
+/// `ADVERTS_PER_NODE` adverts, based on the two subnet sizes.
+fn advert_target_count(own_subnet_size: usize, peer_subnet_size: usize) -> usize {
+    (ADVERTS_PER_NODE * peer_subnet_size)
+        .div_ceil(own_subnet_size.max(1))
+        .clamp(1, peer_subnet_size.max(1))
+}
+
+struct AdvertTaskMetrics {
+    /// Adverts sent, by destination subnet and outcome.
+    adverts_sent: IntCounterVec,
+
+    /// Advert send duration, by outcome.
+    send_advert_duration: HistogramVec,
+
+    /// Outstanding advert posts.
+    outstanding_adverts: IntGauge,
+}
+
+impl AdvertTaskMetrics {
+    fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            adverts_sent: metrics_registry.int_counter_vec(
+                METRIC_ADVERTS_SENT,
+                "Adverts sent, by destination subnet and outcome.",
+                &[LABEL_REMOTE, LABEL_STATUS],
+            ),
+            send_advert_duration: metrics_registry.histogram_vec(
+                METRIC_SEND_ADVERT_DURATION,
+                "Advert send duration, by outcome.",
+                // 0.1ms - 5s
+                decimal_buckets(-4, 0),
+                &[LABEL_STATUS],
+            ),
+            outstanding_adverts: metrics_registry
+                .int_gauge(METRIC_OUTSTANDING_ADVERTS, "Outstanding advert posts."),
+        }
+    }
+}
+
+/// The reason why an advert could not be posted; or its reply handled.
+#[derive(Debug, Error)]
+enum AdvertError {
+    #[error("Failed to resolve the advert endpoint: {0}")]
+    Resolve(#[from] Error),
+    #[error("Failed to post the advert: {0}")]
+    Post(#[from] XNetClientError),
+    #[error("Failed to handle advert reply: {0}")]
+    HandleReply(#[from] XNetAdvertError),
+}
+
+impl AdvertError {
+    /// Maps the error to a `status` label value.
+    fn to_label_value(&self) -> String {
+        match self {
+            AdvertError::Resolve(err) => err.to_label_value().to_string(),
+            AdvertError::Post(err) => err.to_label_value(),
+            AdvertError::HandleReply(err) => err.as_str().to_string(),
+        }
+    }
 }
 
 /// An async task that refills the slice pool.
 pub struct PoolRefillTask {
-    /// A pool of slices, filled in the background by an async task.
+    /// The slice pool that this task is refilling.
     pool: Arc<Mutex<CertifiedSlicePool>>,
 
-    endpoint_resolver: XNetEndpointResolver,
+    endpoint_resolver: Arc<XNetEndpointResolver>,
 
     /// Async client for querying `XNetEndpoints`.
     xnet_client: Arc<dyn XNetClient>,
 
-    /// tokio runtime to be used for spawning async query tasks.
+    /// Used for validating slices before they are pooled.
+    certified_stream_store: Arc<dyn CertifiedStreamStore>,
+
+    /// Tokio runtime to be used for spawning async query tasks.
     runtime_handle: runtime::Handle,
 
     metrics: Arc<XNetPayloadBuilderMetrics>,
@@ -1467,25 +2035,27 @@ impl PoolRefillTask {
     /// Starts an async task that fills the slice pool in the background.
     pub fn start(
         pool: Arc<Mutex<CertifiedSlicePool>>,
-        endpoint_resolver: XNetEndpointResolver,
+        endpoint_resolver: Arc<XNetEndpointResolver>,
         xnet_client: Arc<dyn XNetClient>,
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
         runtime_handle: runtime::Handle,
         metrics: Arc<XNetPayloadBuilderMetrics>,
         log: ReplicaLogger,
     ) -> RefillTaskHandle {
         let (refill_trigger, mut refill_receiver) = mpsc::channel(1);
-        let task = Self {
+        let task = Arc::new(Self {
             pool,
             endpoint_resolver,
             xnet_client,
+            certified_stream_store,
             runtime_handle: runtime_handle.clone(),
             metrics,
             log,
-        };
+        });
 
         runtime_handle.spawn(async move {
             while let Some(registry_version) = refill_receiver.recv().await {
-                task.refill_pool(registry_version).await;
+                task.refill_pool(registry_version);
             }
         });
 
@@ -1494,102 +2064,157 @@ impl PoolRefillTask {
 
     /// Queries all subnets for new slices and puts / appends them to the pool after
     /// validation against the given registry version.
-    async fn refill_pool(&self, registry_version: RegistryVersion) {
-        let refill_stream_slice_indices =
-            refill_stream_slice_indices(self.pool.clone(), self.endpoint_resolver.subnet_id);
+    ///
+    /// Also unschedules every subnet it pulls from, as advert-driven pulling
+    /// would; and records whether it was scheduled and whether the pull pooled
+    /// anything.
+    fn refill_pool(self: &Arc<Self>, registry_version: RegistryVersion) {
+        let pulls: Vec<_> = {
+            let mut pool = self.pool.lock().unwrap();
+            refill_stream_slice_indices(&pool, self.endpoint_resolver.subnet_id)
+                .into_iter()
+                .map(|(subnet_id, indices)| (subnet_id, indices, pool.unschedule_pull(subnet_id)))
+                .collect()
+        };
 
-        for (subnet_id, indices) in refill_stream_slice_indices {
-            // `XNetEndpoint` URL of a node on `subnet_id`.
-            let endpoint_locator = match self.endpoint_resolver.xnet_endpoint_url(
-                subnet_id,
-                indices.witness_begin,
-                indices.msg_begin,
-                indices.byte_limit,
-            ) {
-                Ok(endpoint_locator) => endpoint_locator,
-                Err(e) => {
-                    log!(self.log, e.log_level(), "{}", e);
-                    self.metrics.observe_pull_attempt(e.to_label_value());
-                    continue;
-                }
-            };
-
-            // Spawn an async task to query the `XNetEndpoint` on `subnet_id`.
-            let xnet_client = self.xnet_client.clone();
-            let metrics = Arc::clone(&self.metrics);
-            let pool = Arc::clone(&self.pool);
-            let log = self.log.clone();
+        for (subnet_id, indices, scheduled) in pulls {
+            let task = Arc::clone(self);
             self.runtime_handle.spawn(async move {
-                let since = Instant::now();
-                metrics.outstanding_queries.inc();
-                let query_result = xnet_client.query(&endpoint_locator).await;
-                metrics.outstanding_queries.dec();
-                let proximity = endpoint_locator.proximity.into();
-
-                match query_result {
-                    Ok(slice) => {
-                        let logger = log.clone();
-                        let res = tokio::task::spawn_blocking(move || {
-                            if indices.witness_begin != indices.msg_begin {
-                                // Pulled a stream suffix, append to pooled slice.
-                                pool.lock()
-                                    .unwrap()
-                                    .append(subnet_id, slice, registry_version, log)
-                            } else {
-                                // Pulled a complete stream, replace pooled slice (if any).
-                                pool.lock()
-                                    .unwrap()
-                                    .put(subnet_id, slice, registry_version, log)
-                            }
-                        })
-                        .await;
-                        match res {
-                            Ok(res) => {
-                                let status = match res {
-                                    Ok(()) => STATUS_SUCCESS,
-                                    Err(e) => e.to_label_value(),
-                                };
-
-                                metrics.observe_query_slice_duration(status, proximity, since);
-                                metrics.observe_pull_attempt(status);
-                            }
-                            Err(err) => warn!(
-                                logger,
-                                "Failed to join pool refill blocking thread: {}", err
-                            ),
-                        };
-                    }
-
-                    Err(e) => {
-                        metrics.observe_query_slice_duration(&e.to_label_value(), proximity, since);
-                        metrics.observe_pull_attempt(&e.to_label_value());
-                        if let XNetClientError::NoContent = e {
-                        } else if Self::pass_log_sampling() {
-                            info!(
-                                log,
-                                "Failed to query stream slice for subnet {} from node {}: {}",
-                                subnet_id,
-                                endpoint_locator.node_id,
-                                e
-                            );
-                        }
-                    }
+                if let Ok(pooled) = task.pull(subnet_id, indices, registry_version).await {
+                    task.metrics
+                        .observe_shadow_pull(subnet_id, scheduled, pooled);
                 }
             });
         }
     }
 
-    fn pass_log_sampling() -> bool {
-        /// The fraction of INFO logs related to stream pulls that XNet payload
-        /// builder displays.  The logs become very polluted if we don't
-        /// sample them.
-        const LOG_PASS_THROUGH_RATE: f64 = 0.05;
+    /// Queries a node of `subnet_id` for the slice described by `indices`; and
+    /// puts / appends it to the pool after validation against `registry_version`.
+    ///
+    /// Returns whether the pulled slice was pooled (`false` if there is no stream);
+    /// or `Err(())` if the pull failed (already logged and recorded).
+    async fn pull(
+        self: &Arc<Self>,
+        subnet_id: SubnetId,
+        indices: RefillStreamSliceIndices,
+        registry_version: RegistryVersion,
+    ) -> Result<bool, ()> {
+        // `XNetEndpoint` URL of a node on `subnet_id`.
+        let endpoint = match self.endpoint_resolver.xnet_stream_url(
+            subnet_id,
+            indices.witness_begin,
+            indices.msg_begin,
+            indices.byte_limit,
+        ) {
+            Ok(endpoint) => endpoint,
+            Err(e) => {
+                log!(self.log, e.log_level(), "{}", e);
+                self.metrics.observe_pull_attempt(e.to_label_value());
+                return Err(());
+            }
+        };
 
-        thread_rng().gen_bool(LOG_PASS_THROUGH_RATE)
+        let since = Instant::now();
+        self.metrics.outstanding_queries.inc();
+        let query_result = self.xnet_client.query(&endpoint).await;
+        self.metrics.outstanding_queries.dec();
+        let proximity = endpoint.proximity.into();
+
+        match query_result {
+            Ok(slice) => {
+                let is_suffix = indices.witness_begin != indices.msg_begin;
+
+                // Log and instrument pulled slices above the requested byte limit. In the
+                // future, we may drop such slices.
+                let byte_limit = if is_suffix {
+                    indices.byte_limit
+                } else {
+                    // A complete slice always includes the first message, regardless of byte limit.
+                    indices
+                        .byte_limit
+                        .max(MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get() as usize)
+                };
+                if slice.payload.len() > byte_limit * 11 / 10 + 1024 {
+                    warn!(
+                        self.log,
+                        "Stream from {subnet_id}: pulled payload size ({}) exceeds byte limit ({byte_limit})",
+                        slice.payload.len()
+                    );
+                    self.metrics.pull_size_too_large.inc();
+                }
+
+                // A suffix is appended to the pooled slice; a complete slice replaces it.
+                let put_or_append = if is_suffix {
+                    CertifiedSlicePool::append
+                } else {
+                    CertifiedSlicePool::put
+                };
+                // Blocking because validation verifies the threshold signature.
+                let task = Arc::clone(self);
+                match tokio::task::spawn_blocking(move || {
+                    put_or_append(
+                        &task.pool,
+                        subnet_id,
+                        slice,
+                        task.certified_stream_store.as_ref(),
+                        registry_version,
+                        &task.log,
+                    )
+                })
+                .await
+                {
+                    Ok(res) => {
+                        let status = match &res {
+                            Ok(_) => STATUS_SUCCESS,
+                            Err(e) => e.to_label_value(),
+                        };
+
+                        self.metrics
+                            .observe_query_slice_duration(status, proximity, since);
+                        self.metrics.observe_pull_attempt(status);
+                        res.map_err(|_| ())
+                    }
+
+                    Err(err) => {
+                        warn!(
+                            self.log,
+                            "Failed to join pool refill blocking thread: {err}"
+                        );
+                        Err(())
+                    }
+                }
+            }
+
+            Err(e) => {
+                self.metrics
+                    .observe_query_slice_duration(&e.to_label_value(), proximity, since);
+                self.metrics.observe_pull_attempt(&e.to_label_value());
+                if let XNetClientError::NoContent = e {
+                    return Ok(false);
+                }
+                if pass_log_sampling() {
+                    info!(
+                        self.log,
+                        "Failed to query stream slice for subnet {subnet_id} from node {}: {e}",
+                        endpoint.node_id,
+                    );
+                }
+                Err(())
+            }
+        }
     }
 }
 
-/// A handle for a `PoolRefillTask`to be used for triggering pool refills and
+fn pass_log_sampling() -> bool {
+    /// The fraction of INFO logs related to stream pulls and adverts that XNet
+    /// payload builder displays. The logs become very polluted if we don't
+    /// sample them.
+    const LOG_PASS_THROUGH_RATE: f64 = 0.05;
+
+    thread_rng().gen_bool(LOG_PASS_THROUGH_RATE)
+}
+
+/// A handle for a `PoolRefillTask` to be used for triggering pool refills and
 /// terminating the task (by dropping the handle).
 pub struct RefillTaskHandle(pub Mutex<mpsc::Sender<RegistryVersion>>);
 
@@ -1600,46 +2225,6 @@ impl RefillTaskHandle {
         // We don't care if the send succeeded or not. If it didn't, the refill task is
         // just behind.
         self.0.lock().unwrap().try_send(registry_version).ok();
-    }
-}
-
-/// Wrapper around a `CertifiedSlicePool`, implementing the `XNetSlicePool` trait.
-pub struct XNetSlicePoolImpl {
-    /// A pool of slices, filled in the background by an async task.
-    slice_pool: Arc<Mutex<CertifiedSlicePool>>,
-}
-
-impl XNetSlicePoolImpl {
-    pub fn new(slice_pool: Arc<Mutex<CertifiedSlicePool>>) -> Self {
-        Self { slice_pool }
-    }
-}
-
-impl XNetSlicePool for XNetSlicePoolImpl {
-    fn take_slice(
-        &self,
-        subnet_id: SubnetId,
-        begin: Option<&ExpectedIndices>,
-        msg_limit: Option<usize>,
-        byte_limit: Option<usize>,
-    ) -> Result<Option<(CertifiedStreamSlice, usize)>, CertifiedSliceError> {
-        let mut slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.take_slice(subnet_id, begin, msg_limit, byte_limit)
-    }
-
-    fn observe_pool_size_bytes(&self) {
-        let slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.observe_pool_size_bytes();
-    }
-
-    fn garbage_collect(&self, new_stream_positions: BTreeMap<SubnetId, ExpectedIndices>) {
-        let mut slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.garbage_collect(new_stream_positions);
-    }
-
-    fn garbage_collect_slice(&self, subnet_id: SubnetId, stream_position: ExpectedIndices) {
-        let mut slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.garbage_collect_slice(subnet_id, stream_position);
     }
 }
 
@@ -1655,6 +2240,9 @@ enum SliceValidationResult {
     Valid {
         messages_end: StreamIndex,
         signals_end: StreamIndex,
+        /// See `ExpectedIndices::max_no_gc_header_begin`, computed as if this slice
+        /// had been inducted.
+        max_no_gc_header_begin: StreamIndex,
         message_count: usize,
         byte_size: usize,
     },
@@ -1664,20 +2252,6 @@ enum SliceValidationResult {
     Transient(String),
     /// Slice is empty.
     Empty,
-}
-
-impl SliceValidationResult {
-    /// Maps a `SliceValidationResult` to a value for the `pull_attempt_count`
-    /// metric's `status` label.
-    #[allow(dead_code)]
-    fn to_label_value(&self) -> &'static str {
-        match self {
-            SliceValidationResult::Valid { .. } => "Valid",
-            SliceValidationResult::Invalid(_) => "Invalid",
-            SliceValidationResult::Transient(_) => "Transient",
-            SliceValidationResult::Empty => "Empty",
-        }
-    }
 }
 
 /// Internal error type, to simplify error handling.
@@ -1726,7 +2300,7 @@ impl Error {
 /// An async `XNetEndpoint` client.
 ///
 /// The `async_trait` attribute is necessary both here and on every
-/// implementation because Rust does not have support for `async fn` in traits.
+/// implementation because we use `dyn XNetClient`.
 #[async_trait]
 pub trait XNetClient: Sync + Send {
     /// Queries the given `XNetEndpoint` for a `CertifiedStreamSlice`.
@@ -1736,6 +2310,17 @@ pub trait XNetClient: Sync + Send {
         &self,
         endpoint: &EndpointLocator,
     ) -> Result<CertifiedStreamSlice, XNetClientError>;
+
+    /// Posts an advert — our own certified stream header — to the given
+    /// `XNetEndpoint`.
+    ///
+    /// On success, returns the peer's response: its certified header iff it already
+    /// reflects the contents of the advert, else `None`.
+    async fn post_advert(
+        &self,
+        endpoint: &EndpointLocator,
+        advert: CertifiedStreamSlice,
+    ) -> Result<Option<CertifiedStreamSlice>, XNetClientError>;
 }
 
 type XNetRequestBody = http_body_util::Full<hyper::body::Bytes>;
@@ -1743,19 +2328,20 @@ type XNetRequestBody = http_body_util::Full<hyper::body::Bytes>;
 /// The default `XNetClient` implementation, wrapping an HTTP client (for both
 /// configuration and connection pooling).
 struct XNetClientImpl {
-    /// An HTTP client to be used for querying.
-    http_client: Client<TlsConnector, Request<XNetRequestBody>>,
+    /// HTTP client for querying and advertising.
+    http_client: Client<TlsConnector, XNetRequestBody>,
 
     /// Response body (encoded slice) size.
     response_body_size: HistogramVec,
 
-    /// Proximity map to update after every query with the time-to-first-byte.
+    /// Proximity map to update with the outcome of every request; and with the
+    /// time-to-first-byte of every query.
     proximity_map: Arc<ProximityMap>,
 }
 
 impl XNetClientImpl {
-    /// Creates a new `XNetClientImpl` with a request timeout of 1 second and at
-    /// most 1 idle connection per host.
+    /// Creates a new `XNetClientImpl` with a request timeout of 5 seconds, at
+    /// most 1 idle connection per host and HTTP/2 keep-alive pings.
     fn new(
         metrics_registry: &MetricsRegistry,
         tls: Arc<dyn TlsConfig>,
@@ -1767,9 +2353,24 @@ impl XNetClientImpl {
         let https = TlsConnector::new_for_tests(tls);
 
         // TODO(MR-28) Make timeout configurable.
-        let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
+        //
+        // HTTP/2 keep-alive pings are necessary to evict dead pooled connections:
+        // cancelling a request (e.g. due to the 5-second query timeout) only resets
+        // the respective stream, it does not affect the underlying connection. And
+        // the pool only drops connections that report themselves as closed. So
+        // without keep-alive a connection that is dead or stalled (e.g. due to
+        // packet loss while under load) would be reused indefinitely, with every
+        // query against it timing out. With keep-alive, such a connection is closed
+        // within `interval + timeout` seconds and a fresh connection is established
+        // on the next query.
+        let http_client: Client<TlsConnector, XNetRequestBody> =
             Client::builder(TokioExecutor::new())
                 .http2_only(true)
+                // Timer required by HTTP/2 keep-alive.
+                .timer(TokioTimer::new())
+                .http2_keep_alive_interval(Some(Duration::from_secs(10)))
+                .http2_keep_alive_timeout(Duration::from_secs(5))
+                .http2_keep_alive_while_idle(true)
                 .pool_timer(TokioTimer::new())
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
                 .pool_max_idle_per_host(1)
@@ -1778,8 +2379,8 @@ impl XNetClientImpl {
         let response_body_size = metrics_registry.histogram_vec(
             METRIC_RESPONSE_BODY_SIZE,
             "Response body (encoded slice) size in bytes, by decode status.",
-            // 10 B - 5 MB
-            decimal_buckets(1, 6),
+            // 10 B - 50 MB
+            decimal_buckets(1, 7),
             &[LABEL_STATUS],
         );
         response_body_size.with_label_values(&[STATUS_SUCCESS]);
@@ -1791,11 +2392,8 @@ impl XNetClientImpl {
             proximity_map,
         }
     }
-}
 
-#[async_trait]
-impl XNetClient for XNetClientImpl {
-    async fn query(
+    async fn query_impl(
         &self,
         endpoint: &EndpointLocator,
     ) -> Result<CertifiedStreamSlice, XNetClientError> {
@@ -1821,7 +2419,7 @@ impl XNetClient for XNetClientImpl {
             let status = response.status();
 
             let content =
-                http_body_util::Limited::new(response.into_body(), 5 * POOL_SLICE_BYTE_SIZE_MAX)
+                http_body_util::Limited::new(response.into_body(), 2 * POOLED_SLICE_BYTE_SIZE_MAX)
                     .collect()
                     .await
                     .map(|collected| collected.to_bytes())
@@ -1857,6 +2455,91 @@ impl XNetClient for XNetClientImpl {
             )),
         }
     }
+
+    async fn post_advert_impl(
+        &self,
+        endpoint: &EndpointLocator,
+        advert: CertifiedStreamSlice,
+    ) -> Result<Option<CertifiedStreamSlice>, XNetClientError> {
+        let body = pb::CertifiedStreamSlice::proxy_encode(advert);
+        // The receiver refuses anything larger, so there is no point in sending it.
+        if body.len() > ADVERT_MAX_BODY_BYTES {
+            return Err(XNetClientError::AdvertTooLarge(body.len()));
+        }
+        let request = Request::post(endpoint.url.clone())
+            .header(hyper::header::CONTENT_TYPE, "application/x-protobuf")
+            .body(XNetRequestBody::from(body))
+            .expect("failed to build advert request");
+
+        // TODO(MR-28) Make timeout configurable.
+        let result = tokio::time::timeout(Duration::from_secs(5), async {
+            let response = self
+                .http_client
+                .request(request)
+                .await
+                .map_err(XNetClientError::RequestFailed)?;
+
+            let status = response.status();
+
+            // A reply is a header-only slice, just like the advert.
+            let content = http_body_util::Limited::new(response.into_body(), ADVERT_MAX_BODY_BYTES)
+                .collect()
+                .await
+                .map(|collected| collected.to_bytes())
+                .map_err(XNetClientError::BodyReadError)?;
+
+            Ok((status, content))
+        })
+        .await;
+
+        let (status, bytes) = result.map_err(|_| XNetClientError::Timeout)??;
+
+        match status {
+            // Advert accepted.
+            StatusCode::NO_CONTENT => Ok(None),
+
+            // Everything in our advert was already inducted and certified: the reply is a
+            // certified header that proves it.
+            StatusCode::OK => pb::CertifiedStreamSlice::proxy_decode(bytes.as_ref())
+                .map(Some)
+                .map_err(XNetClientError::ProxyDecodeError),
+
+            _ => Err(XNetClientError::ErrorResponse(
+                status,
+                String::from_utf8_lossy(bytes.as_ref()).to_string(),
+            )),
+        }
+    }
+
+    /// Updates the node's health status, based on whether it served the request.
+    fn update_node_health<T>(&self, node_id: NodeId, result: &Result<T, XNetClientError>) {
+        match result {
+            Err(e) if e.is_node_failure() => self.proximity_map.observe_failure(node_id),
+            _ => self.proximity_map.observe_success(node_id),
+        }
+    }
+}
+
+#[async_trait]
+impl XNetClient for XNetClientImpl {
+    async fn query(
+        &self,
+        endpoint: &EndpointLocator,
+    ) -> Result<CertifiedStreamSlice, XNetClientError> {
+        let result = self.query_impl(endpoint).await;
+        self.update_node_health(endpoint.node_id, &result);
+        result
+    }
+
+    async fn post_advert(
+        &self,
+        endpoint: &EndpointLocator,
+        advert: CertifiedStreamSlice,
+    ) -> Result<Option<CertifiedStreamSlice>, XNetClientError> {
+        let result = self.post_advert_impl(endpoint, advert).await;
+        self.update_node_health(endpoint.node_id, &result);
+        result
+    }
 }
 
 #[derive(Debug, Error)]
@@ -1873,9 +2556,40 @@ pub enum XNetClientError {
     BodyReadError(Box<dyn std::error::Error + Send + Sync>),
     #[error("Error decoding XNet proto into Rust struct: {0}")]
     ProxyDecodeError(ProxyDecodeError),
+    #[error("Advert of {0} bytes exceeds the {ADVERT_MAX_BODY_BYTES} byte limit")]
+    AdvertTooLarge(usize),
 }
 
 impl XNetClientError {
+    /// Returns `true` if this error means that the node failed to serve the
+    /// request: we could not connect to it, it timed out, or it responded with
+    /// a 5xx status code or something we could not make sense of. Whereas a 204
+    /// (`NoContent`) or 4xx status code point to a (likely) healthy node.
+    fn is_node_failure(&self) -> bool {
+        match self {
+            // Self-explanatory.
+            XNetClientError::Timeout
+            // Could be anything, but usually "XNet request failed: client error (Connect)".
+            | XNetClientError::RequestFailed(..)
+            // Not observed in the wild, but it would likely imply a misbehaving server (e.g.
+            // oversized response).
+            | XNetClientError::BodyReadError(..)
+            // Not observed in the wild, but it would likely imply a misbehaving server.
+            | XNetClientError::ProxyDecodeError(..) => true,
+
+            // Only a failure if the server returned a 5xx status code. Even though 503 is
+            // transient (full queue), it is probably a good idea to give the server some
+            // breathing room.
+            XNetClientError::ErrorResponse(status_code, ..) => status_code.is_server_error(),
+
+            // Definitely not an error, there's merely no new content.
+            XNetClientError::NoContent => false,
+
+            // Our own doing, nothing to do with the node.
+            XNetClientError::AdvertTooLarge(..) => false,
+        }
+    }
+
     /// Maps an `XNetClientError` to a `status` label value.
     fn to_label_value(&self) -> String {
         match self {
@@ -1885,6 +2599,7 @@ impl XNetClientError {
             XNetClientError::ErrorResponse(status, _) => format!("HTTP_{}", status.as_u16()),
             XNetClientError::BodyReadError(..) => "BodyReadError".to_string(),
             XNetClientError::ProxyDecodeError(..) => STATUS_DECODE_ERROR.to_string(),
+            XNetClientError::AdvertTooLarge(..) => "AdvertTooLarge".to_string(),
         }
     }
 }
@@ -1893,8 +2608,47 @@ impl XNetClientError {
 pub mod testing {
     pub use super::{
         EndpointLocator, GenRangeFn, LABEL_STATUS, METRIC_BUILD_PAYLOAD_DURATION,
-        METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE, POOL_SLICE_BYTE_SIZE_MAX, PoolRefillTask,
-        ProximityMap, RefillTaskHandle, STATUS_SUCCESS, XNetClient, XNetClientError,
-        XNetEndpointResolver, XNetPayloadBuilderMetrics,
+        METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE, POOLED_SLICE_BYTE_SIZE_MAX,
+        PoolRefillTask, ProximityMap, RefillTaskHandle, STATUS_SUCCESS, XNetClient,
+        XNetClientError, XNetEndpointResolver, XNetPayloadBuilderMetrics,
     };
+
+    use super::*;
+
+    /// Overrides of `XNetPayloadBuilderImpl` defaults, for testing.
+    pub trait XNetPayloadBuilderTesting {
+        /// Replaces the function to be used for calculating `CertifiedStreamSlice`
+        /// byte sizes with the provided one.
+        fn with_count_bytes_fn(
+            self,
+            count_bytes_fn: fn(&CertifiedStreamSlice) -> CertifiedSliceResult<usize>,
+        ) -> Self;
+
+        /// Replaces `SLICE_BYTE_SIZE_MIN` with the provided value.
+        fn with_slice_byte_size_min(self, slice_byte_size_min: usize) -> Self;
+
+        /// Shuffles stream positions using the provided RNG instead of
+        /// `thread_rng()`.
+        fn with_deterministic_rng(self, rng: StdRng) -> Self;
+    }
+
+    impl XNetPayloadBuilderTesting for XNetPayloadBuilderImpl {
+        fn with_count_bytes_fn(
+            mut self,
+            count_bytes_fn: fn(&CertifiedStreamSlice) -> CertifiedSliceResult<usize>,
+        ) -> Self {
+            self.count_bytes_fn = count_bytes_fn;
+            self
+        }
+
+        fn with_slice_byte_size_min(mut self, slice_byte_size_min: usize) -> Self {
+            self.slice_byte_size_min = slice_byte_size_min;
+            self
+        }
+
+        fn with_deterministic_rng(mut self, rng: StdRng) -> Self {
+            self.deterministic_rng_for_testing = Some(Mutex::new(rng));
+            self
+        }
+    }
 }

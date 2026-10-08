@@ -43,16 +43,12 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload, HasHeight,
-        idkg::{self, IDkgBlockReader, TranscriptRef, common::BuildSignatureInputsError},
+        idkg::{self, IDkgBlockReader, TranscriptRef},
     },
     crypto::canister_threshold_sig::{
-        error::{
-            IDkgVerifyInitialDealingsError, IDkgVerifyTranscriptError,
-            ThresholdEcdsaVerifyCombinedSignatureError, ThresholdSchnorrVerifyCombinedSigError,
-        },
+        error::{IDkgVerifyInitialDealingsError, IDkgVerifyTranscriptError},
         idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings, SignedIDkgDealing},
     },
-    messages::CallbackId,
     registry::RegistryClientError,
     state_manager::StateManagerError,
 };
@@ -74,11 +70,8 @@ pub enum IDkgPayloadValidationFailure {
     RegistryClientError(RegistryClientError),
     StateManagerError(StateManagerError),
     TranscriptParamsError(idkg::TranscriptParamsError),
-    ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
-    ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
-    NewSignatureBuildInputsError(BuildSignatureInputsError),
     InvalidChainCacheError(InvalidChainCacheError),
 }
 
@@ -92,11 +85,8 @@ pub enum InvalidIDkgPayloadReason {
     UnexpectedSummaryPayload(IDkgPayloadError),
     UnexpectedDataPayload(Option<IDkgPayloadError>),
     TranscriptParamsError(idkg::TranscriptParamsError),
-    ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
-    ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
-    NewSignatureBuildInputsError(BuildSignatureInputsError),
     // local errors
     ConsensusRegistryVersionNotFound(Height),
     ChainKeyConfigNotFound,
@@ -107,9 +97,6 @@ pub enum InvalidIDkgPayloadReason {
     NewTranscriptNotFound(IDkgTranscriptId),
     NewTranscriptMiscount(u64),
     NewTranscriptMissingParams(IDkgTranscriptId),
-    NewSignatureUnexpected(idkg::PseudoRandomId),
-    NewSignatureMissingContext(idkg::PseudoRandomId),
-    VetKdUnexpected(CallbackId),
     XNetReshareAgreementWithoutRequest(idkg::IDkgReshareRequest),
     XNetReshareRequestDisappeared(idkg::IDkgReshareRequest),
     DecodingError(String),
@@ -169,42 +156,6 @@ impl From<IDkgVerifyInitialDealingsError> for IDkgPayloadValidationFailure {
     }
 }
 
-impl From<ThresholdEcdsaVerifyCombinedSignatureError> for InvalidIDkgPayloadReason {
-    fn from(err: ThresholdEcdsaVerifyCombinedSignatureError) -> Self {
-        InvalidIDkgPayloadReason::ThresholdEcdsaVerifyCombinedSignatureError(err)
-    }
-}
-
-impl From<ThresholdEcdsaVerifyCombinedSignatureError> for IDkgPayloadValidationFailure {
-    fn from(err: ThresholdEcdsaVerifyCombinedSignatureError) -> Self {
-        IDkgPayloadValidationFailure::ThresholdEcdsaVerifyCombinedSignatureError(err)
-    }
-}
-
-impl From<BuildSignatureInputsError> for InvalidIDkgPayloadReason {
-    fn from(err: BuildSignatureInputsError) -> Self {
-        InvalidIDkgPayloadReason::NewSignatureBuildInputsError(err)
-    }
-}
-
-impl From<BuildSignatureInputsError> for IDkgPayloadValidationFailure {
-    fn from(err: BuildSignatureInputsError) -> Self {
-        IDkgPayloadValidationFailure::NewSignatureBuildInputsError(err)
-    }
-}
-
-impl From<ThresholdSchnorrVerifyCombinedSigError> for InvalidIDkgPayloadReason {
-    fn from(err: ThresholdSchnorrVerifyCombinedSigError) -> Self {
-        InvalidIDkgPayloadReason::ThresholdSchnorrVerifyCombinedSignatureError(err)
-    }
-}
-
-impl From<ThresholdSchnorrVerifyCombinedSigError> for IDkgPayloadValidationFailure {
-    fn from(err: ThresholdSchnorrVerifyCombinedSigError) -> Self {
-        IDkgPayloadValidationFailure::ThresholdSchnorrVerifyCombinedSignatureError(err)
-    }
-}
-
 impl From<RegistryClientError> for IDkgPayloadValidationFailure {
     fn from(err: RegistryClientError) -> Self {
         IDkgPayloadValidationFailure::RegistryClientError(err)
@@ -230,6 +181,7 @@ pub fn validate_payload(
     state_reader: &dyn StateReader<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
+    last_summary_block: &Block,
     payload: &BlockPayload,
     metrics: HistogramVec,
 ) -> ValidationResult<IDkgValidationError> {
@@ -243,6 +195,7 @@ pub fn validate_payload(
                     pool_reader,
                     context,
                     parent_block,
+                    last_summary_block,
                     payload.as_summary().idkg.as_ref(),
                 )
             },
@@ -261,6 +214,7 @@ pub fn validate_payload(
                     state_reader,
                     context,
                     parent_block,
+                    last_summary_block,
                     payload.as_data().idkg.as_ref(),
                     &metrics,
                 )
@@ -279,6 +233,7 @@ fn validate_summary_payload(
     pool_reader: &PoolReader<'_>,
     context: &ValidationContext,
     parent_block: &Block,
+    last_summary_block: &Block,
     summary_payload: Option<&idkg::IDkgPayload>,
 ) -> ValidationResult<IDkgValidationError> {
     let height = parent_block.height().increment();
@@ -301,6 +256,7 @@ fn validate_summary_payload(
         pool_reader,
         context,
         parent_block,
+        last_summary_block,
         None,
         &ic_logger::replica_logger::no_op_logger(),
     ) {
@@ -332,6 +288,7 @@ fn validate_data_payload(
     state_reader: &dyn StateReader<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
+    summary_block: &Block,
     data_payload: Option<&idkg::IDkgPayload>,
     metrics: &HistogramVec,
 ) -> ValidationResult<IDkgValidationError> {
@@ -357,7 +314,7 @@ fn validate_data_payload(
                 if data_payload.is_none() {
                     return Err(InvalidIDkgPayloadReason::MissingIDkgDataPayload.into());
                 }
-                (idkg_summary.clone(), data_payload.as_ref().unwrap())
+                (idkg_summary, data_payload.as_ref().unwrap())
             }
         }
     } else {
@@ -373,19 +330,11 @@ fn validate_data_payload(
                 if data_payload.is_none() {
                     return Err(InvalidIDkgPayloadReason::MissingIDkgDataPayload.into());
                 }
-                (payload.clone(), data_payload.as_ref().unwrap())
+                (payload, data_payload.as_ref().unwrap())
             }
         }
     };
 
-    let summary_block = pool_reader
-        .dkg_summary_block(parent_block)
-        .unwrap_or_else(|| {
-            panic!(
-                "Impossible: fail to the summary block that governs height {}",
-                parent_block.height()
-            )
-        });
     // In case the certified height is below the summary height, add the heights in
     // between to the blockchain. This is needed to calculate the total number of pre-
     // signatures in the certified state and every block since then.
@@ -410,7 +359,7 @@ fn validate_data_payload(
                 crypto,
                 thread_pool,
                 &block_reader,
-                &prev_payload,
+                prev_payload,
                 curr_payload,
                 curr_height,
             )
@@ -419,7 +368,7 @@ fn validate_data_payload(
     )?;
     let dealings = timed_call(
         "validate_reshare_dealings",
-        || validate_reshare_dealings(crypto, &block_reader, &prev_payload, curr_payload),
+        || validate_reshare_dealings(crypto, &block_reader, prev_payload, curr_payload),
         metrics,
     )?;
 
@@ -432,7 +381,7 @@ fn validate_data_payload(
         subnet_id,
         context,
         parent_block,
-        &summary_block,
+        summary_block,
         &block_reader,
         &builder,
         state_reader,
@@ -599,9 +548,9 @@ mod test {
             resharing::{initiate_reshare_requests, update_completed_reshare_requests},
         },
         test_utils::*,
-        utils::build_thread_pool,
     };
     use assert_matches::assert_matches;
+    use ic_consensus_utils::build_thread_pool;
     use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, dummy_values::dummy_dealings,

@@ -485,7 +485,12 @@ impl InternalState {
                     | NodeRewardType::Type1dot1 => {
                         self.get_subnet_node_urls(nns_subnet_id, version)
                     }
-                    NodeRewardType::Type4 => self.get_api_boundary_node_urls(version),
+                    NodeRewardType::Type4
+                    | NodeRewardType::Type4dot1
+                    | NodeRewardType::Type4dot2
+                    | NodeRewardType::Type4dot3
+                    | NodeRewardType::Type4dot4
+                    | NodeRewardType::Type4dot5 => self.get_api_boundary_node_urls(version),
                 },
             },
         }
@@ -692,6 +697,7 @@ mod test {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_types::ids::test_replica_version;
     use ic_types::{CanisterId, SubnetId};
     use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, SUBNET_1, SUBNET_2, SUBNET_3};
     use rstest::rstest;
@@ -721,13 +727,14 @@ mod test {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: "test_version".to_string(),
+            replica_version_id: test_replica_version().to_string(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             start_as_nns,
             subnet_type: subnet_type as i32,
             is_halted: false,
             halt_at_cup_height: false,
+            cooling_down: false,
             features: None,
             max_number_of_canisters: 0,
             ssh_readonly_access: vec![],
@@ -834,7 +841,12 @@ mod test {
                     // config URL as fallback.
                     maybe_nns_node_url.or(maybe_config_nns_url)
                 }
-                NodeRewardType::Type4 => {
+                NodeRewardType::Type4
+                | NodeRewardType::Type4dot1
+                | NodeRewardType::Type4dot2
+                | NodeRewardType::Type4dot3
+                | NodeRewardType::Type4dot4
+                | NodeRewardType::Type4dot5 => {
                     // For type4 nodes, we contact API BNs.
                     // Though, if we fail to find API BNs in the registry, we use the config URL as
                     // fallback.

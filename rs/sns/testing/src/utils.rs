@@ -1,6 +1,4 @@
-use anyhow::{Result, anyhow};
-use dfx_core::identity::IdentityManager;
-use dfx_core::identity::identity_manager::InitializeIdentity;
+use anyhow::{Context, Result, anyhow};
 use futures::future::join_all;
 use ic_agent::Identity;
 use ic_agent::{Agent, identity::Secp256k1Identity};
@@ -116,13 +114,9 @@ pub async fn get_nns_neuron_hotkeys<C: CallCanisters>(
 }
 
 pub fn get_identity_principal(identity_name: &str) -> Result<PrincipalId> {
-    let logger = slog::Logger::root(slog::Discard, slog::o!());
-    let mut identity_manager = IdentityManager::new(&logger, None, InitializeIdentity::Disallow)?;
-    identity_manager.instantiate_identity_from_name(identity_name, &logger)?;
-    identity_manager
-        .get_selected_identity_principal()
-        .ok_or_else(|| anyhow!("Failed to get principal for identity `{}`", identity_name))
+    dfx_core_vendored::get_identity_principal(identity_name)
         .map(PrincipalId::from)
+        .with_context(|| format!("Failed to get principal for identity `{identity_name}`"))
 }
 
 pub async fn check_canister_installed<C: CallCanisters>(

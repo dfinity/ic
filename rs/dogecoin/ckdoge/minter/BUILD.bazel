@@ -20,7 +20,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-secp256k1",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
         "@crate_index//:bitcoin_dogecoin",
         "@crate_index//:bs58",
@@ -28,6 +28,8 @@ rust_library(
         "@crate_index//:ciborium",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-bitcoin-canister",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:serde",
         "@crate_index//:sha2",
     ],
@@ -48,7 +50,7 @@ rust_test(
     crate = ":ckdoge_minter_lib",
     data = [":test_vectors"],
     env = {
-        "TEST_VECTORS": "$(locations :test_vectors)",
+        "TEST_VECTORS": "$(rootpaths :test_vectors)",
     },
     proc_macro_deps = [
         # Keep sorted.
@@ -84,9 +86,13 @@ rust_test(
             # Keep sorted.
             ":ckdoge_minter_lib",
             "//packages/ic-http-types",
+            "//packages/icrc-ledger-types:icrc_ledger_types_storable",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
             "@crate_index//:candid",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-cdk-bitcoin-canister",
+            "@crate_index//:ic-cdk-management-canister",
+            "@crate_index//:ic-management-canister-types",
         ],
     )
     for (name, features) in [
@@ -165,8 +171,7 @@ rust_ic_test(
         # Keep sorted.
         ":ckdoge_minter_lib",
         "//:pocket-ic-server",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//packages/pocket-ic",
+        "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/dogecoin/ckdoge/test_utils",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",

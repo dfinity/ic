@@ -10,8 +10,9 @@ pub use bounded_vec::*;
 use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode, Reserved};
 pub use data_size::*;
 pub use http::{
-    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, BoundedHttpHeaders, CanisterHttpRequestArgs,
-    CanisterHttpResponsePayload, DEFAULT_HTTP_OUTCALLS_PRICING_VERSION,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO, BoundedHttpHeaders,
+    CanisterHttpRequestArgs, CanisterHttpResponsePayload, DEFAULT_HTTP_OUTCALLS_PRICING_VERSION,
     FlexibleCanisterHttpRequestArgs, FlexibleHttpGlobalError, FlexibleHttpNodeDetail,
     FlexibleHttpNodeError, FlexibleHttpRequestErr, FlexibleHttpRequestResult, HttpHeader,
     HttpMethod, HttpRequestResourceReport, PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO,
@@ -34,6 +35,7 @@ use ic_protobuf::types::v1::{
     CanisterUpgradeOptions as CanisterUpgradeOptionsProto,
     WasmMemoryPersistence as WasmMemoryPersistenceProto,
 };
+use ic_types_cycles::NominalCycles;
 use std::hash::{Hash, Hasher};
 
 use num_traits::cast::ToPrimitive;
@@ -52,17 +54,23 @@ pub const HASH_LENGTH: usize = 32;
 ///
 /// The extended public key format uses a byte to represent the derivation
 /// level of a key, thus BIP32 derivations with more than 255 path elements
-/// are not interoperable with other software.
+/// are not interoperable with other software. This cap applies to the *full*
+/// path seen by threshold crypto, which the replica derives from the path
+/// supplied here by prepending exactly one element: the caller's principal
+/// for `sign_with_ecdsa`/`sign_with_schnorr`, and the target canister id for
+/// `ecdsa_public_key`/`schnorr_public_key`. One slot is therefore reserved
+/// for that prefix, leaving 254 for the caller.
 ///
 /// See https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format
 /// for details
-const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 255;
+pub const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 254;
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
 
-fn decoder_config() -> DecoderConfig {
+/// Candid decoder configuration used for all management-canister payload types.
+pub fn decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();
     config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
     config.set_full_error_message(false);
@@ -76,6 +84,7 @@ pub enum Method {
     CanisterStatus,
     CanisterInfo,
     CanisterMetadata,
+    ListCanisters,
     CreateCanister,
     DeleteCanister,
     DepositCycles,
@@ -115,6 +124,7 @@ pub enum Method {
 
     // Subnet information
     NodeMetricsHistory,
+    SubnetMetrics,
     SubnetInfo,
 
     FetchCanisterLogs,
@@ -143,6 +153,9 @@ pub enum Method {
 
     // Support for canister migration
     RenameCanister,
+
+    // Canister metrics
+    CanisterMetrics,
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
@@ -1368,6 +1381,94 @@ impl TryFrom<pb_canister_state_bits::SnapshotVisibility> for SnapshotVisibility 
     }
 }
 
+/// Status visibility for a canister.
+/// ```text
+/// variant {
+///    controllers;
+///    public;
+///    allowed_viewers : vec principal;
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, EnumIter)]
+pub enum StatusVisibility {
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers,
+    #[serde(rename = "public")]
+    Public,
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(BoundedAllowedViewers),
+}
+
+impl Payload<'_> for StatusVisibility {}
+
+impl From<&StatusVisibility> for pb_canister_state_bits::StatusVisibility {
+    fn from(item: &StatusVisibility) -> Self {
+        match item {
+            StatusVisibility::Controllers => pb_canister_state_bits::StatusVisibility {
+                status_visibility: Some(
+                    pb_canister_state_bits::status_visibility::StatusVisibility::Controllers(1),
+                ),
+            },
+            StatusVisibility::Public => pb_canister_state_bits::StatusVisibility {
+                status_visibility: Some(
+                    pb_canister_state_bits::status_visibility::StatusVisibility::Public(2),
+                ),
+            },
+            StatusVisibility::AllowedViewers(principals) => {
+                pb_canister_state_bits::StatusVisibility {
+                    status_visibility: Some(
+                        pb_canister_state_bits::status_visibility::StatusVisibility::AllowedViewers(
+                            pb_canister_state_bits::StatusVisibilityAllowedViewers {
+                                principals: principals
+                                    .get()
+                                    .iter()
+                                    .map(|c| (*c).into())
+                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
+                            },
+                        ),
+                    ),
+                }
+            }
+        }
+    }
+}
+
+impl TryFrom<pb_canister_state_bits::StatusVisibility> for StatusVisibility {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_canister_state_bits::StatusVisibility) -> Result<Self, Self::Error> {
+        let Some(status_visibility) = item.status_visibility else {
+            return Err(ProxyDecodeError::MissingField(
+                "StatusVisibility::status_visibility",
+            ));
+        };
+        match status_visibility {
+            pb_canister_state_bits::status_visibility::StatusVisibility::Controllers(_) => {
+                Ok(Self::Controllers)
+            }
+            pb_canister_state_bits::status_visibility::StatusVisibility::Public(_) => {
+                Ok(Self::Public)
+            }
+            pb_canister_state_bits::status_visibility::StatusVisibility::AllowedViewers(data) => {
+                let principals = data
+                    .principals
+                    .into_iter()
+                    .map(|p| {
+                        PrincipalId::try_from(p.raw).map_err(|e| {
+                            ProxyDecodeError::ValueOutOfRange {
+                                typ: "PrincipalId",
+                                err: e.to_string(),
+                            }
+                        })
+                    })
+                    .collect::<Result<Vec<PrincipalId>, _>>()?;
+                Ok(Self::AllowedViewers(BoundedAllowedViewers::new(principals)))
+            }
+        }
+    }
+}
+
 /// Struct used for encoding/decoding
 /// ```text
 /// record {
@@ -1377,7 +1478,10 @@ impl TryFrom<pb_canister_state_bits::SnapshotVisibility> for SnapshotVisibility 
 ///   memory_allocation : nat;
 ///   freezing_threshold : nat;
 ///   reserved_cycles_limit : nat;
+///   minimum_incoming_canister_call_cycles : nat;
 ///   log_visibility : log_visibility;
+///   snapshot_visibility : snapshot_visibility;
+///   status_visibility : status_visibility;
 ///   log_memory_limit : nat;
 ///   wasm_memory_limit : nat;
 ///   wasm_memory_threshold : nat;
@@ -1392,8 +1496,10 @@ pub struct DefiniteCanisterSettingsArgs {
     memory_allocation: candid::Nat,
     freezing_threshold: candid::Nat,
     reserved_cycles_limit: candid::Nat,
+    minimum_incoming_canister_call_cycles: candid::Nat,
     log_visibility: LogVisibilityV2,
     snapshot_visibility: SnapshotVisibility,
+    status_visibility: StatusVisibility,
     log_memory_limit: candid::Nat,
     wasm_memory_limit: candid::Nat,
     wasm_memory_threshold: candid::Nat,
@@ -1401,6 +1507,7 @@ pub struct DefiniteCanisterSettingsArgs {
 }
 
 impl DefiniteCanisterSettingsArgs {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         controller: PrincipalId,
         controllers: Vec<PrincipalId>,
@@ -1408,8 +1515,10 @@ impl DefiniteCanisterSettingsArgs {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
+        minimum_incoming_canister_call_cycles: u128,
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
+        status_visibility: StatusVisibility,
         log_memory_limit: u64,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
@@ -1417,6 +1526,8 @@ impl DefiniteCanisterSettingsArgs {
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
+        let minimum_incoming_canister_call_cycles =
+            candid::Nat::from(minimum_incoming_canister_call_cycles);
         let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
         let environment_variables = environment_variables
             .iter()
@@ -1432,8 +1543,10 @@ impl DefiniteCanisterSettingsArgs {
             memory_allocation,
             freezing_threshold: candid::Nat::from(freezing_threshold),
             reserved_cycles_limit,
+            minimum_incoming_canister_call_cycles,
             log_visibility,
             snapshot_visibility,
+            status_visibility,
             log_memory_limit: candid::Nat::from(log_memory_limit),
             wasm_memory_limit,
             wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
@@ -1449,12 +1562,20 @@ impl DefiniteCanisterSettingsArgs {
         self.reserved_cycles_limit.clone()
     }
 
+    pub fn minimum_incoming_canister_call_cycles(&self) -> candid::Nat {
+        self.minimum_incoming_canister_call_cycles.clone()
+    }
+
     pub fn log_visibility(&self) -> &LogVisibilityV2 {
         &self.log_visibility
     }
 
     pub fn snapshot_visibility(&self) -> &SnapshotVisibility {
         &self.snapshot_visibility
+    }
+
+    pub fn status_visibility(&self) -> &StatusVisibility {
+        &self.status_visibility
     }
 
     pub fn log_memory_limit(&self) -> candid::Nat {
@@ -1515,6 +1636,7 @@ pub struct QueryStats {
 ///     canister_history_size : nat;
 ///     wasm_chunk_store_size : nat;
 ///     snapshots_size : nat;
+///     log_memory_store_size : nat;
 ///   };
 ///   cycles : nat;
 ///   balance : vec record { blob; nat };
@@ -1585,8 +1707,10 @@ impl CanisterStatusResultV2 {
         memory_allocation: Option<u64>,
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
+        minimum_incoming_canister_call_cycles: u128,
         log_visibility: LogVisibilityV2,
         snapshot_visibility: SnapshotVisibility,
+        status_visibility: StatusVisibility,
         log_memory_limit: u64,
         idle_cycles_burned_per_day: u128,
         reserved_cycles: u128,
@@ -1627,8 +1751,10 @@ impl CanisterStatusResultV2 {
                 memory_allocation,
                 freezing_threshold,
                 reserved_cycles_limit,
+                minimum_incoming_canister_call_cycles,
                 log_visibility,
                 snapshot_visibility,
+                status_visibility,
                 log_memory_limit,
                 wasm_memory_limit,
                 wasm_memory_threshold,
@@ -1822,17 +1948,21 @@ pub enum CanisterInstallMode {
     Upgrade = 3,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, EnumString, Serialize,
+)]
 /// Wasm main memory retention on upgrades.
 /// Currently used to specify the persistence of Wasm main memory.
 pub enum WasmMemoryPersistence {
     /// Retain the main memory across upgrades.
     /// Used for enhanced orthogonal persistence, as implemented in Motoko
     #[serde(rename = "keep")]
+    #[strum(serialize = "keep")]
     Keep,
     /// Reinitialize the main memory on upgrade.
     /// Default behavior without enhanced orthogonal persistence.
     #[serde(rename = "replace")]
+    #[strum(serialize = "replace")]
     Replace,
 }
 
@@ -2151,8 +2281,8 @@ pub struct InstallCodeArgs {
 impl std::fmt::Display for InstallCodeArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "InstallCodeArgs {{")?;
-        writeln!(f, "  mode: {:?}", &self.mode)?;
-        writeln!(f, "  canister_id: {:?}", &self.canister_id)?;
+        writeln!(f, "  mode: {:?}", self.mode)?;
+        writeln!(f, "  canister_id: {:?}", self.canister_id)?;
         writeln!(f, "  wasm_module: <{:?} bytes>", self.wasm_module.len())?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
         writeln!(f, "}}")
@@ -2220,8 +2350,8 @@ pub struct InstallCodeArgsV2 {
 impl std::fmt::Display for InstallCodeArgsV2 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "InstallCodeArgsV2 {{")?;
-        writeln!(f, "  mode: {:?}", &self.mode)?;
-        writeln!(f, "  canister_id: {:?}", &self.canister_id)?;
+        writeln!(f, "  mode: {:?}", self.mode)?;
+        writeln!(f, "  canister_id: {:?}", self.canister_id)?;
         writeln!(f, "  wasm_module: <{:?} bytes>", self.wasm_module.len())?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
         writeln!(f, "}}")
@@ -2356,7 +2486,10 @@ pub struct EnvironmentVariable {
 ///   memory_allocation : opt nat;
 ///   freezing_threshold : opt nat;
 ///   reserved_cycles_limit : opt nat;
+///   minimum_incoming_canister_call_cycles : opt nat;
 ///   log_visibility : opt log_visibility;
+///   snapshot_visibility : opt snapshot_visibility;
+///   status_visibility : opt status_visibility;
 ///   log_memory_limit : opt nat;
 ///   wasm_memory_limit : opt nat;
 ///   wasm_memory_threshold : opt nat;
@@ -2370,8 +2503,10 @@ pub struct CanisterSettingsArgs {
     pub memory_allocation: Option<candid::Nat>,
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
+    pub minimum_incoming_canister_call_cycles: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibilityV2>,
     pub snapshot_visibility: Option<SnapshotVisibility>,
+    pub status_visibility: Option<StatusVisibility>,
     pub log_memory_limit: Option<candid::Nat>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
@@ -2390,8 +2525,10 @@ impl CanisterSettingsArgs {
             memory_allocation: None,
             freezing_threshold: None,
             reserved_cycles_limit: None,
+            minimum_incoming_canister_call_cycles: None,
             log_visibility: None,
             snapshot_visibility: None,
+            status_visibility: None,
             log_memory_limit: None,
             wasm_memory_limit: None,
             wasm_memory_threshold: None,
@@ -2407,8 +2544,10 @@ pub struct CanisterSettingsArgsBuilder {
     memory_allocation: Option<candid::Nat>,
     freezing_threshold: Option<candid::Nat>,
     reserved_cycles_limit: Option<candid::Nat>,
+    minimum_incoming_canister_call_cycles: Option<candid::Nat>,
     log_visibility: Option<LogVisibilityV2>,
     snapshot_visibility: Option<SnapshotVisibility>,
+    status_visibility: Option<StatusVisibility>,
     log_memory_limit: Option<candid::Nat>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
@@ -2428,8 +2567,10 @@ impl CanisterSettingsArgsBuilder {
             memory_allocation: self.memory_allocation,
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
+            minimum_incoming_canister_call_cycles: self.minimum_incoming_canister_call_cycles,
             log_visibility: self.log_visibility,
             snapshot_visibility: self.snapshot_visibility,
+            status_visibility: self.status_visibility,
             log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
@@ -2507,6 +2648,19 @@ impl CanisterSettingsArgsBuilder {
         }
     }
 
+    /// Sets the minimum number of cycles required for an incoming call from a different canister.
+    pub fn with_minimum_incoming_canister_call_cycles(
+        self,
+        minimum_incoming_canister_call_cycles: u128,
+    ) -> Self {
+        Self {
+            minimum_incoming_canister_call_cycles: Some(candid::Nat::from(
+                minimum_incoming_canister_call_cycles,
+            )),
+            ..self
+        }
+    }
+
     /// Sets the log visibility.
     pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
@@ -2519,6 +2673,14 @@ impl CanisterSettingsArgsBuilder {
     pub fn with_snapshot_visibility(self, snapshot_visibility: SnapshotVisibility) -> Self {
         Self {
             snapshot_visibility: Some(snapshot_visibility),
+            ..self
+        }
+    }
+
+    /// Sets the status visibility.
+    pub fn with_status_visibility(self, status_visibility: StatusVisibility) -> Self {
+        Self {
+            status_visibility: Some(status_visibility),
             ..self
         }
     }
@@ -2608,21 +2770,28 @@ impl<'a> Payload<'a> for CreateCanisterArgs {
 /// record {
 ///   node_ids : vec principal;
 ///   registry_version : nat64;
+///   subnet_id : opt principal;
 /// }
 /// ```
 #[derive(Debug, CandidType, Deserialize)]
 pub struct SetupInitialDKGArgs {
     node_ids: Vec<PrincipalId>,
     registry_version: u64,
+    subnet_id: Option<SubnetId>,
 }
 
 impl Payload<'_> for SetupInitialDKGArgs {}
 
 impl SetupInitialDKGArgs {
-    pub fn new(node_ids: Vec<NodeId>, registry_version: RegistryVersion) -> Self {
+    pub fn new(
+        node_ids: Vec<NodeId>,
+        registry_version: RegistryVersion,
+        subnet_id: Option<SubnetId>,
+    ) -> Self {
         Self {
             node_ids: node_ids.iter().map(|node_id| node_id.get()).collect(),
             registry_version: registry_version.get(),
+            subnet_id,
         }
     }
 
@@ -2641,6 +2810,10 @@ impl SetupInitialDKGArgs {
 
     pub fn get_registry_version(&self) -> RegistryVersion {
         RegistryVersion::new(self.registry_version)
+    }
+
+    pub fn get_subnet_id(&self) -> Option<SubnetId> {
+        self.subnet_id
     }
 }
 
@@ -2701,25 +2874,22 @@ impl SetupInitialDKGResponse {
 
 /// Types of curves that can be used for ECDSA signing.
 /// ```text
-/// variant { secp256k1; }
+/// variant { secp256k1; secp256r1; }
 /// ```
+///
+/// Must not implement `Hash`. `derive(Hash)` omitted the discriminant while
+/// there was one variant, so deriving now moves the `payload_hash` of every
+/// block naming an ECDSA key and old replicas reject it. A marker byte belongs
+/// in the enclosing type, which knows what follows it: see
+/// `impl Hash for EcdsaKeyId`.
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    Hash,
-    Debug,
-    CandidType,
-    Deserialize,
-    EnumIter,
-    Serialize,
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, EnumIter, Serialize,
 )]
 pub enum EcdsaCurve {
     #[serde(rename = "secp256k1")]
     Secp256k1,
+    #[serde(rename = "secp256r1")]
+    Secp256r1,
 }
 
 impl TryFrom<u32> for EcdsaCurve {
@@ -2728,6 +2898,7 @@ impl TryFrom<u32> for EcdsaCurve {
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(EcdsaCurve::Secp256k1),
+            1 => Ok(EcdsaCurve::Secp256r1),
             _ => Err(format!(
                 "{value} is not a recognized EcdsaCurve variant identifier."
             )),
@@ -2739,6 +2910,7 @@ impl From<&EcdsaCurve> for pb_types::EcdsaCurve {
     fn from(item: &EcdsaCurve) -> Self {
         match item {
             EcdsaCurve::Secp256k1 => pb_types::EcdsaCurve::Secp256k1,
+            EcdsaCurve::Secp256r1 => pb_types::EcdsaCurve::Secp256r1,
         }
     }
 }
@@ -2749,6 +2921,7 @@ impl TryFrom<pb_types::EcdsaCurve> for EcdsaCurve {
     fn try_from(item: pb_types::EcdsaCurve) -> Result<Self, Self::Error> {
         match item {
             pb_types::EcdsaCurve::Secp256k1 => Ok(EcdsaCurve::Secp256k1),
+            pb_types::EcdsaCurve::Secp256r1 => Ok(EcdsaCurve::Secp256r1),
             pb_types::EcdsaCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "EcdsaCurve",
                 err: format!("Unable to convert {item:?} to an EcdsaCurve"),
@@ -2769,6 +2942,7 @@ impl FromStr for EcdsaCurve {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "secp256k1" => Ok(Self::Secp256k1),
+            "secp256r1" => Ok(Self::Secp256r1),
             _ => Err(format!("{s} is not a recognized ECDSA curve")),
         }
     }
@@ -2780,12 +2954,27 @@ impl FromStr for EcdsaCurve {
 /// ```text
 /// record { curve : ecdsa_curve; name : text}
 /// ```
-#[derive(
-    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
-)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
 pub struct EcdsaKeyId {
     pub curve: EcdsaCurve,
     pub name: String,
+}
+
+/// `EcdsaCurve` cannot implement `Hash`; see the note there. `Secp256k1` writes
+/// nothing, matching the old derive, so existing key hashes are unchanged, and
+/// `0xfe` never begins a UTF-8 sequence so `name` cannot forge it. The
+/// destructuring and `&str` binding make a new field or a non-text `name` fail
+/// to compile rather than void that.
+impl Hash for EcdsaKeyId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let Self { curve, name } = self;
+        let name: &str = name.as_str();
+        match curve {
+            EcdsaCurve::Secp256k1 => {}
+            EcdsaCurve::Secp256r1 => 0xfe_u8.hash(state),
+        }
+        name.hash(state);
+    }
 }
 
 impl From<&EcdsaKeyId> for pb_types::EcdsaKeyId {
@@ -3569,7 +3758,7 @@ impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
 ///   end   : principal;
 /// }
 /// ```
-#[derive(Clone, Debug, PartialEq, CandidType, Deserialize)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterIdRange {
     pub start: CanisterId,
     pub end: CanisterId,
@@ -3593,7 +3782,9 @@ impl Payload<'_> for ListCanistersResponse {}
 pub enum QueryMethod {
     FetchCanisterLogs,
     CanisterStatus,
+    CanisterInfo,
     ListCanisters,
+    CanisterMetrics,
 }
 
 /// `CandidType` for `SubnetInfoArgs`
@@ -3623,6 +3814,52 @@ pub struct SubnetInfoResponse {
 }
 
 impl Payload<'_> for SubnetInfoResponse {}
+
+/// `CandidType` for `SubnetMetricsArgs`
+/// ```text
+/// record {
+///   subnet_id : principal;
+/// }
+/// ```
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct SubnetMetricsArgs {
+    pub subnet_id: PrincipalId,
+}
+
+impl Payload<'_> for SubnetMetricsArgs {}
+
+/// `CandidType` for `SubnetMetricsResponse`
+/// ```text
+/// record {
+///     block_height : nat;
+///     num_canisters : nat;
+///     canister_state_bytes : nat;
+///     consumed_cycles_total : nat;
+///     update_transactions_total : nat;
+///     million_round_instructions_total : nat;
+/// }
+/// ```
+///
+/// Freshness: only `block_height` is current as of the block in which the call is
+/// executed. The other five are read from `SystemMetadata::subnet_metrics`, which is
+/// written at the *end* of a round, so they are as of the end of the previous round
+/// — except `canister_state_bytes`, which message routing recomputes only every 10
+/// rounds (summing it over every canister is expensive and it need not be exact),
+/// so it can be up to ten rounds stale and reads as `0` for the first rounds after
+/// the subnet is created. All but `million_round_instructions_total` are the same
+/// values, with the same staleness, that `read_state` serves at
+/// `/subnet/<subnet_id>/metrics`; that field has no `read_state` counterpart.
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+pub struct SubnetMetricsResponse {
+    pub block_height: candid::Nat,
+    pub num_canisters: candid::Nat,
+    pub canister_state_bytes: candid::Nat,
+    pub consumed_cycles_total: candid::Nat,
+    pub update_transactions_total: candid::Nat,
+    pub million_round_instructions_total: candid::Nat,
+}
+
+impl Payload<'_> for SubnetMetricsResponse {}
 
 /// `CandidType` for `NodeMetricsHistoryArgs`
 /// ```text
@@ -3868,7 +4105,7 @@ impl UploadChunkArgs {
 ///   hash : blob;
 /// }
 /// ```
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
 pub struct ChunkHash {
     #[serde(with = "serde_bytes")]
     pub hash: Vec<u8>,
@@ -3918,9 +4155,9 @@ pub struct InstallChunkedCodeArgs {
 impl std::fmt::Display for InstallChunkedCodeArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "InstallChunkedCodeArgs {{")?;
-        writeln!(f, "  mode: {:?}", &self.mode)?;
-        writeln!(f, "  target_canister: {:?}", &self.target_canister)?;
-        writeln!(f, "  store_canister: {:?}", &self.store_canister)?;
+        writeln!(f, "  mode: {:?}", self.mode)?;
+        writeln!(f, "  target_canister: {:?}", self.target_canister)?;
+        writeln!(f, "  store_canister: {:?}", self.store_canister)?;
         writeln!(f, "  arg: <{:?} bytes>", self.arg.len())?;
         writeln!(f, "}}")
     }
@@ -4288,7 +4525,7 @@ pub type ListCanisterSnapshotResponse = Vec<CanisterSnapshotResponse>;
 impl Payload<'_> for ListCanisterSnapshotResponse {}
 
 /// An enum representing the possible values of a global variable.
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, EnumIter, CandidType)]
+#[derive(Copy, Clone, Debug, CandidType, Deserialize, EnumIter, Serialize)]
 pub enum Global {
     #[serde(rename = "i32")]
     I32(i32),
@@ -4413,7 +4650,7 @@ impl ReadCanisterSnapshotMetadataArgs {
 
 impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, EnumIter, Serialize)]
 pub enum SnapshotSource {
     #[serde(rename = "taken_from_canister")]
     TakenFromCanister(Reserved),
@@ -4510,7 +4747,7 @@ impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
 /// }
 /// ```
 
-#[derive(Clone, PartialEq, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct ReadCanisterSnapshotMetadataResponse {
     pub source: SnapshotSource,
     pub taken_at_timestamp: u64,
@@ -4541,7 +4778,7 @@ pub enum GlobalTimer {
 
 /// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
 #[derive(
-    Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, CandidType, Serialize, EnumIter,
+    Copy, Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, EnumIter, Serialize,
 )]
 pub enum OnLowWasmMemoryHookStatus {
     #[default]
@@ -4647,7 +4884,7 @@ impl TryFrom<pb_canister_state_bits::OnLowWasmMemoryHookStatus> for OnLowWasmMem
 /// }
 /// ```
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct ReadCanisterSnapshotDataArgs {
     pub canister_id: PrincipalId,
     pub snapshot_id: SnapshotId,
@@ -4678,7 +4915,7 @@ impl ReadCanisterSnapshotDataArgs {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub enum CanisterSnapshotDataKind {
     #[serde(rename = "wasm_module")]
     WasmModule { offset: u64, size: u64 },
@@ -4693,7 +4930,7 @@ pub enum CanisterSnapshotDataKind {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 
 /// Struct to encode/decode
 /// ```text
@@ -4740,7 +4977,7 @@ impl ReadCanisterSnapshotDataResponse {
 /// }
 /// ```
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct UploadCanisterSnapshotMetadataArgs {
     pub canister_id: PrincipalId,
     pub replace_snapshot: Option<SnapshotId>,
@@ -4807,7 +5044,7 @@ impl UploadCanisterSnapshotMetadataArgs {
 ///   snapshot_id : blob;
 /// }
 /// ```
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct UploadCanisterSnapshotMetadataResponse {
     pub snapshot_id: SnapshotId,
 }
@@ -4841,7 +5078,7 @@ impl UploadCanisterSnapshotMetadataResponse {
 /// }
 /// ```
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct UploadCanisterSnapshotDataArgs {
     pub canister_id: PrincipalId,
     pub snapshot_id: SnapshotId,
@@ -4876,7 +5113,7 @@ impl UploadCanisterSnapshotDataArgs {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub enum CanisterSnapshotDataOffset {
     #[serde(rename = "wasm_module")]
     WasmModule { offset: u64 },
@@ -4902,7 +5139,7 @@ pub enum CanisterSnapshotDataOffset {
 /// }
 /// ```
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct RenameCanisterArgs {
     pub canister_id: PrincipalId,
     pub rename_to: RenameToArgs,
@@ -4926,7 +5163,7 @@ impl RenameCanisterArgs {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct RenameToArgs {
     pub canister_id: PrincipalId,
     pub version: u64,
@@ -4938,6 +5175,95 @@ impl RenameToArgs {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
 }
+
+/// Struct to encode/decode
+/// ```text
+/// record {
+///  memory : nat;
+///  compute_allocation : nat;
+///  ingress_induction : nat;
+///  instructions : nat;
+///  request_and_response_transmission : nat;
+///  uninstall : nat;
+///  canister_creation : nat;
+///  http_outcalls : nat;
+///  burned_cycles : nat;
+/// }
+/// ```
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+pub struct CyclesConsumed {
+    memory: candid::Nat,
+    compute_allocation: candid::Nat,
+    ingress_induction: candid::Nat,
+    instructions: candid::Nat,
+    request_and_response_transmission: candid::Nat,
+    uninstall: candid::Nat,
+    canister_creation: candid::Nat,
+    http_outcalls: candid::Nat,
+    burned_cycles: candid::Nat,
+}
+
+impl CyclesConsumed {
+    pub fn new(
+        memory: NominalCycles,
+        compute_allocation: NominalCycles,
+        ingress_induction: NominalCycles,
+        instructions: NominalCycles,
+        request_and_response_transmission: NominalCycles,
+        uninstall: NominalCycles,
+        canister_creation: NominalCycles,
+        http_outcalls: NominalCycles,
+        burned_cycles: NominalCycles,
+    ) -> Self {
+        Self {
+            memory: candid::Nat::from(memory.get()),
+            compute_allocation: candid::Nat::from(compute_allocation.get()),
+            ingress_induction: candid::Nat::from(ingress_induction.get()),
+            instructions: candid::Nat::from(instructions.get()),
+            request_and_response_transmission: candid::Nat::from(
+                request_and_response_transmission.get(),
+            ),
+            uninstall: candid::Nat::from(uninstall.get()),
+            canister_creation: candid::Nat::from(canister_creation.get()),
+            http_outcalls: candid::Nat::from(http_outcalls.get()),
+            burned_cycles: candid::Nat::from(burned_cycles.get()),
+        }
+    }
+}
+
+impl Payload<'_> for CyclesConsumed {}
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+pub struct CanisterMetricsArgs {
+    canister_id: PrincipalId,
+}
+
+impl CanisterMetricsArgs {
+    pub fn new(canister_id: CanisterId) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}
+
+impl Payload<'_> for CanisterMetricsArgs {}
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+pub struct CanisterMetricsResult {
+    cycles_consumed: CyclesConsumed,
+}
+
+impl CanisterMetricsResult {
+    pub fn new(cycles_consumed: CyclesConsumed) -> Self {
+        Self { cycles_consumed }
+    }
+}
+
+impl Payload<'_> for CanisterMetricsResult {}
 
 #[cfg(test)]
 mod tests {
@@ -4971,8 +5297,46 @@ mod tests {
         for curve in EcdsaCurve::iter() {
             match curve {
                 EcdsaCurve::Secp256k1 => assert_eq!(EcdsaCurve::try_from(0).unwrap(), curve),
+                EcdsaCurve::Secp256r1 => assert_eq!(EcdsaCurve::try_from(1).unwrap(), curve),
             }
         }
+    }
+
+    #[test]
+    fn ecdsa_key_id_hash_is_stable_and_unforgeable() {
+        #[derive(Default)]
+        struct Recorder(Vec<u8>);
+        impl Hasher for Recorder {
+            fn write(&mut self, bytes: &[u8]) {
+                self.0.extend_from_slice(bytes);
+            }
+            fn finish(&self) -> u64 {
+                0
+            }
+        }
+        fn stream<T: Hash>(value: &T) -> Vec<u8> {
+            let mut recorder = Recorder::default();
+            value.hash(&mut recorder);
+            recorder.0
+        }
+        let key_id = |curve, name: &str| EcdsaKeyId {
+            curve,
+            name: name.to_string(),
+        };
+
+        // Every `payload_hash` naming an ECDSA key depends on this.
+        assert_eq!(
+            stream(&key_id(EcdsaCurve::Secp256k1, "key_1")),
+            stream(&"key_1")
+        );
+
+        // A name cannot forge the secp256r1 marker.
+        let secp256r1 = stream(&key_id(EcdsaCurve::Secp256r1, "key_1"));
+        assert_ne!(secp256r1, stream(&key_id(EcdsaCurve::Secp256k1, "key_1")));
+        assert_ne!(
+            secp256r1,
+            stream(&key_id(EcdsaCurve::Secp256k1, "\u{fe}key_1"))
+        );
     }
 
     #[test]

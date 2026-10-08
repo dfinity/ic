@@ -3,25 +3,6 @@ load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/tree_hash",
-    "@crate_index//:assert_matches",
-    "@crate_index//:proptest",
-    "@crate_index//:rand",
-    "@crate_index//:thiserror",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/test_utils/reproducible_rng",
-]
-
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:test-strategy",
-]
-
 rust_library(
     name = "test_utils",
     testonly = True,
@@ -32,12 +13,31 @@ rust_library(
         "//conditions:default": [],
     }),
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/tree_hash",
+        "@crate_index//:assert_matches",
+        "@crate_index//:proptest",
+        "@crate_index//:rand",
+        "@crate_index//:thiserror",
+    ],
 )
 
 rust_test_suite(
     name = "test_utils_integration",
     srcs = glob(["tests/**"]),
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":test_utils"],
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
+    deps = [
+        # Keep sorted.
+        ":test_utils",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/tree_hash",
+        "@crate_index//:assert_matches",
+        "@crate_index//:proptest",
+        "@crate_index//:rand",
+        "@crate_index//:thiserror",
+    ],
 )

@@ -1,0 +1,34 @@
+# Suppress clang's unused-argument warning for the toolchain's own
+# `--unwindlib=none` linker-driver flag. On rustc link invocations the flag is
+# a no-op (rustc passes -nodefaultlibs, so the driver never consults the
+# unwinder selection) and clang warns
+#   clang++: argument unused during compilation: '--unwindlib=none'
+# on every link, which rustc 1.97's linker_messages lint surfaces as a warning.
+# The flag is still needed on regular cc links (it keeps clang from linking a
+# libgcc_s/libunwind of its choosing), so it cannot be dropped; instead wrap
+# just this flag in clang's --start/--end-no-unused-arguments markers, which
+# silence the unused-argument warning for the enclosed arguments only. All
+# other linker messages (and unused-argument warnings for any other flag)
+# remain visible.
+# The warning is also reported upstream (through rust cc-crate build scripts,
+# which additionally apply the flag at compile time):
+# https://github.com/hermeticbuild/hermetic-llvm/issues/304
+# TODO: upstream this fix and drop the patch on the next version bump.
+--- a/toolchain/args/BUILD.bazel
++++ b/toolchain/args/BUILD.bazel
+@@ -902,7 +902,14 @@
+         # would result in a warning when targeting macOS.
+         "@platforms//os:macos": [],
+         # Will prevent clang from choosing which libunwind to link against.
+-        "//conditions:default": ["--unwindlib=none"],
++        # Wrapped in the no-unused-arguments markers: on rustc links (which
++        # pass -nodefaultlibs) the flag is unused and clang would otherwise
++        # warn on every link (surfaced by rustc's linker_messages lint).
++        "//conditions:default": [
++            "--start-no-unused-arguments",
++            "--unwindlib=none",
++            "--end-no-unused-arguments",
++        ],
+     }),
+ )
+ 

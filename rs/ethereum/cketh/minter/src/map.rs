@@ -59,6 +59,10 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
         self.by_key.is_empty()
     }
 
+    pub fn len(&self) -> usize {
+        self.by_key.len()
+    }
+
     pub fn try_insert(
         &mut self,
         key: Key,
@@ -176,7 +180,7 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
         Key: Clone,
     {
         let mut to_remove = Vec::new();
-        for (key, _alt_key) in self.by_key.iter() {
+        for key in self.by_key.keys() {
             if predicate(key) {
                 to_remove.push(key.clone());
             }

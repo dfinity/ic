@@ -225,7 +225,7 @@ impl RegistryCanister {
             },
             Err(error_string) => Err(ic_registry_transport::Error::UnknownError(format!(
                 "Error on registry_get_value_since: {} using agent {:?}",
-                error_string, &agent
+                error_string, agent
             ))),
         }
     }

@@ -63,7 +63,7 @@ impl fmt::Display for MalformedFsEncryptionPublicKeyError {
         write!(
             f,
             "The (forward-secure) encryption public key is malformed: {}",
-            &self.internal_error
+            self.internal_error
         )
     }
 }

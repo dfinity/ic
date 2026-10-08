@@ -35,6 +35,7 @@ use icrc_ledger_types::icrc1::{
 };
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use icrc_ledger_types::icrc21::errors::{ErrorInfo, Icrc21Error};
 use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
 use icrc_ledger_types::icrc21::requests::{
@@ -611,7 +612,7 @@ fn assert_candid_block_equals_icp_ledger_block(
     icp_ledger_blocks: Vec<Block>,
 ) {
     assert_eq!(candid_blocks.len(), icp_ledger_blocks.len());
-    for (cb, lb) in candid_blocks.into_iter().zip(icp_ledger_blocks.into_iter()) {
+    for (cb, lb) in candid_blocks.into_iter().zip(icp_ledger_blocks) {
         assert_eq!(
             cb.parent_hash.map(|x| x.to_vec()),
             lb.parent_hash.map(|x| x.as_slice().to_vec())
@@ -1209,9 +1210,8 @@ fn test_block_transformation() {
     assert_eq!(certificate_pre_upgrade, certificate_post_upgrade);
 
     //Go through all blocks and make sure the blocks fetched before the upgrade are the same as after the upgrade
-    for (block_pre_upgrade, block_post_upgrade) in resp_pre_upgrade
-        .into_iter()
-        .zip(resp_post_upgrade.into_iter())
+    for (block_pre_upgrade, block_post_upgrade) in
+        resp_pre_upgrade.into_iter().zip(resp_post_upgrade)
     {
         assert_eq!(block_pre_upgrade, block_post_upgrade);
         assert_eq!(
@@ -1425,6 +1425,31 @@ fn test_transfer_from_smoke() {
 #[test]
 fn test_transfer_from_self() {
     ic_ledger_suite_state_machine_tests::test_transfer_from_self(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_transfer_from_self_subaccount() {
+    ic_ledger_suite_state_machine_tests::test_transfer_from_self_subaccount(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+/// Unlike an ICRC ledger, this one requires an allowance to burn even when the spender is the
+/// account itself: `Operation::Burn` in `rs/ledger_suite/icp/src/lib.rs` checks one for any
+/// spender, though it exempts the self-spend when consuming one. Pinned rather than skipped, so
+/// that closing the gap is a visible change here.
+#[test]
+fn test_transfer_from_self_subaccount_burn() {
+    assert_eq!(
+        ic_ledger_suite_state_machine_tests::test_transfer_from_self_subaccount_burn(
+            ledger_wasm(),
+            encode_init_args,
+        ),
+        Err(TransferFromError::InsufficientAllowance {
+            allowance: Nat::from(0_u8)
+        })
+    );
 }
 
 #[test]
@@ -1964,9 +1989,9 @@ fn test_notify_caller_logging() {
     );
 
     // Verify that the ledger logged the caller of the notify method.
-    let log = env.canister_log(canister_id);
+    let log = env.canister_log_records(canister_id);
     let expected_log_entry = format!("notify method called by [{user1}]");
-    for record in log.records().iter() {
+    for record in log.iter() {
         let entry =
             String::from_utf8(record.content.clone()).expect("log entry should be a string");
         if entry.contains(&expected_log_entry) {

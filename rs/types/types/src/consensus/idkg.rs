@@ -3,11 +3,10 @@
 use crate::artifact::{IdentifiableArtifact, PbArtifact};
 pub use crate::consensus::idkg::common::{
     IDkgBlockReader, IDkgTranscriptAttributes, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
-    MaskedTranscript, PreSigId, PseudoRandomId, RandomTranscriptParams,
-    RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
-    TranscriptAttributes, TranscriptCastError, TranscriptLookupError, TranscriptParamsError,
-    TranscriptRef, UnmaskedTimesMaskedParams, UnmaskedTranscript,
-    unpack_reshare_of_unmasked_params,
+    MaskedTranscript, PreSigId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
+    ReshareOfMaskedParams, ReshareOfUnmaskedParams, TranscriptAttributes, TranscriptCastError,
+    TranscriptLookupError, TranscriptParamsError, TranscriptRef, UnmaskedTimesMaskedParams,
+    UnmaskedTranscript, unpack_reshare_of_unmasked_params,
 };
 use crate::consensus::idkg::ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation};
 use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
@@ -130,7 +129,7 @@ impl std::borrow::Borrow<MasterPublicKeyId> for IDkgMasterPublicKeyId {
 
 impl std::fmt::Display for IDkgMasterPublicKeyId {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(fmt, "{}", &self.0)
+        write!(fmt, "{}", self.0)
     }
 }
 
@@ -162,11 +161,8 @@ impl<'de> serde::Deserialize<'de> for IDkgMasterPublicKeyId {
 /// Common data that is carried in both `IDkgSummaryPayload` and `IDkgDataPayload`.
 /// published on every consensus round. It represents the current state of the
 /// protocol since the summary block.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, Hash, PartialEq, Debug, Deserialize, Serialize)]
 pub struct IDkgPayload {
-    /// Collection of completed signatures.
-    pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
-
     /// IDKG transcript Pre-Signatures that we can use to create threshold signatures.
     pub available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
 
@@ -202,7 +198,6 @@ impl IDkgPayload {
                 .map(|key_transcript| (key_transcript.key_id(), key_transcript))
                 .collect(),
             uid_generator: IDkgUIDGenerator::new(subnet_id, height),
-            signature_agreements: BTreeMap::new(),
             available_pre_signatures: BTreeMap::new(),
             pre_signatures_in_creation: BTreeMap::new(),
             idkg_transcripts: BTreeMap::new(),
@@ -233,8 +228,8 @@ impl IDkgPayload {
             .flat_map(MasterKeyTranscript::transcript_config_in_creation);
 
         self.pre_signatures_in_creation
-            .iter()
-            .flat_map(|(_, pre_sig)| pre_sig.iter_transcript_configs_in_creation())
+            .values()
+            .flat_map(|pre_sig| pre_sig.iter_transcript_configs_in_creation())
             .chain(key_transcripts)
             .chain(xnet_reshares_transcripts)
     }
@@ -245,8 +240,8 @@ impl IDkgPayload {
         &self,
     ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> + '_ {
         self.pre_signatures_in_creation
-            .iter()
-            .flat_map(|(_, pre_sig)| pre_sig.iter_transcript_configs_in_creation())
+            .values()
+            .flat_map(|pre_sig| pre_sig.iter_transcript_configs_in_creation())
     }
 
     /// Return an iterator of the ongoing xnet reshare transcripts on the source side.
@@ -313,7 +308,9 @@ impl IDkgPayload {
     }
 
     /// Updates the height of all the transcript refs to the given height.
-    pub fn update_refs(&mut self, height: Height) {
+    pub fn update_refs(&mut self, height: Height) -> Result<(), IDkgTranscriptIdError> {
+        self.uid_generator.update_height(height)?;
+
         for obj in self.available_pre_signatures.values_mut() {
             obj.update(height);
         }
@@ -324,8 +321,10 @@ impl IDkgPayload {
             obj.as_mut().update(height);
         }
         for obj in self.key_transcripts.values_mut() {
-            obj.update_refs(height)
+            obj.update_refs(height);
         }
+
+        Ok(())
     }
 
     /// Return the oldest registry version required to keep nodes in the subnet
@@ -889,7 +888,7 @@ impl IDkgMessage {
         }
     }
 
-    pub fn sig_share_dedup_key(&self) -> Option<(RequestId, NodeId)> {
+    pub fn sig_share_request_id_and_signer(&self) -> Option<(RequestId, NodeId)> {
         match self {
             IDkgMessage::EcdsaSigShare(x) => Some((x.request_id, x.signer_id)),
             IDkgMessage::SchnorrSigShare(x) => Some((x.request_id, x.signer_id)),
@@ -1671,14 +1670,14 @@ impl Display for SignedIDkgComplaint {
 }
 
 impl SignedBytesWithoutDomainSeparator for IDkgComplaintContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
 impl SignedBytesWithoutDomainSeparator for SignedIDkgComplaint {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
@@ -1748,14 +1747,14 @@ impl Display for SignedIDkgOpening {
 }
 
 impl SignedBytesWithoutDomainSeparator for IDkgOpeningContent {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
 impl SignedBytesWithoutDomainSeparator for SignedIDkgOpening {
-    fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
-        serde_cbor::to_vec(&self).unwrap()
+    fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
+        serde_cbor::to_writer(bytes, &self).unwrap();
     }
 }
 
@@ -1835,19 +1834,6 @@ pub type Payload = Option<IDkgPayload>;
 
 impl From<&IDkgPayload> for pb::IDkgPayload {
     fn from(payload: &IDkgPayload) -> Self {
-        // signature_agreements
-        let mut signature_agreements = Vec::new();
-        for (pseudo_random_id, completed) in &payload.signature_agreements {
-            let unreported = match completed {
-                CompletedSignature::Unreported(response) => Some(response.into()),
-                CompletedSignature::ReportedToExecution => None,
-            };
-            signature_agreements.push(pb::CompletedSignature {
-                pseudo_random_id: pseudo_random_id.to_vec(),
-                unreported,
-            });
-        }
-
         let mut available_pre_signatures = Vec::new();
         for (pre_sig_id, pre_sig) in &payload.available_pre_signatures {
             available_pre_signatures.push(pb::AvailablePreSignature {
@@ -1906,7 +1892,6 @@ impl From<&IDkgPayload> for pb::IDkgPayload {
             .collect();
 
         Self {
-            signature_agreements,
             available_pre_signatures,
             pre_signatures_in_creation,
             next_unused_transcript_id,
@@ -1928,30 +1913,6 @@ impl TryFrom<pb::IDkgPayload> for IDkgPayload {
             let key_transcript = MasterKeyTranscript::try_from(key_transcript_proto)?;
 
             key_transcripts.insert(key_transcript.key_id(), key_transcript);
-        }
-
-        let mut signature_agreements = BTreeMap::new();
-        for completed_signature in payload.signature_agreements {
-            let pseudo_random_id = {
-                if completed_signature.pseudo_random_id.len() != 32 {
-                    return Err(ProxyDecodeError::Other(
-                        "Expects 32 bytes of pseudo_random_id".to_string(),
-                    ));
-                }
-
-                let mut x = [0; 32];
-                x.copy_from_slice(&completed_signature.pseudo_random_id);
-                x
-            };
-
-            let signature = if let Some(unreported) = completed_signature.unreported {
-                let response = crate::batch::ConsensusResponse::try_from(unreported)?;
-                CompletedSignature::Unreported(response)
-            } else {
-                CompletedSignature::ReportedToExecution
-            };
-
-            signature_agreements.insert(pseudo_random_id, signature);
         }
 
         // available_pre_signatures
@@ -2030,7 +1991,6 @@ impl TryFrom<pb::IDkgPayload> for IDkgPayload {
         }
 
         Ok(Self {
-            signature_agreements,
             available_pre_signatures,
             pre_signatures_in_creation,
             idkg_transcripts,

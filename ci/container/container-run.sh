@@ -1,39 +1,34 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-## This script only supports podman as container runtime
+## Supports two container runtimes, selected via the CONTAINER_RUNTIME env var:
+## 'podman' (default, rootful & privileged) and 'docker' (using docker daemon).
 
 eprintln() {
     echo "$@" >&2
 }
 
-if [ -n "${IN_NIX_SHELL:-}" ]; then
-    eprintln "Please do not run $0 inside of nix-shell."
-    exit 1
-fi
+# Print a yellow, bold message
+warn() {
+    tput -T xterm setaf 3 >&2
+    tput -T xterm bold >&2
+    eprintln "$@"
+    tput -T xterm sgr0 >&2
+}
 
-if [ -e /run/.containerenv ]; then
-    eprintln "Nested $0 is not supported."
+# Container runtime to use: 'podman' (default) or 'docker'.
+RUNTIME="${CONTAINER_RUNTIME:-podman}"
+if [ "$RUNTIME" != podman ] && [ "$RUNTIME" != docker ]; then
+    eprintln "Unsupported CONTAINER_RUNTIME '$RUNTIME' (expected 'podman' or 'docker')."
     exit 1
 fi
-
-if ! which podman >/dev/null 2>&1; then
-    eprintln "Podman needs to be installed to run this script."
-    exit 1
-fi
-
-# Verify podman is reachable/responding
-if ! podman info >/dev/null 2>&1; then
-    eprintln "Podman found but not responding (daemon/service not running or not reachable)."
-    exit 1
-fi
+eprintln "Using container runtime '$RUNTIME'"
 
 usage() {
     cat <<EOF
 Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
 
     -c | --cache-dir <dir>  Bind-mount custom cache dir instead of '~/.cache'
-    -r | --rebuild          Rebuild the container image
     -i | --image <image>    ic-build or ic-dev (default: ic-dev)
     -h | --help             Print help
 
@@ -46,48 +41,35 @@ To run a different shell or command, pass it as arguments, e.g.:
 EOF
 }
 
-REBUILD_IMAGE=false
+if [ -e /run/.containerenv ]; then
+    eprintln "Nested $0 is not supported."
+    exit 1
+fi
+
 IMAGE_NAME="ic-dev"
 
-CTR=0
-while test $# -gt $CTR; do
+while [[ $# -gt 0 ]]; do
     case "$1" in
         -h | --help) usage && exit 0 ;;
-        -f | --full) eprintln "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
-        -r | --rebuild)
-            REBUILD_IMAGE=true
-            shift
-            ;;
         -i | --image)
-            shift
-            if [ $# -eq 0 ]; then
-                echo "Error: --image requires an argument" >&2
-                usage >&2
-                exit 1
-            fi
-            IMAGE_NAME="$1"
+            IMAGE_NAME="${2:?missing value for "$1"}"
+            shift # shift past flag and value
             shift
             ;;
         -c | --cache-dir)
-            if [[ $# -gt "$CTR + 1" ]]; then
-                if [ ! -d "$2" ]; then
-                    eprintln "$2 is not a directory! Create it and try again."
-                    usage && exit 1
-                fi
-                CACHE_DIR="$2"
-                eprintln "Bind-mounting $CACHE_DIR as cache directory."
-            else
-                eprintln "Missing argument for -c | --cache-dir!"
-                usage && exit 1
-            fi
-            shift
+            CACHE_DIR="${2:?missing value for "$1"}"
+            shift # shift past flag and value
             shift
             ;;
-        *) let CTR=CTR+1 ;;
+        *)
+            # found unknown argument; assume the rest is a user-supplied command to run
+            cmd=("$@")
+            break
+            ;;
     esac
 done
 
-if [ $# -eq 0 ]; then
+if [ -z "${cmd:-}" ]; then
     # if no command is specified, create an shell
     if [ -z "${USHELL:-}" ] || [ "$USHELL" == "bash" ]; then
         # bit of a hack: we source the completion by passing it as an rcfile.
@@ -98,136 +80,245 @@ if [ $# -eq 0 ]; then
     else
         cmd=("$USHELL")
     fi
-else
-    cmd=("$@")
 fi
-echo "Using ${cmd[*]} as run command."
+eprintln "Using '${cmd[*]}' as run command."
 
 # Detect environment
 if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
-    echo "Detected Devenv environment."
+    eprintln "Detected Devenv environment."
     DEVENV=true
 else
     DEVENV=false
 fi
 
-if [ "$DEVENV" = true ]; then
-    echo "Using hoststorage for podman root."
+if [ "$RUNTIME" = docker ]; then
+    CONTAINER_CMD=(docker)
+elif [ "$DEVENV" = true ]; then
     CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
 else
     CONTAINER_CMD=(sudo podman)
 fi
 
-echo "Using container command: ${CONTAINER_CMD[*]}"
+eprintln "Using container command: '${CONTAINER_CMD[*]}'"
+
+# Verify podman is reachable/responding
+if ! "${CONTAINER_CMD[@]}" info >/dev/null 2>&1; then
+    warn "No container runtime, check the command is installed and working:"
+    warn "> ${CONTAINER_CMD[*]}"
+    exit 1
+fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 IMAGE="ghcr.io/dfinity/$IMAGE_NAME:$IMAGE_TAG"
 
-if [ $REBUILD_IMAGE = true ]; then
-    "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
-elif ! "${CONTAINER_CMD[@]}" image exists $IMAGE; then
-    if ! "${CONTAINER_CMD[@]}" pull $IMAGE; then
+# Check for a locally-available image (podman has `image exists`; docker doesn't,
+# so use `image inspect`) and pull or build it if it's missing.
+if [ "$RUNTIME" = docker ]; then
+    image_exists_cmd=("${CONTAINER_CMD[@]}" image inspect "$IMAGE")
+else
+    image_exists_cmd=("${CONTAINER_CMD[@]}" image exists "$IMAGE")
+fi
+if ! "${image_exists_cmd[@]}" >/dev/null 2>&1; then
+    if ! "${CONTAINER_CMD[@]}" pull "$IMAGE"; then
         "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
     fi
 fi
 
-if [ "$DEVENV" = true ]; then
-    eprintln "Purging non-relevant container images"
-    "${CONTAINER_CMD[@]}" image prune -a -f --filter "reference!=$IMAGE"
+# On the devenv we issue a warning if the images start taking up a lot of space.
+# Podman does not have a dedicated layer cache like docker, so we avoid nuking dangling/unused images unless space becomes a concern;
+# this allows new image builds to benefit from cached layers.
+# We only issue a warning so that the user can GC when it's most convenient.
+# This is podman-specific: docker manages its own layer cache and reports image
+# sizes in a different JSON shape (a stream of objects without a RawSize field),
+# so we skip the check under docker.
+if [ "$DEVENV" = true ] && [ "$RUNTIME" = podman ]; then
+    MAX_GB=20
+    images_rawsize=$("${CONTAINER_CMD[@]}" system df --format json | jq -cMr '.[]|select(.Type == "Images")|.RawSize')
+    if ((images_rawsize > MAX_GB * 10 ** 9)); then
+        warn "Container images take up more than ${MAX_GB}GB. You can reclaim space by clearing the container image cache (will cause a rebuild):"
+        warn "> ${CONTAINER_CMD[*]} image prune --all --force --filter containers=false"
+    fi
 fi
 
-WORKDIR="/ic"
-USER=$(whoami)
+# Mount the checkout at the same (canonical, symlink-resolved) absolute path
+# it has on the host, and use it as the working directory. This
+# - gives every checkout its own default bazel output base
+#   ($CTR_CACHE_DIR/bazel/_bazel_$CTR_USER/<md5 of the workspace path>) while
+#   the install base, repository cache and repo contents cache in the shared
+#   output_user_root stay shared. Bazel cannot recognize a server that runs in
+#   another container (separate PID namespaces), so two containers on one
+#   output base kill each other's server ("Server terminated abruptly (error
+#   code: 14 ...)");
+# - makes the absolute `gitdir:` pointers of linked git worktrees resolve
+#   (together with the GIT_COMMON_DIR mount below);
+# - keeps host paths valid inside the container.
+# The VS Code devcontainer (.devcontainer/devcontainer.json) mounts the
+# checkout the same way but pins its own output base, so the two never share
+# one.
+WORKDIR="$REPO_ROOT"
 
-PODMAN_RUN_ARGS=(
+# the docker image creates two users: ubuntu (1000) and buildifier (1001). Here we ensure the correct home is used.
+HOST_UID="$(id -u)"
+if [ "$HOST_UID" = "1000" ]; then
+    CTR_USER="ubuntu"
+    CTR_HOME="/home/ubuntu"
+elif [ "$HOST_UID" = "1001" ]; then
+    CTR_USER="buildifier"
+    CTR_HOME="/home/buildifier"
+else
+    warn "User ID '$HOST_UID' does not have a corresponding container user, using root"
+    CTR_USER="root"
+    CTR_HOME="/root"
+fi
+
+eprintln "Using container user '$CTR_USER'"
+# cache directory in the container
+CTR_CACHE_DIR="$CTR_HOME/.cache"
+
+# cache directory on the host
+# NOTE: in devenvs, ~/.cache is `/hoststorage/cache`
+CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
+
+# make sure we have all bind-mounts
+# ~/.aws, ~/.ssh: credentials forwarded to the container
+# $CACHE_DIR (~/.cache or -c/--cache-dir): caches persisted across containers (bazel, cargo, etc)
+# ~/.claude: persisted claude settings
+mkdir -p ~/.{aws,ssh,claude} "$CACHE_DIR"
+
+RUNTIME_RUN_ARGS=(
     -w "$WORKDIR"
     --rm              # remove container after it ran
     --log-driver=none # by default podman logs all of stdout to the journal which is resource-consuming and wasteful
 
-    -u "ubuntu:ubuntu"
-    -e HOSTUSER="$USER"
+    --user "$CTR_USER:$CTR_USER" # user, assuming it has a corresponding group
+
+    # metadata used by system tests for logging
+    -e HOSTUSER="$(whoami)"
     -e HOSTHOSTNAME="$HOSTNAME"
-    -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
+
+    # colored output for cargo & friends
+    # (forward host values)
     -e TERM
     -e LANG=C.UTF-8
     -e CARGO_TERM_COLOR
+
     --hostname=devenv-container
     --add-host devenv-container:127.0.0.1
-    --entrypoint=
+
+    # ensures processes are reaped correctly
     --init
-    --pull=missing
+
+    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"       # the checkout, at its host path
+    --mount type=bind,source="${CACHE_DIR}",target="${CTR_CACHE_DIR}" # persisted root for caches (cargo, etc)
+
+    # mount credentials & settings
+    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
+    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
+    --mount type=bind,source="${HOME}/.claude",target="${CTR_HOME}/.claude"
+
+    --mount type=tmpfs,target="/tmp/containers" # expected by ic-os build
 )
 
-PODMAN_RUN_ARGS+=(--hostuser="$USER")
+# Inside a container `git worktree list` reports worktrees other than the
+# current one as "prunable" because their host checkouts are not mounted, so
+# never run `git worktree prune|repair|move|remove` in a container. For the
+# same reason gc's automatic worktree pruning is disabled in every container,
+# not only when started from a linked worktree: `git gc --auto` in a
+# main-checkout container could otherwise prune host worktrees idle for longer
+# than gc.worktreePruneExpire (default: 3 months).
+RUNTIME_RUN_ARGS+=(
+    -e GIT_CONFIG_COUNT=1
+    -e GIT_CONFIG_KEY_0=gc.worktreePruneExpire
+    -e GIT_CONFIG_VALUE_0=never
+)
 
-if [ "$(id -u)" = "1000" ]; then
-    CTR_HOME="/home/ubuntu"
-else
-    CTR_HOME="/ic"
+# Support linked git worktrees (`git worktree add`).
+#
+# A linked worktree's .git is a file pointing into the main repository's .git
+# directory on the host, which is not otherwise visible in the container, so
+# git (and everything that uses it: --config=stamped, rust-lint.sh, ic-admin's
+# build script under cargo, ...) would fail with "not a git repository".
+# Bind-mount the common git dir at its host path so that the pointer resolves.
+GIT_COMMON_DIR="$(cd "$REPO_ROOT" && realpath "$(git rev-parse --git-common-dir)")"
+if [ "$GIT_COMMON_DIR" != "$REPO_ROOT/.git" ]; then
+    eprintln "Detected linked git worktree; mounting '$GIT_COMMON_DIR'"
+    RUNTIME_RUN_ARGS+=(--mount type=bind,source="$GIT_COMMON_DIR",target="$GIT_COMMON_DIR")
 fi
 
-CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
+# Privilege/isolation flags required by the IC-OS guest build, per runtime.
+if [ "$RUNTIME" = docker ]; then
+    # Under docker the IC-OS build runs (rootless) podman *inside* this
+    # container. That nested podman needs: /dev/fuse for fuse-overlayfs storage;
+    # unconfined seccomp/apparmor and disabled labeling for its syscalls; an
+    # unmasked /proc (systempaths=unconfined) so it can mount its own procfs;
+    # CAP_SYS_ADMIN so newuidmap can set up the nested user namespace; and host
+    # networking so the inner build reaches the registry. This is much narrower
+    # than the --privileged podman uses below.
+    #
+    # /dev/kvm and /dev/net/tun are additionally required by the local
+    # system-test backend (the `_local` tests; see
+    # rs/tests/driver/src/driver/local_backend.rs): it boots QEMU VMs (/dev/kvm)
+    # and creates a per-group Linux bridge and per-VM TAP devices (`ip tuntap
+    # add`, which opens /dev/net/tun). It does the latter inside a private
+    # user+network namespace it unshares itself, gaining CAP_NET_ADMIN over that
+    # namespace with no capability added to the container (the unprivileged
+    # userns nesting is already permitted here) -- so no --cap-add NET_ADMIN.
+    RUNTIME_RUN_ARGS+=(
+        --device /dev/fuse
+        --device /dev/kvm
+        --device /dev/net/tun
+        --security-opt seccomp=unconfined
+        --security-opt apparmor=unconfined
+        --security-opt label=disable
+        --security-opt systempaths=unconfined
+        --cap-add SYS_ADMIN
+        --network=host
+    )
+else
+    # Privileged rootful podman is required due to requirements of IC-OS guest build;
+    # additionally, we need to use hosts's cgroups and network.
+    #
+    # `--pids-limit=-1` turns into `--pids-limit=1` somewhere down the podman -> runc
+    # stack, so use a very high positive limit instead.
+    RUNTIME_RUN_ARGS+=(--pids-limit=4194304 --privileged --network=host --cgroupns=host)
+fi
 
-ZIG_CACHE="${CACHE_DIR}/zig-cache"
-mkdir -p "${ZIG_CACHE}"
-
-ICT_TESTNETS_DIR="/tmp/ict_testnets"
-mkdir -p "${ICT_TESTNETS_DIR}"
-
-# make sure we have all bind-mounts
-mkdir -p ~/.{aws,ssh,cache,claude}
-
-PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
-    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
-    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache"
-    --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}"
-    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
-    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
-    --mount type=bind,source="${HOME}/.claude",target="${CTR_HOME}/.claude"
-    --mount type=tmpfs,target="/tmp/containers"
-)
-
-if [ "$(id -u)" = "1000" ]; then
+# In the devenv, inject some extra files into the container for convenience
+if [ "$DEVENV" = true ]; then
     if [ -e "${HOME}/.gitconfig" ]; then
-        PODMAN_RUN_ARGS+=(
+        RUNTIME_RUN_ARGS+=(
             --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig"
         )
     fi
 
     if [ -e "${HOME}/.bash_history" ]; then
-        PODMAN_RUN_ARGS+=(
+        RUNTIME_RUN_ARGS+=(
             --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
         )
 
     fi
     if [ -e "${HOME}/.local/share/fish" ]; then
-        PODMAN_RUN_ARGS+=(
+        RUNTIME_RUN_ARGS+=(
             --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish"
         )
     fi
     if [ -e "${HOME}/.zsh_history" ]; then
-        PODMAN_RUN_ARGS+=(
+        RUNTIME_RUN_ARGS+=(
             --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
         )
     fi
-    if findmnt /hoststorage >/dev/null; then
-        # use host's storage for cargo target
-        # * shared with VSCode's devcontainer, see .devcontainer/devcontainer.json
-        # this configuration improves performance of rust-analyzer
-        if [ ! -d /hoststorage/cache/cargo ]; then
-            sudo mkdir -p /hoststorage/cache/cargo
-            sudo chown -R 1000:1000 /hoststorage/cache/cargo
-        fi
-        PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
-        )
-    fi
+
+    # persist cargo target across containers
+    # * shared with VSCode's devcontainer, see .devcontainer/devcontainer.json
+    # this configuration improves performance of rust-analyzer
+    RUNTIME_RUN_ARGS+=(
+        -e CARGO_TARGET_DIR="$CTR_CACHE_DIR/cargo"
+    )
 fi
 
 if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
-    PODMAN_RUN_ARGS+=(
+    RUNTIME_RUN_ARGS+=(
         -v "$SSH_AUTH_SOCK:/ssh-agent"
         -e SSH_AUTH_SOCK="/ssh-agent"
     )
@@ -237,25 +328,18 @@ fi
 
 # if a user is attached, make it interactive and create tty
 if tty >/dev/null 2>&1; then
-    PODMAN_RUN_ARGS+=(-i -t)
+    RUNTIME_RUN_ARGS+=(-i -t)
 fi
-
-# Privileged rootful podman is required due to requirements of IC-OS guest build;
-# additionally, we need to use hosts's cgroups and network.
-PODMAN_RUN_ARGS+=(--pids-limit=-1 --privileged --network=host --cgroupns=host)
 
 if [ -f "$HOME/.container-run.conf" ]; then
     # conf file with user's custom PODMAN_RUN_USR_ARGS
     # This file is very handy but is a source of non-hermeticity, and issues
     # related to it are hard to track down so we print a bold yellow message
     # when it is in use.
-    tput -T xterm setaf 3
-    tput -T xterm bold
-    eprintln "Sourcing user's ~/.container-run.conf"
-    tput -T xterm sgr0
+    warn "Sourcing user's ~/.container-run.conf"
     source "$HOME/.container-run.conf"
-    PODMAN_RUN_ARGS+=("${PODMAN_RUN_USR_ARGS[@]}")
+    RUNTIME_RUN_ARGS+=("${PODMAN_RUN_USR_ARGS[@]}")
 fi
 
 set -x
-exec "${CONTAINER_CMD[@]}" run "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
+exec "${CONTAINER_CMD[@]}" run "${RUNTIME_RUN_ARGS[@]}" "$IMAGE" "${cmd[@]}"

@@ -57,7 +57,7 @@ pub struct MemoryModifications {
     pub size: NumWasmPages,
 }
 
-#[derive(Serialize, Default, Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct StateModifications {
     /// Modifications in the execution state of the canister.
     ///
@@ -73,7 +73,7 @@ pub struct StateModifications {
     pub system_state_modifications: SystemStateModifications,
 }
 
-#[derive(Serialize, Debug, Deserialize, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionStateModifications {
     /// The state of the global variables after execution.
     pub globals: Vec<Global>,

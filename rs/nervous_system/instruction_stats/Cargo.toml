@@ -6,6 +6,6 @@ edition = { workspace = true }
 [dependencies]
 ic-nervous-system-histogram = { path = "../histogram" }
 ic-cdk = { workspace = true }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }

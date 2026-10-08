@@ -1,4 +1,4 @@
-//! The [ICRC-21](https://github.com/dfinity/wg-identity-authentication/blob/main/topics/ICRC-21/icrc_21_consent_msg.md)
+//! The [ICRC-21](https://github.com/dfinity/ICRC/blob/main/ICRCs/ICRC-21/ICRC-21.md)
 //! Canister Call Consent Messages standard.
 
 pub mod errors;

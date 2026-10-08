@@ -14,7 +14,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:ac24f205995a1c36921bb8606e0ee16b8b26d73be7dd0cac786c6882f3569680
+      image: ghcr.io/dfinity/ic-build@sha256:0b6a915e614105c632a0c7a0f6e530ed506decfbd0316b297b28e9c555c532a2
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 720 # 12 hours
@@ -27,14 +27,15 @@ jobs:
       - &backup-pod-access
         name: Set up backup pod access
         run: |
-          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
-          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-            eval "$(ssh-agent -s)"
-            ssh-add - <<'EOF'
+          # Start a dedicated ssh-agent with an explicit socket path under /tmp (outside ~/.ssh, so it
+          # survives the `rm -rf ~/.ssh` below) and load the backup-pod private key so CI can SSH into
+          # the backup pod. We don't reuse any pre-existing agent because its socket may live under
+          # ~/.ssh (as in the 26.04 image) and would be removed below.
+          eval "$(ssh-agent -s -a /tmp/backup-pod-agent.sock)"
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          ssh-add - <<'EOF'
           ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
           EOF
-            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
-          fi
 
           rm -rf ~/.ssh
           mkdir -p ~/.ssh
@@ -52,72 +53,45 @@ jobs:
               --keep_going --test_timeout=43200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-# the main purpose of bazel-build-all-no-cache is to detect dead URLS of external dependencies, the actual build of the ic is tested in build-ic
-# we've moved it to schedule-daily because the ubuntu servers frequently return 503 errors and we don't want this job blocking releases
-  bazel-build-all-no-cache:
-    name: Bazel Build All No Cache
-    runs-on: *dind-large-setup
+  nns-recovery-mainnet-state:
+    name: Bazel Test NNS Recovery with Mainnet State
+    runs-on:
+      group: zh1
+      labels: dind-large
     container: *container-setup
-    timeout-minutes: 90
-    steps:
-      - *checkout
-      - uses: ./.github/actions/netrc
-      - name: Run Bazel Build All No Cache
-        uses: ./.github/actions/bazel
-        with:
-          run: bazel build --config=stamped --config=local //...
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-
-  bazel-test-bare-metal:
-    name: Bazel Test Bare Metal
-    runs-on: *dind-large-setup
-    container: *container-setup
+    timeout-minutes: 130
     environment: Nightly Tests
     steps:
       - *checkout
-      - name: Run Bazel Launch Bare Metal
-        shell: bash
-        run: |
-          echo "$ZH2_DLL01_INI_SECRET" > file1
-          echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
-
-          launch_bare_metal() {
-
-            # shellcheck disable=SC2046,SC2086
-            bazel --output_base=/var/tmp/bazel-output run \
-              //ic-os/setupos/envs/dev:launch_bare_metal -- \
-                --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
-                --ini_filename "$(realpath file1)" \
-                --file_share_ssh_key "$(realpath file2)" \
-                --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
-                --file_share_username ci_interim \
-                --ci_mode \
-                $@
-          }
-
-          # Run bare metal installation test
-          launch_bare_metal --hsm
-
-          # Run bare metal node performance benchmarks
-          launch_bare_metal --benchmark
-
-          # Run bare metal node hostOS metrics check
-          launch_bare_metal --check_hostos_metrics
-
-          # Run SEV tests
-          bazel test //rs/tests/nested:guestos_upgrade_from_latest_release_to_current_sev --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-          bazel test //rs/tests/nested:sev_recovery --test_env=BARE_METAL_HOST_SECRETS="$(realpath file1)"
-
-          bazel clean
+      - uses: ./.github/actions/netrc
+      - *backup-pod-access
+      - name: Run NNS Recovery Test with Mainnet State
+        if: false # TODO: Re-enable once #11768 reaches mainnet NNS
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            bazel test \
+              --config=stamped \
+              //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state_farm_colocate \
+              --keep_going --test_timeout=7200
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        # Also notify when the job is cancelled: exceeding the job's `timeout-minutes`
+        # cancels the job rather than failing it, so `failure()` alone would silently
+        # skip the notification on a timeout.
+        if: failure() || cancelled()
+        with:
+          channel-id: eng-consensus-test-failures
+          slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
         env:
-          ZH2_DLL01_INI_SECRET: "${{ secrets.ZH2_DLL01_INI_SECRET }}"
-          ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
 
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
     runs-on: *dind-large-setup
     container: *container-setup
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment: Nightly Tests
     steps:
       - *checkout
@@ -129,6 +103,7 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
+              --config=flaky_retry \
               --test_tag_filters=nns_tests_nightly \
               //... \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
@@ -138,7 +113,7 @@ jobs:
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         if: failure()
         with:
-          channel-id: eng-nns
+          channel-id: eng-nns-alerts
           slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}

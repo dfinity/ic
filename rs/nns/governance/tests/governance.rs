@@ -59,10 +59,10 @@ use ic_nns_governance::{
     pb::v1::{
         AddOrRemoveNodeProvider, Ballot, BallotInfo, CreateServiceNervousSystem, Empty,
         ExecuteNnsFunction, Followees, GovernanceError, IdealMatchedParticipationFunction,
-        InstallCode, KnownNeuron, KnownNeuronData, ManageNeuron, MonthlyNodeProviderRewards,
-        Motion, NetworkEconomics, NeuronType, NeuronsFundData, NeuronsFundEconomics,
-        NeuronsFundMatchedFundingCurveCoefficients, NeuronsFundParticipation, NeuronsFundSnapshot,
-        NnsFunction, NodeProvider, Proposal, ProposalData,
+        InstallCode, KnownNeuron, KnownNeuronData, ManageNeuron, MaturityModulation,
+        MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronType, NeuronsFundData,
+        NeuronsFundEconomics, NeuronsFundMatchedFundingCurveCoefficients, NeuronsFundParticipation,
+        NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal, ProposalData,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -2627,7 +2627,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     );
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     let expected_initial_event = RewardEvent {
         day_after_genesis: 0,
@@ -2850,7 +2850,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     );
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     run_pending_timers().await;
     // Initial reward event
@@ -3206,7 +3206,7 @@ async fn test_reward_distribution_skips_deleted_neurons() {
 
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     // Make sure that the fixture function indeed did not create a neuron 999.
     assert_matches!(gov.neuron_store.with_neuron(&NeuronId { id: 999 }, |n| n.clone()).map_err(|e| {
@@ -3286,7 +3286,7 @@ async fn test_genesis_in_the_future_is_supported() {
     );
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     gov.run_periodic_tasks().now_or_never();
     // At genesis, we should create an empty reward event
@@ -3521,7 +3521,7 @@ fn compute_maturities(
     );
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     let expected_initial_event = RewardEvent {
         day_after_genesis: 0,
@@ -5723,6 +5723,14 @@ fn run_periodic_tasks_often_enough_to_update_maturity_modulation(gov: &mut Gover
     for _i in 0..5 {
         gov.run_periodic_tasks().now_or_never();
     }
+    // The CMC periodic task populates `cached_daily_maturity_modulation_basis_points`, but the
+    // XRC-fed `maturity_modulation` field that spawning and disbursement now read isn't populated
+    // in unit tests (no XRC mock). Set it directly so consumers see a value consistent with
+    // the FakeDriver's 100 bp.
+    gov.heap_data.maturity_modulation = Some(MaturityModulation {
+        current_value_permyriad: Some(100),
+        updated_at_days_since_epoch: Some(gov.env.now() / ONE_DAY_SECONDS),
+    });
 }
 
 /// Checks that:
@@ -6363,7 +6371,7 @@ async fn test_staked_maturity() {
 
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     gov.neuron_store
         .with_neuron_mut(&id, |neuron| {
@@ -8012,7 +8020,7 @@ async fn test_max_number_of_proposals_with_ballots() {
     );
     set_governance_for_tests(gov);
     let gov = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
 
     // Vote with neuron 1. It is smaller, so proposals are not auto-accepted.
     for i in 0..MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS {
@@ -8070,6 +8078,7 @@ async fn test_max_number_of_proposals_with_ballots() {
                     skip_stopping_before_installing: None,
                     wasm_module_hash: Some(vec![7, 8, 9]),
                     arg_hash: Some(vec![10, 11, 12]),
+                    canister_upgrade_options: None,
                 })),
                 ..Default::default()
             },
@@ -10923,8 +10932,7 @@ async fn test_known_neurons() {
         },
     ];
     let mut sorted_response_known_neurons = gov.list_known_neurons().known_neurons;
-    sorted_response_known_neurons
-        .sort_by(|a, b| a.id.as_ref().unwrap().id.cmp(&b.id.as_ref().unwrap().id));
+    sorted_response_known_neurons.sort_by_key(|a| a.id.as_ref().unwrap().id);
     assert_eq!(sorted_response_known_neurons, expected_known_neurons);
 
     // This proposal tries to name neuron 1 with the already existing name "Two", this should fail.
@@ -10951,8 +10959,7 @@ async fn test_known_neurons() {
 
     // Check that the state is the same as before the last proposal.
     let mut sorted_response_known_neurons = gov.list_known_neurons().known_neurons;
-    sorted_response_known_neurons
-        .sort_by(|a, b| a.id.as_ref().unwrap().id.cmp(&b.id.as_ref().unwrap().id));
+    sorted_response_known_neurons.sort_by_key(|a| a.id.as_ref().unwrap().id);
     assert_eq!(sorted_response_known_neurons, expected_known_neurons);
 
     // Update the name of neuron 2.
@@ -12890,7 +12897,7 @@ async fn distribute_rewards_test() {
 
     set_governance_for_tests(governance);
     let governance = governance_mut();
-    schedule_tasks();
+    schedule_tasks(None);
     // Prevent gc.
     governance.latest_gc_timestamp_seconds = now;
 
@@ -14212,6 +14219,112 @@ async fn test_follow_private_neuron_neuron_management() {
             .followees
             .contains(&NeuronId { id: 1 })
     );
+}
+
+#[test]
+fn test_claim_neuron_does_not_leave_zombie_neurons_behind_when_ledger_is_unavailable() {
+    // Step 1: Prepare the world.
+    // This consists of putting 10 ICP into a bunch of Governance subaccounts, all
+    // for neurons having TEST_NEURON_1_OWNER_PRINCIPAL as controller.
+
+    // Step 1.1: Gather the various pieces that will be assembled into a Governance.
+    let now_timestamp_seconds = 1782480488; // This value is not special, just realistic.
+    let controller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let stake = Tokens::from_tokens(10_u64).unwrap();
+    let attempts = (MAX_NEURON_CREATION_SPIKE + 1) as usize;
+    let first_memo = 10_000_u64;
+    let memos = (first_memo..first_memo + attempts as u64).collect::<Vec<_>>();
+    let ledger_accounts = memos
+        .iter()
+        .map(|memo| fake::FakeAccount {
+            id: AccountIdentifier::new(
+                ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+                Some(ledger::compute_neuron_staking_subaccount(controller, *memo)),
+            ),
+            amount_e8s: stake.get_e8s(),
+        })
+        .collect();
+    let driver = fake::FakeDriver::default()
+        .at(now_timestamp_seconds)
+        .with_ledger_accounts(ledger_accounts)
+        .with_supply(Tokens::from_tokens(400_000_000).unwrap());
+
+    // Step 1.2: Assemble Governance.
+    let mut gov = Governance::new(
+        empty_fixture(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+        driver.get_fake_randomness_generator(),
+    );
+
+    let neuron_ids = |gov: &Governance| {
+        gov.neuron_store
+            .list_all_neurons_paginated(
+                NeuronId { id: 0 },
+                u32::MAX,
+                controller,
+                now_timestamp_seconds,
+                &VotingPowerEconomics::with_default_values(),
+            )
+            .into_iter()
+            .map(|neuron| neuron.id.unwrap())
+            .collect::<Vec<NeuronId>>()
+    };
+    // This will be used during verification.
+    let original_neuron_ids = neuron_ids(&gov);
+
+    for memo in memos {
+        // Step 1.3: Make Ledger fail. The whole point of this test is to make sure
+        // that Governance handles this properly, and in particular, does not
+        // leave any zombie neurons lying around.
+        driver.fail_next_ledger_call();
+
+        // Step 2: Call code under test.
+        // Here, the controller (TEST_NEURON_1_OWNER_PRINCIPAL) tries to claim
+        // all their neurons, but on each attempt, Ledger is unavailable.
+        let claim_neuron_response = claim_neuron_by_memo(&mut gov, controller, memo)
+            .command
+            .unwrap();
+
+        // Step 3: Verify results.
+
+        // Step 3.1: First of all, Err returned.
+        match claim_neuron_response {
+            CommandResponse::Error(err) => {
+                let api::GovernanceError {
+                    error_type,
+                    error_message,
+                } = err;
+
+                // Step 3.1.1: Inspect error type.
+                assert_eq!(error_type, ErrorType::External as i32);
+
+                // Step 3.1.2: Inspect message.
+                for expected_substring in ["failed", "balance"] {
+                    assert!(
+                        error_message.to_lowercase().contains(expected_substring),
+                        "{:?} not in {:?}",
+                        expected_substring,
+                        error_message,
+                    );
+                }
+            }
+
+            _ => panic!("{:?}", claim_neuron_response),
+        }
+
+        // Step 3.2: Most interestingly, no new (zombie) neuron(s).
+        assert_eq!(neuron_ids(&gov), original_neuron_ids);
+
+        // Step 3.3: No neuron (yet) with the subaccount. The above is probably
+        // sufficient, but in tests, we are extra cautious.
+        let subaccount = ledger::compute_neuron_staking_subaccount(controller, memo);
+        assert_eq!(
+            gov.neuron_store.get_neuron_id_for_subaccount(subaccount),
+            None
+        );
+    }
 }
 
 /// Fixture for testing grandfathering behavior.

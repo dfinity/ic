@@ -7,15 +7,13 @@ on:
     branches:
       - master
       - rc--*
+      - hotfix-*
       - ic-mainnet-revisions
       - ic-nervous-system-wasms
-    tags:
-      - release-*
     workflows:
       - Schedule Daily
       - Schedule RC
       - Schedule Rust Benchmarks
-      - Schedule Weekly
       - Release Testing
       - Publish Release
       - Container IC Base Images
@@ -69,11 +67,11 @@ jobs:
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Update mainnet ICOS versions file" ]]; then
             CHANNEL="eng-consensus-alerts"
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Update mainnet canister versions file" ]]; then
-            CHANNEL="eng-nns"
+            CHANNEL="eng-nns-alerts"
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Kickoff" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-mainnet-revisions" ]]; then
             CHANNEL="eng-consensus-alerts"
           elif [[ "$TRIGGERING_WORKFLOW_NAME" == "Kickoff" ]] && [[ "$TRIGGERING_WORKFLOW_BRANCH" == "ic-nervous-system-wasms" ]]; then
-            CHANNEL="eng-nns"
+            CHANNEL="eng-nns-alerts"
           fi
 
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT

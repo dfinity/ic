@@ -3,6 +3,7 @@ name = "ic_os_logging"
 edition.workspace = true
 
 [dependencies]
+tracing = { workspace = true }
 tracing-journald = { workspace = true }
 tracing-subscriber = { workspace = true }
 

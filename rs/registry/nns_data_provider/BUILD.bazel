@@ -2,50 +2,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/canister_client",
-    "//rs/certification",
-    "//rs/crypto/tree_hash",
-    "//rs/interfaces/registry",
-    "//rs/nns/constants",
-    "//rs/registry/canister/api",
-    "//rs/registry/transport",
-    "//rs/tree_deserializer",
-    "//rs/types/types",
-    "@crate_index//:candid",
-    "@crate_index//:chrono",
-    "@crate_index//:mockall",
-    "@crate_index//:prost",
-    "@crate_index//:rand",
-    "@crate_index//:serde",
-    "@crate_index//:url",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/pocket-ic",
-    "//rs/certification/test-utils",
-    "//rs/crypto/sha2",
-    "//rs/nervous_system/agent",
-    "//rs/nervous_system/chunks",
-    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
-    "//rs/nns/test_utils",
-    "@crate_index//:futures-util",
-    "@crate_index//:leb128",
-    "@crate_index//:pretty_assertions",
-    "@crate_index//:tokio",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-]
-
 DEV_DATA = [
     # Keep sorted.
     "//rs/pocket_ic_server:pocket-ic-server",
@@ -62,16 +18,69 @@ rust_library(
     name = "nns_data_provider",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_nns_data_provider",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/canister_client",
+        "//rs/certification",
+        "//rs/crypto/tree_hash",
+        "//rs/interfaces/registry",
+        "//rs/nns/constants",
+        "//rs/registry/canister/api",
+        "//rs/registry/transport",
+        "//rs/tree_deserializer",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:chrono",
+        "@crate_index//:mockall",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:url",
+    ],
 )
 
 rust_test(
     name = "nns_data_provider_test",
     crate = ":nns_data_provider",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        # Keep sorted.
+        "//packages/pocket-ic",
+        "//rs/canister_client",
+        "//rs/certification",
+        "//rs/certification/test-utils",
+        "//rs/crypto/sha2",
+        "//rs/crypto/tree_hash",
+        "//rs/interfaces/registry",
+        "//rs/nervous_system/agent",
+        "//rs/nervous_system/chunks",
+        "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/canister/api",
+        "//rs/registry/transport",
+        "//rs/tree_deserializer",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:chrono",
+        "@crate_index//:futures-util",
+        "@crate_index//:leb128",
+        "@crate_index//:mockall",
+        "@crate_index//:pretty_assertions",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
 )
 
 rust_test(
@@ -79,6 +88,39 @@ rust_test(
     srcs = ["tests/registry_canister.rs"],
     data = DEV_DATA,
     env = DEV_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":nns_data_provider"],
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        # Keep sorted.
+        ":nns_data_provider",
+        "//packages/pocket-ic",
+        "//rs/canister_client",
+        "//rs/certification",
+        "//rs/certification/test-utils",
+        "//rs/crypto/sha2",
+        "//rs/crypto/tree_hash",
+        "//rs/interfaces/registry",
+        "//rs/nervous_system/agent",
+        "//rs/nervous_system/chunks",
+        "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/canister/api",
+        "//rs/registry/transport",
+        "//rs/tree_deserializer",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:chrono",
+        "@crate_index//:futures-util",
+        "@crate_index//:leb128",
+        "@crate_index//:mockall",
+        "@crate_index//:pretty_assertions",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
 )

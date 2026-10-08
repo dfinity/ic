@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = { workspace = true }
 
 [dependencies]
-ic-metrics-encoder = "1"
+ic-metrics-encoder = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

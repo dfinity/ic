@@ -525,9 +525,8 @@ fn assert_ledger_index_parity_query_blocks_and_query_encoded_blocks(
         //  - the `created_at_time` field of the unencoded block is set to the `timestamp` field
         //    of the block
         //  - all the other fields of the blocks match
-        for (ledger_block, unencoded_ledger_block) in ledger_blocks
-            .into_iter()
-            .zip(ledger_unencoded_blocks.into_iter())
+        for (ledger_block, unencoded_ledger_block) in
+            ledger_blocks.into_iter().zip(ledger_unencoded_blocks)
         {
             if ledger_block != unencoded_ledger_block {
                 if ledger_block.transaction.created_at_time.is_none() {

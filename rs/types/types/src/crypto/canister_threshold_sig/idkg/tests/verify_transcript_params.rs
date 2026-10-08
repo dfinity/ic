@@ -40,6 +40,30 @@ fn should_fail_on_mismatching_transcript_ids() {
 }
 
 #[test]
+fn should_fail_on_dealing_with_mismatching_transcript_id() {
+    let rng = &mut reproducible_rng();
+    let (mut transcript, params) = valid_transcript_and_params(rng);
+    let other_id = transcript.transcript_id.increment();
+    let first_dealer_index = *transcript.verified_dealings.keys().next().unwrap();
+    let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+        .expect("No other refs to verified_dealings");
+    verified_dealings
+        .get_mut(&first_dealer_index)
+        .unwrap()
+        .content
+        .content
+        .transcript_id = other_id;
+    assert_eq!(transcript.transcript_id, params.transcript_id());
+
+    let result = transcript.verify_consistency_with_params(&params);
+
+    assert_matches!(
+        result,
+        Err(e) if e.contains("mismatching transcript IDs in dealing")
+    );
+}
+
+#[test]
 fn should_fail_on_mismatching_receivers() {
     let rng = &mut reproducible_rng();
     let (mut transcript, params) = valid_transcript_and_params(rng);
@@ -171,7 +195,7 @@ fn should_fail_on_insufficient_num_of_dealings() {
     let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.dealers = dealers(btreeset! {node_id(1), node_id(2), node_id(3), node_id(4)});
     transcript.verified_dealings = Arc::new(
-        btreemap! {0 => batch_signed_dealing(node_id(42), params.receivers.get().clone())},
+        btreemap! {0 => batch_signed_dealing(node_id(42), params.receivers.get().clone(), transcript.transcript_id)},
     );
 
     let result = transcript.verify_consistency_with_params(&params);
@@ -185,7 +209,7 @@ fn should_fail_on_dealing_from_non_dealer() {
     let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.dealers = dealers(btreeset! {node_id(1), node_id(2), node_id(3)});
     transcript.verified_dealings = Arc::new(
-        btreemap! {0 => batch_signed_dealing(node_id(999), params.receivers.get().clone())},
+        btreemap! {0 => batch_signed_dealing(node_id(999), params.receivers.get().clone(), transcript.transcript_id)},
     );
 
     let result = transcript.verify_consistency_with_params(&params);
@@ -198,8 +222,9 @@ fn should_fail_on_mismatching_dealer_indexes() {
     let rng = &mut reproducible_rng();
     let (mut transcript, mut params) = valid_transcript_and_params(rng);
     params.dealers = dealers(btreeset! {node_id(3), node_id(1), node_id(2)});
-    transcript.verified_dealings =
-        Arc::new(btreemap! {0 => batch_signed_dealing(node_id(2), params.receivers.get().clone())});
+    transcript.verified_dealings = Arc::new(
+        btreemap! {0 => batch_signed_dealing(node_id(2), params.receivers.get().clone(), transcript.transcript_id)},
+    );
 
     let result = transcript.verify_consistency_with_params(&params);
 
@@ -244,9 +269,9 @@ fn valid_transcript_and_params<R: Rng + CryptoRng>(
 
     let transcript = IDkgTranscript {
         verified_dealings: Arc::new(btreemap! {
-            0 => batch_signed_dealing(node_id(42), receivers.get().clone()),
-            1 => batch_signed_dealing(node_id(43), receivers.get().clone()),
-            2 => batch_signed_dealing(node_id(44), receivers.get().clone()),
+            0 => batch_signed_dealing(node_id(42), receivers.get().clone(), transcript_id),
+            1 => batch_signed_dealing(node_id(43), receivers.get().clone(), transcript_id),
+            2 => batch_signed_dealing(node_id(44), receivers.get().clone(), transcript_id),
         }),
         transcript_id,
         receivers: receivers.clone(),
@@ -269,9 +294,13 @@ fn valid_transcript_and_params<R: Rng + CryptoRng>(
     (transcript, params)
 }
 
-fn batch_signed_dealing(dealer_id: NodeId, signers: BTreeSet<NodeId>) -> BatchSignedIDkgDealing {
+fn batch_signed_dealing(
+    dealer_id: NodeId,
+    signers: BTreeSet<NodeId>,
+    transcript_id: IDkgTranscriptId,
+) -> BatchSignedIDkgDealing {
     let dealing = IDkgDealing {
-        transcript_id: dummy_transcript_id(),
+        transcript_id,
         internal_dealing_raw: dummy_internal_dealing_raw(),
     };
     let signed_dealing = SignedIDkgDealing {
@@ -294,9 +323,9 @@ fn batch_signed_dealing(dealer_id: NodeId, signers: BTreeSet<NodeId>) -> BatchSi
 fn dummy_transcript() -> IDkgTranscript {
     IDkgTranscript {
         verified_dealings: Arc::new(btreemap! {
-            0 => batch_signed_dealing(node_id(42), BTreeSet::new()),
-            1 => batch_signed_dealing(node_id(43), BTreeSet::new()),
-            3 => batch_signed_dealing(node_id(45), BTreeSet::new())
+            0 => batch_signed_dealing(node_id(42), BTreeSet::new(), dummy_transcript_id()),
+            1 => batch_signed_dealing(node_id(43), BTreeSet::new(), dummy_transcript_id()),
+            3 => batch_signed_dealing(node_id(45), BTreeSet::new(), dummy_transcript_id())
         }),
         transcript_id: dummy_transcript_id(),
         receivers: dummy_receivers(),

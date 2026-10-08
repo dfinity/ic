@@ -306,6 +306,7 @@ async fn change_nns_canister_by_proposal(
             install_mode: Some(how as i32),
             arg: Some(arg.unwrap_or_default()),
             skip_stopping_before_installing: Some(stop_before_installing),
+            canister_upgrade_options: None,
         })),
     };
 

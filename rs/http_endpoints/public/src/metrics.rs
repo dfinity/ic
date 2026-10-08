@@ -27,6 +27,8 @@ pub const SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE: &str =
     "message_already_in_certified_state";
 pub const SYNC_CALL_STATUS_IS_NOT_LEAF: &str = "not_leaf";
 pub const SYNC_CALL_STATUS_IS_INVALID_UTF8: &str = "is_invalid_utf8";
+pub const CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS: &str =
+    "http_handler_sync_call_unknown_certificate_status";
 
 /// Placeholder used when we can't determine the appropriate prometheus label.
 pub const LABEL_UNKNOWN: &str = "unknown";
@@ -71,6 +73,7 @@ pub struct HttpHandlerMetrics {
     // sync call handler metrics
     pub sync_call_early_response_trigger_total: IntCounterVec,
     pub sync_call_certificate_status_total: IntCounterVec,
+    pub critical_error_sync_call_unknown_certificate_status: IntCounter,
 
     // read_state metrics
     pub read_state_path_type_total: IntCounterVec,
@@ -210,6 +213,8 @@ impl HttpHandlerMetrics {
                 "The count of early response triggers for the /{v3,v4}/.../call endpoint.",
                 &[LABEL_SYNC_CALL_EARLY_RESPONSE_TRIGGER],
             ),
+            critical_error_sync_call_unknown_certificate_status: metrics_registry
+                .error_counter(CRITICAL_ERROR_SYNC_CALL_UNKNOWN_CERTIFICATE_STATUS),
             read_state_path_type_total: metrics_registry.int_counter_vec(
                 "replica_http_read_state_path_type_total",
                 "Count of read_state paths requested, by endpoint type and path type.",

@@ -186,9 +186,7 @@ pub fn validated_pool_within_bounds(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
-    use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
 
     #[test]
     fn test_pool_bounds() {
@@ -212,16 +210,14 @@ mod tests {
         // Simple check: advance pool without purging, until we have too many
         // finalized blocks.
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let committee = (0..40).map(node_test_id).collect::<Vec<_>>();
-            let record = SubnetRecordBuilder::from(&committee)
-                .with_dkg_interval_length(499)
-                .build();
             let Dependencies {
                 mut pool,
                 registry,
                 replica_config,
                 ..
-            } = dependencies_with_subnet_params(pool_config, subnet_test_id(0), vec![(1, record)]);
+            } = DependenciesBuilder::new(pool_config, 40)
+                .with_dkg_interval_length(499)
+                .build();
 
             // Still within bounds.
             pool.advance_round_normal_operation_n(max_counts.finalization as u64);

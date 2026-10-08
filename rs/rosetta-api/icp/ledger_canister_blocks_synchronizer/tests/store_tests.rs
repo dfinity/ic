@@ -145,9 +145,7 @@ async fn store_account_balances_test() {
         let to_account: Option<String>;
         let from_account: Option<String>;
         match operation {
-            Operation::Burn {
-                from, amount: _, ..
-            } => {
+            Operation::Burn { from, .. } => {
                 from_account = Some(from.to_hex());
                 to_account = None;
             }

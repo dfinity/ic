@@ -6,6 +6,8 @@
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NeuronPermission {
@@ -22,10 +24,10 @@ pub struct NeuronPermission {
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    Eq,
-    std::hash::Hash,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NeuronId {
@@ -40,6 +42,8 @@ pub struct NeuronId {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Followee {
@@ -49,7 +53,7 @@ pub struct Followee {
     #[prost(string, optional, tag = "2")]
     pub alias: ::core::option::Option<::prost::alloc::string::String>,
 }
-/// A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option<Vec<NeuronId>>.
+/// A sequence of NeuronIds, which is used to get prost to generate a type isomorphic to Option\<Vec<NeuronId>\>.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -65,7 +69,7 @@ pub struct NeuronIds {
 /// The id of a specific proposal.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, serde::Serialize)]
 #[self_describing]
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProposalId {
     #[prost(uint64, tag = "1")]
     pub id: u64,
@@ -76,6 +80,8 @@ pub struct ProposalId {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct DisburseMaturityInProgress {
@@ -138,6 +144,13 @@ pub struct Neuron {
     /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
     #[prost(message, optional, tag = "19")]
     pub topic_followees: ::core::option::Option<neuron::TopicFollowees>,
+    /// The neuron's positive reward shares from its most recent participating reward event,
+    /// tagged with that event's end timestamp. Consumers must compare this timestamp with
+    /// `latest_reward_event.end_timestamp_seconds`. An absent value or a different timestamp means
+    /// that the neuron had zero shares in the target event. A neuron might have a stale value here
+    /// from an earlier voting reward event because old values are not cleaned up.
+    #[prost(message, optional, tag = "20")]
+    pub latest_reward_event_participation: ::core::option::Option<neuron::RewardEventParticipation>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10e-8 of a governance token.
     ///
@@ -184,7 +197,7 @@ pub struct Neuron {
     /// Disburse maturity operations that are currently underway.
     /// The entries are sorted by `timestamp_of_disbursement_seconds`-values,
     /// with the oldest entries first, i.e. it holds for all i that:
-    /// entry\[i\].timestamp_of_disbursement_seconds <= entry\[i+1\].timestamp_of_disbursement_seconds
+    /// entry\[i\].timestamp_of_disbursement_seconds \<= entry\[i+1\].timestamp_of_disbursement_seconds
     #[prost(message, repeated, tag = "18")]
     pub disburse_maturity_in_progress: ::prost::alloc::vec::Vec<DisburseMaturityInProgress>,
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
@@ -248,6 +261,28 @@ pub mod neuron {
         #[prost(btree_map = "int32, message", tag = "1")]
         pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<i32, FolloweesForTopic>,
     }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Message,
+    )]
+    pub struct RewardEventParticipation {
+        /// The end timestamp of the reward event that calculated these shares.
+        #[prost(uint64, tag = "1")]
+        pub reward_event_end_timestamp_seconds: u64,
+        /// The sum of the neuron's voting power over all
+        /// reward-eligible Yes and No ballots in proposals settled by this event.
+        ///
+        /// Encoded as the canonical big-endian unsigned integer magnitude produced
+        /// by BigUint::to_bytes_be().
+        #[prost(bytes = "vec", tag = "2")]
+        pub reward_shares: ::prost::alloc::vec::Vec<u8>,
+    }
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
     ///
@@ -270,6 +305,8 @@ pub mod neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum DissolveState {
@@ -278,8 +315,7 @@ pub mod neuron {
         ///
         /// At any time while the neuron is dissolving, the neuron owner
         /// may pause dissolving, in which case `dissolve_delay_seconds`
-        /// will get assigned to: `when_dissolved_timestamp_seconds -
-        /// <timestamp when the action is taken>`.
+        /// will get assigned to: `when_dissolved_timestamp_seconds -  <timestamp when the action is taken>`.
         #[prost(uint64, tag = "7")]
         WhenDissolvedTimestampSeconds(u64),
         /// When the dissolve timer is stopped, this stores how much time,
@@ -287,8 +323,7 @@ pub mod neuron {
         ///
         /// At any time while in this state, the neuron owner may (re)start
         /// dissolving, in which case `when_dissolved_timestamp_seconds`
-        /// will get assigned to: `<timestamp when the action is taken> +
-        /// dissolve_delay_seconds`.
+        /// will get assigned to: `<timestamp when the action is taken> +  dissolve_delay_seconds`.
         #[prost(uint64, tag = "8")]
         DissolveDelaySeconds(u64),
     }
@@ -311,6 +346,8 @@ pub mod neuron {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NervousSystemFunction {
@@ -320,7 +357,7 @@ pub struct NervousSystemFunction {
     /// be used by generic NervousSystemFunction's.
     #[prost(uint64, tag = "1")]
     pub id: u64,
-    /// A short (<256 chars) description of the NervousSystemFunction.
+    /// A short (\<256 chars) description of the NervousSystemFunction.
     #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
     /// An optional description of what the NervousSystemFunction does.
@@ -337,6 +374,8 @@ pub mod nervous_system_function {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct GenericNervousSystemFunction {
@@ -345,7 +384,7 @@ pub mod nervous_system_function {
         pub target_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
         /// The name of the method that will be called to execute the proposal.
         /// The signature of the method must be equivalent to the following:
-        /// <method_name>(proposal_data: ProposalData) -> Result<(), String>.
+        /// \<method_name>(proposal_data: ProposalData) -> Result\<(), String>.
         #[prost(string, optional, tag = "3")]
         pub target_method_name: ::core::option::Option<::prost::alloc::string::String>,
         /// The id of the canister that will be called to validate the proposal before
@@ -355,7 +394,7 @@ pub mod nervous_system_function {
         /// The name of the method that will be called to validate the proposal
         /// before it is put up for a vote.
         /// The signature of the method must be equivalent to the following:
-        /// <method_name>(proposal_data: ProposalData) -> Result<String, String>
+        /// \<method_name>(proposal_data: ProposalData) -> Result\<String, String>
         #[prost(string, optional, tag = "5")]
         pub validator_method_name: ::core::option::Option<::prost::alloc::string::String>,
         /// The topic this proposal belongs to.
@@ -368,6 +407,8 @@ pub mod nervous_system_function {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum FunctionType {
@@ -392,13 +433,15 @@ pub mod nervous_system_function {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ExecuteGenericNervousSystemFunction {
     /// This enum value determines what canister to call and what
     /// function to call on that canister.
     ///
-    /// 'function_id` must be in the range `\[1000--u64:MAX\]` as this
+    /// 'function_id`must be in the range`\[1000--u64:MAX\]\` as this
     /// can't be used to execute native functions.
     #[prost(uint64, tag = "1")]
     pub function_id: u64,
@@ -411,7 +454,7 @@ pub struct ExecuteGenericNervousSystemFunction {
 /// ecosystem but does not have immediate effect in the sense that no method is executed.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[self_describing]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Motion {
     /// The text of the motion, which can at most be 100kib.
     #[prost(string, tag = "1")]
@@ -424,6 +467,8 @@ pub struct Motion {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ChunkedCanisterWasm {
@@ -446,6 +491,8 @@ pub struct ChunkedCanisterWasm {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct UpgradeSnsControlledCanister {
@@ -471,6 +518,42 @@ pub struct UpgradeSnsControlledCanister {
     /// empty, and this field should be set instead.
     #[prost(message, optional, tag = "5")]
     pub chunked_canister_wasm: ::core::option::Option<ChunkedCanisterWasm>,
+    /// Options that only apply when mode is upgrade.
+    #[prost(message, optional, tag = "6")]
+    pub canister_upgrade_options:
+        ::core::option::Option<upgrade_sns_controlled_canister::CanisterUpgradeOptions>,
+}
+/// Nested message and enum types in `UpgradeSnsControlledCanister`.
+pub mod upgrade_sns_controlled_canister {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Message,
+    )]
+    pub struct CanisterUpgradeOptions {
+        /// Whether to skip the canister's pre_upgrade hook. This would generally be
+        /// used in emergencies. See the corresponding field in the Management
+        /// canister API.
+        #[prost(bool, optional, tag = "1")]
+        pub skip_pre_upgrade: ::core::option::Option<bool>,
+        /// Whether to retain (keep) or drop (replace) the canister's Wasm main
+        /// memory across the upgrade. If the old WASM had a custom section named
+        /// "icp:private enhanced-orthogonal-persistence", then this must be set
+        /// (otherwise, the Management canister will block the upgrade). If keep is
+        /// used here, then the new WASM must also have the same custom section.
+        #[prost(
+            enumeration = "::ic_protobuf::types::v1::WasmMemoryPersistence",
+            optional,
+            tag = "2"
+        )]
+        pub wasm_memory_persistence: ::core::option::Option<i32>,
+    }
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.
@@ -480,6 +563,8 @@ pub struct UpgradeSnsControlledCanister {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct TransferSnsTreasuryFunds {
@@ -545,7 +630,7 @@ pub mod transfer_sns_treasury_funds {
         }
     }
 }
-/// A proposal function that changes the ledger's parameters.
+/// A proposal function that changes the SNS ledger canister's parameters.
 /// Fields with None values will remain unchanged.
 #[derive(
     candid::CandidType,
@@ -553,9 +638,15 @@ pub mod transfer_sns_treasury_funds {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ManageLedgerParameters {
+    /// Changes the SNS ledger's actual transfer fee. If this proposal executes
+    /// successfully, Governance also syncs NervousSystemParameters.transaction_fee_e8s
+    /// to this value. Use this field, not NervousSystemParameters.transaction_fee_e8s,
+    /// when changing the SNS token transfer fee.
     #[prost(uint64, optional, tag = "1")]
     pub transfer_fee: ::core::option::Option<u64>,
     #[prost(string, optional, tag = "2")]
@@ -573,6 +664,8 @@ pub struct ManageLedgerParameters {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct MintSnsTokens {
@@ -597,6 +690,8 @@ pub struct MintSnsTokens {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ManageSnsMetadata {
@@ -623,6 +718,8 @@ pub struct ManageSnsMetadata {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct UpgradeSnsToNextVersion {}
@@ -740,6 +837,8 @@ pub struct RegisterExtension {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Wasm {
@@ -754,6 +853,8 @@ pub mod wasm {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Wasm {
@@ -831,6 +932,8 @@ pub struct ExecuteExtensionOperation {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ExtensionSpec {
@@ -906,6 +1009,8 @@ pub struct ManageDappCanisterSettings {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SnsVersion {
@@ -934,6 +1039,8 @@ pub struct SnsVersion {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct AdvanceSnsTargetVersion {
@@ -1115,7 +1222,7 @@ pub mod proposal {
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[compare_default]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GovernanceError {
     #[prost(enumeration = "governance_error::ErrorType", tag = "1")]
     pub error_type: i32,
@@ -1257,7 +1364,7 @@ pub mod governance_error {
 /// Once a ballot's vote is set it cannot be changed.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[self_describing]
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Ballot {
     /// The ballot's vote.
     #[prost(enumeration = "Vote", tag = "1")]
@@ -1281,6 +1388,8 @@ pub struct Ballot {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct TopicSelector {
@@ -1290,7 +1399,7 @@ pub struct TopicSelector {
 /// A tally of votes associated with a proposal.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[self_describing]
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct Tally {
     /// The time when this tally was made, in seconds from the Unix epoch.
     #[prost(uint64, tag = "1")]
@@ -1317,6 +1426,8 @@ pub struct Tally {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct WaitForQuietState {
@@ -1484,6 +1595,11 @@ pub struct ProposalData {
     /// This proposal's topic.
     #[prost(enumeration = "Topic", optional, tag = "25")]
     pub topic: ::core::option::Option<i32>,
+    /// The raw reply bytes returned by the target canister for a successful
+    /// ExecuteGenericNervousSystemFunction call, truncated to at most
+    /// MAX_SCALAR_FIELD_LEN_BYTES.
+    #[prost(bytes = "vec", optional, tag = "26")]
+    pub execution_reply: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23, 24")]
@@ -1497,6 +1613,8 @@ pub mod proposal_data {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct TransferSnsTreasuryFundsActionAuxiliary {
@@ -1509,6 +1627,8 @@ pub mod proposal_data {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct MintSnsTokensActionAuxiliary {
@@ -1521,6 +1641,8 @@ pub mod proposal_data {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct AdvanceSnsTargetVersionActionAuxiliary {
@@ -1537,6 +1659,8 @@ pub mod proposal_data {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum ActionAuxiliary {
@@ -1554,6 +1678,8 @@ pub mod proposal_data {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Valuation {
@@ -1574,6 +1700,8 @@ pub mod valuation {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct ValuationFactors {
@@ -1655,8 +1783,13 @@ pub struct NervousSystemParameters {
     /// must be larger than the transaction_fee_e8s.
     #[prost(uint64, optional, tag = "2")]
     pub neuron_minimum_stake_e8s: ::core::option::Option<u64>,
-    /// The transaction fee that must be paid for ledger transactions (except
-    /// minting and burning governance tokens).
+    /// Governance's stored copy of the SNS ledger transfer fee. Governance uses
+    /// this value when it submits ledger transfers for neuron operations.
+    ///
+    /// To change the SNS ledger's actual transfer fee, submit a
+    /// ManageLedgerParameters proposal with transfer_fee set. That proposal updates
+    /// the ledger and syncs this field after the ledger update succeeds. Changing
+    /// this field directly does not update the ledger.
     #[prost(uint64, optional, tag = "3")]
     pub transaction_fee_e8s: ::core::option::Option<u64>,
     /// The maximum number of proposals to keep, per action. When the
@@ -1796,6 +1929,8 @@ pub struct NervousSystemParameters {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct CustomProposalCriticality {
@@ -1812,6 +1947,8 @@ pub struct CustomProposalCriticality {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct VotingRewardsParameters {
@@ -1833,7 +1970,7 @@ pub struct VotingRewardsParameters {
     pub round_duration_seconds: ::core::option::Option<u64>,
     /// The amount of time that the growth rate changes (presumably, decreases)
     /// from the initial growth rate to the final growth rate. (See the two
-    /// *_reward_rate_basis_points fields bellow.) The transition is quadratic, and
+    /// \*\_reward_rate_basis_points fields bellow.) The transition is quadratic, and
     /// levels out at the end of the growth rate transition period.
     #[prost(uint64, optional, tag = "3")]
     pub reward_rate_transition_duration_seconds: ::core::option::Option<u64>,
@@ -1872,6 +2009,8 @@ pub struct DefaultFollowees {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct NeuronPermissionList {
@@ -1956,11 +2095,11 @@ pub struct RewardEvent {
     /// reasons that rewards might not be distributed in a given round.
     ///
     /// 1. "Missed" rounds: there was a long period when we did calculate rewards
-    ///     (longer than 1 round). (I.e. distribute_rewards was not called from
-    ///     run_periodic_tasks, for whatever reason, most likely some kind of bug.)
+    ///    (longer than 1 round). (I.e. distribute_rewards was not called from
+    ///    run_periodic_tasks, for whatever reason, most likely some kind of bug.)
     ///
-    /// 2. Rollover: We tried to distribute rewards, but there were no proposals
-    ///     settled to distribute rewards for.
+    /// 1. Rollover: We tried to distribute rewards, but there were no proposals
+    ///    settled to distribute rewards for.
     ///
     /// In both of these cases, the rewards purse rolls over into the next round.
     #[prost(uint64, optional, tag = "6")]
@@ -2117,6 +2256,8 @@ pub mod governance {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct SyncCommand {}
@@ -2248,6 +2389,8 @@ pub mod governance {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct SnsMetadata {
@@ -2269,11 +2412,11 @@ pub mod governance {
         candid::CandidType,
         candid::Deserialize,
         comparable::Comparable,
-        Eq,
-        std::hash::Hash,
         serde::Serialize,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Version {
@@ -2322,6 +2465,8 @@ pub mod governance {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct PendingVersion {
@@ -2346,6 +2491,8 @@ pub mod governance {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct MaturityModulation {
@@ -2444,6 +2591,8 @@ pub mod governance {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetMetadataRequest {}
@@ -2454,6 +2603,8 @@ pub struct GetMetadataRequest {}
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetMetadataResponse {
@@ -2474,6 +2625,8 @@ pub struct GetMetadataResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetMetricsRequest {
@@ -2486,6 +2639,8 @@ pub struct GetMetricsRequest {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct TreasuryMetrics {
@@ -2511,6 +2666,8 @@ pub struct TreasuryMetrics {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct VotingPowerMetrics {
@@ -2550,6 +2707,8 @@ pub struct Metrics {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetSnsInitializationParametersRequest {}
@@ -2560,6 +2719,8 @@ pub struct GetSnsInitializationParametersRequest {}
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetSnsInitializationParametersResponse {
@@ -2574,6 +2735,8 @@ pub struct GetSnsInitializationParametersResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetRunningSnsVersionRequest {}
@@ -2586,6 +2749,8 @@ pub struct GetRunningSnsVersionRequest {}
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetRunningSnsVersionResponse {
@@ -2606,6 +2771,8 @@ pub mod get_running_sns_version_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct UpgradeInProgress {
@@ -2635,6 +2802,8 @@ pub mod get_running_sns_version_response {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct FailStuckUpgradeInProgressRequest {}
@@ -2646,6 +2815,8 @@ pub struct FailStuckUpgradeInProgressRequest {}
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct FailStuckUpgradeInProgressResponse {}
@@ -2659,6 +2830,8 @@ pub struct FailStuckUpgradeInProgressResponse {}
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Empty {}
@@ -2693,6 +2866,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct IncreaseDissolveDelay {
@@ -2710,6 +2885,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct StartDissolving {}
@@ -2722,6 +2899,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct StopDissolving {}
@@ -2734,6 +2913,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct SetDissolveTimestamp {
@@ -2753,6 +2934,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct ChangeAutoStakeMaturity {
@@ -2769,6 +2952,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Configure {
@@ -2784,6 +2969,8 @@ pub mod manage_neuron {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Oneof,
         )]
         pub enum Operation {
@@ -2810,6 +2997,8 @@ pub mod manage_neuron {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Disburse {
@@ -2830,6 +3019,8 @@ pub mod manage_neuron {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct Amount {
@@ -2853,6 +3044,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Split {
@@ -2876,6 +3069,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct MergeMaturity {
@@ -2894,6 +3089,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct StakeMaturity {
@@ -2912,6 +3109,8 @@ pub mod manage_neuron {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct DisburseMaturity {
@@ -2928,6 +3127,8 @@ pub mod manage_neuron {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct FinalizeDisburseMaturity {
@@ -2998,6 +3199,8 @@ pub mod manage_neuron {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct RegisterVote {
@@ -3016,6 +3219,8 @@ pub mod manage_neuron {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct ClaimOrRefresh {
@@ -3031,6 +3236,8 @@ pub mod manage_neuron {
             comparable::Comparable,
             Clone,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct MemoAndController {
@@ -3048,6 +3255,8 @@ pub mod manage_neuron {
             comparable::Comparable,
             Clone,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Oneof,
         )]
         pub enum By {
@@ -3078,6 +3287,8 @@ pub mod manage_neuron {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct AddNeuronPermissions {
@@ -3098,6 +3309,8 @@ pub mod manage_neuron {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct RemoveNeuronPermissions {
@@ -3150,6 +3363,8 @@ pub mod manage_neuron {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ManageNeuronResponse {
@@ -3169,6 +3384,8 @@ pub mod manage_neuron_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct ConfigureResponse {}
@@ -3180,6 +3397,8 @@ pub mod manage_neuron_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct DisburseResponse {
@@ -3196,6 +3415,8 @@ pub mod manage_neuron_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct MergeMaturityResponse {
@@ -3215,6 +3436,8 @@ pub mod manage_neuron_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct DisburseMaturityResponse {
@@ -3234,6 +3457,8 @@ pub mod manage_neuron_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct StakeMaturityResponse {
@@ -3250,6 +3475,8 @@ pub mod manage_neuron_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct FollowResponse {}
@@ -3261,6 +3488,8 @@ pub mod manage_neuron_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct SetFollowingResponse {}
@@ -3272,6 +3501,8 @@ pub mod manage_neuron_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct MakeProposalResponse {
@@ -3287,6 +3518,8 @@ pub mod manage_neuron_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct RegisterVoteResponse {}
@@ -3297,6 +3530,8 @@ pub mod manage_neuron_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct SplitResponse {
@@ -3311,6 +3546,8 @@ pub mod manage_neuron_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct ClaimOrRefreshResponse {
@@ -3327,6 +3564,8 @@ pub mod manage_neuron_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct AddNeuronPermissionsResponse {}
@@ -3338,6 +3577,8 @@ pub mod manage_neuron_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct RemoveNeuronPermissionsResponse {}
@@ -3347,6 +3588,8 @@ pub mod manage_neuron_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Command {
@@ -3387,6 +3630,8 @@ pub mod manage_neuron_response {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetNeuron {
@@ -3435,6 +3680,8 @@ pub mod get_neuron_response {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetProposal {
@@ -3553,6 +3800,8 @@ pub struct ListProposalsResponse {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ListNeurons {
@@ -3614,6 +3863,8 @@ pub struct ListNervousSystemFunctionsResponse {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SetMode {
@@ -3627,6 +3878,8 @@ pub struct SetMode {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct SetModeResponse {}
@@ -3637,6 +3890,8 @@ pub struct SetModeResponse {}
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetMode {}
@@ -3647,6 +3902,8 @@ pub struct GetMode {}
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetModeResponse {
@@ -3729,6 +3986,8 @@ pub mod claim_swap_neurons_request {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct Direct {}
@@ -3748,7 +4007,7 @@ pub mod claim_swap_neurons_request {
         }
     }
     /// Needed to cause prost to generate a type isomorphic to
-    /// Optional<Vec<NeuronRecipe>>.
+    /// Optional\<Vec<NeuronRecipe>\>.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -3784,9 +4043,7 @@ pub struct ClaimSwapNeuronsResponse {
 }
 /// Nested message and enum types in `ClaimSwapNeuronsResponse`.
 pub mod claim_swap_neurons_response {
-    /// The ok result from `claim_swap_neurons. For every requested neuron,
-    /// a SwapNeuron message is returned, and should equal the count of
-    /// `ClaimSwapNeuronsRequest.neuron_recipes`.
+    /// The ok result from `claim_swap_neurons. For every requested neuron,  a SwapNeuron message is returned, and should equal the count of  `ClaimSwapNeuronsRequest.neuron_recipes\`.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -3809,6 +4066,8 @@ pub mod claim_swap_neurons_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct SwapNeuron {
@@ -3843,6 +4102,8 @@ pub mod claim_swap_neurons_response {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetMaturityModulationRequest {}
@@ -3853,6 +4114,8 @@ pub struct GetMaturityModulationRequest {}
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetMaturityModulationResponse {
@@ -3867,6 +4130,8 @@ pub struct GetMaturityModulationResponse {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct AddMaturityRequest {
@@ -3884,6 +4149,8 @@ pub struct AddMaturityRequest {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct AddMaturityResponse {
@@ -3897,6 +4164,8 @@ pub struct AddMaturityResponse {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct AdvanceTargetVersionRequest {
@@ -3911,6 +4180,8 @@ pub struct AdvanceTargetVersionRequest {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct AdvanceTargetVersionResponse {}
@@ -3922,6 +4193,8 @@ pub struct AdvanceTargetVersionResponse {}
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct RefreshCachedUpgradeStepsRequest {}
@@ -3933,6 +4206,8 @@ pub struct RefreshCachedUpgradeStepsRequest {}
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct RefreshCachedUpgradeStepsResponse {}
@@ -3989,6 +4264,8 @@ pub mod upgrade_journal_entry {
         serde::Serialize,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct TargetVersionSet {
@@ -4006,6 +4283,8 @@ pub mod upgrade_journal_entry {
         serde::Serialize,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct TargetVersionReset {
@@ -4023,6 +4302,8 @@ pub mod upgrade_journal_entry {
         serde::Serialize,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct UpgradeStarted {
@@ -4043,6 +4324,8 @@ pub mod upgrade_journal_entry {
             Clone,
             Copy,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Oneof,
         )]
         pub enum Reason {
@@ -4059,6 +4342,8 @@ pub mod upgrade_journal_entry {
         serde::Serialize,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct UpgradeOutcome {
@@ -4076,6 +4361,8 @@ pub mod upgrade_journal_entry {
             serde::Serialize,
             Clone,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Message,
         )]
         pub struct InvalidState {
@@ -4089,6 +4376,8 @@ pub mod upgrade_journal_entry {
             serde::Serialize,
             Clone,
             PartialEq,
+            Eq,
+            Hash,
             ::prost::Oneof,
         )]
         pub enum Status {
@@ -4150,6 +4439,8 @@ pub struct UpgradeJournal {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct GetUpgradeJournalRequest {
@@ -4196,6 +4487,8 @@ pub struct GetUpgradeJournalResponse {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct MintTokensRequest {
@@ -4214,6 +4507,8 @@ pub struct MintTokensRequest {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct MintTokensResponse {}
@@ -4224,6 +4519,8 @@ pub struct MintTokensResponse {}
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Subaccount {
@@ -4240,6 +4537,8 @@ pub struct Subaccount {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct Account {
@@ -4257,6 +4556,8 @@ pub struct Account {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct AddAllowedExtensionRequest {

@@ -169,7 +169,7 @@ pub fn get_cert_time(url: &url::Url, effective_canister_id: PrincipalId) -> Resu
         let paths = vec![path.clone()];
         let agent = assert_create_agent(url.as_str()).await;
         match agent
-            .read_state_raw(paths.clone(), effective_canister_id.into())
+            .read_state_raw(paths.clone(), Principal::from(effective_canister_id))
             .await
         {
             Ok(cert) => match lookup_value(&cert, path.clone()) {
@@ -340,4 +340,24 @@ pub fn install_nns_with_customizations_and_check_progress(
 
 pub fn install_nns_and_check_progress(topology: TopologySnapshot) {
     install_nns_with_customizations_and_check_progress(topology, NnsCustomizations::default());
+}
+
+pub fn can_fetch_logs(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
+    block_on(async {
+        match create_agent(url.as_str()).await {
+            Ok(agent) => {
+                let mcan = MessageCanister::from_canister_id(&agent, canister_id);
+                match tokio::time::timeout(Duration::from_secs(30), mcan.fetch_logs()).await {
+                    Ok(records) => records
+                        .iter()
+                        .any(|r| String::from_utf8_lossy(&r.content).contains(msg)),
+                    Err(_) => false,
+                }
+            }
+            Err(e) => {
+                debug!(log, "Could not create agent: {:?}", e);
+                false
+            }
+        }
+    })
 }

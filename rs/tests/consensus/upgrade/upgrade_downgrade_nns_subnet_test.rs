@@ -1,8 +1,8 @@
-use std::time::Duration;
-
 use anyhow::Result;
-
-use ic_consensus_system_test_upgrade_common::{bless_target_version, upgrade};
+use ic_consensus_system_test_upgrade_common::{
+    ALLOWED_FAILURES, UP_DOWNGRADE_OVERALL_TIMEOUT, UP_DOWNGRADE_PER_TEST_TIMEOUT,
+    elect_target_version, upgrade,
+};
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg_with_retries, install_nns_and_check_progress,
 };
@@ -19,10 +19,7 @@ use ic_types::Height;
 use slog::info;
 
 const DKG_INTERVAL: u64 = 9;
-const ALLOWED_FAILURES: usize = 1;
-const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
-const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(35 * 60);
-const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1;
 
 fn setup(env: TestEnv) {
     let subnet_under_test = Subnet::new(SubnetType::System)
@@ -42,7 +39,7 @@ fn upgrade_downgrade_nns_subnet(env: TestEnv) {
     let log = env.logger();
     let nns_node = env.get_first_healthy_system_node_snapshot();
 
-    let target_version = bless_target_version(&env, &nns_node);
+    let target_version = elect_target_version(&env, &nns_node);
     info!(log, "Upgrading NNS subnet to {} ...", target_version);
     let (faulty_node, can_id, msg) =
         upgrade(&env, &nns_node, &target_version, SubnetType::System, None);

@@ -34,7 +34,6 @@ use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 use icrc_ledger_types::icrc1::account::Subaccount;
-use pretty_bytes::converter;
 use rand::{RngCore, SeedableRng, rngs::StdRng};
 use std::{cell::RefCell, collections::BTreeMap};
 
@@ -131,8 +130,32 @@ fn proposal_action_iterator() -> impl Iterator<Item = u64> {
 
 /// Provide human readable String given a count of bytes.
 /// Ex: 4240000 -> "4.24 MB"
+///
+/// Uses SI units (base 1000) and rounds to at most 2 decimal places, dropping
+/// any trailing zeros (e.g. 4_000_000 -> "4 MB", not "4.00 MB").
 fn pretty_bytes(bytes: usize) -> String {
-    converter::convert(bytes as f64)
+    const UNITS: [&str; 9] = ["B", "kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+
+    // This avoids later doing 0_f64.ln(), which (in math) has NO result.
+    if bytes == 0 {
+        return "0 B".to_string();
+    }
+    let bytes = bytes as f64;
+
+    let delimiter = 1000_f64;
+    // bytes.ln() / delimiter.ln() is log_1000(bytes), i.e. log10(bytes) / 3.
+    let exponent = std::cmp::min(
+        (bytes.ln() / delimiter.ln()).floor() as i32,
+        (UNITS.len() - 1) as i32,
+    );
+
+    // Round to 2 decimals, then trim any trailing zeros and a trailing decimal point.
+    let value = format!("{:.2}", bytes / delimiter.powi(exponent));
+    let value = value.trim_end_matches('0').trim_end_matches('.');
+
+    let unit = UNITS[exponent as usize];
+
+    format!("{} {}", value, unit)
 }
 
 /// Create a vector of NeuronIds. This is an expensive enough operation to do

@@ -4,7 +4,15 @@ use crate::page_map::{
 
 use super::{PageAllocator, PageAllocatorSerialization, PageSerialization};
 use ic_sys::{PAGE_SIZE, PageIndex};
-use nix::unistd::dup;
+use std::os::fd::{BorrowedFd, IntoRawFd, RawFd};
+
+/// Wrapper around `nix::unistd::dup` that keeps the raw-fd based signature these
+/// tests rely on (nix 0.31 takes an `AsFd` and returns an `OwnedFd`).
+fn dup(fd: RawFd) -> nix::Result<RawFd> {
+    // SAFETY: `fd` is a valid file descriptor for the duration of the call.
+    let borrowed = unsafe { BorrowedFd::borrow_raw(fd) };
+    nix::unistd::dup(borrowed).map(IntoRawFd::into_raw_fd)
+}
 
 fn duplicate_file_descriptors(
     page_allocator: PageAllocatorSerialization,

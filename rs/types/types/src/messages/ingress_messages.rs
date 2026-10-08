@@ -16,12 +16,12 @@ use crate::{
 use ic_error_types::{ErrorCode, UserError};
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, ClearChunkStoreArgs,
-    DeleteCanisterSnapshotArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload,
+    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, CanisterMetricsArgs,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, IC_00, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, Method, Payload,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
-    StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
+    StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
@@ -588,9 +588,12 @@ pub fn extract_effective_canister_id(
         Ok(Method::StartCanister)
         | Ok(Method::CanisterStatus)
         | Ok(Method::DeleteCanister)
-        | Ok(Method::UninstallCode)
         | Ok(Method::StopCanister) => match CanisterIdRecord::decode(ingress.arg()) {
             Ok(record) => Ok(Some(record.get_canister_id())),
+            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+        },
+        Ok(Method::UninstallCode) => match UninstallCodeArgs::decode(ingress.arg()) {
+            Ok(args) => Ok(Some(args.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
         Ok(Method::CanisterInfo) => match CanisterInfoRequest::decode(ingress.arg()) {
@@ -673,8 +676,13 @@ pub fn extract_effective_canister_id(
             Ok(record) => Ok(Some(record.get_canister_id())),
             Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
         },
+        Ok(Method::CanisterMetrics) => match CanisterMetricsArgs::decode(ingress.arg()) {
+            Ok(record) => Ok(Some(record.get_canister_id())),
+            Err(err) => Err(ParseIngressError::InvalidSubnetPayload(err.to_string())),
+        },
 
-        Ok(Method::SetupInitialDKG)
+        Ok(Method::ListCanisters)
+        | Ok(Method::SetupInitialDKG)
         | Ok(Method::DepositCycles)
         | Ok(Method::HttpRequest)
         | Ok(Method::FlexibleHttpRequest)
@@ -694,6 +702,7 @@ pub fn extract_effective_canister_id(
         | Ok(Method::BitcoinGetSuccessors)
         | Ok(Method::BitcoinGetCurrentFeePercentiles)
         | Ok(Method::NodeMetricsHistory)
+        | Ok(Method::SubnetMetrics)
         | Ok(Method::SubnetInfo)
         | Ok(Method::FetchCanisterLogs) => {
             // Subnet method not allowed for ingress.

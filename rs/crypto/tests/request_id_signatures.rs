@@ -195,6 +195,24 @@ fn should_correctly_parse_der_encoded_openssl_ecdsa_p256_pk() {
 }
 
 #[test]
+fn should_correctly_parse_cose_encoded_der_wrapped_ed25519_pk() {
+    // Ed25519 public key (RFC 8032 TEST 1) encoded as a COSE_Key
+    // {kty=OKP, alg=EdDSA, crv=Ed25519, x=pk} and DER-wrapped with the IC's
+    // SubjectPublicKeyInfo OID 1.3.6.1.4.1.56387.1.1. The COSE parser must
+    // recognize the OKP/EdDSA/Ed25519 combination and surface it via
+    // `Ed25519PublicKeyDerWrappedCose`.
+    const ED25519_PK_COSE_DER_WRAPPED_HEX: &str = "303b300c060a2b0601040183b8430101032b00a4010103272006215820d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
+
+    let pk_cose_der = hex::decode(ED25519_PK_COSE_DER_WRAPPED_HEX).unwrap();
+    let (pk, bytes_type) = user_public_key_from_bytes(&pk_cose_der).unwrap();
+    assert_eq!(pk.algorithm_id, AlgorithmId::Ed25519);
+    assert_eq!(
+        bytes_type,
+        KeyBytesContentType::Ed25519PublicKeyDerWrappedCose
+    );
+}
+
+#[test]
 fn should_correctly_parse_cose_encoded_der_wrapped_ecdsa_p256_pk() {
     for pk_cose_der_hex in &[
         test_data::ECDSA_P256_PK_1_COSE_DER_WRAPPED_HEX,
@@ -352,7 +370,7 @@ fn should_fail_parsing_ec_keys_on_unsupported_curves() {
         assert_matches!(
             pk_result,
             Err(CryptoError::MalformedPublicKey { internal_error, .. })
-            if internal_error.contains("Unsupported or unparsable public key")
+            if internal_error.contains("Unsupported public key algorithm identifier")
         );
     }
 }
@@ -425,4 +443,24 @@ fn crypto_component(config: &CryptoConfig) -> CryptoComponent {
     ic_crypto_node_key_generation::generate_node_signing_keys(vault.as_ref());
 
     CryptoComponent::new(config, None, Arc::new(dummy_registry), no_op_logger(), None)
+}
+
+#[test]
+fn should_report_the_algorithm_identifier_of_an_unsupported_public_key() {
+    // A valid prime192v1 public key, i.e. a supported algorithm OID (ECDSA) with
+    // an unsupported curve OID as its parameters.
+    const VALID_PRIME192V1_PUBKEY_DER_HEX: &str = "3049301306072a8648ce3d020106082a8648ce3d0301010332000425adc4047e9dcf0d7efbe6bb6e76794555c51f0dfd6f7f90f3067f69e17e989d5969f68e9aefbef70a1788af0b86c03e";
+    let pk_der = hex::decode(VALID_PRIME192V1_PUBKEY_DER_HEX).expect("invalid hex");
+
+    let error = user_public_key_from_bytes(&pk_der).unwrap_err();
+
+    let CryptoError::MalformedPublicKey { internal_error, .. } = &error else {
+        panic!("unexpected error: {error}");
+    };
+    // The identifier is rendered in full, i.e. it is not truncated.
+    assert!(
+        internal_error.starts_with("Unsupported public key algorithm identifier:")
+            && !internal_error.ends_with("..."),
+        "unexpected error: {internal_error}"
+    );
 }

@@ -13,7 +13,7 @@ use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_crypto_tree_hash::{Digest, LabeledTree, MatchPatternPath, MixedHashTree, Witness};
-use ic_http_endpoints_public::start_server;
+use ic_http_endpoints_public::{query, start_server};
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     execution_environment::{
@@ -46,9 +46,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
 };
-use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_platform_version};
 use ic_types::{
-    CryptoHashOfPartialState, Height, RegistryVersion,
+    CanisterId, CryptoHashOfPartialState, Height, PlatformVersion, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
@@ -86,6 +86,55 @@ use tower_test::mock::Handle;
 
 pub type IngressFilterHandle = Handle<IngressFilterInput, IngressFilterResponse>;
 pub type QueryExecutionHandle = Handle<QueryExecutionInput, QueryExecutionResponse>;
+
+/// Unified endpoint type used to parameterise tests that cover both the canister and subnet
+/// synchronous call paths.
+#[derive(Copy, Clone, Debug)]
+pub enum UpdateEndpoint {
+    Canister(ic_http_endpoints_test_agent::Call),
+    Subnet(ic_http_endpoints_test_agent::CallSubnet),
+}
+
+impl UpdateEndpoint {
+    pub async fn call(
+        self,
+        addr: SocketAddr,
+        message: ic_http_endpoints_test_agent::IngressMessage,
+    ) -> reqwest::Response {
+        match self {
+            UpdateEndpoint::Canister(c) => c.call(addr, message).await,
+            UpdateEndpoint::Subnet(s) => s.call(addr, message).await,
+        }
+    }
+
+    pub fn default_ingress_message(&self) -> ic_http_endpoints_test_agent::IngressMessage {
+        match self {
+            UpdateEndpoint::Canister(_) => ic_http_endpoints_test_agent::IngressMessage::default(),
+            UpdateEndpoint::Subnet(_) => ic_http_endpoints_test_agent::IngressMessage::default()
+                .with_canister_id(CanisterId::ic_00().get(), CanisterId::ic_00().get())
+                .with_method_name("create_canister".to_string()),
+        }
+    }
+}
+
+pub async fn query_endpoint(version: query::Version, addr: SocketAddr) -> reqwest::Response {
+    match version {
+        query::Version::V2 | query::Version::V3 => {
+            ic_http_endpoints_test_agent::Query::new(
+                PrincipalId::default(),
+                PrincipalId::default(),
+                version,
+            )
+            .query(addr)
+            .await
+        }
+        query::Version::SubnetV3 => {
+            ic_http_endpoints_test_agent::Query::new_subnet(subnet_test_id(1).get())
+                .query(addr)
+                .await
+        }
+    }
+}
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
     let (service, handle) = tower_test::mock::pair::<QueryExecutionInput, QueryExecutionResponse>();
@@ -138,7 +187,7 @@ pub fn default_read_certified_state(
 )> {
     let height = latest_state.height();
     let lazy_tree = replicated_state_as_lazy_tree(latest_state.get_ref(), height);
-    let hash_tree = hash_lazy_tree(&lazy_tree).unwrap();
+    let hash_tree = hash_lazy_tree(&lazy_tree, None).unwrap();
     let partial_tree = materialize_partial(&lazy_tree, labeled_tree, None);
     let mht = hash_tree.witness::<MixedHashTree>(&partial_tree).unwrap();
     let cert = Certification {
@@ -207,9 +256,10 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
         None,
         None,
         None,
+        Default::default(),
     );
 
-    metadata.network_topology = network_topology;
+    metadata.network_topology = Arc::new(network_topology);
     metadata.batch_time = UNIX_EPOCH;
 
     Labeled::new(
@@ -397,6 +447,7 @@ pub struct HttpEndpointBuilder {
     certified_height: Option<Height>,
     ingress_pool_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_channel_capacity: usize,
+    platform_version: Option<PlatformVersion>,
 }
 
 impl HttpEndpointBuilder {
@@ -413,7 +464,13 @@ impl HttpEndpointBuilder {
             tls_config: Arc::new(MockTlsConfig::new()),
             certified_height: None,
             ingress_channel_capacity: MAX_P2P_IO_CHANNEL_SIZE,
+            platform_version: None,
         }
+    }
+
+    pub fn with_platform_version(mut self, platform_version: PlatformVersion) -> Self {
+        self.platform_version = Some(platform_version);
+        self
     }
 
     pub fn with_state_manager(
@@ -492,6 +549,7 @@ impl HttpEndpointBuilder {
         let (terminal_state_ingress_messages_tx, terminal_state_ingress_messages_rx) = channel(100);
 
         let node_id = node_test_id(1);
+        let platform_version = self.platform_version.unwrap_or_else(test_platform_version);
 
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
@@ -513,6 +571,7 @@ impl HttpEndpointBuilder {
             sig_verifier,
             node_id,
             subnet_id,
+            platform_version,
             nns_subnet_id,
             log,
             self.consensus_cache,

@@ -18,7 +18,7 @@ repos:
   - id: bazel_ruff_format
     name: Auto format Python files
     stages: [commit]
-    entry: bazel run //:ruff-format
+    entry: bazel run //:ruff-fix
     files: \.py$
     language: system
 

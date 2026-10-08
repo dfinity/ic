@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
-use ic_types::{CanisterId, PrincipalId, SubnetId};
+use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
 use icp_ledger::AccountIdentifier;
 use std::path::PathBuf;
 
@@ -39,12 +39,24 @@ pub struct ReplayToolArgs {
     pub data_root: Option<PathBuf>,
 
     #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
+    /// The replay will stop at this height, deliver potential extra batches and finally deliver one
+    /// final extra batch to make a checkpoint. If this is a CUP height and there no extra batches
+    /// to deliver, the checkpoint will be made at the height itself.
     pub replay_until_height: Option<u64>,
 
     #[clap(long)]
     /// Whether or not to skip prompts for user input.
     pub skip_prompts: bool,
+
+    #[clap(long)]
+    /// The GuestOS version the validator uses; defaults to the replica version.
+    pub guestos_version: Option<ReplicaVersion>,
+
+    /// The replica version under which the extra messages of the subcommand are executed. Required
+    /// if no consensus pool is available, otherwise the version is taken from its finalized tip and
+    /// this argument is ignored.
+    #[clap(long)]
+    pub replica_version: Option<ReplicaVersion>,
 }
 
 #[derive(Clone, Subcommand)]
@@ -107,26 +119,14 @@ pub struct UpgradeSubnetToReplicaVersionCmd {
     /// The Replica version record.
     #[clap(value_parser = parse_json::<ReplicaVersionRecord>)]
     pub replica_version_record: ReplicaVersionRecord,
-    /// If true, the replica version will be added and blessed in the registry
+    /// If true, the replica version will be added in the registry
     /// before upgrading the subnet to it.
     #[clap(long)]
-    pub add_and_bless_replica_version: bool,
+    pub add_replica_version: bool,
 }
 
 #[derive(Clone, Parser)]
 pub struct RestoreFromBackupCmd {
-    /// Registry local store path
-    pub registry_local_store_path: PathBuf,
-    /// Backup spool path
-    pub backup_spool_path: PathBuf,
-    /// The replica version to be restored
-    pub replica_version: String,
-    /// Height from which the restoration should happen
-    pub start_height: u64,
-}
-
-#[derive(Clone, Parser)]
-pub struct RestoreFromBackup2Cmd {
     /// Registry local store path
     pub registry_local_store_path: PathBuf,
     /// Backup spool path

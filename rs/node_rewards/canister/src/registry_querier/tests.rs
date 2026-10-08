@@ -309,6 +309,31 @@ fn test_node_re_registered_after_deletion() {
 }
 
 #[test]
+fn test_type4dot5_nodes_rewarded_as_type1dot1() {
+    let node_id = 5;
+    let no_id = 10;
+    let np_id = 20;
+
+    let (node_k, node_v) = generate_node_key_value(node_id, NodeRewardType::Type4dot5, no_id);
+    add_record_helper(&node_k, 39678, Some(node_v), "2025-07-17");
+
+    let client = client_for_tests();
+
+    let rewardables = client
+        .get_rewardable_nodes_per_provider(&to_native_date("2025-07-17"), None)
+        .unwrap()
+        .remove(&PrincipalId::new_user_test_id(np_id))
+        .unwrap();
+
+    let node = rewardables
+        .iter()
+        .find(|n| n.node_id == NodeId::from(PrincipalId::new_node_test_id(node_id)))
+        .expect("type4.5 node should be rewardable");
+
+    assert_eq!(node.node_reward_type, NodeRewardType::Type1dot1);
+}
+
+#[test]
 fn test_get_subnet_record_returns_correct_type() {
     let client = client_for_tests();
     let app_subnet: SubnetId = PrincipalId::new_subnet_test_id(10).into();

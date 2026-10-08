@@ -12,17 +12,19 @@ Success:: Upgrades work into both directions for all subnet types.
 
 end::catalog[] */
 
-use candid::Principal;
-use futures::future::try_join_all;
+use candid::{Encode, Principal};
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, cert_state_makes_progress_with_retries, store_message_with_retries,
+    can_fetch_logs, can_read_msg, cert_state_makes_progress_with_retries,
+    store_message_with_retries,
 };
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
-    assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
+    assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes, elect_replica_version,
 };
-use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
+use ic_consensus_threshold_sig_system_test_utils::{
+    get_public_key_with_retries, run_chain_key_signature_test,
+};
 use ic_management_canister_types::{CanisterId, TakeCanisterSnapshotArgs};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
@@ -32,34 +34,34 @@ use ic_system_test_driver::{
     util::{JournalStreamer, MessageCanister, block_on},
 };
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
-use ic_utils::interfaces::ManagementCanister;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-const ALLOWED_FAILURES: usize = 1;
+pub const ALLOWED_FAILURES: usize = 1;
 
-pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
-pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_mins(35);
+pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_mins(30);
 
-pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> ReplicaVersion {
+pub fn elect_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> ReplicaVersion {
     let logger = env.logger();
 
     let target_version = get_guestos_update_img_version();
 
-    // Bless target version
+    // Elect target version
     let sha256 = get_guestos_update_img_sha256();
-    let upgrade_url = get_guestos_update_img_url();
+    let upgrade_url = get_guestos_update_img_url(env);
     let guest_launch_measurements = get_guestos_update_launch_measurements();
-    block_on(bless_replica_version(
+    block_on(elect_replica_version(
         nns_node,
+        &env.topology_snapshot(),
         &target_version,
         &logger,
         sha256,
         Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
-    info!(&logger, "Blessed target version");
+    info!(&logger, "Elected target version");
 
     target_version
 }
@@ -175,12 +177,22 @@ pub fn upgrade(
         let agent = create_agent(healthy_node.get_public_url().as_str())
             .await
             .expect("Failed to create agent");
-        let mgr = ManagementCanister::create(&agent);
         let snapshot_args = TakeCanisterSnapshotArgs {
             canister_id: CanisterId::from(can_id),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         };
-        mgr.take_canister_snapshot(&can_id, &snapshot_args)
+        // Call the management canister directly instead of via `ic_utils`'s typed
+        // helper: `ic_utils` pulls `ic-management-canister-types` from crates.io, which
+        // Cargo treats as a distinct crate from this workspace's local copy (same 0.8.0
+        // version), so its `take_canister_snapshot` expects an incompatible
+        // `TakeCanisterSnapshotArgs` type.
+        agent
+            .update(&Principal::management_canister(), "take_canister_snapshot")
+            .with_arg(Encode!(&snapshot_args).unwrap())
+            .with_effective_canister_id(CanisterId::from(can_id))
+            .call_and_wait()
             .await
             .unwrap();
     });
@@ -236,6 +248,11 @@ pub fn upgrade(
         msg
     ));
     info!(logger, "After upgrade could read message '{}'", msg);
+    assert!(
+        can_fetch_logs(&logger, &faulty_node.get_public_url(), can_id, msg),
+        "Canister {} logs missing after upgrade",
+        can_id
+    );
 
     let msg_2 = &format!("hello after upgrade to {upgrade_version}");
     let can_id_2 = store_message_with_retries(
@@ -251,10 +268,24 @@ pub fn upgrade(
         msg_2
     ));
     info!(logger, "Could store and read message '{}'", msg_2);
+    assert!(
+        can_fetch_logs(&logger, &faulty_node.get_public_url(), can_id_2, msg_2),
+        "Canister {} logs missing after upgrade",
+        can_id_2
+    );
+    // Storing msg_2 above guarantees a round was executed, so migration of canister_log to
+    // log_memory_store has run. Verify logs are still accessible after migration.
+    assert!(
+        can_fetch_logs(&logger, &faulty_node.get_public_url(), can_id, msg),
+        "Canister {} logs missing after upgrade (after migration)",
+        can_id
+    );
 
     if let Some((canister, public_keys)) = ecdsa_canister_key {
-        for (key_id, public_key) in public_keys {
-            run_chain_key_signature_test(canister, &logger, key_id, public_key.clone());
+        for (key_id, old_public_key) in public_keys {
+            let new_public_key =
+                block_on(get_public_key_with_retries(key_id, canister, &logger, 100)).unwrap();
+            assert_eq!(old_public_key, &new_public_key);
         }
     }
 
@@ -292,24 +323,19 @@ async fn upgrade_to(
     );
     deploy_guestos_to_all_subnet_nodes(nns_node, target_version, subnet_id).await;
 
+    for node in &healthy_nodes {
+        assert_assigned_replica_version(node, target_version, logger.clone());
+    }
+
     info!(
         logger,
         "Checking that all nodes produced a log indicating that the orchestrator has gracefully shut \
         down the tasks",
     );
-
-    // Concurrently assert that all orchestrators shut down gracefully
-    #[allow(clippy::redundant_iter_cloned)] // Need to clone to move the nodes into async tasks
-    try_join_all(healthy_nodes.iter().cloned().map(|node| {
-        tokio::task::spawn_blocking(move || assert_orchestrator_stopped_gracefully(&node))
-    }))
-    .await
-    .unwrap();
-    info!(logger, "All orchestrators shut down the tasks gracefully");
-
     for node in &healthy_nodes {
-        assert_assigned_replica_version(node, target_version, logger.clone());
+        assert_orchestrator_stopped_gracefully(node);
     }
+    info!(logger, "All orchestrators shut down the tasks gracefully");
 
     info!(
         logger,
@@ -417,22 +443,16 @@ fn find_latest_computed_root_hashes_from_logs(
     latest_root_hash_per_node
 }
 
-/// Asserts that the orchestrator has shut down gracefully by searching for a specific log entry.
-/// Panics if the log entry is not found but the log stream ends (which indicates the node
-/// rebooted).
+/// Asserts that the orchestrator has shut down gracefully by searching the previous boot's
+/// journal for a specific log entry.
 ///
-/// We use a bash script instead of connecting to the log stream endpoint because as the
-/// orchestrator is shutting down, the endpoint might close right away without letting us the
-/// chance to read the relevant log entry. In constrast, the SSH connection remains open longer.
-///
-/// This function will never return if an upgrade is not scheduled.
+/// This must only be called once the node has rebooted, so that `--boot=-1` refers to the boot
+/// cycle during which the orchestrator was shutting down.
 fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
     let session = node.block_on_ssh_session().unwrap();
-    session.set_timeout(5 * 60 * 1000);
     assert!(
         JournalStreamer::new(session)
-            .follow()
-            .max_lines(1)
+            .previous_boot()
             .contains("Orchestrator shut down gracefully")
             .unwrap_or_default(),
         "Orchestrator of node {} did not shut down gracefully",

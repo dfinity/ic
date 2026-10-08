@@ -1,0 +1,3 @@
+load(":mainnet_artifact_refs_test.bzl", "mainnet_artifact_refs_test_suite")
+
+mainnet_artifact_refs_test_suite(name = "mainnet_artifact_refs_test")

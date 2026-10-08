@@ -166,14 +166,110 @@ fn canonical_encoding_stream_header() {
     }
 }
 
+/// Canonical CBOR encoding (versions `V26` and above) of:
+///
+/// ```no_run
+/// StreamHeader {
+///     begin: 23.into(),
+///     end: 25.into(),
+///     signals_end: 256.into(),
+///     reject_signals: vec![
+///         RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+///         RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
+///         RejectSignal::new(RejectReason::QueueFull, 251.into()),
+///         RejectSignal::new(RejectReason::OutOfMemory, 252.into()),
+///         RejectSignal::new(RejectReason::CanisterStopping, 253.into()),
+///         RejectSignal::new(RejectReason::CanisterStopped, 254.into()),
+///         RejectSignal::new(RejectReason::Unknown, 255.into()),
+///         RejectSignal::new(RejectReason::EngineNotAllowed, 248.into()),
+///     ]
+///     .into(),
+///     flags: StreamFlags {
+///        deprecated_responses_only: true,
+///     },
+/// }
+/// ```
+///
+/// Expected:
+///
+/// ```text
+/// A5          # map(5)
+///    00       # field_index(StreamHeader::begin)
+///    17       # unsigned(23)
+///    01       # field_index(StreamHeader::end)
+///    18 19    # unsigned(25)
+///    02       # field_index(StreamHeader::signals_end)
+///    19 0100  # unsigned(256)
+///    04       # field_index(StreamHeader::flags)
+///    01       # unsigned(1)
+///    05       # field_index(StreamHeader::reject_signals)
+///    A8       # map(8)
+///       00    # field_index(RejectSignals::canister_migrating_deltas)
+///       81    # array(1)
+///          07 # unsigned(7)
+///       01    # field_index(RejectSignals::canister_not_found_deltas)
+///       81    # array(1)
+///          06 # unsigned(6)
+///       02    # field_index(RejectSignals::canister_stopped_deltas)
+///       81    # array(1)
+///          02 # unsigned(2)
+///       03    # field_index(RejectSignals::canister_stopping_deltas)
+///       81    # array(1)
+///          03 # unsigned(3)
+///       04    # field_index(RejectSignals::queue_full_deltas)
+///       81    # array(1)
+///          05 # unsigned(5)
+///       05    # field_index(RejectSignals::out_of_memory_deltas)
+///       81    # array(1)
+///          04 # unsigned(4)
+///       06    # field_index(RejectSignals::unknown_deltas)
+///       81    # array(1)
+///          01 # unsigned(1)
+///       07    # field_index(RejectSignals::engine_not_allowed_deltas)
+///       81    # array(1)
+///          08 # unsigned(8)
+/// ```
+/// Used http://cbor.me/ for printing the human friendly output.
+#[test]
+fn canonical_encoding_stream_header_v26() {
+    for certification_version in
+        all_supported_versions().filter(|v| *v >= CertificationVersion::V26)
+    {
+        let header = StreamHeader::new(
+            23.into(),
+            25.into(),
+            256.into(),
+            vec![
+                RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+                RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
+                RejectSignal::new(RejectReason::QueueFull, 251.into()),
+                RejectSignal::new(RejectReason::OutOfMemory, 252.into()),
+                RejectSignal::new(RejectReason::CanisterStopping, 253.into()),
+                RejectSignal::new(RejectReason::CanisterStopped, 254.into()),
+                RejectSignal::new(RejectReason::Unknown, 255.into()),
+                RejectSignal::new(RejectReason::EngineNotAllowed, 248.into()),
+            ]
+            .into(),
+            StreamFlags {
+                deprecated_responses_only: true,
+            },
+        );
+
+        assert_eq!(
+            "A5 00 17 01 18 19 02 19 01 00 04 01 05 A8 00 81 07 01 81 06 02 81 02 03 81 03 04 81 05 05 81 04 06 81 01 07 81 08",
+            as_hex(&encode_stream_header(&header, certification_version))
+        );
+    }
+}
+
 /// Canonical CBOR encoding of:
 ///
 /// ```no_run
 /// SubnetMetrics {
 ///     consumed_cycles_by_deleted_canisters: 0.into(),
-///     consumed_cycles_http_outcalls: 50_000_000_000.into(),
-///     consumed_cycles_ecdsa_outcalls: 100_000_000_000.into(),
 ///     consumed_cycles_by_use_case: btreemap! {
+///         CyclesUseCase::HTTPOutcalls => 50_000_000_000.into(),
+///         CyclesUseCase::ECDSAOutcalls => 100_000_000_000.into(),
 ///         CyclesUseCase::Instructions => 80_000_000_000.into(),
 ///         CyclesUseCase::RequestAndResponseTransmission => 20_000_000_000.into(),
 ///     },
@@ -187,10 +283,11 @@ fn canonical_encoding_stream_header() {
 /// }
 /// ```
 ///
-/// Expected:
+/// Expected (for certification versions up to and including `V28`):
 ///
-/// For the `consumed_cycles_total`, the expected value (250B) is the sum of all
-/// the invividual values above.
+/// For the `consumed_cycles_total`, the expected value (250B) is the sum of the
+/// `consumed_cycles_by_deleted_canisters` and `consumed_cycles_by_use_case`
+/// values above.
 ///
 /// ```text
 /// A4                        # map(4)
@@ -207,14 +304,37 @@ fn canonical_encoding_stream_header() {
 ///    03                     # field_index(SubnetMetrics::update_transactions_total)
 ///    19 1068                # unsigned(4200)
 /// ```
+///
+/// Starting with `V29`, the `Instructions` (80B) and
+/// `RequestAndResponseTransmission` (20B) use case entries are no longer added
+/// on top of the deleted canisters scalar (fixing the double counting), while
+/// the cycles consumed by non-deleted canisters (50B, folded into the stored
+/// aggregate by `SubnetMetrics::refresh_consumed_cycles`) are added instead.
+/// Hence the expected value becomes
+/// 0 (deleted) + 50B (HTTP) + 100B (ECDSA) + 50B (canisters) = 200B
+/// (`1B 0000002E90EDD000`).
+///
+/// Starting with `V30`, the cycles consumed by non-deleted canisters are the sum
+/// of their monotonic `consumed_cycles_monotonic` (30B, excluding outstanding
+/// prepayments) instead of their `consumed_cycles` gauges (50B). Hence the
+/// expected value becomes
+/// 0 (deleted) + 50B (HTTP) + 100B (ECDSA) + 30B (canisters) = 180B
+/// (`1B 00000029E8D60800`).
+///
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
 fn canonical_encoding_subnet_metrics() {
     for certification_version in all_supported_versions() {
         let mut metrics = SubnetMetrics::default();
         metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::zero());
-        metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(50_000_000_000));
-        metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(100_000_000_000));
+        metrics.observe_consumed_cycles_with_use_case(
+            CyclesUseCase::HTTPOutcalls,
+            NominalCycles::new(50_000_000_000),
+        );
+        metrics.observe_consumed_cycles_with_use_case(
+            CyclesUseCase::ECDSAOutcalls,
+            NominalCycles::new(100_000_000_000),
+        );
         metrics.num_canisters = 5;
         metrics.canister_state_bytes = NumBytes::from(5 * 1024 * 1024);
         metrics.update_transactions_total = 4200;
@@ -237,8 +357,21 @@ fn canonical_encoding_subnet_metrics() {
         metrics.threshold_signature_agreements =
             BTreeMap::from([(schnorr_key_id, 15), (ecdsa_key_id, 16)]);
 
+        metrics.refresh_consumed_cycles(
+            NominalCycles::new(50_000_000_000),
+            NominalCycles::new(30_000_000_000),
+        );
+
+        let expected = if certification_version >= CertificationVersion::V30 {
+            "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 29 E8 D6 08 00 01 00 03 19 10 68"
+        } else if certification_version >= CertificationVersion::V29 {
+            "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 2E 90 ED D0 00 01 00 03 19 10 68"
+        } else {
+            "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 3A 35 29 44 00 01 00 03 19 10 68"
+        };
+
         assert_eq!(
-            "A4 00 05 01 1A 00 50 00 00 02 A2 00 1B 00 00 00 3A 35 29 44 00 01 00 03 19 10 68",
+            expected,
             as_hex(&encode_subnet_metrics(&metrics, certification_version))
         );
     }
@@ -1910,21 +2043,25 @@ fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
 }
 
 fn reject_signals(
-    _certification_version: CertificationVersion,
+    certification_version: CertificationVersion,
 ) -> (VecDeque<RejectSignal>, StreamIndex) {
-    (
-        vec![
-            RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
-            RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
-            RejectSignal::new(RejectReason::CanisterStopped, 251.into()),
-            RejectSignal::new(RejectReason::CanisterStopping, 252.into()),
-            RejectSignal::new(RejectReason::QueueFull, 253.into()),
-            RejectSignal::new(RejectReason::OutOfMemory, 254.into()),
-            RejectSignal::new(RejectReason::Unknown, 255.into()),
-        ]
-        .into(),
-        256.into(),
-    )
+    let mut reject_signals = vec![
+        RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
+        RejectSignal::new(RejectReason::CanisterStopped, 251.into()),
+        RejectSignal::new(RejectReason::CanisterStopping, 252.into()),
+        RejectSignal::new(RejectReason::QueueFull, 253.into()),
+        RejectSignal::new(RejectReason::OutOfMemory, 254.into()),
+        RejectSignal::new(RejectReason::Unknown, 255.into()),
+    ];
+    // `EngineNotAllowed` signals are only encodable starting at V26.
+    if certification_version >= CertificationVersion::V26 {
+        reject_signals.push(RejectSignal::new(
+            RejectReason::EngineNotAllowed,
+            248.into(),
+        ));
+    }
+    (reject_signals.into(), 256.into())
 }
 
 fn request_message(certification_version: CertificationVersion) -> StreamMessage {

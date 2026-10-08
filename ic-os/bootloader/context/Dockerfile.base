@@ -1,0 +1,6 @@
+FROM ubuntu:26.04
+
+USER root:root
+
+# Pull required packages
+RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime

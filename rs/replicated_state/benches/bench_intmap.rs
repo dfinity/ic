@@ -13,7 +13,7 @@ fn value(k: u64) -> Value {
 
 const BENCH_SIZES: &[u64] = &[10, 100, 1000];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 struct Key128(i32, usize);
 
 impl AsInt for Key128 {

@@ -4,6 +4,7 @@ use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize;
 use ic_consensus_utils::{
     MINIMUM_CHAIN_LENGTH, active_high_threshold_nidkg_id, aggregate,
     bouncer_metrics::BouncerMetrics, membership::Membership, registry_version_at_height,
+    subnet_splitting_status_at_height,
 };
 use ic_crypto_tree_hash::{Witness, recompute_digest};
 use ic_interfaces::{
@@ -14,7 +15,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashMetadata, StateManager};
-use ic_logger::{ReplicaLogger, debug, error, trace};
+use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -25,13 +26,13 @@ use ic_types::{
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
+        dkg::{PostSplitArgs, SubnetSplittingStatus},
     },
     crypto::{CryptoHash, Signed},
     replica_config::ReplicaConfig,
 };
 use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{cell::RefCell, collections::BTreeSet, sync::Arc, time::Instant};
-use tokio::sync::watch;
 
 struct CertifierMetrics {
     shares_created: IntCounter,
@@ -50,7 +51,6 @@ pub struct CertifierImpl {
     metrics: CertifierMetrics,
     /// The highest height that has been purged. Used to avoid redundant purging.
     highest_purged_height: RefCell<Height>,
-    max_certified_height_tx: watch::Sender<Height>,
     log: ReplicaLogger,
 }
 
@@ -151,16 +151,6 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
                         .deliver_state_certification(certification);
                     self.metrics.last_certified_height.set(height.get() as i64);
                     debug!(&self.log, "Delivered certification for height {}", height);
-
-                    self.max_certified_height_tx.send_if_modified(|h| {
-                        if height > *h {
-                            *h = height;
-                            true
-                        } else {
-                            false
-                        }
-                    });
-
                     true
                 }
                 None => false,
@@ -283,7 +273,6 @@ impl CertifierImpl {
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
-        max_certified_height_tx: watch::Sender<Height>,
     ) -> Self {
         let membership = Arc::new(Membership::new(
             consensus_pool_cache.clone(),
@@ -318,7 +307,6 @@ impl CertifierImpl {
             },
             log,
             highest_purged_height: RefCell::new(Height::from(1)),
-            max_certified_height_tx,
         }
     }
 
@@ -353,6 +341,10 @@ impl CertifierImpl {
                 certification_pool
                     .shares_at_height(state_hash_metadata.height)
                     .all(|share| share.signed.signature.signer != self.replica_config.node_id)
+            })
+            // Filter out all heights, where the subnet splitting is taking place
+            .filter(|state_hash_metadata| {
+                !self.should_skip_due_to_subnet_splitting(state_hash_metadata.height)
             })
             .cloned()
             .filter_map(|state_hash_metadata| {
@@ -493,6 +485,14 @@ impl CertifierImpl {
         let registry_version =
             registry_version_at_height(self.consensus_pool_cache.as_ref(), certification.height)?;
 
+        // If a subnet splitting is taking place, we need to skip validating certifications (and
+        // shares). In particular because after a split, before replicas get restarted, they are
+        // still under the same P2P network and can gossip certifications for states of different
+        // subnets.
+        if self.should_skip_due_to_subnet_splitting(certification.height) {
+            return None;
+        }
+
         // check if the certification is indeed valid for the specified height. If
         // not, we consider the certification invalid.
         if let Err(e) = validate_height_witness(
@@ -530,6 +530,14 @@ impl CertifierImpl {
     ) -> Option<ChangeAction> {
         let msg = CertificationMessage::CertificationShare(share.clone());
         let content = &share.signed.content;
+
+        // If a subnet splitting is taking place, we need to skip validating certifications (and
+        // shares). In particular because after a split, before replicas get restarted, they are
+        // still under the same P2P network and can gossip certifications for states of different
+        // subnets.
+        if self.should_skip_due_to_subnet_splitting(share.height) {
+            return None;
+        }
 
         // If the share has an invalid content or does not belong to the
         // committee
@@ -596,6 +604,59 @@ impl CertifierImpl {
             }
         }
     }
+
+    /// Checks if we should skip the creation and/or validation of certifications/shares
+    /// at the given height, due to an ongoing subnet splitting.
+    fn should_skip_due_to_subnet_splitting(&self, height: Height) -> bool {
+        match subnet_splitting_status_at_height(self.consensus_pool_cache.as_ref(), height) {
+            None => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Missing finalized summary block for height {height}. \
+                    Skipping creation/validation of certifications/shares"
+                );
+
+                true
+            }
+            Some(SubnetSplittingStatus::NotScheduled) => false,
+            // Don't produce certifications in the dkg interval where the subnet splitting is
+            // happening as it will be skipped by consensus anyways
+            Some(SubnetSplittingStatus::Scheduled(..)) => {
+                info!(
+                    every_n_seconds => 30,
+                    self.log,
+                    "Skipping creation/validation of certifications/shares at height {height} \
+                    because a subnet splitting is taking place at the current interval"
+                );
+
+                true
+            }
+            // Wait for the replica to be restarted with the new `subnet_id`
+            Some(SubnetSplittingStatus::PostSplit(PostSplitArgs { new_subnet_id })) => {
+                if new_subnet_id != self.replica_config.subnet_id {
+                    info!(
+                        every_n_seconds => 30,
+                        self.log,
+                        "Skipping creation/validation of certifications/shares at height {height} \
+                        because a subnet splitting has taken place and the replica is still running \
+                        with the old subnet_id"
+                    );
+
+                    true
+                } else {
+                    info!(
+                        every_n_seconds => 30,
+                        self.log,
+                        "A subnet splitting has just taken place and the replica is running with the \
+                        new subnet_id. Creating/validating certifications/shares at height {height}"
+                    );
+
+                    false
+                }
+            }
+        }
+    }
 }
 
 fn validate_height_witness(
@@ -630,7 +691,7 @@ mod tests {
     use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
     use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
     use ic_canonical_state_tree_hash::lazy_tree::materialize::materialize_partial;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_tree_hash::{Digest, Witness, sparse_labeled_tree_from_paths};
     use ic_interfaces::{
         certification::CertificationPool,
@@ -638,9 +699,11 @@ mod tests {
     };
     use ic_interfaces_state_manager::StateHashMetadata;
     use ic_registry_subnet_type::SubnetType;
+    use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_types::consensus::{BlockPayload, HashedBlock, Payload, dkg::SplittingArgs};
     use ic_types::{
         CryptoHashOfPartialState, Height,
         artifact::CertificationMessageId,
@@ -739,7 +802,7 @@ mod tests {
         height: Height,
     ) -> (Witness, CryptoHashOfPartialState) {
         let lazy_tree = replicated_state_as_lazy_tree(state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree).unwrap();
+        let hash_tree = hash_lazy_tree(&lazy_tree, None).unwrap();
         let paths = vec![vec![].into()];
         let labeled_tree = sparse_labeled_tree_from_paths(&paths).unwrap();
         let partial_tree = materialize_partial(&lazy_tree, &labeled_tree, None);
@@ -761,9 +824,7 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 1);
-
-                let (max_certified_height_tx, _) = watch::channel(Height::from(0));
+                } = DependenciesBuilder::new(pool_config.clone(), 1).build();
 
                 let certifier = CertifierImpl::new(
                     replica_config,
@@ -773,7 +834,6 @@ mod tests {
                     pool.get_cache(),
                     MetricsRegistry::new(),
                     log,
-                    max_certified_height_tx,
                 );
 
                 let mut cert = if let CertificationMessage::Certification(cert) =
@@ -800,7 +860,7 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
                 pool.advance_round_normal_operation();
                 add_expectations(state_manager.clone(), 1, 4);
                 let metrics_registry = MetricsRegistry::new();
@@ -810,8 +870,6 @@ mod tests {
                     ic_logger::replica_logger::no_op_logger(),
                     metrics_registry.clone(),
                 );
-                let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
                 let certifier = CertifierImpl::new(
                     replica_config,
                     registry,
@@ -820,7 +878,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry.clone(),
                     log,
-                    max_certified_height_tx,
                 );
                 let bouncer_factory = CertifierBouncer::new(&metrics_registry, pool.get_cache());
 
@@ -869,12 +926,11 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 pool.advance_round_normal_operation_n(6);
                 add_expectations(state_manager.clone(), 1, 4);
                 let metrics_registry = MetricsRegistry::new();
-                let (max_certified_height_tx, _) = watch::channel(Height::from(0));
                 let mut cert_pool = CertificationPoolImpl::new(
                     replica_config.node_id,
                     pool_config,
@@ -889,7 +945,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry,
                     log,
-                    max_certified_height_tx,
                 );
 
                 // generate a certifications for heights 1, 2 and 4
@@ -1008,7 +1063,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies(pool_config.clone(), 6);
+            } = DependenciesBuilder::new(pool_config.clone(), 6).build();
             // make the mock state manager return empty hashes for heights 3, 4 and 5
             add_expectations(state_manager.clone(), 3, 5);
             let metrics_registry = MetricsRegistry::new();
@@ -1018,8 +1073,6 @@ mod tests {
                 ic_logger::replica_logger::no_op_logger(),
                 metrics_registry.clone(),
             );
-            let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
             with_test_replica_logger(|log| {
                 let certifier = CertifierImpl::new(
                     replica_config,
@@ -1029,7 +1082,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry,
                     log,
-                    max_certified_height_tx,
                 );
 
                 std::iter::empty()
@@ -1069,7 +1121,7 @@ mod tests {
                     .collect();
 
                 // sort by heights
-                certs.sort_by(|s1, s2| s1.height.cmp(&s2.height));
+                certs.sort_by_key(|s| s.height);
 
                 assert_eq!(certs[0].height, Height::from(3));
                 assert_eq!(certs[1].height, Height::from(4));
@@ -1091,7 +1143,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies(pool_config.clone(), 7);
+            } = DependenciesBuilder::new(pool_config.clone(), 7).build();
             pool.insert_beacon_chain(&pool.make_next_beacon(), Height::from(10));
             // make the mock state manager return empty hashes for heights 3, 4 and 5
             add_expectations(state_manager.clone(), 3, 5);
@@ -1102,8 +1154,6 @@ mod tests {
                 ic_logger::replica_logger::no_op_logger(),
                 metrics_registry.clone(),
             );
-            let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
             with_test_replica_logger(|log| {
                 let certifier = CertifierImpl::new(
                     replica_config,
@@ -1113,7 +1163,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry,
                     log,
-                    max_certified_height_tx,
                 );
 
                 std::iter::empty()
@@ -1167,7 +1216,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies(pool_config.clone(), 4);
+            } = DependenciesBuilder::new(pool_config.clone(), 4).build();
             pool.advance_round_normal_operation_n(10);
             // make the mock state manager return empty hashes for heights 3, 4 and 5
             add_expectations(state_manager.clone(), 3, 5);
@@ -1178,8 +1227,6 @@ mod tests {
                 ic_logger::replica_logger::no_op_logger(),
                 metrics_registry.clone(),
             );
-            let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
             with_test_replica_logger(|log| {
                 let certifier = CertifierImpl::new(
                     replica_config,
@@ -1189,7 +1236,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry,
                     log,
-                    max_certified_height_tx,
                 );
 
                 let shares = certifier.sign(
@@ -1242,13 +1288,11 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 1);
+                } = DependenciesBuilder::new(pool_config.clone(), 1).build();
                 pool.advance_round_normal_operation_n(10);
                 // make the mock state manager return empty hashes for heights 3, 4 and 5
                 add_expectations(state_manager.clone(), 3, 5);
                 let metrics_registry = MetricsRegistry::new();
-                let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
                 let certifier = CertifierImpl::new(
                     replica_config.clone(),
                     registry,
@@ -1257,7 +1301,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry.clone(),
                     log,
-                    max_certified_height_tx,
                 );
                 let mut cert_pool = CertificationPoolImpl::new(
                     replica_config.node_id,
@@ -1418,7 +1461,7 @@ mod tests {
                 crypto,
                 state_manager,
                 ..
-            } = dependencies(pool_config.clone(), 4);
+            } = DependenciesBuilder::new(pool_config.clone(), 4).build();
             // make the mock state manager return empty hashes for heights 4 and 5
             add_expectations(state_manager.clone(), 4, 5);
             let metrics_registry = MetricsRegistry::new();
@@ -1428,8 +1471,6 @@ mod tests {
                 ic_logger::replica_logger::no_op_logger(),
                 metrics_registry.clone(),
             );
-            let (max_certified_height_tx, _) = watch::channel(Height::from(0));
-
             with_test_replica_logger(|log| {
                 let certifier = CertifierImpl::new(
                     replica_config,
@@ -1439,7 +1480,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry,
                     log,
-                    max_certified_height_tx,
                 );
 
                 std::iter::empty()
@@ -1501,144 +1541,6 @@ mod tests {
         })
     }
 
-    /// Test that the certifier always transmits the highest certified height that
-    /// has been seen so far. I.e. always transmit the global maximum height.
-    /// Test scenario:
-    /// 1. Certifier receives certifications for heights 1, 2, 3.
-    ///     - Certifier should transmit height 3.
-    /// 2. Certifier receives certification for height 4.
-    ///    - Certifier should transmit height 4.
-    /// 3. Certifier receives certifications for heights 4, 3, 2, 1.
-    ///   - Certifier should not transmit any height, as none of the heights are higher
-    ///     than the last transmitted height.
-    #[test]
-    fn test_certified_heights_are_transmitted() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    registry,
-                    crypto,
-                    state_manager,
-                    ..
-                } = dependencies(pool_config.clone(), 4);
-
-                let metrics_registry = MetricsRegistry::new();
-                let (max_certified_height_tx, mut max_certified_height_rx) =
-                    watch::channel(Height::from(0));
-                let cert_pool = CertificationPoolImpl::new(
-                    replica_config.node_id,
-                    pool_config,
-                    ic_logger::replica_logger::no_op_logger(),
-                    metrics_registry.clone(),
-                );
-
-                for height in 1..=4 {
-                    cert_pool
-                        .validated
-                        .insert(CertificationMessage::Certification(Certification {
-                            height: Height::from(height),
-                            height_witness: Some(Witness::new_for_testing_with_height()),
-                            signed: Signed {
-                                content: gen_content(Height::from(height)),
-                                signature: ThresholdSignature::fake(),
-                            },
-                        }));
-                }
-
-                let certifier = CertifierImpl::new(
-                    replica_config,
-                    registry,
-                    crypto,
-                    state_manager.clone(),
-                    pool.get_cache(),
-                    metrics_registry,
-                    log,
-                    max_certified_height_tx,
-                );
-
-                // We expect deliver_state_certification() to be called 8 times since we call
-                // CertifierImpl::on_state_change 3 times with 8 heights in total:
-                // We mock the certified heights [1, 2, 3], [4], [4, 3, 2, 1] which are in total 8 heights.
-                // I.e. the certifier should deliver the state certification 8 times.
-                state_manager
-                    .get_mut()
-                    .expect_deliver_state_certification()
-                    .times(8)
-                    .return_const(());
-
-                let state_hashes = |heights: Vec<u64>| {
-                    heights
-                        .into_iter()
-                        .map(|h| StateHashMetadata {
-                            height: Height::from(h),
-                            hash: CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
-                            height_witness: Witness::new_for_testing_with_height(),
-                        })
-                        .collect::<Vec<_>>()
-                };
-
-                // We mock the state manager to return the heights
-                // of the states that are certified. The CertifierImpl
-                // should transmit the highest height that it has seen
-                // each time it sees a new height it certifies by delivering it
-                // to the state manager.
-                state_manager
-                    .get_mut()
-                    .expect_list_state_hashes_to_certify()
-                    .times(1)
-                    .return_const(state_hashes(vec![1, 2, 3]));
-                state_manager
-                    .get_mut()
-                    .expect_list_state_heights_to_certify()
-                    .times(1)
-                    .return_const(vec![]);
-
-                certifier.on_state_change(&cert_pool);
-                assert_eq!(
-                    *max_certified_height_rx.borrow_and_update(),
-                    Height::from(3)
-                );
-
-                // New max height is 4, so it should be transmitted
-                state_manager
-                    .get_mut()
-                    .expect_list_state_hashes_to_certify()
-                    .times(1)
-                    .return_const(state_hashes(vec![4]));
-                state_manager
-                    .get_mut()
-                    .expect_list_state_heights_to_certify()
-                    .times(1)
-                    .return_const(vec![]);
-                certifier.on_state_change(&cert_pool);
-                assert_eq!(
-                    *max_certified_height_rx.borrow_and_update(),
-                    Height::from(4),
-                    "Expected height 4 to be transmitted as it is higher than previous transmitted heights"
-                );
-
-                // None of these heights are higher than the last transmitted height
-                state_manager
-                    .get_mut()
-                    .expect_list_state_hashes_to_certify()
-                    .times(1)
-                    .return_const(state_hashes(vec![4, 3, 2, 1]));
-                state_manager
-                    .get_mut()
-                    .expect_list_state_heights_to_certify()
-                    .times(1)
-                    .return_const(vec![]);
-                certifier.on_state_change(&cert_pool);
-                assert!(
-                    !max_certified_height_rx.has_changed().unwrap(),
-                    "No new height should be sent if they are lower than a previously sent height."
-                );
-            })
-        })
-    }
-
     /// Test that the certifier delivers certification requested by the state manager
     /// via the function `StateManager::list_state_heights_to_certify`.
     /// Test scenario:
@@ -1657,11 +1559,9 @@ mod tests {
                     crypto,
                     state_manager,
                     ..
-                } = dependencies(pool_config.clone(), 4);
+                } = DependenciesBuilder::new(pool_config.clone(), 4).build();
 
                 let metrics_registry = MetricsRegistry::new();
-                let (max_certified_height_tx, _max_certified_height_rx) =
-                    watch::channel(Height::from(0));
                 let cert_pool = CertificationPoolImpl::new(
                     replica_config.node_id,
                     pool_config,
@@ -1690,7 +1590,6 @@ mod tests {
                     pool.get_cache(),
                     metrics_registry,
                     log,
-                    max_certified_height_tx,
                 );
 
                 // We expect deliver_state_certification() to be called 2 times for heights 3 and 4.
@@ -1732,6 +1631,286 @@ mod tests {
                     .return_const(vec![Height::new(1), Height::new(4)]);
 
                 certifier.on_state_change(&cert_pool);
+            })
+        })
+    }
+
+    // DKG interval length used for subnet-splitting tests.
+    const TEST_DKG_INTERVAL: u64 = 9;
+
+    // Advances `pool` by TEST_DKG_INTERVAL rounds so the next block is a DKG
+    // summary block, then inserts and finalizes that summary block after setting
+    // its subnet-splitting status to `status`.
+    //
+    // Returns the height of the newly finalized summary block.  Heights in
+    // [split_height, split_height + TEST_DKG_INTERVAL] are covered by this
+    // summary, so `subnet_splitting_status_at_height` will return `status` for
+    // any of those heights.
+    fn advance_to_splitting_interval(
+        pool: &mut TestConsensusPool,
+        status: SubnetSplittingStatus,
+    ) -> Height {
+        pool.advance_round_normal_operation_n(TEST_DKG_INTERVAL);
+
+        let mut proposal = pool.make_next_block();
+        let block = proposal.content.as_mut();
+        let mut payload = block.payload.as_ref().as_summary().clone();
+        payload.dkg.subnet_splitting_status = status;
+        block.payload = Payload::new(
+            ic_types::crypto::crypto_hash,
+            BlockPayload::Summary(payload),
+        );
+        proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+
+        pool.advance_round_with_block(&proposal);
+
+        proposal.height()
+    }
+
+    fn not_scheduled_splitting() -> SubnetSplittingStatus {
+        SubnetSplittingStatus::NotScheduled
+    }
+
+    fn scheduled_splitting() -> SubnetSplittingStatus {
+        SubnetSplittingStatus::Scheduled(SplittingArgs {
+            source_subnet_id: subnet_test_id(0),
+            destination_subnet_id: subnet_test_id(1),
+        })
+    }
+
+    fn done_splitting_different_subnet() -> SubnetSplittingStatus {
+        SubnetSplittingStatus::PostSplit(PostSplitArgs {
+            new_subnet_id: subnet_test_id(1),
+        })
+    }
+
+    fn done_splitting_same_subnet() -> SubnetSplittingStatus {
+        SubnetSplittingStatus::PostSplit(PostSplitArgs {
+            new_subnet_id: subnet_test_id(0),
+        })
+    }
+
+    fn assert_for_all_subnet_splitting_statuses(
+        pool: &mut TestConsensusPool,
+        mut test: impl FnMut(Option<SubnetSplittingStatus>, bool, Height),
+    ) {
+        for (status, should_skip) in [
+            (not_scheduled_splitting(), false),
+            (scheduled_splitting(), true),
+            (done_splitting_different_subnet(), true),
+            (done_splitting_same_subnet(), false),
+        ] {
+            let splitting_height = advance_to_splitting_interval(pool, status).get();
+            for test_height in splitting_height..=splitting_height + TEST_DKG_INTERVAL {
+                let test_height = Height::from(test_height);
+
+                test(Some(status), should_skip, test_height);
+            }
+        }
+
+        // One more test case: a height that does not have a corresponding finalized summary block.
+        // The certifier should skip for this height, since the subnet splitting status is unknown.
+        let height_too_ahead = advance_to_splitting_interval(pool, not_scheduled_splitting()).get()
+            + TEST_DKG_INTERVAL
+            + 1;
+        for test_height in height_too_ahead..=height_too_ahead + TEST_DKG_INTERVAL {
+            let test_height = Height::from(test_height);
+
+            test(None, /*should_skip=*/ true, test_height);
+        }
+    }
+
+    /// Signing should be skipped for heights covered by a `Scheduled` or `Done` with different
+    /// subnet ID splitting interval.
+    /// In a `Done` interval with same subnet ID, signing should proceed as normal.
+    #[test]
+    fn test_sign_skips_during_subnet_splitting() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    mut pool,
+                    replica_config,
+                    registry,
+                    crypto,
+                    state_manager,
+                    ..
+                } = DependenciesBuilder::new(pool_config.clone(), 4)
+                    .with_dkg_interval_length(TEST_DKG_INTERVAL)
+                    .build();
+
+                let metrics_registry = MetricsRegistry::new();
+                let cert_pool = CertificationPoolImpl::new(
+                    replica_config.node_id,
+                    pool_config,
+                    ic_logger::replica_logger::no_op_logger(),
+                    metrics_registry.clone(),
+                );
+                let certifier = CertifierImpl::new(
+                    replica_config,
+                    registry,
+                    crypto,
+                    state_manager,
+                    pool.get_cache(),
+                    metrics_registry,
+                    log,
+                );
+
+                assert_for_all_subnet_splitting_statuses(
+                    &mut pool,
+                    |status, should_skip, test_height| {
+                        let shares = certifier.sign(
+                            &cert_pool,
+                            &[StateHashMetadata {
+                                height: test_height,
+                                hash: CryptoHashOfPartialState::from(CryptoHash(vec![1, 2, 3])),
+                                height_witness: Witness::new_for_testing_with_height(),
+                            }],
+                        );
+
+                        if should_skip {
+                            assert!(
+                                shares.is_empty(),
+                                "Expected shares to be empty for status {status:?}, got: {shares:?}"
+                            );
+                        } else {
+                            assert!(
+                                !shares.is_empty(),
+                                "Expected shares to be non-empty for status {status:?}"
+                            );
+                        }
+                    },
+                );
+            })
+        })
+    }
+
+    /// An incoming share at a height inside a `Scheduled` or `Done` with different subnet ID
+    /// should be ignored and not validated, as it could be from the other subnet.
+    /// In a `Done` interval with same subnet ID, shares should be validated as normal.
+    #[test]
+    fn test_validate_share_handles_invalid_during_subnet_splitting() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    mut pool,
+                    replica_config,
+                    registry,
+                    crypto,
+                    state_manager,
+                    ..
+                } = DependenciesBuilder::new(pool_config.clone(), 4)
+                    .with_dkg_interval_length(TEST_DKG_INTERVAL)
+                    .build();
+
+                let metrics_registry = MetricsRegistry::new();
+                let cert_pool = CertificationPoolImpl::new(
+                    replica_config.node_id,
+                    pool_config,
+                    ic_logger::replica_logger::no_op_logger(),
+                    metrics_registry.clone(),
+                );
+                let certifier = CertifierImpl::new(
+                    replica_config,
+                    registry,
+                    crypto,
+                    state_manager,
+                    pool.get_cache(),
+                    metrics_registry,
+                    log,
+                );
+
+                assert_for_all_subnet_splitting_statuses(
+                    &mut pool,
+                    |status, should_skip, test_height| {
+                        let content = gen_content(test_height);
+                        let share = CertificationShare {
+                            height: test_height,
+                            height_witness: Witness::new_for_testing_with_height(),
+                            signed: Signed {
+                                content,
+                                signature: ThresholdSignatureShare::fake(node_test_id(1)),
+                            },
+                        };
+
+                        let result = certifier.validate_share(&cert_pool, &share);
+                        if should_skip {
+                            assert_eq!(
+                                result, None,
+                                "Expected no change action for status {status:?}, got: {result:?}"
+                            );
+                        } else {
+                            assert_eq!(
+                                result,
+                                Some(ChangeAction::MoveToValidated(
+                                    CertificationMessage::CertificationShare(share)
+                                )),
+                                "Expected MoveToValidated for status {status:?}, got: {result:?}"
+                            );
+                        }
+                    },
+                );
+            })
+        })
+    }
+
+    /// Full certifications received during a `Scheduled` or `Done` with different subnet ID
+    /// should be ignored and not validated, as they could be from the other subnet.
+    /// In a `Done` interval with same subnet ID, certifications should be validated as normal
+    #[test]
+    fn test_validate_certification_handles_invalid_during_subnet_splitting() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    mut pool,
+                    replica_config,
+                    registry,
+                    crypto,
+                    state_manager,
+                    ..
+                } = DependenciesBuilder::new(pool_config.clone(), 1)
+                    .with_dkg_interval_length(TEST_DKG_INTERVAL)
+                    .build();
+
+                let certifier = CertifierImpl::new(
+                    replica_config,
+                    registry,
+                    crypto,
+                    state_manager,
+                    pool.get_cache(),
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                assert_for_all_subnet_splitting_statuses(
+                    &mut pool,
+                    |status, should_skip, test_height| {
+                        let content = gen_content(test_height);
+                        let cert = Certification {
+                            height: test_height,
+                            height_witness: Some(Witness::new_for_testing_with_height()),
+                            signed: Signed {
+                                content,
+                                signature: ThresholdSignature::fake(),
+                            },
+                        };
+
+                        let result = certifier.validate_certification(&cert);
+                        if should_skip {
+                            assert_eq!(
+                                result, None,
+                                "Expected no change action for status {status:?}, got: {result:?}"
+                            );
+                        } else {
+                            assert_eq!(
+                                result,
+                                Some(ChangeAction::MoveToValidated(
+                                    CertificationMessage::Certification(cert)
+                                )),
+                                "Expected MoveToValidated for status {status:?}, got: {result:?}"
+                            );
+                        }
+                    },
+                );
             })
         })
     }

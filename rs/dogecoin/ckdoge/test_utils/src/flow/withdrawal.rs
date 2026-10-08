@@ -28,7 +28,7 @@ use std::time::Duration;
 
 /// Entry point in the withdrawal flow
 ///
-/// Step 1: approve the minter to burn user's funds
+/// Step 1: await a refresh of the minter's median fee percentiles
 pub struct WithdrawalFlowStart<S> {
     setup: S,
 }
@@ -38,6 +38,21 @@ impl<S> WithdrawalFlowStart<S> {
         Self { setup }
     }
 
+    pub fn minter_await_fee_refresh(self) -> WithdrawalFlowApproval<S>
+    where
+        S: AsRef<Setup>,
+    {
+        self.setup.as_ref().minter().await_fee_refresh();
+        WithdrawalFlowApproval { setup: self.setup }
+    }
+}
+
+/// Step 2: approve the minter to burn user's funds
+pub struct WithdrawalFlowApproval<S> {
+    setup: S,
+}
+
+impl<S> WithdrawalFlowApproval<S> {
     pub fn ledger_approve_minter<A>(self, account: A, amount: u64) -> RetrieveDogeFlow<S>
     where
         A: Into<Account>,

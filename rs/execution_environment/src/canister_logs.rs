@@ -1,40 +1,112 @@
+use crate::canister_manager::types::{CanisterManagerError, CanisterManagerResponse};
 use crate::canister_settings::VisibilitySettings;
-use ic_config::flag_status::FlagStatus;
-use ic_error_types::{ErrorCode, UserError};
+use crate::execution_environment::{RoundLimits, as_round_instructions};
+use candid::Encode;
 use ic_management_canister_types_private::{
-    CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRange, FetchCanisterLogsRequest,
-    FetchCanisterLogsResponse, LogVisibilityV2,
+    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2,
 };
-use ic_replicated_state::ReplicatedState;
-use ic_types::PrincipalId;
-use std::collections::VecDeque;
+use ic_replicated_state::CanisterState;
+use ic_replicated_state::metadata_state::UnflushedCheckpointOps;
+use ic_types::{NumBytes, NumInstructions, PrincipalId};
 
 pub(crate) fn fetch_canister_logs(
     sender: PrincipalId,
-    state: &ReplicatedState,
+    canister: &CanisterState,
     args: FetchCanisterLogsRequest,
-    log_memory_store_feature: FlagStatus,
-) -> Result<FetchCanisterLogsResponse, UserError> {
-    let canister_id = args.get_canister_id();
-    let canister = state.canister_state(&canister_id).ok_or_else(|| {
-        UserError::new(
-            ErrorCode::CanisterNotFound,
-            format!("Canister {canister_id} not found"),
-        )
-    })?;
-
-    // Check if the sender has permission to access logs
-    check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
-
-    let s = &canister.system_state;
-    let canister_log_records = match log_memory_store_feature {
-        FlagStatus::Disabled => filter_records(&args, s.canister_log.records())?,
-        FlagStatus::Enabled => s.log_memory_store.records(args.filter),
-    };
-
-    Ok(FetchCanisterLogsResponse {
-        canister_log_records,
+    round_limits: &mut RoundLimits,
+) -> Result<CanisterManagerResponse, CanisterManagerError> {
+    let canister_id = canister.canister_id();
+    let (reply, instructions) = fetch_canister_logs_response(sender, canister, args)?;
+    // Charge the read/encode work against the round's instruction budget. No cycles
+    // fee is charged for the call because every term is already covered by fees the
+    // caller pays (per-message execution fee and per-byte response transmission fee).
+    round_limits.instructions -= as_round_instructions(instructions);
+    Ok(CanisterManagerResponse {
+        canister_id,
+        reply: Some(reply),
+        heap_delta_increase: NumBytes::new(0),
+        unflushed_checkpoint_ops: UnflushedCheckpointOps::default(),
+        instructions_to_charge_on_success: NumInstructions::new(0),
+        deleted_call_context_responses: vec![],
+        stop_call_id_to_remove: None,
+        stop_contexts_to_reject: vec![],
+        snapshot_to_make_immutable: None,
     })
+}
+
+/// Executes the `fetch_canister_logs` management method against the given canister
+/// on behalf of the given sender and returns the Candid-encoded
+/// `FetchCanisterLogsResponse` together with the number of instructions consumed
+/// while producing it.
+///
+/// This is shared by the replicated path (see `fetch_canister_logs`) and the
+/// non-replicated path (see `crate::query_handler::subnet_query`) so that both
+/// charge the same number of instructions for the same reply.
+pub(crate) fn fetch_canister_logs_response(
+    sender: PrincipalId,
+    canister: &CanisterState,
+    args: FetchCanisterLogsRequest,
+) -> Result<(Vec<u8>, NumInstructions), CanisterManagerError> {
+    check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
+    let canister_log_records = canister.system_state.log_memory_store.records(args.filter);
+    // The number of records returned and the total size of their content determine
+    // the instructions deducted for the call.
+    let record_count = canister_log_records.len() as u64;
+    let content_size = NumBytes::new(
+        canister_log_records
+            .iter()
+            .map(|r| r.content.len())
+            .sum::<usize>() as u64,
+    );
+    let reply = Encode!(&FetchCanisterLogsResponse {
+        canister_log_records
+    })
+    .unwrap();
+    Ok((
+        reply,
+        fetch_canister_logs_instructions(record_count, content_size),
+    ))
+}
+
+/// Derives the number of round instructions to deduct for a `fetch_canister_logs`
+/// call from its response: the number of records returned and their total content
+/// size.
+///
+/// The constants below are a conservative linear upper bound on the measured
+/// read/encode time, with a modest margin over every case. To re-derive them, run
+/// the `fetch_canister_log` benchmark in
+/// `rs/execution_environment/benches/management_canister/canister_logging.rs` and
+/// convert the measured times at 2_000_000 instructions/ms.
+pub(crate) fn fetch_canister_logs_instructions(
+    record_count: u64,
+    content_size: NumBytes,
+) -> NumInstructions {
+    // Fixed base for a near-empty fetch (index lookup on a full log buffer).
+    const BASE_INSTRUCTIONS: u64 = 150_000;
+    // Per-record decode/encode overhead.
+    const INSTRUCTIONS_PER_RECORD: u64 = 900;
+    // Per-byte cost of copying and encoding the record content.
+    const INSTRUCTIONS_PER_CONTENT_BYTE: u64 = 1;
+    NumInstructions::new(
+        BASE_INSTRUCTIONS
+            .saturating_add(INSTRUCTIONS_PER_RECORD.saturating_mul(record_count))
+            .saturating_add(INSTRUCTIONS_PER_CONTENT_BYTE.saturating_mul(content_size.get())),
+    )
+}
+
+/// Benchmark-only entry point for the `management_canister_bench`: runs
+/// [`fetch_canister_logs_response`] and returns its result, panicking on error.
+/// Re-exported from the crate root so the benchmark can time the read/encode work
+/// that drives `fetch_canister_logs_instructions` without the surrounding
+/// subnet-message machinery.
+#[doc(hidden)]
+pub fn fetch_canister_logs_response_for_bench(
+    sender: PrincipalId,
+    canister: &CanisterState,
+    args: FetchCanisterLogsRequest,
+) -> (Vec<u8>, NumInstructions) {
+    fetch_canister_logs_response(sender, canister, args)
+        .expect("fetch_canister_logs_response failed")
 }
 
 /// Checks if the caller has permission to access the logs based on the canister's log visibility settings.
@@ -42,36 +114,41 @@ pub(crate) fn check_log_visibility_permission(
     caller: &PrincipalId,
     log_visibility: &LogVisibilityV2,
     controllers: &std::collections::BTreeSet<PrincipalId>,
-) -> Result<(), UserError> {
+) -> Result<(), CanisterManagerError> {
     if !VisibilitySettings::from(log_visibility).has_access(caller, controllers) {
-        return Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            format!("Caller {caller} is not allowed to access canister logs"),
-        ));
+        return Err(CanisterManagerError::FetchCanisterLogsAccessDenied { caller: *caller });
     }
     Ok(())
 }
 
-fn filter_records(
-    args: &FetchCanisterLogsRequest,
-    records: &VecDeque<CanisterLogRecord>,
-) -> Result<Vec<CanisterLogRecord>, UserError> {
-    let Some(filter) = &args.filter else {
-        return Ok(records.iter().cloned().collect());
-    };
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let (range, key): (&FetchCanisterLogsRange, fn(&CanisterLogRecord) -> u64) = match filter {
-        FetchCanisterLogsFilter::ByIdx(r) => (r, |rec| rec.idx),
-        FetchCanisterLogsFilter::ByTimestampNanos(r) => (r, |rec| rec.timestamp_nanos),
-    };
-
-    if range.is_empty() {
-        return Ok(Vec::new());
+    #[test]
+    fn fetch_canister_logs_instructions_matches_linear_approximation() {
+        // Empty response → only the fixed base (150_000 instructions).
+        assert_eq!(
+            fetch_canister_logs_instructions(0, NumBytes::new(0)),
+            NumInstructions::new(150_000)
+        );
+        // 150_000 + 900 × record_count + 1 × content_size instructions.
+        assert_eq!(
+            fetch_canister_logs_instructions(50_000, NumBytes::new(0)),
+            NumInstructions::new(150_000 + 900 * 50_000)
+        );
+        assert_eq!(
+            fetch_canister_logs_instructions(10, NumBytes::new(4_096)),
+            NumInstructions::new(150_000 + 900 * 10 + 4_096)
+        );
+        // Monotonically increasing in both the record count and content size.
+        assert!(
+            fetch_canister_logs_instructions(100, NumBytes::new(1_000))
+                < fetch_canister_logs_instructions(200, NumBytes::new(1_000))
+        );
+        assert!(
+            fetch_canister_logs_instructions(100, NumBytes::new(1_000))
+                < fetch_canister_logs_instructions(100, NumBytes::new(2_000))
+        );
     }
-
-    Ok(records
-        .iter()
-        .filter(|r| range.contains(key(r)))
-        .cloned()
-        .collect())
 }

@@ -2,45 +2,37 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/interfaces/registry",
-    "//rs/monitoring/metrics",
-    "//rs/types/types",
-    "//rs/utils/thread",
-    "@crate_index//:crossbeam-channel",
-    "@crate_index//:prometheus",
-]
-
-MACRO_DEPENDENCIES = []
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/registry/helpers",
-    "//rs/registry/proto",
-    "//rs/registry/proto_data_provider",
-    "//rs/test_utilities/metrics",
-    "@crate_index//:assert_matches",
-]
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "client",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "ic_registry_client",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/interfaces/registry",
+        "//rs/monitoring/metrics",
+        "//rs/types/types",
+        "//rs/utils/thread",
+        "@crate_index//:crossbeam-channel",
+        "@crate_index//:prometheus",
+    ],
 )
 
 rust_test(
     name = "client_test",
-    aliases = ALIASES,
     crate = ":client",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/interfaces/registry",
+        "//rs/monitoring/metrics",
+        "//rs/registry/helpers",
+        "//rs/registry/proto",
+        "//rs/registry/proto_data_provider",
+        "//rs/test_utilities/metrics",
+        "//rs/types/types",
+        "//rs/utils/thread",
+        "@crate_index//:assert_matches",
+        "@crate_index//:crossbeam-channel",
+        "@crate_index//:prometheus",
+    ],
 )

@@ -397,7 +397,7 @@ impl From<CanisterThresholdError> for IDkgCreateTranscriptInternalError {
 pub fn create_transcript(
     algorithm_id: AlgorithmId,
     reconstruction_threshold: NumberOfNodes,
-    verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+    verified_dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
     operation_mode: &IDkgTranscriptOperationInternal,
 ) -> Result<IDkgTranscriptInternal, IDkgCreateTranscriptInternalError> {
     let alg = IdkgProtocolAlgorithm::from_algorithm(algorithm_id)
@@ -436,7 +436,7 @@ pub fn verify_transcript(
     internal_transcript: &IDkgTranscriptInternal,
     algorithm_id: AlgorithmId,
     reconstruction_threshold: NumberOfNodes,
-    verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
+    verified_dealings: BTreeMap<NodeIndex, IDkgDealingInternal>,
     operation_mode: &IDkgTranscriptOperationInternal,
 ) -> Result<(), IDkgVerifyTranscriptInternalError> {
     let transcript = create_transcript(

@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::ErrorCode;
@@ -5,6 +7,7 @@ use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::canister_state::system_state::OutstandingPrepayments;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_execution_environment::{
     ExecutionResponse, ExecutionTest, ExecutionTestBuilder, check_ingress_status,
@@ -19,7 +22,7 @@ use ic_types::{
     messages::{CallbackId, MessageId},
 };
 use ic_types::{ComputeAllocation, MemoryAllocation};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_lt};
 
@@ -98,8 +101,18 @@ fn execute_response_refunds_cycles() {
 
         // Canister A calls canister B.
         let cycles_sent = Cycles::new(1_000_000);
+        let b_callback = wasm()
+            .accept_cycles(cycles_sent / 2_u64)
+            .message_payload()
+            .append_and_reply()
+            .build();
         let wasm_payload = wasm()
-            .call_with_cycles(b_id, "update", call_args(), cycles_sent)
+            .call_with_cycles(
+                b_id,
+                "update",
+                call_args().other_side(b_callback.clone()),
+                cycles_sent,
+            )
             .build();
 
         // Enqueue ingress message to canister A and execute it.
@@ -107,16 +120,11 @@ fn execute_response_refunds_cycles() {
         assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
         test.execute_message(a_id);
 
-        // Create response from canister B to canister A.
-        let response = ResponseBuilder::new()
-            .originator(a_id)
-            .respondent(b_id)
-            .originator_reply_callback(CallbackId::from(1))
-            .refund(cycles_sent / 2_u64)
-            .build();
-        let response_payload_size = response.payload_size_bytes();
+        // Execute message on B.
+        test.induct_messages();
+        test.execute_message(b_id);
 
-        // Execute response.
+        // Execute response on A.
         let balance_before = test.canister_state(a_id).system_state.balance();
         let consumed_cycles_before = *test
             .canister_state(a_id)
@@ -125,8 +133,16 @@ fn execute_response_refunds_cycles() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
+        let consumed_cycles_before_counter = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap();
         let instructions_before = test.canister_executed_instructions(a_id);
-        test.execute_response(a_id, response);
+        test.induct_messages();
+        test.execute_message(a_id);
         let instructions_after = test.canister_executed_instructions(a_id);
         let instructions_executed = instructions_after - instructions_before;
         let balance_after = test.canister_state(a_id).system_state.balance();
@@ -137,6 +153,13 @@ fn execute_response_refunds_cycles() {
             .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
+        let consumed_cycles_after_counter = *test
+            .canister_state(a_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
+            .unwrap();
 
         // The balance is equivalent to the amount of cycles before executing`execute_response`
         // plus the unaccepted cycles (no more the cycles sent via request),
@@ -144,11 +167,10 @@ fn execute_response_refunds_cycles() {
         // Compute the response transmission refund.
         let mgr = test.cycles_account_manager();
         let prepayment_for_response_transmission =
-            mgr.prepayment_for_response_transmission(test.subnet_size(), cost_schedule);
+            mgr.prepayment_for_response_transmission(test.get_own_subnet_cycles_config());
         let actual_response_transmission_fee = mgr.xnet_call_bytes_transmitted_fee(
-            response_payload_size,
-            test.subnet_size(),
-            cost_schedule,
+            NumBytes::from(b_callback.len() as u64),
+            test.get_own_subnet_cycles_config(),
         );
         let response_transmission_refund =
             prepayment_for_response_transmission - actual_response_transmission_fee;
@@ -177,7 +199,148 @@ fn execute_response_refunds_cycles() {
             consumed_cycles_after,
             consumed_cycles_before - response_transmission_refund.nominal(),
         );
+        assert_eq!(
+            consumed_cycles_after_counter,
+            consumed_cycles_before_counter
+                + (test.call_fee("update", &b_callback) + actual_response_transmission_fee)
+                    .nominal(),
+        );
+        assert_eq!(consumed_cycles_after, consumed_cycles_after_counter);
     }
+}
+
+/// A callback created before April 2026 carries no `prepayment_for_call_transmission`,
+/// so `prepayment_for_response_transmission` stands in for it. The refund path and
+/// `SystemState::outstanding_prepayments()` fall back on it independently of each
+/// other, and the two must agree on the amount that executing the response settles.
+///
+/// Note that the fallback leaves the call fee out: the gauge holds the whole call
+/// transmission prepayment, of which the response transmission prepayment accounts
+/// for only a part, and nothing ever refunds the rest. The monotonic amounts thus
+/// stay short of the gauges by exactly that fee once the response is executed.
+///
+/// The call fee is a `RequestAndResponseTransmission` charge, so the by-use-case
+/// amounts are checked alongside the scalar ones throughout.
+#[test]
+fn execute_response_of_legacy_callback_settles_the_outstanding_prepayments() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    // Canister A calls canister B, which replies with the payload it received.
+    let b_callback = wasm().message_payload().append_and_reply().build();
+    let wasm_payload = wasm()
+        .call_simple(b_id, "update", call_args().other_side(b_callback.clone()))
+        .build();
+    test.ingress_raw(a_id, "update", wasm_payload);
+    test.execute_message(a_id);
+
+    // Turn the callback of that call into a legacy one, i.e. one whose prepayment for
+    // the call transmission was never stored.
+    let callback_id = *test
+        .canister_state(a_id)
+        .system_state
+        .call_context_manager()
+        .unwrap()
+        .callbacks()
+        .keys()
+        .next()
+        .unwrap();
+    test.canister_state_mut(a_id)
+        .system_state
+        .reset_prepayment_for_call_transmission(callback_id);
+
+    // Execute the message on B, so that it responds to A.
+    test.induct_messages();
+    test.execute_message(b_id);
+
+    // The `xnet_call_performed_fee` plus the fee for transmitting the request: the
+    // part of the call transmission prepayment that the response transmission
+    // prepayment cannot stand in for.
+    let call_fee = test.call_fee("update", &b_callback).nominal();
+    // Non-zero, or the offset it stands for below would be vacuous.
+    assert_ne!(call_fee, NominalCycles::zero());
+
+    let system_state = &test.canister_state(a_id).system_state;
+    let callback = system_state
+        .call_context_manager()
+        .unwrap()
+        .callback(callback_id)
+        .unwrap()
+        .clone();
+    assert!(callback.prepayment_for_call_transmission.is_zero());
+    // The prepayments that the refund path is expected to report, with the response
+    // transmission prepayment standing in for the missing call transmission one.
+    let outstanding_before = system_state.outstanding_prepayments().unwrap();
+    assert_eq!(
+        outstanding_before,
+        OutstandingPrepayments {
+            instructions: callback.prepayment_for_response_execution.nominal(),
+            transmission: callback.prepayment_for_response_transmission.nominal(),
+        }
+    );
+    let gauge_before = system_state.canister_metrics().consumed_cycles();
+    let monotonic_before = system_state.canister_metrics().consumed_cycles_monotonic();
+    assert_eq!(
+        gauge_before,
+        monotonic_before + outstanding_before.total() + call_fee
+    );
+    // The call fee sits in the `RequestAndResponseTransmission` amounts, so the same
+    // offset shows up there.
+    let transmission_gauge_before = transmission(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases(),
+    );
+    let transmission_monotonic_before = transmission(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic(),
+    );
+    assert_eq!(
+        transmission_gauge_before,
+        transmission_monotonic_before + outstanding_before.transmission + call_fee
+    );
+
+    // Execute the response on A.
+    test.induct_messages();
+    test.execute_message(a_id);
+
+    // Nothing is outstanding any more, and the monotonic amounts are short of the
+    // gauges by just the call fee: the refund path reported the very prepayments
+    // predicted above.
+    let system_state = &test.canister_state(a_id).system_state;
+    assert_eq!(
+        system_state.outstanding_prepayments(),
+        Some(OutstandingPrepayments::default())
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        system_state.canister_metrics().consumed_cycles_monotonic() + call_fee
+    );
+    let mut gauges = system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .clone();
+    *gauges
+        .get_mut(&CyclesUseCase::RequestAndResponseTransmission)
+        .unwrap() -= call_fee;
+    assert_eq!(
+        &gauges,
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+    );
+}
+
+/// The `RequestAndResponseTransmission` entry of one of the by-use-case consumed
+/// cycles maps.
+fn transmission(amounts: &BTreeMap<CyclesUseCase, NominalCycles>) -> NominalCycles {
+    *amounts
+        .get(&CyclesUseCase::RequestAndResponseTransmission)
+        .unwrap()
 }
 
 #[test]
@@ -431,7 +594,10 @@ fn cycles_correct_if_response_fails() {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
@@ -481,7 +647,10 @@ fn cycles_correct_if_cleanup_fails() {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
@@ -881,8 +1050,8 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
 #[test]
 fn dts_abort_works_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(100_000_000)
-        .with_slice_instruction_limit(100_000)
+        .with_instruction_limit(1_000_000_000)
+        .with_slice_instruction_limit(500_000)
         .with_manual_execution()
         .build();
 
@@ -982,8 +1151,8 @@ fn dts_abort_works_in_response_callback() {
 #[test]
 fn dts_abort_works_in_cleanup_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(100_000_000)
-        .with_slice_instruction_limit(100_000)
+        .with_instruction_limit(1_000_000_000)
+        .with_slice_instruction_limit(500_000)
         .with_manual_execution()
         .build();
 
@@ -1162,7 +1331,10 @@ fn response_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
 
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
@@ -1211,7 +1383,10 @@ fn cleanup_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
 
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
@@ -1381,8 +1556,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(a_id),
         )
         .real();
@@ -1506,8 +1680,7 @@ fn dts_response_concurrent_cycles_change_fails() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(a_id),
         )
         .real();
@@ -1654,8 +1827,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
         .cycles_account_manager()
         .execution_cost(
             NumInstructions::from(instruction_limit),
-            test.subnet_size(),
-            CanisterCyclesCostSchedule::Normal,
+            test.get_own_subnet_cycles_config(),
             test.canister_wasm_execution_mode(a_id),
         )
         .real();
@@ -1882,10 +2054,10 @@ fn cleanup_callback_cannot_make_calls() {
 
 #[test]
 fn dts_uninstall_with_aborted_response() {
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 50_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
+        .with_slice_instruction_limit(500_000)
         .with_manual_execution()
         .build();
 
@@ -1900,10 +2072,10 @@ fn dts_uninstall_with_aborted_response() {
                 .on_reply(
                     wasm()
                         .stable64_grow(1)
-                        .stable64_fill(0, 0, 10_000)
-                        .stable64_fill(0, 0, 10_000)
-                        .stable64_fill(0, 0, 10_000)
-                        .stable64_fill(0, 0, 10_000),
+                        .stable64_fill(0, 0, 65_000)
+                        .stable64_fill(0, 0, 65_000)
+                        .stable64_fill(0, 0, 65_000)
+                        .stable64_fill(0, 0, 65_000),
                 ),
         )
         .build();
@@ -2002,7 +2174,10 @@ fn reserve_instructions_for_cleanup_callback_scenario(
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
 
     // Assert that the response failed with exceeding instructions limit.
     let ingress_status = test.ingress_status(&ingress_id);
@@ -2024,9 +2199,11 @@ fn reserve_instructions_for_cleanup_callback_scenario(
 
 #[test]
 fn reserve_instructions_for_cleanup_callback() {
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 500_000_000;
+    let slice_instruction_limit = 500_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(slice_instruction_limit)
         .with_manual_execution()
         .build();
 
@@ -2035,8 +2212,8 @@ fn reserve_instructions_for_cleanup_callback() {
 
 #[test]
 fn reserve_instructions_for_cleanup_callback_with_dts() {
-    let instruction_limit = 1_000_000;
-    let slice_instruction_limit = 10_000;
+    let instruction_limit = 500_000_000;
+    let slice_instruction_limit = 500_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(slice_instruction_limit)
@@ -2728,10 +2905,10 @@ fn cycles_balance_changes_applied_correctly() {
         .with_instruction_limit(20_000_000_000)
         .build();
     let a_id = test
-        .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(20_000_000_000_000))
         .unwrap();
     let b_id = test
-        .universal_canister_with_cycles(Cycles::new(301_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(400_000_000_000))
         .unwrap();
 
     test.ingress(
@@ -2784,7 +2961,7 @@ fn test_cycles_burn() {
     let canister_memory_usage = NumBytes::from(1_000_000);
     let canister_message_memory_usage = MessageMemoryUsage::ZERO;
 
-    let amount = 1_000_000_000;
+    let amount = 100_000_000_000;
     let mut balance = Cycles::new(amount);
     let amount_to_burn = Cycles::new(amount / 10);
 
@@ -2796,8 +2973,7 @@ fn test_cycles_burn() {
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
+        test.get_own_subnet_cycles_config(),
         Cycles::zero(),
     );
 
@@ -2818,12 +2994,11 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
+        test.get_own_subnet_cycles_config(),
         Cycles::zero(),
     );
 
-    let amount = 1_000_000_000;
+    let amount = 100_000_000_000;
     let mut balance = Cycles::new(amount);
 
     let burned = test.cycles_account_manager().cycles_burn(
@@ -2834,8 +3009,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
+        test.get_own_subnet_cycles_config(),
         Cycles::zero(),
     );
 
@@ -3087,8 +3261,10 @@ fn test_call_context_performance_counter_correctly_reported_on_reply() {
 
     let counters = result
         .bytes()
-        .chunks_exact(std::mem::size_of::<u64>())
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<{ std::mem::size_of::<u64>() }>()
+        .0
+        .iter()
+        .map(|c| u64::from_le_bytes(*c))
         .collect::<Vec<_>>();
 
     assert_lt!(counters[0], counters[1]);
@@ -3137,8 +3313,10 @@ fn test_call_context_performance_counter_correctly_reported_on_reject() {
 
     let counters = result
         .bytes()
-        .chunks_exact(std::mem::size_of::<u64>())
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<{ std::mem::size_of::<u64>() }>()
+        .0
+        .iter()
+        .map(|c| u64::from_le_bytes(*c))
         .collect::<Vec<_>>();
 
     assert_lt!(counters[0], counters[1]);
@@ -3185,8 +3363,10 @@ fn test_call_context_performance_counter_correctly_reported_on_cleanup() {
     let stable_memory = &state.execution_state.as_ref().unwrap().stable_memory;
     let page = stable_memory.page_map.get_page(0.into());
     let counters = page[0..(std::mem::size_of::<u64>() * 3)]
-        .chunks_exact(std::mem::size_of::<u64>())
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<{ std::mem::size_of::<u64>() }>()
+        .0
+        .iter()
+        .map(|c| u64::from_le_bytes(*c))
         .collect::<Vec<_>>();
 
     assert_lt!(counters[0], counters[1]);

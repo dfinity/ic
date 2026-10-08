@@ -19,7 +19,8 @@ pub(crate) struct OrchestratorMetrics {
     pub(crate) critical_error_state_removal_failed: IntCounter,
     pub(crate) fstrim_duration: IntGauge,
     pub(crate) critical_error_task_failed: IntCounterVec,
-    pub(crate) replica_process_start_attempts: IntCounter,
+    pub(crate) processes_start_attempts: IntCounterVec,
+    pub(crate) processes_stop_attempts: IntCounterVec,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, AsRefStr)]
@@ -66,8 +67,8 @@ impl OrchestratorMetrics {
             ),
             orchestrator_info: metrics_registry.int_gauge_vec(
                 "ic_orchestrator_info",
-                "version info for the internet computer orchestrator running.",
-                &["ic_active_version"],
+                "Replica & GuestOS versions info for the running Internet Computer orchestrator",
+                &["ic_active_version", "ic_guestos_version"],
             ),
             key_rotation_status: metrics_registry.int_gauge_vec(
                 "orchestrator_key_rotation_status",
@@ -107,9 +108,15 @@ impl OrchestratorMetrics {
                 grouped by the task name and the reason of the failure",
                 &["task_name", "reason"],
             ),
-            replica_process_start_attempts: metrics_registry.int_counter(
-                "orchestrator_replica_process_start_attempts_total",
-                "Number of times the replica process was attempted to be started",
+            processes_start_attempts: metrics_registry.int_counter_vec(
+                "orchestrator_processes_start_attempts_total",
+                "Number of times a process was attempted to be started",
+                &["process_name"],
+            ),
+            processes_stop_attempts: metrics_registry.int_counter_vec(
+                "orchestrator_processes_stop_attempts_total",
+                "Number of times a process was attempted to be stopped",
+                &["process_name"],
             ),
         }
     }

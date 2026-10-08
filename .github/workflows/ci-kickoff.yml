@@ -6,7 +6,6 @@ on:
     branches:
       - master
       - 'dev-gh-*'
-      - 'public-hotfix-*'
   pull_request:
     branches-ignore:
       - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
@@ -25,7 +24,7 @@ concurrency:
 jobs:
   ci-main:
     name: CI Main
-    # for dfinity/ic: run on all events except for forked PRs
+    # for dfinity/ic: run on all events except on PRs from forks
     # for dfinity/ic-private: only run on PRs
     if: |
       (github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) ||
@@ -37,6 +36,13 @@ jobs:
       release-build: ${{ inputs.release-build }}
     permissions:
       actions: write
+      # The upload jobs of ci-main.yml attest what they uploaded; only release
+      # builds upload. The grant also applies to this workflow's pull-request,
+      # merge-group and dev-gh-* runs, which never upload: an attestation minted
+      # from one of those would carry that run's ref (refs/pull/N/merge,
+      # refs/heads/gh-readonly-queue/..., refs/heads/dev-gh-*) and commit, which
+      # the release workflows consuming attestations reject.
+      attestations: write
       contents: read
       id-token: write
       pull-requests: read
@@ -53,6 +59,22 @@ jobs:
       contents: read
       pull-requests: write
 
+
+  # This job runs a bazel build & test on the Remote Build Execution cluster @ Namespace.
+  # It's currently in the evaluation phase where we compare its speed and stability with the `bazel-test-all` job.
+  # We expect it to fail and that's OK and it shouldn't block PRs & releases.
+  ci-rbe-evaluation:
+    name: CI RBE Evaluation
+    # for dfinity/ic: run on all events except for forked PRs
+    if: |
+      github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    uses: ./.github/workflows/ci-rbe-evaluation.yml
+    secrets: inherit
+    with:
+      commit-sha: ${{ github.sha }}
+      release-build: ${{ inputs.release-build }}
+    permissions:
+      contents: read
 
 ## Explanation on the below jobs for posting required checks:
 ## For accepting external contributions we need to trigger the workflow from `workflow_dispatch`, not the pull_request directly

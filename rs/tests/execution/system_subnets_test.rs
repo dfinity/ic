@@ -1,9 +1,8 @@
-#![allow(deprecated)]
 use anyhow::Result;
 use candid::{Decode, Encode, Principal};
 use ic_agent::AgentError;
 use ic_agent::agent::RejectCode;
-use ic_cdk::api::management_canister::main::{CanisterIdRecord, CanisterStatusResponse};
+use ic_cdk_management_canister::{CanisterIdRecord, CanisterStatusResult};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
@@ -106,7 +105,7 @@ pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
                 AgentError::HttpError(payload) => {
                     let error_message = String::from_utf8(payload.content).unwrap();
                     assert!(error_message.contains(&format!(
-                        "Specified CanisterId {subnet_id} does not match effective canister id in URL {canister_id}"
+                        "Specified canister ID {subnet_id} does not match effective canister ID in URL {canister_id}"
                     )));
                 }
                 _ => panic!("Unexpected error: {err:?}"),
@@ -117,7 +116,7 @@ pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
             let res = agent_call(&Principal::management_canister(), &canister_id)
                 .await
                 .unwrap();
-            let _ = Decode!(&res, CanisterStatusResponse).unwrap();
+            let _ = Decode!(&res, CanisterStatusResult).unwrap();
         }
     });
 }

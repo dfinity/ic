@@ -1,7 +1,9 @@
 //! The execution environment public interface.
 mod errors;
+mod heap;
 
 pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
+pub use heap::{Heap, HeapAccessCheck, valid_subslice};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::MasterPublicKeyId;
@@ -53,14 +55,6 @@ pub struct InstanceStats {
     /// Non-deterministic number of dirty Wasm (64 KiB) pages (write).
     pub wasm_dirty_wasm_pages_count: usize,
 
-    /// Number of times a write access is handled when the page has already been
-    /// read.
-    pub wasm_read_before_write_count: usize,
-
-    /// Number of times a write access is handled when the page has not yet been
-    /// read.
-    pub wasm_direct_write_count: usize,
-
     /// Number of sigsegv handled.
     pub wasm_sigsegv_count: usize,
 
@@ -81,14 +75,6 @@ pub struct InstanceStats {
 
     /// Number of modified OS pages (4KiB) in stable memory.
     pub stable_dirty_pages: usize,
-
-    /// Number of times a write access is handled when the page has already been
-    /// read.
-    pub stable_read_before_write_count: usize,
-
-    /// Number of times a write access is handled when the page has not yet been
-    /// read.
-    pub stable_direct_write_count: usize,
 
     /// Number of sigsegv handled.
     pub stable_sigsegv_count: usize,
@@ -267,6 +253,8 @@ pub enum SystemApiCallId {
     SubnetSelfSize,
     /// Tracker for `ic0.subnet_self_copy()`
     SubnetSelfCopy,
+    /// Tracker for `ic0.subnet_self_node_count()`
+    SubnetSelfNodeCount,
     /// Tracker for `ic0.stable64_grow()`
     Stable64Grow,
     /// Tracker for `ic0.stable64_read()`
@@ -477,28 +465,6 @@ impl SubnetAvailableMemory {
         Ok(())
     }
 
-    /// Updates (increments/decrements) the available execution memory
-    /// by the given number of bytes.
-    /// This function should only be used to account for canister history
-    /// in the available execution memory.
-    /// This is because we do not want an operation tracked in canister history
-    /// to fail due to insufficient available execution memory
-    /// to update canister history.
-    /// Note that the available memory can become negative after this change.
-    pub fn update_execution_memory_unchecked(
-        &mut self,
-        execution_memory_change: SubnetAvailableExecutionMemoryChange,
-    ) {
-        match execution_memory_change {
-            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes) => {
-                self.execution_memory -= allocated_bytes.get() as i64;
-            }
-            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes) => {
-                self.execution_memory += deallocated_bytes.get() as i64;
-            }
-        }
-    }
-
     pub fn increment(
         &mut self,
         execution_amount: NumBytes,
@@ -535,19 +501,6 @@ impl SubnetAvailableMemory {
         self.guaranteed_response_message_memory -= guaranteed_response_message_amount.get() as i64;
         self.wasm_custom_sections_memory -= wasm_custom_sections_amount.get() as i64;
     }
-}
-
-/// Represents an update (allocation/deallocation)
-/// of the subnet available execution memory
-/// by the given number of bytes.
-/// This enum should only be used to account for canister history
-/// in the subnet available execution memory.
-/// This is because we do not want an operation tracked in canister history
-/// to fail due to insufficient available execution memory
-/// to update canister history.
-pub enum SubnetAvailableExecutionMemoryChange {
-    Allocated(NumBytes),
-    Deallocated(NumBytes),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -656,6 +609,7 @@ pub trait IngressHistoryWriter: Send + Sync {
         state: &mut Self::State,
         message_id: MessageId,
         status: IngressStatus,
+        current_round: ExecutionRound,
     ) -> Arc<IngressStatus>;
 }
 
@@ -762,7 +716,7 @@ pub trait SystemApi {
         dst: usize,
         offset: usize,
         size: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Checks if an environment variable with the given name exists.
@@ -777,7 +731,7 @@ pub trait SystemApi {
         &self,
         name_src: usize,
         name_size: usize,
-        heap: &[u8],
+        heap: &Heap<'_>,
     ) -> HypervisorResult<i32>;
 
     /// Returns the size of the value for the environment variable with the given name.
@@ -793,7 +747,7 @@ pub trait SystemApi {
         &self,
         name_src: usize,
         name_size: usize,
-        heap: &[u8],
+        heap: &Heap<'_>,
     ) -> HypervisorResult<usize>;
 
     /// Copies the value of the environment variable with the given name into memory.
@@ -812,7 +766,7 @@ pub trait SystemApi {
         dst: usize,
         offset: usize,
         size: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Copies `size` bytes starting from `offset` inside the opaque caller blob
@@ -823,7 +777,7 @@ pub trait SystemApi {
         dst: usize,
         offset: usize,
         size: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Returns the size of the opaque caller blob.
@@ -839,7 +793,7 @@ pub trait SystemApi {
         dst: usize,
         offset: usize,
         size: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Returns the size of the caller info signer blob.
@@ -852,7 +806,7 @@ pub trait SystemApi {
         dst: usize,
         offset: usize,
         size: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Returns the size of msg.payload.
@@ -865,7 +819,7 @@ pub trait SystemApi {
         dst: usize,
         offset: usize,
         size: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Used to look up the size of the method_name that the message wants to
@@ -879,7 +833,7 @@ pub trait SystemApi {
         dst: usize,
         offset: usize,
         size: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     // If the canister calls this method, then the message will be accepted
@@ -893,7 +847,7 @@ pub trait SystemApi {
         &mut self,
         src: usize,
         size: usize,
-        heap: &[u8],
+        heap: &Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Replies to the sender with the data assembled using
@@ -908,7 +862,7 @@ pub trait SystemApi {
     fn ic0_msg_reject_code(&self) -> HypervisorResult<i32>;
 
     /// Replies to sender with an error message
-    fn ic0_msg_reject(&mut self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_msg_reject(&mut self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<()>;
 
     /// Returns the length of the reject message in bytes.
     ///
@@ -930,7 +884,7 @@ pub trait SystemApi {
         dst: usize,
         offset: usize,
         size: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Returns the size of the blob corresponding to the id of the canister.
@@ -943,14 +897,14 @@ pub trait SystemApi {
         dst: usize,
         offset: usize,
         size: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Outputs the specified bytes on the heap as a string on STDOUT.
-    fn ic0_debug_print(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_debug_print(&self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<()>;
 
     /// Traps, with a possibly helpful message
-    fn ic0_trap(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()>;
+    fn ic0_trap(&self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<()>;
 
     /// Begins assembling a call to the canister specified by
     /// callee_src/callee_size at method name_src/name_size. Two mandatory
@@ -972,7 +926,7 @@ pub trait SystemApi {
         reply_env: u64,
         reject_fun: u32,
         reject_env: u64,
-        heap: &[u8],
+        heap: &Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Appends the specified bytes to the argument of the call. Initially, the
@@ -982,7 +936,7 @@ pub trait SystemApi {
         &mut self,
         src: usize,
         size: usize,
-        heap: &[u8],
+        heap: &Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Relaxes the response delivery guarantee to be best effort, asking the system to respond at the
@@ -1056,7 +1010,7 @@ pub trait SystemApi {
         dst: u64,
         offset: u64,
         size: u64,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// The canister can query the IC for the current time.
@@ -1142,7 +1096,7 @@ pub trait SystemApi {
     fn ic0_canister_cycle_balance128(
         &mut self,
         dst: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// This system call indicates the current liquid cycle balance
@@ -1154,7 +1108,7 @@ pub trait SystemApi {
     fn ic0_canister_liquid_cycle_balance128(
         &mut self,
         dst: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_available128` instead.
@@ -1171,7 +1125,7 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
-    fn ic0_msg_cycles_available128(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()>;
+    fn ic0_msg_cycles_available128(&self, dst: usize, heap: &mut Heap<'_>) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_refunded128` instead.
     /// This API supports only 64-bit values.
@@ -1187,7 +1141,7 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
-    fn ic0_msg_cycles_refunded128(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()>;
+    fn ic0_msg_cycles_refunded128(&self, dst: usize, heap: &mut Heap<'_>) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_accept128` instead.
     /// This API supports only 64-bit values.
@@ -1234,7 +1188,7 @@ pub trait SystemApi {
         &mut self,
         max_amount: Cycles,
         dst: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Used to look up the size of the root key.
@@ -1247,7 +1201,7 @@ pub trait SystemApi {
         dst: usize,
         offset: usize,
         size: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Sets the certified data for the canister.
@@ -1256,7 +1210,7 @@ pub trait SystemApi {
         &mut self,
         src: usize,
         size: usize,
-        heap: &[u8],
+        heap: &Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// If run in non-replicated execution (i.e. query),
@@ -1278,7 +1232,7 @@ pub trait SystemApi {
         dst: usize,
         offset: usize,
         size: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Returns the current status of the canister.  `1` indicates
@@ -1298,7 +1252,7 @@ pub trait SystemApi {
         &mut self,
         amount: Cycles,
         dst: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// Checks whether the principal identified by src/size is one of the
@@ -1306,7 +1260,7 @@ pub trait SystemApi {
     /// otherwise a 0 is returned. It can be called multiple times.
     ///
     /// This system call traps if src+size exceeds the size of the WebAssembly memory.
-    fn ic0_is_controller(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<u32>;
+    fn ic0_is_controller(&self, src: usize, size: usize, heap: &Heap<'_>) -> HypervisorResult<u32>;
 
     /// If run in replicated execution (i.e. an update call or a certified
     /// query), returns 1.
@@ -1325,7 +1279,7 @@ pub trait SystemApi {
         &mut self,
         amount: Cycles,
         dst: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// This system call returns the amount of cycles that a canister needs to
@@ -1345,7 +1299,7 @@ pub trait SystemApi {
         method_name_size: u64,
         payload_size: u64,
         dst: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// This system call indicates the cycle cost of creating a canister on
@@ -1353,7 +1307,7 @@ pub trait SystemApi {
     ///
     /// The amount of cycles is represented by a 128-bit value and is copied
     /// to the canister memory starting at the location `dst`.
-    fn ic0_cost_create_canister(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()>;
+    fn ic0_cost_create_canister(&self, dst: usize, heap: &mut Heap<'_>) -> HypervisorResult<()>;
 
     /// This system call indicates the cycle cost of making an http outcall,
     /// i.e., the management canister's `http_request`.
@@ -1370,7 +1324,7 @@ pub trait SystemApi {
         request_size: u64,
         max_res_bytes: u64,
         dst: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     fn ic0_cost_http_request_v2(
@@ -1378,7 +1332,7 @@ pub trait SystemApi {
         params_src: usize,
         params_size: usize,
         dst: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
 
     /// This system call indicates the cycle cost of signing with ecdsa,
@@ -1402,7 +1356,7 @@ pub trait SystemApi {
         size: usize,
         curve: u32,
         dst: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<u32>;
 
     /// This system call indicates the cycle cost of signing with schnorr,
@@ -1425,7 +1379,7 @@ pub trait SystemApi {
         size: usize,
         algorithm: u32,
         dst: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<u32>;
 
     /// This system call indicates the cycle cost of vetkd key derivation,
@@ -1448,7 +1402,7 @@ pub trait SystemApi {
         size: usize,
         curve: u32,
         dst: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<u32>;
 
     /// Used to look up the size of the subnet Id of the calling canister.
@@ -1461,8 +1415,12 @@ pub trait SystemApi {
         dst: usize,
         offset: usize,
         size: usize,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()>;
+
+    /// Used to look up the number of nodes currently on the subnet that the
+    /// calling canister is running on.
+    fn ic0_subnet_self_node_count(&self) -> HypervisorResult<u32>;
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

@@ -92,7 +92,8 @@ type MetadataValue = variant {
 };
 
 type FeatureFlags = record {
-  icrc2 : bool
+  icrc2 : bool;
+  icrc152 : bool
 };
 
 // The initialization parameters of the Ledger
@@ -225,8 +226,28 @@ type Transaction = record {
   mint : opt Mint;
   approve : opt Approve;
   fee_collector : opt FeeCollector;
+  authorized_mint : opt AuthorizedMint;
+  authorized_burn : opt AuthorizedBurn;
   timestamp : Timestamp;
   transfer : opt Transfer
+};
+
+type AuthorizedMint = record {
+  to : Account;
+  amount : nat;
+  created_at_time : opt Timestamp;
+  caller : opt principal;
+  mthd : opt text;
+  reason : opt text
+};
+
+type AuthorizedBurn = record {
+  from : Account;
+  amount : nat;
+  created_at_time : opt Timestamp;
+  caller : opt principal;
+  mthd : opt text;
+  reason : opt text
 };
 
 type FeeCollector = record {
@@ -548,6 +569,39 @@ type GetIndexPrincipalError = variant {
   }
 };
 
+type Icrc152MintArgs = record {
+  to : Account;
+  amount : nat;
+  created_at_time : nat64;
+  reason : opt text
+};
+
+type Icrc152MintError = variant {
+  Unauthorized : text;
+  InvalidAccount : text;
+  Duplicate : record { duplicate_of : nat };
+  GenericError : record { error_code : nat; message : text }
+};
+
+type Icrc152MintResult = variant { Ok : nat; Err : Icrc152MintError };
+
+type Icrc152BurnArgs = record {
+  from : Account;
+  amount : nat;
+  created_at_time : nat64;
+  reason : opt text
+};
+
+type Icrc152BurnError = variant {
+  Unauthorized : text;
+  InvalidAccount : text;
+  InsufficientBalance : record { balance : nat };
+  Duplicate : record { duplicate_of : nat };
+  GenericError : record { error_code : nat; message : text }
+};
+
+type Icrc152BurnResult = variant { Ok : nat; Err : Icrc152BurnError };
+
 service : (ledger_arg : LedgerArg) -> {
   archives : () -> (vec ArchiveInfo) query;
   get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
@@ -580,6 +634,9 @@ service : (ledger_arg : LedgerArg) -> {
   icrc103_get_allowances : (GetAllowancesArgs) -> (icrc103_get_allowances_response) query;
 
   icrc106_get_index_principal : () -> (GetIndexPrincipalResult) query;
+
+  icrc152_mint : (Icrc152MintArgs) -> (Icrc152MintResult);
+  icrc152_burn : (Icrc152BurnArgs) -> (Icrc152BurnResult);
 
   is_ledger_ready : () -> (bool) query
 }

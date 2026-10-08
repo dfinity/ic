@@ -131,10 +131,10 @@ impl Log {
     }
 
     pub fn sort_asc(&mut self) {
-        self.entries.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        self.entries.sort_by_key(|a| a.timestamp);
     }
 
     pub fn sort_desc(&mut self) {
-        self.entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        self.entries.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
     }
 }

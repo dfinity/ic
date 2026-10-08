@@ -3,9 +3,10 @@
 
 use crate::execution_environment::ExecutionResponse;
 use crate::{
-    ExecuteMessageResult, RoundLimits, as_round_instructions,
+    ExecuteMessageResult, HypervisorMetrics, RoundLimits, as_round_instructions,
     canister_manager::types::CanisterManagerError, metrics::CallTreeMetrics,
 };
+use candid::Encode;
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
@@ -18,11 +19,15 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
 use ic_logger::{ReplicaLogger, error, fatal, info, warn};
-use ic_management_canister_types_private::CanisterStatusType;
+use ic_management_canister_types_private::{
+    CanisterIdRange, CanisterInfoResponse, CanisterStatusType, EmptyBlob, ListCanistersResponse,
+    Payload as _,
+};
+use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
-    SystemState,
+    ReplicatedState, SystemState,
 };
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{
@@ -372,6 +377,32 @@ pub(crate) fn validate_snapshot_visibility(
     Ok(())
 }
 
+/// Validates that the `caller` is allowed to read the status of the `canister`
+/// according to its canister status visibility settings.
+///
+/// Subnet admins always retain access; otherwise access is governed by the
+/// status visibility setting, which grants access to the controllers plus any
+/// additional allowed viewers (or everyone, if the status is public).
+pub(crate) fn validate_status_visibility(
+    canister: &CanisterState,
+    subnet_admins: Option<BTreeSet<PrincipalId>>,
+    caller: &PrincipalId,
+) -> Result<(), CanisterManagerError> {
+    // Subnet admins always retain access to the canister status.
+    if let Some(subnet_admins) = &subnet_admins
+        && subnet_admins.contains(caller)
+    {
+        return Ok(());
+    }
+    // Otherwise, access is governed by the status visibility setting.
+    if crate::canister_settings::VisibilitySettings::from(canister.status_visibility())
+        .has_access(caller, canister.controllers())
+    {
+        return Ok(());
+    }
+    Err(CanisterManagerError::CanisterStatusAccessDenied { caller: *caller })
+}
+
 pub(crate) fn validate_subnet_admin(
     subnet_admins: &BTreeSet<PrincipalId>,
     sender: &PrincipalId,
@@ -415,6 +446,99 @@ pub(crate) fn validate_controller_or_subnet_admin(
             controller_provided: *sender,
         })
     }
+}
+
+/// Computes the response to the `canister_info` management canister method.
+///
+/// The method is not subject to any access control: the canister history is
+/// public information that any principal is allowed to retrieve. The size of
+/// the response is bounded by `MAX_CANISTER_HISTORY_CHANGES`, so producing it
+/// consumes no round instructions.
+///
+/// This is shared by the replicated path (an inter-canister call to
+/// `canister_info`) and the non-replicated path (see
+/// `crate::query_handler::subnet_query`) so that both return the same response.
+pub(crate) fn canister_info(
+    canister: &CanisterState,
+    num_requested_changes: Option<u64>,
+) -> CanisterInfoResponse {
+    let canister_history = canister.system_state.get_canister_history();
+    let total_num_changes = canister_history.get_total_num_changes();
+    let changes = canister_history
+        .get_changes(num_requested_changes.unwrap_or(0) as usize)
+        .map(|e| (*e.clone()).clone())
+        .collect();
+    let module_hash = canister
+        .execution_state
+        .as_ref()
+        .map(|es| es.wasm_binary.binary.module_hash().to_vec());
+    let controllers = canister
+        .controllers()
+        .iter()
+        .copied()
+        .collect::<Vec<PrincipalId>>();
+    CanisterInfoResponse::new(total_num_changes, changes, module_hash, controllers)
+}
+
+/// Computes the response to the `list_canisters` management canister method.
+///
+/// The method takes no arguments and is only available on subnets with subnet
+/// admins configured, in which case the caller must be a subnet admin. On
+/// success, it returns the Candid-encoded `ListCanistersResponse` listing the
+/// ranges of canister IDs hosted on this subnet, together with the number of
+/// round instructions the caller must deduct for computing it.
+pub(crate) fn list_canisters(
+    state: &ReplicatedState,
+    caller: &PrincipalId,
+    payload: &[u8],
+) -> Result<(Vec<u8>, NumInstructions), UserError> {
+    EmptyBlob::decode(payload)?;
+    match state.get_own_subnet_admins() {
+        Some(ref admins) => validate_subnet_admin(admins, caller).map_err(UserError::from)?,
+        None => {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "list_canisters is only available on subnets with subnet admins",
+            ));
+        }
+    }
+    let mut canisters: Vec<CanisterIdRange> = Vec::new();
+    for id in state.canister_states().all_keys() {
+        let id_u64 = canister_id_into_u64(*id);
+        match canisters.last_mut() {
+            Some(last) if canister_id_into_u64(last.end).checked_add(1) == Some(id_u64) => {
+                last.end = *id;
+            }
+            _ => canisters.push(CanisterIdRange {
+                start: *id,
+                end: *id,
+            }),
+        }
+    }
+    let response = ListCanistersResponse { canisters };
+    Ok((
+        Encode!(&response).unwrap(),
+        list_canisters_instructions(state),
+    ))
+}
+
+/// Computes the number of round instructions consumed by executing the
+/// `list_canisters` management method against the given state.
+///
+/// The cost model was derived from the `list_canisters` benchmark using the
+/// conversion `2B instructions = 1 second` (i.e. `2M instructions = 1 ms`):
+///   - a base cost of 20M instructions (≈10ms), and
+///   - a variable cost of 16K instructions per canister hosted on the subnet
+///     (`list_canisters` iterates over all of them to build the ID ranges).
+///     The variable cost reflects the worst case where the canister IDs form
+///     gaps so that each canister becomes its own ID range.
+// Keep in sync with `list_canisters_respects_round_instruction_limit` in
+// `execution_test.rs`.
+fn list_canisters_instructions(state: &ReplicatedState) -> NumInstructions {
+    const BASE_INSTRUCTIONS: u64 = 20_000_000;
+    const INSTRUCTIONS_PER_CANISTER: u64 = 16_000;
+    let num_canisters = state.num_canisters() as u64;
+    NumInstructions::new(BASE_INSTRUCTIONS + INSTRUCTIONS_PER_CANISTER * num_canisters)
 }
 
 /// Unregisters the callback corresponding to the given response.
@@ -507,6 +631,7 @@ fn try_apply_canister_state_changes(
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
     is_composite_query: bool,
+    metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
 ) -> HypervisorResult<RequestMetadataStats> {
     subnet_available_memory
@@ -523,6 +648,7 @@ fn try_apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
+        metrics,
         log,
     )
 }
@@ -546,6 +672,7 @@ pub fn apply_canister_state_changes(
     time: Time,
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
+    metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
     state_changes_error: &IntCounter,
     call_tree_metrics: &dyn CallTreeMetrics,
@@ -572,6 +699,7 @@ pub fn apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
+        metrics,
         log,
     ) {
         Ok(request_stats) => {
@@ -618,6 +746,12 @@ pub fn apply_canister_state_changes(
             output.wasm_result = Err(err);
         }
     }
+
+    // Re-evaluate the `OnLowWasmMemory` hook condition after every execution,
+    // regardless of whether memory was grown (or even of success), because the
+    // scheduler will sometimes "forget" a `Ready` status (if not enough cycles were
+    // available to execute the hook).
+    system_state.update_on_low_wasm_memory_hook_status(execution_state.wasm_memory_usage());
 }
 
 pub(crate) fn finish_call_with_error(
@@ -700,54 +834,196 @@ pub fn log_dirty_pages(
 
 #[cfg(test)]
 mod test {
-    use super::wasm_result_to_query_response;
-    use crate::ExecutionResponse;
-    use ic_base_types::{CanisterId, NumSeconds};
-    use ic_error_types::UserError;
-    use ic_logger::{LoggerImpl, ReplicaLogger};
-    use ic_replicated_state::{
-        CanisterState, SchedulerState, SystemState,
-        canister_state::canister_snapshots::CanisterSnapshots,
-    };
-    use ic_types::Time;
-    use ic_types::messages::{CallbackId, NO_DEADLINE};
-    use ic_types_cycles::Cycles;
+    use super::*;
+
+    use crate::metrics::CallTreeMetricsNoOp;
+    use ic_base_types::NumSeconds;
+    use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
+    use ic_metrics::MetricsRegistry;
+    use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
+    use ic_replicated_state::canister_state::canister_snapshots::CanisterSnapshots;
+    use ic_replicated_state::{Memory, NumWasmPages, PageMap, SchedulerState};
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_state::{ExecutionStateBuilder, SystemStateBuilder};
+    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_types::messages::NO_DEADLINE;
+    use ic_types::time::UNIX_EPOCH;
 
     #[test]
     fn test_wasm_result_to_query_response_refunds_correctly() {
-        let scheduler_state = SchedulerState::default();
-        let system_state = SystemState::new_running_for_testing(
-            CanisterId::from_u64(42),
-            CanisterId::from(100_u64).into(),
-            Cycles::new(1 << 36),
-            NumSeconds::from(100_000),
-        );
-        let canister_snapshots = CanisterSnapshots::default();
+        with_test_replica_logger(|log| {
+            let scheduler_state = SchedulerState::default();
+            let system_state = SystemState::new_running_for_testing(
+                CanisterId::from_u64(42),
+                CanisterId::from_u64(100).get(),
+                Cycles::new(1 << 36),
+                NumSeconds::new(100_000),
+            );
+            let canister_snapshots = CanisterSnapshots::default();
 
-        let logger = LoggerImpl::new(&Default::default(), "test".to_string());
-        let log = ReplicaLogger::new(logger.root.clone().into());
+            let response = wasm_result_to_query_response(
+                Err(UserError::new(
+                    ic_error_types::ErrorCode::CanisterCalledTrap,
+                    "",
+                )),
+                &CanisterState::new(system_state, None, scheduler_state, canister_snapshots),
+                Time::from_nanos_since_unix_epoch(100),
+                ic_replicated_state::CallOrigin::CanisterUpdate(
+                    CanisterId::from_u64(123),
+                    CallbackId::new(2),
+                    NO_DEADLINE,
+                    String::from(""),
+                ),
+                &log,
+                Cycles::new(1000_u128),
+            );
 
-        let response = wasm_result_to_query_response(
-            Err(UserError::new(
-                ic_error_types::ErrorCode::CanisterCalledTrap,
-                "",
-            )),
-            &CanisterState::new(system_state, None, scheduler_state, canister_snapshots),
-            Time::from_nanos_since_unix_epoch(100),
-            ic_replicated_state::CallOrigin::CanisterUpdate(
-                CanisterId::from(123_u64),
-                CallbackId::new(2),
-                NO_DEADLINE,
-                String::from(""),
-            ),
-            &log,
-            Cycles::from(1000_u128),
-        );
+            if let ExecutionResponse::Request(response) = response {
+                assert_eq!(response.refund, Cycles::new(1000_u128));
+            } else {
+                panic!("Unexpected response.");
+            }
+        })
+    }
 
-        if let ExecutionResponse::Request(response) = response {
-            assert_eq!(response.refund, Cycles::from(1000_u128));
-        } else {
-            panic!("Unexpected response.");
+    /// Runs `apply_canister_state_changes` with a `SystemState` parameterized by
+    /// `wasm_memory_threshold` / `wasm_memory_limit` / `start_status` and an
+    /// `ExecutionStateChanges` whose `wasm_memory` is sized to
+    /// `post_execution_wasm_pages`. Returns the resulting hook status to verify
+    /// that the hook is re-evaluated against the freshly committed Wasm memory
+    /// usage.
+    fn run_low_wasm_memory_hook_check(
+        wasm_memory_threshold: NumBytes,
+        wasm_memory_limit: Option<NumBytes>,
+        post_execution_wasm_pages: NumWasmPages,
+        start_status: OnLowWasmMemoryHookStatus,
+    ) -> OnLowWasmMemoryHookStatus {
+        with_test_replica_logger(|log| {
+            let mut system_state = SystemStateBuilder::default()
+                .wasm_memory_threshold(wasm_memory_threshold)
+                .wasm_memory_limit(wasm_memory_limit)
+                .empty_task_queue_with_on_low_wasm_memory_hook_status(start_status)
+                .build();
+            let mut execution_state = ExecutionStateBuilder::new().build();
+
+            let canister_state_changes = CanisterStateChanges {
+                execution_state_changes: Some(ExecutionStateChanges {
+                    globals: vec![],
+                    wasm_memory: Memory::new(PageMap::new_for_testing(), post_execution_wasm_pages),
+                    stable_memory: Memory::new_for_testing(),
+                }),
+                system_state_modifications: Default::default(),
+            };
+
+            let mut output = WasmExecutionOutput {
+                wasm_result: Ok(None),
+                num_instructions_left: NumInstructions::from(0),
+                allocated_bytes: NumBytes::from(0),
+                allocated_guaranteed_response_message_bytes: NumBytes::from(0),
+                new_memory_usage: None,
+                new_message_memory_usage: None,
+                instance_stats: Default::default(),
+                system_api_call_counters: Default::default(),
+            };
+            let mut round_limits = RoundLimits {
+                instructions: as_round_instructions(NumInstructions::from(i64::MAX as u64)),
+                subnet_available_memory: SubnetAvailableMemory::new_for_testing(i64::MAX, 0, 0),
+                subnet_available_callbacks: i64::MAX,
+                compute_allocation_used: 0,
+                subnet_memory_reservation: NumBytes::from(0),
+            };
+
+            let metrics_registry = MetricsRegistry::new();
+            let hypervisor_metrics = HypervisorMetrics::new(&metrics_registry);
+            let state_changes_error = IntCounter::new("test_state_changes_error", "test").unwrap();
+
+            apply_canister_state_changes(
+                canister_state_changes,
+                &mut execution_state,
+                &mut system_state,
+                &mut output,
+                &mut round_limits,
+                UNIX_EPOCH,
+                &Default::default(),
+                subnet_test_id(1),
+                &hypervisor_metrics,
+                &log,
+                &state_changes_error,
+                &CallTreeMetricsNoOp,
+                UNIX_EPOCH,
+                false,
+                &|_| {},
+            );
+
+            system_state.task_queue.peek_hook_status()
+        })
+    }
+
+    /// Returns a Wasm page count whose byte size equals `bytes` (rounded up).
+    fn wasm_pages_for(bytes: u64) -> NumWasmPages {
+        NumWasmPages::from(bytes.div_ceil(WASM_PAGE_SIZE_IN_BYTES as u64) as usize)
+    }
+
+    const GIB: u64 = 1 << 30;
+
+    #[test]
+    fn apply_canister_state_changes_updates_low_wasm_memory_hook() {
+        let wasm_memory_threshold = NumBytes::new(GIB);
+        let wasm_memory_limit = Some(NumBytes::new(3 * GIB));
+        // `max_allowed_wasm_memory` = `wasm_memory_limit` - `wasm_memory_threshold`
+        let max_allowed_wasm_memory = 2 * GIB;
+        let unsatisfied = wasm_pages_for(max_allowed_wasm_memory);
+        let satisfied = wasm_pages_for(max_allowed_wasm_memory + 1);
+
+        use OnLowWasmMemoryHookStatus::*;
+        let cases = [
+            (unsatisfied, ConditionNotSatisfied, ConditionNotSatisfied),
+            (unsatisfied, Ready, ConditionNotSatisfied),
+            (unsatisfied, Executed, ConditionNotSatisfied),
+            (satisfied, ConditionNotSatisfied, Ready),
+            (satisfied, Ready, Ready),
+            (satisfied, Executed, Executed),
+        ];
+        for (post_execution_wasm_pages, start_status, expected_status) in cases {
+            let actual = run_low_wasm_memory_hook_check(
+                wasm_memory_threshold,
+                wasm_memory_limit,
+                post_execution_wasm_pages,
+                start_status,
+            );
+            assert_eq!(
+                actual, expected_status,
+                "post_pages = {post_execution_wasm_pages:?}, start = {start_status:?}",
+            );
         }
+    }
+
+    #[test]
+    fn apply_canister_state_changes_uses_default_4gib_limit_when_unset() {
+        // When the memory limit is not set, the default Wasm memory limit is 4 GiB.
+        let wasm_memory_threshold = NumBytes::new(GIB);
+        let wasm_memory_limit = None;
+        // `max_allowed_wasm_memory` = `wasm_memory_limit` - `wasm_memory_threshold`
+        let max_allowed_wasm_memory = 3 * GIB;
+
+        use OnLowWasmMemoryHookStatus::*;
+        assert_eq!(
+            run_low_wasm_memory_hook_check(
+                wasm_memory_threshold,
+                wasm_memory_limit,
+                wasm_pages_for(max_allowed_wasm_memory),
+                ConditionNotSatisfied,
+            ),
+            ConditionNotSatisfied,
+        );
+        assert_eq!(
+            run_low_wasm_memory_hook_check(
+                wasm_memory_threshold,
+                wasm_memory_limit,
+                wasm_pages_for(max_allowed_wasm_memory + 1),
+                ConditionNotSatisfied,
+            ),
+            Ready,
+        );
     }
 }

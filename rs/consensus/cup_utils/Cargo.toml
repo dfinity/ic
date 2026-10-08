@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-consensus-idkg = { path = "../idkg" }
 ic-consensus-dkg = { path = "../dkg" }
+ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-protobuf = { path = "../../protobuf" }
@@ -19,5 +20,7 @@ slog = { workspace = true }
 
 [dev-dependencies]
 ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
+ic-registry-keys = { path = "../../registry/keys" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 prost = { workspace = true }
+rstest = { workspace = true }

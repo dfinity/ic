@@ -57,7 +57,7 @@ fn canister_status(_: CanisterStatusArgs) -> CanisterStatusResult {
     unimplemented!()
 }
 
-#[candid_method(update)]
+#[candid_method(query)]
 fn canister_info(_: CanisterInfoArgs) -> CanisterInfoResult {
     unimplemented!()
 }
@@ -69,6 +69,11 @@ fn canister_metadata(_: CanisterMetadataArgs) -> CanisterMetadataResult {
 
 #[candid_method(update)]
 fn subnet_info(_: SubnetInfoArgs) -> SubnetInfoResult {
+    unimplemented!()
+}
+
+#[candid_method(query)]
+fn list_canisters() -> ListCanistersResult {
     unimplemented!()
 }
 
@@ -89,6 +94,11 @@ fn raw_rand() -> RawRandResult {
 
 #[candid_method(update)]
 fn http_request(_: HttpRequestArgs) -> HttpRequestResult {
+    unimplemented!()
+}
+
+#[candid_method(update)]
+fn flexible_http_request(_: FlexibleHttpRequestArgs) -> FlexibleHttpRequestResult {
     unimplemented!()
 }
 
@@ -124,6 +134,11 @@ fn vetkd_derive_key(_: VetKDDeriveKeyArgs) -> VetKDDeriveKeyResult {
 
 #[candid_method(update)]
 fn node_metrics_history(_: NodeMetricsHistoryArgs) -> NodeMetricsHistoryResult {
+    unimplemented!()
+}
+
+#[candid_method(update)]
+fn subnet_metrics(_: SubnetMetricsArgs) -> SubnetMetricsResult {
     unimplemented!()
 }
 
@@ -185,6 +200,11 @@ fn upload_canister_snapshot_data(_: UploadCanisterSnapshotDataArgs) {
 
 #[candid_method(query)]
 fn fetch_canister_logs(_: FetchCanisterLogsArgs) -> FetchCanisterLogsResult {
+    unimplemented!()
+}
+
+#[candid_method(query)]
+fn canister_metrics(_: CanisterMetricsArgs) -> CanisterMetricsResult {
     unimplemented!()
 }
 

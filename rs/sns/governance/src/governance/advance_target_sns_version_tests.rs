@@ -1059,9 +1059,13 @@ fn add_environment_mock_calls_for_initiate_upgrade(
                 root_canister_id,
                 "change_canister",
                 Encode!(
-                    &ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, canister_id)
-                        .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
-                        .with_arg(Encode!().unwrap())
+                    &ChangeCanisterRequest::new(
+                        true, // Stop before installing.
+                        CanisterInstallModeV2::Upgrade(None),
+                        canister_id
+                    )
+                    .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
+                    .with_arg(Encode!().unwrap())
                 )
                 .unwrap(),
                 // We don't actually look at the response from this call anywhere

@@ -24,8 +24,8 @@ use ic_types::{
     xnet::{CertifiedStreamSlice, StreamIndex},
 };
 use ic_xnet_payload_builder::certified_slice_pool::{
-    METRIC_POOL_SIZE_BYTES, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES, METRIC_TAKE_MESSAGES,
-    METRIC_TAKE_SIZE_BYTES, UnpackedStreamSlice,
+    METRIC_POOL_SIZE_BYTES, METRIC_PUT_COUNT, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES,
+    METRIC_TAKE_MESSAGES, METRIC_TAKE_SIZE_BYTES, UnpackedStreamSlice,
 };
 use std::{convert::TryFrom, sync::Arc};
 use tempfile::{Builder, TempDir};
@@ -66,11 +66,13 @@ impl StateManagerFixture {
             verifier,
             subnet_id,
             subnet_type,
-            log.clone(),
-            &metrics,
             &config,
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
+            tokio::sync::watch::channel(Height::from(0)).0,
+            None,
+            &metrics,
+            log.clone(),
         );
 
         Self {
@@ -83,8 +85,7 @@ impl StateManagerFixture {
         }
     }
 
-    /// Adds a stream to the wrapped state, creates a new checkpoint and
-    /// certifies it.
+    /// Adds a stream to the wrapped state and certifies it.
     pub fn with_stream(mut self, destination_subnet: SubnetId, stream: Stream) -> Self {
         let (mut height, mut state) = self.state_manager.take_tip();
 
@@ -95,6 +96,7 @@ impl StateManagerFixture {
         height.inc_assign();
         self.state_manager
             .commit_and_certify(state, CertificationScope::Metadata, None);
+        self.state_manager.flush_hash_channel();
         certify_height(&self.state_manager, height);
         self.certified_height = height;
 
@@ -137,6 +139,11 @@ impl StateManagerFixture {
     /// Returns the value of the `METRIC_POOL_SIZE_BYTES` gauge.
     pub fn fetch_pool_size_bytes(&self) -> usize {
         fetch_gauge(&self.metrics, METRIC_POOL_SIZE_BYTES).unwrap() as usize
+    }
+
+    /// Returns the value of the `METRIC_PUT_COUNT` counters.
+    pub fn fetch_pool_put_count(&self) -> MetricVec<u64> {
+        fetch_int_counter_vec(&self.metrics, METRIC_PUT_COUNT)
     }
 
     /// Returns the value of the `METRIC_TAKE_COUNT` counters.

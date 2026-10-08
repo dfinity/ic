@@ -4,10 +4,9 @@ mod framework;
 use crate::framework::ConsensusDriver;
 use assert_matches::assert_matches;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
-use ic_consensus::consensus::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_consensus_certification::CertifierImpl;
 use ic_consensus_dkg::{DkgKeyManager, get_dkg_summary_from_cup_contents};
-use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool, pool_reader::PoolReader};
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_registry::RegistryClient;
@@ -27,18 +26,17 @@ use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
 use ic_test_utilities_state::get_initial_state;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
-    ids::{node_test_id, subnet_test_id},
+    ids::{node_test_id, subnet_test_id, test_replica_version},
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    CryptoHashOfState, Height, batch::BatchContent, crypto::CryptoHash,
+    CryptoHashOfState, Height, PlatformVersion, batch::BatchContent, crypto::CryptoHash,
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
 };
 use std::{
     sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
-use tokio::sync::watch;
 
 /// Test that the batches that Consensus produces contain expected batch
 /// numbers and payloads
@@ -68,6 +66,9 @@ fn consensus_produces_expected_batches() {
         let chain_key_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
         let chain_key_payload_builder = Arc::new(chain_key_payload_builder);
 
+        let upgrade_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let upgrade_payload_builder = Arc::new(upgrade_payload_builder);
+
         let mut state_manager = MockStateManager::new();
         state_manager.expect_remove_states_below().return_const(());
         state_manager
@@ -92,6 +93,12 @@ fn consensus_produces_expected_batches() {
                 Arc::new(get_initial_state(0, 0)),
             )));
         state_manager
+            .expect_get_latest_certified_state()
+            .return_const(Some(Labeled::new(
+                Height::new(0),
+                Arc::new(get_initial_state(0, 0)),
+            )));
+        state_manager
             .expect_get_certified_state_snapshot()
             .returning(|| None);
         let state_manager = Arc::new(state_manager);
@@ -102,7 +109,15 @@ fn consensus_produces_expected_batches() {
         let router = Arc::new(router);
         let node_id = node_test_id(0);
         let subnet_id = subnet_test_id(0);
-        let replica_config = ReplicaConfig { node_id, subnet_id };
+        let replica_version = test_replica_version();
+        let replica_config = ReplicaConfig {
+            node_id,
+            subnet_id,
+            platform_version: PlatformVersion {
+                guestos_version: replica_version.clone(),
+                replica_version,
+            },
+        };
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
         let metrics_registry = MetricsRegistry::new();
@@ -119,8 +134,9 @@ fn consensus_produces_expected_batches() {
             replica_config.subnet_id,
             vec![(
                 1,
-                SubnetRecordBuilder::from(&[node_test_id(0)])
+                SubnetRecordBuilder::from(&[node_id])
                     .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                    .with_replica_version(replica_config.replica_version().as_ref())
                     .build(),
             )],
         );
@@ -129,6 +145,7 @@ fn consensus_produces_expected_batches() {
             .expect("Failed to retreive the DKG transcripts from registry");
         let summary = get_dkg_summary_from_cup_contents(
             cup_contents.value.expect("Missing CUP contents"),
+            Height::from(0),
             replica_config.subnet_id,
             &*registry_client,
             cup_contents.version,
@@ -142,6 +159,7 @@ fn consensus_produces_expected_batches() {
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
             node_id,
             subnet_id,
+            replica_config.replica_version(),
             make_genesis(summary).into(),
             pool_config.clone(),
             MetricsRegistry::new(),
@@ -154,9 +172,9 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&fake_crypto) as Arc<_>,
             no_op_logger(),
             &PoolReader::new(&*consensus_pool.read().unwrap()),
+            registry_client.clone(),
+            replica_config.clone(),
         )));
-
-        let (dummy_watcher, _) = watch::channel(Height::from(0));
 
         let consensus = ic_consensus::consensus::ConsensusImpl::new(
             replica_config.clone(),
@@ -169,6 +187,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&canister_http_payload_builder) as Arc<_>,
             query_stats_payload_builder,
             chain_key_payload_builder,
+            upgrade_payload_builder,
             Arc::clone(&dkg_pool) as Arc<_>,
             Arc::clone(&idkg_pool) as Arc<_>,
             dkg_key_manager.clone(),
@@ -184,7 +203,9 @@ fn consensus_produces_expected_batches() {
         let consensus_bouncer =
             ic_consensus::consensus::ConsensusBouncer::new(&metrics_registry, router.clone());
         let dkg = ic_consensus_dkg::DkgImpl::new(
-            replica_config.node_id,
+            replica_config.clone(),
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&consensus_cache),
             dkg_key_manager,
@@ -208,7 +229,6 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&consensus_cache),
             metrics_registry.clone(),
             no_op_logger(),
-            dummy_watcher,
         );
 
         let driver = ConsensusDriver::new(

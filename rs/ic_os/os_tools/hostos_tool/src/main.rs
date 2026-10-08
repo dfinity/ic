@@ -1,11 +1,11 @@
 use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
 use config_tool::{DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, deserialize_config};
-use config_types::{HostOSConfig, Ipv6Config};
+use config_types::{HostOSConfig, Ipv6Config, VmSlot};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use grub::BootAlternative;
-use manual_guestos_recovery::GuestOSRecoveryApp;
+use manual_guestos_recovery::{GuestOSRecoveryApp, RecoveryMode};
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use std::path::Path;
@@ -13,7 +13,9 @@ use tracing::warn;
 use utils::to_cidr;
 
 mod guestos_alternative;
-use guestos_alternative::{show_guestos_alternative, swap_guestos_alternative};
+use guestos_alternative::{
+    get_current_guestos_alternative, show_guestos_alternative, swap_guestos_alternative,
+};
 
 use ic_os_metrics_utils::write_registry_to_file;
 
@@ -47,7 +49,11 @@ pub enum Commands {
         output_path: String,
     },
     /// Launch the Recovery TUI tool for manual node recovery
-    ManualRecovery,
+    ManualRecovery {
+        /// Recovery mode: nns requires the recovery hash, tee hides it.
+        #[arg(value_enum, default_value_t = RecoveryMode::Nns)]
+        mode: RecoveryMode,
+    },
     /// Show or swap the GuestOS boot alternative (A/B)
     #[command(name = "guestos-alternative", subcommand)]
     GuestosAlternative(GuestosAlternativeCommands),
@@ -98,6 +104,7 @@ pub fn main() -> Result<()> {
                 &hostos_config.icos_settings.mgmt_mac,
                 hostos_config.icos_settings.deployment_environment,
                 NodeType::HostOS,
+                VmSlot::Plain,
             );
 
             generate_network_config(
@@ -118,6 +125,7 @@ pub fn main() -> Result<()> {
                 &hostos_config.icos_settings.mgmt_mac,
                 hostos_config.icos_settings.deployment_environment,
                 node_type,
+                VmSlot::Plain,
             );
 
             warn!("Using generated mac address {generated_mac}");
@@ -147,12 +155,14 @@ pub fn main() -> Result<()> {
                 &hostos_config.icos_settings.mgmt_mac,
                 hostos_config.icos_settings.deployment_environment,
                 node_type,
+                VmSlot::Plain,
             );
             println!("{generated_mac}");
             Ok(())
         }
-        Some(Commands::ManualRecovery) => {
-            let mut app = GuestOSRecoveryApp::new();
+        Some(Commands::ManualRecovery { mode }) => {
+            let current_boot_alternative = get_current_guestos_alternative()?;
+            let mut app = GuestOSRecoveryApp::new(mode, current_boot_alternative);
             app.run()?;
             Ok(())
         }

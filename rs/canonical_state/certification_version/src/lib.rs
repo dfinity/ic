@@ -20,6 +20,22 @@ pub enum CertificationVersion {
     V24 = 24,
     /// Add /subnet/<subnet_id>/type.
     V25 = 25,
+    /// Introdue `EngineNotAllowed` signals
+    V26 = 26,
+    /// Add `/canister/<canister_id>/last_install_timestamp` leaf.
+    V27 = 27,
+    /// Add `/canister/<canister_id>/canister_creation_timestamp` leaf.
+    V28 = 28,
+    /// Fix double counting of cycles consumed by deleted canisters in
+    /// `/subnet/<subnet_id>/metrics` and additionally include the cycles
+    /// consumed by all non-deleted canisters in the reported total.
+    V29 = 29,
+    /// Report the cycles consumed by non-deleted canisters in
+    /// `/subnet/<subnet_id>/metrics` as the sum of the monotonic
+    /// `CanisterMetrics::consumed_cycles_monotonic` instead of the
+    /// `CanisterMetrics::consumed_cycles` gauge (which includes outstanding
+    /// prepayments).
+    V30 = 30,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -51,7 +67,7 @@ impl std::convert::TryFrom<u32> for CertificationVersion {
 
 /// The Canonical State certification version that should be used for newly
 /// computed states.
-pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V25;
+pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V29;
 
 /// Minimum supported certification version.
 ///
@@ -63,7 +79,7 @@ pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = Certificat
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V25;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V30;
 
 /// Returns a list of all certification versions from `MIN_SUPPORTED_CERTIFICATION_VERSION`
 /// up to `MAX_SUPPORTED_CERTIFICATION_VERSION`.

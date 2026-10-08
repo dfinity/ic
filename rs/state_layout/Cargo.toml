@@ -24,10 +24,11 @@ ic-wasm-types = { path = "../types/wasm_types" }
 libc = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
-scoped_threadpool = "0.1.*"
+scoped_threadpool = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
+ic-config = { path = "../config" }
 ic-interfaces = { path = "../interfaces" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-time = { path = "../test_utilities/time" }

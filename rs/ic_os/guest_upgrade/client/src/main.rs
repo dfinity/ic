@@ -2,9 +2,10 @@ use anyhow::{Context, Result};
 use attestation::attestation_package::SevRootCertificateVerification;
 use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{GuestOSConfig, GuestVMType};
-use guest_disk::DEFAULT_PREVIOUS_SEV_KEY_PATH;
+use guest_disk::DEFAULT_STORE_LUKS_HEADER_PATH;
+use guest_upgrade_client::DefaultDiskCryptoOps;
 use guest_upgrade_client::create_nns_registry_client;
-use guest_upgrade_shared::DEFAULT_SERVER_PORT;
+use guest_upgrade_shared::{DEFAULT_SERVER_PORT, STORE_DEVICE};
 use sev::firmware::guest::Firmware;
 use std::path::PathBuf;
 use std::process::Command;
@@ -33,7 +34,7 @@ pub async fn main() -> Result<()> {
 }
 
 async fn try_run_exchange(guestos_config: GuestOSConfig) -> Result<()> {
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     let nns_registry_client = create_nns_registry_client(&guestos_config)?;
 
     let sev_firmware = Firmware::open().context("Failed to open SEV firmware")?;
@@ -43,8 +44,9 @@ async fn try_run_exchange(guestos_config: GuestOSConfig) -> Result<()> {
         SevRootCertificateVerification::Verify,
         Box::new(sev_firmware),
         Arc::new(nns_registry_client),
-        Box::new(guest_disk::sev::can_open_store),
-        PathBuf::from(DEFAULT_PREVIOUS_SEV_KEY_PATH),
+        Arc::new(DefaultDiskCryptoOps),
+        PathBuf::from(STORE_DEVICE),
+        PathBuf::from(DEFAULT_STORE_LUKS_HEADER_PATH),
         DEFAULT_SERVER_PORT,
     )
     .run()

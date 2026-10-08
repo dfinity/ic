@@ -8,6 +8,7 @@
 use crate::execution::common::{validate_canister, validate_method};
 use crate::execution_environment::RoundLimits;
 use crate::{Hypervisor, NonReplicatedQueryKind, metrics::CallTreeMetricsNoOp};
+use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_embedders::wasmtime_embedder::system_api::{ApiType, ExecutionParameters};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
@@ -16,8 +17,9 @@ use ic_types::ingress::WasmResult;
 use ic_types::messages::{CallContextId, RequestMetadata};
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{NumInstructions, Time};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
+use ic_types_cycles::Cycles;
 use prometheus::IntCounter;
+use std::sync::Arc;
 
 // Execute non replicated query.
 #[allow(clippy::too_many_arguments)]
@@ -29,11 +31,11 @@ pub fn execute_non_replicated_query(
     data_certificate: Option<Vec<u8>>,
     time: Time,
     execution_parameters: ExecutionParameters,
-    network_topology: &NetworkTopology,
+    network_topology: Arc<NetworkTopology>,
     hypervisor: &Hypervisor,
     round_limits: &mut RoundLimits,
     state_changes_error: &IntCounter,
-    cost_schedule: CanisterCyclesCostSchedule,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> (
     CanisterState,
     NumInstructions,
@@ -135,7 +137,7 @@ pub fn execute_non_replicated_query(
         state_changes_error,
         &CallTreeMetricsNoOp,
         time,
-        cost_schedule,
+        subnet_cycles_config,
     );
     canister.system_state = output_system_state;
     if preserve_changes {

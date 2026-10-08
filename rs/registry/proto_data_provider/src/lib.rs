@@ -3,7 +3,7 @@ use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord, RegistryValue
 use ic_registry_common_proto::pb::proto_registry::v1::{ProtoRegistry, ProtoRegistryRecord};
 use ic_registry_transport::pb::v1::registry_mutation::Type;
 use ic_registry_transport::pb::v1::{RegistryAtomicMutateRequest, RegistryMutation};
-use ic_registry_transport::upsert;
+use ic_registry_transport::{delete, upsert};
 use ic_sys::fs::{Clobber, write_atomically};
 use ic_types::{RegistryVersion, registry::RegistryDataProviderError};
 use std::collections::HashMap;
@@ -235,7 +235,15 @@ impl ProtoRegistryDataProvider {
 
         for record in records {
             let version = record.version;
-            let mutation = upsert(record.key, record.value.or_else(|| Some(vec![])).unwrap());
+            // A record with no value represents a deletion (tombstone) and must
+            // be exported as a `delete` mutation rather than an `upsert` with an
+            // empty value; otherwise the registry canister would store an empty
+            // value for the key (e.g. a 0-byte crypto key) and fail its
+            // invariant checks.
+            let mutation = match record.value {
+                Some(value) => upsert(record.key, value),
+                None => delete(record.key),
+            };
 
             if let Some(mutations_vec) = mutations_by_version.get_mut(&version) {
                 mutations_vec.push(mutation);

@@ -11,8 +11,9 @@ use ic_artifact_pool::{
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
 use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
-use ic_consensus::consensus::batch_delivery::deliver_batches;
+use ic_consensus::consensus::batch_delivery::deliver_batches_for_ic_replay;
 use ic_consensus_certification::VerifierImpl;
+use ic_consensus_cup_utils::verify_catch_up_package_proto;
 use ic_consensus_utils::{lookup_replica_version, membership::Membership, pool_reader::PoolReader};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_crypto_tree_hash::{Digest, Witness};
@@ -34,14 +35,11 @@ use ic_logger::{ReplicaLogger, error, info, new_replica_logger_from_config, warn
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::{
-    registry::{replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord},
-    types::v1 as pb,
-};
+use ic_protobuf::{registry::subnet::v1::SubnetRecord, types::v1 as pb};
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{deserialize_registry_value, subnet::SubnetRegistry};
-use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key};
+use ic_registry_keys::make_subnet_record_key;
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
@@ -53,13 +51,14 @@ use ic_registry_transport::{
     deserialize_get_value_response, serialize_get_changes_since_request,
     serialize_get_value_request,
 };
+use ic_replicated_state::metrics::ReplicatedStateInvariants;
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
-    CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
-    RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
-    batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics},
+    CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PlatformVersion, PrincipalId,
+    Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
+    batch::{Batch, BatchContent, BatchMessages},
     consensus::{
-        CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
+        CatchUpPackage, HasHeight, HasVersion,
         certification::{Certification, CertificationContent, CertificationShare},
     },
     crypto::{
@@ -100,21 +99,36 @@ pub struct StateParams {
     pub invalid_artifacts: Vec<InvalidArtifact>,
 }
 
+/// The result of a successful replay.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct ReplayOutput {
+    /// The params of the latest *checkpointed* state the replay ended up with.
+    pub state_params: StateParams,
+    /// Number of batches delivered on top of the replayed blocks, i.e. the batches
+    /// carrying the extra ingress messages and the one creating the checkpoint. Zero
+    /// if no extra batch was delivered, e.g. because the replayed blocks already
+    /// ended in a checkpoint.
+    ///
+    /// `ValidateReplayStep` in `ic-recovery` subtracts these from the height above
+    /// to compare the replayed blocks against the subnet's certification height.
+    pub extra_batches: u64,
+}
+
 #[derive(Clone, Debug)]
 pub enum ReplayError {
     /// Can't proceed because the state has diverged.
     StateDivergence(Height),
     /// Can't proceed because an upgrade was detected.
-    UpgradeDetected(StateParams),
+    UpgradeDetected(ReplayOutput),
     /// Can't proceed because artifact validation failed after the given height.
     ValidationIncomplete(Height, Vec<InvalidArtifact>),
     /// Can't proceed because CUP verification failed at the given height.
     CUPVerificationFailed(Height),
     /// Replay was successful, but manual inspection is required to choose correct state.
-    ManualInspectionRequired(StateParams),
+    ManualInspectionRequired(ReplayOutput),
 }
 
-pub type ReplayResult = Result<StateParams, ReplayError>;
+pub type ReplayResult = Result<ReplayOutput, ReplayError>;
 
 /// The main ic-replay component that sets up consensus and execution
 /// environment to replay past blocks.
@@ -148,11 +162,12 @@ impl Player {
     /// restoring states from backups.
     pub(crate) fn new_for_backup(
         mut cfg: Config,
-        replica_version: ReplicaVersion,
+        platform_version: PlatformVersion,
         backup_spool_path: &Path,
         registry_local_store_path: &Path,
         subnet_id: SubnetId,
         start_height: u64,
+        replay_target_height: Option<u64>,
     ) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
 
@@ -178,7 +193,7 @@ impl Player {
         let artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
         let backup_dir = backup_spool_path
             .join(subnet_id.to_string())
-            .join(replica_version.to_string());
+            .join(platform_version.replica_version.as_ref());
         // Extract the genesis CUP and instantiate a new pool.
         let cup_file = backup::cup_file_name(&backup_dir, Height::from(start_height));
         let initial_cup_proto = backup::read_cup_proto_file(&cup_file)
@@ -187,6 +202,7 @@ impl Player {
         let pool = ConsensusPoolImpl::new(
             NodeId::from(PrincipalId::new_anonymous()),
             subnet_id,
+            &platform_version.replica_version,
             // Note: it's important to pass the original proto which came from the command line (as
             // opposed to, for example, a proto which was first deserialized and then serialized
             // again). Since the proto file could have been produced and signed by nodes running a
@@ -208,7 +224,8 @@ impl Player {
             subnet_id,
             Some(pool),
             Some(backup_dir),
-            replica_version,
+            platform_version,
+            replay_target_height,
             log,
             _async_log_guard,
         );
@@ -218,13 +235,23 @@ impl Player {
 
     /// Create and return a `Player` from a replica configuration object for
     /// subnet recovery.
-    pub(crate) fn new(cfg: Config, subnet_id: SubnetId) -> Self {
+    pub(crate) fn new(
+        cfg: Config,
+        subnet_id: SubnetId,
+        replica_version: Option<ReplicaVersion>,
+        guestos_version: Option<ReplicaVersion>,
+        replay_target_height: Option<u64>,
+    ) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::new();
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
         let time_source = Arc::new(SysTimeSource::new());
 
-        let consensus_pool = if cfg.artifact_pool.consensus_pool_path.exists() {
+        // `consensus_pool_path` is only the root that the consensus and the
+        // certification store share, and the latter alone is enough to create it, so
+        // the consensus store itself is what decides whether there is a pool.
+        let consensus_store_path = cfg.artifact_pool.consensus_pool_path.join("consensus");
+        let consensus_pool = if consensus_store_path.exists() {
             let mut artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
             // We don't want to modify the original consensus pool during the subnet
             // recovery.
@@ -245,7 +272,22 @@ impl Player {
             // Use the replica version from the finalized tip in the pool.
             PoolReader::new(pool).get_finalized_tip().version().clone()
         } else {
-            Default::default()
+            // Without a consensus pool there is no finalized tip to take the version
+            // from, so the version the subnet is currently running must be given. It
+            // cannot be looked up in the registry: the subnet may well be stalled on
+            // a version older than the one the latest registry version assigns to it.
+            replica_version.unwrap_or_else(|| {
+                panic!(
+                    "No consensus pool found at {}, so the replica version the subnet is \
+                     running on has to be given with `--replica-version`.",
+                    consensus_store_path.display()
+                )
+            })
+        };
+
+        let platform_version = PlatformVersion {
+            guestos_version: guestos_version.unwrap_or_else(|| replica_version.clone()),
+            replica_version,
         };
 
         Player::new_with_params(
@@ -254,7 +296,8 @@ impl Player {
             subnet_id,
             consensus_pool,
             None,
-            replica_version,
+            platform_version,
+            replay_target_height,
             log,
             _async_log_guard,
         )
@@ -267,21 +310,17 @@ impl Player {
         subnet_id: SubnetId,
         consensus_pool: Option<ConsensusPoolImpl>,
         backup_dir: Option<PathBuf>,
-        replica_version: ReplicaVersion,
+        platform_version: PlatformVersion,
+        replay_target_height: Option<u64>,
         log: ReplicaLogger,
         _async_log_guard: AsyncGuard,
     ) -> Self {
-        println!("Setting default replica version {replica_version}");
-        if ReplicaVersion::set_default_version(replica_version.clone()).is_err() {
-            println!("Failed to set default replica version");
-        }
-
-        let subnet_type = match registry.get_subnet_record(subnet_id, registry.get_latest_version())
-        {
+        let registry_version = registry.get_latest_version();
+        let subnet_type = match registry.get_subnet_record(subnet_id, registry_version) {
             Ok(Some(record)) => {
                 SubnetType::try_from(record.subnet_type).expect("Failed to decode subnet type")
             }
-            err => panic!("Failed to extract subnet type of {subnet_id:?} from registry: {err:?}"),
+            err => panic!("Failed to read subnet record for {subnet_id:?} from registry: {err:?}"),
         };
 
         let metrics_registry = MetricsRegistry::new();
@@ -291,15 +330,19 @@ impl Player {
         let crypto = Arc::new(crypto);
 
         let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
+        let replicated_state_invariants =
+            ReplicatedStateInvariants::new(&metrics_registry, &cfg.hypervisor);
         let state_manager = Arc::new(StateManagerImpl::new(
             verifier.clone(),
             subnet_id,
             subnet_type,
-            log.clone(),
-            &metrics_registry,
             &cfg.state_manager,
             None,
             MaliciousFlags::default(),
+            tokio::sync::watch::channel(Height::from(0)).0,
+            Some(replicated_state_invariants),
+            &metrics_registry,
+            log.clone(),
         ));
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let execution_service = ExecutionServices::setup_execution(
@@ -340,6 +383,7 @@ impl Player {
             ReplayValidator::new(
                 cfg,
                 subnet_id,
+                platform_version.clone(),
                 crypto.clone(),
                 crypto.clone(),
                 verifier,
@@ -373,25 +417,22 @@ impl Player {
             registry,
             local_store_path,
             subnet_id,
-            replica_version,
+            replica_version: platform_version.replica_version,
             backup_dir,
             log,
             _async_log_guard,
             tmp_dir: None,
-            replay_target_height: None,
+            replay_target_height,
             runtime,
         }
     }
 
-    /// Set the replay target height
-    pub fn with_replay_target_height(mut self, replay_target_height: Option<u64>) -> Self {
-        self.replay_target_height = replay_target_height;
-        self
-    }
-
     /// In case a consensus pool was supplied, replay past finalized but
-    /// un-executed blocks by delivering ingress messages for execution,
-    /// and make a full checkpoint of the latest state when they all finish.
+    /// un-executed blocks by delivering ingress messages for execution, and make a
+    /// full checkpoint of the latest state when they all finish. That checkpoint is
+    /// created by an extra batch, one height above the last replayed block, unless
+    /// the state is checkpointed already because the last replayed block was a CUP
+    /// height.
     ///
     /// It takes a function argument, which can be used to make extra ingress
     /// messages for execution, which are delivered after the last finalized
@@ -418,7 +459,7 @@ impl Player {
             Default::default()
         };
 
-        let (latest_context_time, extra_batch_delivery) = self.deliver_extra_batch(
+        let (latest_context_time, extra_batches, extra_batch_delivery) = self.deliver_extra_batch(
             self.message_routing.as_ref(),
             self.consensus_pool.as_ref(),
             extra,
@@ -440,7 +481,7 @@ impl Player {
                         Some(printer) => printer(bytes),
                         _ => println!(
                             "Ingress id={} response={}",
-                            &msg.ingress.id(),
+                            msg.ingress.id(),
                             hex::encode(bytes)
                         ),
                     },
@@ -452,11 +493,15 @@ impl Player {
         let state_params =
             self.get_latest_state_params(Some(latest_context_time), invalid_artifacts);
         println!("Latest registry version: {}", state_params.registry_version);
+        let replay_output = ReplayOutput {
+            state_params,
+            extra_batches,
+        };
 
         if inspection_required {
-            Err(ReplayError::ManualInspectionRequired(state_params))
+            Err(ReplayError::ManualInspectionRequired(replay_output))
         } else {
-            Ok(state_params)
+            Ok(replay_output)
         }
     }
 
@@ -660,11 +705,29 @@ impl Player {
             self.wait_for_state(height);
             if let Ok(hash_raw) = self.state_manager.get_state_hash_at(height) {
                 (height, hash_raw)
-            } else {
-                // If the latest state height corresponds to an in-memory state only, we return the
-                // state hash of the latest CUP
+            } else if self.consensus_pool.is_some() {
+                // The latest state exists in memory only, so it has no hash. Report the
+                // latest CUP's state instead, which is checkpointed by construction.
                 let last_cup = self.get_latest_cup();
                 (last_cup.height(), last_cup.content.state_hash)
+            } else {
+                // Same, except that without a consensus pool there is no CUP to fall back
+                // on, so report the highest checkpoint: the latest state that was
+                // persisted, which is what the in-memory tip was computed on top of.
+                let height = self
+                    .state_manager
+                    .checkpoint_heights()
+                    .into_iter()
+                    .max()
+                    .expect(
+                        "Neither a consensus pool nor a checkpoint is available, so there \
+                         is no persisted state to report",
+                    );
+                let hash_raw = self
+                    .state_manager
+                    .get_state_hash_at(height)
+                    .expect("Failed to get the hash of the highest checkpoint");
+                (height, hash_raw)
             }
         };
         let hash = hex::encode(hash_raw.get().0);
@@ -680,7 +743,7 @@ impl Player {
     /// Fetch registry records from the given `nns_url`, and update the local
     /// registry store with the new records.
     pub fn update_registry_local_store(&self) {
-        println!("RegistryLocalStore path: {:?}", &self.local_store_path);
+        println!("RegistryLocalStore path: {:?}", self.local_store_path);
         let latest_version = self.registry.get_latest_version();
         println!("RegistryLocalStore latest version: {latest_version}");
         let records = self
@@ -702,13 +765,13 @@ impl Player {
     ) -> Height {
         let expected_batch_height = message_routing.expected_batch_height();
         let last_batch_height = loop {
-            match deliver_batches(
+            match deliver_batches_for_ic_replay(
                 message_routing,
                 membership,
                 pool,
                 &*self.registry,
-                self.subnet_id,
                 &self.log,
+                self.subnet_id,
                 replay_target_height,
             ) {
                 Ok(h) => break h,
@@ -734,13 +797,13 @@ impl Player {
         message_routing: &dyn MessageRouting,
         pool: Option<&ConsensusPoolImpl>,
         mut extra: F,
-    ) -> (Time, Option<(Height, Vec<IngressWithPrinter>)>) {
+    ) -> (Time, u64, Option<(Height, Vec<IngressWithPrinter>)>) {
         let (registry_version, time, randomness, replica_version) = match pool {
             None => (
                 self.registry.get_latest_version(),
                 ic_types::time::current_time(),
                 Randomness::from([0; 32]),
-                ReplicaVersion::default(),
+                self.replica_version.clone(),
             ),
             Some(pool) => {
                 let pool = PoolReader::new(pool);
@@ -763,9 +826,35 @@ impl Player {
             }
         };
 
+        let mut nb_extra_delivered_batches = 0;
         let extra_msgs = extra(self, time);
-        if extra_msgs.is_empty() {
-            return (time, None);
+        let no_extra_msgs = extra_msgs.is_empty();
+
+        // `deliver_batches()` deliberately does not force a checkpoint at the replay
+        // target height: that height has to be executed exactly the way the subnet
+        // executed it, so that the resulting certified state is identical to the one
+        // the subnet certified at that height (see `redeliver_certifications`). The
+        // checkpoint is therefore created by an extra
+        // `BatchContent::CheckpointingWithoutExecution` batch, whose round creates it
+        // without executing anything.
+        //
+        // That batch occupies the height the next block would have been delivered at,
+        // so it may only be delivered where no further block will follow.
+        //
+        // Nothing needs to be persisted if the state that batch would checkpoint is
+        // already checkpointed: no blocks were replayed at all, or the last replayed
+        // block is a summary block, whose batch requires a full state hash anyway.
+        // Note that this compares against the height of the latest state and not
+        // against the replay target height: the two differ if the state was already
+        // ahead of the replayed blocks, in which case it is the latest state that the
+        // checkpointing batch would checkpoint.
+        let latest_state_checkpointed = self
+            .state_manager
+            .checkpoint_heights()
+            .contains(&self.state_manager.latest_state_height());
+        if no_extra_msgs && latest_state_checkpointed {
+            println!("No extra batch delivered: the replayed state is already checkpointed.");
+            return (time, nb_extra_delivered_batches, None);
         }
 
         let extra_ingresses = extra_msgs
@@ -776,33 +865,47 @@ impl Player {
         let mut extra_batch = Batch {
             batch_number: message_routing.expected_batch_height(),
             batch_summary: None,
-            content: BatchContent::Data {
-                batch_messages: BatchMessages {
-                    signed_ingress_msgs: extra_ingresses,
-                    ..BatchMessages::default()
-                },
-                chain_key_data: Default::default(),
-                consensus_responses: Vec::new(),
-                requires_full_state_hash: false,
+            content: if no_extra_msgs {
+                BatchContent::CheckpointingWithoutExecution
+            } else {
+                BatchContent::Data {
+                    batch_messages: BatchMessages {
+                        signed_ingress_msgs: extra_ingresses,
+                        ..BatchMessages::default()
+                    },
+                    chain_key_data: Default::default(),
+                    consensus_responses: Vec::new(),
+                    canister_http_spent: Default::default(),
+                    requires_full_state_hash: false,
+                }
             },
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
             registry_version,
             time,
-            blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            // No block was made for this batch, so no blockmaker is credited.
+            blockmaker_metrics: None,
             replica_version,
         };
 
-        println!("extra_batch created with new ingress");
+        if no_extra_msgs {
+            println!("extra_batch created to trigger checkpoint creation");
+        } else {
+            println!("extra_batch created with new ingress");
+        }
 
         loop {
             match message_routing.deliver_batch(extra_batch.clone()) {
                 Ok(()) => {
                     println!("Delivered batch {}", extra_batch.batch_number);
+                    nb_extra_delivered_batches += 1;
                     self.wait_for_state(extra_batch.batch_number);
 
-                    // We are done once we delivered a batch for a new checkpoint
-                    if extra_batch.requires_full_state_hash() {
+                    // We are done once we delivered the batch creating the checkpoint.
+                    if matches!(
+                        extra_batch.content,
+                        BatchContent::CheckpointingWithoutExecution
+                    ) {
                         break;
                     }
 
@@ -818,12 +921,16 @@ impl Player {
                                 IngressStatus::Known { state, .. } => !state.is_terminal(),
                             });
 
-                    extra_batch = extra_batch.clone();
-                    extra_batch.content = BatchContent::Data {
-                        batch_messages: BatchMessages::default(),
-                        chain_key_data: Default::default(),
-                        consensus_responses: Vec::new(),
-                        requires_full_state_hash: !have_incomplete_msgs,
+                    extra_batch.content = if have_incomplete_msgs {
+                        BatchContent::Data {
+                            batch_messages: BatchMessages::default(),
+                            chain_key_data: Default::default(),
+                            consensus_responses: Vec::new(),
+                            canister_http_spent: Default::default(),
+                            requires_full_state_hash: false,
+                        }
+                    } else {
+                        BatchContent::CheckpointingWithoutExecution
                     };
                     extra_batch.batch_number = message_routing.expected_batch_height();
                     extra_batch.time += Duration::from_nanos(1);
@@ -837,7 +944,11 @@ impl Player {
                 }
             }
         }
-        (time, Some((extra_batch.batch_number, extra_msgs)))
+        (
+            time,
+            nb_extra_delivered_batches,
+            Some((extra_batch.batch_number, extra_msgs)),
+        )
     }
 
     fn certify_state_with_dummy_certification(&self) {
@@ -877,21 +988,6 @@ impl Player {
                 },
             },
         }
-    }
-
-    /// Return latest BlessedReplicaVersions record by querying the registry
-    /// canister.
-    pub fn get_blessed_replica_versions(
-        &self,
-        ingress_expiry: Time,
-    ) -> Result<BlessedReplicaVersions, String> {
-        self.certify_state_with_dummy_certification();
-        let perform_query = Arc::new(Mutex::new(self.query_handler.clone()));
-        self.runtime.block_on(registry_get_value(
-            &make_blessed_replica_versions_key(),
-            ingress_expiry,
-            &perform_query,
-        ))
     }
 
     /// Return the latest registry version by querying the registry canister.
@@ -1028,7 +1124,17 @@ impl Player {
                 && last_batch_height >= height
             {
                 println!("Target height {height} reached.");
-                return Ok(self.get_latest_state_params(None, invalid_artifacts));
+                // Reaching the target height ends the restore, so this is where we should deliver
+                // an extra batch to checkpoint the state.
+                let (_, extra_batches, _) = self.deliver_extra_batch(
+                    self.message_routing.as_ref(),
+                    self.consensus_pool.as_ref(),
+                    |_, _| Vec::new(),
+                );
+                return Ok(ReplayOutput {
+                    state_params: self.get_latest_state_params(None, invalid_artifacts),
+                    extra_batches,
+                });
             }
 
             match result {
@@ -1083,7 +1189,12 @@ impl Player {
                         "Restored the state at the height {:?}",
                         self.state_manager.latest_state_height()
                     );
-                    return Ok(self.get_latest_state_params(None, invalid_artifacts));
+                    return Ok(ReplayOutput {
+                        state_params: self.get_latest_state_params(None, invalid_artifacts),
+                        // Without a target height to stop at, the restore checkpoints
+                        // nothing on top of the replayed blocks.
+                        extra_batches: 0,
+                    });
                 }
             }
         }
@@ -1137,16 +1248,10 @@ impl Player {
         }
 
         // Verify the CUP signature.
-        if let Err(err) = self.crypto.verify_combined_threshold_sig_by_public_key(
-            &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
-            &CatchUpContentProtobufBytes::from(&protobuf),
-            self.subnet_id,
-            last_cup.content.block.get_value().context.registry_version,
-        ) {
-            error!(
-                self.log,
-                "Verification of the signature on the CUP failed: {:?}", err
-            );
+        if let Err(err) =
+            verify_catch_up_package_proto(self.crypto.as_ref(), self.subnet_id, &protobuf)
+        {
+            error!(self.log, "Verification of the CUP failed: {}", err);
             return Err(ReplayError::CUPVerificationFailed(last_cup.height()));
         }
 
@@ -1190,9 +1295,11 @@ impl Player {
                     replica_version,
                     last_cup.height()
                 );
-                return Err(ReplayError::UpgradeDetected(
-                    self.get_latest_state_params(None, Vec::new()),
-                ));
+                return Err(ReplayError::UpgradeDetected(ReplayOutput {
+                    state_params: self.get_latest_state_params(None, Vec::new()),
+                    // No extra batch has been delivered at this point.
+                    extra_batches: 0,
+                }));
             }
             _ => {}
         }
@@ -1238,11 +1345,50 @@ pub async fn public_only_for_test_get_changes_since(
     get_changes_since(version, ingress_expiry, perform_query).await
 }
 
+/// Returns all registry records since `version` (exclusive), up to the latest version of the
+/// registry canister.
 async fn get_changes_since(
     version: u64,
     ingress_expiry: Time,
     perform_query: &(impl PerformQuery + Sync),
 ) -> Result<Vec<RegistryRecord>, String> {
+    let mut records = vec![];
+    let mut since = version;
+
+    // The registry canister caps the size of each `get_changes_since` response, so we keep querying
+    // until the latest version is reached.
+    loop {
+        let (page, latest_version) =
+            get_changes_since_page(since, ingress_expiry, perform_query).await?;
+        let Some(page_max_version) = page.iter().map(|r| r.version.get()).max() else {
+            break;
+        };
+
+        println!(
+            "Fetched {} registry records in versions ({since}, {page_max_version}] out of latest \
+            version {latest_version}",
+            page.len()
+        );
+        records.extend(page);
+
+        let is_page_max_in_window = since < page_max_version && page_max_version < latest_version;
+        if !is_page_max_in_window {
+            break;
+        }
+
+        since = page_max_version;
+    }
+
+    Ok(records)
+}
+
+/// Returns the registry records of a single `get_changes_since` response, along with the latest
+/// version of the registry canister reported in that response.
+async fn get_changes_since_page(
+    version: u64,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<(Vec<RegistryRecord>, u64), String> {
     let payload = serialize_get_changes_since_request(version).unwrap();
     let query = Query {
         source: QuerySource::User {
@@ -1258,7 +1404,7 @@ async fn get_changes_since(
     match perform_query.perform_query(query).await.unwrap() {
         Ok((Ok(wasm_result), _time)) => match wasm_result {
             WasmResult::Reply(v) => {
-                let (high_capacity_deltas, _version) =
+                let (high_capacity_deltas, version) =
                     deserialize_get_changes_since_response(v).map_err(|err| format!("{err:?}"))?;
 
                 // Dechunkify deltas.
@@ -1273,8 +1419,9 @@ async fn get_changes_since(
                     inlined_deltas.push(delta);
                 }
 
-                registry_deltas_to_registry_records(inlined_deltas)
-                    .map_err(|err| format!("{err:?}"))
+                let records = registry_deltas_to_registry_records(inlined_deltas)
+                    .map_err(|err| format!("{err:?}"))?;
+                Ok((records, version))
             }
 
             WasmResult::Reject(e) => Err(format!("Query rejected: {e}")),
@@ -2054,6 +2201,100 @@ mod tests {
                     value: Some(b"derp".to_vec()),
                     version: RegistryVersion::from(50),
                 },
+            ]),
+        );
+    }
+
+    /// Tests that `get_changes_since` keeps querying the registry canister when a response does
+    /// not reach the latest version, e.g. because the canister capped the size of the response,
+    /// whereas `get_changes_since_page` only returns the records of a single response.
+    #[tokio::test]
+    async fn test_get_changes_since_pages_until_latest_version() {
+        const LATEST_VERSION: u64 = 45;
+
+        fn inline_value(version: u64, value: &[u8]) -> HighCapacityRegistryValue {
+            HighCapacityRegistryValue {
+                version,
+                content: Some(high_capacity_registry_value::Content::Value(value.to_vec())),
+                timestamp_nanoseconds: 0,
+            }
+        }
+
+        // Each page is (version requested, deltas replied).
+        let pages = [
+            (
+                42,
+                vec![HighCapacityRegistryDelta {
+                    key: b"a".to_vec(),
+                    values: vec![inline_value(43, b"a43")],
+                }],
+            ),
+            (
+                43,
+                vec![
+                    HighCapacityRegistryDelta {
+                        key: b"a".to_vec(),
+                        values: vec![inline_value(45, b"a45")],
+                    },
+                    HighCapacityRegistryDelta {
+                        key: b"b".to_vec(),
+                        values: vec![inline_value(44, b"b44")],
+                    },
+                ],
+            ),
+        ];
+
+        let mut perform_query = MockPerformQuery::new();
+        for (requested_version, deltas) in pages {
+            let reply = HighCapacityRegistryGetChangesSinceResponse {
+                version: LATEST_VERSION,
+                deltas,
+                error: None,
+            }
+            .encode_to_vec();
+            perform_query
+                .expect_perform_query()
+                .withf(move |query| {
+                    query.method_name == "get_changes_since"
+                        && query.method_payload
+                            == serialize_get_changes_since_request(requested_version).unwrap()
+                })
+                // Once by `get_changes_since_page` and once by `get_changes_since`.
+                .times(2)
+                .returning(move |_query| {
+                    Ok(Ok((
+                        Ok(WasmResult::Reply(reply.clone())),
+                        Time::try_from(SystemTime::now()).unwrap(),
+                    )))
+                });
+        }
+
+        let record = |key: &str, value: &[u8], version: u64| RegistryRecord {
+            key: key.to_string(),
+            value: Some(value.to_vec()),
+            version: RegistryVersion::from(version),
+        };
+
+        // A single page stops short of the latest version, which is reported alongside it.
+        assert_eq!(
+            get_changes_since_page(42, expiry_time_from_now(), &perform_query).await,
+            Ok((vec![record("a", b"a43", 43)], LATEST_VERSION)),
+        );
+        assert_eq!(
+            get_changes_since_page(43, expiry_time_from_now(), &perform_query).await,
+            Ok((
+                vec![record("b", b"b44", 44), record("a", b"a45", 45)],
+                LATEST_VERSION
+            )),
+        );
+
+        // All pages together reach the latest version.
+        assert_eq!(
+            get_changes_since(42, expiry_time_from_now(), &perform_query).await,
+            Ok(vec![
+                record("a", b"a43", 43),
+                record("b", b"b44", 44),
+                record("a", b"a45", 45),
             ]),
         );
     }

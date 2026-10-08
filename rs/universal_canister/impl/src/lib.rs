@@ -126,5 +126,6 @@ try_from_u8!(
         CostHttpRequestV2 = 97,
         MsgCallerInfoData = 98,
         MsgCallerInfoSigner = 99,
+        LoopUntilGlobalDataSet = 100,
     }
 );

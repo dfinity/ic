@@ -59,7 +59,7 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
                 Error::unable_to_find_block(&"Unable to find block".to_owned()).into(),
                 Error::invalid_block_identifier(&"Unable to find block".to_owned()).into(),
                 Error::failed_to_build_block_response(
-                    &"Faild to create a response for fetching blocks.".to_owned(),
+                    &"Failed to create a response for fetching blocks.".to_owned(),
                 )
                 .into(),
                 Error::invalid_transaction_identifier().into(),
@@ -69,7 +69,7 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
                 Error::ledger_communication_unsuccessful(&"Rosetta could not communicate with the ICRC-1 Ledger successfully.".to_owned()).into(),
                 Error::unable_to_find_account_balance(&"The balance for the given account could not be fetched.".to_owned()).into(),
                 Error::request_processing_error(&"The input of the user resulted in an error while trying to process the request.".to_owned()).into(),
-                Error::processing_construction_failed(&"An error while processing an construction api endpoint occured.".to_owned()).into(),
+                Error::processing_construction_failed(&"An error while processing a construction api endpoint occurred.".to_owned()).into(),
                 Error::invalid_metadata(&"The metadata provided by the user is invalid.".to_owned()).into(),
             ],
             historical_balance_lookup: true,
@@ -514,7 +514,7 @@ pub async fn search_transactions(
     });
 
     // Sort the transactions by block index in descending order
-    transactions.sort_by(|a, b| b.block_identifier.index.cmp(&a.block_identifier.index));
+    transactions.sort_by_key(|b| std::cmp::Reverse(b.block_identifier.index));
 
     // Is rosetta blocks is empty that means the entire blockchain was traversed but no transactions were found that match the search criteria
     let last_traversed_block_index = rosetta_blocks
@@ -1234,6 +1234,10 @@ mod test {
                                             caller: _,
                                             mthd: _,
                                         } => None,
+                                        IcrcOperation::AuthorizedMint { to, .. } => Some(to.into()),
+                                        IcrcOperation::AuthorizedBurn { from, .. } => {
+                                            Some(from.into())
+                                        }
                                     };
                                 if search_transactions_request.account_identifier.is_some() {
                                     break;
@@ -1292,6 +1296,22 @@ mod test {
                                         caller: _,
                                         mthd: _,
                                     } => false,
+                                    IcrcOperation::AuthorizedMint { to, .. } => {
+                                        to == search_transactions_request
+                                            .account_identifier
+                                            .clone()
+                                            .unwrap()
+                                            .try_into()
+                                            .unwrap()
+                                    }
+                                    IcrcOperation::AuthorizedBurn { from, .. } => {
+                                        from == search_transactions_request
+                                            .account_identifier
+                                            .clone()
+                                            .unwrap()
+                                            .try_into()
+                                            .unwrap()
+                                    }
                                 })
                                 .count();
 

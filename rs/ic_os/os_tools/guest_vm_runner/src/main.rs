@@ -12,7 +12,7 @@ use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use command_runner::{AsyncCommandRunner, RealAsyncCommandRunner};
-use config_types::{HostOSConfig, Ipv6Config};
+use config_types::{HostOSConfig, Ipv6Config, VmSlot};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use ic_device::device_mapping::MappedDevice;
@@ -25,7 +25,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::pin::pin;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use strum_macros::AsRefStr;
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -35,8 +35,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 use virt::connect::Connect;
 use virt::sys::{
-    VIR_DOMAIN_CRASHED, VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING,
-    VIR_DOMAIN_SHUTDOWN,
+    VIR_DOMAIN_BLOCKED, VIR_DOMAIN_CRASHED, VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE,
+    VIR_DOMAIN_RUNNING, VIR_DOMAIN_SHUTDOWN,
 };
 
 mod boot_args;
@@ -69,9 +69,53 @@ const GUESTOS_BOOT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 /// signal before giving up and letting the force-destroy in Drop take over.
 const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
+/// How long a VM may remain in a state that does not execute guest code (in particular PAUSED)
+/// before it is treated as stopped and restarted.
+#[cfg(not(test))]
+const STUCK_STATE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+#[cfg(test)]
+const STUCK_STATE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// With SEV enabled, QEMU needs several minutes after the GuestOS powered off to release the
+/// encrypted guest RAM.
+const SEV_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
 /// The GuestOS will log one of these marker texts on the serial output.
 const GUESTOS_BOOT_SUCCESS_MARKER: &str = "GUESTOS BOOT SUCCESS";
 const GUESTOS_BOOT_FAILURE_MARKER: &str = "GUESTOS BOOT FAILURE";
+
+/// Returns true if `needle` occurs anywhere in `haystack` (an empty needle always matches).
+///
+/// A naive search is sufficient here: it runs on individual serial console lines.
+fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
+    needle.is_empty()
+        || haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
+}
+
+#[cfg(test)]
+mod contains_subslice_tests {
+    use super::*;
+
+    #[test]
+    fn finds_markers_in_serial_lines() {
+        let line = b"[  12.345] \xff\xfeGUESTOS BOOT SUCCESS\r";
+        assert!(contains_subslice(
+            line,
+            GUESTOS_BOOT_SUCCESS_MARKER.as_bytes()
+        ));
+        assert!(!contains_subslice(
+            line,
+            GUESTOS_BOOT_FAILURE_MARKER.as_bytes()
+        ));
+        assert!(contains_subslice(b"abc", b"abc"));
+        assert!(contains_subslice(b"abc", b""));
+        assert!(!contains_subslice(b"ab", b"abc"));
+        assert!(!contains_subslice(b"", b"a"));
+    }
+}
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
@@ -93,6 +137,9 @@ impl GuestVMType {
 enum Command {
     /// Run the GuestOS virtual machine
     Run {
+        #[arg(long = "slot")]
+        slot: Option<u8>,
+
         #[arg(long = "type", default_value = "default", value_enum)]
         vm_type: GuestVMType,
     },
@@ -121,11 +168,13 @@ pub async fn main() -> Result<()> {
 
     match args.command {
         Command::ReserveHugepages => reserve_hugepages(),
-        Command::Run { vm_type } => run(vm_type).await,
+        Command::Run { slot, vm_type } => run(slot, vm_type).await,
     }
 }
 
-async fn run(vm_type: GuestVMType) -> Result<()> {
+async fn run(slot: Option<u8>, vm_type: GuestVMType) -> Result<()> {
+    let slot = VmSlot::new(slot.unwrap_or(0));
+
     let startup_message = match vm_type {
         GuestVMType::Default => "Launching GuestOS Virtual Machine...",
         GuestVMType::Upgrade => "Launching Upgrade GuestOS Virtual Machine...",
@@ -141,7 +190,7 @@ async fn run(vm_type: GuestVMType) -> Result<()> {
     let termination_token = CancellationToken::new();
     setup_signal_handler(termination_token.clone()).context("Failed to setup signal handler")?;
 
-    GuestVmService::create_and_run(vm_type, termination_token).await
+    GuestVmService::create_and_run(slot, vm_type, termination_token).await
 }
 
 fn setup_signal_handler(termination_token: CancellationToken) -> Result<()> {
@@ -300,9 +349,9 @@ impl VirtualMachine {
     }
 
     /// Sends an ACPI power-off signal to the GuestOS and waits for it to stop cleanly.
-    /// If the GuestOS does not stop within `GRACEFUL_SHUTDOWN_TIMEOUT`, this returns and the
+    /// If the GuestOS does not stop within the given timeout, this returns and the
     /// `Drop` impl will force-destroy the domain as a fallback.
-    async fn shutdown_gracefully(&self) {
+    async fn shutdown_gracefully(&self, graceful_shutdown_timeout: Duration) {
         match self.get_domain() {
             Ok(domain) => {
                 if let Err(e) = domain.shutdown() {
@@ -317,17 +366,18 @@ impl VirtualMachine {
             }
         }
 
-        match tokio::time::timeout(GRACEFUL_SHUTDOWN_TIMEOUT, self.wait_for_shutdown()).await {
+        match tokio::time::timeout(graceful_shutdown_timeout, self.wait_for_shutdown()).await {
             Ok(()) => info!("GuestOS shut down gracefully"),
             Err(_) => warn!(
                 "GuestOS did not shut down within {:?}, proceeding with force shutdown",
-                GRACEFUL_SHUTDOWN_TIMEOUT
+                graceful_shutdown_timeout
             ),
         }
     }
 
     /// Returns once the VM is no longer running.
     async fn wait_for_shutdown(&self) {
+        let mut stuck_since: Option<Instant> = None;
         loop {
             let domain = match self.get_domain() {
                 Ok(domain) => domain,
@@ -339,17 +389,39 @@ impl VirtualMachine {
             match domain.get_state() {
                 Ok((VIR_DOMAIN_RUNNING, _reason)) => {
                     // all good, VM is running
+                    stuck_since = None;
+                }
+                Ok((VIR_DOMAIN_BLOCKED, _reason)) => {
+                    // Blocked on a resource, but still considered running.
+                    stuck_since = None;
+                }
+                Ok((VIR_DOMAIN_SHUTDOWN, reason)) => {
+                    warn!("VM shutting down, reason: {reason}");
+                    stuck_since = None;
                 }
                 Ok((VIR_DOMAIN_CRASHED, reason)) => {
                     warn!("VM crashed, reason: {reason}");
                     break;
                 }
-                Ok((VIR_DOMAIN_SHUTDOWN, reason)) => {
-                    warn!("VM shutting down, reason: {reason}");
-                }
-                Ok((state, reason)) => {
-                    warn!("VM is in state {state}, reason: {reason}");
-                }
+                // Any other state (PAUSED, SHUTOFF, PMSUSPENDED, NOSTATE) does not execute
+                // guest code. A stuck VM never resumes on its own and must be restarted.
+                Ok((state, reason)) => match stuck_since {
+                    None => {
+                        warn!(
+                            "VM is in state {state}, reason: {reason}; treating it as stopped \
+                             if this persists for more than {STUCK_STATE_TIMEOUT:?}"
+                        );
+                        stuck_since = Some(Instant::now());
+                    }
+                    Some(started_at) if started_at.elapsed() >= STUCK_STATE_TIMEOUT => {
+                        warn!(
+                            "VM is still in state {state}, reason: {reason}, after more than \
+                             {STUCK_STATE_TIMEOUT:?}: treating VM as stopped"
+                        );
+                        break;
+                    }
+                    Some(_) => {}
+                },
                 Err(e) => {
                     warn!("Failed to get domain state: {e}");
                     break;
@@ -414,6 +486,7 @@ pub struct GuestVmService {
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
     console_ttys: Vec<Mutex<Box<dyn Write + Send + Sync>>>,
+    guest_vm_slot: VmSlot,
     guest_vm_type: GuestVMType,
     sev_certificate_provider: HostSevCertificateProvider,
     disk_device: PathBuf,
@@ -432,7 +505,7 @@ impl GuestVmService {
     }
 
     #[cfg(target_os = "linux")]
-    pub fn new(guest_vm_type: GuestVMType) -> Result<Self> {
+    pub fn new(guest_vm_slot: VmSlot, guest_vm_type: GuestVMType) -> Result<Self> {
         let metrics = GuestVmMetrics::new(PathBuf::from(Self::metrics_path(guest_vm_type)))
             .context("Failed to create metrics")?;
         let libvirt_connection = LibvirtConnectionWithReconnect::new(Arc::new(|| {
@@ -460,24 +533,29 @@ impl GuestVmService {
         )
         .context("Could not initialize SEV certificate provider")?;
 
+        let device = PathBuf::from(format!(
+            "{GUESTOS_DEVICE}{suffix}",
+            suffix = guest_vm_slot.to_suffix()
+        ));
+
         // If this is an Upgrade VM, create a mapped device which protects the data partition of the
         // Guest device.
         let upgrade_mapped_device = (guest_vm_type == GuestVMType::Upgrade)
             .then(|| {
-                create_mapped_device_for_upgrade(Path::new(GUESTOS_DEVICE))
-                    .context("Cannot create mapped device")
+                create_mapped_device_for_upgrade(&device).context("Cannot create mapped device")
             })
             .transpose()?;
 
         let disk_device = upgrade_mapped_device
             .as_ref()
             .map(|x| x.path())
-            .unwrap_or(Path::new(GUESTOS_DEVICE));
+            .unwrap_or(&device);
 
         Ok(Self {
             metrics,
             libvirt_connection: Arc::new(libvirt_connection),
             hostos_config,
+            guest_vm_slot,
             guest_vm_type,
             systemd_notifier: Arc::new(systemd_notifier::DefaultSystemdNotifier),
             console_ttys: vec![
@@ -492,17 +570,18 @@ impl GuestVmService {
             disk_device: disk_device.to_path_buf(),
             _upgrade_mapped_device: upgrade_mapped_device,
             guestos_boot_timeout: GUESTOS_BOOT_TIMEOUT,
-            vm_serial_log_path: serial_log_path(guest_vm_type).to_path_buf(),
+            vm_serial_log_path: serial_log_path(guest_vm_type, guest_vm_slot).to_path_buf(),
             command_runner: Arc::new(RealAsyncCommandRunner),
         })
     }
 
     #[cfg(target_os = "linux")]
     pub async fn create_and_run(
+        slot: VmSlot,
         guest_vm_type: GuestVMType,
         termination_token: CancellationToken,
     ) -> Result<()> {
-        let mut guest_vm_service = Self::new(guest_vm_type)?;
+        let mut guest_vm_service = Self::new(slot, guest_vm_type)?;
         guest_vm_service.run(termination_token).await
     }
 
@@ -567,7 +646,7 @@ impl GuestVmService {
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine, GuestVmServiceError> {
         VirtualMachine::try_destroy_existing_vm(
             self.libvirt_connection.as_ref(),
-            vm_domain_name(self.guest_vm_type),
+            &vm_domain_name(self.guest_vm_type, self.guest_vm_slot),
             self.command_runner.as_ref(),
         )
         .await?;
@@ -609,6 +688,7 @@ impl GuestVmService {
 
         assemble_config_media(
             &self.hostos_config,
+            self.guest_vm_slot,
             self.guest_vm_type,
             sev_certificate_chain_pem,
             config_media.path(),
@@ -624,6 +704,7 @@ impl GuestVmService {
             direct_boot.as_ref().map(DirectBoot::to_config),
             &self.disk_device,
             &self.vm_serial_log_path,
+            self.guest_vm_slot,
             self.guest_vm_type,
             available_hugepages_gib,
             &self.metrics,
@@ -637,7 +718,7 @@ impl GuestVmService {
             &vm_config,
             config_media,
             direct_boot,
-            vm_domain_name(self.guest_vm_type),
+            &vm_domain_name(self.guest_vm_type, self.guest_vm_slot),
         )
         .await?;
 
@@ -676,6 +757,7 @@ impl GuestVmService {
             &self.hostos_config.icos_settings.mgmt_mac,
             self.hostos_config.icos_settings.deployment_environment,
             NodeType::HostOS,
+            VmSlot::Plain,
         );
 
         let Ipv6Config::Deterministic(ipv6_config) =
@@ -736,18 +818,15 @@ impl GuestVmService {
         // cannot use the String type.
         let mut lines = reader.split(b'\n');
 
-        let success = memchr::memmem::Finder::new(GUESTOS_BOOT_SUCCESS_MARKER);
-        let fail = memchr::memmem::Finder::new(GUESTOS_BOOT_FAILURE_MARKER);
-
         loop {
             let Some(line) = lines.next_segment().await? else {
                 sleep(Duration::from_secs(1)).await;
                 continue;
             };
-            if success.find(&line).is_some() {
+            if contains_subslice(&line, GUESTOS_BOOT_SUCCESS_MARKER.as_bytes()) {
                 return Ok(true);
             }
-            if fail.find(&line).is_some() {
+            if contains_subslice(&line, GUESTOS_BOOT_FAILURE_MARKER.as_bytes()) {
                 return Ok(false);
             }
         }
@@ -759,12 +838,22 @@ impl GuestVmService {
         vm: &VirtualMachine,
         termination_token: CancellationToken,
     ) -> Result<(), GuestVmServiceError> {
+        let graceful_shutdown_timeout = if self
+            .hostos_config
+            .icos_settings
+            .enable_trusted_execution_environment
+        {
+            SEV_GRACEFUL_SHUTDOWN_TIMEOUT
+        } else {
+            GRACEFUL_SHUTDOWN_TIMEOUT
+        };
+
         tokio::select! {
             biased;
             // Wait for either VM shutdown event or stop signal
             _ = termination_token.cancelled() => {
                 info!("Shutting down VM gracefully");
-                vm.shutdown_gracefully().await;
+                vm.shutdown_gracefully(graceful_shutdown_timeout).await;
                 Ok(())
             },
             _ = vm.wait_for_shutdown() => {
@@ -818,7 +907,7 @@ mod tests {
     use tempfile::TempDir;
     use tokio::task::JoinHandle;
     use virt::connect::Connect;
-    use virt::sys::VIR_DOMAIN_RUNNING_BOOTED;
+    use virt::sys::{VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_BOOTED};
 
     static GUESTOS_IMAGE: LazyLock<NamedTempFile> = LazyLock::new(|| {
         let icos_image_path =
@@ -861,13 +950,16 @@ mod tests {
 
     async fn assert_with_retry(check: impl Fn() -> Result<(), Error>) {
         const DEFAULT_ACTION_TIMEOUT: Duration = Duration::from_secs(5);
+        assert_with_retry_timeout(check, DEFAULT_ACTION_TIMEOUT).await;
+    }
 
+    async fn assert_with_retry_timeout(check: impl Fn() -> Result<(), Error>, timeout: Duration) {
         let start = Instant::now();
         loop {
             let Err(e) = check() else {
                 return;
             };
-            if start.elapsed() > DEFAULT_ACTION_TIMEOUT {
+            if start.elapsed() > timeout {
                 panic!("{}", e);
             }
             sleep(Duration::from_millis(100)).await;
@@ -983,6 +1075,16 @@ mod tests {
                 .to_string()
         }
 
+        fn get_disk_path(&self) -> String {
+            let domain = self.get_domain();
+            let vm_config = domain.get_xml_desc(0).unwrap();
+            Regex::new("<source dev='([^']+)'/>")
+                .unwrap()
+                .captures(&vm_config)
+                .expect("disk path not found in VM config")[1]
+                .to_string()
+        }
+
         #[allow(dead_code)] // Remove once used
         fn terminate(&self) {
             self.termination_token.cancel();
@@ -1029,7 +1131,7 @@ mod tests {
         /// Starts a VM service in the background.
         /// This roughly corresponds to invoking `run_guest_vm()` in prod code.
         /// The returned instance can be used to interact with the newly started service.
-        fn start_service(&self, guest_vm_type: GuestVMType) -> TestServiceInstance {
+        fn start_service(&self, guest_vm_type: GuestVMType, slot: VmSlot) -> TestServiceInstance {
             let console_file = NamedTempFile::new().expect("Failed to create console log file");
             let metrics_file = NamedTempFile::new().expect("Failed to create metrics file");
             let systemd_notifier = MockSystemdNotifier::new();
@@ -1037,6 +1139,10 @@ mod tests {
             let (sev_certificate_provider, sev_certificate_cache_dir) =
                 mock_host_sev_certificate_provider()
                     .expect("Failed to create mock SEV cert provider");
+            let device = PathBuf::from(format!(
+                "{GUESTOS_DEVICE}{suffix}",
+                suffix = slot.to_suffix()
+            ));
             let mut service = GuestVmService {
                 metrics: GuestVmMetrics::new(metrics_file.path().to_path_buf()).unwrap(),
                 libvirt_connection: self.libvirt_connection.clone(),
@@ -1053,8 +1159,9 @@ mod tests {
                     .unwrap(),
                 ),
                 guest_vm_type,
+                guest_vm_slot: slot,
                 sev_certificate_provider,
-                disk_device: GUESTOS_DEVICE.into(),
+                disk_device: device,
                 _upgrade_mapped_device: None,
                 guestos_boot_timeout: self.guestos_boot_timeout,
                 vm_serial_log_path: self.guest_serial_log.path().to_path_buf(),
@@ -1072,7 +1179,7 @@ mod tests {
                 systemd_notifier,
                 termination_token,
                 libvirt_connection: self.libvirt_connection.clone(),
-                vm_domain_name: vm_domain_name(guest_vm_type).to_string(),
+                vm_domain_name: vm_domain_name(guest_vm_type, slot),
                 _sev_certificate_cache_dir: sev_certificate_cache_dir,
             }
         }
@@ -1115,7 +1222,7 @@ mod tests {
     #[tokio::test]
     async fn test_run_guest_vm() {
         let fixture = TestFixture::new(valid_hostos_config());
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
         // The signal handlers work on the process level. All unit tests in this file are run in the
         // same process. We must only test the signal handler in one test otherwise a signal sent in
         // one unit test may be caught by a service running in another unit test which leads to
@@ -1162,8 +1269,8 @@ mod tests {
     #[tokio::test]
     async fn test_vm_killed() {
         let fixture = TestFixture::new(valid_hostos_config());
-        let mut service = fixture.start_service(GuestVMType::Default);
-        // Wait for the service to start the VM and notify systemd
+        let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
+        // Wait for systemd to start the VM
         service.wait_for_systemd_ready().await;
 
         // Kill the VM
@@ -1174,9 +1281,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_paused_vm_is_restarted() {
+        let fixture = TestFixture::new(valid_hostos_config());
+        let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
+        // Wait for systemd to start the VM
+        service.wait_for_systemd_ready().await;
+
+        // Suspend the VM, as QEMU does on an invalid VMCB
+        service.get_domain().suspend().unwrap();
+
+        // Assert that the VM is restarted after STUCK_STATE_TIMEOUT is hit
+        assert_with_retry_timeout(
+            || service.check_vm_running(),
+            Duration::from_secs(5) + STUCK_STATE_TIMEOUT,
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_transient_pause_does_not_restart_vm() {
+        let fixture = TestFixture::new(valid_hostos_config());
+        let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
+        // Wait for systemd to start the VM
+        service.wait_for_systemd_ready().await;
+        let domain_id_before = service.get_domain().get_id().unwrap();
+
+        // Suspend the VM briefly (shorter than STUCK_STATE_TIMEOUT), then resume it
+        let domain = service.get_domain();
+        domain.suspend().unwrap();
+        sleep(Duration::from_millis(1000)).await;
+        domain.resume().unwrap();
+
+        // Assert that the same domain is still running (no restart)
+        let domain = service.get_domain();
+        let (state, _reason) = domain.get_state().unwrap();
+        assert_eq!(state, VIR_DOMAIN_RUNNING);
+        assert_eq!(domain.get_id().unwrap(), domain_id_before);
+    }
+
+    #[tokio::test]
     async fn test_vm_cannot_be_started() {
         let fixture = TestFixture::new(invalid_hostos_config());
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
 
         // Wait until the service fails
         (&mut service.task)
@@ -1197,11 +1343,11 @@ mod tests {
     async fn test_stops_already_running_vm() {
         let fixture = TestFixture::new(valid_hostos_config());
 
-        let mut service1 = fixture.start_service(GuestVMType::Default);
+        let mut service1 = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
         service1.wait_for_systemd_ready().await;
         let domain_id1 = service1.get_domain().get_id().unwrap();
 
-        let mut service2 = fixture.start_service(GuestVMType::Default);
+        let mut service2 = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
         service2.wait_for_systemd_ready().await;
 
         // Assert that the first VM was stopped and the second VM is running
@@ -1217,10 +1363,10 @@ mod tests {
     async fn test_run_default_and_upgrade_vm_at_once() {
         let fixture = TestFixture::new(valid_hostos_config());
 
-        let mut service1 = fixture.start_service(GuestVMType::Default);
+        let mut service1 = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
         service1.wait_for_systemd_ready().await;
 
-        let mut service2 = fixture.start_service(GuestVMType::Upgrade);
+        let mut service2 = fixture.start_service(GuestVMType::Upgrade, VmSlot::Plain);
         service2.wait_for_systemd_ready().await;
 
         // Assert that both VMs are running
@@ -1240,9 +1386,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_run_multiple_guest_vm_at_once() {
+        let fixture = TestFixture::new(valid_hostos_config());
+
+        let mut service1 = fixture.start_service(GuestVMType::Default, VmSlot::new(1));
+        service1.wait_for_systemd_ready().await;
+
+        let mut service2 = fixture.start_service(GuestVMType::Default, VmSlot::new(64));
+        service2.wait_for_systemd_ready().await;
+
+        // Assert that both VMs are running
+        service1.check_vm_running().unwrap();
+        service2.check_vm_running().unwrap();
+
+        assert!(
+            service1
+                .get_kernel_cmdline()
+                .contains("root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7")
+        );
+        assert!(
+            service2
+                .get_kernel_cmdline()
+                .contains("root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7")
+        );
+        assert!(service1.get_disk_path() != service2.get_disk_path());
+    }
+
+    #[tokio::test]
     async fn test_guestos_boot_success() {
         let mut fixture = TestFixture::new(valid_hostos_config());
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
         service.wait_for_systemd_ready().await;
         writeln!(
             fixture.guest_serial_log,
@@ -1255,7 +1428,7 @@ mod tests {
     #[tokio::test]
     async fn test_guestos_boot_failure() {
         let mut fixture = TestFixture::new(valid_hostos_config());
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
         service.wait_for_systemd_ready().await;
         writeln!(
             fixture.guest_serial_log,
@@ -1269,7 +1442,7 @@ mod tests {
     async fn test_guestos_boot_timeout() {
         let mut fixture = TestFixture::new(valid_hostos_config());
         fixture.guestos_boot_timeout = Duration::from_millis(50);
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
         service.wait_for_systemd_ready().await;
         writeln!(fixture.guest_serial_log, "foo bar").unwrap();
         sleep(Duration::from_millis(500)).await;
@@ -1320,7 +1493,7 @@ mod tests {
         )));
         fixture.command_runner = Arc::new(mock_command_runner);
 
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
 
         // The service should stop with an error indicating an unrecoverable state.
         let err = (&mut service.task)
@@ -1374,7 +1547,7 @@ mod tests {
             })));
         fixture.command_runner = Arc::new(mock_command_runner);
 
-        let mut service = fixture.start_service(GuestVMType::Default);
+        let mut service = fixture.start_service(GuestVMType::Default, VmSlot::Plain);
         service.wait_for_systemd_ready().await;
     }
 }

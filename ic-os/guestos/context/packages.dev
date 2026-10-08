@@ -22,7 +22,7 @@ strace
 setools
 
 # flamegraphs (scalability suite)
-linux-tools-virtual-hwe-24.04
+linux-tools-virtual-hwe-26.04
 
 # performance testing additions
 fio

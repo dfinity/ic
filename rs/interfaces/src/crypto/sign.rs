@@ -25,7 +25,7 @@
 use ic_types::crypto::{
     BasicSigOf, CombinedMultiSigOf, CryptoResult, IndividualMultiSigOf, Signable,
 };
-use ic_types::signature::BasicSignatureBatch;
+use ic_types::signature::{BasicSigBatchEntry, BasicSignatureBatch};
 use ic_types::{NodeId, RegistryVersion};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -130,6 +130,33 @@ pub trait BasicSigVerifier<T: Signable> {
         signature_batch: &BasicSignatureBatch<T>,
         message: &T,
         registry_version: RegistryVersion,
+    ) -> CryptoResult<()>;
+
+    /// Verifies a batch of basic signatures on potentially different messages.
+    ///
+    /// In contrast to `verify_basic_sig_batch`, each signature in this batch
+    /// may be on a different message. The same `NodeId` may appear multiple
+    /// times in `inputs` if a node signed multiple different messages. Each
+    /// input carries its own `RegistryVersion`, at which that signer's public
+    /// key is resolved; different inputs may use different registry versions.
+    ///
+    /// # Errors
+    /// * `CryptoError::RegistryClient`: if the registry cannot be accessed at
+    ///   an input's registry version.
+    /// * `CryptoError::PublicKeyNotFound`: if at least one of the signers'
+    ///   public keys cannot be found at that input's registry version.
+    /// * `CryptoError::MalformedSignature`: if a signature is malformed.
+    /// * `CryptoError::AlgorithmNotSupported`: if a signature algorithm is
+    ///   not supported, or if a signer's public key obtained from the
+    ///   registry is for an unsupported algorithm.
+    /// * `CryptoError::MalformedPublicKey`: if a signer's public key obtained
+    ///   from the registry is malformed.
+    /// * `CryptoError::SignatureVerification`: if at least one signature in
+    ///   the batch could not be verified for its corresponding message.
+    /// * `CryptoError::InvalidArgument`: if `inputs` is empty.
+    fn verify_basic_sig_batch_multi_msg(
+        &self,
+        inputs: &[BasicSigBatchEntry<'_, T>],
     ) -> CryptoResult<()>;
 }
 

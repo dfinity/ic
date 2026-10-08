@@ -38,6 +38,7 @@ def main():
         help="Partitions to write. These must match the CSV volume table entries.",
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
+    parser.add_argument("--zstd", help="Path to the zstd tool", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -94,7 +95,7 @@ def main():
 
     subprocess.run(
         [
-            "zstd",
+            args.zstd,
             "-q",
             "--threads=0",
             temp_tar,

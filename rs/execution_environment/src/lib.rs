@@ -16,10 +16,10 @@ mod types;
 pub mod units;
 pub mod util;
 
+pub use crate::canister_logs::fetch_canister_logs_response_for_bench;
 pub use crate::ic00_permissions::Ic00MethodPermissions;
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use canister_manager::types::WasmSource;
-pub use canister_manager::wasm_execution_mode;
 use canister_manager::{CanisterManager, types::CanisterMgrConfig};
 pub use execution_environment::{
     CompilationCostHandling, ExecuteMessageResult, ExecuteSubnetMessageResultType,
@@ -27,7 +27,9 @@ pub use execution_environment::{
     as_round_instructions, execute_canister,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
-pub use hypervisor::{Hypervisor, HypervisorMetrics};
+pub use hypervisor::{
+    CanisterMemoryHandling, Hypervisor, HypervisorMetrics, MemoryHandling, MemorySource,
+};
 use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -39,7 +41,7 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_query_stats::QueryStatsPayloadBuilderParams;
+use ic_query_stats::{QueryStatsCollector, QueryStatsPayloadBuilderParams};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
@@ -52,7 +54,9 @@ pub use metrics::IngressFilterMetrics;
 pub use query_handler::{DataCertificateWithDelegationMetadata, InternalHttpQueryHandler};
 use query_handler::{HttpQueryHandler, QueryScheduler};
 use scheduler::SchedulerImpl;
-pub use scheduler::{RoundSchedule, SchedulerMetrics, abort_all_paused_executions};
+pub use scheduler::{
+    IterationSchedule, RoundSchedule, SchedulerMetrics, abort_all_paused_executions,
+};
 use std::{path::Path, sync::Arc};
 use tokio::sync::mpsc::Sender;
 
@@ -102,6 +106,7 @@ pub struct ExecutionServices {
     pub transform_execution_service: TransformExecutionService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
+    pub local_query_execution_stats: Arc<QueryStatsCollector>,
     pub cycles_account_manager: Arc<CyclesAccountManager>,
 }
 
@@ -128,6 +133,7 @@ impl ExecutionServices {
             sync_query_handler,
             query_scheduler,
             query_stats_payload_builder,
+            query_stats_collector,
             cycles_account_manager,
             execution_environment,
         ) = setup_execution_helper(
@@ -169,7 +175,6 @@ impl ExecutionServices {
         let scheduler = Box::new(SchedulerImpl::new(
             subnet_config.scheduler_config,
             config.embedders_config,
-            own_subnet_id,
             Arc::clone(&ingress_history_writer) as Arc<_>,
             Arc::clone(&execution_environment) as Arc<_>,
             Arc::clone(&cycles_account_manager),
@@ -188,6 +193,7 @@ impl ExecutionServices {
             transform_execution_service,
             scheduler,
             query_stats_payload_builder,
+            local_query_execution_stats: query_stats_collector,
             cycles_account_manager,
         }
     }
@@ -252,6 +258,7 @@ impl ExecutionServicesForTesting {
             sync_query_handler,
             _query_scheduler,
             query_stats_payload_builder,
+            _query_stats_collector,
             cycles_account_manager,
             execution_environment,
         ) = setup_execution_helper(
@@ -304,6 +311,7 @@ fn setup_execution_helper(
     InternalHttpQueryHandler,
     QueryScheduler,
     QueryStatsPayloadBuilderParams,
+    Arc<QueryStatsCollector>,
     Arc<CyclesAccountManager>,
     Arc<ExecutionEnvironment>,
 ) {
@@ -323,7 +331,7 @@ fn setup_execution_helper(
             own_subnet_id,
             logger.clone(),
             Arc::clone(&cycles_account_manager),
-            scheduler_config.dirty_page_overhead,
+            scheduler_config.page_overhead,
             Arc::clone(&fd_factory),
             Arc::clone(&state_reader),
             temp_dir,
@@ -334,8 +342,8 @@ fn setup_execution_helper(
             logger.clone(),
             Arc::clone(&cycles_account_manager),
             wasm_executor,
+            config.embedders_config.create_execution_state_base_cost,
             config.embedders_config.cost_to_compile_wasm_instruction,
-            config.embedders_config.dirty_page_overhead,
             config.canister_guaranteed_callback_quota,
         ),
     });
@@ -345,12 +353,12 @@ fn setup_execution_helper(
         logger.clone(),
         metrics_registry,
         completed_execution_messages_tx,
-        Arc::clone(&state_reader),
     ));
     let ingress_history_reader = Box::new(IngressHistoryReaderImpl::new(Arc::clone(&state_reader)));
 
     let (query_stats_collector, query_stats_payload_builder) =
         ic_query_stats::init_query_stats(logger.clone(), &config, metrics_registry);
+    let query_stats_collector = Arc::new(query_stats_collector);
 
     let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
         config.default_provisional_cycles_balance,
@@ -367,6 +375,7 @@ fn setup_execution_helper(
         config.embedders_config.wasm_max_size,
         scheduler_config.canister_snapshot_baseline_instructions,
         scheduler_config.canister_snapshot_data_baseline_instructions,
+        scheduler_config.canister_log_resize_instructions_per_byte,
         config.default_wasm_memory_limit,
         config.max_number_of_snapshots_per_canister,
         config.max_environment_variables,
@@ -402,7 +411,7 @@ fn setup_execution_helper(
         metrics_registry,
         scheduler_config.max_instructions_per_query_message,
         Arc::clone(&cycles_account_manager),
-        query_stats_collector,
+        Arc::clone(&query_stats_collector),
     );
 
     let query_scheduler = QueryScheduler::new(
@@ -428,6 +437,7 @@ fn setup_execution_helper(
         sync_query_handler,
         query_scheduler,
         query_stats_payload_builder,
+        query_stats_collector,
         cycles_account_manager,
         exec_env,
     )

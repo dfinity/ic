@@ -4,10 +4,10 @@ use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, dkg_pool, idkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::consensus::{
-    ConsensusBouncer, ConsensusImpl, MAX_CONSENSUS_THREADS, build_thread_pool,
-};
+use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
 use ic_consensus_idkg::IDkgImpl;
+use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilderImpl;
+use ic_consensus_utils::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -34,7 +34,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_consensus::{IDkgStatsNoOp, batch::MockBatchPayloadBuilder};
 use ic_types::{
-    NodeId, SubnetId,
+    NodeId, ReplicaVersion, SubnetId,
     artifact::IdentifiableArtifact,
     consensus::{
         CatchUpPackage, ConsensusMessage, HasHeight, certification::CertificationMessage,
@@ -45,6 +45,7 @@ use ic_types::{
 };
 use rand_chacha::ChaChaRng;
 use rayon::ThreadPool;
+use std::str::FromStr;
 use std::{
     cell::{RefCell, RefMut},
     cmp::Ordering,
@@ -176,6 +177,7 @@ pub struct ConsensusDependencies {
     pub(crate) canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub(crate) query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub(crate) chain_key_payload_builder: Arc<dyn BatchPayloadBuilder>,
+    pub(crate) upgrade_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
     pub idkg_pool: Arc<RwLock<idkg_pool::IDkgPoolImpl>>,
@@ -206,6 +208,7 @@ impl ConsensusDependencies {
         let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
             replica_config.node_id,
             replica_config.subnet_id,
+            replica_config.replica_version(),
             cup.into(),
             pool_config.clone(),
             metrics_registry.clone(),
@@ -238,6 +241,7 @@ impl ConsensusDependencies {
             canister_http_payload_builder: Arc::new(FakeCanisterHttpPayloadBuilder::new()),
             query_stats_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             chain_key_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
+            upgrade_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             state_manager,
             thread_pool: build_thread_pool(MAX_CONSENSUS_THREADS),
             metrics_registry,
@@ -274,7 +278,7 @@ impl fmt::Display for ConsensusInstance<'_> {
 /// This is the type of predicates used by the ConsensusRunner to determine
 /// whether or not it should terminate. It is evaluated for all consensus
 /// instances at every time step.
-pub type StopPredicate = Box<dyn Fn(&ConsensusInstance<'_>) -> bool>;
+pub type StopPredicate = Box<dyn FnMut(&ConsensusInstance<'_>) -> bool>;
 
 pub(crate) struct BouncerState<Artifact: IdentifiableArtifact> {
     bouncer: Bouncer<Artifact::Id>,
@@ -412,6 +416,7 @@ pub struct ConsensusRunnerConfig {
     pub stall_clocks: bool,
     pub execution: Box<dyn ExecutionStrategy>,
     pub delivery: Box<dyn DeliveryStrategy>,
+    pub dkg_interval_length: u64,
 }
 
 impl fmt::Display for ConsensusRunnerConfig {
@@ -419,7 +424,8 @@ impl fmt::Display for ConsensusRunnerConfig {
         write!(
             f,
             "ConsensusRunnerConfig {{ max_delta: {}, random_seed: {}, \
-             num_nodes: {}, num_rounds: {}, degree: {}, use_priority_fn: {}, execution: {}, delivery: {} }}",
+             num_nodes: {}, num_rounds: {}, degree: {}, use_priority_fn: {}, \
+             execution: {}, delivery: {}, dkg_interval_length: {} }}",
             self.max_delta,
             self.random_seed,
             self.num_nodes,
@@ -427,7 +433,8 @@ impl fmt::Display for ConsensusRunnerConfig {
             self.degree,
             self.use_priority_fn,
             get_name(&self.execution),
-            get_name(&self.delivery)
+            get_name(&self.delivery),
+            self.dkg_interval_length,
         )
     }
 }

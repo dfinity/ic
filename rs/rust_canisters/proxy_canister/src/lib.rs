@@ -5,15 +5,49 @@
 //! as a canister message to client if the call was successful and agreed by majority nodes,
 //! otherwise errors out.
 //!
-#![allow(deprecated)]
 use std::time::Duration;
 
 use candid::{CandidType, Deserialize};
-use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{
     BoundedHttpHeaders, FlexibleCanisterHttpRequestArgs, HttpHeader, HttpMethod, Payload,
     TransformContext,
 };
+
+/// The reject code that this canister reports back to its callers.
+///
+/// The variants and their ordering define the `variant` this canister exposes
+/// over Candid, so the numbering must stay in sync with the reject codes of the
+/// [IC interface specification](https://docs.internetcomputer.org/references/ic-interface-spec/https-interface/#reject-codes).
+#[derive(Copy, Clone, Debug, CandidType, Deserialize)]
+pub enum RejectionCode {
+    NoError,
+    SysFatal,
+    SysTransient,
+    DestinationInvalid,
+    CanisterReject,
+    CanisterError,
+    SysUnknown,
+    /// The reject code reported by the system is not one the interface
+    /// specification defines.
+    Unknown,
+}
+
+impl RejectionCode {
+    /// Translates a raw reject code, as reported by the system, into the variant
+    /// this canister exposes over Candid.
+    pub fn from_raw(raw: u32) -> Self {
+        match raw {
+            0 => Self::NoError,
+            1 => Self::SysFatal,
+            2 => Self::SysTransient,
+            3 => Self::DestinationInvalid,
+            4 => Self::CanisterReject,
+            5 => Self::CanisterError,
+            6 => Self::SysUnknown,
+            _ => Self::Unknown,
+        }
+    }
+}
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct RemoteHttpRequest {
@@ -77,6 +111,16 @@ pub struct RemoteHttpResponse {
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct ResponseWithRefundedCycles {
     pub result: Result<RemoteHttpResponse, (RejectionCode, String)>,
+    pub refunded_cycles: u64,
+}
+
+/// The reply to a flexible outcall, with the cycles that came back on it.
+///
+/// `result` is the raw Candid encoding of a `flexible_http_request_result`, or the
+/// rejection the management canister answered with.
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct FlexibleResponseWithRefundedCycles {
+    pub result: Result<Vec<u8>, (RejectionCode, String)>,
     pub refunded_cycles: u64,
 }
 

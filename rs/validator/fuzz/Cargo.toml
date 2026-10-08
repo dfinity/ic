@@ -14,7 +14,7 @@ cargo-fuzz = true
 ic-types = { path = "../../types/types" }
 ic-validator-http-request-arbitrary = { path = "../http_request_arbitrary" }
 ic-validator-ingress-message = { path = "../ingress_message" }
-libfuzzer-sys = "0.4"
+libfuzzer-sys = { workspace = true }
 
 [dependencies.ic-validator]
 path = ".."

@@ -11,7 +11,7 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_test(systest!(test; CupCorruption::NotCorrupted))
         // The replica binary is "broken" and restarted by the orchestrator multiple times
-        .remove_metrics_to_check("orchestrator_replica_process_start_attempts_total")
+        .remove_metrics_to_check("orchestrator_processes_start_attempts_total")
         .execute_from_args()?;
     Ok(())
 }

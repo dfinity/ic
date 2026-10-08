@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+axum = { workspace = true }
 bare_metal_deployment = { path = "../../ic_os/dev_test_tools/bare_metal_deployment" }
 bincode = { workspace = true }
 candid = { workspace = true }
@@ -22,19 +23,17 @@ cycles-minting-canister = { path = "../../nns/cmc" }
 deterministic_ips = { path = "../../ic_os/networking/deterministic_ips" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
-ed25519-dalek = { workspace = true }
+duration-string = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }
-humantime-serde = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
-ic-cdk = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic-config = { path = "../../config" }
 ic-limits = { path = "../../limits" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
@@ -77,20 +76,22 @@ ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-utils = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+inotify = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
+libc = { workspace = true }
 macaddr = { workspace = true }
+network = { path = "../../ic_os/networking/network" }
 nix = { workspace = true }
-num_cpus = "1.13.1"
 on_wire = { path = "../../rust_canisters/on_wire" }
 phantom_newtype = { path = "../../phantom_newtype" }
-prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+rcgen = { workspace = true }
 regex = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
-ring = { version = "0.17.7", features = ["std"] }
+rsa = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -106,6 +107,7 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 url = { workspace = true }
 walkdir = { workspace = true }
 wat = { workspace = true }

@@ -9,7 +9,7 @@ use ic_consensus_certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_xnet::XNetEndpoint;
-use ic_https_outcalls_adapter_client::setup_canister_http_client;
+use ic_https_outcalls_adapter_client::{setup_canister_http_channel, setup_canister_http_client};
 use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
     time_source::SysTimeSource,
@@ -24,11 +24,11 @@ use ic_pprof::Pprof;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{ReplicatedState, metrics::ReplicatedStateInvariants};
 use ic_state_manager::{StateManagerImpl, state_sync::StateSync};
 use ic_tracing::ReloadHandles;
 use ic_types::{
-    Height, NodeId, SubnetId,
+    Height, NodeId, PlatformVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
@@ -67,6 +67,7 @@ pub fn construct_ic_stack(
     config: Config,
     node_id: NodeId,
     subnet_id: SubnetId,
+    platform_version: PlatformVersion,
     registry: Arc<impl RegistryClient + 'static>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
@@ -106,9 +107,13 @@ pub fn construct_ic_stack(
             // This case is only possible if the replica is started without an orchestrator which
             // is currently only possible in the local development mode with `dfx`.
             None => {
-                let registry_cup =
-                    ic_consensus_cup_utils::make_registry_cup(&*registry, subnet_id, log)
-                        .expect("Couldn't create a registry CUP");
+                let registry_cup = ic_consensus_cup_utils::make_registry_cup(
+                    &*registry,
+                    subnet_id,
+                    registry.get_latest_version(),
+                    log,
+                )
+                .expect("Couldn't create a registry CUP");
 
                 info!(
                     log,
@@ -126,12 +131,8 @@ pub fn construct_ic_stack(
         .get_root_subnet_id(catch_up_package.content.registry_version())
         .expect("cannot read from registry")
         .expect("cannot find root subnet id");
-    let subnet_type = get_subnet_type(
-        log,
-        subnet_id,
-        registry.get_latest_version(),
-        registry.as_ref(),
-    );
+    let registry_version = registry.get_latest_version();
+    let subnet_type = get_subnet_type(log, subnet_id, registry_version, registry.as_ref());
 
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
     // This is the first object that is required for the creation of the IC stack. Initializing the
@@ -141,11 +142,13 @@ pub fn construct_ic_stack(
     create_consensus_pool_dir(&config);
     ensure_persistent_pool_replica_version_compatibility(
         artifact_pool_config.persistent_pool_db_path(),
+        &platform_version.replica_version,
     );
 
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
         node_id,
         subnet_id,
+        &platform_version.replica_version,
         // Note: it's important to pass the original proto which came from the command line (as
         // opposed to, for example, a proto which was first deserialized and then serialized
         // again). Since the proto file could have been produced and signed by nodes running a
@@ -165,18 +168,23 @@ pub fn construct_ic_stack(
     // ---------- REPLICATED STATE DEPS FOLLOW ----------
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
+    let (max_certified_height_tx, max_certified_height_rx) = watch::channel(Height::from(0));
+    let replicated_state_invariants =
+        ReplicatedStateInvariants::new(metrics_registry, &config.hypervisor);
     let state_manager = Arc::new(StateManagerImpl::new(
         verifier,
         subnet_id,
         subnet_type,
-        log.clone(),
-        metrics_registry,
         &config.state_manager,
         // In order for the state manager to start, it needs to know the height of the last
         // CUP and/or certification. This information part of the persisted consensus pool.
         // Hence the need of the dependency on consensus here.
         Some(consensus_pool_cache.starting_height()),
         config.malicious_behavior.malicious_flags.clone(),
+        max_certified_height_tx,
+        Some(replicated_state_invariants),
+        metrics_registry,
+        log.clone(),
     ));
     // ---------- EXECUTION DEPS FOLLOW ----------
 
@@ -228,15 +236,6 @@ pub fn construct_ic_stack(
             config.malicious_behavior.malicious_flags.clone(),
         )
     };
-    let xnet_endpoint = XNetEndpoint::new(
-        rt_handle_xnet.clone(),
-        Arc::clone(&certified_stream_store),
-        Arc::clone(&crypto) as Arc<_>,
-        registry.clone(),
-        config.message_routing,
-        metrics_registry,
-        log.clone(),
-    );
     // Use XNet runtime to spawn XNet client threads.
     let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new(
         Arc::clone(&state_manager) as Arc<_>,
@@ -246,9 +245,20 @@ pub fn construct_ic_stack(
         rt_handle_xnet.clone(),
         node_id,
         subnet_id,
+        max_certified_height_rx.clone(),
         metrics_registry,
         log.clone(),
     ));
+    let xnet_endpoint = XNetEndpoint::new(
+        rt_handle_xnet.clone(),
+        Arc::clone(&certified_stream_store),
+        xnet_payload_builder.advert_handler(),
+        Arc::clone(&crypto) as Arc<_>,
+        registry.clone(),
+        config.message_routing,
+        metrics_registry,
+        log.clone(),
+    );
     // ---------- PAYLOAD BUILDERS WITHOUT ARTIFACT POOL FOLLOW -----------
     let query_stats_payload_builder = execution_services
         .query_stats_payload_builder
@@ -288,23 +298,30 @@ pub fn construct_ic_stack(
         subnet_id,
         subnet_type,
         root_subnet_id,
+        state_manager.clone(),
         registry.clone(),
         Arc::clone(&crypto) as Arc<_>,
         cancellation_token.child_token(),
     );
 
     // ---------- HTTPS OUTCALLS PAYLOAD BUILDER DEPS FOLLOW ----------
-    let canister_http_adapter_client = setup_canister_http_client(
+    let canister_http_channel = setup_canister_http_channel(
         rt_handle_main.clone(),
         metrics_registry,
-        config.adapters_config,
+        &config.adapters_config,
+        log,
+    );
+
+    let canister_http_adapter_client = setup_canister_http_client(
+        rt_handle_main.clone(),
+        canister_http_channel,
         execution_services.transform_execution_service,
         max_canister_http_requests_in_flight,
+        metrics_registry,
         log.clone(),
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
-    let (max_certified_height_tx, max_certified_height_rx) = watch::channel(Height::from(0));
 
     let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
         log,
@@ -316,6 +333,7 @@ pub fn construct_ic_stack(
         node_id,
         subnet_id,
         subnet_type,
+        platform_version.clone(),
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::new(state_sync) as Arc<_>,
@@ -335,7 +353,6 @@ pub fn construct_ic_stack(
         execution_services.cycles_account_manager,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
-        max_certified_height_tx,
     );
 
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
@@ -354,6 +371,7 @@ pub fn construct_ic_stack(
         Arc::clone(&crypto) as Arc<_>,
         node_id,
         subnet_id,
+        platform_version,
         root_subnet_id,
         log.clone(),
         consensus_pool_cache,

@@ -26,13 +26,27 @@ pub struct Ic00MethodPermissions {
 impl Ic00MethodPermissions {
     pub fn new(method: Ic00Method) -> Self {
         match method {
+            Ic00Method::UpdateSettings => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+                counts_toward_round_limit: true,
+                does_not_run_on_aborted_canister: false,
+                installs_code: false,
+            },
             Ic00Method::CanisterStatus
             | Ic00Method::CanisterInfo
             | Ic00Method::CanisterMetadata
+            // NOTE: `ListCanisters` does consume round instructions, but it has
+            // no effective canister ID and therefore never reaches
+            // `can_be_executed` (see `can_execute_subnet_msg` in `scheduler.rs`),
+            // so `counts_toward_round_limit` is not consulted for it. Its
+            // round-instruction deferral is handled by a dedicated special case
+            // in `can_execute_subnet_msg` instead.
+            | Ic00Method::ListCanisters
             | Ic00Method::DepositCycles
             | Ic00Method::ECDSAPublicKey
             | Ic00Method::SignWithECDSA
-            | Ic00Method::UpdateSettings
             | Ic00Method::SchnorrPublicKey
             | Ic00Method::SignWithSchnorr
             | Ic00Method::VetKdPublicKey
@@ -46,10 +60,12 @@ impl Ic00MethodPermissions {
             | Ic00Method::BitcoinGetSuccessors
             | Ic00Method::NodeMetricsHistory
             | Ic00Method::SubnetInfo
+            | Ic00Method::SubnetMetrics
             | Ic00Method::ProvisionalCreateCanisterWithCycles
             | Ic00Method::ProvisionalTopUpCanister
             | Ic00Method::StoredChunks
-            | Ic00Method::ListCanisterSnapshots => Self {
+            | Ic00Method::ListCanisterSnapshots
+            | Ic00Method::CanisterMetrics => Self {
                 method,
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,

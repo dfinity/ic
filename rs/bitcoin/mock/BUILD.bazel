@@ -25,11 +25,11 @@ rust_canister(
     deps = [
         # Keep sorted.
         ":mock",
-        "@crate_index//:bech32",
         "@crate_index//:byteorder",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-bitcoin-canister",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
     ],
@@ -68,7 +68,6 @@ rust_ic_test(
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
         "//rs/types/cycles",
-        "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:bitcoin_dogecoin",
         "@crate_index//:candid",
@@ -76,6 +75,7 @@ rust_ic_test(
         "@crate_index//:hex",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-bitcoin-canister",
         "@crate_index//:rand",
     ],
 )
