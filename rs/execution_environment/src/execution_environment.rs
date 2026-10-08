@@ -2378,10 +2378,6 @@ impl ExecutionEnvironment {
         state
             .metadata
             .subnet_metrics
-            .observe_consumed_cycles_http_outcalls(nominal_consumed_cycles);
-        state
-            .metadata
-            .subnet_metrics
             .observe_consumed_cycles_with_use_case(
                 CyclesUseCase::HTTPOutcalls,
                 nominal_consumed_cycles,
@@ -4055,13 +4051,7 @@ impl ExecutionEnvironment {
             request.payment -= signature_fee.real();
             let nominal_fee = signature_fee.nominal();
             let use_case = match args {
-                ThresholdArguments::Ecdsa(_) => {
-                    state
-                        .metadata
-                        .subnet_metrics
-                        .observe_consumed_cycles_ecdsa_outcalls(nominal_fee);
-                    CyclesUseCase::ECDSAOutcalls
-                }
+                ThresholdArguments::Ecdsa(_) => CyclesUseCase::ECDSAOutcalls,
                 ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
                 ThresholdArguments::VetKd(_) => CyclesUseCase::VetKd,
             };

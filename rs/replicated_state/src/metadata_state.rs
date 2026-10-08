@@ -450,8 +450,6 @@ pub struct SubnetMetrics {
     /// strictly larger than the sum of the entries above: deletions from before
     /// use-case tracking are recorded in it alone.
     consumed_cycles_by_deleted_canisters: NominalCycles,
-    consumed_cycles_http_outcalls: NominalCycles,
-    consumed_cycles_ecdsa_outcalls: NominalCycles,
     /// The cycles consumed on this subnet, per use case. The entries only ever
     /// grow: subnet-level use cases are never refunded, and canister-level ones
     /// only enter the map when a canister is deleted. So besides the gauge, this
@@ -509,17 +507,9 @@ impl SubnetMetrics {
         self.consumed_cycles_by_deleted_canisters
     }
 
-    pub fn observe_consumed_cycles_http_outcalls(&mut self, cycles: NominalCycles) {
-        self.consumed_cycles_http_outcalls += cycles;
-    }
-
     /// Cycles consumed by HTTP outcalls (`CyclesUseCase::HTTPOutcalls`).
     pub fn get_consumed_cycles_http_outcalls(&self) -> NominalCycles {
         self.get_consumed_cycles_subnet_use_case(CyclesUseCase::HTTPOutcalls)
-    }
-
-    pub fn observe_consumed_cycles_ecdsa_outcalls(&mut self, cycles: NominalCycles) {
-        self.consumed_cycles_ecdsa_outcalls += cycles;
     }
 
     /// Cycles consumed by ECDSA outcalls (`CyclesUseCase::ECDSAOutcalls`).
