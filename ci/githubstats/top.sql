@@ -12,19 +12,21 @@ WITH
       percentile_disc(0.9) WITHIN GROUP (ORDER BY total_run_duration) * INTERVAL '1 second' AS "duration_p90"
 
     FROM
-      workflow_runs     AS wr JOIN
-      bazel_invocations AS bi ON wr.id = bi.run_id JOIN
-      bazel_tests       AS bt ON bi.build_id = bt.build_id
+      bazel_tests       AS bt JOIN
+      bazel_invocations AS bi ON bt.build_id = bi.build_id LEFT JOIN LATERAL (
+        -- Some invocations have no workflow run, and runs until 2025-10-09 can have a row per attempt, some without the PR number.
+        SELECT * FROM workflow_runs WHERE id = bi.run_id ORDER BY pull_request_number IS NULL, run_attempt DESC LIMIT 1
+      ) AS wr ON TRUE
 
     WHERE
       ({exclude} = '' OR bt.label NOT LIKE {exclude})
       AND ({include} = '' OR bt.label LIKE {include})
       AND ({time_filter})
       AND (NOT {only_prs} OR wr.event_type = 'pull_request')
-      AND ({branch} = '' OR wr.head_branch LIKE {branch})
+      AND ({branch} = '' OR bi.head_branch LIKE {branch})
       AND ({job} = '' OR bi.job_name LIKE {job})
       AND (bi.job_name IS NULL OR bi.job_name NOT LIKE ALL({exclude_jobs}))
-      AND (wr.event_type != 'pull_request' OR wr.pull_request_number != ALL({exclude_prs}))
+      AND (wr.event_type IS DISTINCT FROM 'pull_request' OR wr.pull_request_number != ALL({exclude_prs}))
       AND (bi.head_sha != ALL({exclude_commits}))
 
     GROUP BY label
