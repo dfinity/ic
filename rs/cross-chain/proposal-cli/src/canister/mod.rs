@@ -23,6 +23,9 @@ pub enum TargetCanister {
     CkEthIndex,
     CkEthLedger,
     CkEthMinter,
+    CkSolIndex,
+    CkSolLedger,
+    CkSolMinter,
     IcpArchive1,
     IcpArchive2,
     IcpArchive3,
@@ -56,6 +59,8 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CkSolIndex
+            | TargetCanister::CkSolLedger
             | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
@@ -69,6 +74,7 @@ impl TargetCanister {
             TargetCanister::ExchangeRateCanister => {
                 "https://github.com/dfinity/exchange-rate-canister.git"
             }
+            TargetCanister::CkSolMinter => "https://github.com/dfinity/cksol.git",
             TargetCanister::SolRpc => "https://github.com/dfinity/sol-rpc-canister.git",
             TargetCanister::Bitcoin
             | TargetCanister::BtcWatchdog
@@ -88,12 +94,14 @@ impl TargetCanister {
             TargetCanister::CkBtcIndex
             | TargetCanister::CkDogeIndex
             | TargetCanister::CkEthIndex
+            | TargetCanister::CkSolIndex
             | TargetCanister::CyclesIndex => {
                 PathBuf::from("rs/ledger_suite/icrc1/index-ng/index-ng.did")
             }
             TargetCanister::CkBtcLedger
             | TargetCanister::CkDogeLedger
-            | TargetCanister::CkEthLedger => {
+            | TargetCanister::CkEthLedger
+            | TargetCanister::CkSolLedger => {
                 PathBuf::from("rs/ledger_suite/icrc1/ledger/ledger.did")
             }
             TargetCanister::CkBtcMinter => {
@@ -105,6 +113,7 @@ impl TargetCanister {
             TargetCanister::CkEthMinter => {
                 PathBuf::from("rs/ethereum/cketh/minter/cketh_minter.did")
             }
+            TargetCanister::CkSolMinter => PathBuf::from("minter/cksol_minter.did"),
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
@@ -142,6 +151,8 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CkSolIndex
+            | TargetCanister::CkSolLedger
             | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
@@ -152,7 +163,8 @@ impl TargetCanister {
             | TargetCanister::LedgerSuiteOrchestrator => {
                 Some(self.candid_file().parent().unwrap().to_path_buf())
             }
-            TargetCanister::EvmRpc
+            TargetCanister::CkSolMinter
+            | TargetCanister::EvmRpc
             | TargetCanister::CyclesLedger
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::SolRpc
@@ -217,11 +229,18 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CkSolIndex
+            | TargetCanister::CkSolLedger
             | TargetCanister::LedgerSuiteOrchestrator
             | TargetCanister::EvmRpc
             | TargetCanister::CyclesLedger
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::SolRpc => self.repo_dir().into_iter().collect(),
+            TargetCanister::CkSolMinter => vec![
+                PathBuf::from("libs"),
+                PathBuf::from("minter"),
+                PathBuf::from("Cargo.lock"),
+            ],
             TargetCanister::CkDogeMinter => vec![
                 PathBuf::from("rs/bitcoin/ckbtc"),
                 PathBuf::from("rs/dogecoin/ckdoge"),
@@ -248,6 +267,8 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CkSolIndex
+            | TargetCanister::CkSolLedger
             | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
@@ -265,7 +286,9 @@ impl TargetCanister {
             | TargetCanister::BtcWatchdog
             | TargetCanister::DogeWatchdog
             | TargetCanister::Dogecoin => PathBuf::from(self.artifact_file_name()),
-            TargetCanister::SolRpc => PathBuf::from("wasms").join(self.artifact_file_name()),
+            TargetCanister::CkSolMinter | TargetCanister::SolRpc => {
+                PathBuf::from("wasms").join(self.artifact_file_name())
+            }
         }
     }
 
@@ -273,8 +296,8 @@ impl TargetCanister {
         match &self {
             TargetCanister::BtcChecker => "ic-btc-checker.wasm.gz",
             TargetCanister::CkBtcArchive => "ic-icrc1-archive.wasm.gz",
-            TargetCanister::CkBtcIndex => "ic-icrc1-index-ng.wasm.gz",
-            TargetCanister::CkBtcLedger => "ic-icrc1-ledger.wasm.gz",
+            TargetCanister::CkBtcIndex | TargetCanister::CkSolIndex => "ic-icrc1-index-ng.wasm.gz",
+            TargetCanister::CkBtcLedger | TargetCanister::CkSolLedger => "ic-icrc1-ledger.wasm.gz",
             TargetCanister::CkBtcMinter => "ic-ckbtc-minter.wasm.gz",
             TargetCanister::CkDogeMinter => "ic-ckdoge-minter.wasm.gz",
             TargetCanister::CkEthArchive => "ic-icrc1-archive-u256.wasm.gz",
@@ -285,6 +308,7 @@ impl TargetCanister {
                 "ic-icrc1-ledger-u256.wasm.gz"
             }
             TargetCanister::CkEthMinter => "ic-cketh-minter.wasm.gz",
+            TargetCanister::CkSolMinter => "cksol_minter.wasm.gz",
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
@@ -318,6 +342,8 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CkSolIndex
+            | TargetCanister::CkSolLedger
             | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
@@ -330,9 +356,10 @@ impl TargetCanister {
                 cmd.arg("--canisters");
                 cmd
             }
-            TargetCanister::EvmRpc | TargetCanister::CyclesLedger | TargetCanister::SolRpc => {
-                Command::new("./scripts/docker-build")
-            }
+            TargetCanister::CkSolMinter
+            | TargetCanister::EvmRpc
+            | TargetCanister::CyclesLedger
+            | TargetCanister::SolRpc => Command::new("./scripts/docker-build"),
             TargetCanister::Bitcoin => {
                 let mut cmd = Command::new("./scripts/docker-build");
                 cmd.arg("ic-btc-canister");
@@ -374,6 +401,9 @@ impl TargetCanister {
             TargetCanister::CkEthIndex => "s3zol-vqaaa-aaaar-qacpa-cai",
             TargetCanister::CkEthLedger => "ss2fx-dyaaa-aaaar-qacoq-cai",
             TargetCanister::CkEthMinter => "sv3dd-oaaaa-aaaar-qacoa-cai",
+            TargetCanister::CkSolIndex => "2ezyf-hqaaa-aaaar-qb6ga-cai",
+            TargetCanister::CkSolLedger => "ls5lp-lqaaa-aaaar-qb5oa-cai",
+            TargetCanister::CkSolMinter => "lh22c-kyaaa-aaaar-qb5nq-cai",
             TargetCanister::IcpArchive1 => "qjdve-lqaaa-aaaaa-aaaeq-cai",
             TargetCanister::IcpArchive2 => "qsgjb-riaaa-aaaaa-aaaga-cai",
             TargetCanister::IcpArchive3 => "q4eej-kyaaa-aaaaa-aaaha-cai",
@@ -421,6 +451,9 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CkSolIndex
+            | TargetCanister::CkSolLedger
+            | TargetCanister::CkSolMinter
             | TargetCanister::LedgerSuiteOrchestrator
             | TargetCanister::EvmRpc
             | TargetCanister::ExchangeRateCanister
@@ -460,6 +493,9 @@ impl FromStr for TargetCanister {
             ["cketh", "index"] => Ok(TargetCanister::CkEthIndex),
             ["cketh", "ledger"] => Ok(TargetCanister::CkEthLedger),
             ["cketh", "minter"] => Ok(TargetCanister::CkEthMinter),
+            ["cksol", "index"] => Ok(TargetCanister::CkSolIndex),
+            ["cksol", "ledger"] => Ok(TargetCanister::CkSolLedger),
+            ["cksol", "minter"] => Ok(TargetCanister::CkSolMinter),
             ["ckerc20", "orchestrator"] => Ok(TargetCanister::LedgerSuiteOrchestrator),
             ["icp", "archive1"] => Ok(TargetCanister::IcpArchive1),
             ["icp", "archive2"] => Ok(TargetCanister::IcpArchive2),
@@ -496,6 +532,9 @@ impl Display for TargetCanister {
             TargetCanister::CkEthIndex => write!(f, "ckETH index"),
             TargetCanister::CkEthLedger => write!(f, "ckETH ledger"),
             TargetCanister::CkEthMinter => write!(f, "ckETH minter"),
+            TargetCanister::CkSolIndex => write!(f, "ckSOL index"),
+            TargetCanister::CkSolLedger => write!(f, "ckSOL ledger"),
+            TargetCanister::CkSolMinter => write!(f, "ckSOL minter"),
             TargetCanister::IcpArchive1 => write!(f, "ICP archive1"),
             TargetCanister::IcpArchive2 => write!(f, "ICP archive2"),
             TargetCanister::IcpArchive3 => write!(f, "ICP archive3"),
