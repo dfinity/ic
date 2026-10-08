@@ -3,14 +3,24 @@
 //! The canister HTTP payload sits in a block as an opaque byte string: a
 //! sequence of length-delimited [`pb::CanisterHttpResponseMessage`] protos (see
 //! [`ic_types::batch::iterator_to_bytes`]). Some of those messages carry a full
-//! [`CanisterHttpResponse`], which the block does not need to carry to its
-//! receivers: they can look it up in their own canister HTTP pool, or else fetch
-//! it from a peer that advertises the block (see [`for_each_response_slot`]).
+//! [`CanisterHttpResponse`], each accompanied, in the very same message, by the
+//! hash of its content: the `content_hash` of the metadata that the response's
+//! signers signed over.
 //!
-//! Every such response is accompanied, in the very same message, by the hash of
-//! its content: the `content_hash` of the metadata that the response's signers
-//! signed over. That hash is all a receiver needs in order to look the content up
-//! in its own canister HTTP pool, or to fetch it from a peer.
+//! That hash is all a receiver of the block needs to come up with the content
+//! itself, whatever kind of outcall it answers, so the block does not need to carry
+//! it. The receiver can always fetch it from the peers that advertise the block,
+//! which serve it out of their canister HTTP pool or, once that has dropped it, out
+//! of the block itself (see [`find_response`]). Its own canister HTTP pool usually
+//! saves it that round trip, for as long as the outcall is in flight in its own
+//! latest state:
+//!
+//! * A fully replicated response is withheld from the gossip, as every replica is
+//!   expected to produce it itself, so the receiver holds it if its own adapter
+//!   returned that very content.
+//! * A non-replicated or flexible response is gossiped along with its share, as
+//!   its peers cannot produce it themselves, so the receiver holds it once it has
+//!   validated that share.
 //!
 //! The block hash covers the payload's very bytes, so a receiver has to put them
 //! back together exactly. It does so by encoding again what it decodes, which only
@@ -29,15 +39,24 @@ use std::collections::{BTreeMap, BTreeSet};
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     CountBytes, NumBytes,
-    batch::{MAX_CANISTER_HTTP_PAYLOAD_SIZE, iterator_to_bytes, slice_to_messages},
+    batch::{
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE, iterator_to_bytes, slice_to_messages,
+        slice_to_messages_iter,
+    },
     canister_http::{CanisterHttpReject, CanisterHttpResponse},
     crypto::{CryptoHash, CryptoHashOf},
 };
-use prost::Message;
 
 use thiserror::Error;
 
 use super::types::CanisterHttpResponseContentHash;
+
+/// A place in the payload where the content of a response belongs, together with
+/// the hash of that content.
+type ResponseSlot<'a> = (
+    CanisterHttpResponseContentHash,
+    &'a mut Option<pb::CanisterHttpResponse>,
+);
 
 /// The canister http payload of a block could not be reassembled.
 #[derive(Debug, PartialEq, Error)]
@@ -80,12 +99,14 @@ pub(crate) fn strip_responses(
     let mut messages = parse(payload_bytes).ok()?;
 
     let mut stripped = BTreeSet::new();
-    for_each_response_slot(&mut messages, |content_hash, response| {
-        if is_worth_stripping(response) {
-            *response = None;
-            stripped.insert(content_hash);
+    for message in &mut messages {
+        for (content_hash, response) in response_slots(message) {
+            if is_worth_stripping(response) {
+                *response = None;
+                stripped.insert(content_hash);
+            }
         }
-    });
+    }
 
     // Rather than pay for encoding the payload again, leave it as it is if there was
     // nothing worth stripping in it.
@@ -140,27 +161,23 @@ pub(crate) fn reinsert_responses(
     // Putting a content back grows the payload by more than the content itself, so
     // this is a lower bound on the size of the reassembled payload.
     let mut reassembled_size = payload_bytes.len();
-    let mut error = None;
-    for_each_response_slot(&mut messages, |content_hash, response| {
-        if error.is_some() || response.is_some() {
-            return;
+    for message in &mut messages {
+        for (content_hash, response) in response_slots(message) {
+            if response.is_some() {
+                continue;
+            }
+            let Some(Some(content)) = responses.get(&content_hash) else {
+                return Err(CanisterHttpPayloadError::MissingResponse(content_hash));
+            };
+            reassembled_size = reassembled_size.saturating_add(content.content.count_bytes());
+            if reassembled_size > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
+                return Err(CanisterHttpPayloadError::TooLarge);
+            }
+            *response = Some(pb::CanisterHttpResponse::from(content.clone()));
         }
-        let Some(Some(content)) = responses.get(&content_hash) else {
-            error = Some(CanisterHttpPayloadError::MissingResponse(content_hash));
-            return;
-        };
-        reassembled_size = reassembled_size.saturating_add(content.content.count_bytes());
-        if reassembled_size > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
-            error = Some(CanisterHttpPayloadError::TooLarge);
-            return;
-        }
-        *response = Some(pb::CanisterHttpResponse::from(content.clone()));
-    });
-
-    match error {
-        Some(error) => Err(error),
-        None => Ok(encode(messages)),
     }
+
+    Ok(encode(messages))
 }
 
 /// Returns the response with the given content hash, if the payload delivers it.
@@ -173,23 +190,14 @@ pub(crate) fn find_response(
     payload_bytes: &[u8],
     content_hash: &CanisterHttpResponseContentHash,
 ) -> Option<CanisterHttpResponse> {
-    let mut remaining = payload_bytes;
-    while !remaining.is_empty() {
-        let mut message =
-            pb::CanisterHttpResponseMessage::decode_length_delimited(&mut remaining).ok()?;
-
-        let mut found = None;
-        for_each_response_slot(std::slice::from_mut(&mut message), |hash, response| {
-            if found.is_none() && hash == *content_hash {
-                found = response.take();
-            }
-        });
-        if let Some(response) = found {
-            return CanisterHttpResponse::try_from(response).ok();
-        }
-    }
-
-    None
+    slice_to_messages_iter::<pb::CanisterHttpResponseMessage>(payload_bytes)
+        .map_while(Result::ok)
+        .find_map(|mut message| {
+            response_slots(&mut message)
+                .into_iter()
+                .filter(|(hash, _)| hash == content_hash)
+                .find_map(|(_, response)| CanisterHttpResponse::try_from(response.take()?).ok())
+        })
 }
 
 fn parse(
@@ -206,78 +214,68 @@ fn encode(messages: Vec<pb::CanisterHttpResponseMessage>) -> Vec<u8> {
     iterator_to_bytes(messages.into_iter(), NumBytes::new(u64::MAX))
 }
 
-/// Calls `f` once for every response slot of the payload, passing the hash of the
-/// content that belongs in the slot together with the slot itself.
+/// The response slots of the message, each with the hash of the content that
+/// belongs in it.
 ///
-/// Every response a payload delivers can be stripped, whatever kind of outcall it
-/// answers. A receiver can always fetch a stripped content from the peers that
-/// advertise the block, which serve it out of their canister HTTP pool or, once
-/// that has dropped it, out of the block itself `Pools::get_canister_http_response`.
-///
-/// The receiver's own canister HTTP pool usually saves it that round trip, for as
-/// long as the outcall is in flight in its own latest state:
-///
-/// * A fully replicated response is withheld from the gossip, as every replica is
-///   expected to produce it itself, so the receiver holds it if its own adapter
-///   returned that very content.
-/// * A non-replicated or flexible response is gossiped along with its share, as
-///   its peers cannot produce it themselves, so the receiver holds it once it has
-///   validated that share.
-///
-/// The messages that carry no response at all — a timeout, a divergence proof, an
-/// out-of-cycles error or an asynchronous receipt — have no slot to visit.
+/// The messages that carry no response have no slots: a timeout, a divergence
+/// proof, an out-of-cycles error and an asynchronous receipt, as well as the errors
+/// of a flexible outcall other than too many rejects, which carry shares at most.
 ///
 /// A slot whose content hash cannot be read is skipped: such a message cannot be
 /// part of a valid block, and there is nothing to identify its content by.
-fn for_each_response_slot<F>(messages: &mut [pb::CanisterHttpResponseMessage], mut f: F)
-where
-    F: FnMut(CanisterHttpResponseContentHash, &mut Option<pb::CanisterHttpResponse>),
-{
+fn response_slots(message: &mut pb::CanisterHttpResponseMessage) -> Vec<ResponseSlot<'_>> {
     use pb::canister_http_response_message::MessageType;
     use pb::flexible_canister_http_error::ErrorDetails;
 
-    for message in messages {
-        match message.message_type.as_mut() {
-            Some(MessageType::Response(response)) => {
-                let content_hash = CryptoHashOf::new(CryptoHash(response.hash.clone()));
-                f(content_hash, &mut response.response);
-            }
-            Some(MessageType::FlexibleResponses(group)) => {
-                for_each_response_with_proof(&mut group.responses, &mut f);
-            }
-            Some(MessageType::FlexibleError(error)) => {
-                if let Some(ErrorDetails::TooManyRejects(rejects)) = error.error_details.as_mut() {
-                    for_each_response_with_proof(&mut rejects.reject_responses, &mut f);
-                }
+    match message.message_type.as_mut() {
+        Some(MessageType::Response(response)) => {
+            let content_hash = CryptoHashOf::new(CryptoHash(response.hash.clone()));
+            vec![(content_hash, &mut response.response)]
+        }
+        Some(MessageType::FlexibleResponses(group)) => {
+            flexible_response_slots(&mut group.responses)
+        }
+        Some(MessageType::FlexibleError(error)) => match error.error_details.as_mut() {
+            Some(ErrorDetails::TooManyRejects(rejects)) => {
+                flexible_response_slots(&mut rejects.reject_responses)
             }
             Some(
-                MessageType::Timeout(_)
-                | MessageType::DivergenceResponse(_)
-                | MessageType::OutOfCycles(_)
-                | MessageType::AsyncReceipt(_),
+                ErrorDetails::Timeout(_)
+                | ErrorDetails::ResponsesTooLarge(_)
+                | ErrorDetails::OutOfCycles(_),
             )
-            | None => {}
-        }
+            | None => vec![],
+        },
+        Some(
+            MessageType::Timeout(_)
+            | MessageType::DivergenceResponse(_)
+            | MessageType::OutOfCycles(_)
+            | MessageType::AsyncReceipt(_),
+        )
+        | None => vec![],
     }
 }
 
-fn for_each_response_with_proof<F>(
+/// The slots of a flexible outcall's responses, whose content hashes sit in their proofs.
+fn flexible_response_slots(
     responses: &mut [pb::FlexibleCanisterHttpResponseWithProof],
-    f: &mut F,
-) where
-    F: FnMut(CanisterHttpResponseContentHash, &mut Option<pb::CanisterHttpResponse>),
-{
-    for response in responses {
-        let Some(content_hash) = response
-            .proof
-            .as_ref()
-            .and_then(|proof| proof.metadata.as_ref())
-            .map(|metadata| CryptoHashOf::new(CryptoHash(metadata.content_hash.clone())))
-        else {
-            continue;
-        };
-        f(content_hash, &mut response.response);
-    }
+) -> Vec<ResponseSlot<'_>> {
+    responses
+        .iter_mut()
+        .filter_map(|response| {
+            let content_hash = response
+                .proof
+                .as_ref()?
+                .metadata
+                .as_ref()?
+                .content_hash
+                .clone();
+            Some((
+                CryptoHashOf::new(CryptoHash(content_hash)),
+                &mut response.response,
+            ))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -586,11 +584,10 @@ mod tests {
     /// grows one, so a stripped payload that big is refused before it is decoded.
     #[test]
     fn reinsert_refuses_an_oversized_payload_test() {
-        let slot = fake_stripped_canister_http_response_message(
+        let slot = fake_canister_http_payload(vec![fake_stripped_canister_http_response_message(
             &fake_canister_http_response(1, 1024),
             &[NODE_1],
-        )
-        .encode_length_delimited_to_vec();
+        )]);
         let oversized = slot.repeat(MAX_CANISTER_HTTP_PAYLOAD_SIZE / slot.len() + 1);
 
         assert_matches!(
@@ -656,7 +653,9 @@ mod tests {
         }
     }
 
-    /// A payload that no longer carries the content has nothing to serve.
+    /// A block that passed validation always carries every response, as a payload
+    /// with an emptied slot does not even decode. Should one get here anyway, the
+    /// emptied slot must not be served as if it held the response.
     #[test]
     fn find_response_in_stripped_payload_test() {
         let response = fake_canister_http_response(1, 1024);
@@ -667,6 +666,27 @@ mod tests {
             )]);
 
         assert_eq!(find_response(&payload, &hash_of(&response)), None);
+    }
+
+    /// A slot whose response does not decode cannot be part of a block that passed
+    /// validation either. Should one get here anyway, it does not end the search: a
+    /// later slot may deliver the very same content.
+    #[test]
+    fn find_response_skips_an_undecodable_response_test() {
+        use pb::canister_http_response_message::MessageType;
+
+        let response = fake_canister_http_response(1, 1024);
+        let mut undecodable = fake_canister_http_response_message(&response, &[NODE_1]);
+        let Some(MessageType::Response(with_consensus)) = undecodable.message_type.as_mut() else {
+            panic!("Expected a response message");
+        };
+        with_consensus.response.as_mut().unwrap().content = None;
+        let payload = fake_canister_http_payload(vec![
+            undecodable,
+            fake_canister_http_response_message(&response, &[NODE_2]),
+        ]);
+
+        assert_eq!(find_response(&payload, &hash_of(&response)), Some(response));
     }
 
     #[test]

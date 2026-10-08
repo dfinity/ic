@@ -367,9 +367,6 @@ fn fake_canister_http_signature() -> CanisterHttpResponseSignature {
 }
 
 /// A `responses` entry of a canister http payload, signed by the given signers.
-///
-/// A single signer makes it the response of a non-replicated outcall, more than
-/// one the response of a fully replicated one.
 pub(crate) fn fake_canister_http_response_message(
     response: &CanisterHttpResponse,
     signers: &[NodeId],
@@ -495,12 +492,12 @@ pub(crate) fn fake_stripped_canister_http_response_message(
 pub(crate) fn fake_canister_http_payload(
     messages: Vec<pb::CanisterHttpResponseMessage>,
 ) -> Vec<u8> {
-    let expected = messages.len();
+    let expected_count = messages.len();
     let bytes = iterator_to_bytes(
         messages.into_iter(),
         NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
     );
-    assert_no_messages_dropped(&bytes, expected);
+    assert_no_messages_dropped(&bytes, expected_count);
 
     bytes
 }
@@ -538,16 +535,16 @@ pub(crate) fn fake_canister_http_payload_with_every_kind() -> (Vec<u8>, Vec<Cani
     )
 }
 
-/// Fails unless `payload` carries all `expected` messages, i.e. unless every
+/// Fails unless `payload` carries all `expected_count` messages, i.e. unless every
 /// message given to `iterator_to_bytes` fit into the payload limit.
-fn assert_no_messages_dropped(payload: &[u8], expected: usize) {
-    let encoded = slice_to_messages::<pb::CanisterHttpResponseMessage>(payload)
+fn assert_no_messages_dropped(payload: &[u8], expected_count: usize) {
+    let encoded_count = slice_to_messages::<pb::CanisterHttpResponseMessage>(payload)
         .expect("Should encode a parseable payload")
         .len();
 
     assert_eq!(
-        encoded, expected,
-        "only {encoded} of {expected} messages fit into the \
+        encoded_count, expected_count,
+        "only {encoded_count} of {expected_count} messages fit into the \
          {MAX_CANISTER_HTTP_PAYLOAD_SIZE} byte payload limit; use smaller responses"
     );
 }
