@@ -4,9 +4,10 @@
 pub mod common;
 
 use crate::common::{
-    HttpEndpointBuilder, UpdateEndpoint, basic_state_manager_mock, create_conn_and_send_request,
-    default_get_latest_state, default_read_certified_state, get_free_localhost_socket_addr,
-    query_endpoint,
+    DelegatedSubnet, HttpEndpointBuilder, UpdateEndpoint, basic_state_manager_mock,
+    complete_message_in_latest_state, create_conn_and_send_request, default_get_latest_state,
+    default_read_certified_state, get_free_localhost_socket_addr, modify_latest_state,
+    query_endpoint, set_delegation_from_nns,
 };
 use axum::body::{Body, to_bytes};
 use bytes::Bytes;
@@ -19,15 +20,11 @@ use ic_canister_client::prepare_read_state;
 use ic_canister_client_sender::Sender;
 use ic_canonical_state::encoding::types::{Cycles, SubnetMetrics};
 use ic_certification_test_utils::{
-    Certificate as TestCertificate, CertificateBuilder, CertificateData,
-    create_certificate_labeled_tree, serialize_to_cbor,
+    Certificate as TestCertificate, CertificateBuilder, CertificateData, serialize_to_cbor,
 };
 use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_tree_hash::{
-    Digest, Label, LabeledTree, MatchPatternPath, MixedHashTree, Path, Witness, flatmap,
-    lookup_path,
-};
+use ic_crypto_tree_hash::{Digest, Label, LabeledTree, MixedHashTree, Path, Witness, flatmap};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
@@ -40,20 +37,13 @@ use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::CertifiedStateSnapshot;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
-use ic_logger::no_op_logger;
 use ic_nns_delegation_manager::NNSDelegationBuilder;
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
 };
 use ic_read_state_response_parser::parse_subnet_read_state_response;
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
-use ic_registry_routing_table::CanisterIdRange;
-use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::metadata_state::testing::SystemMetadataTesting;
-use ic_replicated_state::{
-    ReplicatedState, SubnetTopology, metadata_state::testing::NetworkTopologyTesting,
-};
+use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_types::ids::{NODE_1, canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
     CanisterId, CryptoHashOfPartialState, Height, NumBytes, PrincipalId, RegistryVersion,
@@ -798,53 +788,30 @@ fn can_retrieve_subnet_metrics(
         canister_id_ranges: vec![(canister_test_id(0), canister_test_id(10))],
     });
 
-    let (certificate, root_pk, _cbor) =
-        CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::SubTree(flatmap![
+    let subnet_certificate_builder = CertificateBuilder::new(CertificateData::CustomTree(
+        LabeledTree::SubTree(flatmap![
             Label::from("subnet") => LabeledTree::SubTree(flatmap![
                 Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
                     Label::from("metrics") => LabeledTree::Leaf(serialize_to_cbor(&expected_subnet_metrics)),
                 ])
             ]),
-        ])))
+        ]),
+    ));
+    // The key signing the certificate, which the NNS delegation certifies as the subnet's key.
+    let subnet_public_key = subnet_certificate_builder.get_root_public_key();
+    let (certificate, root_pk, _cbor) = subnet_certificate_builder
         .with_delegation(delegation_from_nns)
         .build();
 
     let mock_certified_state = move |certificate: TestCertificate| {
         let hash_tree = certificate.clone().tree();
 
-        // The certified state must certify the same subnet public key as the delegation
-        // embedded in `certificate`; otherwise the delegation-vs-certified-state check
-        // rejects the request with 503. The subnet endpoints don't verify the canister
-        // ranges, so those don't need to match.
-        let delegation = certificate
-            .delegation()
-            .map(|d| CertificateDelegation {
-                subnet_id: d.subnet_id,
-                certificate: d.certificate,
-            })
-            .expect("Delegation should be present.");
-        let mut replicated_state = ReplicatedState::new(subnet_id, SubnetType::Application);
-        replicated_state
-            .metadata
-            .modify_network_topology(|topology| {
-                topology.subnets_mut().insert(
-                    subnet_id,
-                    SubnetTopology {
-                        public_key: certified_subnet_public_key(&delegation),
-                        ..SubnetTopology::default()
-                    },
-                );
-                topology
-                    .routing_table_mut()
-                    .insert(
-                        CanisterIdRange {
-                            start: canister_test_id(0),
-                            end: canister_test_id(10),
-                        },
-                        subnet_id,
-                    )
-                    .unwrap();
-            });
+        // The certified state must record the subnet public key which the NNS delegation
+        // certifies, otherwise the endpoint does not serve the delegation.
+        let mut state = (**default_get_latest_state().get_ref()).clone();
+        DelegatedSubnet::default()
+            .with_public_key(subnet_public_key)
+            .record_in(&mut state);
         let certification = Certification {
             height: Height::from(1),
             height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
@@ -866,7 +833,7 @@ fn can_retrieve_subnet_metrics(
             },
         };
 
-        (Arc::new(replicated_state), hash_tree, certification)
+        (Arc::new(state), hash_tree, certification)
     };
 
     let mut mock_state_manager = MockStateManager::new();
@@ -1270,8 +1237,6 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
     )]
     endpoint: UpdateEndpoint,
 ) {
-    use ic_crypto_tree_hash::MatchPatternPath;
-
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -1279,119 +1244,12 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
         ..Default::default()
     };
 
-    let mut mock_state_manager = MockStateManager::new();
-
-    let state = Arc::new(default_get_latest_state());
-
-    let state_clone = state.clone();
-    mock_state_manager
-        .expect_get_latest_state()
-        .returning(move || (*state_clone).clone());
-
-    let state_clone = state.clone();
-    mock_state_manager
-        .expect_read_certified_state()
-        .returning(move |labeled_tree| {
-            default_read_certified_state(labeled_tree, (*state_clone).clone())
-        });
-
-    let state_clone = state.clone();
-    mock_state_manager
-        .expect_latest_certified_height()
-        .returning(move || state_clone.height());
-
-    // Inject the mock certified state snapshot
-    mock_state_manager
-        .expect_get_certified_state_snapshot()
-        .return_once(move || {
-            struct FakeCertifiedStateSnapshot(ReplicatedState);
-
-            impl Default for FakeCertifiedStateSnapshot {
-                fn default() -> Self {
-                    Self(ReplicatedState::new(
-                        subnet_test_id(1),
-                        SubnetType::Application,
-                    ))
-                }
-            }
-
-            impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
-                type State = ReplicatedState;
-
-                fn get_state(&self) -> &ReplicatedState {
-                    &self.0
-                }
-
-                fn get_height(&self) -> Height {
-                    unimplemented!();
-                }
-
-                fn read_certified_state_with_exclusion(
-                    &self,
-                    paths: &LabeledTree<()>,
-                    _exclusion: Option<&MatchPatternPath>,
-                ) -> Option<(MixedHashTree, Certification)> {
-                    let message_id = match paths {
-                        LabeledTree::SubTree(flat_map) => {
-                            let request_status =
-                                flat_map.get(&Label::from("request_status")).unwrap();
-
-                            match request_status {
-                                LabeledTree::Leaf(_) => panic!("request status can not be leaf"),
-                                LabeledTree::SubTree(flat_map) => flat_map.keys().first().unwrap(),
-                            }
-                        }
-                        _ => panic!("Must be subtree."),
-                    };
-
-                    let hash_tree = MixedHashTree::Labeled(
-                        Label::from(b"request_status"),
-                        Box::new(MixedHashTree::Labeled(
-                            message_id.clone(),
-                            Box::new(MixedHashTree::Labeled(
-                                Label::from(b"status"),
-                                Box::new(MixedHashTree::Leaf(
-                                    b"hello world canister response.".to_vec(),
-                                )),
-                            )),
-                        )),
-                    );
-
-                    let (certificate, _, _) = CertificateBuilder::new(CertificateData::CustomTree(
-                        LabeledTree::Leaf(b"test".to_vec()),
-                    ))
-                    .build();
-
-                    let certification = Certification {
-                        height: Height::from(1),
-                        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
-                        signed: Signed {
-                            signature: ThresholdSignature {
-                                signer: NiDkgId {
-                                    start_block_height: Height::from(0),
-                                    dealer_subnet: subnet_test_id(0),
-                                    dkg_tag: NiDkgTag::HighThreshold,
-                                    target_subnet: NiDkgTargetSubnet::Local,
-                                },
-                                signature: CombinedThresholdSigOf::new(CombinedThresholdSig(
-                                    certificate.signature().to_vec(),
-                                )),
-                            },
-                            content: CertificationContent::new(CryptoHashOfPartialState::from(
-                                CryptoHash(hash_tree.digest().to_vec()),
-                            )),
-                        },
-                    };
-
-                    Some((hash_tree, certification))
-                }
-            }
-
-            Some(Box::new(FakeCertifiedStateSnapshot::default()))
-        });
+    let (state_manager, latest_state) = basic_state_manager_mock();
+    let message = endpoint.default_ingress_message();
+    complete_message_in_latest_state(&latest_state, &message);
 
     let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
-        .with_state_manager(mock_state_manager)
+        .with_state_manager(state_manager)
         .run();
 
     // Mock ingress filter to always accept the message.
@@ -1404,8 +1262,6 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
 
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
-
-        let message = endpoint.default_ingress_message();
 
         let response = endpoint.call(addr, message).await;
 
@@ -1743,53 +1599,17 @@ fn test_synchronous_call_endpoint_no_certification(
     });
 }
 
-struct FakeCertifiedStateSnapshot(ReplicatedState);
-
-impl Default for FakeCertifiedStateSnapshot {
-    fn default() -> Self {
-        Self(ReplicatedState::new(
-            subnet_test_id(1),
-            SubnetType::Application,
-        ))
-    }
-}
-
-impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
-    type State = ReplicatedState;
-
-    fn get_state(&self) -> &ReplicatedState {
-        &self.0
-    }
-
-    fn get_height(&self) -> Height {
-        unimplemented!()
-    }
-
-    fn read_certified_state_with_exclusion(
-        &self,
-        _paths: &LabeledTree<()>,
-        _exclusion: Option<&MatchPatternPath>,
-    ) -> Option<(MixedHashTree, Certification)> {
-        None
-    }
-}
-
-/// Tests that the /v3/.../call endpoint responds with `202 ACCEPTED` for
+/// Tests that the sync call endpoints respond with `202 ACCEPTED` for
 /// ingress messages that complete execution and certification
 /// but the state reader fails to read the certified state.
 #[rstest]
-#[case::certified_state_snapshot_unavailable(None)]
-#[case::reading_certified_state_fails(Some(Box::new(FakeCertifiedStateSnapshot::default()) as _))]
-fn test_call_v3_response_when_state_reader_fails(
+fn test_call_response_when_state_reader_fails(
     #[values(
         UpdateEndpoint::Canister(Call::V3),
         UpdateEndpoint::Canister(Call::V4),
         UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
     )]
     endpoint: UpdateEndpoint,
-    #[case] certified_state_snapshot: Option<
-        Box<dyn CertifiedStateSnapshot<State = ReplicatedState>>,
-    >,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -1801,29 +1621,21 @@ fn test_call_v3_response_when_state_reader_fails(
 
     let mut mock_state_manager = MockStateManager::new();
 
-    let state = Arc::new(default_get_latest_state());
+    let state = default_get_latest_state();
 
-    let state_clone = state.clone();
-    mock_state_manager
-        .expect_get_latest_state()
-        .returning(move || (*state_clone).clone());
-
-    let state_clone = state.clone();
-    mock_state_manager
-        .expect_read_certified_state()
-        .returning(move |labeled_tree| {
-            default_read_certified_state(labeled_tree, (*state_clone).clone())
-        });
-
-    let state_clone = state.clone();
     mock_state_manager
         .expect_latest_certified_height()
-        .returning(move || state_clone.height());
+        .return_const(state.height());
 
-    // Inject the mock certified state snapshot
+    // The endpoint reads the certified state once to start serving requests...
     mock_state_manager
-        .expect_get_certified_state_snapshot()
-        .return_once(move || certified_state_snapshot);
+        .expect_read_certified_state()
+        .times(1)
+        .returning(move |labeled_tree| default_read_certified_state(labeled_tree, state.clone()));
+    // ...but fails to read it afterwards.
+    mock_state_manager
+        .expect_read_certified_state()
+        .returning(|_| None);
 
     let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
         .with_state_manager(mock_state_manager)
@@ -2176,261 +1988,80 @@ fn test_call_v4_subnet_wrong_canister_or_method(
 }
 
 // ---------------------------------------------------------------------------
-// NNS delegation vs. certified state: the `call` and `read_state`
-// endpoints must reply with `503 SERVICE_UNAVAILABLE` when the NNS delegation the
-// replica would serve does not match its certified state. Otherwise the client
-// would receive a certificate whose delegation it cannot verify against the
-// certified state. This can happen around subnet splits and canister migrations.
+// NNS delegation vs. certified state: the `call` and `read_state` endpoints must
+// reply with `503 SERVICE_UNAVAILABLE` instead of serving a certificate whose NNS
+// delegation does not match the certified state which the certificate is built
+// from, as the client could not verify the certificate. The two drift apart e.g.
+// around subnet splits and canister migrations, until the replica fetches a new
+// delegation from the NNS.
 // ---------------------------------------------------------------------------
 
-/// Builds an NNS delegation for `subnet_test_id(1)` certifying the given public key
-/// and the given canister ranges (in both the flat and the tree layout). If no public
-/// key is given, a fresh one is generated.
-fn nns_delegation_and_public_key(
-    existing_public_key: Option<ThresholdSigPublicKey>,
-    ranges: &[(CanisterId, CanisterId)],
-) -> (CertificateDelegation, ThresholdSigPublicKey) {
-    let subnet_id = subnet_test_id(1);
+/// What changes about the subnet under test, so that the NNS delegation and the
+/// certified state disagree.
+#[derive(Clone, Copy, Debug)]
+enum DelegationDrift {
+    /// The threshold public key of the subnet changes, as e.g. on a subnet split.
+    SubnetPublicKey,
+    /// The canister which the requests target, `canister_test_id(0)`, is migrated to
+    /// another subnet.
+    CanisterMigration,
+}
 
-    let subnet_public_key = existing_public_key.unwrap_or_else(|| {
-        // Any threshold public key works here; reuse the random root key of a
-        // throw-away certificate builder so we don't depend on the crypto crates.
-        CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::Leaf(vec![])))
-            .get_root_public_key()
-    });
+/// Which of the NNS delegation and the certified state reflects the change first.
+#[derive(Clone, Copy, Debug)]
+enum DriftingSide {
+    /// The endpoint receives a new NNS delegation, while its certified state does not
+    /// reflect the change yet.
+    NnsDelegation,
+    /// The certified state changes, while the endpoint still serves the previous NNS
+    /// delegation.
+    CertifiedState,
+}
 
-    let certificate_tree = create_certificate_labeled_tree(
-        &ranges.to_vec(),
-        subnet_id,
-        subnet_public_key,
-        /*max_ranges_per_routing_table_leaf=*/ 1,
-        /*time=*/ 42,
-        /*with_tree_canister_ranges=*/ true,
-        /*with_flat_canister_ranges=*/ true,
-    );
+/// A threshold public key different from the one of the subnet under test.
+fn fresh_threshold_public_key() -> ThresholdSigPublicKey {
+    // Reuse the randomly generated root key of a throw-away certificate builder.
+    CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::Leaf(vec![])))
+        .get_root_public_key()
+}
 
-    let (_certificate, _root_pk, cbor) =
-        CertificateBuilder::new(CertificateData::CustomTree(certificate_tree)).build();
-
-    let delegation = CertificateDelegation {
-        subnet_id: Blob(subnet_id.get().to_vec()),
-        certificate: Blob(cbor),
+/// Makes the NNS delegation served by an endpoint and the endpoint's certified state,
+/// which both start as the default [`DelegatedSubnet`], disagree according to `drift`,
+/// by changing `side`.
+fn drift_delegation_from_certified_state(
+    drift: DelegationDrift,
+    side: DriftingSide,
+    nns_delegation_watcher: &watch::Sender<Option<NNSDelegationBuilder>>,
+    latest_state: &Mutex<Labeled<Arc<ReplicatedState>>>,
+) {
+    let drifted_subnet = match drift {
+        DelegationDrift::SubnetPublicKey => {
+            DelegatedSubnet::default().with_public_key(fresh_threshold_public_key())
+        }
+        DelegationDrift::CanisterMigration => {
+            DelegatedSubnet::default().with_canister_migrated(canister_test_id(0))
+        }
     };
 
-    (delegation, subnet_public_key)
-}
-
-/// Returns the raw bytes of the `/subnet/<subnet_test_id(1)>/public_key` leaf
-/// certified by `delegation`, i.e. exactly what
-/// `verify_delegation_matches_certified_state` compares against the subnet's
-/// public key in the certified state.
-fn certified_subnet_public_key(delegation: &CertificateDelegation) -> Vec<u8> {
-    let subnet_id_bytes = subnet_test_id(1).get().to_vec();
-    let certificate: Certificate =
-        serde_cbor::from_slice(delegation.certificate.0.as_slice()).unwrap();
-    let tree = LabeledTree::try_from(certificate.tree).unwrap();
-    match lookup_path(
-        &tree,
-        &[b"subnet", subnet_id_bytes.as_slice(), b"public_key"],
-    ) {
-        Some(LabeledTree::Leaf(public_key)) => public_key.clone(),
-        other => panic!("unexpected `public_key` path in delegation: {other:?}"),
-    }
-}
-
-/// Rewrites the state behind `latest_state` so that the certification view of the
-/// network topology assigns `subnet_test_id(1)` the given `public_key` and the
-/// given canister `ranges`. Installing the delegation's certified key and ranges
-/// makes the delegation match; installing different bytes makes it mismatch.
-fn set_certified_subnet_topology(
-    latest_state: &Arc<Mutex<Labeled<Arc<ReplicatedState>>>>,
-    public_key: Option<Vec<u8>>,
-    ranges: Option<&[(CanisterId, CanisterId)]>,
-) {
-    let subnet_id = subnet_test_id(1);
-    let mut guard = latest_state.lock().unwrap();
-    let height = guard.height();
-    let mut state = (**guard.get_ref()).clone();
-    state.metadata.modify_network_topology(|topology| {
-        if let Some(public_key) = public_key {
-            // `insert` overwrites the previous entry, so this also serves to *change* the
-            // certified public key on a subsequent call.
-            topology.subnets_mut().insert(
-                subnet_id,
-                SubnetTopology {
-                    public_key,
-                    ..SubnetTopology::default()
-                },
-            );
+    match side {
+        DriftingSide::NnsDelegation => {
+            set_delegation_from_nns(nns_delegation_watcher, drifted_subnet.nns_delegation())
         }
-        if let Some(ranges) = ranges {
-            let mut routing_table = RoutingTable::new();
-            for (start, end) in ranges {
-                routing_table
-                    .insert(
-                        CanisterIdRange {
-                            start: *start,
-                            end: *end,
-                        },
-                        subnet_id,
-                    )
-                    .unwrap();
-            }
-            topology.set_routing_table(routing_table);
-        }
-    });
-    *guard = Labeled::new(height, Arc::new(state));
-}
-
-/// Which side of the delegation/certified-state pair drifts to trigger the
-/// mismatch in the transition tests below.
-#[derive(Clone, Debug)]
-enum DelegationDrift {
-    /// The NNS starts handing out a delegation certifying a different subnet key.
-    DelegationKeyChanges,
-    /// The NNS starts handing out a delegation certifying different canister ranges.
-    DelegationCanisterRangesChange {
-        new_ranges: Vec<(CanisterId, CanisterId)>,
-    },
-    /// The certified state starts certifying a different subnet key.
-    StateKeyChanges,
-    /// The certified state starts certifying different canister ranges.
-    StateCanisterRangesChange {
-        new_ranges: Vec<(CanisterId, CanisterId)>,
-    },
-}
-
-/// Makes the delegation the endpoint serves stop matching its certified state,
-/// according to `drift`, so that subsequent requests must return `503`.
-fn drift_delegation_away_from_certified_state(
-    drift: &DelegationDrift,
-    nns_delegation_watcher: &watch::Sender<Option<NNSDelegationBuilder>>,
-    latest_state: &Arc<Mutex<Labeled<Arc<ReplicatedState>>>>,
-    existing_public_key: ThresholdSigPublicKey,
-    existing_ranges: &[(CanisterId, CanisterId)],
-) {
-    match drift {
-        DelegationDrift::DelegationKeyChanges => {
-            // The NNS pushes a fresh delegation certifying a new (random) key that
-            // no longer matches the key in the certified state.
-            let (new_delegation, _new_public_key) =
-                nns_delegation_and_public_key(None, existing_ranges);
-            let builder = NNSDelegationBuilder::try_new(
-                new_delegation.certificate,
-                subnet_test_id(1),
-                &no_op_logger(),
-            )
-            .unwrap();
-            nns_delegation_watcher.send(Some(builder)).unwrap();
-        }
-        DelegationDrift::DelegationCanisterRangesChange { new_ranges } => {
-            // The NNS pushes a fresh delegation certifying different canister ranges
-            // that no longer match the routing table in the certified state.
-            let (new_delegation, _new_public_key) =
-                nns_delegation_and_public_key(Some(existing_public_key), new_ranges.as_ref());
-            let builder = NNSDelegationBuilder::try_new(
-                new_delegation.certificate,
-                subnet_test_id(1),
-                &no_op_logger(),
-            )
-            .unwrap();
-            nns_delegation_watcher.send(Some(builder)).unwrap();
-        }
-        DelegationDrift::StateKeyChanges => {
-            // The certified state starts certifying a different key (the routing
-            // table is left untouched, only the public key changes).
-            set_certified_subnet_topology(latest_state, Some(vec![0xff; 10]), None);
-        }
-        DelegationDrift::StateCanisterRangesChange { new_ranges } => {
-            // The certified state starts certifying different canister ranges (the
-            // subnet's public key is left untouched, only the routing table changes).
-            set_certified_subnet_topology(latest_state, None, Some(new_ranges.as_ref()));
+        DriftingSide::CertifiedState => {
+            modify_latest_state(latest_state, |state| drifted_subnet.record_in(state))
         }
     }
 }
 
-struct DelegationDriftTestCase {
-    drift: DelegationDrift,
-    expected_unavailable: bool,
-}
-
-/// The `read_state` endpoints answer a request while the NNS delegation matches
-/// the certified state, but reply with `503 SERVICE_UNAVAILABLE` once the two
-/// drift apart -- whether it is the delegation's key that changes or the certified
-/// state's key.
+/// The `read_state` endpoints answer a request while the NNS delegation matches the
+/// certified state, but reply with `503 SERVICE_UNAVAILABLE` once the two drift apart.
 #[rstest]
-#[case(
-    DelegationDriftTestCase {
-        drift: DelegationDrift::DelegationKeyChanges,
-        expected_unavailable: true,
-    }
-)]
-#[case(
-    DelegationDriftTestCase {
-        drift: DelegationDrift::DelegationCanisterRangesChange { new_ranges: vec![(canister_test_id(0), canister_test_id(10))] },
-        expected_unavailable: false,
-    }
-)]
-#[case(
-    DelegationDriftTestCase {
-        drift: DelegationDrift::DelegationCanisterRangesChange { new_ranges: vec![(canister_test_id(20), canister_test_id(30))] },
-        expected_unavailable: true,
-    }
-)]
-#[case(
-    DelegationDriftTestCase {
-        drift: DelegationDrift::DelegationCanisterRangesChange { new_ranges: vec![(canister_test_id(0), canister_test_id(20))] },
-        expected_unavailable: false,
-    }
-)]
-#[case(
-    DelegationDriftTestCase {
-        drift: DelegationDrift::DelegationCanisterRangesChange { new_ranges: vec![(canister_test_id(40), canister_test_id(50))] },
-        expected_unavailable: true,
-    }
-)]
-#[case(
-    DelegationDriftTestCase {
-        drift: DelegationDrift::StateKeyChanges,
-        expected_unavailable: true,
-    }
-)]
-#[case(
-    DelegationDriftTestCase {
-        drift: DelegationDrift::StateCanisterRangesChange { new_ranges: vec![(canister_test_id(0), canister_test_id(10))] },
-        expected_unavailable: false,
-    }
-)]
-#[case(
-    DelegationDriftTestCase {
-        drift: DelegationDrift::StateCanisterRangesChange { new_ranges: vec![(canister_test_id(20), canister_test_id(30))] },
-        expected_unavailable: true,
-    }
-)]
-#[case(
-    DelegationDriftTestCase {
-        drift: DelegationDrift::StateCanisterRangesChange { new_ranges: vec![(canister_test_id(0), canister_test_id(20))] },
-        expected_unavailable: false,
-    }
-)]
-#[case(
-    DelegationDriftTestCase {
-        drift: DelegationDrift::StateCanisterRangesChange { new_ranges: vec![(canister_test_id(40), canister_test_id(50))] },
-        expected_unavailable: true,
-    }
-)]
 fn test_read_state_endpoint_becomes_unavailable_when_delegation_drifts_from_state(
-    #[values(
-        vec![(canister_test_id(0), canister_test_id(10)), (canister_test_id(20), canister_test_id(30))],
-    )]
-    original_ranges: Vec<(CanisterId, CanisterId)>,
-    #[case] test_case: DelegationDriftTestCase,
     #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
+    #[values(DelegationDrift::SubnetPublicKey, DelegationDrift::CanisterMigration)]
+    drift: DelegationDrift,
+    #[values(DriftingSide::NnsDelegation, DriftingSide::CertifiedState)] side: DriftingSide,
 ) {
-    let DelegationDriftTestCase {
-        drift,
-        expected_unavailable,
-    } = test_case;
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -2438,23 +2069,13 @@ fn test_read_state_endpoint_becomes_unavailable_when_delegation_drifts_from_stat
         ..Default::default()
     };
 
-    let (delegation, public_key) = nns_delegation_and_public_key(None, &original_ranges);
-
     let (state_manager, latest_state) = basic_state_manager_mock();
-    // Start from a certified state that matches the delegation.
-    set_certified_subnet_topology(
-        &latest_state,
-        Some(certified_subnet_public_key(&delegation)),
-        Some(&original_ranges),
-    );
 
     let handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
         .with_state_manager(state_manager)
-        .with_delegation_from_nns(delegation)
+        .with_delegation_from_nns(DelegatedSubnet::default().nns_delegation())
         .run();
 
-    // We always read the `/time` path of `canister_test_id(0)`, which is covered by
-    // the delegation's canister ranges.
     let read_state_request = || {
         CanisterReadState::new(
             vec![Path::from(Label::from("time"))],
@@ -2476,72 +2097,37 @@ fn test_read_state_endpoint_becomes_unavailable_when_delegation_drifts_from_stat
             response.text().await
         );
 
-        // The delegation and the certified state drift apart.
-        drift_delegation_away_from_certified_state(
-            &drift,
+        drift_delegation_from_certified_state(
+            drift,
+            side,
             &handlers.nns_delegation_watcher,
             &latest_state,
-            public_key,
-            &original_ranges,
         );
 
         // The same request now fails, because the delegation no longer matches.
         let response = read_state_request().await;
-        if expected_unavailable {
-            assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
-            assert_eq!(
-                "This replica has an outdated delegation. Please try again.",
-                response.text().await.unwrap(),
-            );
-        } else {
-            assert_eq!(
-                StatusCode::OK,
-                response.status(),
-                "{:?}",
-                response.text().await
-            );
-            // The same request now fails, because the delegation no longer matches.
-        }
+        assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
+        assert_eq!(
+            "This replica has an outdated delegation. Please try again.",
+            response.text().await.unwrap(),
+        );
     });
 }
 
-/// The synchronous `call` endpoints accept a request while the NNS delegation
-/// matches the certified state, but reply with `503 SERVICE_UNAVAILABLE` once the
-/// two drift apart -- whether it is the delegation's key that changes or the
-/// certified state's key.
+/// The sync call endpoints serve the certificate of a message while the NNS delegation
+/// matches the certified state, but reply with `503 SERVICE_UNAVAILABLE` once the two
+/// drift apart in a way which the endpoint verifies.
 #[rstest]
-/// The message is certified after certified state transition.
-#[case(Height::from(0), Some(Height::from(1)), Height::from(1))]
-/// The message is already certified.
-#[case(Height::from(1), None, Height::from(1))]
-#[case(Height::from(1), Some(Height::from(0)), Height::from(1))]
 fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state(
-    #[values(
-        vec![(canister_test_id(0), canister_test_id(10)), (canister_test_id(20), canister_test_id(30))],
-    )]
-    original_ranges: Vec<(CanisterId, CanisterId)>,
     #[values(
         UpdateEndpoint::Canister(Call::V3),
         UpdateEndpoint::Canister(Call::V4),
         UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
     )]
     endpoint: UpdateEndpoint,
-    #[values(
-        DelegationDrift::DelegationKeyChanges,
-        DelegationDrift::DelegationCanisterRangesChange { new_ranges: vec![(canister_test_id(0), canister_test_id(10))] },
-        DelegationDrift::DelegationCanisterRangesChange { new_ranges: vec![(canister_test_id(20), canister_test_id(30))] },
-        DelegationDrift::DelegationCanisterRangesChange { new_ranges: vec![(canister_test_id(0), canister_test_id(20))] },
-        DelegationDrift::DelegationCanisterRangesChange { new_ranges: vec![(canister_test_id(40), canister_test_id(50))] },
-        DelegationDrift::StateKeyChanges,
-        DelegationDrift::StateCanisterRangesChange { new_ranges: vec![(canister_test_id(0), canister_test_id(10))] },
-        DelegationDrift::StateCanisterRangesChange { new_ranges: vec![(canister_test_id(20), canister_test_id(30))] },
-        DelegationDrift::StateCanisterRangesChange { new_ranges: vec![(canister_test_id(0), canister_test_id(20))] },
-        DelegationDrift::StateCanisterRangesChange { new_ranges: vec![(canister_test_id(40), canister_test_id(50))] },
-    )]
+    #[values(DelegationDrift::SubnetPublicKey, DelegationDrift::CanisterMigration)]
     drift: DelegationDrift,
-    #[case] initial_certified_height: Height,
-    #[case] transitioned_certified_height: Option<Height>,
-    #[case] message_finalization_height: Height,
+    #[values(DriftingSide::NnsDelegation, DriftingSide::CertifiedState)] side: DriftingSide,
 ) {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
@@ -2550,25 +2136,17 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
         ..Default::default()
     };
 
-    let (delegation, public_key) = nns_delegation_and_public_key(None, &original_ranges);
-
+    // The message already completed, so the endpoint serves its certificate right away.
     let (state_manager, latest_state) = basic_state_manager_mock();
-    // Start from a certified state that matches the delegation.
-    set_certified_subnet_topology(
-        &latest_state,
-        Some(certified_subnet_public_key(&delegation)),
-        Some(&original_ranges),
-    );
+    let message = endpoint.default_ingress_message();
+    complete_message_in_latest_state(&latest_state, &message);
 
     let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
-        .with_certified_height(initial_certified_height)
         .with_state_manager(state_manager)
-        .with_delegation_from_nns(delegation)
+        .with_delegation_from_nns(DelegatedSubnet::default().nns_delegation())
         .run();
 
-    let message = endpoint.default_ingress_message();
-
-    // Accept every ingress message so that the handler reaches the delegation check.
+    // Mock ingress filter to always accept the message.
     rt.spawn(async move {
         loop {
             let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
@@ -2576,51 +2154,10 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
         }
     });
 
-    let message_id = message.message_id();
-    let message_clone = message.clone();
-    let latest_state_clone = latest_state.clone();
-    rt.spawn(async move {
-        let new_ingress = handlers.ingress_rx.recv().await.unwrap();
-        let UnvalidatedArtifactMutation::Insert((sent_message, _)) = new_ingress else {
-            panic!("Expected Insert");
-        };
-        assert_eq!(sent_message.id(), message_clone.message_id());
-
-        // set the ingress to the terminal state in the certified state
-        // this is needed since the HTTP handler would return 202 otherwise
-        let (_height, mut state) = {
-            let state_and_height = latest_state_clone.lock().unwrap();
-            (
-                state_and_height.height(),
-                (**state_and_height.get_ref()).clone(),
-            )
-        };
-        state.set_ingress_status(
-            message_clone.message_id(),
-            message_clone.known_ingress_status(),
-            NumBytes::new(4 << 30), // INGRESS_HISTORY_MEMORY_CAPACITY
-            |_| {},
-        );
-        *latest_state_clone.lock().unwrap() =
-            Labeled::new(message_finalization_height, Arc::new(state));
-
-        handlers
-            .terminal_state_ingress_messages
-            .try_send((message_id, message_finalization_height))
-            .unwrap();
-
-        if let Some(transitioned_certified_height) = transitioned_certified_height {
-            handlers
-                .certified_height_watcher
-                .send(transitioned_certified_height)
-                .unwrap();
-        }
-    });
-
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        // While the delegation matches the certified state, the message is accepted.
+        // While the delegation matches the certified state, the certificate is served.
         let response = endpoint.call(addr, message.clone()).await;
         assert_eq!(
             StatusCode::OK,
@@ -2629,50 +2166,18 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
             response.text().await
         );
 
-        // The delegation and the certified state drift apart.
-        drift_delegation_away_from_certified_state(
-            &drift,
+        drift_delegation_from_certified_state(
+            drift,
+            side,
             &handlers.nns_delegation_watcher,
             &latest_state,
-            public_key,
-            &original_ranges,
         );
 
         let response = endpoint.call(addr, message).await;
         match (endpoint, drift) {
-            (
-                UpdateEndpoint::Subnet(CallSubnet::V4(_)),
-                DelegationDrift::DelegationCanisterRangesChange { .. },
-            )
-            | (
-                UpdateEndpoint::Subnet(CallSubnet::V4(_)),
-                DelegationDrift::StateCanisterRangesChange { .. },
-            ) => {
-                // The subnet v4 endpoint does not check the canister ranges
-                assert_eq!(
-                    StatusCode::OK,
-                    response.status(),
-                    "{:?}",
-                    response.text().await
-                );
-            }
-            (
-                UpdateEndpoint::Canister(Call::V3),
-                DelegationDrift::DelegationCanisterRangesChange { new_ranges },
-            )
-            | (
-                UpdateEndpoint::Canister(Call::V3),
-                DelegationDrift::StateCanisterRangesChange { new_ranges },
-            )
-            | (
-                UpdateEndpoint::Canister(Call::V4),
-                DelegationDrift::DelegationCanisterRangesChange { new_ranges },
-            )
-            | (
-                UpdateEndpoint::Canister(Call::V4),
-                DelegationDrift::StateCanisterRangesChange { new_ranges },
-            ) if new_ranges[0].0 == canister_test_id(0) => {
-                // The canister is still covered by the new ranges, so the request succeeds.
+            // The subnet endpoint serves the delegation without canister ranges, so it does
+            // not verify them.
+            (UpdateEndpoint::Subnet(_), DelegationDrift::CanisterMigration) => {
                 assert_eq!(
                     StatusCode::OK,
                     response.status(),
@@ -2681,7 +2186,6 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
                 );
             }
             _ => {
-                // The same request now fails, because the delegation no longer matches.
                 assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
                 assert_eq!(
                     "This replica has an outdated delegation. Please try again.",
@@ -2689,5 +2193,91 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
                 );
             }
         }
+    });
+}
+
+/// The sync call endpoints verify the NNS delegation only when they serve a certificate,
+/// i.e. when the certified state contains the status of the message. Until it does, a
+/// delegation which does not match the certified state neither prevents the message from
+/// being submitted nor makes the endpoint reply with `503 SERVICE_UNAVAILABLE`.
+#[rstest]
+#[case::status_not_certified(
+    false,
+    StatusCode::ACCEPTED,
+    "Certified state does not contain request status. Please try /read_state."
+)]
+#[case::status_certified(
+    true,
+    StatusCode::SERVICE_UNAVAILABLE,
+    "This replica has an outdated delegation. Please try again."
+)]
+fn test_sync_call_endpoint_verifies_delegation_only_when_serving_certificate(
+    #[values(
+        UpdateEndpoint::Canister(Call::V3),
+        UpdateEndpoint::Canister(Call::V4),
+        UpdateEndpoint::Subnet(CallSubnet::V4(subnet_test_id(1).get())),
+    )]
+    endpoint: UpdateEndpoint,
+    #[case] is_status_certified: bool,
+    #[case] expected_status: StatusCode,
+    #[case] expected_text: &str,
+) {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let (state_manager, latest_state) = basic_state_manager_mock();
+
+    // The endpoint serves a delegation certifying another public key than the certified state.
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_state_manager(state_manager)
+        .with_delegation_from_nns(
+            DelegatedSubnet::default()
+                .with_public_key(fresh_threshold_public_key())
+                .nns_delegation(),
+        )
+        .run();
+
+    let message = endpoint.default_ingress_message();
+
+    // Mock ingress filter to always accept the message.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(Ok(())))
+        }
+    });
+
+    // Once submitted, the message completes execution and gets certified.
+    let message_clone = message.clone();
+    rt.spawn(async move {
+        let new_ingress = handlers.ingress_rx.recv().await.unwrap();
+        let UnvalidatedArtifactMutation::Insert((sent_message, _)) = new_ingress else {
+            panic!("Expected Insert");
+        };
+        assert_eq!(sent_message.id(), message_clone.message_id());
+
+        if is_status_certified {
+            complete_message_in_latest_state(&latest_state, &message_clone);
+        }
+        handlers
+            .terminal_state_ingress_messages
+            .try_send((sent_message.id(), Height::from(1)))
+            .unwrap();
+        handlers
+            .certified_height_watcher
+            .send(Height::from(1))
+            .unwrap();
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+
+        let response = endpoint.call(addr, message).await;
+        assert_eq!(expected_status, response.status());
+        assert_eq!(expected_text, response.text().await.unwrap());
     });
 }
