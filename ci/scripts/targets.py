@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-#   targets.py [-h] [--skip_long_tests] [--exclude_tags TAG]... [--base BASE] [--head HEAD] {build,test,check}
+#   targets.py [-h] [--skip_long_tests] [--exclude_tags TAG]... [--include_manual] [--base BASE] [--head HEAD] {build,test,check}
 #
 # This script determines which Bazel targets should be built or tested and writes them separated by newlines to stdout.
 #
@@ -8,6 +8,9 @@
 # where `$HEAD` is from --head if specified.
 #
 # If --skip_long_tests is passed, tests tagged with 'long_test' will be excluded.
+#
+# If --include_manual is passed, targets tagged 'manual' are not excluded, e.g. to find out whether
+# the inputs of the (manual) IC-OS image bundles were modified.
 #
 # However, long_tests of which a direct source file has been modified will be included.
 #
@@ -185,6 +188,7 @@ def targets(
     exclude_tags: list[str],
     base: str | None,
     head: str | None,
+    include_manual: bool = False,
 ):
     """Print the bazel targets to build or test to stdout."""
     # If no base is specified, form a query to return all targets
@@ -199,7 +203,8 @@ def targets(
     )
 
     # Finally, exclude targets that have any of the excluded tags:
-    excluded_tags_regex = "|".join(EXCLUDED_TAGS + exclude_tags)
+    excluded_tags = [tag for tag in EXCLUDED_TAGS if not (include_manual and tag == "manual")]
+    excluded_tags_regex = "|".join(excluded_tags + exclude_tags)
     query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
 
     # rdeps over //... can also return targets of external repositories (e.g. the
@@ -304,12 +309,13 @@ def main():
         help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE [$HEAD]` where $HEAD is from --head if specified.",
     )
     parser.add_argument("--head", help="See --base.")
+    parser.add_argument("--include_manual", action="store_true", help="Don't exclude targets tagged as 'manual'")
     args = parser.parse_args()
 
     if args.command == "check":
         check()
 
-    targets(args.command, args.skip_long_tests, args.exclude_tags, args.base, args.head)
+    targets(args.command, args.skip_long_tests, args.exclude_tags, args.base, args.head, args.include_manual)
 
 
 if __name__ == "__main__":

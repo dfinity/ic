@@ -650,9 +650,27 @@ jobs:
 
             cd "$CI_PROJECT_DIR"
 
-            # Always build all IC-OS images, canisters and binaries: this is the
-            # no-cache side of the build-determinism comparison. Only release builds are stamped.
-            ci/container/build-ic.sh -i -c -b ${{ case(needs.config.outputs.release-build == 'true', '', '--no-release') }}
+            # Build all canisters and binaries without a cache: this is the no-cache side of the
+            # build-determinism comparison. Only release builds are stamped.
+            build_ic_args=(-c -b)
+
+            # The IC-OS images take the longest. Build them too, except on PRs whose changes
+            # don't reach any of the images that build-ic.sh -i builds: their cached images were
+            # already checked against a no-cache build when their inputs last changed.
+            if [[ '${{ needs.config.outputs.diff-only }}' != 'true' ]]; then
+              build_ic_args+=(-i)
+            else
+              affected="$(ci/scripts/targets.py build --include_manual \
+                '--base=${{ github.event.pull_request.base.sha }}' \
+                '--head=${{ github.event.pull_request.head.sha }}')"
+              if grep -qxE '//ic-os/(guestos/envs/(prod|recovery)|hostos/envs/prod|setupos/envs/prod):bundle(-disk|-update)?' <<<"$affected"; then
+                build_ic_args+=(-i)
+              else
+                echo "::notice::No IC-OS image inputs were modified: build-ic skips the IC-OS images"
+              fi
+            fi
+
+            ci/container/build-ic.sh "${build_ic_args[@]}" ${{ case(needs.config.outputs.release-build == 'true', '', '--no-release') }}
 
   build-determinism:
     name: Build Determinism
