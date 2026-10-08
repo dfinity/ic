@@ -616,8 +616,7 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
                 METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
                 |labels| labels.get("kind").is_some_and(|kind| kind == "canister"),
                 &node_ips,
-            )
-            .unwrap_or(0.0);
+            );
             let executing = min_across_replicas(
                 &metrics,
                 METRIC_SUBNET_CALL_CONTEXTS,
@@ -627,8 +626,7 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
                         .is_some_and(|ty| ty == LABEL_INSTALL_CODE)
                 },
                 &node_ips,
-            )
-            .unwrap_or(0.0);
+            );
             if queued < expected_queued || executing < 1.0 {
                 bail!(
                     "at least {queued} request(s) enqueued and {executing} executing per \

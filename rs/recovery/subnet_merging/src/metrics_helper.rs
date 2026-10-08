@@ -50,8 +50,7 @@ impl std::error::Error for ScrapeError {}
 ///
 /// Fails if any node cannot be scraped: a condition evaluated across the nodes
 /// could otherwise hold on partial data. A series that no node reports is
-/// absent though (which `max_across_replicas` reads as `None`), as a node that
-/// responds simply does not export that series.
+/// absent though, as a node that responds simply does not export that series.
 pub async fn fetch_metrics(node_ips: &[IpAddr], metrics: &[&str]) -> Result<Metrics, ScrapeError> {
     let responses = join_all(node_ips.iter().map(fetch_node_metrics)).await;
 
@@ -129,34 +128,32 @@ pub fn matching_series<'a>(
 }
 
 /// The largest value any replica reports for any series of `metric` whose
-/// labels match `labels_match`. `None` if there is no such series.
-///
-/// A replica that does not report a series is skipped, which fits the terms
-/// this is used for: they count items, and a replica that holds none of them
-/// simply does not export the series.
+/// labels match `labels_match`. A series that a replica does not report reads
+/// as zero, so this is zero if there is no such series.
 pub fn max_across_replicas(
     metrics: &Metrics,
     metric: &str,
     labels_match: impl Fn(&Labels) -> bool,
-) -> Option<f64> {
+) -> f64 {
     matching_series(metrics, metric, labels_match)
         .into_iter()
         .flat_map(|values| values.values())
         .copied()
-        .reduce(f64::max)
+        .fold(0.0, f64::max)
 }
 
-/// The smallest matching value across the given replicas. Returns `None` if
-/// any replica reports no matching series, or if `replicas` is empty.
-/// Multiple series reported by one node cannot stand in for another node.
+/// The smallest value any of the given replicas reports for any series of
+/// `metric` whose labels match `labels_match`. A replica that reports no such
+/// series reads as zero, and so does an empty `replicas`: multiple series
+/// reported by one node cannot stand in for another node.
 pub fn min_across_replicas(
     metrics: &Metrics,
     metric: &str,
     labels_match: impl Fn(&Labels) -> bool,
     replicas: &[IpAddr],
-) -> Option<f64> {
+) -> f64 {
     let series = matching_series(metrics, metric, labels_match);
-    let minima: Option<Vec<f64>> = replicas
+    replicas
         .iter()
         .map(|ip| {
             series
@@ -164,9 +161,10 @@ pub fn min_across_replicas(
                 .filter_map(|values| values.get(ip))
                 .copied()
                 .reduce(f64::min)
+                .unwrap_or(0.0)
         })
-        .collect();
-    minima?.into_iter().reduce(f64::min)
+        .reduce(f64::min)
+        .unwrap_or(0.0)
 }
 
 #[cfg(test)]
@@ -192,13 +190,10 @@ mod tests {
         ]);
         assert_eq!(
             min_across_replicas(&metrics, "m", |_| true, &[ip(1), ip(2)]),
-            None
+            0.0
         );
-        assert_eq!(
-            min_across_replicas(&metrics, "m", |_| true, &[ip(1)]),
-            Some(5.0)
-        );
-        assert_eq!(min_across_replicas(&metrics, "m", |_| true, &[]), None);
+        assert_eq!(min_across_replicas(&metrics, "m", |_| true, &[ip(1)]), 5.0);
+        assert_eq!(min_across_replicas(&metrics, "m", |_| true, &[]), 0.0);
     }
 
     fn series(metric: &str, labels: &[(&str, &str)]) -> (String, Labels) {
@@ -269,35 +264,21 @@ some_other_metric 12
 
         assert_eq!(
             max_across_replicas(&metrics, "mr_stream_messages", |_| true),
-            Some(5.0)
+            5.0
         );
         assert_eq!(
             max_across_replicas(&metrics, "mr_stream_messages", |labels| labels
                 .get("remote")
                 .is_some_and(|remote| remote == "a")),
-            Some(3.0)
+            3.0
         );
         assert_eq!(
             max_across_replicas(&metrics, "mr_registry_version", |_| true),
-            None
-        );
-        assert_eq!(
-            min_across_replicas(&metrics, "mr_stream_messages", |_| true, &[ip(1), ip(2)]),
-            Some(1.0)
-        );
-        assert_eq!(
-            min_across_replicas(
-                &metrics,
-                "mr_stream_messages",
-                |_| true,
-                &[ip(1), ip(2), ip(3)]
-            ),
-            None,
-            "a replica that does not report the series must not be skipped"
+            0.0
         );
         assert_eq!(
             min_across_replicas(&metrics, "mr_registry_version", |_| true, &[]),
-            None
+            0.0
         );
     }
 }

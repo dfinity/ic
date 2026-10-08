@@ -1,12 +1,9 @@
 //! The "merge readiness" condition, evaluated from the metrics of the
 //! replicas.
 //!
-//! A subnet that is cooling down is ready to be merged once it has come to a
-//! complete rest: every subnet has observed that it is cooling down, nothing is
-//! in flight to or from it, and it holds no state that only it could act upon.
-//! The terms below spell that out, one per `Condition`. For the subnet `S` that
-//! is cooling down and the registry version `V` at which it was labeled as such,
-//! the condition holds iff:
+//! For the subnet `S` that is cooling down and the registry version `V` at
+//! which it was labeled as such, the condition holds iff all of the following
+//! terms, one per `Condition`, hold:
 //!
 //! 1. `RegistryVersion`: every replica of every subnet reports
 //!    `mr_registry_version >= V`.
@@ -52,9 +49,6 @@ pub const METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES: &str = "execution_subnet_output_q
 pub const METRIC_SUBNET_CALL_CONTEXTS: &str = "replicated_state_subnet_call_contexts";
 /// The number of pending anonymous refunds, i.e. the size of the refund pool.
 pub const METRIC_PENDING_REFUNDS: &str = "replicated_state_pending_refunds";
-/// The total value of those refunds, which is logged next to the term above
-/// when the refund pool is not empty, but is not itself a condition.
-pub const METRIC_PENDING_REFUNDS_CYCLES: &str = "replicated_state_pending_refunds_cycles";
 
 /// The individual conditions the "merge readiness" condition is made of.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -108,15 +102,12 @@ impl std::error::Error for ReadinessError {
 /// is cooling down and the registry version `V` at which it was labeled as
 /// such. Returns one term per condition.
 ///
-/// Every term has to hold on every single replica, as a replica that lags
-/// behind still holds what the others have already processed: the registry
-/// version is the minimum across all replicas, and every other term is the
-/// maximum across the replicas reporting the respective series. A replica that
-/// does not report its registry version reads as zero.
+/// Every term has to hold on every single replica: the registry version is the
+/// minimum across all replicas, and every other term is the maximum across all
+/// replicas.
 /// Fails if any node of any subnet (the cooling down one included) cannot be
 /// scraped, rather than evaluating the terms on partial data: most terms
-/// compare against zero, which missing data would satisfy. A series that a
-/// reachable node does not report reads as zero.
+/// compare against zero, which missing data would satisfy.
 pub async fn evaluate_merge_readiness(
     subnets: &SubnetNodeIps,
     source_subnet_id: SubnetId,
@@ -133,7 +124,6 @@ pub async fn evaluate_merge_readiness(
             METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
             METRIC_SUBNET_CALL_CONTEXTS,
             METRIC_PENDING_REFUNDS,
-            METRIC_PENDING_REFUNDS_CYCLES,
         ],
     )
     .await?;
@@ -155,60 +145,47 @@ pub async fn evaluate_merge_readiness(
             )
             .await?
         };
-        // A replica that does not report its registry version reads as zero,
-        // so that the term fails closed until every replica reports it.
         let version = metrics_helper::min_across_replicas(
             &metrics,
             METRIC_REGISTRY_VERSION,
             |_| true,
             node_ips,
-        )
-        .unwrap_or(0.0);
+        );
         min_registry_version = Some(min_registry_version.map_or(version, |v: f64| v.min(version)));
         if subnet_id != source_subnet_id {
             incoming_stream_messages +=
                 metrics_helper::max_across_replicas(&metrics, METRIC_STREAM_MESSAGES, |labels| {
                     labels.get("remote") == Some(&source_subnet)
-                })
-                .unwrap_or(0.0);
+                });
         }
     }
     let min_registry_version = min_registry_version.unwrap_or(0.0);
 
     let outgoing_stream_messages =
-        metrics_helper::max_across_replicas(&own_metrics, METRIC_STREAM_MESSAGES, |_| true)
-            .unwrap_or(0.0);
+        metrics_helper::max_across_replicas(&own_metrics, METRIC_STREAM_MESSAGES, |_| true);
     let ingress_history_messages = metrics_helper::max_across_replicas(
         &own_metrics,
         METRIC_INGRESS_HISTORY_BY_STATE,
         |labels| {
             labels
                 .get("state")
-                .is_none_or(|state| state != "processing")
+                .is_some_and(|state| state != "processing")
         },
-    )
-    .unwrap_or(0.0);
+    );
     let subnet_input_queue_messages = metrics_helper::max_across_replicas(
         &own_metrics,
         METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
         |_| true,
-    )
-    .unwrap_or(0.0);
+    );
     let subnet_output_queue_messages = metrics_helper::max_across_replicas(
         &own_metrics,
         METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
         |_| true,
-    )
-    .unwrap_or(0.0);
+    );
     let subnet_call_contexts =
-        metrics_helper::max_across_replicas(&own_metrics, METRIC_SUBNET_CALL_CONTEXTS, |_| true)
-            .unwrap_or(0.0);
+        metrics_helper::max_across_replicas(&own_metrics, METRIC_SUBNET_CALL_CONTEXTS, |_| true);
     let pending_refunds =
-        metrics_helper::max_across_replicas(&own_metrics, METRIC_PENDING_REFUNDS, |_| true)
-            .unwrap_or(0.0);
-    let pending_refunds_cycles =
-        metrics_helper::max_across_replicas(&own_metrics, METRIC_PENDING_REFUNDS_CYCLES, |_| true)
-            .unwrap_or(0.0);
+        metrics_helper::max_across_replicas(&own_metrics, METRIC_PENDING_REFUNDS, |_| true);
 
     let term = |condition, description: String, satisfied: bool| Term {
         condition,
@@ -219,69 +196,45 @@ pub async fn evaluate_merge_readiness(
         term(
             Condition::RegistryVersion,
             format!(
-                "every replica of every subnet has reached registry version {registry_version} \
-                 (the lowest one is at {min_registry_version})"
+                "every replica of every subnet has reached registry version {registry_version}"
             ),
             min_registry_version >= registry_version as f64,
         ),
         term(
             Condition::IncomingStreams,
-            format!(
-                "no remote subnet holds a message in its stream to subnet {source_subnet_id} \
-                 (at most {incoming_stream_messages} messages per replica, summed over the remote subnets)"
-            ),
+            format!("no remote subnet holds a message in its stream to subnet {source_subnet_id}"),
             incoming_stream_messages == 0.0,
         ),
         term(
             Condition::OutgoingStreams,
             format!(
-                "subnet {source_subnet_id} holds no message in any of its streams, loopback \
-                 included (at most {outgoing_stream_messages} messages per stream and replica)"
+                "subnet {source_subnet_id} holds no message in any of its streams, loopback included"
             ),
             outgoing_stream_messages == 0.0,
         ),
         term(
             Condition::IngressHistory,
-            format!(
-                "the ingress history holds nothing but `processing` entries \
-                 (at most {ingress_history_messages} other entries per state and replica)"
-            ),
+            "the ingress history holds nothing but `processing` entries".to_string(),
             ingress_history_messages == 0.0,
         ),
         term(
             Condition::SubnetInputQueues,
-            format!(
-                "the subnet input queues are empty (at most {subnet_input_queue_messages} messages per kind and replica)"
-            ),
+            "the subnet input queues are empty".to_string(),
             subnet_input_queue_messages == 0.0,
         ),
         term(
             Condition::SubnetOutputQueues,
-            format!(
-                "the subnet output queues are empty (at most {subnet_output_queue_messages} messages per replica)"
-            ),
+            "the subnet output queues are empty".to_string(),
             subnet_output_queue_messages == 0.0,
         ),
         term(
             Condition::SubnetCallContexts,
-            format!(
-                "the subnet call context manager holds no call context (at most \
-                 {subnet_call_contexts} call contexts per type and replica)"
-            ),
+            "the subnet call context manager holds no call context".to_string(),
             subnet_call_contexts == 0.0,
         ),
         term(
             Condition::RefundPool,
-            // A cooling down subnet still routes its refunds (see `route_refunds`
-            // in `rs/messaging/src/routing/stream_builder.rs`), so the refund pool
-            // drains by itself, unless a stream is full. Waiting for it to be
-            // empty keeps a refund from being lost in the merge: the merged state
-            // takes the refunds of the destination subnet, not those of the
-            // subnet that is merged away.
-            format!(
-                "the refund pool holds no pending anonymous refund (at most {pending_refunds} \
-                 refunds, worth at most {pending_refunds_cycles} cycles, per replica)"
-            ),
+            "the refund pool holds no pending anonymous refund".to_string(),
             pending_refunds == 0.0,
         ),
     ])
