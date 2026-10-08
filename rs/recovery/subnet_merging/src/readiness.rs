@@ -4,7 +4,27 @@
 //! A subnet that is cooling down is ready to be merged once it has come to a
 //! complete rest: every subnet has observed that it is cooling down, nothing is
 //! in flight to or from it, and it holds no state that only it could act upon.
-//! The terms below spell that out, one per `Condition`.
+//! The terms below spell that out, one per `Condition`. For the subnet `S` that
+//! is cooling down and the registry version `V` at which it was labeled as such,
+//! the condition holds iff:
+//!
+//! 1. `RegistryVersion`: every replica of every subnet reports
+//!    `mr_registry_version >= V`.
+//! 2. `IncomingStreams`: no replica of any other subnet reports
+//!    `mr_stream_messages{remote="S"} > 0`.
+//! 3. `OutgoingStreams`: no replica of `S` reports `mr_stream_messages > 0`
+//!    for any remote subnet, `S` itself included.
+//! 4. `IngressHistory`: no replica of `S` reports
+//!    `replicated_state_ingress_history_length_by_state > 0` for any state
+//!    other than `processing`.
+//! 5. `SubnetInputQueues`: no replica of `S` reports
+//!    `execution_subnet_input_queue_messages > 0` for any kind.
+//! 6. `SubnetOutputQueues`: no replica of `S` reports
+//!    `execution_subnet_output_queue_messages > 0`.
+//! 7. `SubnetCallContexts`: no replica of `S` reports
+//!    `replicated_state_subnet_call_contexts > 0` for any type.
+//! 8. `RefundPool`: no replica of `S` reports
+//!    `replicated_state_pending_refunds > 0`.
 
 use crate::metrics_helper::{self, Metrics, ScrapeError};
 

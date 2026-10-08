@@ -64,7 +64,7 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_registry_subnet_type::SubnetType;
-use ic_subnet_merging::metrics_helper::{fetch_metrics, min_sum_across_replicas};
+use ic_subnet_merging::metrics_helper::{fetch_metrics, min_across_replicas};
 use ic_subnet_merging::readiness::{
     Condition, METRIC_SUBNET_CALL_CONTEXTS, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, SubnetNodeIps,
     Term, evaluate_merge_readiness,
@@ -581,15 +581,17 @@ fn install_code_payload(targets: &[Principal]) -> Vec<u8> {
 }
 
 /// Waits until all of `U1`'s `install_code` requests have left `U1`'s output
-/// queue, i.e. are either enqueued in `subnet`'s subnet input queues or already
-/// executing (and hence hold a call context in the subnet call context
-/// manager).
+/// queue, i.e. until, on every replica, one of them is executing (and hence
+/// holds a call context in the subnet call context manager) and the others are
+/// enqueued in `subnet`'s subnet input queues. Every `install_code` call
+/// executes `INIT_INSTRUCTIONS` instructions, so the first one keeps executing
+/// for long enough to observe this state.
 ///
 /// Every subnet message this test made before `U1`'s calls (creating and
 /// installing canisters, setting their controller) was waited for, so the subnet
 /// queues hold nothing but those calls by the time they are inducted.
 async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &Logger) {
-    let expected = INSTALL_CODE_TARGETS.len() as f64;
+    let expected_queued = (INSTALL_CODE_TARGETS.len() - 1) as f64;
     let node_ips: Vec<_> = subnet.nodes().map(|node| node.get_ip_addr()).collect();
     retry_with_msg_async!(
         format!(
@@ -609,19 +611,29 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
                 ],
             )
             .await?;
-            // Sum the phases on each replica before taking the minimum: a
-            // request may still be queued on one replica and executing on another.
-            let inducted = min_sum_across_replicas(&metrics, &node_ips, |name, labels| {
-                (name == METRIC_SUBNET_INPUT_QUEUE_MESSAGES
-                    && labels.get("kind").is_some_and(|kind| kind == "canister"))
-                    || (name == METRIC_SUBNET_CALL_CONTEXTS
-                        && labels
-                            .get("type")
-                            .is_some_and(|ty| ty == LABEL_INSTALL_CODE))
-            })
+            let queued = min_across_replicas(
+                &metrics,
+                METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
+                |labels| labels.get("kind").is_some_and(|kind| kind == "canister"),
+                &node_ips,
+            )
             .unwrap_or(0.0);
-            if inducted < expected {
-                bail!("at least {inducted} request(s) inducted per replica; expected {expected}");
+            let executing = min_across_replicas(
+                &metrics,
+                METRIC_SUBNET_CALL_CONTEXTS,
+                |labels| {
+                    labels
+                        .get("type")
+                        .is_some_and(|ty| ty == LABEL_INSTALL_CODE)
+                },
+                &node_ips,
+            )
+            .unwrap_or(0.0);
+            if queued < expected_queued || executing < 1.0 {
+                bail!(
+                    "at least {queued} request(s) enqueued and {executing} executing per \
+                     replica; expected {expected_queued} enqueued and 1 executing"
+                );
             }
             Ok(())
         }

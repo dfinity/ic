@@ -74,9 +74,6 @@ pub async fn fetch_metrics(node_ips: &[IpAddr], metrics: &[&str]) -> Result<Metr
 }
 
 async fn fetch_node_metrics(ip: &IpAddr) -> Result<String, String> {
-    // The timeout covers reading the body too: `reqwest::get` completes as soon
-    // as the response headers arrive, and a node stalling after that would
-    // otherwise keep `fetch_metrics` from ever returning.
     let response = tokio::time::timeout(REQUEST_TIMEOUT, async {
         reqwest::get(format!("http://{}", SocketAddr::new(*ip, 9090)))
             .await?
@@ -172,31 +169,6 @@ pub fn min_across_replicas(
     minima?.into_iter().reduce(f64::min)
 }
 
-/// Sums the selected series separately for each replica, then returns the
-/// smallest total. Missing series contribute zero; an empty replica list
-/// returns `None`. This preserves totals when replicas observe items in
-/// different phases (e.g. queued on one replica and executing on another).
-pub fn min_sum_across_replicas(
-    metrics: &Metrics,
-    replicas: &[IpAddr],
-    series_match: impl Fn(&str, &Labels) -> bool,
-) -> Option<f64> {
-    let series: Vec<_> = metrics
-        .iter()
-        .filter(|((name, labels), _)| series_match(name, labels))
-        .map(|(_, values)| values)
-        .collect();
-    replicas
-        .iter()
-        .map(|ip| {
-            series
-                .iter()
-                .filter_map(|values| values.get(ip))
-                .sum::<f64>()
-        })
-        .reduce(f64::min)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,35 +199,6 @@ mod tests {
             Some(5.0)
         );
         assert_eq!(min_across_replicas(&metrics, "m", |_| true, &[]), None);
-    }
-
-    #[test]
-    fn sums_phases_before_taking_minimum() {
-        let metrics = Metrics::from([
-            (
-                series("queued", &[("kind", "canister")]),
-                values(&[(1, 5.0), (2, 4.0)]),
-            ),
-            // A missing executing series on node 1 contributes zero.
-            (series("executing", &[]), values(&[(2, 1.0)])),
-            (
-                series("queued", &[("kind", "ingress")]),
-                values(&[(1, 100.0), (2, 100.0)]),
-            ),
-        ]);
-        let selected = |name: &str, labels: &Labels| {
-            name == "executing"
-                || (name == "queued" && labels.get("kind").is_some_and(|kind| kind == "canister"))
-        };
-        assert_eq!(
-            min_sum_across_replicas(&metrics, &[ip(1), ip(2)], selected),
-            Some(5.0)
-        );
-        assert_eq!(
-            min_sum_across_replicas(&metrics, &[ip(1), ip(2), ip(3)], selected),
-            Some(0.0)
-        );
-        assert_eq!(min_sum_across_replicas(&metrics, &[], selected), None);
     }
 
     fn series(metric: &str, labels: &[(&str, &str)]) -> (String, Labels) {
