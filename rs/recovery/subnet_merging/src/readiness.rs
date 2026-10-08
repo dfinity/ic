@@ -64,6 +64,8 @@ pub enum ReadinessError {
     NoNodes(SubnetId),
     /// A node of the subnet could not be scraped.
     Scrape(SubnetId, ScrapeError),
+    /// A node of the subnet does not report a metric that it always exports.
+    MissingMetric(SubnetId, IpAddr, &'static str),
 }
 
 impl fmt::Display for ReadinessError {
@@ -71,6 +73,12 @@ impl fmt::Display for ReadinessError {
         match self {
             Self::NoNodes(subnet_id) => write!(f, "subnet {subnet_id} has no node to scrape"),
             Self::Scrape(subnet_id, err) => write!(f, "subnet {subnet_id}: {err}"),
+            Self::MissingMetric(subnet_id, ip, metric) => {
+                write!(
+                    f,
+                    "subnet {subnet_id}: node {ip} does not report `{metric}`"
+                )
+            }
         }
     }
 }
@@ -78,7 +86,7 @@ impl fmt::Display for ReadinessError {
 impl std::error::Error for ReadinessError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::NoNodes(_) => None,
+            Self::NoNodes(_) | Self::MissingMetric(..) => None,
             Self::Scrape(_, err) => Some(err),
         }
     }
@@ -91,12 +99,13 @@ impl std::error::Error for ReadinessError {
 /// Every term has to hold on every single replica, as a replica that lags
 /// behind still holds what the others have already processed: the registry
 /// version is the minimum across all replicas, and every other term is the
-/// maximum across the replicas reporting the respective series. A replica that
-/// does not report its registry version reads as zero.
+/// maximum across the replicas reporting the respective series.
 /// Fails if any node of any subnet (the cooling down one included) cannot be
-/// scraped, rather than evaluating the terms on partial data: most terms
-/// compare against zero, which missing data would satisfy. A series that a
-/// reachable node does not report reads as zero.
+/// scraped or does not report any series of one of the metrics, rather than
+/// evaluating the terms on partial data: most terms compare against zero, which
+/// missing data would satisfy. `METRIC_STREAM_MESSAGES` only has a series per
+/// existing stream, so a missing series of it for a particular remote subnet
+/// reads as zero.
 pub async fn evaluate_merge_readiness(
     subnets: &SubnetNodeIps,
     source_subnet_id: SubnetId,
@@ -135,8 +144,6 @@ pub async fn evaluate_merge_readiness(
             )
             .await?
         };
-        // A replica that does not report its registry version reads as zero,
-        // so that the term fails closed until every replica reports it.
         let version = metrics_helper::min_across_replicas(
             &metrics,
             METRIC_REGISTRY_VERSION,
@@ -267,18 +274,30 @@ pub async fn evaluate_merge_readiness(
     ])
 }
 
-/// Fetches the given metrics from all nodes of `subnet_id`.
+/// Fetches the given metrics from all nodes of `subnet_id`, and checks that
+/// every node reports some series of every one of them.
 async fn subnet_metrics(
     subnets: &SubnetNodeIps,
     subnet_id: SubnetId,
-    metrics: &[&str],
+    metrics: &[&'static str],
 ) -> Result<Metrics, ReadinessError> {
     let node_ips = match subnets.get(&subnet_id) {
         Some(node_ips) if !node_ips.is_empty() => node_ips.as_slice(),
         _ => return Err(ReadinessError::NoNodes(subnet_id)),
     };
 
-    metrics_helper::fetch_metrics(node_ips, metrics)
+    let fetched = metrics_helper::fetch_metrics(node_ips, metrics)
         .await
-        .map_err(|err| ReadinessError::Scrape(subnet_id, err))
+        .map_err(|err| ReadinessError::Scrape(subnet_id, err))?;
+    for &metric in metrics {
+        for &ip in node_ips {
+            if !metrics_helper::matching_series(&fetched, metric, |_| true)
+                .iter()
+                .any(|values| values.contains_key(&ip))
+            {
+                return Err(ReadinessError::MissingMetric(subnet_id, ip, metric));
+            }
+        }
+    }
+    Ok(fetched)
 }
