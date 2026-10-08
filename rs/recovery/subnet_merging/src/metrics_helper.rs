@@ -144,8 +144,7 @@ pub fn max_across_replicas(
 
 /// The smallest value any of the given replicas reports for any series of
 /// `metric` whose labels match `labels_match`. A replica that reports no such
-/// series reads as zero, and so does an empty `replicas`: multiple series
-/// reported by one node cannot stand in for another node.
+/// series reads as zero, and so does an empty `replicas`.
 pub fn min_across_replicas(
     metrics: &Metrics,
     metric: &str,
