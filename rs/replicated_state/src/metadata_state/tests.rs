@@ -2851,11 +2851,11 @@ fn consumed_cycles_total_calculates_the_right_amount() {
 
 /// The `replicated_state_consumed_cycles_since_replica_started` gauge is set in
 /// `ReplicatedStateMetrics::observe` from
-/// [`SubnetMetrics::consumed_cycles_total_including_canisters`]. This test
+/// [`SubnetMetrics::consumed_cycles_total_including_canisters_monotonic`]. This test
 /// exercises every subnet-level use case that contributes to the total, so that
 /// omitting any of them (as the `SchnorrOutcalls`/`VetKd`/`DroppedMessages` use
 /// cases once were) would change the reported value and fail the assertion, plus
-/// the canisters' part of the total. Distinct powers of two are used so that a
+/// the canisters' (monotonic) part of the total. Distinct powers of two are used so that a
 /// missing contribution is always detectable in the total.
 #[test]
 fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
@@ -2896,8 +2896,8 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         consumed_cycles_by_use_case,
         ..Default::default()
     };
-    // The canisters' monotonic part only feeds the monotonic total, never the
-    // gauge.
+    // The canisters' non-monotonic part only feeds the non-monotonic total, never
+    // the gauge.
     subnet_metrics.refresh_consumed_cycles(NominalCycles::new(64), NominalCycles::new(128));
 
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
@@ -2913,7 +2913,7 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
     );
 
     // Deleted canisters (1) + ECDSA (2) + HTTP (4) + Schnorr (8) + VetKd (16)
-    // + dropped messages (32) + the canisters' part (64) = 127. The
+    // + dropped messages (32) + the canisters' monotonic part (128) = 191. The
     // canister-level use cases inserted into the map above (each worth 1024)
     // must not appear in the total.
     let gauge = fetch_gauge(
@@ -2921,16 +2921,16 @@ fn consumed_cycles_gauge_accounts_for_all_subnet_level_use_cases() {
         "replicated_state_consumed_cycles_since_replica_started",
     )
     .unwrap();
-    assert_eq!(gauge, 127.0);
+    assert_eq!(gauge, 191.0);
 
-    // The monotonic total shares the subnet-level part (63) but adds the
-    // canisters' monotonic part (128) instead.
+    // The non-monotonic total shares the subnet-level part (63) but adds the
+    // canisters' non-monotonic part (64) instead.
     assert_eq!(
         state
             .metadata
             .subnet_metrics
-            .consumed_cycles_total_including_canisters_monotonic(),
-        NominalCycles::new(191)
+            .consumed_cycles_total_including_canisters(),
+        NominalCycles::new(127)
     );
 }
 
