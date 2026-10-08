@@ -48,17 +48,12 @@ build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
 # The ic-os container filesystems are built in a KVM microVM (IcosContainerVmBuild), which needs
-# only /dev/kvm, so like all other ic-os image actions they run sandboxed or remotely. The podman
-# executor (--config=icos_podman, and always for the local-base-* images) runs rootless
-# 'podman build' instead, which needs to create user namespaces, so those actions run locally,
-# outside the sandbox (see ICOS_CONTAINER_MNEMONICS in toolchains/sysimage/toolchain.bzl).
-# IcosContainerBuild outputs are still cached; the base image is only cached locally
-# (no-remote-cache), as it's not reproducible.
+# only /dev/kvm, so like all other ic-os image actions they run sandboxed or remotely. Only the
+# local-base-* images build their base image from scratch with rootless 'podman build', which
+# needs to create user namespaces and the network, so that action runs locally, outside the
+# sandbox (see ICOS_CONTAINER_MNEMONICS in toolchains/sysimage/toolchain.bzl). It is only cached
+# locally (no-remote-cache), as it's not reproducible.
 build --strategy=IcosContainerBaseImage=local
-build --strategy=IcosContainerBuild=local
-
-# Fallback: build the ic-os container filesystems with rootless podman on the host, as before.
-build:icos_podman --//toolchains/sysimage:container_executor=podman
 
 # Escape hatch: run all ic-os image actions on the host, unsandboxed, as before. Use it with
 # `--config=icos_host` on a machine or executor where they fail sandboxed or remotely. The progress

@@ -11,7 +11,7 @@ as build rules.
 
 The following build tools are provided:
 
-* +build_container_filesystem_tar.py+: Build a container image and convert to tar file
+* +build_container_filesystem_vm.py+: Build a Dockerfile on a base image in a KVM microVM and export the filesystem as a tar file
 
 * +build_vfat_image.py+: Build vfat fs image from tar file
 

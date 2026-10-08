@@ -15,7 +15,7 @@ load("//bazel:defs.bzl", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "oci_rootfs", "upgrade_image")
 
 def icos_build(
         name,
@@ -116,7 +116,7 @@ def icos_build(
     # -------------------- Build the container image --------------------
 
     if build_local_base_image:
-        base_image_tag = "base-image-" + name  # Reuse for build_container_filesystem_tar
+        base_image_tag = "base-image-" + name
         package_files_arg = "PACKAGE_FILES=packages.common"
         if "dev" in mode:
             package_files_arg += " packages.dev"
@@ -131,31 +131,27 @@ def icos_build(
             tags = ["manual"],
         )
 
-        build_container_filesystem(
-            name = "rootfs-tree.tar",
-            context_files = [image_deps["container_context_files"]],
-            component_files = image_deps["component_files"],
-            dockerfile = image_deps["dockerfile"],
-            build_args = image_deps["build_args"],
-            file_build_arg = image_deps["file_build_arg"],
-            base_image_tar_file = ":base_image.tar",
-            base_image_tar_file_tag = base_image_tag,
+        oci_rootfs(
+            name = "base_image_rootfs",
+            layout = ":base_image.tar",
             target_compatible_with = ["@platforms//os:linux"],
             tags = ["manual"],
         )
-    else:
-        build_container_filesystem(
-            name = "rootfs-tree.tar",
-            context_files = [image_deps["container_context_files"]],
-            component_files = image_deps["component_files"],
-            dockerfile = image_deps["dockerfile"],
-            build_args = image_deps["build_args"],
-            file_build_arg = image_deps["file_build_arg"],
-            base_rootfs = image_deps["base_rootfs"],
-            base_image_ref = image_deps["base_image_ref"],
-            target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual"],
-        )
+
+    # The Dockerfile's FROM names base_image_ref; the local-base-* images replace that base image
+    # with the one built above.
+    build_container_filesystem(
+        name = "rootfs-tree.tar",
+        context_files = [image_deps["container_context_files"]],
+        component_files = image_deps["component_files"],
+        dockerfile = image_deps["dockerfile"],
+        build_args = image_deps["build_args"],
+        file_build_arg = image_deps["file_build_arg"],
+        base_rootfs = ":base_image_rootfs" if build_local_base_image else image_deps["base_rootfs"],
+        base_image_ref = image_deps["base_image_ref"],
+        target_compatible_with = ["@platforms//os:linux"],
+        tags = ["manual"],
+    )
 
     # Extract SElinux file_contexts to use later when building ext4 filesystems
     tar_extract(

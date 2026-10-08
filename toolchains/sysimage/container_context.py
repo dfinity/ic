@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 #
-# Assembling the build context of the IC-OS container builds, shared by the
-# podman (build_container_filesystem_tar.py) and microVM
-# (build_container_filesystem_vm.py) builders so that both see the same files.
+# Assembling the build context of the IC-OS container builds
+# (build_container_filesystem_vm.py).
 from __future__ import annotations
 
 import os

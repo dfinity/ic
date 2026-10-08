@@ -1,4 +1,3 @@
-load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@python_deps//:requirements.bzl", "requirement")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
@@ -6,22 +5,6 @@ load(":base_images.bzl", "ICOS_BASE_IMAGES")
 load(":toolchain.bzl", "oci_rootfs")
 
 package(default_visibility = ["//visibility:public"])
-
-# How the IC-OS container filesystems (rootfs-tree.tar, the bootloader tree)
-# are built from their Dockerfiles:
-# - "vm": the steps run in a KVM microVM (build_container_filesystem_vm.py).
-#   Needs only /dev/kvm, so it runs sandboxed and remotely.
-# - "podman": rootless `podman build` on the host (build_container_filesystem_tar.py),
-#   which needs user namespaces. Select it with --config=icos_podman.
-# The local-base-* images always use podman, which builds their base image.
-string_flag(
-    name = "container_executor",
-    build_setting_default = "vm",
-    values = [
-        "podman",
-        "vm",
-    ],
-)
 
 # The base images, flattened into root filesystem tars, e.g.
 # :icos_base_guestos_prod_rootfs. See base_images.bzl.
@@ -52,7 +35,8 @@ tar -xOf "$$rootfs" "$$kernels" > $@
     target_compatible_with = ["@platforms//os:linux"],
 )
 
-# Process wrapper for the ic-os build commands that run podman.
+# Process wrapper for the ic-os build commands that run podman (the local-base-*
+# base images).
 sh_binary(
     name = "proc_wrapper",
     srcs = ["proc_wrapper.sh"],
@@ -126,15 +110,6 @@ py_binary(
         requirement("loguru"),
         requirement("invoke"),
         requirement("simple_parsing"),
-    ],
-)
-
-py_binary(
-    name = "build_container_filesystem_tar",
-    srcs = ["build_container_filesystem_tar.py"],
-    deps = [
-        ":container_context",
-        requirement("invoke"),
     ],
 )
 

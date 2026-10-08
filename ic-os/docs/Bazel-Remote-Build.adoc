@@ -57,26 +57,25 @@ boot file extraction, launch measurements, `test-img`
 |sandboxed, remotely; cached
 
 |`local-base-*` base images (manual, local only)
-|rootless `podman build` + `apt install`; not reproducible
+|rootless `podman build` + `apt install`; not reproducible. Their container
+filesystems are built in the microVM like the others
 |on the host; not remotely cached
 |===
 
-The privileged fallback for the container filesystems is still available:
-`--config=icos_podman` builds them with rootless `podman build` on the host, as
-before, and `--config=icos_host` runs every IC-OS action on the host,
-unsandboxed.
+There is no podman fallback for the container filesystems.
+`--config=icos_host` runs every IC-OS action on the host, unsandboxed.
 
 == Phase 1: cache everything, run unprivileged steps anywhere
 
 * Each sysimage action has a mnemonic (`IcosExt4Image`, `IcosDiskImage`, ...).
-  Only the podman actions, `IcosContainerBaseImage` and `IcosContainerBuild`
-  (see `ICOS_CONTAINER_MNEMONICS` in `toolchains/sysimage/toolchain.bzl`), are
+  Only the podman action, `IcosContainerBaseImage` (the `local-base-*` base
+  images, see `ICOS_CONTAINER_MNEMONICS` in `toolchains/sysimage/toolchain.bzl`), is
   forced `local`, via `--strategy=<mnemonic>=local`. Everything else follows
   the normal spawn strategy: sandboxed locally, `remote` on RBE.
   `IcosContainerBaseImage` keeps `no-remote-cache` because its `apt install`
   isn't reproducible.
 * The podman wrapper (`proc_wrapper.sh`, which needs `podman unshare` or `sudo`
-  to clean up) is used only by the podman actions. All other actions use
+  to clean up) is used only by the podman action. All other actions use
   `tmpdir_wrapper.sh`, which manages a private `TMPDIR` in the action's
   working directory and sets `FAKEROOTDONTTRYCHOWN` (see the notes below).
 * `no-cache` is removed from all image targets, including the uncompressed
@@ -111,9 +110,7 @@ unsandboxed.
   filesystems (which were already cacheable) and the binaries in the images
   come from the cache like all other release artifacts, except SetupOS's
   container filesystem: it contains the commit time (`/commit-time`), so it is
-  rebuilt for every stamped commit, which on the `dind-large` runners means
-  TCG. Genrules can't be
-  singled out by mnemonic, so the few small IC-OS genrules (bootloader tree
+  rebuilt for every stamped commit. Genrules can't be singled out by mnemonic, so the few small IC-OS genrules (bootloader tree
   post-processing, verity signing, launch measurements) use the cache too,
   keyed by the digests of their inputs. `build-determinism` cross-checks the
   result.
@@ -151,7 +148,7 @@ them, including any `bazel query` over `//...`, like `ci/scripts/targets.py`;
 on DFINITY CI they come through the `bazel-remote` downloader, on Namespace
 from the cache volume's repository cache. `rules_oci` also copies each image's
 layers into a directory in `bazel-out` (a local, uncached action) before they
-are flattened, and `--config=icos_podman` still fetches them. A GuestOS base
+are flattened. A GuestOS base
 image update rebuilds all container filesystems, since its kernel boots every
 build VM.
 
@@ -188,7 +185,7 @@ run inside a Bazel sandbox or as an RBE action without a privileged,
 docker-in-docker worker. Output depends on the daemon/BuildKit version.
 *Rejected.*
 
-|Rootless podman (previous approach, now `--config=icos_podman`)
+|Rootless podman (previous approach, removed)
 |No daemon. Deterministic (`--timestamp 0`, tar repack).
 |Needs unprivileged user namespaces plus setuid `newuidmap`/`newgidmap` and
 `/etc/subuid` ranges. Bazel's linux-sandbox and many RBE isolations
@@ -237,15 +234,18 @@ How it works (`toolchains/sysimage/`):
 . The bootloader tree (`//ic-os/bootloader:build-bootloader-tree`) is built the
   same way from `ic-os/bootloader/context/Dockerfile`.
 
-`//toolchains/sysimage:container_executor` selects the executor: `vm` (the
-default) or `podman` (`--config=icos_podman`). The `local-base-*` images, which
-bring their own podman-built base image, always use podman.
+The microVM is the only executor. The `local-base-*` images still build their
+base image from scratch with rootless `podman build` (`IcosContainerBaseImage`,
+whose `apt install` needs the network), saved as an OCI archive. `oci_rootfs.py`
+flattens it, and their container filesystem is built in the microVM on top of
+it, in place of the base image that the Dockerfile's `FROM` names (as
+`podman build --from` did before).
 
 The microVM produces *byte-identical* container filesystems to podman: on the
-devenv, `rootfs-tree.tar` of GuestOS, HostOS and SetupOS (dev and prod) and the
-bootloader tree have the same SHA-256 with both executors, and so do all images
-built from them. So switching the executor changes no image and no launch
-measurement.
+devenv, before the podman executor was removed, `rootfs-tree.tar` of GuestOS,
+HostOS and SetupOS (dev and prod) and the bootloader tree had the same SHA-256
+with both executors, and so did all images built from them. So the switch
+changes no image and no launch measurement.
 
 [[kvm-availability]]
 *KVM availability.* `/dev/kvm` is available in all three environments:
@@ -261,12 +261,14 @@ measurement.
   `--device /dev/kvm` under Docker in `ci/container/container-run.sh`), and
   `ci/container/init.sh` makes it writable. Bazel's linux-sandbox gives
   sandboxed actions access to it.
-* DFINITY's `dind-large` GitHub runners (`ci-main.yml`) have *no* `/dev/kvm`,
-  even in their privileged containers. There the build VM falls back to QEMU's
-  TCG emulation and prints a warning: 4-8 minutes per container filesystem
-  instead of about one. That only matters when a container filesystem isn't in
-  the cache, e.g. in the uncached `build-ic` job, which took 19-22 instead of
-  16 minutes on PR #11784.
+* DFINITY's `dind-large` GitHub runners (`ci-main.yml`): they have `/dev/kvm`
+  (`local-system-tests.yml` runs the `_local` system tests there), and the job
+  containers get it (`--privileged`, or `--device /dev/kvm` in `build-ic`). But
+  it's only writable for the container user after `ci/container/init.sh`, the
+  dev container's entrypoint, which GitHub's container jobs skip, so the jobs
+  that build IC-OS images (`bazel-test-all`, `build-ic`) run it before Bazel.
+  Without it, the build VMs fell back to TCG: 99-481 s per container
+  filesystem instead of 27-201 s.
 
 Without KVM the build falls back to TCG and prints a warning. The VM gets 4
 CPUs and 4 GiB of memory, which its action reserves from Bazel's local
@@ -293,7 +295,7 @@ resources, and is killed after an hour.
 |In the `ic-build` container, with the `bazel-remote` cache from
 `bazel/conf/.bazelrc.internal`. PR jobs upload results.
 |Sandboxed (`linux-sandbox`) on the runner; results cached in `bazel-remote`.
-The build VM uses TCG: the runners have no `/dev/kvm`
+The build VM uses KVM (`ci/container/init.sh` makes `/dev/kvm` writable)
 
 |Namespace (`ci-rbe-evaluation.yml`, `.github/actions/bazel-namespace`)
 |`--noworkspace_rc` with `.bazelrc.build`, the `nsc` endpoints and
@@ -339,9 +341,8 @@ Notes:
   `linux-sandbox` can't create namespaces there (e.g. Ubuntu's
   `apparmor_restrict_unprivileged_userns`), Bazel uses its process-wrapper
   sandbox instead.
-* *Fallbacks:* `--config=icos_podman` builds the container filesystems with
-  podman on the host, as before (it needs a privileged container in CI).
-  `--config=icos_host` runs every IC-OS action on the host, unsandboxed. If
+* *Fallback:* `--config=icos_host` runs every IC-OS action on the host,
+  unsandboxed. If
   `fakeroot`'s SysV IPC were a problem somewhere, its TCP daemon
   (`fakeroot --faked faked-tcp`, shipped in the same package) avoids it.
 
@@ -375,7 +376,7 @@ On an x86_64 devenv in the `ic-dev` container:
   `rootfs-tree.tar`, hostlvm, ESP, `test-img`).
 * Outputs that don't depend on `partition_tools` are byte-identical to
   CI-built master.
-* microVM vs podman: byte-identical `rootfs-tree.tar` of GuestOS, HostOS and
+* microVM vs podman (while both executors existed): byte-identical `rootfs-tree.tar` of GuestOS, HostOS and
   SetupOS, dev and prod, and bootloader tree, and byte-identical images built
   from them (SetupOS disk image, GuestOS/HostOS update images, launch
   measurements, partitions, `test-img`).
@@ -386,8 +387,9 @@ On an x86_64 devenv in the `ic-dev` container:
   `remote`ly on the workers, and all tests passed; the RBE driver ran
   unprivileged.
 * `dind-large` CI runners (`ci-main.yml`): `build-ic` built all IC-OS images
-  unprivileged, the build VMs with TCG (99-481 s each), and `build-determinism`
-  found no mismatches. A CI-built root partition has the same root directory
+  unprivileged, the build VMs with KVM (`clocksource: kvm-clock`, 27-201 s
+  each; Bazel's elapsed time went from 978 s with TCG to 792 s), and
+  `build-determinism` found no mismatches. A CI-built root partition has the same root directory
   mode (0755) as one built on the devenv.
 * A build with `--sandbox_base` on a setgid directory is byte-identical to a
   normal one.
@@ -397,6 +399,3 @@ On an x86_64 devenv in the `ic-dev` container:
 * Namespace RBE workers expose `/dev/kvm` today (see <<kvm-availability>>).
   Confirm with the infra team that this is a supported property of the
   workers rather than an incidental one.
-* Expose `/dev/kvm` on the `dind-large` runners (and pass it into the job
-  containers with `--device /dev/kvm`), so that uncached container filesystem
-  builds there don't need TCG. Less important once CI runs on Namespace.

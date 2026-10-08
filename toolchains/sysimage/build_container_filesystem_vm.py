@@ -16,10 +16,10 @@
 #    /proc, /sys, /dev and /run like a container engine would, runs the COPY and
 #    RUN steps (planned by dockerfile.py) as root, and writes the resulting
 #    filesystem as a tar to a second, raw disk.
-# 3. The tar is read back and normalized exactly like the podman export in
-#    build_container_filesystem_tar.py (no /run, mtime 0, no user/group names).
+# 3. The tar is read back and normalized exactly like the podman export that
+#    this replaces (no /run, mtime 0, no user/group names).
 #
-# For the IC-OS Dockerfiles the result is byte-identical to podman's. Differences
+# For the IC-OS Dockerfiles the result is byte-identical to `podman build`'s. Differences
 # that they don't depend on: the steps have no network; /etc/hosts, hostname
 # and resolv.conf are regular files (podman bind-mounts the host's during RUN,
 # so writes to them don't persist there); `uname -r`, the CPU count and the
@@ -270,7 +270,7 @@ def normalize(name: str) -> str:
 
 
 def export_filesystem(output_disk: Path, destination_tar_filename: str):
-    """Normalize the VM's tar exactly like build_container_filesystem_tar.export_container_filesystem."""
+    """Normalize the VM's tar like the podman export did: no /run contents, mtime 0, no user/group names."""
     with tarfile.open(output_disk, "r:") as source, tarfile.open(
         destination_tar_filename, "w", format=tarfile.GNU_FORMAT
     ) as destination:

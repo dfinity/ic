@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from toolchains.sysimage.oci_rootfs import flatten
+from toolchains.sysimage.oci_rootfs import flatten, flatten_layout_or_archive
 
 
 def layer(entries) -> bytes:
@@ -159,6 +159,21 @@ class FlattenTest(unittest.TestCase):
             [layer([("d", "dir", None), ("d/f", "file", "f"), ("e", "file", "e")]), layer([(".wh.d", "file", "")])]
         )
         self.assertEqual(names, ["e"])
+
+
+class ArchiveTest(unittest.TestCase):
+    def test_an_oci_archive_flattens_like_its_layout(self):
+        tmp = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        write_layout(tmp / "layout", [layer([("etc", "dir", None), ("etc/a", "file", "a")])], ["PATH=/bin"])
+        with tarfile.open(tmp / "image.tar", "w") as archive:
+            for path in sorted((tmp / "layout").rglob("*")):
+                archive.add(path, arcname=str(path.relative_to(tmp / "layout")), recursive=False)
+        flatten_layout_or_archive(tmp / "layout", "linux/amd64", tmp / "from-layout.tar", tmp / "env1.json")
+        flatten_layout_or_archive(tmp / "image.tar", "linux/amd64", tmp / "from-archive.tar", tmp / "env2.json")
+        self.assertEqual((tmp / "from-layout.tar").read_bytes(), (tmp / "from-archive.tar").read_bytes())
+        self.assertEqual((tmp / "env1.json").read_text(), (tmp / "env2.json").read_text())
+        with tarfile.open(tmp / "from-archive.tar") as tar:
+            self.assertEqual(tar.getnames(), ["etc", "etc/a"])
 
 
 if __name__ == "__main__":

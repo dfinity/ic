@@ -238,7 +238,7 @@ jobs:
 
       - name: Prepare the scratch directory for the ic-os image builds
         # Actions that run locally in this container (the ic-os image actions run remotely,
-        # except under --config=icos_host or icos_podman) can write several GB of scratch under
+        # except under --config=icos_host) can write several GB of scratch under
         # $TMPDIR, by default /tmp: this container's
         # overlay root, a containerd snapshot on the Namespace cache volume which risks
         # filling up if the ic-os build writes its temporary scratch there.

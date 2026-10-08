@@ -7,7 +7,8 @@
 # the opaque marker `.wh..wh..opq`). The output lists the entries sorted by
 # name, with the owners, modes and link targets of the image, mtime 0 and no
 # user/group names or extended attributes, which is what the IC-OS image builds
-# keep of a container filesystem (see build_container_filesystem_tar.py).
+# keep of a container filesystem (see export_filesystem in
+# build_container_filesystem_vm.py).
 #
 # The image config's environment (`Env`, e.g. PATH and SOURCE_DATE_EPOCH) is
 # written as JSON to --env-output, for running the Dockerfile steps on top.
@@ -205,14 +206,25 @@ def flatten(layout_dir: Path, platform: str, output: Path, env_output: Path):
                 layer.close()
 
 
+def flatten_layout_or_archive(layout: Path, platform: str, output: Path, env_output: Path):
+    """Like flatten, but layout can also be an OCI archive (`podman image save --format oci-archive`)."""
+    if layout.is_dir():
+        flatten(layout, platform, output, env_output)
+        return
+    # An OCI archive is a tar of a layout.
+    with tempfile.TemporaryDirectory() as tmp, tarfile.open(layout) as archive:
+        archive.extractall(tmp, filter="data")
+        flatten(Path(tmp), platform, output, env_output)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--layout", required=True, type=Path, help="OCI image layout directory")
+    parser.add_argument("--layout", required=True, type=Path, help="OCI image layout directory, or an OCI archive")
     parser.add_argument("--platform", default="linux/amd64")
     parser.add_argument("--output", required=True, type=Path, help="Root filesystem tar to write")
     parser.add_argument("--env-output", required=True, type=Path, help="JSON list of the image's environment")
     args = parser.parse_args()
-    flatten(args.layout, args.platform, args.output, args.env_output)
+    flatten_layout_or_archive(args.layout, args.platform, args.output, args.env_output)
 
 
 if __name__ == "__main__":

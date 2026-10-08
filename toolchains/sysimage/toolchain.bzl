@@ -2,13 +2,12 @@
 Tools for building IC OS image.
 """
 
-load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
-
-# Mnemonics of the actions that run `podman build`. Rootless podman needs to
-# create user namespaces, so bazel/conf/.bazelrc.build forces these (and only
-# these) to run locally, outside the sandbox. All other actions of this file
-# only operate on plain image files and run sandboxed or remotely.
-ICOS_CONTAINER_MNEMONICS = ["IcosContainerBaseImage", "IcosContainerBuild"]
+# Mnemonics of the actions that run `podman build`: only the from-scratch base
+# image builds of the local-base-* images. Rootless podman needs to create user
+# namespaces, so bazel/conf/.bazelrc.build forces these (and only these) to run
+# locally, outside the sandbox. All other actions of this file only operate on
+# plain image files (or boot a microVM) and run sandboxed or remotely.
+ICOS_CONTAINER_MNEMONICS = ["IcosContainerBaseImage"]
 
 def _run_with_wrapper(ctx, wrapper, executable, arguments, tools, execution_requirements, inputs, **kwargs):
     ctx.actions.run(
@@ -161,7 +160,8 @@ oci_rootfs = _icos_build_rule(
         "layout": attr.label(
             allow_single_file = True,
             mandatory = True,
-            doc = "The OCI image layout directory.",
+            doc = "The OCI image layout directory (e.g. from oci_pull), or an OCI archive of one " +
+                  "(from build_container_base_image).",
         ),
         "_tool": attr.label(
             default = "//toolchains/sysimage:oci_rootfs",
@@ -237,63 +237,14 @@ def _build_container_filesystem_vm(ctx, output_file):
     )
 
 def _build_container_filesystem_impl(ctx):
-    args = []
-    inputs = []
-    outputs = []
-
     # Output file is the name given to the target
     output_file = ctx.actions.declare_file(ctx.label.name)
-
-    # The microVM executor needs the base image pulled by Bazel. local-base-*
-    # builds bring their own base image tar, which only podman can load.
-    executor = ctx.attr._executor[BuildSettingInfo].value
-    if executor == "vm" and not ctx.file.base_image_tar_file:
-        if not ctx.attr.base_rootfs or not ctx.file.base_image_ref or not ctx.file.dockerfile:
-            fail("the vm container executor needs dockerfile, base_rootfs and base_image_ref")
-        _build_container_filesystem_vm(ctx, output_file)
-        return [DefaultInfo(files = depset([output_file]))]
-
-    args.extend(["--output", output_file.path])
-    outputs.append(output_file)
-
-    for context_file in ctx.files.context_files:
-        args.extend(["--context-file", context_file.path])
-    inputs.extend(ctx.files.context_files)
-
-    for input_target, install_target in ctx.attr.component_files.items():
-        args.extend(["--component-file", input_target.files.to_list()[0].path + ":" + install_target])
-        inputs.extend(input_target.files.to_list())
-
-    if ctx.file.dockerfile:
-        args.extend(["--dockerfile", ctx.file.dockerfile.path])
-        inputs.append(ctx.file.dockerfile)
-
-    for build_arg in ctx.attr.build_args:
-        args.extend(["--build-arg", build_arg])
-
-    if ctx.attr.file_build_arg:
-        args.extend(["--file-build-arg", ctx.attr.file_build_arg])
-
-    if ctx.file.base_image_tar_file:
-        args.extend(["--base-image-tar-file", ctx.file.base_image_tar_file.path])
-        args.extend(["--base-image-tar-file-tag", ctx.attr.base_image_tar_file_tag])
-        inputs.append(ctx.file.base_image_tar_file)
-
-    _run_with_podman_wrapper(
-        ctx,
-        executable = ctx.executable._tool.path,
-        arguments = args,
-        inputs = inputs,
-        outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run],
-        mnemonic = "IcosContainerBuild",
-        progress_message = "Building container filesystem %{output}",
-    )
-
-    return [DefaultInfo(files = depset(outputs))]
+    _build_container_filesystem_vm(ctx, output_file)
+    return [DefaultInfo(files = depset([output_file]))]
 
 build_container_filesystem = _icos_build_rule(
     implementation = _build_container_filesystem_impl,
+    doc = "Builds a Dockerfile on a base image in a KVM microVM and exports the filesystem as a tar.",
     attrs = {
         "context_files": attr.label_list(
             allow_files = True,
@@ -303,32 +254,27 @@ build_container_filesystem = _icos_build_rule(
         ),
         "dockerfile": attr.label(
             allow_single_file = True,
+            mandatory = True,
         ),
         "build_args": attr.string_list(),
         "file_build_arg": attr.string(),
-        "base_image_tar_file": attr.label(
-            allow_single_file = True,
-        ),
-        "base_image_tar_file_tag": attr.string(),
         "base_rootfs": attr.label(
             providers = [IcosBaseRootfsInfo],
-            doc = "The flattened base image (oci_rootfs), for the vm executor.",
+            mandatory = True,
+            doc = "The flattened base image (oci_rootfs) that the Dockerfile builds on.",
         ),
         "base_image_ref": attr.label(
             allow_single_file = True,
-            doc = "The docker-base* file that base_rootfs was pulled from, for the vm executor.",
-        ),
-        "_tool": attr.label(
-            default = "//toolchains/sysimage:build_container_filesystem_tar",
-            executable = True,
-            cfg = "exec",
+            mandatory = True,
+            doc = "The docker-base* file that the Dockerfile's FROM names. base_rootfs is that " +
+                  "image, except for the local-base-* images, whose base_rootfs replaces it " +
+                  "(like `podman build --from`).",
         ),
         "_vm_tool": attr.label(
             default = "//toolchains/sysimage:build_container_filesystem_vm",
             executable = True,
             cfg = "exec",
         ),
-        "_executor": attr.label(default = "//toolchains/sysimage:container_executor"),
         # In the target configuration, to share the flattened GuestOS base
         # image with the GuestOS builds.
         "_kernel": attr.label(

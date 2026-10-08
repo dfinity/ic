@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
 # Process wrapper for the ic-os build commands that run podman (the
-# IcosContainerBaseImage and IcosContainerBuild actions of toolchain.bzl, i.e.
-# the podman executor). All other ic-os build actions use tmpdir_wrapper.sh.
+# IcosContainerBaseImage actions of toolchain.bzl, which build the base images
+# of the local-base-* images). All other ic-os build actions use
+# tmpdir_wrapper.sh.
 # Usage:
 # ./proc_wrapper.sh COMMAND
 
