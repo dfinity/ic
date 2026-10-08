@@ -198,8 +198,9 @@ Notes:
   workers, e.g. because `fakeroot` (SysV IPC, `LD_PRELOAD`) doesn't work under
   the worker isolation. If only SysV IPC is the problem, a narrower fix is
   fakeroot's TCP daemon (`fakeroot --faked faked-tcp`, shipped in the same
-  package), which doesn't use SysV message queues. On Namespace it can be appended to the Bazel arguments
-  of `ci-rbe-evaluation.yml` until the workers support these actions.
+  package), which doesn't use SysV message queues. On Namespace,
+  `--config=icos_host` can be appended to the Bazel arguments of
+  `ci-rbe-evaluation.yml` until the workers support these actions.
 
 == Phase 2: KVM vs. Docker for the remaining container step
 
@@ -230,14 +231,12 @@ userns.
 user namespaces. Strong isolation; the build kernel is pinned, so execution is
 deterministic. It works inside the linux-sandbox
 (`--sandbox_add_mount_pair=/dev/kvm`) and remotely, by routing actions with a
-`requires-kvm`-style exec property to KVM-capable workers. CI already uses
-`/dev/kvm` (`ci/container/init.sh`, `container-run.sh` for local system
-tests). Falls back to QEMU TCG (slower, no device needed) on hosts without
-KVM.
+`requires-kvm`-style exec property to KVM-capable workers. All three
+environments already provide `/dev/kvm` (see <<kvm-availability>>). Falls
+back to QEMU TCG (slower, no device needed) on hosts without KVM.
 |The Dockerfile `RUN` steps have to become a script run in the VM (they are
 already plain shell). Each action pays a few seconds of VM boot. Needs a small
-pinned kernel/initramfs as a Bazel input. Needs Namespace to expose
-`/dev/kvm` on (a pool of) RBE workers.
+pinned kernel/initramfs as a Bazel input.
 
 |No execution (pure tar assembly)
 |Fully hermetic. Any executor works.
@@ -245,6 +244,21 @@ pinned kernel/initramfs as a Bazel input. Needs Namespace to expose
 enable` and the SELinux policy build in `prep.sh` have to run inside the
 target. Re-implementing them as Bazel rules is a large, fragile effort.
 |===
+
+[[kvm-availability]]
+*KVM availability.* `/dev/kvm` is already used by CI in all three
+environments:
+
+* DFINITY farm workers support KVM builds.
+* Namespace RBE workers: the `_local` system tests boot QEMU VMs with
+  `-machine q35,accel=kvm` and no TCG fallback
+  (`rs/tests/driver/src/driver/local_backend.rs`), and
+  `ci-rbe-evaluation.yml` runs them remotely on the default workers. On
+  master's run of 2026-10-07 (Kickoff run 37681894278), 208 `_local` tests
+  executed and passed on RBE, with no test executed locally.
+* Locally: the dev container gets `/dev/kvm` (privileged under podman,
+  `--device /dev/kvm` under Docker in `ci/container/container-run.sh`), and
+  `ci/container/init.sh` makes it writable, for the same `_local` tests.
 
 *Recommendation:* a KVM microVM executor for `IcosContainerBuild` and the
 bootloader tree:
@@ -258,8 +272,10 @@ bootloader tree:
 . Boot `qemu-system-x86_64 -enable-kvm -kernel <pinned> -initrd <pinned>`
   with that disk as root and the converted Dockerfile steps as init, then
   export the result with `debugfs rdump`/`dflate`.
-. Tag the action `requires-kvm` and give it a Namespace exec property for a
-  KVM-capable worker pool. Locally, mount `/dev/kvm` into the sandbox.
+. Run the action remotely like the `_local` system tests, which already get
+  `/dev/kvm` on the default Namespace workers; add an exec property only if a
+  dedicated KVM pool becomes necessary. Locally, mount `/dev/kvm` into the
+  sandbox (`--sandbox_add_mount_pair=/dev/kvm`).
 
 Once that lands, nothing in the IC-OS build needs `--privileged` or
 `/tmp/containers`, and the `local` strategy lines can be removed.
@@ -274,9 +290,10 @@ Once that lands, nothing in the IC-OS build needs `--privileged` or
 
 == Open questions
 
-* Can Namespace RBE workers expose `/dev/kvm` (nested virtualization), or do
-  they allow unprivileged user namespaces? This decides between Phase 2 options
-  and needs input from the infra team.
+* Answered: Namespace RBE workers expose `/dev/kvm` (see
+  <<kvm-availability>>), so Phase 2 can use the KVM microVM everywhere. Still
+  open: confirm with the infra team that this is a supported property of the
+  workers rather than an incidental one.
 * How big is the remote CAS growth from Phase 1? Measure on the
   `ci-rbe-evaluation` workflow.
 * Do the image actions work on Namespace workers at all? `fakeroot` needs SysV
