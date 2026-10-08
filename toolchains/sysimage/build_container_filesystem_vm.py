@@ -56,12 +56,12 @@ INIT_SCRIPT = """#!/bin/sh
 # PID 1 of the IC-OS container build VM: run the build steps, write the
 # resulting filesystem to the output disk and power off.
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-# Like a container build, the steps get no input (instead of the console).
-exec < /dev/null
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 # The kernel mounts devtmpfs on /dev itself if it is built with DEVTMPFS_MOUNT.
 grep -q " /dev " /proc/mounts || mount -t devtmpfs devtmpfs /dev
+# Like a container build, the steps get no input (instead of the console).
+exec < /dev/null
 mkdir -p /dev/pts /dev/shm
 mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /dev/shm
@@ -165,7 +165,7 @@ def build_root_disk(
     script = f"""
 set -euo pipefail
 root={shlex.quote(str(staging))}
-mkdir "$root"
+mkdir -m 0755 "$root"
 tar --extract --numeric-owner --same-permissions --file={shlex.quote(str(base_rootfs))} --directory="$root"
 mkdir "$root/{BUILD_DIR}"
 cp -dR --preserve=mode,links {shlex.quote(str(context_dir))} "$root/{BUILD_DIR}/ctx"

@@ -206,6 +206,7 @@ def create_test_img(name, source, **kwargs):
         # executors only have a 1 GB /tmp (#10797).
         cmd = """
             tmpdir="$$(mktemp -d -p "$$PWD")"
+            chmod g-s "$$tmpdir"  # see toolchains/sysimage/tmpdir_wrapper.sh
             trap "rm -rf $$tmpdir" EXIT
             export TMPDIR="$$tmpdir"
             tar -xf $(location """ + source + """) -C $$tmpdir

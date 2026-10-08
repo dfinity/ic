@@ -74,11 +74,12 @@ common --flag_alias=timeout_value=//bazel:timeout_value
 common --flag_alias=hermetic_cc=//bazel:hermetic_cc
 
 common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --stamp'
-# Release (stamped) builds build the IC-OS images from scratch rather than taking them from the
-# remote cache, which PR builds write to, as they did before the images became cacheable. They
-# don't upload them either: their root and boot partitions embed the version, so nothing else
-# could use them. The binaries in the images come from the cache like all other release artifacts.
-build:stamped --modify_execution_info=^Icos.*=+no-remote-cache
+# Release (stamped) builds build the IC-OS partitions and images from scratch rather than taking
+# them from the remote cache, which PR builds write to, as they did before they became cacheable.
+# They don't upload them either: their root and boot partitions embed the version, so nothing else
+# could use them. Like before, the container filesystems (which already were cacheable) and the
+# binaries in the images come from the cache like all other release artifacts.
+build:stamped --modify_execution_info=^Icos(VfatImage|Fat32Image|Ext4Image|DiskImage|LvmImage|UpgradeImage)$=+no-remote-cache
 
 # Configure all tests to retry automatically on failure (up to 3 times)
 # such that we can detect flaky tests ASAP and fix them.

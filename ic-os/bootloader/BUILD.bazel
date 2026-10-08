@@ -47,6 +47,7 @@ genrule(
 set -euo pipefail
 umask 022
 tmpdir="$$(mktemp -d -p "$$PWD")"
+chmod g-s "$$tmpdir"  # see toolchains/sysimage/tmpdir_wrapper.sh
 trap 'rm -rf "$$tmpdir"' EXIT
 tar --strip-components=1 -C "$$tmpdir" -x -f $(location :bootloader-rootfs.tar) build
 tar cf $@ --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "$$tmpdir" boot

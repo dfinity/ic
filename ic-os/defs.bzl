@@ -187,6 +187,7 @@ def icos_build(
 set -euo pipefail
 
 tmpdir=$$(mktemp -d -p "$$PWD")
+chmod g-s "$$tmpdir"  # see toolchains/sysimage/tmpdir_wrapper.sh
 trap 'rm -rf "$$tmpdir"' EXIT
 
 # Extract boot.img from the base GuestOS update image.
@@ -315,6 +316,7 @@ FAKEROOTDONTTRYCHOWN=1 fakeroot -- sh -ec '
             # is 1 GiB, which the remote executors' 1 GB /tmp can't hold (#10797).
             cmd = """
                 tmpdir="$$(mktemp -d -p "$$PWD")"
+                chmod g-s "$$tmpdir"  # see toolchains/sysimage/tmpdir_wrapper.sh
                 trap 'rm -rf "$$tmpdir"' EXIT
 
                 tar --extract -a --file "$<" --directory "$$tmpdir"

@@ -21,6 +21,10 @@ export FAKEROOTDONTTRYCHOWN=1
 # sandbox's copy of it) rather than /tmp: image actions unpack and write several
 # GB there, and remote executors only have a 1 GB /tmp (#10797).
 tmpdir=$(mktemp -d -p "$PWD" "icosbuildXXXX")
+# The working directory can be setgid (e.g. the sandbox on the dind-large CI
+# runners), which new directories inherit, and the image tools would record that
+# mode in the images (e.g. a root directory with mode 2755). Not below here.
+chmod g-s "$tmpdir"
 # Under fakeroot, tar applies archive modes exactly, so the tree can contain
 # directories without u+w that a plain `rm -rf` can't empty. Restore write
 # permissions first, and never let a failed cleanup fail a successful command.

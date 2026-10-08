@@ -102,16 +102,18 @@ unsandboxed.
   Builds outside the dev container use whatever host tools they find, as
   before. `zstd` comes from Bazel (`@zstd`) in all image tools.
 * Release builds (`--config=stamped`) don't use the remote cache for the
-  `Icos*` image actions (`--modify_execution_info=^Icos.*=+no-remote-cache`):
-  they build the images from scratch, as before this change, instead of taking
-  unstamped intermediates (container filesystems, ESP, grub and config
-  partitions) from a cache that PR builds write to. They don't upload them
-  either: their root and boot partitions embed the version, so nothing else
-  could use them. Genrules can't be singled out by mnemonic, so the few small
-  IC-OS genrules (the bootloader tree post-processing, verity signing, launch
-  measurements) still use the cache, keyed by the digests of their freshly
-  built inputs. The binaries in the images come from the cache like all other
-  release artifacts, and `build-determinism` cross-checks the result.
+  partition and image actions (`IcosVfatImage`, `IcosFat32Image`,
+  `IcosExt4Image`, `IcosDiskImage`, `IcosLvmImage`, `IcosUpgradeImage`): they
+  build them from scratch, as before this change, instead of taking unstamped
+  ones (ESP, grub and config partitions) from a cache that PR builds write to.
+  They don't upload them either: their root and boot partitions embed the
+  version, so nothing else could use them. As before, the container
+  filesystems (which were already cacheable) and the binaries in the images
+  come from the cache like all other release artifacts. Genrules can't be
+  singled out by mnemonic, so the few small IC-OS genrules (bootloader tree
+  post-processing, verity signing, launch measurements) use the cache too,
+  keyed by the digests of their inputs. `build-determinism` cross-checks the
+  result.
 
 Expected effect: on a PR that doesn't touch `ic-os/components`, the component
 binaries or the base images, `rootfs-tree.tar` comes from the cache and the
@@ -120,12 +122,25 @@ gets every partition and image from the cache. A PR that does change one
 rebuilds only the affected `partition-root` → verity → disk/upgrade chain, and
 on RBE that chain runs on remote workers instead of the CI driver.
 
+Scratch directory modes: the sandbox directories can be setgid (they are on
+the `dind-large` CI runners), and directories created below a setgid directory
+inherit the bit, which the ext4 tools then record in the images (a root
+directory with mode 2755 instead of 755). `tmpdir_wrapper.sh` and the genrules
+therefore clear it on their scratch directories, and the ext4 image root gets
+an explicit 755.
+
 Cache size: one complete set of dev images (GuestOS, HostOS, SetupOS and
 `test-img`) is about 22 GiB of action outputs, mostly the uncompressed disk
 and upgrade image tars (2-3 GiB each), partitions and container filesystems
 (1-2 GiB each). Those are added to the remote cache only when a change reaches
 them; unchanged images are cache hits. Before this change, PRs that need images
-rebuilt (but didn't store) most of them every time.
+rebuilt (but didn't store) most of them every time. The flattened base images
+(`icos_base_*_rootfs.tar`, 0.2-2 GB each, about 9 GB for all seven) are added
+once per base image update. Bazel fetches the base images (about 6 GB of
+compressed layers) into its repository cache the first time something needs
+them, including any `bazel query` over `//...`, like `ci/scripts/targets.py`;
+on DFINITY CI they come through the `bazel-remote` downloader, on Namespace
+from the cache volume's repository cache.
 
 Scratch space: a root partition build extracts about 3 GB and creates a
 10 GB sparse image, `create_test_img` unpacks a whole SetupOS disk image, and
@@ -230,10 +245,10 @@ measurement.
   sandboxed actions access to it.
 * DFINITY's `dind-large` GitHub runners (`ci-main.yml`) have *no* `/dev/kvm`,
   even in their privileged containers. There the build VM falls back to QEMU's
-  TCG emulation and prints a warning: about 1-5 minutes per container
-  filesystem instead of under one. That only matters when a container
-  filesystem isn't in the cache, e.g. in the uncached `build-ic` job, which took
-  19 instead of 16 minutes on PR #11784.
+  TCG emulation and prints a warning: 4-8 minutes per container filesystem
+  instead of about one. That only matters when a container filesystem isn't in
+  the cache, e.g. in the uncached `build-ic` job, which took 19-22 instead of
+  16 minutes on PR #11784.
 
 Without KVM the build falls back to TCG and prints a warning. The VM gets 4
 CPUs and 4 GiB of memory, which its action reserves from Bazel's local
@@ -244,9 +259,10 @@ resources, and is killed after an hour.
 * `build-ic` (the uncached side of `build-determinism`) builds the IC-OS images
   on PRs only if the PR modifies inputs of the images that `build-ic.sh -i`
   builds (`ci/scripts/targets.py build --include_manual --base ... --head ...`,
-  matched against the bundle targets). On `master`, `rc--*`, merge-queue and
-  scheduled runs, and on PRs labelled to build all targets, it always builds
-  them. The canisters and binaries are always built.
+  matched against the bundle targets). On `master`, `rc--*` and scheduled
+  runs, and on PRs labelled to build all targets, it always builds them
+  (`build-ic` doesn't run in the merge queue). The canisters and binaries are
+  always built.
 * Privileged CI containers: see <<privileges-in-ci>>.
 
 == Supported build environments

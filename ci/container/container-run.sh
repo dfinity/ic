@@ -248,8 +248,10 @@ fi
 
 # Privilege/isolation flags required by the IC-OS guest build, per runtime.
 if [ "$RUNTIME" = docker ]; then
-    # Under docker the IC-OS build runs (rootless) podman *inside* this
-    # container. That nested podman needs: /dev/fuse for fuse-overlayfs storage;
+    # The IC-OS container filesystems are built in a KVM microVM, which only
+    # needs /dev/kvm (see below). The podman fallback (--config=icos_podman, and
+    # the local-base-* images) runs rootless podman *inside* this container.
+    # That nested podman needs: /dev/fuse for fuse-overlayfs storage;
     # unconfined seccomp/apparmor and disabled labeling for its syscalls; an
     # unmasked /proc (systempaths=unconfined) so it can mount its own procfs;
     # CAP_SYS_ADMIN so newuidmap can set up the nested user namespace; and host
