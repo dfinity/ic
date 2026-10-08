@@ -457,8 +457,9 @@ fn validate_controller_or_subnet_admin(
 /// This is the single place defining which senders can call which management
 /// canister methods targeting a canister. It must be called after the method's
 /// payload has been decoded and `canister` has been looked up. A method
-/// targeting more than one canister (e.g., `install_chunked_code` with a
-/// separate store canister) must call it once per targeted canister.
+/// targeting more than one canister must call it once per targeted canister,
+/// passing the method whose permission is required on that canister (e.g.,
+/// `install_chunked_code` validates its store canister as `stored_chunks`).
 ///
 /// The `subnet_admins` are only taken into account if the subnet can have
 /// subnet admins (see `can_have_subnet_admins`).
@@ -508,6 +509,9 @@ pub(crate) fn validate_sender(
 
         Ic00Method::CanisterStatus => validate_status_visibility(canister, subnet_admins, sender),
 
+        // `StoredChunks` (including the exception for the canister itself
+        // above) is also used to validate the store canister of
+        // `install_chunked_code`: its errors must not refer to `stored_chunks`.
         Ic00Method::UpdateSettings
         | Ic00Method::InstallCode
         | Ic00Method::InstallChunkedCode

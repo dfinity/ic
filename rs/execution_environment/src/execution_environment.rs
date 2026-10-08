@@ -4167,17 +4167,16 @@ impl ExecutionEnvironment {
                                 format!("InstallChunkedCode Error: Store canister {} was not found on subnet {} of target canister {}", store_canister_id, state.metadata.own_subnet_id, args.target_canister_id()),
                             )
                         })?;
-                // If the `store_canister` is different from the caller, we need
-                // to verify that the caller is a controller of the store.
-                if store_canister.canister_id().get() != origin.origin() {
-                    validate_sender_on_subnet(
-                        &origin.origin(),
-                        Ic00Method::InstallChunkedCode,
-                        store_canister,
-                        &state.metadata.network_topology,
-                        state.metadata.own_subnet_id,
-                    )?;
-                }
+                // Using the chunks of the store canister requires the same
+                // permission as `stored_chunks` on the store canister: being
+                // a controller of the store canister or the store canister itself.
+                validate_sender_on_subnet(
+                    &origin.origin(),
+                    Ic00Method::StoredChunks,
+                    store_canister,
+                    &state.metadata.network_topology,
+                    state.metadata.own_subnet_id,
+                )?;
                 InstallCodeContext::chunked_install(
                     origin,
                     args,
