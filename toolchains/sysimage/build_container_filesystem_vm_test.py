@@ -20,6 +20,9 @@ class CopyTest(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        # Like tmpdir_wrapper.sh: the test's directory can be setgid (e.g. on the
+        # dind-large CI runners), which the directories below would inherit.
+        os.chmod(self.tmp, 0o700)
         self.context = self.tmp / "ctx"
         self.root = self.tmp / "root"
         self.context.mkdir()
