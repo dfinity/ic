@@ -49,6 +49,26 @@ class TestCsvLoading(unittest.TestCase):
             )
         self.assertEqual(result["edges"], {(i, (i - 1) % 20): 1 for i in range(20)})
 
+    def test_communication_counter_reset_uses_fresh_count(self):
+        header = "sender_canister_id,receiver_canister_id,count\n"
+        sender = "rrkah-fqaaa-aaaaa-aaaaq-cai"
+        receiver = "rwlgt-iiaaa-aaaaa-aaaaa-cai"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            communication_path = Path(tmp_dir) / "communication.csv"
+            communication_path.write_text(header + f"{sender},{receiver},5\n")
+            communication_baseline_path = Path(tmp_dir) / "communication_baseline.csv"
+            communication_baseline_path.write_text(header + f"{sender},{receiver},100\n")
+            result = load_subnet_data(
+                FAKE_LOAD_SAMPLE_CSV_PATH,
+                FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+                "ingress_messages_executed",
+                communication_path,
+                communication_baseline_path,
+            )
+        # The counter was reset (e.g. evicted and recreated) since the baseline was collected, so
+        # the fresh count is a lower bound on the number of messages exchanged in the meantime.
+        self.assertEqual(result["edges"], {(1, 0): 5})
+
     def test_solver_sanity_check(self):
         result = find_split(
             FAKE_LOAD_SAMPLE_CSV_PATH,

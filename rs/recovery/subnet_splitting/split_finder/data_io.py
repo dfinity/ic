@@ -30,7 +30,9 @@ def load_subnet_data(
     communication_baseline_data_path -- path to a file in the same format as
                                         `communication_data_path`. Represents a sample collected at
                                         an earlier time. It is subtracted from the communication
-                                        data to compute relative message counts (clipped at 0).
+                                        data to compute relative message counts. If a fresh count
+                                        is lower than its baseline (i.e. the counter was reset),
+                                        the fresh count is used instead.
 
     Communication with canisters which are not in the load data is ignored.
 
@@ -45,15 +47,13 @@ def load_subnet_data(
     communication_baseline_data = pd.read_csv(communication_baseline_data_path).set_index(
         ["sender_canister_id", "receiver_canister_id"]
     )
-    communication_data = (
-        (communication_data.subtract(communication_baseline_data, fill_value=0))
-        .loc[communication_data.index]
-        # To avoid negative values (which could happen if the baseline has higher values for some
-        # pair (sender, receiver) of canisters than the respective fresh values) bound the values
-        # by 0.
-        .clip(lower=0)
-        .reset_index()
-    )
+    communication_delta = communication_data.subtract(communication_baseline_data, fill_value=0).loc[
+        communication_data.index
+    ]
+    # A negative delta means that the counter was reset (e.g. evicted and later recreated) since the
+    # baseline was collected, so the fresh count is a lower bound on the number of messages
+    # exchanged in the meantime. Use it instead of the delta.
+    communication_data = communication_delta.where(communication_delta >= 0, communication_data).reset_index()
     canister_data["index"] = range(len(canister_data))
     canister_id_to_index = dict(zip(canister_data["canister_id"], canister_data["index"]))
     index_to_canister_id = dict(zip(canister_data["index"], canister_data["canister_id"]))

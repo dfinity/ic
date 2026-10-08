@@ -1884,3 +1884,35 @@ fn lru_connection_metrics_new_evicts_least_recently_accessed_entries() {
         .collect();
     assert_eq!(metrics.get(), &expected);
 }
+
+#[test]
+fn lru_connection_metrics_evicts_lowest_count_among_equally_old_entries() {
+    let heavy_canister = canister_test_id(0);
+    let light_canister = canister_test_id(MAX_CAPACITY as u64 / 2);
+    // `MAX_CAPACITY + 1` entries all accessed in the same round.
+    let metrics_per_canister: BTreeMap<_, _> = (0..=MAX_CAPACITY as u64)
+        .map(|i| {
+            let canister_id = canister_test_id(i);
+            let count = if canister_id == heavy_canister {
+                5
+            } else if canister_id == light_canister {
+                1
+            } else {
+                2
+            };
+            (
+                canister_id,
+                ConnectionMetrics {
+                    last_access_timestamp: UNIX_EPOCH,
+                    count,
+                },
+            )
+        })
+        .collect();
+
+    let metrics = LRUConnectionMetrics::new(metrics_per_canister);
+
+    assert_eq!(metrics.get().len(), MAX_CAPACITY);
+    assert!(!metrics.get().contains_key(&light_canister));
+    assert!(metrics.get().contains_key(&heavy_canister));
+}

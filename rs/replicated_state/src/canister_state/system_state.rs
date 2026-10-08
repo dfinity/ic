@@ -239,12 +239,18 @@ impl LRUConnectionMetrics {
         self.evict();
     }
 
+    /// Evicts the least recently accessed entries until at most `MAX_CAPACITY` remain.
+    ///
+    /// All messages executed in a round share the same timestamp, so among equally old entries
+    /// the one with the lowest count is evicted first, keeping the heaviest connections.
     fn evict(&mut self) {
         while self.metrics_per_canister.len() > MAX_CAPACITY
             && let Some(canister_id) = self
                 .metrics_per_canister
                 .iter()
-                .min_by_key(|(_canister_id, counter)| counter.last_access_timestamp)
+                .min_by_key(|(_canister_id, counter)| {
+                    (counter.last_access_timestamp, counter.count)
+                })
                 .map(|(canister_id, _)| *canister_id)
         {
             let _ = self.metrics_per_canister.remove(&canister_id);
