@@ -330,6 +330,55 @@ fn test_encode_decode_non_empty_environment_variables() {
 }
 
 #[test]
+fn test_encode_decode_non_empty_connection_metrics() {
+    let mut connection_metrics = BTreeMap::new();
+    connection_metrics.insert(
+        canister_test_id(1),
+        ConnectionMetrics {
+            last_access_timestamp: Time::from_nanos_since_unix_epoch(1_000),
+            count: 7,
+        },
+    );
+    connection_metrics.insert(
+        canister_test_id(2),
+        ConnectionMetrics {
+            last_access_timestamp: Time::from_nanos_since_unix_epoch(2_000),
+            count: 3,
+        },
+    );
+
+    // A canister state with non-empty connection metrics.
+    let canister_state_bits = CanisterStateBits {
+        connection_metrics: connection_metrics.clone(),
+        ..default_canister_state_bits()
+    };
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let decoded_canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+    assert_eq!(
+        decoded_canister_state_bits.connection_metrics,
+        connection_metrics
+    );
+}
+
+#[test]
+fn test_decode_connection_metrics_without_canister_id_fails() {
+    let mut pb_bits =
+        pb_canister_state_bits::CanisterStateBits::from(default_canister_state_bits());
+    pb_bits
+        .connection_metrics
+        .push(pb_canister_state_bits::CanisterToCanisterMetrics {
+            other_canister_id: None,
+            timestamp_nanos: 1_000,
+            count: 7,
+        });
+
+    assert!(matches!(
+        CanisterStateBits::try_from(pb_bits),
+        Err(ic_protobuf::proxy::ProxyDecodeError::MissingField(_))
+    ));
+}
+
+#[test]
 fn test_encode_decode_task_queue() {
     let ingress = Arc::new(IngressBuilder::new().method_name("test_ingress").build());
     let request = Arc::new(RequestBuilder::new().method_name("test_request").build());

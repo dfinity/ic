@@ -55,8 +55,8 @@ fn write_load_metrics_file(
     writeln!(
         output_file,
         "canister_id,instructions_executed,ingress_messages_executed,remote_subnet_messages_executed,local_subnet_messages_executed,http_outcalls_executed,heartbeats_and_global_timers_executed"
-     )
-     .map_err(|err| format!("Failed to write header: {err}"))?;
+    )
+    .map_err(|err| format!("Failed to write header: {err}"))?;
 
     // Write rows.
     for (canister_id, canister_state) in replicated_state.canister_states().all_iter() {
@@ -77,8 +77,8 @@ fn write_load_metrics_file(
         writeln!(
             output_file,
             "{canister_id},{instructions_executed},{ingress_messages_executed},{remote_subnet_messages_executed},{local_subnet_messages_executed},{http_outcalls_executed},{heartbeats_and_global_timers_executed}"
-         )
-         .map_err(|err| format!("Failed to write row: {err}"))?;
+        )
+        .map_err(|err| format!("Failed to write row: {err}"))?;
     }
 
     Ok(())

@@ -8,8 +8,8 @@ use crate::canister_state::canister_snapshots::CanisterSnapshots;
 use crate::canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata};
 use crate::canister_state::system_state::testing::{OutputRequestBuilder, SystemStateTesting};
 use crate::canister_state::system_state::{
-    CallContextManager, CanisterHistory, CanisterStatus, MAX_CANISTER_HISTORY_CHANGES,
-    OutstandingPrepayments,
+    CallContextManager, CanisterHistory, CanisterStatus, ConnectionMetrics, LRUConnectionMetrics,
+    MAX_CANISTER_HISTORY_CHANGES, MAX_CAPACITY, OutstandingPrepayments,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use assert_matches::assert_matches;
@@ -1858,4 +1858,29 @@ fn reverts_stopping_status_after_split() {
     canister_state.drop_in_progress_management_calls_after_split();
 
     assert_eq!(expected_state, canister_state);
+}
+
+#[test]
+fn lru_connection_metrics_new_evicts_least_recently_accessed_entries() {
+    let extra = 3;
+    let metrics_per_canister: BTreeMap<_, _> = (0..(MAX_CAPACITY + extra) as u64)
+        .map(|i| {
+            (
+                canister_test_id(i),
+                ConnectionMetrics {
+                    last_access_timestamp: Time::from_nanos_since_unix_epoch(i),
+                    count: 1,
+                },
+            )
+        })
+        .collect();
+
+    let metrics = LRUConnectionMetrics::new(metrics_per_canister.clone());
+
+    // Only the `extra` least recently accessed entries were evicted.
+    let expected: BTreeMap<_, _> = metrics_per_canister
+        .into_iter()
+        .filter(|(_, m)| m.last_access_timestamp.as_nanos_since_unix_epoch() >= extra as u64)
+        .collect();
+    assert_eq!(metrics.get(), &expected);
 }

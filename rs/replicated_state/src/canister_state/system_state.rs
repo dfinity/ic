@@ -201,7 +201,7 @@ enum ConsumingCycles {
     Refund,
 }
 
-const MAX_CAPACITY: usize = 100;
+pub(crate) const MAX_CAPACITY: usize = 100;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct ConnectionMetrics {
@@ -215,6 +215,16 @@ pub struct LRUConnectionMetrics {
 }
 
 impl LRUConnectionMetrics {
+    /// Creates the metrics from the given map, evicting the least recently accessed
+    /// entries if it holds more than `MAX_CAPACITY` of them.
+    pub fn new(metrics_per_canister: BTreeMap<CanisterId, ConnectionMetrics>) -> Self {
+        let mut metrics = Self {
+            metrics_per_canister,
+        };
+        metrics.evict();
+        metrics
+    }
+
     pub fn increment(&mut self, canister_id: CanisterId, access_timestamp: Time) {
         let entry = self
             .metrics_per_canister
@@ -230,7 +240,7 @@ impl LRUConnectionMetrics {
     }
 
     fn evict(&mut self) {
-        if self.metrics_per_canister.len() > MAX_CAPACITY
+        while self.metrics_per_canister.len() > MAX_CAPACITY
             && let Some(canister_id) = self
                 .metrics_per_canister
                 .iter()
@@ -355,9 +365,7 @@ impl CanisterMetrics {
             consumed_cycles_by_use_cases_monotonic,
             instructions_executed,
             load_metrics,
-            connection_metrics: LRUConnectionMetrics {
-                metrics_per_canister: connection_metrics,
-            },
+            connection_metrics: LRUConnectionMetrics::new(connection_metrics),
         }
     }
 

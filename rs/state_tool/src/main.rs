@@ -190,8 +190,9 @@ enum Opt {
         path: PathBuf,
     },
 
-    /// Extracts canister metrics from the replicated state and prints them in CSV format to the
-    /// specified file.
+    /// Extracts canister metrics from the replicated state and writes them in CSV format to two
+    /// files: per-canister load metrics to `--canister-load-output` and canister-to-canister
+    /// connection counts to `--canister-connections-output`.
     #[clap(name = "canister_metrics")]
     CanisterMetrics {
         /// Path to a checkpoint.

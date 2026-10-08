@@ -101,7 +101,8 @@ def parse_args():
     parser.add_argument(
         "--communication-baseline-data-path",
         type=Path,
-        help="Path to canister-to-canister communication data",
+        help="Path to baseline canister-to-canister communication data, collected earlier than the data under "
+        "`--communication-data-path`. Used to compute relative (delta) communication counts",
         required=True,
     )
     parser.add_argument(
