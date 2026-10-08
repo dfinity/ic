@@ -134,6 +134,26 @@ class FlattenTest(unittest.TestCase):
         self.assertTrue(members["m"][0].islnk() and members["m"][0].linkname == "a")
         self.assertTrue(members["z"][0].islnk() and members["z"][0].linkname == "a")
 
+    def test_hard_link_keeps_its_data_when_the_target_is_replaced(self):
+        names, members, _ = self.flatten(
+            [
+                layer([("a", "file", "OLD"), ("b", "hardlink", "a"), ("c", "hardlink", "a")]),
+                layer([("a", "file", "NEW")]),
+            ]
+        )
+        self.assertEqual(names, ["a", "b", "c"])
+        self.assertEqual(members["a"][1], "NEW")
+        self.assertTrue(members["b"][0].isreg())
+        self.assertEqual(members["b"][1], "OLD")
+        self.assertTrue(members["c"][0].islnk() and members["c"][0].linkname == "b")
+
+    def test_hard_link_to_a_whited_out_target_keeps_its_data(self):
+        names, members, _ = self.flatten(
+            [layer([("a", "file", "data"), ("b", "hardlink", "a")]), layer([(".wh.a", "file", "")])]
+        )
+        self.assertEqual(names, ["b"])
+        self.assertEqual(members["b"][1], "data")
+
     def test_whiteout_of_a_directory_hides_its_contents(self):
         names, _, _ = self.flatten(
             [layer([("d", "dir", None), ("d/f", "file", "f"), ("e", "file", "e")]), layer([(".wh.d", "file", "")])]

@@ -50,10 +50,18 @@ def is_under(name: str, directory: str) -> bool:
     return name.startswith(directory + "/")
 
 
-@dataclass
+@dataclass(eq=False)
 class Entry:
     layer: int  # index into the list of uncompressed layer tars
     info: tarfile.TarInfo
+    # The entry holding the data and metadata: the entry itself, or for a hard
+    # link the entry it linked to when its layer was applied. Like an inode in
+    # overlayfs, it stays with the link when a later layer replaces its target.
+    inode: Optional["Entry"] = None
+
+    def __post_init__(self):
+        if self.inode is None:
+            self.inode = self
 
 
 class Layout:
@@ -133,36 +141,22 @@ def apply_layer(entries: Dict[str, Entry], layer_index: int, layer: tarfile.TarF
             for other in [n for n in entries if is_under(n, name)]:
                 del entries[other]
         if member.islnk():
-            member.linkname = normalize(member.linkname)
-        entries[name] = Entry(layer_index, member)
+            target = entries.get(normalize(member.linkname))
+            if target is None:
+                raise RuntimeError(f"{name} is a hard link to {member.linkname}, which isn't in the image")
+            entries[name] = Entry(layer_index, member, target.inode)
+        else:
+            entries[name] = Entry(layer_index, member)
 
 
 def write_rootfs(entries: Dict[str, Entry], layers: List[tarfile.TarFile], output: Path):
-    # Hard links must follow the entry they link to. Entries are written in name
-    # order, so a link that precedes its target becomes the regular file and the
-    # target (and any further links) a link to it.
-    emitted_as: Dict[str, str] = {}
+    # The first name (in name order) of each inode is written as the file, and
+    # the other names as hard links to it.
+    written_as: Dict[int, str] = {}
     with tarfile.open(output, "w", format=tarfile.GNU_FORMAT) as out:
         for name in sorted(entries):
-            entry = entries[name]
-            info = entry.info
-            source = entry
-            linkname: Optional[str] = None
-            if info.islnk():
-                target = info.linkname
-                if target not in entries:
-                    raise RuntimeError(f"{name} is a hard link to {target}, which isn't in the image")
-                if target in emitted_as:
-                    linkname = emitted_as[target]
-                else:
-                    source = entries[target]
-                    emitted_as[target] = name
-            elif name in emitted_as:
-                linkname = emitted_as[name]
-            else:
-                emitted_as[name] = name
-
-            src = source.info
+            inode = entries[name].inode
+            src = inode.info
             new = tarfile.TarInfo(name)
             new.mode = src.mode
             new.uid = src.uid
@@ -170,14 +164,16 @@ def write_rootfs(entries: Dict[str, Entry], layers: List[tarfile.TarFile], outpu
             new.mtime = 0
             new.uname = ""
             new.gname = ""
-            if linkname is not None:
+            if id(inode) in written_as:
                 new.type = tarfile.LNKTYPE
-                new.linkname = linkname
+                new.linkname = written_as[id(inode)]
                 out.addfile(new)
-            elif src.isreg():
+                continue
+            written_as[id(inode)] = name
+            if src.isreg():
                 new.type = tarfile.REGTYPE
                 new.size = src.size
-                out.addfile(new, layers[source.layer].extractfile(src))
+                out.addfile(new, layers[inode.layer].extractfile(src))
             else:
                 new.type = src.type
                 new.linkname = src.linkname

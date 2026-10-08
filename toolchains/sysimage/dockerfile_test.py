@@ -54,6 +54,17 @@ USER root:root
         steps = plan("FROM base\nARG A=1\nARG B\nRUN x\n", {"B": "2"}).steps
         self.assertEqual(steps, [Run(command="x", args={"A": "1", "B": "2"})])
 
+    def test_stage_arg_without_default_inherits_the_global_default(self):
+        self.assertEqual(
+            plan("ARG V=glob\nFROM base\nARG V\nRUN x\n", {}).steps, [Run(command="x", args={"V": "glob"})]
+        )
+        self.assertEqual(
+            plan("ARG V=glob\nFROM base\nARG V\nRUN x\n", {"V": "arg"}).steps, [Run(command="x", args={"V": "arg"})]
+        )
+
+    def test_empty_lines_in_a_continuation_are_skipped(self):
+        self.assertEqual(plan("FROM base\nRUN a \\\n\n  b\n", {}).steps, [Run(command="a   b")])
+
     def test_stage_args_are_not_inherited(self):
         text = "FROM base AS one\nARG A=1\nRUN x\nFROM one\nRUN y\n"
         self.assertEqual(plan(text, {}).steps, [Run(command="x", args={"A": "1"}), Run(command="y")])
@@ -69,6 +80,12 @@ USER root:root
             "FROM base\nCOPY --from=other /a /a\n",
             "FROM base\nCOPY *.txt /a/\n",
             "FROM base\nCOPY ../a /a\n",
+            "FROM base\nCOPY a /x/${B:-default}/\n",
+            "FROM base\nCOPY a /x/\\$HOME\n",
+            "# escape=`\nFROM base\n",
+            "# syntax=docker/dockerfile:1\nFROM base\n",
+            'FROM base\nARG A="x y"\n',
+            "FROM --platform=linux/amd64 base\n",
             "FROM base\nADD a /a\n",
             "RUN x\n",
             "",

@@ -25,8 +25,24 @@ def arrange_component_files(context_dir, component_files):
         if install_target[0] == "/":
             install_target = install_target[1:]
         install_target = os.path.join(context_dir, install_target)
-        os.makedirs(os.path.dirname(install_target), exist_ok=True)
+        make_directories(context_dir, os.path.dirname(install_target))
         shutil.copy(source_file, install_target)
+
+
+def make_directories(context_dir, path):
+    """
+    Create path and its missing parents below context_dir with mode 0755.
+
+    `COPY dir /dest` copies the directories' modes, so they must not depend on
+    the umask of the build action.
+    """
+    missing = []
+    while not os.path.isdir(path) and os.path.abspath(path) != os.path.abspath(context_dir):
+        missing.append(path)
+        path = os.path.dirname(path)
+    for directory in reversed(missing):
+        os.mkdir(directory)
+        os.chmod(directory, 0o755)
 
 
 def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:

@@ -18,17 +18,26 @@
 #    filesystem as a tar to a second, raw disk.
 # 3. The tar is read back and normalized exactly like the podman export in
 #    build_container_filesystem_tar.py (no /run, mtime 0, no user/group names).
+#
+# For the IC-OS Dockerfiles the result is byte-identical to podman's. Differences
+# that they don't depend on: the steps have no network; /etc/hosts, hostname
+# and resolv.conf are regular files (podman bind-mounts the host's during RUN,
+# so writes to them don't persist there); `uname -r`, the CPU count and the
+# hostname are the VM's; processes a step leaves running are only stopped at the
+# end of the build, not after each step.
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 from pathlib import Path
 from typing import Dict, List
 
@@ -38,6 +47,7 @@ from toolchains.sysimage.dockerfile import Copy, Plan, Run, plan
 # Inside the VM's root filesystem.
 BUILD_DIR = ".icos-build"
 RESULT_MARKER = "ICOS-BUILD-RESULT:"
+RESULT_PATTERN = re.compile(re.escape(RESULT_MARKER) + r" (\d+)")
 
 ROOT_DISK_SIZE = "32G"  # sparse; only the used blocks are written
 OUTPUT_DISK_SIZE = "32G"  # sparse
@@ -46,9 +56,12 @@ INIT_SCRIPT = """#!/bin/sh
 # PID 1 of the IC-OS container build VM: run the build steps, write the
 # resulting filesystem to the output disk and power off.
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Like a container build, the steps get no input (instead of the console).
+exec < /dev/null
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
-mount -t devtmpfs devtmpfs /dev
+# The kernel mounts devtmpfs on /dev itself if it is built with DEVTMPFS_MOUNT.
+grep -q " /dev " /proc/mounts || mount -t devtmpfs devtmpfs /dev
 mkdir -p /dev/pts /dev/shm
 mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /dev/shm
@@ -58,15 +71,22 @@ status=0
 /bin/sh -e /{build_dir}/steps.sh || status=$?
 
 cd /
+# Stop what the steps left running, like a container engine at the end of each
+# step, so that nothing keeps the mounts busy.
+kill -KILL -1 2> /dev/null
+sleep 1
 # Keep the output disk's device node, then unmount everything so that only the
 # image's own files (and mount point directories) remain.
 cp -a /dev/vdb /{build_dir}/output || status=$?
-umount /run /dev/shm /dev/pts /dev /sys /proc
+# Release /dev/null, which would keep /dev busy (a closed stdin makes some tools abort).
+exec < /
+umount /run /dev/shm /dev/pts /dev /sys /proc || status=$?
+{remove_lost_found}
 if [ "$status" -eq 0 ]; then
-    # Like a container image, without the build files and the mke2fs-created
-    # lost+found. Only names, owners, modes and contents are kept downstream.
+    # Like a container image, without the build files. Only names, owners, modes
+    # and contents are kept downstream.
     tar --create --file=/{build_dir}/output --format=gnu --numeric-owner --sort=name \\
-        --one-file-system --exclude=./{build_dir} --exclude=./lost+found . || status=$?
+        --one-file-system --exclude=./{build_dir} . || status=$?
 fi
 sync
 echo "{marker} $status"
@@ -106,30 +126,34 @@ def copy_commands(step: Copy) -> List[str]:
     """Shell commands implementing a COPY step: files owned by root, modes from the context."""
     destination = step.destination
     into_directory = destination.endswith("/") or len(step.sources) > 1
+    dest = shlex.quote(destination)
     cp = "cp -dR --preserve=mode,ownership,links --remove-destination"
     commands = []
     for source in step.sources:
-        src = f"/{BUILD_DIR}/ctx/{source.rstrip('/')}"
-        commands.append(f"if [ -d {shlex.quote(src)} ]; then")
+        src = shlex.quote(f"/{BUILD_DIR}/ctx/{source.rstrip('/')}")
+        commands.append(f"if [ -d {src} ]; then")
         # A directory's contents are merged into the destination directory.
-        commands.append(f"  mkdir -p {shlex.quote(destination)}")
-        commands.append(f"  {cp} {shlex.quote(src)}/. {shlex.quote(destination)}/")
+        commands.append(f"  mkdir -p {dest}")
+        commands.append(f"  {cp} {src}/. {dest}/")
         if step.chmod:
             commands.append(
-                f"  (cd {shlex.quote(src)} && find . -mindepth 1 -exec sh -c "
+                f"  (cd {src} && find . -mindepth 1 -exec sh -c "
                 + shlex.quote(f'chmod {step.chmod} "$0"/"$1"')
-                + f" {shlex.quote(destination)} {{}} \\;)"
+                + f" {dest} {{}} \\;)"
             )
         commands.append("else")
+        # A file goes into the destination if that is (or must be) a directory,
+        # and to the destination path otherwise.
+        name = shlex.quote(os.path.basename(source))
         if into_directory:
-            target = destination.rstrip("/") + "/" + os.path.basename(source)
-            commands.append(f"  mkdir -p {shlex.quote(destination)}")
+            commands.append(f"  mkdir -p {dest}")
+            commands.append(f"  target={dest}/{name}")
         else:
-            target = destination
             commands.append(f"  mkdir -p {shlex.quote(os.path.dirname(destination) or '/')}")
-        commands.append(f"  {cp} {shlex.quote(src)} {shlex.quote(target)}")
+            commands.append(f"  if [ -d {dest} ]; then target={dest}/{name}; else target={dest}; fi")
+        commands.append(f'  {cp} {src} "$target"')
         if step.chmod:
-            commands.append(f"  chmod {step.chmod} {shlex.quote(target)}")
+            commands.append(f'  chmod {step.chmod} "$target"')
         commands.append("fi")
     return commands
 
@@ -160,7 +184,9 @@ chmod 0755 "$root/{BUILD_DIR}/init"
     subprocess.run(["fakeroot", "--", "bash", "-c", script], check=True)
 
 
-def run_vm(qemu: str, qemu_data: str, kernel: Path, root_disk: Path, output_disk: Path, memory: str, cpus: int):
+def run_vm(
+    qemu: str, qemu_data: str, kernel: Path, root_disk: Path, output_disk: Path, memory: str, cpus: int, timeout: int
+):
     """Boot the build VM and return whether the build steps succeeded."""
     if not os.access("/dev/kvm", os.R_OK | os.W_OK):
         print(
@@ -193,7 +219,8 @@ def run_vm(qemu: str, qemu_data: str, kernel: Path, root_disk: Path, output_disk
         "-kernel",
         str(kernel),
         "-append",
-        f"root=/dev/vda rw rootfstype=ext4 init=/{BUILD_DIR}/init console=ttyS0 panic=-1 loglevel=4",
+        # loglevel=1: only emergencies, so that kernel messages don't interleave with the steps' output.
+        f"root=/dev/vda rw rootfstype=ext4 init=/{BUILD_DIR}/init console=ttyS0 panic=-1 loglevel=1",
         "-drive",
         f"file={root_disk},format=raw,if=virtio,cache=unsafe",
         "-drive",
@@ -202,15 +229,38 @@ def run_vm(qemu: str, qemu_data: str, kernel: Path, root_disk: Path, output_disk
     print(" ".join(shlex.quote(c) for c in command), file=sys.stderr, flush=True)
     result = None
     with subprocess.Popen(command, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True, errors="replace") as vm:
-        for line in vm.stdout:
-            sys.stderr.write(line)
-            if RESULT_MARKER in line:
-                result = int(line.split(RESULT_MARKER, 1)[1].split()[0])
+        # A step waiting for something that never comes would otherwise hang the build.
+        timed_out = threading.Event()
+
+        def kill():
+            timed_out.set()
+            vm.kill()
+
+        watchdog = threading.Timer(timeout, kill)
+        watchdog.start()
+        try:
+            for line in vm.stdout:
+                sys.stderr.write(line)
+                match = RESULT_PATTERN.search(line)
+                if match:
+                    result = int(match.group(1))
+        finally:
+            watchdog.cancel()
     if vm.returncode != 0:
+        if timed_out.is_set():
+            raise RuntimeError(f"the build VM didn't finish within {timeout}s")
         raise RuntimeError(f"qemu exited with {vm.returncode}")
     if result is None:
         raise RuntimeError("the build VM stopped without reporting a result")
     return result == 0
+
+
+def normalize(name: str) -> str:
+    """A tar member name without leading `./` (or `/`) and trailing `/`."""
+    name = name.lstrip("/")
+    while name.startswith("./"):
+        name = name[2:]
+    return name.rstrip("/")
 
 
 def export_filesystem(output_disk: Path, destination_tar_filename: str):
@@ -239,6 +289,11 @@ def export_filesystem(output_disk: Path, destination_tar_filename: str):
 
             data = source.extractfile(member) if member.isfile() else None
             destination.addfile(member.replace(mtime=0, uname="", gname="", deep=False), data)
+
+
+def has_entry(rootfs: Path, name: str) -> bool:
+    with tarfile.open(rootfs) as tar:
+        return any(normalize(member.name) == name for member in tar)
 
 
 def get_args():
@@ -273,8 +328,9 @@ def get_args():
     parser.add_argument("--qemu", required=True, help="qemu-system-x86_64")
     parser.add_argument("--qemu-data", required=True, help="Directory with QEMU's firmware files")
     parser.add_argument("--mke2fs", required=True)
-    parser.add_argument("--memory", default="4G")
-    parser.add_argument("--cpus", type=int, default=min(os.cpu_count() or 1, 8))
+    parser.add_argument("--memory", default="4G", help="The VM's memory")
+    parser.add_argument("--cpus", type=int, default=4, help="The VM's CPUs")
+    parser.add_argument("--timeout", type=int, default=3600, help="Seconds before the VM is killed")
     return parser.parse_args()
 
 
@@ -305,7 +361,12 @@ def main():
         if not any(e.startswith("HOME=") for e in env):
             env.append("HOME=/root")
         steps = generate_steps(build_plan, env, tmp / "build")
-        init = INIT_SCRIPT.format(build_dir=BUILD_DIR, marker=RESULT_MARKER)
+        # mke2fs creates /lost+found, which isn't part of the image unless the base has one.
+        init = INIT_SCRIPT.format(
+            build_dir=BUILD_DIR,
+            marker=RESULT_MARKER,
+            remove_lost_found="" if has_entry(args.base_rootfs, "lost+found") else "rmdir /lost+found || status=$?",
+        )
 
         root_disk = tmp / "root.img"
         output_disk = tmp / "output.img"
@@ -314,7 +375,9 @@ def main():
         with open(output_disk, "wb") as f:
             f.truncate(int(OUTPUT_DISK_SIZE[:-1]) << 30)
 
-        if not run_vm(args.qemu, args.qemu_data, args.kernel, root_disk, output_disk, args.memory, args.cpus):
+        if not run_vm(
+            args.qemu, args.qemu_data, args.kernel, root_disk, output_disk, args.memory, args.cpus, args.timeout
+        ):
             raise RuntimeError("a build step failed in the build VM (see the log above)")
         root_disk.unlink()
         export_filesystem(output_disk, args.output)

@@ -171,6 +171,15 @@ oci_rootfs = _icos_build_rule(
     },
 )
 
+# The resources of the container build VM, reserved for its action so that Bazel
+# doesn't run more of them concurrently than the machine can hold.
+_VM_CPUS = 4
+_VM_MEMORY_MB = 4096
+
+def _vm_resources(_os, _inputs_size):
+    # The VM's memory, plus QEMU and the build tool around it.
+    return {"cpu": _VM_CPUS, "memory": _VM_MEMORY_MB + 512}
+
 def _build_container_filesystem_vm(ctx, output_file):
     args = ["--output", output_file.path]
     inputs = []
@@ -208,6 +217,10 @@ def _build_container_filesystem_vm(ctx, output_file):
         ctx.file._qemu_data.path,
         "--mke2fs",
         ctx.file._mke2fs.path,
+        "--cpus",
+        str(_VM_CPUS),
+        "--memory",
+        "{}M".format(_VM_MEMORY_MB),
     ])
     inputs.extend([base.rootfs, base.env, ctx.file.base_image_ref, ctx.file._kernel, ctx.file._qemu, ctx.file._qemu_data, ctx.file._mke2fs])
 
@@ -219,6 +232,7 @@ def _build_container_filesystem_vm(ctx, output_file):
         outputs = [output_file],
         tools = [ctx.attr._vm_tool.files_to_run],
         mnemonic = "IcosContainerVmBuild",
+        resource_set = _vm_resources,
         progress_message = "Building container filesystem %{output} in a microVM",
     )
 

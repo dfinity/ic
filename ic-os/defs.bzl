@@ -195,8 +195,12 @@ tar --extract --zstd --to-stdout --file $(location :base-update-img.tar.zst) boo
 mkdir "$$tmpdir/bootfs"
 # In the sandbox's user namespace a real chown fails with EINVAL, which fakeroot
 # doesn't ignore; the owners are recorded by fakeroot either way.
-FAKEROOTDONTTRYCHOWN=1 fakeroot -- sh -c '
-    "$$1" -R "rdump / $$2/bootfs" "$$2/boot.img"
+# debugfs exits 0 even when it fails, so check that it reported nothing but its
+# version and dumped something.
+FAKEROOTDONTTRYCHOWN=1 fakeroot -- sh -ec '
+    "$$1" -R "rdump / $$2/bootfs" "$$2/boot.img" 2> "$$2/debugfs.err"
+    if grep -v "^debugfs [0-9]" "$$2/debugfs.err" >&2; then exit 1; fi
+    [ -n "$$(ls -A "$$2/bootfs")" ] || { echo "nothing dumped from boot.img" >&2; exit 1; }
     tar --create --file "$$3" --numeric-owner --sort=name --mtime=@0 -C "$$2/bootfs" .
 ' sh $(location //:debugfs) "$$tmpdir" "$@"
 """,

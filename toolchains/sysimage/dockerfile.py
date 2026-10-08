@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
 _VARIABLE = re.compile(r"\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
+# Parser directives, e.g. `# escape=` or `# syntax=`, which change how the rest is parsed.
+_DIRECTIVE = re.compile(r"#\s*[A-Za-z]+\s*=")
 
 
 class DockerfileError(Exception):
@@ -60,6 +62,10 @@ class Plan:
 
 
 def substitute(value: str, variables: Dict[str, str]) -> str:
+    # Only $NAME and ${NAME}: no ${NAME:-default} or other modifiers, no \$ escapes.
+    if "\\$" in value or "${" in _VARIABLE.sub("", value):
+        raise DockerfileError(f"unsupported variable syntax in {value!r}")
+
     def replace(match):
         name = match.group(1) or match.group(2)
         return variables.get(name, "")
@@ -71,9 +77,14 @@ def logical_lines(text: str) -> List[str]:
     """Join continuation lines and drop comments and blank lines."""
     lines = []
     current = ""
-    for raw in text.splitlines():
+    for number, raw in enumerate(text.splitlines()):
         stripped = raw.strip()
+        if not lines and not current and _DIRECTIVE.match(stripped):
+            raise DockerfileError(f"unsupported parser directive on line {number + 1}: {stripped}")
         if stripped.startswith("#"):
+            continue
+        if current and not stripped:
+            # Docker skips empty lines in a continuation.
             continue
         if raw.rstrip().endswith("\\"):
             # Like Docker, drop the backslash and the newline.
@@ -100,7 +111,15 @@ def parse(text: str, build_args: Dict[str, str]) -> List[Stage]:
             name, has_default, default = rest.partition("=")
             if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
                 raise DockerfileError(f"unsupported ARG: {line}")
-            value = build_args.get(name, default if has_default else "")
+            if default[:1] in ("'", '"'):
+                raise DockerfileError(f"unsupported quoted ARG default: {line}")
+            if has_default:
+                value = build_args.get(name, default)
+            else:
+                # Like Docker, a stage's ARG without a default inherits the global one.
+                value = (
+                    build_args.get(name, global_args.get(name, "")) if stage is not None else build_args.get(name, "")
+                )
             if stage is None:
                 global_args[name] = value
             else:
