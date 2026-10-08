@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -8,12 +9,13 @@ use ic_consensus_cup_utils::{get_master_public_keys, verify_catch_up_package_pro
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::new_replica_logger_from_config;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     RegistryVersion, SubnetId,
     consensus::{CatchUpPackage, CupType, HasHeight},
-    crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet,
+    crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgTargetSubnet},
 };
 use prost::Message;
 use tokio::{fs, task};
@@ -309,11 +311,12 @@ pub fn verify(
 
 /// 1. Verify the CUP against the subnet public key found in the registry
 /// 2. Print the hex-encoded threshold master public keys held by the subnet according to the CUP
+/// 3. Return these keys
 pub fn extract_master_public_keys(
     nns_url: Url,
     nns_pem: Option<PathBuf>,
     cup_path: &Path,
-) -> Result<(), String> {
+) -> Result<BTreeMap<MasterPublicKeyId, MasterPublicKey>, String> {
     let (_, crypto) = registry_client_and_crypto(nns_url, nns_pem);
     let (subnet_id, cup) = read_and_verify_cup(crypto.as_ref(), cup_path)?;
 
@@ -326,7 +329,7 @@ pub fn extract_master_public_keys(
 
     if public_keys.is_empty() {
         println!("\nThe CUP contains no threshold master public keys.");
-        return Ok(());
+        return Ok(public_keys);
     }
 
     println!(
@@ -344,5 +347,5 @@ pub fn extract_master_public_keys(
         );
     }
 
-    Ok(())
+    Ok(public_keys)
 }

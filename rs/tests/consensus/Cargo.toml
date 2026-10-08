@@ -17,6 +17,7 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
+ic-crypto-utils-canister-threshold-sig = { path = "../../crypto/utils/canister_threshold_sig" }
 ic-cup-explorer = { path = "../../cup_explorer" }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
@@ -33,6 +34,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
+ic-vetkeys = { workspace = true }
 ic_consensus_system_test_catch_up_test_common = { path = "./catch_up_test_common" }
 ic_consensus_system_test_liveness_test_common = { path = "./liveness_test_common" }
 ic_consensus_system_test_utils = { path = "./utils" }
