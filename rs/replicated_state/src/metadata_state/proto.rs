@@ -257,8 +257,6 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
             consumed_cycles_by_deleted_canisters: Some(
                 (&item.consumed_cycles_by_deleted_canisters).into(),
             ),
-            consumed_cycles_http_outcalls: Some((&item.consumed_cycles_http_outcalls).into()),
-            consumed_cycles_ecdsa_outcalls: Some((&item.consumed_cycles_ecdsa_outcalls).into()),
             threshold_signature_agreements: item
                 .threshold_signature_agreements
                 .iter()
@@ -316,16 +314,6 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 item.consumed_cycles_by_deleted_canisters,
                 "SubnetMetrics::consumed_cycles_by_deleted_canisters",
             )?,
-            consumed_cycles_http_outcalls: try_from_option_field(
-                item.consumed_cycles_http_outcalls,
-                "SubnetMetrics::consumed_cycles_http_outcalls",
-            )
-            .unwrap_or_else(|_| NominalCycles::zero()),
-            consumed_cycles_ecdsa_outcalls: try_from_option_field(
-                item.consumed_cycles_ecdsa_outcalls,
-                "SubnetMetrics::consumed_cycles_ecdsa_outcalls",
-            )
-            .unwrap_or_else(|_| NominalCycles::zero()),
             threshold_signature_agreements,
             consumed_cycles_by_use_case,
             // Transient, with no corresponding proto field:
