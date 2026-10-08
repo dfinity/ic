@@ -16,6 +16,8 @@ from typing import List, Optional
 
 import invoke
 
+from toolchains.sysimage.container_context import arrange_component_files, resolve_file_args
+
 
 @dataclass(frozen=True)
 class BaseImageOverride:
@@ -46,17 +48,6 @@ def load_base_image_tar_file(tar_file: Path):
     storage_args = get_storage_dir_args()
     cmd = f"podman {storage_args} image load --quiet --input {tar_file}"
     invoke.run(cmd)
-
-
-def arrange_component_files(context_dir, component_files):
-    """Add component files into the context directory by copying them to their defined paths."""
-    for component_file in component_files:
-        source_file, install_target = component_file.split(":")
-        if install_target[0] == "/":
-            install_target = install_target[1:]
-        install_target = os.path.join(context_dir, install_target)
-        os.makedirs(os.path.dirname(install_target), exist_ok=True)
-        shutil.copy(source_file, install_target)
 
 
 def build_container(
@@ -130,23 +121,6 @@ def export_container_filesystem(image_tag: str, destination_tar_filename: str):
         raise RuntimeError(f"podman export failed (exit {proc.returncode})")
 
 
-def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:
-    result = list()
-    for arg in file_build_args:
-        chunks = arg.split("=")
-        if len(chunks) != 2:
-            raise RuntimeError(f"File build arg '{arg}' is not valid")
-        (name, pathname) = chunks
-
-        path = Path(context_dir) / pathname
-
-        with open(path, "r") as f:
-            value = f.readline().strip()
-            result.append(f"{name}={value}")
-
-    return result
-
-
 def get_args():
     parser = argparse.ArgumentParser()
 
@@ -198,7 +172,7 @@ def get_args():
         type=str,
         action="append",
         help="Files to include in rootfs; expects list of sourcefile:targetfile",
-        required=True,
+        default=[],
     )
 
     parser.add_argument(

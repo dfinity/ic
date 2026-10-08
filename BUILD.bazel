@@ -13,6 +13,9 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     ".git",
     "buf.yaml",
+    # The dev-container image tag, an input of the IC-OS image actions, which use some tools of
+    # that image (see //toolchains/sysimage:toolchain.bzl).
+    "ci/container/TAG",
     "clippy.toml",
     "rustfmt.toml",
     "mainnet-canister-revisions.json",

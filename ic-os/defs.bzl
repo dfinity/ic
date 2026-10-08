@@ -151,6 +151,8 @@ def icos_build(
             dockerfile = image_deps["dockerfile"],
             build_args = image_deps["build_args"],
             file_build_arg = image_deps["file_build_arg"],
+            base_rootfs = image_deps["base_rootfs"],
+            base_image_ref = image_deps["base_image_ref"],
             target_compatible_with = ["@platforms//os:linux"],
             tags = ["manual"],
         )
@@ -170,36 +172,38 @@ def icos_build(
     # (see //ic-os/guestos/envs/sev-recovery:build-sev-recovery).
     native.genrule(
         name = "alternative_guestos_base_bootfs_tree_tar",
-        srcs = [":base-update-img.tar.zst"],
+        srcs = [
+            ":base-update-img.tar.zst",
+            # The dev-container image tag stands in for its fakeroot and tar (see
+            # //toolchains/sysimage:toolchain.bzl).
+            "//:ci/container/TAG",
+        ],
         outs = ["alternative_guestos_base_bootfs_tree.tar"],
+        # Dump the boot partition's files with debugfs under fakeroot, which records
+        # their owners, rather than mounting it: no /dev/fuse or setuid fusermount
+        # needed, so this runs sandboxed and remotely. The files keep their modes and
+        # owners; the downstream ext4_image resets all timestamps anyway.
         cmd = """
 set -euo pipefail
 
-tmpdir=$$(mktemp -d)
-mounted=0
-cleanup() {
-  set +e
-  if [[ $$mounted -eq 1 ]]; then
-    fusermount3 -u "$$tmpdir/bootfs" || fusermount -u "$$tmpdir/bootfs" || umount "$$tmpdir/bootfs"
-  fi
-  rm -rf "$$tmpdir"
-}
-trap cleanup EXIT
+tmpdir=$$(mktemp -d -p "$$PWD")
+trap 'rm -rf "$$tmpdir"' EXIT
 
 # Extract boot.img from the base GuestOS update image.
-tar --extract --zstd --to-stdout --file "$<" boot.img > "$$tmpdir/boot.img"
+tar --extract --zstd --to-stdout --file $(location :base-update-img.tar.zst) boot.img > "$$tmpdir/boot.img"
 
 mkdir "$$tmpdir/bootfs"
-$(location //:fuse2fs) -o ro,norecovery,fakeroot "$$tmpdir/boot.img" "$$tmpdir/bootfs"
-mounted=1
-tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
+# In the sandbox's user namespace a real chown fails with EINVAL, which fakeroot
+# doesn't ignore; the owners are recorded by fakeroot either way.
+FAKEROOTDONTTRYCHOWN=1 fakeroot -- sh -c '
+    "$$1" -R "rdump / $$2/bootfs" "$$2/boot.img"
+    tar --create --file "$$3" --numeric-owner --sort=name --mtime=@0 -C "$$2/bootfs" .
+' sh $(location //:debugfs) "$$tmpdir" "$@"
 """,
-        message = "Extracting base GuestOS boot partition via fuse2fs",
-        # Mounting with fuse2fs needs /dev/fuse and the setuid fusermount, which
-        # neither the sandbox nor the remote executors provide.
-        tags = ["manual", "no-sandbox", "no-remote-exec"],
+        message = "Extracting base GuestOS boot partition",
+        tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
-        tools = ["//:fuse2fs"],
+        tools = ["//:debugfs"],
     )
 
     ext4_image(
@@ -341,11 +345,16 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
             native.genrule(
                 name = "generate-" + partition_root_signed_tzst,
                 testonly = malicious,
-                srcs = [partition_root_unsigned_tzst],
+                # The dev-container image tag stands in for its veritysetup (see
+                # //toolchains/sysimage:toolchain.bzl).
+                srcs = [
+                    partition_root_unsigned_tzst,
+                    "//:ci/container/TAG",
+                ],
                 outs = [partition_root_signed_tzst, partition_root_hash],
                 cmd = "$(location //toolchains/sysimage:tmpdir_wrapper) " +
                       "$(location //toolchains/sysimage:verity_sign) " +
-                      "-i $< -o $(location :" + partition_root_signed_tzst + ") " +
+                      "-i $(location " + partition_root_unsigned_tzst + ") -o $(location :" + partition_root_signed_tzst + ") " +
                       "-r $(location " + partition_root_hash + ") " +
                       "--dflate $(location //rs/ic_os/build_tools/dflate) " +
                       "--zstd $(location @zstd//:zstd_cli)",
@@ -394,6 +403,9 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
             # are validated against the proposal *in the same genrule* so that the
             # validation can never become a leaf target that is silently skipped.
             measurement_srcs = [
+                # The dev-container image tag stands in for its jq (see
+                # //toolchains/sysimage:toolchain.bzl).
+                "//:ci/container/TAG",
                 ":" + extracted_ovmf_sev,
                 ":" + extracted_boot_args,
                 ":" + extracted_initrd,

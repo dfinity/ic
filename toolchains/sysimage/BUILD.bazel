@@ -1,8 +1,56 @@
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@python_deps//:requirements.bzl", "requirement")
-load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load(":base_images.bzl", "ICOS_BASE_IMAGES")
+load(":toolchain.bzl", "oci_rootfs")
 
 package(default_visibility = ["//visibility:public"])
+
+# How the IC-OS container filesystems (rootfs-tree.tar, the bootloader tree)
+# are built from their Dockerfiles:
+# - "vm": the steps run in a KVM microVM (build_container_filesystem_vm.py).
+#   Needs only /dev/kvm, so it runs sandboxed and remotely.
+# - "podman": rootless `podman build` on the host (build_container_filesystem_tar.py),
+#   which needs user namespaces. Select it with --config=icos_podman.
+# The local-base-* images always use podman, which builds their base image.
+string_flag(
+    name = "container_executor",
+    build_setting_default = "vm",
+    values = [
+        "podman",
+        "vm",
+    ],
+)
+
+# The base images, flattened into root filesystem tars, e.g.
+# :icos_base_guestos_prod_rootfs. See base_images.bzl.
+[
+    oci_rootfs(
+        name = name + "_rootfs",
+        layout = "@{0}_linux_amd64//:{0}_linux_amd64".format(name),
+        tags = ["manual"],
+        target_compatible_with = ["@platforms//os:linux"],
+    )
+    for name in ICOS_BASE_IMAGES
+]
+
+# The kernel the container build VMs boot: the GuestOS base image's. It has
+# virtio-blk and ext4 built in, so it needs no initramfs.
+genrule(
+    name = "build_vm_kernel",
+    srcs = [":icos_base_guestos_prod_rootfs"],
+    outs = ["build_vm_vmlinuz"],
+    cmd = """
+set -euo pipefail
+for f in $(SRCS); do case "$$f" in *.tar) rootfs="$$f";; esac; done
+kernels=$$(tar -tf "$$rootfs" | grep -E '^boot/vmlinuz-[^/]+$$')
+[ "$$(echo "$$kernels" | wc -l)" -eq 1 ] || { echo "expected one kernel, got: $$kernels" >&2; exit 1; }
+tar -xOf "$$rootfs" "$$kernels" > $@
+""",
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
 
 # Process wrapper for the ic-os build commands that run podman.
 sh_binary(
@@ -28,6 +76,34 @@ py_library(
     srcs = ["utils.py"],
 )
 
+py_library(
+    name = "container_context",
+    srcs = ["container_context.py"],
+)
+
+py_library(
+    name = "dockerfile",
+    srcs = ["dockerfile.py"],
+)
+
+py_test(
+    name = "dockerfile_test",
+    srcs = ["dockerfile_test.py"],
+    data = [
+        "//ic-os/bootloader:context/Dockerfile",
+        "//ic-os/guestos/context:Dockerfile",
+        "//ic-os/hostos/context:Dockerfile",
+        "//ic-os/setupos/context:Dockerfile",
+    ],
+    deps = [":dockerfile"],
+)
+
+py_test(
+    name = "oci_rootfs_test",
+    srcs = ["oci_rootfs_test.py"],
+    deps = [":oci_rootfs_lib"],
+)
+
 # Build tools
 py_binary(
     name = "build_container_base_image",
@@ -43,8 +119,28 @@ py_binary(
     name = "build_container_filesystem_tar",
     srcs = ["build_container_filesystem_tar.py"],
     deps = [
+        ":container_context",
         requirement("invoke"),
     ],
+)
+
+py_binary(
+    name = "build_container_filesystem_vm",
+    srcs = ["build_container_filesystem_vm.py"],
+    deps = [
+        ":container_context",
+        ":dockerfile",
+    ],
+)
+
+py_library(
+    name = "oci_rootfs_lib",
+    srcs = ["oci_rootfs.py"],
+)
+
+py_binary(
+    name = "oci_rootfs",
+    srcs = ["oci_rootfs.py"],
 )
 
 py_binary(

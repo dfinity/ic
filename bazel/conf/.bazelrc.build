@@ -47,13 +47,18 @@ build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
 build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
-# The ic-os container builds run rootless 'podman build', which needs to create user namespaces,
-# so they run locally, outside the sandbox (see ICOS_CONTAINER_MNEMONICS in
-# toolchains/sysimage/toolchain.bzl). IcosContainerBuild outputs are still cached; the base image
-# is only cached locally (no-remote-cache), as it's not reproducible. All other ic-os image actions
-# only operate on plain files and run sandboxed or remotely like any other action.
+# The ic-os container filesystems are built in a KVM microVM (IcosContainerVmBuild), which needs
+# only /dev/kvm, so like all other ic-os image actions they run sandboxed or remotely. The podman
+# executor (--config=icos_podman, and always for the local-base-* images) runs rootless
+# 'podman build' instead, which needs to create user namespaces, so those actions run locally,
+# outside the sandbox (see ICOS_CONTAINER_MNEMONICS in toolchains/sysimage/toolchain.bzl).
+# IcosContainerBuild outputs are still cached; the base image is only cached locally
+# (no-remote-cache), as it's not reproducible.
 build --strategy=IcosContainerBaseImage=local
 build --strategy=IcosContainerBuild=local
+
+# Fallback: build the ic-os container filesystems with rootless podman on the host, as before.
+build:icos_podman --//toolchains/sysimage:container_executor=podman
 
 # Escape hatch: run all ic-os image actions on the host, unsandboxed, as before. Use it with
 # `--config=icos_host` on a machine or executor where they fail sandboxed or remotely. The progress
@@ -69,6 +74,11 @@ common --flag_alias=timeout_value=//bazel:timeout_value
 common --flag_alias=hermetic_cc=//bazel:hermetic_cc
 
 common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --stamp'
+# Release (stamped) builds build the IC-OS images from scratch rather than taking them from the
+# remote cache, which PR builds write to, as they did before the images became cacheable. They
+# don't upload them either: their root and boot partitions embed the version, so nothing else
+# could use them. The binaries in the images come from the cache like all other release artifacts.
+build:stamped --modify_execution_info=^Icos.*=+no-remote-cache
 
 # Configure all tests to retry automatically on failure (up to 3 times)
 # such that we can detect flaky tests ASAP and fix them.

@@ -95,11 +95,15 @@ def image_deps(mode, malicious = False):
         deps.update({
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
+            "base_rootfs": Label("//toolchains/sysimage:icos_base_guestos_dev_rootfs"),
+            "base_image_ref": Label("//ic-os/guestos/context:docker-base.dev"),
         })
     else:
         deps.update({
             "build_args": prod_build_args,
             "file_build_arg": prod_file_build_arg,
+            "base_rootfs": Label("//toolchains/sysimage:icos_base_guestos_prod_rootfs"),
+            "base_image_ref": Label("//ic-os/guestos/context:docker-base.prod"),
         })
 
     # Update dev rootfs
