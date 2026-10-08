@@ -5,12 +5,13 @@ use ic_protobuf::{
 use ic_types::{
     NodeIndex,
     artifact::ConsensusMessageId,
+    canister_http::CanisterHttpResponse,
     consensus::{ConsensusMessageHash, idkg::IDkgArtifactId},
     crypto::{CryptoHash, CryptoHashOf, canister_threshold_sig::idkg::SignedIDkgDealing},
     messages::SignedRequestBytes,
 };
 
-use super::SignedIngressId;
+use super::{CanisterHttpResponseContentHash, SignedIngressId};
 
 /// Parameters for the `/block/ingress/rpc` requests.
 #[derive(Clone, Debug, PartialEq)]
@@ -168,6 +169,77 @@ impl From<GetIDkgDealingInBlockResponse> for pb::GetIDkgDealingInBlockResponse {
     }
 }
 
+/// Parameters for the `/block/canister_http_response/rpc` requests.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct GetCanisterHttpResponseInBlockRequest {
+    pub(crate) content_hash: CanisterHttpResponseContentHash,
+    pub(crate) block_proposal_id: ConsensusMessageId,
+}
+
+impl TryFrom<pb::GetCanisterHttpResponseInBlockRequest> for GetCanisterHttpResponseInBlockRequest {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::GetCanisterHttpResponseInBlockRequest) -> Result<Self, Self::Error> {
+        let consensus_message_id: ConsensusMessageId = try_from_option_field(
+            value.block_proposal_id,
+            "GetCanisterHttpResponseInBlockRequest::block_proposal_id",
+        )?;
+
+        match &consensus_message_id.hash {
+            ConsensusMessageHash::BlockProposal(_) => {}
+            // if it's not block proposal => return an error;
+            _ => {
+                return Err(ProxyDecodeError::Other(String::from(
+                    "Not a BlockProposal consensus message id",
+                )));
+            }
+        };
+
+        Ok(Self {
+            content_hash: CryptoHashOf::from(CryptoHash(value.content_hash)),
+            block_proposal_id: consensus_message_id,
+        })
+    }
+}
+
+impl From<GetCanisterHttpResponseInBlockRequest> for pb::GetCanisterHttpResponseInBlockRequest {
+    fn from(value: GetCanisterHttpResponseInBlockRequest) -> Self {
+        Self {
+            content_hash: value.content_hash.get().0,
+            block_proposal_id: Some(value.block_proposal_id.into()),
+        }
+    }
+}
+
+/// `/block/canister_http_response/rpc` response.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct GetCanisterHttpResponseInBlockResponse {
+    pub(crate) response: CanisterHttpResponse,
+}
+
+impl TryFrom<pb::GetCanisterHttpResponseInBlockResponse>
+    for GetCanisterHttpResponseInBlockResponse
+{
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::GetCanisterHttpResponseInBlockResponse) -> Result<Self, Self::Error> {
+        Ok(Self {
+            response: try_from_option_field(
+                value.response,
+                "GetCanisterHttpResponseInBlockResponse::response",
+            )?,
+        })
+    }
+}
+
+impl From<GetCanisterHttpResponseInBlockResponse> for pb::GetCanisterHttpResponseInBlockResponse {
+    fn from(value: GetCanisterHttpResponseInBlockResponse) -> Self {
+        pb::GetCanisterHttpResponseInBlockResponse {
+            response: Some(value.response.into()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
@@ -176,8 +248,10 @@ mod tests {
     use ic_types::{
         Height,
         artifact::IngressMessageId,
+        canister_http::CanisterHttpResponseContent,
         consensus::idkg::{IDkgArtifactIdData, IDkgArtifactIdDataOf, dealing_prefix},
         crypto::{CryptoHash, CryptoHashOf, canister_threshold_sig::idkg::IDkgTranscriptId},
+        messages::CallbackId,
         signature::BasicSignature,
         time::UNIX_EPOCH,
     };
@@ -311,6 +385,53 @@ mod tests {
             err,
             ProxyDecodeError::Other(s) if s.contains("Not a dealing artifact id")
         );
+    }
+
+    #[test]
+    fn get_canister_http_response_in_block_request_serialization_test() {
+        let request = GetCanisterHttpResponseInBlockRequest {
+            content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            block_proposal_id: make_proposal_id(),
+        };
+
+        let proto = pb::GetCanisterHttpResponseInBlockRequest::from(request.clone());
+        let deserialized = GetCanisterHttpResponseInBlockRequest::try_from(proto)
+            .expect("Should successfully deserialize the proto");
+
+        assert_eq!(request, deserialized);
+    }
+
+    #[test]
+    fn get_canister_http_response_in_block_request_serialization_fails_if_not_proposal_test() {
+        let request = GetCanisterHttpResponseInBlockRequest {
+            content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
+            block_proposal_id: fake_finalization_consensus_message_id(),
+        };
+
+        let proto = pb::GetCanisterHttpResponseInBlockRequest::from(request.clone());
+        let err = GetCanisterHttpResponseInBlockRequest::try_from(proto)
+            .expect_err("Should not successfully deserialize the proto");
+
+        assert_matches!(
+            err,
+            ProxyDecodeError::Other(s) if s.contains("Not a BlockProposal consensus message id")
+        );
+    }
+
+    #[test]
+    fn get_canister_http_response_in_block_response_serialization_test() {
+        let response = GetCanisterHttpResponseInBlockResponse {
+            response: CanisterHttpResponse {
+                id: CallbackId::new(42),
+                content: CanisterHttpResponseContent::Success(vec![1, 2, 3]),
+            },
+        };
+
+        let proto = pb::GetCanisterHttpResponseInBlockResponse::from(response.clone());
+        let deserialized = GetCanisterHttpResponseInBlockResponse::try_from(proto)
+            .expect("Should successfully deserialize the proto");
+
+        assert_eq!(response, deserialized);
     }
 
     #[test]

@@ -172,7 +172,6 @@ rust_ic_test(
         ":ckdoge_minter_lib",
         "//:pocket-ic-server",
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
-        "//packages/pocket-ic",
         "//rs/dogecoin/ckdoge/test_utils",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",

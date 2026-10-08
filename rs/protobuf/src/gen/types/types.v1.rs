@@ -231,6 +231,7 @@ impl NiDkgTag {
 pub enum EcdsaCurve {
     Unspecified = 0,
     Secp256k1 = 1,
+    Secp256r1 = 2,
 }
 impl EcdsaCurve {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -241,6 +242,7 @@ impl EcdsaCurve {
         match self {
             Self::Unspecified => "ECDSA_CURVE_UNSPECIFIED",
             Self::Secp256k1 => "ECDSA_CURVE_SECP256K1",
+            Self::Secp256r1 => "ECDSA_CURVE_SECP256R1",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -248,6 +250,7 @@ impl EcdsaCurve {
         match value {
             "ECDSA_CURVE_UNSPECIFIED" => Some(Self::Unspecified),
             "ECDSA_CURVE_SECP256K1" => Some(Self::Secp256k1),
+            "ECDSA_CURVE_SECP256R1" => Some(Self::Secp256r1),
             _ => None,
         }
     }
@@ -400,15 +403,6 @@ pub struct Summary {
     pub current_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
     #[prost(message, repeated, tag = "12")]
     pub next_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
-    /// Set by replica versions that no longer maintain `transcripts_for_remote_subnets` (field 10).
-    ///
-    /// When set, field 10 must be ignored entirely, including when hashing the summary. This is what
-    /// allows the field to be removed without changing the hash of a summary: replica versions that
-    /// still maintain the field and versions that have dropped it derive the same hash from the same
-    /// wire bytes, because both read this marker. `repeated` fields cannot express the difference
-    /// between "absent" and "empty" on the wire, hence the separate marker.
-    #[prost(bool, tag = "16")]
-    pub transcripts_for_remote_subnets_removed: bool,
     #[prost(oneof = "summary::SubnetSplittingStatus", tags = "13, 14, 15")]
     pub subnet_splitting_status: ::core::option::Option<summary::SubnetSplittingStatus>,
 }
@@ -1315,6 +1309,13 @@ pub struct DkgMessageId {
     pub height: u64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradeAuthorizationShareId {
+    #[prost(bytes = "vec", tag = "1")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ConsensusMessageId {
     #[prost(message, optional, tag = "1")]
     pub hash: ::core::option::Option<ConsensusMessageHash>,
@@ -1487,6 +1488,8 @@ pub struct Block {
     pub query_stats_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "17")]
     pub chain_key_payload_bytes: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "18")]
+    pub upgrade_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "11")]
     pub payload_hash: ::prost::alloc::vec::Vec<u8>,
 }
@@ -1770,6 +1773,20 @@ pub struct GetIDkgDealingInBlockResponse {
     pub signed_dealing:
         ::core::option::Option<super::super::registry::subnet::v1::IDkgSignedDealingTuple>,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetCanisterHttpResponseInBlockRequest {
+    /// The hash of the stripped `CanisterHttpResponse`, i.e. the `content_hash` that
+    /// the block's own metadata for that response carries.
+    #[prost(bytes = "vec", tag = "1")]
+    pub content_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub block_proposal_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetCanisterHttpResponseInBlockResponse {
+    #[prost(message, optional, tag = "1")]
+    pub response: ::core::option::Option<CanisterHttpResponse>,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StrippedBlockProposal {
     /// The original block proposal proto but all \[`Strippable`\] data is removed.
@@ -1784,6 +1801,17 @@ pub struct StrippedBlockProposal {
     /// The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
     #[prost(message, repeated, tag = "4")]
     pub stripped_idkg_dealings: ::prost::alloc::vec::Vec<StrippedIDkgDealing>,
+    /// The stripped canister HTTP responses, i.e. the response contents that were pruned from the
+    /// canister HTTP payload of the block proposal. Deduplicated: two committee members of a flexible
+    /// outcall that produced the very same response share one entry.
+    #[prost(message, repeated, tag = "5")]
+    pub stripped_canister_http_responses: ::prost::alloc::vec::Vec<StrippedCanisterHttpResponse>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct StrippedCanisterHttpResponse {
+    /// The hash of the response content that was pruned from the canister HTTP payload.
+    #[prost(bytes = "vec", tag = "1")]
+    pub content_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StrippedIDkgDealing {
@@ -1849,4 +1877,52 @@ impl ChainKeyErrorCode {
             _ => None,
         }
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradePermitAction {
+    #[prost(oneof = "upgrade_permit_action::Action", tags = "1, 2, 3")]
+    pub action: ::core::option::Option<upgrade_permit_action::Action>,
+}
+/// Nested message and enum types in `UpgradePermitAction`.
+pub mod upgrade_permit_action {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Action {
+        #[prost(message, tag = "1")]
+        RequestPermit(super::RequestUpgradePermit),
+        #[prost(message, tag = "2")]
+        AuthorizePermit(super::AuthorizeUpgradePermit),
+        #[prost(message, tag = "3")]
+        ReturnPermit(super::ReturnUpgradePermit),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradePermitRequest {
+    #[prost(message, optional, tag = "1")]
+    pub requestor: ::core::option::Option<NodeId>,
+    #[prost(uint64, tag = "2")]
+    pub request_height: u64,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct RequestUpgradePermit {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<UpgradePermitRequest>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AuthorizeUpgradePermit {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<UpgradePermitRequest>,
+    #[prost(message, repeated, tag = "2")]
+    pub signatures: ::prost::alloc::vec::Vec<BasicSignature>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ReturnUpgradePermit {
+    #[prost(message, optional, tag = "1")]
+    pub node: ::core::option::Option<NodeId>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradeAuthorizationShare {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<UpgradePermitRequest>,
+    #[prost(message, optional, tag = "2")]
+    pub signature: ::core::option::Option<BasicSignature>,
 }

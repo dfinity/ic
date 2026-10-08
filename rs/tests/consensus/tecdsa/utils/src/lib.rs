@@ -71,9 +71,18 @@ pub fn make_key(name: &str) -> EcdsaKeyId {
     }
 }
 
-pub fn make_ecdsa_key_id() -> MasterPublicKeyId {
+pub fn make_ecdsa_secp256k1_key_id() -> MasterPublicKeyId {
     MasterPublicKeyId::Ecdsa(EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
+        name: "some_ecdsa_key".to_string(),
+    })
+}
+
+/// Shares its name with the secp256k1 key, as keys of both curves would on
+/// mainnet, so that tests catch code telling ECDSA keys apart by name alone.
+pub fn make_ecdsa_secp256r1_key_id() -> MasterPublicKeyId {
+    MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        curve: EcdsaCurve::Secp256r1,
         name: "some_ecdsa_key".to_string(),
     })
 }
@@ -101,7 +110,8 @@ pub fn make_vetkd_key_id() -> MasterPublicKeyId {
 
 pub fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
     vec![
-        make_ecdsa_key_id(),
+        make_ecdsa_secp256k1_key_id(),
+        make_ecdsa_secp256r1_key_id(),
         make_bip340_key_id(),
         make_eddsa_key_id(),
         make_vetkd_key_id(),
@@ -110,7 +120,8 @@ pub fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
 
 pub fn make_key_ids_for_all_idkg_schemes() -> Vec<MasterPublicKeyId> {
     vec![
-        make_ecdsa_key_id(),
+        make_ecdsa_secp256k1_key_id(),
+        make_ecdsa_secp256r1_key_id(),
         make_bip340_key_id(),
         make_eddsa_key_id(),
     ]
@@ -408,9 +419,18 @@ pub async fn get_ecdsa_public_key_with_retries(
             }
         }
     };
-    let pk =
-        VerifyingKey::from_sec1_bytes(&public_key[..]).expect("Bytes are not a valid public key");
-    info!(logger, "ecdsa_public_key returns {:?}", pk);
+    match key_id.curve {
+        EcdsaCurve::Secp256k1 => {
+            let pk = VerifyingKey::from_sec1_bytes(&public_key[..])
+                .expect("Bytes are not a valid public key");
+            info!(logger, "ecdsa_public_key returns {:?}", pk);
+        }
+        EcdsaCurve::Secp256r1 => {
+            let pk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&public_key[..])
+                .expect("Bytes are not a valid public key");
+            info!(logger, "ecdsa_public_key returns {:?}", pk);
+        }
+    }
     Ok(public_key)
 }
 
@@ -1247,9 +1267,16 @@ pub fn verify_ed25519_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     vk.verify(msg, &signature).is_ok()
 }
 
-pub fn verify_ecdsa_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+pub fn verify_ecdsa_secp256k1_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     let pk = VerifyingKey::from_sec1_bytes(pk).expect("Bytes are not a valid public key");
     let signature = Signature::try_from(sig).expect("Bytes are not a valid signature");
+    pk.verify_prehash(msg, &signature).is_ok()
+}
+
+pub fn verify_ecdsa_secp256r1_signature(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+    let pk =
+        p256::ecdsa::VerifyingKey::from_sec1_bytes(pk).expect("Bytes are not a valid public key");
+    let signature = p256::ecdsa::Signature::try_from(sig).expect("Bytes are not a valid signature");
     pk.verify_prehash(msg, &signature).is_ok()
 }
 
@@ -1270,7 +1297,8 @@ pub fn verify_vetkey(public_key: &[u8], encrypted_key: &[u8], input: &[u8]) -> b
 pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: &[u8]) {
     let res = match key_id {
         MasterPublicKeyId::Ecdsa(key_id) => match key_id.curve {
-            EcdsaCurve::Secp256k1 => verify_ecdsa_signature(pk, sig, msg),
+            EcdsaCurve::Secp256k1 => verify_ecdsa_secp256k1_signature(pk, sig, msg),
+            EcdsaCurve::Secp256r1 => verify_ecdsa_secp256r1_signature(pk, sig, msg),
         },
         MasterPublicKeyId::Schnorr(key_id) => match key_id.algorithm {
             SchnorrAlgorithm::Bip340Secp256k1 => verify_bip340_signature(pk, sig, msg),
@@ -1294,6 +1322,10 @@ fn cast_ecdsa_key_id(key_id: EcdsaKeyId) -> ic_cdk_management_canister::EcdsaKey
     ic_cdk_management_canister::EcdsaKeyId {
         curve: match key_id.curve {
             EcdsaCurve::Secp256k1 => ic_cdk_management_canister::EcdsaCurve::Secp256k1,
+            EcdsaCurve::Secp256r1 => unimplemented!(
+                "ic-cdk-management-canister re-exports a secp256k1-only EcdsaCurve; \
+                 needs ic-management-canister-types released and cdk-rs bumped"
+            ),
         },
         name: key_id.name,
     }

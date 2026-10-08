@@ -3,7 +3,7 @@ Title:: Soak test for the http_requests feature
 
 Goal:: Measure the evolving qps of http_requests originating from one canister. The test should be run with the following command:
 ```
-bazel run //rs/tests/networking:canister_http_soak_test --test_tmpdir=./canister_http_soak_test -- --keepalive
+bazel run //rs/tests/networking:canister_http_soak_test_farm --test_tmpdir=./canister_http_soak_test -- --keepalive
 ```
 
 Runbook::

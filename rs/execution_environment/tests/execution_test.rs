@@ -572,9 +572,9 @@ fn compressed_canisters_support() {
 
     let test_canister_wasm = wat::parse_str(TEST_CANISTER).expect("invalid WAT");
     let compressed_wasm = {
-        let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
         std::io::copy(&mut &test_canister_wasm[..], &mut encoder).unwrap();
-        encoder.finish().into_result().unwrap()
+        encoder.finish().unwrap()
     };
     let compressed_hash = ic_crypto_sha2::Sha256::hash(&compressed_wasm);
 
@@ -3197,9 +3197,10 @@ fn certified_subnet_metrics(env: &StateMachine) -> (MixedHashTree, CryptoHashOfP
 /// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
 /// is not persisted: `ReplicatedState::new_from_checkpoint` re-derives it from the
 /// canisters it loads, exactly as the refresh on every committed state does. From
-/// certification version `V29` on, that aggregate is what
-/// `/subnet/<subnet_id>/metrics` certifies, so a replica restarting from a
-/// checkpoint has to certify byte-for-byte the same leaf as one that kept running.
+/// certification version `V29` on, that aggregate (or, from `V30` on, its
+/// monotonic counterpart) is what `/subnet/<subnet_id>/metrics` certifies, so a
+/// replica restarting from a checkpoint has to certify byte-for-byte the same leaf
+/// as one that kept running.
 #[test]
 fn subnet_metrics_are_unchanged_across_a_restart() {
     let env = StateMachineBuilder::new()
@@ -3298,7 +3299,8 @@ fn assert_consumed_cycles_are_refreshed(env: &StateMachine) -> NominalCycles {
 /// The canisters' part of `SubnetMetrics::consumed_cycles_total_including_canisters`
 /// is refreshed on every committed state, not only on the rounds that happen to
 /// touch the subnet-level fields. From certification version `V29` on the aggregate
-/// is certified at `/subnet/<subnet_id>/metrics`, so a stale one would be served to
+/// (or, from `V30` on, its monotonic counterpart) is certified at
+/// `/subnet/<subnet_id>/metrics`, so a stale one would be served to
 /// users as the current consumption of the subnet.
 ///
 /// A heartbeat that burns a fixed amount of cycles makes every single round consume

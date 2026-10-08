@@ -41,7 +41,6 @@ rust_library(
         "//rs/nns/constants",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
-        "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:candid",
@@ -53,7 +52,6 @@ rust_library(
         "@crate_index//:rand",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
-        "@crate_index//:yansi",
     ],
 )
 
@@ -85,7 +83,6 @@ rust_canister(
         "//rs/nns/constants",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
-        "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:build-info",
@@ -98,7 +95,6 @@ rust_canister(
         "@crate_index//:rand",
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
-        "@crate_index//:yansi",
     ],
 )
 
@@ -120,7 +116,6 @@ rust_test(
         "//rs/nns/constants",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
-        "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:candid",
@@ -134,7 +129,6 @@ rust_test(
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
-        "@crate_index//:yansi",
     ],
 )
 
@@ -162,7 +156,6 @@ rust_test(
         "//rs/nns/constants",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
-        "//rs/types/base_types",
         "//rs/types/cycles",
         "//rs/types/types",
         "//rs/types/types_test_utils",
@@ -180,6 +173,5 @@ rust_test(
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
-        "@crate_index//:yansi",
     ],
 )

@@ -30,7 +30,6 @@ ic-registry-resource-limits = { path = "../registry/resource_limits" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
-ic-state-layout = { path = "../state_layout" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-types-cycles = { path = "../types/cycles" }
@@ -80,7 +79,6 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
-libflate = { workspace = true }
 maplit = { workspace = true }
 proptest = { workspace = true }
 regex-lite = { workspace = true }
@@ -91,7 +89,6 @@ wat = { workspace = true }
 wirm = { workspace = true }
 
 [build-dependencies]
-escargot = { workspace = true }
 
 [features]
 default = []

@@ -278,6 +278,7 @@ impl From<EcdsaCurve> for AlgorithmId {
     fn from(curve: EcdsaCurve) -> Self {
         match curve {
             EcdsaCurve::Secp256k1 => AlgorithmId::ThresholdEcdsaSecp256k1,
+            EcdsaCurve::Secp256r1 => AlgorithmId::ThresholdEcdsaSecp256r1,
         }
     }
 }

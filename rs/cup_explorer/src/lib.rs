@@ -11,7 +11,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     RegistryVersion, SubnetId,
-    consensus::{CatchUpPackage, HasHeight},
+    consensus::{CatchUpPackage, CupType, HasHeight},
     crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet,
 };
 use prost::Message;
@@ -57,9 +57,9 @@ fn get_subnet_id(cup: &CatchUpPackage) -> Result<SubnetId, String> {
     // If the DKG key material was signed by the subnet itself — use it.
     match dkg_id.target_subnet {
         NiDkgTargetSubnet::Local => Ok(dkg_id.dealer_subnet),
-        // If we hit this case, then the local CUP is a genesis or recovery CUP of an application
-        // subnet or of the NNS subnet recovered on failover nodes. We cannot derive the subnet id
-        // from it.
+        // If we hit this case, then the local CUP is a genesis, recovery, or post-split CUP of an
+        // application subnet or of the NNS subnet recovered on failover nodes. We cannot derive
+        // the subnet id from it.
         NiDkgTargetSubnet::Remote(_) => {
             Err("Registry CUPs cannot be verified with this tool".into())
         }
@@ -246,26 +246,30 @@ pub fn verify(
             Ok(contents) => {
                 if let Some(cup_contents) = contents.value
                     && contents.version == version
+                    && let CupType::Recovery {
+                        height,
+                        time,
+                        state_hash,
+                    } = CupType::try_from(&cup_contents).map_err(|e| {
+                        format!("Cannot verify recovery history at registry version {version}: {e}")
+                    })?
                 {
                     println!("Found Recovery proposal at version {version}:");
-                    println!("{:>20}: {}", "TIME", cup_contents.time);
-                    println!("{:>20}: {}", "HEIGHT", cup_contents.height);
+                    println!("{:>20}: {}", "TIME", time.as_nanos_since_unix_epoch());
+                    println!("{:>20}: {}", "HEIGHT", height);
                     println!(
                         "{:>20}: {}",
                         "HASH",
-                        hex::encode(&cup_contents.state_hash[..])
+                        hex::encode(&state_hash.get_ref().0[..])
                     );
                     println!("Ensuring recovery time is greater than CUP time...");
-                    assert!(cup_contents.time > block.context.time.as_nanos_since_unix_epoch());
+                    assert!(time > block.context.time);
                     println!("Success!");
                     println!("Ensuring recovery height is greater than CUP height...");
-                    assert!(cup_contents.height > block.height.get());
+                    assert!(height > block.height);
                     println!("Success!");
                     println!("Ensuring recovery state hash is equal to CUP state hash...");
-                    assert_eq!(
-                        cup_contents.state_hash[..],
-                        cup.content.state_hash.get_ref().0[..]
-                    );
+                    assert_eq!(state_hash, cup.content.state_hash);
                     println!("Success!");
                     println!(
                         "The subnet was correctly recovered without modifications to the state!"

@@ -9,6 +9,7 @@ use crate::canister_state::execution_state::{CustomSection, CustomSectionType, W
 use crate::canister_state::system_state::testing::{OutputRequestBuilder, SystemStateTesting};
 use crate::canister_state::system_state::{
     CallContextManager, CanisterHistory, CanisterStatus, MAX_CANISTER_HISTORY_CHANGES,
+    OutstandingPrepayments,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use assert_matches::assert_matches;
@@ -1057,7 +1058,7 @@ fn outstanding_prepayments_of_open_callbacks() {
     let system_state = &mut fixture.canister_state.system_state;
     assert_eq!(
         system_state.outstanding_prepayments(),
-        Some(NominalCycles::zero())
+        Some(OutstandingPrepayments::default())
     );
 
     // `SystemStateTesting::with_callback` prepays 42 for the response execution, 84
@@ -1066,16 +1067,20 @@ fn outstanding_prepayments_of_open_callbacks() {
     // the transmission of both the request and the response, so the response
     // transmission prepayment is not counted on top of it; it is the fallback for
     // legacy callbacks only, see
-    // `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`. The
-    // same two are what an aborted response execution carries, see
-    // `checkpoint_round_backfills_consumed_cycles_monotonic_of_aborted_response_execution`.
+    // `execute_response_of_legacy_callback_settles_the_outstanding_prepayments`.
+    //
+    // The response execution prepayment is outstanding for `Instructions`, the call
+    // transmission one for `RequestAndResponseTransmission`.
     fixture.make_callback(NO_DEADLINE);
     assert_eq!(
         fixture
             .canister_state
             .system_state
             .outstanding_prepayments(),
-        Some(NominalCycles::new(42 + 168))
+        Some(OutstandingPrepayments {
+            instructions: NominalCycles::new(42),
+            transmission: NominalCycles::new(168),
+        })
     );
 
     fixture.make_callback(SOME_DEADLINE);
@@ -1084,7 +1089,10 @@ fn outstanding_prepayments_of_open_callbacks() {
             .canister_state
             .system_state
             .outstanding_prepayments(),
-        Some(NominalCycles::new(2 * (42 + 168)))
+        Some(OutstandingPrepayments {
+            instructions: NominalCycles::new(2 * 42),
+            transmission: NominalCycles::new(2 * 168),
+        })
     );
 }
 
@@ -1110,7 +1118,10 @@ fn outstanding_prepayments_of_paused_and_aborted_executions() {
             .canister_state
             .system_state
             .outstanding_prepayments(),
-        Some(prepaid.nominal())
+        Some(OutstandingPrepayments {
+            instructions: prepaid.nominal(),
+            ..Default::default()
+        })
     );
 
     let mut fixture = CanisterStateFixture::new();
@@ -1131,11 +1142,10 @@ fn outstanding_prepayments_of_paused_and_aborted_executions() {
     );
 }
 
-/// Backfilling the monotonic amount from the gauge is exact, thanks to the
-/// invariant that the gauge exceeds it by exactly the outstanding prepayments. And
-/// it is idempotent, so it can be redone in every checkpoint round.
+/// A gauge exceeds its monotonic counterpart by exactly the prepayments outstanding
+/// for it. Covers the scalar total and the by-use-case map alike.
 #[test]
-fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
+fn consumed_cycles_monotonic_is_the_gauge_net_of_outstanding_prepayments() {
     let cost_schedule = CanisterCyclesCostSchedule::Normal;
     let mut fixture = CanisterStateFixture::new();
     let system_state = &mut fixture.canister_state.system_state;
@@ -1147,72 +1157,73 @@ fn migrate_consumed_cycles_to_monotonic_is_exact_and_idempotent() {
     system_state.consume_cycles(final_charge);
     system_state.consume_cycles(prepaid);
     system_state.refund_cycles(prepaid, refund);
-    let settled = final_charge.nominal() + (prepaid - refund).nominal();
 
-    // ...plus an outstanding prepayment for a call that has not been responded to.
-    let outstanding = CompoundCycles::<Instructions>::new(Cycles::new(42), cost_schedule).nominal()
-        + CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(168), cost_schedule)
-            .nominal();
-    system_state.consume_cycles(CompoundCycles::<Instructions>::new(
-        Cycles::new(42),
-        cost_schedule,
-    ));
-    system_state.consume_cycles(CompoundCycles::<RequestAndResponseTransmission>::new(
-        Cycles::new(168),
-        cost_schedule,
-    ));
+    // ...plus an outstanding prepayment for a call that has not been responded to,
+    // in both refundable use cases.
+    let outstanding_instructions =
+        CompoundCycles::<Instructions>::new(Cycles::new(42), cost_schedule);
+    let outstanding_transmission =
+        CompoundCycles::<RequestAndResponseTransmission>::new(Cycles::new(168), cost_schedule);
+    system_state.consume_cycles(outstanding_instructions);
+    system_state.consume_cycles(outstanding_transmission);
     fixture.make_callback(NO_DEADLINE);
     let system_state = &mut fixture.canister_state.system_state;
 
+    // What is settled, per use case and in total.
+    let settled_memory = final_charge.nominal();
+    let settled_instructions = (prepaid - refund).nominal();
+    let settled = settled_memory + settled_instructions;
+    let outstanding = OutstandingPrepayments {
+        instructions: outstanding_instructions.nominal(),
+        transmission: outstanding_transmission.nominal(),
+    };
+
+    /// Asserts that the monotonic amounts are exactly what was settled.
+    fn assert_settled(
+        system_state: &SystemState,
+        settled: NominalCycles,
+        settled_memory: NominalCycles,
+        settled_instructions: NominalCycles,
+    ) {
+        let metrics = system_state.canister_metrics();
+        assert_eq!(metrics.consumed_cycles_monotonic(), settled);
+        assert_eq!(
+            metrics.consumed_cycles_by_use_cases_monotonic(),
+            &BTreeMap::from([
+                (CyclesUseCase::Memory, settled_memory),
+                (CyclesUseCase::Instructions, settled_instructions),
+                // Nothing of the outstanding transmission prepayment is settled, but
+                // the entry is there: it was created when the prepayment was made.
+                (
+                    CyclesUseCase::RequestAndResponseTransmission,
+                    NominalCycles::zero()
+                ),
+            ])
+        );
+    }
+
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        settled + outstanding
+        settled + outstanding.total()
     );
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        settled
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases(),
+        &BTreeMap::from([
+            (CyclesUseCase::Memory, settled_memory),
+            (
+                CyclesUseCase::Instructions,
+                settled_instructions + outstanding.instructions
+            ),
+            (
+                CyclesUseCase::RequestAndResponseTransmission,
+                outstanding.transmission
+            ),
+        ])
     );
     assert_eq!(system_state.outstanding_prepayments(), Some(outstanding));
-
-    // Pretend the canister was loaded from a checkpoint predating the field.
-    system_state.reset_consumed_cycles_monotonic();
-    system_state.migrate_consumed_cycles_to_monotonic();
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        settled
-    );
-
-    // Redoing it changes nothing.
-    system_state.migrate_consumed_cycles_to_monotonic();
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        settled
-    );
-}
-
-/// A canister with a paused execution cannot be backfilled, as the prepayment of the
-/// paused execution is not part of the replicated state.
-#[test]
-fn migrate_consumed_cycles_to_monotonic_skips_paused_execution() {
-    let mut fixture = CanisterStateFixture::new();
-    let system_state = &mut fixture.canister_state.system_state;
-    system_state.consume_cycles(CompoundCycles::<MemoryUseCase>::new(
-        Cycles::new(500),
-        CanisterCyclesCostSchedule::Normal,
-    ));
-    system_state
-        .task_queue
-        .enqueue(ExecutionTask::PausedExecution {
-            id: PausedExecutionId(0),
-            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-        });
-
-    system_state.reset_consumed_cycles_monotonic();
-    system_state.migrate_consumed_cycles_to_monotonic();
-    assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        NominalCycles::zero()
-    );
+    assert_settled(system_state, settled, settled_memory, settled_instructions);
 }
 
 #[test]
@@ -1760,7 +1771,10 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
     // still zero.
     assert_eq!(
         system_state.outstanding_prepayments(),
-        Some(prepaid.nominal())
+        Some(OutstandingPrepayments {
+            instructions: prepaid.nominal(),
+            ..Default::default()
+        })
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
@@ -1794,7 +1808,7 @@ fn refunds_prepayment_of_aborted_canister_install_dropped_after_split() {
     );
     assert_eq!(
         system_state.outstanding_prepayments(),
-        Some(NominalCycles::zero())
+        Some(OutstandingPrepayments::default())
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles_monotonic(),

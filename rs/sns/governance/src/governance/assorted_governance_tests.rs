@@ -10,7 +10,7 @@ use crate::{
         TEST_ARCHIVES_CANISTER_IDS, TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID,
         TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
         TEST_SWAP_CANISTER_ID, basic_governance_proto, canister_status_for_test,
-        canister_status_from_management_canister_for_test,
+        canister_status_from_management_canister_for_test, execute_proposal,
     },
     pb::v1::{
         Account as AccountProto, Motion, NervousSystemFunction, NeuronPermissionType, ProposalData,
@@ -58,6 +58,7 @@ use ic_sns_test_utils::itest_helpers::UserInfo;
 use ic_test_utilities_types::ids::canister_test_id;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use maplit::btreemap;
+use num_bigint::BigUint;
 use pretty_assertions::assert_eq;
 use proptest::prelude::{prop_assert, proptest};
 use std::{
@@ -740,47 +741,6 @@ proptest! {
             .current_deadline_timestamp_seconds;
         dbg!(new_deadline , initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + now_seconds.div_ceil(2));
         prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + now_seconds.div_ceil(2));
-    }
-}
-
-// A helper function to execute each proposal.
-fn execute_proposal(governance: &mut Governance, proposal_id: u64) -> ProposalData {
-    governance.process_proposal(proposal_id);
-
-    let now = std::time::Instant::now;
-
-    let start = now();
-    // In practice, the exit condition of the following loop occurs in much
-    // less than 1 s (on my Macbook Pro 2019 Intel). The reason for this
-    // generous limit is twofold: 1. avoid flakes in CI, while at the same
-    // time 2. do not run forever if something goes wrong.
-    let give_up = || now() < start + std::time::Duration::from_secs(30);
-
-    loop {
-        let result = governance
-            .get_proposal(&GetProposal {
-                proposal_id: Some(ProposalId { id: proposal_id }),
-            })
-            .result
-            .unwrap();
-        let proposal_data = match result {
-            get_proposal_response::Result::Proposal(p) => p,
-            _ => panic!("get_proposal result: {result:#?}"),
-        };
-
-        let upgrade_sns_action_id = 7;
-
-        // If the proposal is an SNS upgrade action, it won't move to the "executed" state in
-        // this env (non-canister env), hence return.
-        if proposal_data.status().is_final() || proposal_data.action == upgrade_sns_action_id {
-            break proposal_data;
-        }
-
-        if give_up() {
-            panic!("Proposal took too long to terminate (in the failed state).")
-        }
-
-        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
 
@@ -4418,12 +4378,23 @@ async fn test_split_neuron_succeeds() {
     let split_amount_e8s = stake_e8s / 3;
     let maturity_e8s = 123_456_789;
     let mut setup = prepare_setup_for_split_neuron_tests(stake_e8s, maturity_e8s);
+    let original_participation = neuron::RewardEventParticipation {
+        reward_event_end_timestamp_seconds: 123,
+        reward_shares: BigUint::from(99_u128).to_bytes_be(),
+    };
+    setup
+        .governance
+        .proto
+        .neurons
+        .get_mut(&setup.neuron_id.to_string())
+        .unwrap()
+        .latest_reward_event_participation = Some(original_participation.clone());
     let orig_neuron = setup
         .governance
         .proto
         .neurons
         .get(&setup.neuron_id.to_string())
-        .expect("Missing orig neuron!")
+        .unwrap()
         .clone();
     let split = manage_neuron::Split {
         amount_e8s: split_amount_e8s,
@@ -4450,6 +4421,10 @@ async fn test_split_neuron_succeeds() {
     );
     assert_eq!(parent_neuron.maturity_e8s_equivalent, maturity_e8s);
     assert_eq!(parent_neuron.neuron_fees_e8s, orig_neuron.neuron_fees_e8s);
+    assert_eq!(
+        parent_neuron.latest_reward_event_participation,
+        Some(original_participation),
+    );
     let child_neuron = setup
         .governance
         .proto
@@ -4463,6 +4438,7 @@ async fn test_split_neuron_succeeds() {
     assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
     assert!(child_neuron.disburse_maturity_in_progress.is_empty());
     assert_eq!(child_neuron.neuron_fees_e8s, 0);
+    assert_eq!(child_neuron.latest_reward_event_participation, None);
 
     let p = parent_neuron;
     let c = child_neuron;
