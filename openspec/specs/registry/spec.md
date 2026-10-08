@@ -459,7 +459,7 @@ Subnet splitting creates a new subnet by splitting an existing subnet's canister
 - **WHEN** a `split_subnet` registry mutation is submitted
 - **THEN** a new subnet record is created with the specified node membership
 - **AND** the routing table is updated to reroute the specified canister ranges to the new subnet
-- **AND** a new CUP (Catch-Up Package) is created for the new subnet
+- **AND** a new CUP (Catch-Up Package) is created for the new subnet, with `cup_type` set to `SubnetSplitting` -- the same variant the source subnet's record carries, not `Genesis` -- so that the destination subnet's replicas ignore that record when building a registry CUP out of it, since it is not meant to be used that way
 - **AND** the operation is atomic: all mutations succeed or none are applied
 
 #### Scenario: Split subnet invariant validation
