@@ -636,8 +636,8 @@ jobs:
     # Not --privileged: building needs no privileges, the IC-OS container filesystems included
     # (they are built in a microVM, see ic-os/docs/Bazel-Remote-Build.adoc). Bazel's linux-sandbox
     # needs no seccomp/AppArmor confinement and an unmasked /proc to create its namespaces and
-    # mount /proc. The microVM needs /dev/kvm, which ci/container/init.sh makes writable (it falls
-    # back to QEMU's much slower TCG emulation otherwise).
+    # mount /proc. The microVM needs /dev/kvm, which ci/container/init.sh makes writable. The runner
+    # must have it: the container doesn't start without the device.
     container:
       image: *ic-build-image
       options: >-

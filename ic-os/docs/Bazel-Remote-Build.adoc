@@ -75,7 +75,8 @@ There is no podman fallback for the container filesystems.
   `IcosContainerBaseImage` keeps `no-remote-cache` because its `apt install`
   isn't reproducible.
 * The podman wrapper (`proc_wrapper.sh`, which needs `podman unshare` or `sudo`
-  to clean up) is used only by the podman action. All other actions use
+  to clean up) is used only by the podman action (and, outside the build, by the
+  bare-metal deployment tool). All other actions use
   `tmpdir_wrapper.sh`, which manages a private `TMPDIR` in the action's
   working directory and sets `FAKEROOTDONTTRYCHOWN` (see the notes below).
 * `no-cache` is removed from all image targets, including the uncompressed
@@ -265,7 +266,8 @@ changes no image and no launch measurement.
   sandboxed actions access to it.
 * DFINITY's `dind-large` GitHub runners (`ci-main.yml`): they have `/dev/kvm`
   (`local-system-tests.yml` runs the `_local` system tests there), and the job
-  containers get it (`--privileged`, or `--device /dev/kvm` in `build-ic`). But
+  containers get it (`--privileged`, or `--device /dev/kvm` in `build-ic`, whose
+  container therefore doesn't start on a runner without it). But
   it's only writable for the container user after `ci/container/init.sh`, the
   dev container's entrypoint, which GitHub's container jobs skip, so the jobs
   that build IC-OS images (`bazel-test-all`, `build-ic`) run it before Bazel.

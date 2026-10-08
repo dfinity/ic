@@ -44,6 +44,9 @@ def normalize(name: str) -> str:
     name = name.lstrip("/")
     while name.startswith("./"):
         name = name[2:]
+    # tar would extract such a name somewhere else (it strips a leading `../`).
+    if ".." in name.split("/"):
+        raise RuntimeError(f"{name!r} has a `..` component")
     return name.rstrip("/")
 
 

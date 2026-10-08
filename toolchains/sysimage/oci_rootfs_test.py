@@ -160,6 +160,11 @@ class FlattenTest(unittest.TestCase):
         )
         self.assertEqual(names, ["e"])
 
+    def test_a_dot_dot_component_is_an_error(self):
+        for entries in [[("../evil", "file", "x")], [("a/../../evil", "file", "x")], [("x", "hardlink", "../a")]]:
+            with self.subTest(entries=entries), self.assertRaisesRegex(RuntimeError, "`..` component"):
+                self.flatten([layer(entries)])
+
 
 class ArchiveTest(unittest.TestCase):
     def test_an_oci_archive_flattens_like_its_layout(self):
