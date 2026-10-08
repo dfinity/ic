@@ -107,7 +107,7 @@ const MIN_SERVER_VERSION: &str = "16.0.0";
 const MAX_SERVER_VERSION: &str = "17";
 
 /// Public to facilitate downloading the PocketIC server.
-pub const LATEST_SERVER_VERSION: &str = "16.0.0";
+pub const LATEST_SERVER_VERSION: &str = "16.1.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
