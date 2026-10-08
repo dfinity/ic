@@ -308,8 +308,7 @@ pub fn verify(
 }
 
 /// 1. Verify the CUP against the subnet public key found in the registry
-/// 2. Print the threshold master public keys held by the subnet according to the CUP, hex-encoded
-///    in the same way as the mainnet master public keys hardcoded for `ic-pub-key`.
+/// 2. Print the hex-encoded threshold master public keys held by the subnet according to the CUP
 pub fn extract_master_public_keys(
     nns_url: Url,
     nns_pem: Option<PathBuf>,
