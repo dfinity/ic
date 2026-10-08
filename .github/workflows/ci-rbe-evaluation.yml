@@ -144,19 +144,22 @@ jobs:
       # The RBE worker image of .github/actions/bazel-namespace/rbe.bazelrc: the
       # update-image-references job of container-autobuild.yml rewrites both.
       image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:fac27369c3b2e018d78a5d6ab90201974007188f98da67c4c76b7692bbf37d1a
-      # The ic-os container builds run 'podman build' (rootless) and are forced to run locally in
-      # this container by the --strategy=IcosContainer...=local lines of bazel/conf/.bazelrc.build.
-      # Rootless podman needs to create user namespaces, which fails in an unprivileged
-      # container with "cannot clone: Operation not permitted".
+      # Not --privileged: the ic-os container filesystems are built in a microVM on the RBE workers
+      # (IcosContainerVmBuild), so no podman runs here any more. What remains needs:
+      # - CAP_SYS_ADMIN and no AppArmor confinement: the bind mount of the "Mount the Bazel
+      #   repository cache" step.
+      # - no seccomp/AppArmor confinement and an unmasked /proc: Bazel's linux-sandbox for the actions
+      #   that run locally, which creates user, mount and PID namespaces and mounts /proc.
       options: >-
-        --privileged --mount type=tmpfs,target="/tmp/containers"
+        --cap-add SYS_ADMIN --security-opt seccomp=unconfined --security-opt apparmor=unconfined
+        --security-opt systempaths=unconfined
       volumes:
         # nscloud-setup finds the runner's Namespace token in here and exports NSC_TOKEN_FILE,
         # which nsc and namespace-actions/upload-artifact read.
         - /var/run/nsc/:/var/run/nsc/
         # The runner profile's Namespace cache volume (always /cache on the host). The
         # "Mount the Bazel repository cache" step bind-mounts a directory of it into this
-        # container; mount(2) needs CAP_SYS_ADMIN, which --privileged above grants.
+        # container; mount(2) needs CAP_SYS_ADMIN, which the options above grant.
         - /cache:/cache
         # The runner's scratch filesystem, see runs-on above.
         - /namespace/scratch:/namespace/scratch

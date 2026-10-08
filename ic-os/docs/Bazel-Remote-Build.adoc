@@ -101,14 +101,17 @@ unsandboxed.
   the cache. The cost is one full IC-OS rebuild per dev-container image change.
   Builds outside the dev container use whatever host tools they find, as
   before. `zstd` comes from Bazel (`@zstd`) in all image tools.
-* Release builds (`--config=stamped`) don't use the remote cache for the image
-  actions (`--modify_execution_info=^Icos.*=+no-remote-cache`): they build the
-  images from scratch, as before this change, instead of taking unstamped
-  intermediates (container filesystems, ESP, grub and config partitions) from
-  a cache that PR builds write to. They don't upload them either: their root
-  and boot partitions embed the version, so nothing else could use them. The
-  binaries in the images come from the cache like all other release artifacts,
-  and `build-determinism` cross-checks the result.
+* Release builds (`--config=stamped`) don't use the remote cache for the
+  `Icos*` image actions (`--modify_execution_info=^Icos.*=+no-remote-cache`):
+  they build the images from scratch, as before this change, instead of taking
+  unstamped intermediates (container filesystems, ESP, grub and config
+  partitions) from a cache that PR builds write to. They don't upload them
+  either: their root and boot partitions embed the version, so nothing else
+  could use them. Genrules can't be singled out by mnemonic, so the few small
+  IC-OS genrules (the bootloader tree post-processing, verity signing, launch
+  measurements) still use the cache, keyed by the digests of their freshly
+  built inputs. The binaries in the images come from the cache like all other
+  release artifacts, and `build-determinism` cross-checks the result.
 
 Expected effect: on a PR that doesn't touch `ic-os/components`, the component
 binaries or the base images, `rootfs-tree.tar` comes from the cache and the
@@ -225,8 +228,16 @@ measurement.
   `--device /dev/kvm` under Docker in `ci/container/container-run.sh`), and
   `ci/container/init.sh` makes it writable. Bazel's linux-sandbox gives
   sandboxed actions access to it.
+* DFINITY's `dind-large` GitHub runners (`ci-main.yml`) have *no* `/dev/kvm`,
+  even in their privileged containers. There the build VM falls back to QEMU's
+  TCG emulation and prints a warning: about 1-5 minutes per container
+  filesystem instead of under one. That only matters when a container
+  filesystem isn't in the cache, e.g. in the uncached `build-ic` job, which took
+  19 instead of 16 minutes on PR #11784.
 
-Without KVM the build falls back to TCG and prints a warning.
+Without KVM the build falls back to TCG and prints a warning. The VM gets 4
+CPUs and 4 GiB of memory, which its action reserves from Bazel's local
+resources, and is killed after an hour.
 
 == Phase 3: CI
 
@@ -247,7 +258,8 @@ Without KVM the build falls back to TCG and prints a warning.
 |DFINITY CI (`dind-large` runners, `ci-main.yml`)
 |In the `ic-build` container, with the `bazel-remote` cache from
 `bazel/conf/.bazelrc.internal`. PR jobs upload results.
-|Sandboxed (`linux-sandbox`) on the runner; results cached in `bazel-remote`
+|Sandboxed (`linux-sandbox`) on the runner; results cached in `bazel-remote`.
+The build VM uses TCG: the runners have no `/dev/kvm`
 
 |Namespace (`ci-rbe-evaluation.yml`, `.github/actions/bazel-namespace`)
 |`--noworkspace_rc` with `.bazelrc.build`, the `nsc` endpoints and
@@ -302,17 +314,22 @@ Notes:
 [[privileges-in-ci]]
 == Privileges in CI
 
-With the microVM, no IC-OS action needs privileges any more, only
-`/dev/kvm`. The CI containers still run `--privileged` for other reasons:
+With the microVM, no IC-OS action needs privileges any more, only `/dev/kvm`
+where available. What the CI containers still need is generic:
 
+* Bazel's linux-sandbox creates user, mount and PID namespaces and mounts
+  `/proc`, which Docker's default seccomp and AppArmor profiles and its masked
+  `/proc` forbid: `--security-opt seccomp=unconfined`, `apparmor=unconfined`
+  and `systempaths=unconfined`.
 * `ci-rbe-evaluation.yml`: the "Mount the Bazel repository cache" step
   bind-mounts a cache volume, which needs `CAP_SYS_ADMIN`.
-* `ci-main.yml`: Bazel's linux-sandbox needs to create user and mount
-  namespaces, which Docker's default seccomp and AppArmor profiles forbid, and
-  the build VM needs `/dev/kvm`.
 
-The `/tmp/containers` tmpfs is only used by podman (`--config=icos_podman`,
-`local-base-*`).
+So the RBE driver container (`ci-rbe-evaluation.yml`) and the `build-ic`
+container (`ci-main.yml`), which builds all IC-OS images without a cache, no
+longer run `--privileged` and have no `/tmp/containers` tmpfs (which only
+podman used). The other `ci-main.yml` jobs (tests, fuzzers, cargo, artifact uploads) keep
+`--privileged`: what they need is outside the IC-OS build, and narrowing their
+containers is a separate change that has to be validated against all tests.
 
 == Verification
 
@@ -338,3 +355,6 @@ On an x86_64 devenv in the `ic-dev` container:
 * Namespace RBE workers expose `/dev/kvm` today (see <<kvm-availability>>).
   Confirm with the infra team that this is a supported property of the
   workers rather than an incidental one.
+* Expose `/dev/kvm` on the `dind-large` runners (and pass it into the job
+  containers with `--device /dev/kvm`), so that uncached container filesystem
+  builds there don't need TCG. Less important once CI runs on Namespace.
