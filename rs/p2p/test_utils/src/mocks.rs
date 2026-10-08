@@ -32,6 +32,8 @@ use crate::consensus::U64Artifact;
 /// pool, which a mock cannot hand back for data it owns itself.
 pub struct FakeCanisterHttpPool {
     contents: BTreeMap<CryptoHashOf<CanisterHttpResponse>, CanisterHttpResponse>,
+    /// Whether looking up a response content fails the test.
+    never_get_response_content: bool,
 }
 
 impl FakeCanisterHttpPool {
@@ -41,11 +43,18 @@ impl FakeCanisterHttpPool {
                 .into_iter()
                 .map(|response| (ic_types::crypto::crypto_hash(&response), response))
                 .collect(),
+            never_get_response_content: false,
         }
     }
 
     pub fn empty() -> Self {
         Self::new(std::iter::empty())
+    }
+
+    /// Makes any later call to [`CanisterHttpPool::get_response_content_by_hash`]
+    /// panic, like `.never()` does for an expectation of a mock.
+    pub fn expect_never_get_response_content_by_hash(&mut self) {
+        self.never_get_response_content = true;
     }
 }
 
@@ -78,6 +87,10 @@ impl CanisterHttpPool for FakeCanisterHttpPool {
         &self,
         hash: &CryptoHashOf<CanisterHttpResponse>,
     ) -> Option<&CanisterHttpResponse> {
+        assert!(
+            !self.never_get_response_content,
+            "Unexpected lookup of the canister http response content {hash:?}"
+        );
         self.contents.get(hash)
     }
 
