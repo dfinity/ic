@@ -254,7 +254,8 @@ changes no image and no launch measurement.
 *KVM availability.* `/dev/kvm` is available in all three environments:
 
 * DFINITY farm workers support KVM builds.
-* Namespace RBE workers: the `_local` system tests boot QEMU VMs with
+* Namespace RBE workers: a supported feature of the workers (confirmed by the
+  infra team). The `_local` system tests boot QEMU VMs with
   `-machine q35,accel=kvm` and no TCG fallback
   (`rs/tests/driver/src/driver/local_backend.rs`), and
   `ci-rbe-evaluation.yml` runs them remotely on the default workers. On
@@ -398,9 +399,3 @@ On an x86_64 devenv in the `ic-dev` container:
   mode (0755) as one built on the devenv.
 * A build with `--sandbox_base` on a setgid directory is byte-identical to a
   normal one.
-
-== Open questions
-
-* Namespace RBE workers expose `/dev/kvm` today (see <<kvm-availability>>).
-  Confirm with the infra team that this is a supported property of the
-  workers rather than an incidental one.
