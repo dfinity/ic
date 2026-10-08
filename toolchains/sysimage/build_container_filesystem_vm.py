@@ -15,7 +15,7 @@
 #    read-write root and the generated init script as PID 1. The script mounts
 #    /proc, /sys, /dev and /run like a container engine would, runs the COPY and
 #    RUN steps (planned by dockerfile.py) as root, and writes the resulting
-#    filesystem as a tar to a second, raw disk.
+#    filesystem as a tar to a second, raw disk, and its exit status to a third.
 # 3. The tar is read back and normalized exactly like the podman export that
 #    this replaces (no /run, mtime 0, no user/group names).
 #
@@ -39,7 +39,7 @@ import tarfile
 import tempfile
 import threading
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from toolchains.sysimage.container_context import arrange_context, resolve_file_args
 from toolchains.sysimage.dockerfile import Copy, Plan, Run, plan
@@ -47,10 +47,14 @@ from toolchains.sysimage.dockerfile import Copy, Plan, Run, plan
 # Inside the VM's root filesystem.
 BUILD_DIR = ".icos-build"
 RESULT_MARKER = "ICOS-BUILD-RESULT:"
-RESULT_PATTERN = re.compile(re.escape(RESULT_MARKER) + r" (\d+)")
+RESULT_PATTERN = re.compile(re.escape(RESULT_MARKER) + r" (\d+)\n")
 
 ROOT_DISK_SIZE = "32G"  # sparse; only the used blocks are written
 OUTPUT_DISK_SIZE = "32G"  # sparse
+# The init script writes its result to this disk rather than (only) to the
+# serial console, where kernel messages (like sysrq's "Power Off") can land in
+# the middle of it.
+STATUS_DISK_SIZE = 1 << 20
 
 INIT_SCRIPT = """#!/bin/sh
 # PID 1 of the IC-OS container build VM: run the build steps, write the
@@ -77,9 +81,10 @@ cd /
 # step, so that nothing keeps the mounts busy.
 kill -KILL -1 2> /dev/null
 sleep 1
-# Keep the output disk's device node, then unmount everything so that only the
-# image's own files (and mount point directories) remain.
+# Keep the output and status disks' device nodes, then unmount everything so
+# that only the image's own files (and mount point directories) remain.
 cp -a /dev/vdb /{build_dir}/output || status=$?
+cp -a /dev/vdc /{build_dir}/status || status=$?
 # Release /dev/null, which would keep /dev busy (a closed stdin makes some tools abort).
 exec < /
 umount /run /dev/shm /dev/pts /dev /sys /proc || status=$?
@@ -90,6 +95,7 @@ if [ "$status" -eq 0 ]; then
     tar --create --file=/{build_dir}/output --format=gnu --numeric-owner --sort=name \\
         --one-file-system --exclude=./{build_dir} . || status=$?
 fi
+echo "{marker} $status" > /{build_dir}/status
 sync
 echo "{marker} $status"
 mount -t proc proc /proc
@@ -190,8 +196,23 @@ chmod 0755 "$root/{BUILD_DIR}/init"
     subprocess.run(["fakeroot", "--", "bash", "-c", script], check=True)
 
 
+def read_result(status_disk: Path) -> Optional[int]:
+    """The exit status the init script wrote to the status disk, if any."""
+    with open(status_disk, "rb") as f:
+        match = RESULT_PATTERN.match(f.read(256).decode(errors="replace"))
+    return int(match.group(1)) if match else None
+
+
 def run_vm(
-    qemu: str, qemu_data: str, kernel: Path, root_disk: Path, output_disk: Path, memory: str, cpus: int, timeout: int
+    qemu: str,
+    qemu_data: str,
+    kernel: Path,
+    root_disk: Path,
+    output_disk: Path,
+    status_disk: Path,
+    memory: str,
+    cpus: int,
+    timeout: int,
 ):
     """Boot the build VM and return whether the build steps succeeded."""
     if not os.access("/dev/kvm", os.R_OK | os.W_OK):
@@ -231,9 +252,10 @@ def run_vm(
         f"file={root_disk},format=raw,if=virtio,cache=unsafe",
         "-drive",
         f"file={output_disk},format=raw,if=virtio,cache=unsafe",
+        "-drive",
+        f"file={status_disk},format=raw,if=virtio,cache=unsafe",
     ]
     print(" ".join(shlex.quote(c) for c in command), file=sys.stderr, flush=True)
-    result = None
     with subprocess.Popen(command, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, text=True, errors="replace") as vm:
         # A step waiting for something that never comes would otherwise hang the build.
         timed_out = threading.Event()
@@ -247,15 +269,13 @@ def run_vm(
         try:
             for line in vm.stdout:
                 sys.stderr.write(line)
-                match = RESULT_PATTERN.search(line)
-                if match:
-                    result = int(match.group(1))
         finally:
             watchdog.cancel()
     if vm.returncode != 0:
         if timed_out.is_set():
             raise RuntimeError(f"the build VM didn't finish within {timeout}s")
         raise RuntimeError(f"qemu exited with {vm.returncode}")
+    result = read_result(status_disk)
     if result is None:
         raise RuntimeError("the build VM stopped without reporting a result")
     return result == 0
@@ -376,13 +396,24 @@ def main():
 
         root_disk = tmp / "root.img"
         output_disk = tmp / "output.img"
+        status_disk = tmp / "status.img"
         build_root_disk(args.base_rootfs, context_dir, tmp / "root", init, steps, args.mke2fs, root_disk)
         shutil.rmtree(tmp / "root", ignore_errors=True)
         with open(output_disk, "wb") as f:
             f.truncate(int(OUTPUT_DISK_SIZE[:-1]) << 30)
+        with open(status_disk, "wb") as f:
+            f.truncate(STATUS_DISK_SIZE)
 
         if not run_vm(
-            args.qemu, args.qemu_data, args.kernel, root_disk, output_disk, args.memory, args.cpus, args.timeout
+            args.qemu,
+            args.qemu_data,
+            args.kernel,
+            root_disk,
+            output_disk,
+            status_disk,
+            args.memory,
+            args.cpus,
+            args.timeout,
         ):
             raise RuntimeError("a build step failed in the build VM (see the log above)")
         root_disk.unlink()

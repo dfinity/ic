@@ -11,6 +11,7 @@ from toolchains.sysimage.build_container_filesystem_vm import (
     export_filesystem,
     generate_steps,
     has_entry,
+    read_result,
 )
 from toolchains.sysimage.dockerfile import Copy, Plan, Run
 
@@ -138,6 +139,23 @@ class ExportTest(unittest.TestCase):
         source = self.tar([("./lost+found/", "dir", None), ("./etc/", "dir", None)])
         self.assertTrue(has_entry(source, "lost+found"))
         self.assertFalse(has_entry(source, "found"))
+
+
+class ReadResultTest(unittest.TestCase):
+    def status_disk(self, data: bytes) -> Path:
+        path = Path(self.enterContext(tempfile.TemporaryDirectory())) / "status.img"
+        with open(path, "wb") as f:
+            f.write(data)
+            f.truncate(1 << 20)
+        return path
+
+    def test_result(self):
+        self.assertEqual(read_result(self.status_disk(b"ICOS-BUILD-RESULT: 0\n")), 0)
+        self.assertEqual(read_result(self.status_disk(b"ICOS-BUILD-RESULT: 32\n")), 32)
+
+    def test_no_or_partial_result(self):
+        self.assertIsNone(read_result(self.status_disk(b"")))
+        self.assertIsNone(read_result(self.status_disk(b"ICOS-BUILD-RESULT: 1")))
 
 
 if __name__ == "__main__":

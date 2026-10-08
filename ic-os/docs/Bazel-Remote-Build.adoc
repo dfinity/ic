@@ -228,7 +228,9 @@ How it works (`toolchains/sysimage/`):
   image's (it has virtio-blk and ext4 built in, so no initramfs is needed).
   The init script mounts `/proc`, `/sys`, `/dev` and `/run` like a container
   engine, runs the steps as root, unmounts everything and writes the
-  filesystem to a second, raw disk with `tar --sort=name --numeric-owner`.
+  filesystem to a second, raw disk with `tar --sort=name --numeric-owner`, and
+  its exit status to a third (not only to the serial console, where kernel
+  messages can interleave with it).
   The tar is normalized exactly like the podman export (no `/run`, mtime 0, no
   user/group names).
 . The bootloader tree (`//ic-os/bootloader:build-bootloader-tree`) is built the
