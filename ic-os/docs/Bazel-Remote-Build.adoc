@@ -132,8 +132,11 @@ their scratch directories (the sandbox directories on the `dind-large` CI
 runners are setgid, which gave root directories mode 2755);
 `tmpdir_wrapper.sh` also drops a default ACL the scratch directory would
 inherit. The ext4 image root gets an explicit 755, and the build context's
-files get 0755 or 0644 by their executable bit, whatever modes Bazel gave the
-inputs (they differ between local and remote execution).
+files get 0755 or 0644 by their executable bit, whatever other bits Bazel gave
+the inputs (generated inputs are 0555 locally, but can be 0755 or 0644 on a
+remote executor). Even the executable bit of a generated file can depend on
+where it was produced, so every path a Dockerfile `COPY`s must still get its
+mode from a later step or `COPY --chmod` (like `/commit-time`).
 
 Cache size: one complete set of dev images (GuestOS, HostOS, SetupOS and
 `test-img`) is about 22 GiB of action outputs, mostly the uncompressed disk

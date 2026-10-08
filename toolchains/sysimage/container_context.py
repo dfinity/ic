@@ -23,8 +23,10 @@ def copy_file(source: str, target: str):
     Copy source to target with mode 0755 if it is executable and 0644 otherwise.
 
     `COPY` keeps the modes of the context files, and the inputs' modes besides
-    the executable bit depend on how Bazel materialized them (e.g. 0555 locally,
-    0755 or 0644 on a remote executor).
+    the executable bit depend on how Bazel materialized them (e.g. 0555 locally
+    for generated files, 0755 or 0644 on a remote executor). The Dockerfiles
+    still set the final modes of what they COPY: even the executable bit of a
+    generated file can depend on where it was produced.
     """
     shutil.copyfile(source, target)
     os.chmod(target, 0o755 if os.stat(source).st_mode & 0o111 else 0o644)

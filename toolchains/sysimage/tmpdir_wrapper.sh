@@ -29,10 +29,13 @@ umask 022
 tmpdir=$(mktemp -d -p "$PWD" "icosbuildXXXX")
 chmod g-s "$tmpdir"
 python3 -c '
-import os, sys
-for name in os.listxattr(sys.argv[1]):
-    if name == "system.posix_acl_default":
-        os.removexattr(sys.argv[1], name)
+import errno, os, sys
+try:
+    if "system.posix_acl_default" in os.listxattr(sys.argv[1]):
+        os.removexattr(sys.argv[1], "system.posix_acl_default")
+except OSError as e:  # e.g. a FUSE filesystem without xattrs: no ACL then either
+    if e.errno not in (errno.ENOTSUP, errno.ENODATA):
+        raise
 ' "$tmpdir"
 # Under fakeroot, tar applies archive modes exactly, so the tree can contain
 # directories without u+w that a plain `rm -rf` can't empty. Restore write
