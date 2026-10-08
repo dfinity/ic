@@ -207,6 +207,11 @@ jobs:
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
 
+      # GitHub runners override the container's entrypoint which is ci/container/init.sh
+      # so we run it explicitly here to ensure the system is set up correctly for running local
+      # system-tests and for building the IC-OS container filesystems: both need /dev/kvm.
+      - run: ci/container/init.sh
+
       - name: Infer Bazel Args
         id: infer-bazel-args
         shell: bash
@@ -318,10 +323,6 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-checksums: ${{ steps.upload-artifacts.outputs.manifest-path }}
-
-      # GitHub runners override the container's entrypoint which is ci/container/init.sh
-      # so we run it explicitly here to ensure the system is set up correctly for running local system-tests.
-      - run: ci/container/init.sh
 
       - name: Run Tests
         uses: ./.github/actions/bazel
@@ -635,12 +636,13 @@ jobs:
     # Not --privileged: building needs no privileges, the IC-OS container filesystems included
     # (they are built in a microVM, see ic-os/docs/Bazel-Remote-Build.adoc). Bazel's linux-sandbox
     # needs no seccomp/AppArmor confinement and an unmasked /proc to create its namespaces and
-    # mount /proc. The microVM uses /dev/kvm where the runner has it, and QEMU's TCG otherwise.
+    # mount /proc. The microVM needs /dev/kvm, which ci/container/init.sh makes writable (it falls
+    # back to QEMU's much slower TCG emulation otherwise).
     container:
       image: *ic-build-image
       options: >-
         -e NODE_NAME --cgroupns host --security-opt seccomp=unconfined --security-opt apparmor=unconfined
-        --security-opt systempaths=unconfined
+        --security-opt systempaths=unconfined --device /dev/kvm
     timeout-minutes: 90
     if: ${{ github.event_name != 'merge_group' }}
     steps:
@@ -649,6 +651,9 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
+      # GitHub runners override the container's entrypoint, ci/container/init.sh, which makes
+      # /dev/kvm writable for the microVM.
+      - run: ci/container/init.sh
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
