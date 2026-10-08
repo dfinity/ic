@@ -916,7 +916,7 @@ impl InstallCodeHelper {
 /// time slicing execution of `install_code`.
 #[derive(Debug)]
 pub(crate) struct OriginalContext {
-    /// The management canister method (`install_code` or `install_chunked_code`).
+    /// The management canister method (`InstallCode` or `InstallChunkedCode`).
     pub method: Ic00Method,
     pub execution_parameters: ExecutionParameters,
     pub mode: CanisterInstallModeV2,

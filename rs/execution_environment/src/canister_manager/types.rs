@@ -231,7 +231,7 @@ impl WasmSource {
 
 #[derive(Clone, Debug)]
 pub struct InstallCodeContext {
-    /// The management canister method (`install_code` or `install_chunked_code`).
+    /// The management canister method (`InstallCode` or `InstallChunkedCode`).
     pub method: Ic00Method,
     pub origin: CanisterChangeOrigin,
     pub mode: CanisterInstallModeV2,
