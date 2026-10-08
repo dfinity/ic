@@ -113,6 +113,13 @@ const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE: NumOsPages =
 const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
     NumOsPages::new(GIB / (PAGE_SIZE as u64));
 
+// Maximum number of Wasm heap OS pages (4KiB) that a single message execution
+// is allowed to access. The default equals the maximum heap size, so the limit
+// is never hit; it is lowered through the config once all heap accesses are
+// covered by the limit checks.
+const WASM_MEMORY_ACCESSED_PAGE_LIMIT: NumOsPages =
+    NumOsPages::new(MAX_WASM64_MEMORY_IN_BYTES / (PAGE_SIZE as u64));
+
 /// The maximum size in bytes for an uncompressed Wasm module. This value is
 /// also used as the maximum size for the Wasm chunk store of each canister.
 pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
@@ -146,7 +153,7 @@ pub enum MeteringType {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-pub struct StableMemoryPageLimit {
+pub struct MemoryPageLimit {
     // Regular message (e.g., update) execution dirty/accessed page limit.
     pub message: NumOsPages,
     // Longer message (e.g., upgrade) execution dirty/accessed page limit.
@@ -202,11 +209,16 @@ pub struct Config {
 
     // Maximum number of stable memory pages that a single message execution
     // can access.
-    pub stable_memory_accessed_page_limit: StableMemoryPageLimit,
+    pub stable_memory_accessed_page_limit: MemoryPageLimit,
 
     /// Maximum number of stable memory dirty pages that a single message
     /// execution is allowed to produce.
-    pub stable_memory_dirty_page_limit: StableMemoryPageLimit,
+    pub stable_memory_dirty_page_limit: MemoryPageLimit,
+
+    /// Maximum number of Wasm heap pages (in OS pages) that a single message
+    /// execution is allowed to access. Accessing one more page fails the
+    /// execution with `MemoryAccessLimitExceeded`.
+    pub wasm_memory_accessed_page_limit: MemoryPageLimit,
 
     /// Sandbox process eviction ensures that the number of sandbox processes is
     /// always below this threshold.
@@ -269,15 +281,20 @@ impl Config {
             num_rayon_page_allocator_threads: DEFAULT_PAGE_ALLOCATOR_THREADS,
             feature_flags: FeatureFlags::const_default(),
             metering_type: MeteringType::New,
-            stable_memory_dirty_page_limit: StableMemoryPageLimit {
+            stable_memory_dirty_page_limit: MemoryPageLimit {
                 message: STABLE_MEMORY_DIRTY_PAGE_LIMIT_MESSAGE,
                 upgrade: STABLE_MEMORY_DIRTY_PAGE_LIMIT_UPGRADE,
                 query: STABLE_MEMORY_DIRTY_PAGE_LIMIT_QUERY,
             },
-            stable_memory_accessed_page_limit: StableMemoryPageLimit {
+            stable_memory_accessed_page_limit: MemoryPageLimit {
                 message: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_MESSAGE,
                 upgrade: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_UPGRADE,
                 query: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY,
+            },
+            wasm_memory_accessed_page_limit: MemoryPageLimit {
+                message: WASM_MEMORY_ACCESSED_PAGE_LIMIT,
+                upgrade: WASM_MEMORY_ACCESSED_PAGE_LIMIT,
+                query: WASM_MEMORY_ACCESSED_PAGE_LIMIT,
             },
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
