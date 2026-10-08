@@ -2,7 +2,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use super::{
-    INSTRUCTIONS_COUNTER_GLOBAL_NAME, StoreData, linker,
+    INSTRUCTIONS_COUNTER_GLOBAL_NAME, StoreData,
+    heap_access::TrackerHeapAccess,
+    linker,
     system_api::{
         ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
         SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
@@ -116,6 +118,9 @@ fn test_wasmtime_system_api() {
             num_instructions_global: None,
             log: no_op_logger(),
             limits: StoreLimits::default(),
+            heap_access: TrackerHeapAccess::inactive(
+                EmbeddersConfig::default().wasm_memory_accessed_page_limit,
+            ),
         },
     );
 
