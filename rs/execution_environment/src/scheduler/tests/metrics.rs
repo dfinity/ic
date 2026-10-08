@@ -1658,7 +1658,6 @@ fn http_outcalls_consumed_cycles_are_not_double_counted_on_canister_deletion() {
     // in the canister's monotonic amounts.
     let outcalls = NominalCycles::new(1_000_000);
     let subnet_metrics = &mut test.state_mut().metadata.subnet_metrics;
-    subnet_metrics.observe_consumed_cycles_http_outcalls(outcalls);
     subnet_metrics.observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, outcalls);
     test.canister_state_mut(canister_id)
         .system_state

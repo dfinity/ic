@@ -267,8 +267,6 @@ fn canonical_encoding_stream_header_v26() {
 /// ```no_run
 /// SubnetMetrics {
 ///     consumed_cycles_by_deleted_canisters: 0.into(),
-///     consumed_cycles_http_outcalls: 50_000_000_000.into(),
-///     consumed_cycles_ecdsa_outcalls: 100_000_000_000.into(),
 ///     consumed_cycles_by_use_case: btreemap! {
 ///         CyclesUseCase::HTTPOutcalls => 50_000_000_000.into(),
 ///         CyclesUseCase::ECDSAOutcalls => 100_000_000_000.into(),
@@ -289,8 +287,7 @@ fn canonical_encoding_stream_header_v26() {
 ///
 /// For the `consumed_cycles_total`, the expected value (250B) is the sum of the
 /// `consumed_cycles_by_deleted_canisters` and `consumed_cycles_by_use_case`
-/// values above (the legacy scalar outcall fields only mirror the outcall use
-/// cases and are not summed).
+/// values above.
 ///
 /// ```text
 /// A4                        # map(4)
@@ -330,14 +327,10 @@ fn canonical_encoding_subnet_metrics() {
     for certification_version in all_supported_versions() {
         let mut metrics = SubnetMetrics::default();
         metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::zero());
-        // As production does, observe the outcalls both in the scalar fields and
-        // under their use cases.
-        metrics.observe_consumed_cycles_http_outcalls(NominalCycles::new(50_000_000_000));
         metrics.observe_consumed_cycles_with_use_case(
             CyclesUseCase::HTTPOutcalls,
             NominalCycles::new(50_000_000_000),
         );
-        metrics.observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(100_000_000_000));
         metrics.observe_consumed_cycles_with_use_case(
             CyclesUseCase::ECDSAOutcalls,
             NominalCycles::new(100_000_000_000),

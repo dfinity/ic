@@ -349,16 +349,10 @@ mod tests {
             let mut subnet_metrics = SubnetMetrics::default();
 
             subnet_metrics.observe_consumed_cycles_by_deleted_canisters(NominalCycles::zero());
-            // As production does, observe the outcalls both in the scalar fields
-            // and under their use cases.
-            subnet_metrics
-                .observe_consumed_cycles_http_outcalls(NominalCycles::new(50_000_000_000));
             subnet_metrics.observe_consumed_cycles_with_use_case(
                 CyclesUseCase::HTTPOutcalls,
                 NominalCycles::new(50_000_000_000),
             );
-            subnet_metrics
-                .observe_consumed_cycles_ecdsa_outcalls(NominalCycles::new(100_000_000_000));
             subnet_metrics.observe_consumed_cycles_with_use_case(
                 CyclesUseCase::ECDSAOutcalls,
                 NominalCycles::new(100_000_000_000),

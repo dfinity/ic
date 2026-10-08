@@ -1136,8 +1136,6 @@ prop_compose! {
     /// Returns an arbitrary [`SubnetMetrics`].
     pub fn arb_subnet_metrics()(
         consumed_cycles_by_deleted_canisters in arb_nominal_cycles(),
-        consumed_cycles_http_outcalls in arb_nominal_cycles(),
-        consumed_cycles_ecdsa_outcalls in arb_nominal_cycles(),
         num_canisters in any::<u64>(),
         canister_state_bytes in arb_num_bytes(),
         update_transactions_total in any::<u64>(),
@@ -1148,8 +1146,6 @@ prop_compose! {
         let mut metrics = SubnetMetrics::default();
 
         metrics.observe_consumed_cycles_by_deleted_canisters(consumed_cycles_by_deleted_canisters);
-        metrics.observe_consumed_cycles_http_outcalls(consumed_cycles_http_outcalls);
-        metrics.observe_consumed_cycles_ecdsa_outcalls(consumed_cycles_ecdsa_outcalls);
         metrics.num_canisters = num_canisters;
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;

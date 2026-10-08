@@ -1243,7 +1243,7 @@ impl CanisterManager {
             + canister_to_delete
                 .system_state
                 .canister_metrics()
-                .consumed_cycles();
+                .consumed_cycles_monotonic();
 
         state
             .metadata
