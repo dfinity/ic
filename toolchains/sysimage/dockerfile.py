@@ -9,7 +9,8 @@
 # else is rejected rather than silently interpreted differently:
 #
 # * `ARG name[=default]`, before the first FROM (usable in FROM lines) or in a
-#   stage (visible to that stage's RUN steps as environment variables).
+#   stage (visible to the RUN steps of that stage and of the stages based on it,
+#   as environment variables).
 # * `FROM image|stage [AS name]`, where the stages leading to the last one form
 #   a single chain (each derives from the previous one).
 # * `USER root[:root]` (the steps always run as root).
@@ -134,7 +135,10 @@ def parse(text: str, build_args: Dict[str, str]) -> List[Stage]:
                 raise DockerfileError(f"unsupported FROM: {line}")
             if base.startswith("--"):
                 raise DockerfileError(f"unsupported FROM flag: {line}")
-            stages.append(Stage(base=substitute(base, global_args), name=name))
+            base = substitute(base, global_args)
+            # A stage based on an earlier stage inherits its ARGs (unrelated stages don't).
+            parent = next((s for s in reversed(stages) if s.name == base), None)
+            stages.append(Stage(base=base, name=name, args=dict(parent.args) if parent else {}))
         elif stage is None:
             raise DockerfileError(f"{instruction} before the first FROM")
         elif instruction == "USER":

@@ -65,9 +65,13 @@ USER root:root
     def test_empty_lines_in_a_continuation_are_skipped(self):
         self.assertEqual(plan("FROM base\nRUN a \\\n\n  b\n", {}).steps, [Run(command="a   b")])
 
-    def test_stage_args_are_not_inherited(self):
+    def test_stage_args_are_inherited_by_stages_based_on_the_stage(self):
         text = "FROM base AS one\nARG A=1\nRUN x\nFROM one\nRUN y\n"
-        self.assertEqual(plan(text, {}).steps, [Run(command="x", args={"A": "1"}), Run(command="y")])
+        self.assertEqual(plan(text, {}).steps, [Run(command="x", args={"A": "1"}), Run(command="y", args={"A": "1"})])
+
+    def test_stage_args_are_not_visible_in_unrelated_stages(self):
+        text = "FROM base AS one\nARG A=1\nRUN x\nFROM base AS two\nRUN y\n"
+        self.assertEqual(plan(text, {}).steps, [Run(command="y")])
 
     def test_unsupported_syntax_is_rejected(self):
         for text in [
