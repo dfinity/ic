@@ -520,9 +520,8 @@ pub(crate) fn validate_sender(
         | Ic00Method::UploadCanisterSnapshotMetadata
         | Ic00Method::UploadCanisterSnapshotData => validate_controller(canister, sender),
 
-        // In addition to `rename_canister` only being available from the NNS
-        // subnet, the sender has to be a controller of the canister to be
-        // renamed and the migration canister.
+        // The sender has to be a controller of the canister to be renamed and
+        // the migration canister.
         Ic00Method::RenameCanister => {
             validate_controller(canister, sender)?;
             if *sender != MIGRATION_CANISTER_ID.get() {
@@ -578,9 +577,10 @@ pub(crate) fn validate_sender(
 /// Calls `validate_sender` with the subnet type, cost schedule, and subnet
 /// admins of the subnet `subnet_id` in `network_topology`.
 ///
-/// If `network_topology` does not contain the subnet `subnet_id`, then the
-/// subnet is treated as a subnet without subnet admins
-/// (consistently with `ReplicatedState::get_own_subnet_admins`).
+/// If `network_topology` does not contain the subnet `subnet_id`, then safe
+/// defaults are used: an application subnet on the normal cost schedule
+/// without subnet admins, i.e., a subnet on which subnet admins are not taken
+/// into account (consistently with `ReplicatedState::get_own_subnet_admins`).
 pub(crate) fn validate_sender_on_subnet(
     sender: &PrincipalId,
     method: Ic00Method,
@@ -1188,8 +1188,9 @@ mod test {
     }
 
     /// Checks which senders `validate_sender` accepts for every method it
-    /// validates, both on a rented subnet (where subnet admins are taken into
-    /// account) and on a regular subnet (where they are ignored).
+    /// validates on every subnet type and cost schedule: subnet admins are
+    /// only taken into account on rented subnets (application subnets on the
+    /// free cost schedule) and on cloud engines on the free cost schedule.
     #[test]
     fn validate_sender_accepts_expected_senders() {
         let canister_id = CanisterId::from_u64(42);
@@ -1209,8 +1210,48 @@ mod test {
         );
         let subnet_admins = BTreeSet::from([subnet_admin]);
 
+        // Subnet type, cost schedule, and whether subnet admins are taken into account.
+        let subnets = [
+            (
+                SubnetType::Application,
+                CanisterCyclesCostSchedule::Free,
+                true,
+            ),
+            (
+                SubnetType::CloudEngine,
+                CanisterCyclesCostSchedule::Free,
+                true,
+            ),
+            (
+                SubnetType::Application,
+                CanisterCyclesCostSchedule::Normal,
+                false,
+            ),
+            (
+                SubnetType::CloudEngine,
+                CanisterCyclesCostSchedule::Normal,
+                false,
+            ),
+            (SubnetType::System, CanisterCyclesCostSchedule::Free, false),
+            (
+                SubnetType::System,
+                CanisterCyclesCostSchedule::Normal,
+                false,
+            ),
+            (
+                SubnetType::VerifiedApplication,
+                CanisterCyclesCostSchedule::Free,
+                false,
+            ),
+            (
+                SubnetType::VerifiedApplication,
+                CanisterCyclesCostSchedule::Normal,
+                false,
+            ),
+        ];
+
         // Senders (other than the controller, who is always accepted) that
-        // are accepted on a rented subnet and on a regular subnet, respectively.
+        // are accepted on subnets with and without subnet admins, respectively.
         let cases: Vec<(Vec<Ic00Method>, Vec<PrincipalId>, Vec<PrincipalId>)> = vec![
             (
                 vec![
@@ -1261,15 +1302,14 @@ mod test {
             ),
         ];
 
-        for (methods, accepted_on_rented_subnet, accepted_on_regular_subnet) in cases {
+        for (methods, accepted_with_subnet_admins, accepted_without_subnet_admins) in cases {
             for method in methods {
-                for (cost_schedule, accepted) in [
-                    (CanisterCyclesCostSchedule::Free, &accepted_on_rented_subnet),
-                    (
-                        CanisterCyclesCostSchedule::Normal,
-                        &accepted_on_regular_subnet,
-                    ),
-                ] {
+                for (subnet_type, cost_schedule, has_subnet_admins) in subnets {
+                    let accepted = if has_subnet_admins {
+                        &accepted_with_subnet_admins
+                    } else {
+                        &accepted_without_subnet_admins
+                    };
                     for sender in [
                         controller,
                         subnet_admin,
@@ -1281,7 +1321,7 @@ mod test {
                             &sender,
                             method,
                             &canister,
-                            SubnetType::Application,
+                            subnet_type,
                             cost_schedule,
                             &subnet_admins,
                         );
@@ -1289,7 +1329,7 @@ mod test {
                         assert_eq!(
                             result.is_ok(),
                             is_accepted,
-                            "method: {method}, sender: {sender}, cost schedule: {cost_schedule:?}, result: {result:?}"
+                            "method: {method}, sender: {sender}, subnet type: {subnet_type:?}, cost schedule: {cost_schedule:?}, result: {result:?}"
                         );
                     }
                 }
@@ -1300,19 +1340,8 @@ mod test {
     #[test]
     fn validate_sender_rename_canister_requires_controller_and_migration_canister() {
         let canister_id = CanisterId::from_u64(42);
-        let controller = PrincipalId::new_user_test_id(1);
-        let validate = |canister: &CanisterState, sender: PrincipalId| {
-            validate_sender(
-                &sender,
-                Ic00Method::RenameCanister,
-                canister,
-                SubnetType::Application,
-                CanisterCyclesCostSchedule::Normal,
-                &BTreeSet::new(),
-            )
-        };
-        let new_canister = |controller: PrincipalId| {
-            CanisterState::new(
+        let validate = |controller: PrincipalId| {
+            let canister = CanisterState::new(
                 SystemState::new_running_for_testing(
                     canister_id,
                     controller,
@@ -1322,23 +1351,23 @@ mod test {
                 None,
                 SchedulerState::default(),
                 CanisterSnapshots::default(),
+            );
+            validate_sender(
+                &MIGRATION_CANISTER_ID.get(),
+                Ic00Method::RenameCanister,
+                &canister,
+                SubnetType::System,
+                CanisterCyclesCostSchedule::Normal,
+                &BTreeSet::new(),
             )
         };
 
         // The migration canister is a controller.
-        let canister = new_canister(MIGRATION_CANISTER_ID.get());
-        assert_eq!(validate(&canister, MIGRATION_CANISTER_ID.get()), Ok(()));
-
-        // A controller that is not the migration canister.
-        let canister = new_canister(controller);
-        assert_eq!(
-            validate(&canister, controller),
-            Err(CanisterManagerError::CallerNotAuthorized)
-        );
+        assert_eq!(validate(MIGRATION_CANISTER_ID.get()), Ok(()));
 
         // The migration canister is not a controller.
         assert!(matches!(
-            validate(&canister, MIGRATION_CANISTER_ID.get()),
+            validate(PrincipalId::new_user_test_id(1)),
             Err(CanisterManagerError::CanisterInvalidController { .. })
         ));
     }

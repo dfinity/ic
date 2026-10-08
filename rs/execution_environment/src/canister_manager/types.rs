@@ -9,6 +9,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    Method as Ic00Method,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -230,6 +231,8 @@ impl WasmSource {
 
 #[derive(Clone, Debug)]
 pub struct InstallCodeContext {
+    /// The management canister method (`install_code` or `install_chunked_code`).
+    pub method: Ic00Method,
     pub origin: CanisterChangeOrigin,
     pub mode: CanisterInstallModeV2,
     pub canister_id: CanisterId,
@@ -271,6 +274,7 @@ impl InstallCodeContext {
             InstallCodeContextError::InvalidHash(format!("Invalid wasm hash {hash:?}"))
         })?;
         Ok(InstallCodeContext {
+            method: Ic00Method::InstallChunkedCode,
             origin,
             mode: args.mode,
             canister_id,
@@ -296,6 +300,7 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
         let canister_id = CanisterId::unchecked_from_principal(args.canister_id);
 
         Ok(InstallCodeContext {
+            method: Ic00Method::InstallCode,
             origin,
             mode: args.mode,
             canister_id,

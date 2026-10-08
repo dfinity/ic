@@ -26,7 +26,6 @@ use ic_types::{CanisterTimer, MemoryAllocation, NumInstructions, Time, messages:
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 use ic_wasm_types::WasmHash;
-use std::str::FromStr;
 
 use crate::{
     CompilationCostHandling, RoundLimits,
@@ -537,11 +536,9 @@ impl InstallCodeHelper {
         let config = &original.config;
         let id = self.canister.canister_id();
 
-        let method =
-            Ic00Method::from_str(original.message.method_name()).unwrap_or(Ic00Method::InstallCode);
         validate_sender_on_subnet(
             &original.sender,
-            method,
+            original.method,
             &self.canister,
             network_topology,
             config.own_subnet_id,
@@ -919,6 +916,8 @@ impl InstallCodeHelper {
 /// time slicing execution of `install_code`.
 #[derive(Debug)]
 pub(crate) struct OriginalContext {
+    /// The management canister method (`install_code` or `install_chunked_code`).
+    pub method: Ic00Method,
     pub execution_parameters: ExecutionParameters,
     pub mode: CanisterInstallModeV2,
     pub config: CanisterMgrConfig,

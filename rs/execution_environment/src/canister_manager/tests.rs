@@ -231,6 +231,7 @@ impl Default for InstallCodeContextBuilder {
     fn default() -> Self {
         Self {
             ctx: InstallCodeContext {
+                method: Method::InstallCode,
                 origin: canister_change_origin_from_principal(&PrincipalId::new_user_test_id(0)),
                 canister_id: canister_test_id(0),
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(
@@ -2452,6 +2453,7 @@ fn failed_upgrade_hooks_consume_instructions() {
         let res = install_code(
             &canister_manager,
             InstallCodeContext {
+                method: Method::InstallCode,
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(initial_wasm)),
@@ -2476,6 +2478,7 @@ fn failed_upgrade_hooks_consume_instructions() {
         let (instructions_left, result, _) = install_code(
             &canister_manager,
             InstallCodeContext {
+                method: Method::InstallCode,
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(upgrade_wasm)),
@@ -2597,6 +2600,7 @@ fn failed_install_hooks_consume_instructions() {
         let (instructions_left, result, _) = install_code(
             &canister_manager,
             InstallCodeContext {
+                method: Method::InstallCode,
                 origin: canister_change_origin_from_principal(&sender),
                 canister_id,
                 wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),
@@ -2718,6 +2722,7 @@ fn install_code_respects_instruction_limit() {
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
         InstallCodeContext {
+            method: Method::InstallCode,
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
@@ -2752,6 +2757,7 @@ fn install_code_respects_instruction_limit() {
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
         InstallCodeContext {
+            method: Method::InstallCode,
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
@@ -2778,6 +2784,7 @@ fn install_code_respects_instruction_limit() {
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
         InstallCodeContext {
+            method: Method::InstallCode,
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm.clone())),
@@ -2811,6 +2818,7 @@ fn install_code_respects_instruction_limit() {
     let (instructions_left, result, _) = install_code(
         &canister_manager,
         InstallCodeContext {
+            method: Method::InstallCode,
             origin: canister_change_origin_from_principal(&sender),
             canister_id,
             wasm_source: WasmSource::CanisterModule(CanisterModule::new(wasm)),

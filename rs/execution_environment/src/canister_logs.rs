@@ -49,7 +49,7 @@ pub(crate) fn fetch_canister_logs(
 /// the number of instructions consumed while producing it.
 ///
 /// The caller must have validated that the sender is allowed to fetch the
-/// canister's logs (see `validate_sender`).
+/// canister's logs (see `crate::execution::common::validate_sender_on_subnet`).
 ///
 /// This is shared by the replicated path (see `fetch_canister_logs`) and the
 /// non-replicated path (see `crate::query_handler::subnet_query`) so that both
