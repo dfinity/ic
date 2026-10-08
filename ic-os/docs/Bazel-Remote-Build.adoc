@@ -281,7 +281,8 @@ resources, and is killed after an hour.
 * `build-ic` (the uncached side of `build-determinism`) builds the IC-OS images
   on PRs only if the PR modifies inputs of the images that `build-ic.sh -i`
   builds (`ci/scripts/targets.py build --include_manual --base ... --head ...`,
-  matched against the bundle targets). On `master`, `rc--*` and scheduled
+  matched against the bundle targets), or deletes any file (the query can't see
+  what depended on a deleted file, e.g. through a `glob`). On `master`, `rc--*` and scheduled
   runs, and on PRs labelled to build all targets, it always builds them
   (`build-ic` doesn't run in the merge queue). The canisters and binaries are
   always built.

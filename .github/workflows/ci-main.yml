@@ -679,8 +679,13 @@ jobs:
               # build-ic.sh's target list and this selection aren't Bazel inputs.
               changed="$(git diff --name-only --merge-base \
                 '${{ github.event.pull_request.base.sha }}' '${{ github.event.pull_request.head.sha }}')"
+              # A deleted file (e.g. one a glob picked up) isn't in the head's Bazel graph, so the
+              # query above can't see what depended on it.
+              deleted="$(git diff --name-only --no-renames --diff-filter=D --merge-base \
+                '${{ github.event.pull_request.base.sha }}' '${{ github.event.pull_request.head.sha }}')"
               if grep -qxE '//ic-os/(guestos/envs/(prod|recovery)|hostos/envs/prod|setupos/envs/prod):bundle(-disk|-update)?' <<<"$affected" \
-                || grep -qxE 'ci/container/build-ic\.sh|ci/scripts/targets\.py' <<<"$changed"; then
+                || grep -qxE 'ci/container/build-ic\.sh|ci/scripts/targets\.py' <<<"$changed" \
+                || [[ -n "$deleted" ]]; then
                 build_ic_args+=(-i)
               else
                 echo "::notice::No IC-OS image inputs were modified: build-ic skips the IC-OS images"
