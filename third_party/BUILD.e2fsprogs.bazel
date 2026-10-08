@@ -19,7 +19,7 @@ configure_make(
         # stays self-contained.
         "--enable-libuuid",
         "--enable-libblkid",
-        "--enable-fuse2fs",
+        "--disable-fuse2fs",
         # Trim optional features that would pull in extra deps or shared libs.
         "--disable-uuidd",
         "--disable-nls",
@@ -42,7 +42,6 @@ configure_make(
     lib_source = ":all_srcs",
     out_binaries = [
         "debugfs",
-        "fuse2fs",
         "mke2fs",
     ],
     # We don't ship any libs out of this build; everything is folded into the
@@ -61,23 +60,13 @@ configure_make(
         " && cp $$INSTALLDIR/sbin/mke2fs $$INSTALLDIR/bin/mke2fs" +
         " && cp $$INSTALLDIR/sbin/debugfs $$INSTALLDIR/bin/debugfs" +
         " && find $$INSTALLDIR -mindepth 1 -maxdepth 1 ! -name bin ! -name include -exec rm -rf {} +" +
-        " && find $$INSTALLDIR/bin -mindepth 1 ! -name debugfs ! -name fuse2fs ! -name mke2fs -delete"
+        " && find $$INSTALLDIR/bin -mindepth 1 ! -name debugfs ! -name mke2fs -delete"
     ),
     # These tools are only ever used to build Linux filesystem images.
     target_compatible_with = [
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
-    deps = [
-        "@libfuse",
-    ],
-)
-
-filegroup(
-    name = "fuse2fs",
-    srcs = [":e2fsprogs"],
-    output_group = "fuse2fs",
-    visibility = ["//visibility:public"],
 )
 
 filegroup(

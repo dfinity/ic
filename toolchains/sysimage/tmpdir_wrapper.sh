@@ -20,11 +20,20 @@ export FAKEROOTDONTTRYCHOWN=1
 # Scratch space goes in the action's working directory (the execroot, or the
 # sandbox's copy of it) rather than /tmp: image actions unpack and write several
 # GB there, and remote executors only have a 1 GB /tmp (#10797).
+# The image tools record the modes of the files they create in the images, so
+# those mustn't depend on the environment: a fixed umask, and the scratch
+# directory doesn't pass on a setgid bit (the sandbox on the dind-large CI
+# runners has one, which made root directories 2755) or a default ACL of the
+# working directory.
+umask 022
 tmpdir=$(mktemp -d -p "$PWD" "icosbuildXXXX")
-# The working directory can be setgid (e.g. the sandbox on the dind-large CI
-# runners), which new directories inherit, and the image tools would record that
-# mode in the images (e.g. a root directory with mode 2755). Not below here.
 chmod g-s "$tmpdir"
+python3 -c '
+import os, sys
+for name in os.listxattr(sys.argv[1]):
+    if name == "system.posix_acl_default":
+        os.removexattr(sys.argv[1], name)
+' "$tmpdir"
 # Under fakeroot, tar applies archive modes exactly, so the tree can contain
 # directories without u+w that a plain `rm -rf` can't empty. Restore write
 # permissions first, and never let a failed cleanup fail a successful command.

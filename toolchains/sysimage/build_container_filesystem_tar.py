@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -16,7 +15,7 @@ from typing import List, Optional
 
 import invoke
 
-from toolchains.sysimage.container_context import arrange_component_files, resolve_file_args
+from toolchains.sysimage.container_context import arrange_context, resolve_file_args
 
 
 @dataclass(frozen=True)
@@ -211,12 +210,9 @@ def main():
     # tempfile cleanup is handled by proc_wrapper.sh
     context_dir = tempfile.mkdtemp()
 
-    # Add all context files directly into dir
-    for context_file in context_files:
-        shutil.copy(context_file, context_dir)
-
-    # Fill context with remaining component files from map
-    arrange_component_files(context_dir, component_files)
+    # Add all context files directly into dir, and the component files to
+    # their paths in it (shared with the microVM builder).
+    arrange_context(context_dir, context_files, component_files)
 
     # Bazel can't read files. (: Resolve them here, instead.
     if args.file_build_args:

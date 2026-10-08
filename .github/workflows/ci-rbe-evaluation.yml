@@ -237,8 +237,9 @@ jobs:
         run: echo "common --repository_cache=/var/cache/bazel-repository-cache" >>/tmp/bazel-rbe.bazelrc
 
       - name: Prepare the scratch directory for the ic-os image builds
-        # The ic-os container builds run locally (see the container options above) and each
-        # writes several GB of scratch under $TMPDIR, by default /tmp: this container's
+        # Actions that run locally in this container (the ic-os image actions run remotely,
+        # except under --config=icos_host or icos_podman) can write several GB of scratch under
+        # $TMPDIR, by default /tmp: this container's
         # overlay root, a containerd snapshot on the Namespace cache volume which risks
         # filling up if the ic-os build writes its temporary scratch there.
         # $HOME is no alternative: it is on the runner's root disk, an overlayfs with layers
@@ -361,7 +362,7 @@ jobs:
         timeout-minutes: 100 # Backstop, see "Infer Bazel Targets".
         env:
           # Bazel's local strategy hands actions the client's TMPDIR (--action_env has no
-          # effect on it), so this is what moves the ic-os image builds' scratch to the
+          # effect on it), so this is what moves the scratch of locally run actions to the
           # scratch filesystem; see the "Prepare the scratch directory" step.
           TMPDIR: /namespace/scratch/tmp
         uses: ./.github/actions/bazel-namespace

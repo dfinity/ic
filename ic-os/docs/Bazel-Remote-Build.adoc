@@ -109,7 +109,10 @@ unsandboxed.
   They don't upload them either: their root and boot partitions embed the
   version, so nothing else could use them. As before, the container
   filesystems (which were already cacheable) and the binaries in the images
-  come from the cache like all other release artifacts. Genrules can't be
+  come from the cache like all other release artifacts, except SetupOS's
+  container filesystem: it contains the commit time (`/commit-time`), so it is
+  rebuilt for every stamped commit, which on the `dind-large` runners means
+  TCG. Genrules can't be
   singled out by mnemonic, so the few small IC-OS genrules (bootloader tree
   post-processing, verity signing, launch measurements) use the cache too,
   keyed by the digests of their inputs. `build-determinism` cross-checks the
@@ -122,12 +125,15 @@ gets every partition and image from the cache. A PR that does change one
 rebuilds only the affected `partition-root` → verity → disk/upgrade chain, and
 on RBE that chain runs on remote workers instead of the CI driver.
 
-Scratch directory modes: the sandbox directories can be setgid (they are on
-the `dind-large` CI runners), and directories created below a setgid directory
-inherit the bit, which the ext4 tools then record in the images (a root
-directory with mode 2755 instead of 755). `tmpdir_wrapper.sh` and the genrules
-therefore clear it on their scratch directories, and the ext4 image root gets
-an explicit 755.
+Modes in the images: the image tools record the modes of the files and
+directories they create, so those mustn't depend on the environment.
+`tmpdir_wrapper.sh` and the genrules set `umask 022` and clear the setgid bit of
+their scratch directories (the sandbox directories on the `dind-large` CI
+runners are setgid, which gave root directories mode 2755);
+`tmpdir_wrapper.sh` also drops a default ACL the scratch directory would
+inherit. The ext4 image root gets an explicit 755, and the build context's
+files get 0755 or 0644 by their executable bit, whatever modes Bazel gave the
+inputs (they differ between local and remote execution).
 
 Cache size: one complete set of dev images (GuestOS, HostOS, SetupOS and
 `test-img`) is about 22 GiB of action outputs, mostly the uncompressed disk
@@ -140,7 +146,16 @@ once per base image update. Bazel fetches the base images (about 6 GB of
 compressed layers) into its repository cache the first time something needs
 them, including any `bazel query` over `//...`, like `ci/scripts/targets.py`;
 on DFINITY CI they come through the `bazel-remote` downloader, on Namespace
-from the cache volume's repository cache.
+from the cache volume's repository cache. `rules_oci` also copies each image's
+layers into a directory in `bazel-out` (a local, uncached action) before they
+are flattened, and `--config=icos_podman` still fetches them. A GuestOS base
+image update rebuilds all container filesystems, since its kernel boots every
+build VM.
+
+Each build VM action needs up to 6-9 GB of scratch (the unpacked base and
+context, the root disk, the output disk), which matters if `--sandbox_base` is
+a tmpfs. On RBE, Bazel's `resource_set` doesn't apply, so a worker may run
+several 4 GiB VMs at once.
 
 Scratch space: a root partition build extracts about 3 GB and creates a
 10 GB sparse image, `create_test_img` unpacks a whole SetupOS disk image, and
@@ -363,8 +378,16 @@ On an x86_64 devenv in the `ic-dev` container:
   measurements, partitions, `test-img`).
 * `debugfs rdump` vs `fuse2fs` extraction of a GuestOS boot partition: the same
   entries, contents, modes and owners.
-* Namespace RBE (`ci-rbe-evaluation`, PR #11784): the disk, ext4 and upgrade
-  image actions executed `remote`ly on the workers, and all tests passed.
+* Namespace RBE (`ci-rbe-evaluation`, PR #11784): the image actions, including
+  the build VMs (`IcosContainerVmBuild`, 4-66 s each with KVM), executed
+  `remote`ly on the workers, and all tests passed; the RBE driver ran
+  unprivileged.
+* `dind-large` CI runners (`ci-main.yml`): `build-ic` built all IC-OS images
+  unprivileged, the build VMs with TCG (99-481 s each), and `build-determinism`
+  found no mismatches. A CI-built root partition has the same root directory
+  mode (0755) as one built on the devenv.
+* A build with `--sandbox_base` on a setgid directory is byte-identical to a
+  normal one.
 
 == Open questions
 

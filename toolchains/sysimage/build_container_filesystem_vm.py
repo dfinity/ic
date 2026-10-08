@@ -67,6 +67,8 @@ mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /dev/shm
 mount -t tmpfs tmpfs /run
 
+# kvm-clock under KVM, something else (e.g. tsc) under TCG emulation.
+echo "clocksource: $(cat /sys/devices/system/clocksource/clocksource0/current_clocksource)"
 status=0
 /bin/sh -e /{build_dir}/steps.sh || status=$?
 
@@ -122,15 +124,19 @@ def generate_steps(build_plan: Plan, env: List[str], build_dir: Path) -> str:
     return "\n".join(lines)
 
 
-def copy_commands(step: Copy) -> List[str]:
-    """Shell commands implementing a COPY step: files owned by root, modes from the context."""
-    destination = step.destination
+def copy_commands(step: Copy, context: str = f"/{BUILD_DIR}/ctx", root: str = "") -> List[str]:
+    """
+    Shell commands implementing a COPY step: files owned by root, modes from the context.
+
+    context is where the build context is, and root is prepended to the destination (for tests).
+    """
+    destination = root + step.destination
     into_directory = destination.endswith("/") or len(step.sources) > 1
     dest = shlex.quote(destination)
     cp = "cp -dR --preserve=mode,ownership,links --remove-destination"
     commands = []
     for source in step.sources:
-        src = shlex.quote(f"/{BUILD_DIR}/ctx/{source.rstrip('/')}")
+        src = shlex.quote(f"{context}/{source.rstrip('/')}")
         commands.append(f"if [ -d {src} ]; then")
         # A directory's contents are merged into the destination directory.
         commands.append(f"  mkdir -p {dest}")

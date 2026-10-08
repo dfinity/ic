@@ -62,8 +62,10 @@ build:icos_podman --//toolchains/sysimage:container_executor=podman
 
 # Escape hatch: run all ic-os image actions on the host, unsandboxed, as before. Use it with
 # `--config=icos_host` on a machine or executor where they fail sandboxed or remotely. The progress
-# messages of the image actions contain their output path, so this matches all of them (it never
-# matches tests: Bazel doesn't apply --strategy_regexp to the TestRunner mnemonic).
+# messages of the image actions in the ic-os packages contain their output path, so this matches
+# them; not the base image flattening and the build VM kernel in //toolchains/sysimage, which need
+# nothing from the host. It never matches tests: Bazel doesn't apply --strategy_regexp to the
+# TestRunner mnemonic.
 build:icos_host --strategy_regexp=ic-os[:/].*=local
 
 build --workspace_status_command='$(pwd)/bazel/workspace_status.sh'

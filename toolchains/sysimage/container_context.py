@@ -14,8 +14,20 @@ from typing import List
 def arrange_context(context_dir: str, context_files: List[str], component_files: List[str]):
     """Copy the context files into context_dir, and the component files to their defined paths in it."""
     for context_file in context_files:
-        shutil.copy(context_file, context_dir)
+        copy_file(context_file, os.path.join(context_dir, os.path.basename(context_file)))
     arrange_component_files(context_dir, component_files)
+
+
+def copy_file(source: str, target: str):
+    """
+    Copy source to target with mode 0755 if it is executable and 0644 otherwise.
+
+    `COPY` keeps the modes of the context files, and the inputs' modes besides
+    the executable bit depend on how Bazel materialized them (e.g. 0555 locally,
+    0755 or 0644 on a remote executor).
+    """
+    shutil.copyfile(source, target)
+    os.chmod(target, 0o755 if os.stat(source).st_mode & 0o111 else 0o644)
 
 
 def arrange_component_files(context_dir, component_files):
@@ -26,7 +38,7 @@ def arrange_component_files(context_dir, component_files):
             install_target = install_target[1:]
         install_target = os.path.join(context_dir, install_target)
         make_directories(context_dir, os.path.dirname(install_target))
-        shutil.copy(source_file, install_target)
+        copy_file(source_file, install_target)
 
 
 def make_directories(context_dir, path):

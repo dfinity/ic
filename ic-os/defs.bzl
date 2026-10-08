@@ -186,6 +186,7 @@ def icos_build(
         cmd = """
 set -euo pipefail
 
+umask 022
 tmpdir=$$(mktemp -d -p "$$PWD")
 chmod g-s "$$tmpdir"  # see toolchains/sysimage/tmpdir_wrapper.sh
 trap 'rm -rf "$$tmpdir"' EXIT
@@ -315,6 +316,7 @@ FAKEROOTDONTTRYCHOWN=1 fakeroot -- sh -ec '
             # Scratch in the working directory, not /tmp: the boot partition image
             # is 1 GiB, which the remote executors' 1 GB /tmp can't hold (#10797).
             cmd = """
+                umask 022
                 tmpdir="$$(mktemp -d -p "$$PWD")"
                 chmod g-s "$$tmpdir"  # see toolchains/sysimage/tmpdir_wrapper.sh
                 trap 'rm -rf "$$tmpdir"' EXIT

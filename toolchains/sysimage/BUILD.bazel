@@ -99,6 +99,20 @@ py_test(
 )
 
 py_test(
+    name = "container_context_test",
+    srcs = ["container_context_test.py"],
+    deps = [":container_context"],
+)
+
+py_test(
+    name = "build_container_filesystem_vm_test",
+    srcs = ["build_container_filesystem_vm_test.py"],
+    # The generated COPY commands use GNU cp.
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [":build_container_filesystem_vm_lib"],
+)
+
+py_test(
     name = "oci_rootfs_test",
     srcs = ["oci_rootfs_test.py"],
     deps = [":oci_rootfs_lib"],
@@ -121,6 +135,15 @@ py_binary(
     deps = [
         ":container_context",
         requirement("invoke"),
+    ],
+)
+
+py_library(
+    name = "build_container_filesystem_vm_lib",
+    srcs = ["build_container_filesystem_vm.py"],
+    deps = [
+        ":container_context",
+        ":dockerfile",
     ],
 )
 

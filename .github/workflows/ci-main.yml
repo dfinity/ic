@@ -671,7 +671,11 @@ jobs:
               affected="$(ci/scripts/targets.py build --include_manual \
                 '--base=${{ github.event.pull_request.base.sha }}' \
                 '--head=${{ github.event.pull_request.head.sha }}')"
-              if grep -qxE '//ic-os/(guestos/envs/(prod|recovery)|hostos/envs/prod|setupos/envs/prod):bundle(-disk|-update)?' <<<"$affected"; then
+              # build-ic.sh's target list and this selection aren't Bazel inputs.
+              changed="$(git diff --name-only --merge-base \
+                '${{ github.event.pull_request.base.sha }}' '${{ github.event.pull_request.head.sha }}')"
+              if grep -qxE '//ic-os/(guestos/envs/(prod|recovery)|hostos/envs/prod|setupos/envs/prod):bundle(-disk|-update)?' <<<"$affected" \
+                || grep -qxE 'ci/container/build-ic\.sh|ci/scripts/targets\.py' <<<"$changed"; then
                 build_ic_args+=(-i)
               else
                 echo "::notice::No IC-OS image inputs were modified: build-ic skips the IC-OS images"
