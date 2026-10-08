@@ -231,16 +231,12 @@ impl TargetCanister {
             | TargetCanister::CkEthMinter
             | TargetCanister::CkSolIndex
             | TargetCanister::CkSolLedger
+            | TargetCanister::CkSolMinter
             | TargetCanister::LedgerSuiteOrchestrator
             | TargetCanister::EvmRpc
             | TargetCanister::CyclesLedger
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::SolRpc => self.repo_dir().into_iter().collect(),
-            TargetCanister::CkSolMinter => vec![
-                PathBuf::from("libs"),
-                PathBuf::from("minter"),
-                PathBuf::from("Cargo.lock"),
-            ],
             TargetCanister::CkDogeMinter => vec![
                 PathBuf::from("rs/bitcoin/ckbtc"),
                 PathBuf::from("rs/dogecoin/ckdoge"),
