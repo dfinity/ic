@@ -8,8 +8,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
-use ic_consensus_dkg::get_vetkey_public_keys;
-use ic_crypto::get_master_public_key_from_transcript;
+use ic_consensus_cup_utils::get_master_public_keys;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
     ImageUpgrader, ManagebootRunner, Rebooting,
@@ -17,7 +16,6 @@ use ic_image_upgrader::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, error, info, warn};
-use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::{proxy::try_from_option_field, types::v1 as pb};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
@@ -25,10 +23,7 @@ use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
     Height, NodeId, PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::{CatchUpPackage, HasHeight},
-    crypto::{
-        canister_threshold_sig::MasterPublicKey,
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
-    },
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
 };
 use std::{
     collections::BTreeMap,
@@ -1063,44 +1058,6 @@ fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
     OrchestratorError::ExecError(program, err.into())
 }
 
-/// Return the threshold master public key of the given CUP, if it exists.
-fn get_master_public_keys(
-    cup: &CatchUpPackage,
-    log: &ReplicaLogger,
-) -> BTreeMap<MasterPublicKeyId, MasterPublicKey> {
-    let payload = cup.content.block.get_value().payload.as_ref();
-
-    let (mut public_keys, _) = get_vetkey_public_keys(&payload.as_summary().dkg, log);
-
-    let Some(idkg) = payload.as_idkg() else {
-        return public_keys;
-    };
-
-    for (key_id, key_transcript) in &idkg.key_transcripts {
-        let Some(transcript) = key_transcript
-            .current
-            .as_ref()
-            .and_then(|transcript_ref| idkg.idkg_transcripts.get(&transcript_ref.transcript_id()))
-        else {
-            continue;
-        };
-
-        match get_master_public_key_from_transcript(transcript) {
-            Ok(public_key) => {
-                public_keys.insert(key_id.clone().into(), public_key);
-            }
-            Err(err) => {
-                warn!(
-                    log,
-                    "Failed to get the master public key for key id {}: {:?}", key_id, err,
-                );
-            }
-        };
-    }
-
-    public_keys
-}
-
 /// Get threshold master public keys of both CUPs and make sure previous keys weren't changed
 /// or deleted. Raise an alert if they were.
 fn compare_master_public_keys(
@@ -1227,7 +1184,8 @@ mod tests {
         RegistryClientVersionedResult, RegistryDataProvider, RegistryVersionedRecord,
     };
     use ic_management_canister_types_private::{
-        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
+        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+        VetKdKeyId,
     };
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::log::log_entry::v1::LogEntry;

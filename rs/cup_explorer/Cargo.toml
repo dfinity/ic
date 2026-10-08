@@ -18,6 +18,7 @@ ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
+ic-logger = { path = "../monitoring/logger" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
