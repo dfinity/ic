@@ -9,7 +9,7 @@ use crate::canister_state::execution_state::{CustomSection, CustomSectionType, W
 use crate::canister_state::system_state::testing::{OutputRequestBuilder, SystemStateTesting};
 use crate::canister_state::system_state::{
     CallContextManager, CanisterHistory, CanisterStatus, ConnectionMetrics, LRUConnectionMetrics,
-    MAX_CANISTER_HISTORY_CHANGES, MAX_CAPACITY, OutstandingPrepayments,
+    MAX_CANISTER_HISTORY_CHANGES, MAX_CONNECTION_METRICS_ENTRIES, OutstandingPrepayments,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use assert_matches::assert_matches;
@@ -1863,7 +1863,7 @@ fn reverts_stopping_status_after_split() {
 #[test]
 fn lru_connection_metrics_new_evicts_least_recently_accessed_entries() {
     let extra = 3;
-    let metrics_per_canister: BTreeMap<_, _> = (0..(MAX_CAPACITY + extra) as u64)
+    let metrics_per_canister: BTreeMap<_, _> = (0..(MAX_CONNECTION_METRICS_ENTRIES + extra) as u64)
         .map(|i| {
             (
                 canister_test_id(i),
@@ -1888,9 +1888,9 @@ fn lru_connection_metrics_new_evicts_least_recently_accessed_entries() {
 #[test]
 fn lru_connection_metrics_evicts_lowest_count_among_equally_old_entries() {
     let heavy_canister = canister_test_id(0);
-    let light_canister = canister_test_id(MAX_CAPACITY as u64 / 2);
-    // `MAX_CAPACITY + 1` entries all accessed in the same round.
-    let metrics_per_canister: BTreeMap<_, _> = (0..=MAX_CAPACITY as u64)
+    let light_canister = canister_test_id(MAX_CONNECTION_METRICS_ENTRIES as u64 / 2);
+    // `MAX_CONNECTION_METRICS_ENTRIES + 1` entries all accessed in the same round.
+    let metrics_per_canister: BTreeMap<_, _> = (0..=MAX_CONNECTION_METRICS_ENTRIES as u64)
         .map(|i| {
             let canister_id = canister_test_id(i);
             let count = if canister_id == heavy_canister {
@@ -1912,7 +1912,7 @@ fn lru_connection_metrics_evicts_lowest_count_among_equally_old_entries() {
 
     let metrics = LRUConnectionMetrics::new(metrics_per_canister);
 
-    assert_eq!(metrics.get().len(), MAX_CAPACITY);
+    assert_eq!(metrics.get().len(), MAX_CONNECTION_METRICS_ENTRIES);
     assert!(!metrics.get().contains_key(&light_canister));
     assert!(metrics.get().contains_key(&heavy_canister));
 }
