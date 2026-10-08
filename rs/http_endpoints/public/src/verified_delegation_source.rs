@@ -63,7 +63,7 @@ fn delegation_verification_failure_error(err: DelegationVerificationError) -> Ht
     let status = StatusCode::SERVICE_UNAVAILABLE;
     let message = match err {
         DelegationVerificationError::Inconsistent => {
-            "This replica has an outdated delegation. Please try again."
+            "This replica's delegation is inconsistent with its state. Please try again."
         }
         DelegationVerificationError::Validation(_) => {
             "This replica has an invalid delegation. Please try again."

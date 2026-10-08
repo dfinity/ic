@@ -2082,7 +2082,7 @@ fn test_read_state_endpoint_becomes_unavailable_when_delegation_drifts_from_stat
             _ => {
                 assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
                 assert_eq!(
-                    "This replica has an outdated delegation. Please try again.",
+                    "This replica's delegation is inconsistent with its state. Please try again.",
                     response.text().await.unwrap(),
                 );
             }
@@ -2165,7 +2165,7 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
             _ => {
                 assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
                 assert_eq!(
-                    "This replica has an outdated delegation. Please try again.",
+                    "This replica's delegation is inconsistent with its state. Please try again.",
                     response.text().await.unwrap(),
                 );
             }
@@ -2186,7 +2186,7 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
 #[case::status_certified(
     true,
     StatusCode::SERVICE_UNAVAILABLE,
-    "This replica has an outdated delegation. Please try again."
+    "This replica's delegation is inconsistent with its state. Please try again."
 )]
 fn test_sync_call_endpoint_verifies_delegation_only_when_serving_certificate(
     #[values(
