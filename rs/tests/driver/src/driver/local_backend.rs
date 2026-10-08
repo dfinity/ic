@@ -6,8 +6,8 @@
 //! Boots each VM as a per-VM daemonized `qemu-system-x86_64` process, controlled
 //! afterwards through its pid-file (destroy) and a per-VM QMP unix socket
 //! (reboot). Networking (per-group Linux bridge + per-VM TAPs, `dnsmasq`
-//! RA/DHCPv4/DNS) and disk images (qcow2 overlays over a shared base) are
-//! managed directly by this backend.
+//! RA/DHCPv4/DNS, an `ntpd-rs` NTS time server) and disk images (qcow2 overlays
+//! over a shared base) are managed directly by this backend.
 //!
 //! Many Farm features have no local equivalent (managed playnet DNS, TLS
 //! issuance, HTTP file upload, multi-tenant scheduling); those operations warn
@@ -19,6 +19,7 @@
 //! `enp2s0`).
 
 use crate::driver::farm::{VMCreateResponse, VmSpec};
+use crate::driver::ic_gateway_vm::dev_root_ca;
 use crate::driver::resource::DiskImage;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::get_dependency_path_from_env;
@@ -26,11 +27,12 @@ use anyhow::{Context, Result, anyhow, bail};
 use deterministic_ips::MacAddr6Ext;
 use macaddr::MacAddr6;
 use network::systemd::IPV6_NAME_SERVERS;
+use rcgen::{CertificateParams, KeyPair};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{IpAddr, Ipv6Addr, SocketAddr, TcpStream};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
@@ -63,6 +65,18 @@ const NIP_IO_DOMAIN: &str = "ipv6.nip.io";
 /// `systemd-resolved`, which routes `*.local` to mDNS and never to the unicast
 /// `DNS=` servers the group's `dnsmasq` answers on.
 pub const IN_GROUP_DOMAIN_SUFFIX: &str = "ic.net";
+
+/// The NTS server the group's time server poses as (see
+/// [`LocalBackend::start_time_server`]). It must be one of the `nts` servers in
+/// `ic-os/components/misc/chrony/chrony.conf`.
+const NTS_SERVER_NAME: &str = "time.cloudflare.com";
+
+/// The TCP port of the NTS key exchange (RFC 8915).
+const NTS_KE_PORT: u16 = 4460;
+
+/// How long [`LocalBackend::start_time_server`] waits for the time server to
+/// accept connections.
+const TIME_SERVER_STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Environment variables holding the runfiles paths of the split OVMF (UEFI)
 /// firmware images, provided by the `@ovmf` Bazel repo (extracted from the
@@ -696,6 +710,9 @@ impl LocalBackend {
         );
         Self::run_shell(&create_script, "create group bridge")?;
 
+        // Start the time server before any VM can boot and query it.
+        self.start_time_server(&gateway)?;
+
         // Start `dnsmasq`. Non-IC-node VMs (e.g. universal VMs) SLAAC their
         // global address from its RA; IC GuestOS nodes use a static config instead.
         // The same `dnsmasq` also serves DHCPv4 on the group's IPv4 `/24` for
@@ -715,8 +732,8 @@ impl LocalBackend {
     }
 
     /// Path of the extra hosts-file the group's `dnsmasq` serves DNS records
-    /// from (`--addn-hosts`), written by
-    /// [`add_dns_record`](Self::add_dns_record).
+    /// from (`--addn-hosts`), seeded by [`start_dnsmasq`](Self::start_dnsmasq)
+    /// and appended to by [`add_dns_record`](Self::add_dns_record).
     fn dnsmasq_hosts_path(&self, bridge: &str) -> PathBuf {
         self.active_local_backend
             .working_dir
@@ -755,7 +772,9 @@ impl LocalBackend {
         // Truncate the hosts-file, both to drop any records such a run left and
         // so it exists before `dnsmasq` starts: a missing `--addn-hosts` file is
         // tolerated, but relying on it being picked up later is needless risk.
-        std::fs::write(&hosts_path, "")
+        // Its one initial record points `NTS_SERVER_NAME` at the time server.
+        let gateway = Self::group_gateway_ipv6(group_name);
+        std::fs::write(&hosts_path, format!("{gateway} {NTS_SERVER_NAME}\n"))
             .with_context(|| format!("creating {}", hosts_path.display()))?;
 
         info!(
@@ -779,13 +798,16 @@ impl LocalBackend {
         // no upstream server left to forward to, anything it cannot answer is
         // REFUSED rather than leaked. It answers from two sources:
         //
-        // * `--addn-hosts` — records tests register through
-        //   [`add_dns_record`](Self::add_dns_record).
+        // * `--addn-hosts` — the [`NTS_SERVER_NAME`] record seeded above and the
+        //   records tests register through [`add_dns_record`](Self::add_dns_record).
         // * `--synth-domain` — synthesises `<address>.ipv6.nip.io` for the
         //   group's `/64`, with `:` written as `-`, mirroring the public
         //   `nip.io` wildcard service that tests use to name a VM by its
         //   address. `dnsmasq` parses the label with `inet_pton`, so it accepts
         //   exactly the form Rust's `Ipv6Addr` Display produces.
+        //
+        // `--local` makes it answer the A query for the AAAA-only
+        // [`NTS_SERVER_NAME`] with an empty NOERROR instead of REFUSED.
         //
         // `--bind-interfaces` binds the bridge's addresses as they are at
         // startup, which is why `create_group` assigns the name-server addresses
@@ -815,6 +837,7 @@ impl LocalBackend {
                  --no-resolv \
                  --no-hosts \
                  --addn-hosts={hosts} \
+                 --local=/{NTS_SERVER_NAME}/ \
                  --synth-domain={NIP_IO_DOMAIN},{prefix}/64",
             pid = pid_path.display(),
             lease = lease_path.display(),
@@ -883,6 +906,130 @@ impl LocalBackend {
             let _ = Command::new("kill").arg(pid.to_string()).status();
         }
         let _ = std::fs::remove_file(&pid_path);
+    }
+
+    /// Working dir of the group's time server: its config, certificate,
+    /// pid-file and log.
+    fn time_server_dir(&self) -> PathBuf {
+        self.active_local_backend.working_dir.join("ntp")
+    }
+
+    /// Start the group's time server: an `ntpd-rs` daemon that serves the
+    /// host's clock over NTS on `gateway` as [`NTS_SERVER_NAME`], with a
+    /// certificate from the dev root CA, which dev GuestOS and HostOS images
+    /// trust. `dnsmasq` resolves that name to `gateway` (see `start_dnsmasq`).
+    ///
+    /// Both sockets are bound to `gateway` itself: `create_group` makes the
+    /// management address the source of host-to-node traffic, and chrony drops
+    /// replies from any other address than the one it queried.
+    fn start_time_server(&self, gateway: &str) -> Result<()> {
+        let dir = self.time_server_dir();
+        std::fs::create_dir_all(&dir)
+            .with_context(|| format!("creating time server dir {}", dir.display()))?;
+
+        let ca = dev_root_ca()?;
+        let key = KeyPair::generate().context("generating the time server certificate key")?;
+        let cert = CertificateParams::new(vec![NTS_SERVER_NAME.to_string()])
+            .context("building the time server certificate parameters")?
+            .signed_by(&key, &ca.cert, &ca.key)
+            .context("signing the time server certificate")?;
+        let chain_path = dir.join("chain.pem");
+        let key_path = dir.join("key.pem");
+        std::fs::write(&chain_path, format!("{}{}", cert.pem(), ca.cert_pem))
+            .with_context(|| format!("writing {}", chain_path.display()))?;
+        std::fs::write(&key_path, key.serialize_pem())
+            .with_context(|| format!("writing {}", key_path.display()))?;
+
+        // `log-level`: logs each completed key exchange (see `stop_time_server`).
+        // `local-stratum`: serves the host's clock without sources, so it never
+        // adjusts it. `key-exchange-timeout-ms`: chrony backs off for 1024s
+        // after a failed key exchange.
+        let config_path = dir.join("ntp.toml");
+        let config = format!(
+            r#"[observability]
+log-level = "debug"
+ansi-colors = false
+
+[synchronization]
+local-stratum = 1
+
+[[server]]
+listen = "[{gateway}]:123"
+
+[[nts-ke-server]]
+listen = "[{gateway}]:{NTS_KE_PORT}"
+certificate-chain-path = "{chain}"
+private-key-path = "{key}"
+key-exchange-timeout-ms = 10000
+"#,
+            chain = chain_path.display(),
+            key = key_path.display(),
+        );
+        std::fs::write(&config_path, config)
+            .with_context(|| format!("writing {}", config_path.display()))?;
+
+        info!(
+            self.logger,
+            "Starting the time server on [{gateway}] as {NTS_SERVER_NAME}"
+        );
+        // It inherits the capabilities to bind port 123 (see
+        // `ensure_administrable_netns`) and outlives the `Child` handle;
+        // `delete_group` stops it via its pid-file.
+        let log_path = dir.join("ntp-daemon.log");
+        let log = std::fs::File::create(&log_path)
+            .with_context(|| format!("creating {}", log_path.display()))?;
+        let child = Command::new(get_dependency_path_from_env("ENV_DEPS__NTP_DAEMON_PATH"))
+            .arg("-c")
+            .arg(&config_path)
+            .stdin(Stdio::null())
+            .stdout(log.try_clone()?)
+            .stderr(log)
+            .spawn()
+            .context("spawning the time server")?;
+        let pid_path = dir.join("ntp-daemon.pid");
+        std::fs::write(&pid_path, child.id().to_string())
+            .with_context(|| format!("writing {}", pid_path.display()))?;
+
+        // chrony connects to the key exchange port before it sends any NTP
+        // request, so wait for that one. Each probe shows up in the server's log
+        // as a failed key exchange from `gateway`.
+        let ke_addr = SocketAddr::new(
+            gateway
+                .parse()
+                .with_context(|| format!("parsing gateway address {gateway}"))?,
+            NTS_KE_PORT,
+        );
+        let deadline = Instant::now() + TIME_SERVER_STARTUP_TIMEOUT;
+        while TcpStream::connect_timeout(&ke_addr, Duration::from_secs(1)).is_err() {
+            if Instant::now() >= deadline {
+                bail!(
+                    "the time server did not accept connections on {ke_addr} within {:?}: {}",
+                    TIME_SERVER_STARTUP_TIMEOUT,
+                    std::fs::read_to_string(&log_path)
+                        .unwrap_or_default()
+                        .trim()
+                );
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        Ok(())
+    }
+
+    /// Stop the group's time server, if running, and report its log, which lists
+    /// every VM that completed a key exchange, including VMs whose journals are
+    /// not streamed. Best-effort and idempotent.
+    fn stop_time_server(&self) {
+        let dir = self.time_server_dir();
+        let pid_path = dir.join("ntp-daemon.pid");
+        if let Ok(contents) = std::fs::read_to_string(&pid_path)
+            && let Ok(pid) = contents.trim().parse::<i32>()
+        {
+            let _ = Command::new("kill").arg(pid.to_string()).status();
+        }
+        let _ = std::fs::remove_file(&pid_path);
+        if let Ok(log) = std::fs::read_to_string(dir.join("ntp-daemon.log")) {
+            info!(self.logger, "Time server log:\n{}", log.trim_end());
+        }
     }
 
     /// Path of a VM's QEMU pid-file (written via `-pidfile` in [`start_vm`]).
@@ -968,8 +1115,10 @@ impl LocalBackend {
             "Deleting local group {group_name} (bridge {bridge})"
         );
 
-        // Stop `dnsmasq` before removing the bridge it listens on.
+        // Stop `dnsmasq` and the time server before removing the bridge they
+        // listen on.
         self.stop_dnsmasq(&bridge);
+        self.stop_time_server();
 
         // Best effort: stop every VM QEMU process started for this group. Each
         // VM records its pid under `working_dir/vms/<vm>/qemu.pid`; killing it
@@ -1444,9 +1593,14 @@ impl LocalBackend {
             );
         }
 
-        // virtio-balloon and virtio-rng, each on its own root port.
+        // virtio-balloon and virtio-rng, each on its own root port. Free page reporting
+        // hands the memory a guest frees back to the host, e.g. all of it when the guest
+        // reboots, rather than QEMU holding on to the guest's high-water mark.
         let rp = root_port!();
-        arg!("-device", format!("virtio-balloon-pci,bus={rp},addr=0x0"));
+        arg!(
+            "-device",
+            format!("virtio-balloon-pci,bus={rp},addr=0x0,free-page-reporting=on")
+        );
         let rp = root_port!();
         arg!("-object", "rng-random,id=rng0,filename=/dev/urandom");
         arg!(

@@ -450,10 +450,12 @@ pub struct SubnetMetrics {
     /// strictly larger than the sum of the entries above: deletions from before
     /// use-case tracking are recorded in it alone.
     consumed_cycles_by_deleted_canisters: NominalCycles,
-    consumed_cycles_http_outcalls: NominalCycles,
-    consumed_cycles_ecdsa_outcalls: NominalCycles,
+    /// The cycles consumed on this subnet, per use case. The entries only ever
+    /// grow: subnet-level use cases are never refunded, and canister-level ones
+    /// only enter the map when a canister is deleted. So besides the gauge, this
+    /// map also feeds the monotonic
+    /// `replicated_state_consumed_cycles_from_replica_start_as_counters` metric.
     consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
-    consumed_cycles_by_use_case_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
     pub threshold_signature_agreements: BTreeMap<MasterPublicKeyId, u64>,
     /// The number of canisters that exist on this subnet.
     pub num_canisters: u64,
@@ -474,6 +476,12 @@ pub struct SubnetMetrics {
     /// until [`Self::refresh_consumed_cycles`] derives it.
     #[validate_eq(Ignore)]
     consumed_cycles_total_including_canisters: NominalCycles,
+
+    /// Backing store of
+    /// [`Self::consumed_cycles_total_including_canisters_monotonic()`]; zero until
+    /// [`Self::refresh_consumed_cycles`] derives it.
+    #[validate_eq(Ignore)]
+    consumed_cycles_total_including_canisters_monotonic: NominalCycles,
 }
 
 impl SubnetMetrics {
@@ -489,10 +497,6 @@ impl SubnetMetrics {
             .consumed_cycles_by_use_case
             .entry(use_case)
             .or_insert_with(NominalCycles::zero) += cycles;
-        *self
-            .consumed_cycles_by_use_case_monotonic
-            .entry(use_case)
-            .or_insert_with(NominalCycles::zero) += cycles;
     }
 
     pub fn observe_consumed_cycles_by_deleted_canisters(&mut self, cycles: NominalCycles) {
@@ -503,77 +507,14 @@ impl SubnetMetrics {
         self.consumed_cycles_by_deleted_canisters
     }
 
-    pub fn observe_consumed_cycles_http_outcalls(&mut self, cycles: NominalCycles) {
-        self.consumed_cycles_http_outcalls += cycles;
-    }
-
     /// Cycles consumed by HTTP outcalls (`CyclesUseCase::HTTPOutcalls`).
     pub fn get_consumed_cycles_http_outcalls(&self) -> NominalCycles {
         self.get_consumed_cycles_subnet_use_case(CyclesUseCase::HTTPOutcalls)
     }
 
-    pub fn observe_consumed_cycles_ecdsa_outcalls(&mut self, cycles: NominalCycles) {
-        self.consumed_cycles_ecdsa_outcalls += cycles;
-    }
-
     /// Cycles consumed by ECDSA outcalls (`CyclesUseCase::ECDSAOutcalls`).
     pub fn get_consumed_cycles_ecdsa_outcalls(&self) -> NominalCycles {
         self.get_consumed_cycles_subnet_use_case(CyclesUseCase::ECDSAOutcalls)
-    }
-
-    /// Migrates the cycles consumed by HTTP and ECDSA outcalls that are tracked
-    /// in the legacy scalar fields (`consumed_cycles_http_outcalls` /
-    /// `consumed_cycles_ecdsa_outcalls`) into the corresponding entries of
-    /// `consumed_cycles_by_use_case`.
-    ///
-    /// The scalar fields predate use-case tracking, so they are a superset of
-    /// the corresponding use-case entries. We therefore bring the use-case
-    /// entries up to the scalar value (via `max`), which backfills the history
-    /// that predates use-case tracking while avoiding double counting the
-    /// overlapping period.
-    ///
-    /// This is called unconditionally once per round (from the scheduler's
-    /// `finish_round`), i.e. independently of any subnet activity. Hooking it to
-    /// an observation instead would leave the entries stale indefinitely on
-    /// subnets that observe no subnet-level use case at all: the subnet-level use
-    /// cases are only observed on HTTP outcalls, threshold signature outcalls,
-    /// canister deletion and cycles lost to dropped messages, so a subnet that
-    /// does none of these (e.g. one that has stopped performing outcalls) would
-    /// never catch up.
-    ///
-    /// Running once per round rather than per observation is equivalent, because
-    /// the call sites bump the scalar field and the matching use-case entry by
-    /// the same amount: `max(entry, scalar) + delta == max(entry + delta, scalar
-    /// + delta)`. It is also idempotent, so extra invocations are harmless.
-    ///
-    /// Only the `consumed_cycles_by_use_case` map is migrated; the monotonic
-    /// `consumed_cycles_by_use_case_monotonic` map is intentionally left
-    /// untouched (backfilling it would introduce a spurious counter jump).
-    ///
-    /// The scalar fields are intentionally kept (and kept up to date) rather
-    /// than zeroed, even though nothing reads their value anymore (all readers
-    /// go through `consumed_cycles_by_use_case`), so that downgrading to an
-    /// earlier replica version observes the correct totals.
-    pub fn migrate_outcalls_cycles_to_use_cases(&mut self) {
-        for (scalar, use_case) in [
-            (
-                self.consumed_cycles_http_outcalls,
-                CyclesUseCase::HTTPOutcalls,
-            ),
-            (
-                self.consumed_cycles_ecdsa_outcalls,
-                CyclesUseCase::ECDSAOutcalls,
-            ),
-        ] {
-            if scalar.get() == 0 {
-                continue;
-            }
-            let entry = self
-                .consumed_cycles_by_use_case
-                .entry(use_case)
-                .or_insert_with(NominalCycles::zero);
-            *entry = (*entry).max(scalar);
-        }
     }
 
     /// Cycles consumed by Schnorr threshold-signature outcalls
@@ -606,20 +547,16 @@ impl SubnetMetrics {
         &self.consumed_cycles_by_use_case
     }
 
-    pub fn get_consumed_cycles_by_use_case_monotonic(
-        &self,
-    ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
-        &self.consumed_cycles_by_use_case_monotonic
-    }
-
     /// Computes the subnet-level aggregate of the consumed cycles, i.e. the part
     /// of the total that is not held by the canisters that still exist.
     ///
     /// This is the current computation, which avoids double counting the cycles
     /// consumed by deleted canisters, as the legacy
     /// [`Self::consumed_cycles_total_v28`] does. It is one of the two summands of
-    /// [`Self::consumed_cycles_total_including_canisters`], which is what the
-    /// canonical state consumer reports from certification version `V29` on.
+    /// [`Self::consumed_cycles_total_including_canisters`] and of
+    /// [`Self::consumed_cycles_total_including_canisters_monotonic`], which are
+    /// what the canonical state consumer reports for certification version `V29`
+    /// and from certification version `V30` on, respectively.
     pub fn consumed_cycles_total(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
@@ -660,24 +597,48 @@ impl SubnetMetrics {
     /// exist, as of the end of the last committed round.
     ///
     /// Every consumer of the full total reads it here -- the certified state tree at
-    /// `/subnet/<subnet_id>/metrics` (from certification version `V29`) and the
+    /// `/subnet/<subnet_id>/metrics` (at certification version `V29`) and the
     /// `replicated_state_consumed_cycles_since_replica_started` gauge -- so they
     /// cannot drift apart.
     pub fn consumed_cycles_total_including_canisters(&self) -> NominalCycles {
         self.consumed_cycles_total_including_canisters
     }
 
-    /// Recomputes [`Self::consumed_cycles_total_including_canisters`] from the
-    /// subnet-level aggregate and `consumed_by_canisters`, the sum of
-    /// `CanisterMetrics::consumed_cycles()` over the canisters that currently exist.
+    /// The monotonic counterpart of
+    /// [`Self::consumed_cycles_total_including_canisters`]:
+    /// [`Self::consumed_cycles_total`] plus the sum of
+    /// `CanisterMetrics::consumed_cycles_monotonic()` (rather than of the
+    /// `CanisterMetrics::consumed_cycles()` gauge, which also includes outstanding
+    /// prepayments) over the canisters that currently exist, as of the end of the
+    /// last committed round.
+    ///
+    /// This is what the certified state tree at `/subnet/<subnet_id>/metrics`
+    /// reports from certification version `V30` on.
+    pub fn consumed_cycles_total_including_canisters_monotonic(&self) -> NominalCycles {
+        self.consumed_cycles_total_including_canisters_monotonic
+    }
+
+    /// Recomputes [`Self::consumed_cycles_total_including_canisters`] and
+    /// [`Self::consumed_cycles_total_including_canisters_monotonic`] from the
+    /// subnet-level aggregate and, respectively, `consumed_by_canisters`, the sum
+    /// of `CanisterMetrics::consumed_cycles()`, and `consumed_by_canisters_monotonic`,
+    /// the sum of `CanisterMetrics::consumed_cycles_monotonic()`, over the canisters
+    /// that currently exist.
     ///
     /// Callers pass the canisters' part only; adding the subnet-level part happens
-    /// here, so no caller can get it wrong. The total is derived, not
+    /// here, so no caller can get it wrong. The totals are derived, not
     /// persisted: `ReplicatedState::refresh_consumed_cycles` calls this whenever a
     /// state is committed and `ReplicatedState::new_from_checkpoint` on load.
-    pub fn refresh_consumed_cycles(&mut self, consumed_by_canisters: NominalCycles) {
+    pub fn refresh_consumed_cycles(
+        &mut self,
+        consumed_by_canisters: NominalCycles,
+        consumed_by_canisters_monotonic: NominalCycles,
+    ) {
+        let consumed_cycles_total = self.consumed_cycles_total();
         self.consumed_cycles_total_including_canisters =
-            self.consumed_cycles_total() + consumed_by_canisters;
+            consumed_cycles_total + consumed_by_canisters;
+        self.consumed_cycles_total_including_canisters_monotonic =
+            consumed_cycles_total + consumed_by_canisters_monotonic;
     }
 
     /// Legacy computation of the total consumed cycles, used by the canonical
@@ -689,8 +650,9 @@ impl SubnetMetrics {
     /// `consumed_cycles_by_use_case` map, and both are summed here. It is kept
     /// unchanged to preserve the certified state for certification versions up
     /// to and including `V28`; from `V29` on the consumer reports
-    /// [`Self::consumed_cycles_total_including_canisters`], which does not
-    /// double count.
+    /// [`Self::consumed_cycles_total_including_canisters`] (`V29`) or
+    /// [`Self::consumed_cycles_total_including_canisters_monotonic`] (from `V30`
+    /// on), which do not double count.
     pub fn consumed_cycles_total_v28(&self) -> NominalCycles {
         let mut total = NominalCycles::zero();
 
@@ -1743,6 +1705,12 @@ impl Stream {
         self.reject_signals
             .get(next_reject_signal_pos)
             .map(|reject_signal| reject_signal.index)
+    }
+
+    /// Whether the stream holds a reject signal in `[from, to)`.
+    pub fn has_reject_signal_between(&self, from: StreamIndex, to: StreamIndex) -> bool {
+        self.next_reject_signal_index(from)
+            .is_some_and(|index| index < to)
     }
 
     /// Returns the index just beyond the last sent signal.

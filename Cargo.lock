@@ -2399,9 +2399,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.36"
+version = "0.10.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "688dc9917e4fd15d7656d46f9dbf45ca0151ca13158875894b40e22c27681d86"
+checksum = "a4dda5edb2bfa2d7703219ba0fd6ec712343fcd03867b76b87405feaa9aae7a0"
 dependencies = [
  "anyhow",
  "binrw",
@@ -2431,9 +2431,9 @@ dependencies = [
 
 [[package]]
 name = "candid_derive"
-version = "0.10.36"
+version = "0.10.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b33ea2fcb595b01cc1188d51c8fcf0455220779f6fd5f9b88e280d8c602baa1"
+checksum = "45e094bb111b7a9b70174aaa66f80f1a6751a2e66d2a99eef797c8ab6d0933d3"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -7799,6 +7799,7 @@ dependencies = [
  "ic-types-test-utils",
  "phantom_newtype",
  "prost",
+ "rstest",
  "slog",
 ]
 
@@ -9884,6 +9885,7 @@ dependencies = [
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",
+ "ic-test-utilities-metrics",
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.9.0",
@@ -9936,6 +9938,7 @@ dependencies = [
  "mockall",
  "prometheus",
  "proptest",
+ "prost",
  "rand 0.8.6",
  "rand_chacha 0.3.1",
  "rayon",
@@ -10911,7 +10914,7 @@ dependencies = [
 
 [[package]]
 name = "ic-management-canister-types"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "candid",
  "candid_parser",
@@ -14351,6 +14354,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-secp256k1",
+ "ic-secp256r1",
  "ic-state-layout",
  "ic-state-manager",
  "ic-test-state-machine-client",
@@ -14364,6 +14368,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-xnet-payload-builder",
  "maplit",
+ "p256",
  "proptest",
  "rand 0.8.6",
  "rcgen 0.13.2",
@@ -19367,6 +19372,7 @@ dependencies = [
  "icrc-ledger-types",
  "k256",
  "maplit",
+ "p256",
  "prost",
  "registry-canister",
  "reqwest",
