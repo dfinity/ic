@@ -645,6 +645,7 @@ mod tests {
         match stripped_message {
             PoolMessage::Ingress(maybe_ingress) => {
                 idkg_pool.expect_get().never();
+                canister_http_pool.expect_never_get_response_content_by_hash();
                 if let Some(ingress_message) = maybe_ingress {
                     ingress_pool
                         .expect_get()
@@ -659,6 +660,7 @@ mod tests {
             }
             PoolMessage::IDkgDealing(maybe_dealing) => {
                 ingress_pool.expect_get().never();
+                canister_http_pool.expect_never_get_response_content_by_hash();
                 if let Some(dealing) = maybe_dealing {
                     idkg_pool
                         .expect_get()
@@ -677,6 +679,7 @@ mod tests {
             PoolMessage::None => {
                 ingress_pool.expect_get().never();
                 idkg_pool.expect_get().never();
+                canister_http_pool.expect_never_get_response_content_by_hash();
             }
         }
 
