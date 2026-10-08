@@ -555,14 +555,14 @@ impl ReplicatedStateMetrics {
         );
 
         // Read from the shared definition rather than re-folding, so the gauge cannot
-        // drift from the certified state tree (at certification version `V29`). The
-        // per-use-case breakdowns below do still fold over the canisters, as no
+        // drift from the certified state tree (from certification version `V30` on).
+        // The per-use-case breakdowns below do still fold over the canisters, as no
         // aggregate holds them.
         self.consumed_cycles.set(
             state
                 .metadata
                 .subnet_metrics
-                .consumed_cycles_total_including_canisters()
+                .consumed_cycles_total_including_canisters_monotonic()
                 .get() as f64,
         );
 
