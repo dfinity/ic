@@ -49,6 +49,8 @@ pub(crate) fn find_response(
     content_hash: &CanisterHttpResponseContentHash,
 ) -> Option<CanisterHttpResponse> {
     slice_to_messages_iter::<pb::CanisterHttpResponseMessage>(payload_bytes)
+        // The messages after one that cannot be decoded can no longer be told
+        // apart, so the search ends there rather than skipping it.
         .map_while(Result::ok)
         .find_map(|mut message| {
             response_slots(&mut message)
