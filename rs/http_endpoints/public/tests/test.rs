@@ -9,15 +9,13 @@ use crate::common::{
     default_read_certified_state, get_free_localhost_socket_addr, modify_latest_state,
     query_endpoint, set_delegation_from_nns,
 };
-use axum::body::{Body, to_bytes};
+use axum::body::Body;
 use bytes::Bytes;
 use futures_util::{FutureExt, StreamExt, future::BoxFuture};
 use http_body::Frame;
 use http_body_util::StreamBody;
-use hyper::{Method, Request, StatusCode, body::Incoming};
+use hyper::{Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
-use ic_canister_client::prepare_read_state;
-use ic_canister_client_sender::Sender;
 use ic_canonical_state::encoding::types::{Cycles, SubnetMetrics};
 use ic_certification_test_utils::{
     Certificate as TestCertificate, CertificateBuilder, CertificateData, serialize_to_cbor,
@@ -28,7 +26,7 @@ use ic_crypto_tree_hash::{Digest, Label, LabeledTree, MixedHashTree, Path, Witne
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
-    self, APPLICATION_CBOR, Call, CallSubnet, CanisterReadState, IngressMessage, Query,
+    self, APPLICATION_CBOR, Call, CallSubnet, IngressMessage, Query, ReadState,
     wait_for_status_healthy,
 };
 use ic_interfaces::execution_environment::QueryExecutionError;
@@ -221,7 +219,7 @@ fn test_unauthorized_controller(
     rt.block_on(async {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = CanisterReadState::new(vec![path], canister1, version)
+        let response = ReadState::new(vec![path], canister1, version)
             .read_state(addr)
             .await;
 
@@ -711,7 +709,7 @@ fn test_too_long_paths_are_rejected(
     rt.block_on(async move {
         wait_for_status_healthy(&addr).await.unwrap();
 
-        let response = CanisterReadState::new(vec![long_path], PrincipalId::default(), version)
+        let response = ReadState::new(vec![long_path], PrincipalId::default(), version)
             .read_state(addr)
             .await;
 
@@ -903,53 +901,30 @@ fn can_retrieve_subnet_metrics(
         )
         .run();
 
-    let subnet_id = subnet_test_id(1);
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
 
-    let request = |body: Vec<u8>| {
-        rt.block_on(async {
-            wait_for_status_healthy(&addr).await.unwrap();
-            let client = Client::builder(TokioExecutor::new()).build_http();
-            let version_str = match version {
-                read_state::Version::V2 => "v2",
-                read_state::Version::V3 => "v3",
-            };
+        let response = ReadState::new_subnet(
+            vec![Path::new(vec![
+                Label::from("subnet"),
+                ByteBuf::from(subnet_id.get().to_vec()).into(),
+                Label::from("metrics"),
+            ])],
+            subnet_id.get(),
+            version,
+        )
+        .read_state(addr)
+        .await;
+        assert_eq!(StatusCode::OK, response.status());
 
-            let req = Request::builder()
-                .method(Method::POST)
-                .uri(format!(
-                    "http://{addr}/api/{version_str}/subnet/{subnet_id}/read_state"
-                ))
-                .header("Content-Type", "application/cbor")
-                .body(Body::from(body))
-                .expect("request builder");
-
-            client.request(req).await.unwrap()
-        })
-    };
-
-    let sender = Sender::from_principal_id(PrincipalId::new_anonymous());
-    let body = prepare_read_state(
-        &sender,
-        &[Path::new(vec![
-            Label::from("subnet"),
-            ByteBuf::from(subnet_id.get().to_vec()).into(),
-            Label::from("metrics"),
-        ])],
-        Blob(sender.get_principal_id().to_vec()),
-    )
-    .unwrap();
-
-    let response = request(body.as_ref().to_vec());
-    assert_eq!(StatusCode::OK, response.status());
-
-    let bytes = |body: Incoming| rt.block_on(async { to_bytes(Body::new(body), usize::MAX).await });
-    let subnet_metrics = parse_subnet_read_state_response(
-        &subnet_id,
-        Some(&root_pk),
-        serde_cbor::from_slice(&bytes(response.into_body()).unwrap()).unwrap(),
-    )
-    .unwrap();
-    assert_eq!(expected_subnet_metrics, subnet_metrics);
+        let subnet_metrics = parse_subnet_read_state_response(
+            &subnet_id,
+            Some(&root_pk),
+            serde_cbor::from_slice(&response.bytes().await.unwrap()).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(expected_subnet_metrics, subnet_metrics);
+    });
 }
 
 #[rstest]
@@ -967,43 +942,24 @@ fn subnet_metrics_not_supported_via_canister_read_state(
     HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let subnet_id = subnet_test_id(1);
+    let canister_id: PrincipalId = "223xb-saaaa-aaaaf-arlqa-cai".parse().unwrap();
 
-    let request = |body: Vec<u8>| {
-        rt.block_on(async {
-            wait_for_status_healthy(&addr).await.unwrap();
-            let client = Client::builder(TokioExecutor::new()).build_http();
-            let version_str = match version {
-                read_state::Version::V2 => "v2",
-                read_state::Version::V3 => "v3",
-            };
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
 
-            let req = Request::builder()
-                .method(Method::POST)
-                .uri(format!(
-                    "http://{addr}/api/{version_str}/canister/223xb-saaaa-aaaaf-arlqa-cai/read_state",
-                ))
-                .header("Content-Type", "application/cbor")
-                .body(Body::from(body))
-                .expect("request builder");
-
-            client.request(req).await.unwrap()
-        })
-    };
-
-    let sender = Sender::from_principal_id(PrincipalId::new_anonymous());
-    let body = prepare_read_state(
-        &sender,
-        &[Path::new(vec![
-            Label::from("subnet"),
-            ByteBuf::from(subnet_id.get().to_vec()).into(),
-            Label::from("metrics"),
-        ])],
-        Blob(sender.get_principal_id().to_vec()),
-    )
-    .unwrap();
-
-    let response = request(body.as_ref().to_vec());
-    assert_eq!(StatusCode::NOT_FOUND, response.status());
+        let response = ReadState::new(
+            vec![Path::new(vec![
+                Label::from("subnet"),
+                ByteBuf::from(subnet_id.get().to_vec()).into(),
+                Label::from("metrics"),
+            ])],
+            canister_id,
+            version,
+        )
+        .read_state(addr)
+        .await;
+        assert_eq!(StatusCode::NOT_FOUND, response.status());
+    });
 }
 
 /// Regression test: all four read_state endpoints (canister/subnet × V2/V3) validate
@@ -2053,11 +2009,13 @@ fn drift_delegation_from_certified_state(
     }
 }
 
-/// The `read_state` endpoints answer a request while the NNS delegation matches the
-/// certified state, but reply with `503 SERVICE_UNAVAILABLE` once the two drift apart.
+/// The `read_state` endpoints answer a request while the NNS delegation matches the certified
+/// state, but reply with `503 SERVICE_UNAVAILABLE` once the two drift apart in a way which the
+/// endpoint verifies.
 #[rstest]
 fn test_read_state_endpoint_becomes_unavailable_when_delegation_drifts_from_state(
     #[values(read_state::Version::V2, read_state::Version::V3)] version: read_state::Version,
+    #[values(read_state::Target::Canister, read_state::Target::Subnet)] target: read_state::Target,
     #[values(DelegationDrift::SubnetPublicKey, DelegationDrift::CanisterMigration)]
     drift: DelegationDrift,
     #[values(DriftingSide::NnsDelegation, DriftingSide::CertifiedState)] side: DriftingSide,
@@ -2077,11 +2035,15 @@ fn test_read_state_endpoint_becomes_unavailable_when_delegation_drifts_from_stat
         .run();
 
     let read_state_request = || {
-        CanisterReadState::new(
-            vec![Path::from(Label::from("time"))],
-            canister_test_id(0).get(),
-            version,
-        )
+        let paths = vec![Path::from(Label::from("time"))];
+        match target {
+            read_state::Target::Canister => {
+                ReadState::new(paths, canister_test_id(0).get(), version)
+            }
+            read_state::Target::Subnet => {
+                ReadState::new_subnet(paths, subnet_test_id(1).get(), version)
+            }
+        }
         .read_state(addr)
     };
 
@@ -2104,13 +2066,27 @@ fn test_read_state_endpoint_becomes_unavailable_when_delegation_drifts_from_stat
             &latest_state,
         );
 
-        // The same request now fails, because the delegation no longer matches.
         let response = read_state_request().await;
-        assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
-        assert_eq!(
-            "This replica has an outdated delegation. Please try again.",
-            response.text().await.unwrap(),
-        );
+        match (target, drift) {
+            // The subnet endpoints do not verify the canister ranges, so the request still
+            // succeeds.
+            (read_state::Target::Subnet, DelegationDrift::CanisterMigration) => {
+                assert_eq!(
+                    StatusCode::OK,
+                    response.status(),
+                    "{:?}",
+                    response.text().await
+                );
+            }
+            // The same request now fails, because the delegation no longer matches.
+            _ => {
+                assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
+                assert_eq!(
+                    "This replica has an outdated delegation. Please try again.",
+                    response.text().await.unwrap(),
+                );
+            }
+        }
     });
 }
 
@@ -2175,8 +2151,8 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
 
         let response = endpoint.call(addr, message).await;
         match (endpoint, drift) {
-            // The subnet endpoint serves the delegation without canister ranges, so it does
-            // not verify them.
+            // The subnet endpoints do not verify the canister ranges, so the request still
+            // succeeds.
             (UpdateEndpoint::Subnet(_), DelegationDrift::CanisterMigration) => {
                 assert_eq!(
                     StatusCode::OK,
@@ -2185,6 +2161,7 @@ fn test_sync_call_endpoint_becomes_unavailable_when_delegation_drifts_from_state
                     response.text().await
                 );
             }
+            // The same request now fails, because the delegation no longer matches.
             _ => {
                 assert_eq!(StatusCode::SERVICE_UNAVAILABLE, response.status());
                 assert_eq!(
