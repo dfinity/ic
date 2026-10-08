@@ -168,7 +168,13 @@ pub fn assert_node_is_unassigned_with_ssh_session(
         || match block_on(fetcher.fetch::<u64>()) {
             Ok(metrics) => {
                 assert_eq!(metrics[&state_removal_failed][0], 0);
-                assert!(metrics[&fs_trim_duration][0] > 0);
+                // The orchestrator only sets the fstrim duration after it has removed the state
+                // and then synced and trimmed the filesystem, so it might not be set yet.
+                ensure!(
+                    metrics[&fs_trim_duration][0] > 0,
+                    "Node {} has not finished trimming its filesystem yet.",
+                    node.get_ip_addr()
+                );
                 Ok(())
             }
             Err(e) => bail!("Failed to fetch metrics: {}", e),
