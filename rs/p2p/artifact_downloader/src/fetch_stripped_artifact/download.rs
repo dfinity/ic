@@ -11,13 +11,17 @@ use axum::{
 };
 use backon::{BackoffBuilder, ExponentialBuilder};
 use bytes::Bytes;
-use ic_interfaces::p2p::consensus::{Peers, ValidatedPoolReader};
+use ic_interfaces::{
+    canister_http::CanisterHttpPool,
+    p2p::consensus::{Peers, ValidatedPoolReader},
+};
 use ic_logger::{ReplicaLogger, warn};
 use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
 use ic_quic_transport::Transport;
 use ic_types::{
     NodeId, NodeIndex,
     artifact::ConsensusMessageId,
+    canister_http::CanisterHttpResponse,
     consensus::{
         BlockPayload, ConsensusMessage,
         idkg::{IDkgArtifactId, IDkgMessage, IDkgObject},
@@ -28,9 +32,15 @@ use ic_types::{
 use rand::{SeedableRng, rngs::SmallRng, seq::IteratorRandom};
 use tokio::time::{Instant, sleep_until, timeout_at};
 
-use crate::fetch_stripped_artifact::types::{
-    StrippedMessage, StrippedMessageId, StrippedMessageType,
-    rpc::{GetIDkgDealingInBlockRequest, GetIDkgDealingInBlockResponse},
+use crate::fetch_stripped_artifact::{
+    canister_http::find_response,
+    types::{
+        CanisterHttpResponseContentHash, StrippedMessage, StrippedMessageId, StrippedMessageType,
+        rpc::{
+            GetCanisterHttpResponseInBlockRequest, GetCanisterHttpResponseInBlockResponse,
+            GetIDkgDealingInBlockRequest, GetIDkgDealingInBlockResponse,
+        },
+    },
 };
 
 use super::{
@@ -45,6 +55,7 @@ type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + 
 
 const INGRESS_URI: &str = "/block/ingress/rpc";
 const IDKG_DEALING_URI: &str = "/block/idkg_dealing/rpc";
+const CANISTER_HTTP_RESPONSE_URI: &str = "/block/canister_http_response/rpc";
 const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -53,6 +64,7 @@ pub(super) struct Pools {
     pub(super) consensus_pool: ValidatedPoolReaderRef<ConsensusMessage>,
     pub(super) ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
     pub(super) idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
+    pub(super) canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
     pub(super) metrics: StrippedMessageSenderMetrics,
 }
 
@@ -82,6 +94,19 @@ enum IDkgPoolAccessError {
     NotABlockProposal,
     /// The IDkg artifact with the given [`IDkgArtifactId`] is not a dealing.
     NotADealing,
+}
+
+#[derive(Debug)]
+enum CanisterHttpPoolAccessError {
+    /// The consensus pool doesn't have a block proposal with the given [`ConsensusMessageId`].
+    BlockNotFound,
+    /// Neither the canister http pool nor the block has the requested response.
+    ResponseNotFound,
+    /// The consensus artifact with the given [`ConsensusMessageId`] is not a block proposal.
+    NotABlockProposal,
+    /// The requested block proposal is a summary block. Summary blocks carry no
+    /// canister http payload.
+    SummaryBlock,
 }
 
 impl Pools {
@@ -200,12 +225,69 @@ impl Pools {
         self.metrics.report_stripped_message_in_block(message_type);
         Ok(batch_signed_dealing.content.clone())
     }
+
+    /// Retrieves the canister http response with the given content hash, from the
+    /// canister http pool or from the block that delivers it.
+    fn get_canister_http_response(
+        &self,
+        content_hash: &CanisterHttpResponseContentHash,
+        block_proposal_id: &ConsensusMessageId,
+    ) -> Result<CanisterHttpResponse, CanisterHttpPoolAccessError> {
+        let message_type = StrippedMessageType::CanisterHttpResponse;
+
+        // First check if the requested response content exists in the canister http
+        // pool. Note that this deliberately looks past the `ResponseVisibility` of the
+        // share: withholding a fully replicated response only keeps us from *pushing*
+        // it at peers that can produce it themselves, and says nothing about serving it
+        // to a peer that is missing it and asks for it by hash.
+        if let Some(response) = self
+            .canister_http_pool
+            .read()
+            .unwrap()
+            .get_response_content_by_hash(content_hash)
+            .cloned()
+        {
+            self.metrics.report_stripped_message_in_pool(message_type);
+            return Ok(response);
+        }
+
+        // Otherwise find the block which should contain the response.
+        let Some(consensus_artifact) = self.consensus_pool.read().unwrap().get(block_proposal_id)
+        else {
+            self.metrics.report_stripped_message_not_found(message_type);
+            return Err(CanisterHttpPoolAccessError::BlockNotFound);
+        };
+
+        // Double check it is indeed a Block Proposal
+        let ConsensusMessage::BlockProposal(block_proposal) = consensus_artifact else {
+            return Err(CanisterHttpPoolAccessError::NotABlockProposal);
+        };
+
+        let BlockPayload::Data(data_payload) = block_proposal.as_ref().payload.as_ref() else {
+            return Err(CanisterHttpPoolAccessError::SummaryBlock);
+        };
+
+        match find_response(&data_payload.batch.canister_http, content_hash) {
+            Some(response) => {
+                self.metrics.report_stripped_message_in_block(message_type);
+                Ok(response)
+            }
+            None => {
+                self.metrics.report_stripped_message_not_found(message_type);
+                Err(CanisterHttpPoolAccessError::ResponseNotFound)
+            }
+        }
+    }
 }
 
 pub(super) fn build_axum_router(pools: Pools) -> Router {
     Router::new()
         .route(INGRESS_URI, any(ingress_rpc_handler))
         .route(IDKG_DEALING_URI, any(idkg_dealing_rpc_handler))
+        .route(
+            CANISTER_HTTP_RESPONSE_URI,
+            any(canister_http_response_rpc_handler),
+        )
         .with_state(pools)
         // Disable request size limit since consensus might push artifacts larger than limit.
         .layer(DefaultBodyLimit::disable())
@@ -277,6 +359,41 @@ async fn idkg_dealing_rpc_handler(
             Err(IDkgPoolAccessError::NotABlockProposal | IDkgPoolAccessError::NotADealing) => {
                 Err(StatusCode::BAD_REQUEST)
             }
+        }
+    });
+
+    let bytes = join_handle
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+
+    Ok(bytes)
+}
+
+async fn canister_http_response_rpc_handler(
+    State(pools): State<Pools>,
+    payload: Bytes,
+) -> Result<Bytes, StatusCode> {
+    let join_handle = tokio::task::spawn_blocking(move || {
+        let request_proto: pb::GetCanisterHttpResponseInBlockRequest =
+            pb::GetCanisterHttpResponseInBlockRequest::proxy_decode(&payload)
+                .map_err(|_| StatusCode::BAD_REQUEST)?;
+        let request = GetCanisterHttpResponseInBlockRequest::try_from(request_proto)
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+        match pools.get_canister_http_response(&request.content_hash, &request.block_proposal_id) {
+            Ok(response) => Ok::<_, StatusCode>(Bytes::from(
+                pb::GetCanisterHttpResponseInBlockResponse::proxy_encode(
+                    GetCanisterHttpResponseInBlockResponse { response },
+                ),
+            )),
+            Err(
+                CanisterHttpPoolAccessError::ResponseNotFound
+                | CanisterHttpPoolAccessError::BlockNotFound,
+            ) => Err(StatusCode::NOT_FOUND),
+            Err(
+                CanisterHttpPoolAccessError::NotABlockProposal
+                | CanisterHttpPoolAccessError::SummaryBlock,
+            ) => Err(StatusCode::BAD_REQUEST),
         }
     });
 
@@ -433,8 +550,12 @@ fn parse_dealing_response(body: Bytes) -> Result<SignedIDkgDealing, ParseRespons
 #[cfg(test)]
 mod tests {
     use crate::fetch_stripped_artifact::test_utils::{
-        fake_block_proposal_with_ingresses, fake_block_proposal_with_ingresses_and_idkg,
-        fake_idkg_payload_with_dealing, fake_summary_block_proposal,
+        fake_block_proposal_with_canister_http, fake_block_proposal_with_ingresses,
+        fake_block_proposal_with_ingresses_and_idkg, fake_canister_http_payload,
+        fake_canister_http_reject, fake_canister_http_response,
+        fake_canister_http_response_message, fake_flexible_canister_http_responses_message,
+        fake_flexible_canister_http_too_many_rejects_message, fake_idkg_payload_with_dealing,
+        fake_summary_block_proposal,
     };
 
     use super::*;
@@ -444,7 +565,9 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_p2p_test_utils::mocks::{MockPeers, MockTransport, MockValidatedPoolReader};
+    use ic_p2p_test_utils::mocks::{
+        FakeCanisterHttpPool, MockPeers, MockTransport, MockValidatedPoolReader,
+    };
     use ic_test_utilities_consensus::fake::{FakeContent, FakeContentSigner};
     use ic_test_utilities_types::ids::test_replica_version;
     use ic_test_utilities_types::messages::SignedIngressBuilder;
@@ -466,6 +589,9 @@ mod tests {
         Ingress(Option<SignedIngress>),
         /// We expect an access attempt to the IDKG pool, with an optional message being returned.
         IDkgDealing(Option<SignedIDkgDealing>),
+        /// We expect an access attempt to the canister http pool, with an optional
+        /// response content being returned.
+        CanisterHttpResponse(Option<CanisterHttpResponse>),
         /// We don't expect any access to the pools.
         None,
     }
@@ -474,12 +600,14 @@ mod tests {
     enum GetStrippedMessageRequest {
         Ingress(GetIngressMessageInBlockRequest),
         IDkgDealing(GetIDkgDealingInBlockRequest),
+        CanisterHttpResponse(GetCanisterHttpResponseInBlockRequest),
     }
 
     #[derive(Debug, PartialEq)]
     enum GetStrippedMessageResponse {
         Ingress(GetIngressMessageInBlockResponse),
         IDkgDealing(GetIDkgDealingInBlockResponse),
+        CanisterHttpResponse(GetCanisterHttpResponseInBlockResponse),
     }
 
     impl GetStrippedMessageResponse {
@@ -496,6 +624,13 @@ mod tests {
                 _ => panic!("Expected IDkgDealing response"),
             }
         }
+
+        fn unwrap_canister_http_response(self) -> GetCanisterHttpResponseInBlockResponse {
+            match self {
+                GetStrippedMessageResponse::CanisterHttpResponse(response) => response,
+                _ => panic!("Expected CanisterHttpResponse response"),
+            }
+        }
     }
 
     fn mock_pools(
@@ -505,10 +640,12 @@ mod tests {
     ) -> Pools {
         let mut ingress_pool = MockValidatedPoolReader::<SignedIngress>::default();
         let mut idkg_pool = MockValidatedPoolReader::<IDkgMessage>::default();
+        let mut canister_http_pool = FakeCanisterHttpPool::empty();
 
         match stripped_message {
             PoolMessage::Ingress(maybe_ingress) => {
                 idkg_pool.expect_get().never();
+                canister_http_pool.expect_never_get_response_content_by_hash();
                 if let Some(ingress_message) = maybe_ingress {
                     ingress_pool
                         .expect_get()
@@ -523,6 +660,7 @@ mod tests {
             }
             PoolMessage::IDkgDealing(maybe_dealing) => {
                 ingress_pool.expect_get().never();
+                canister_http_pool.expect_never_get_response_content_by_hash();
                 if let Some(dealing) = maybe_dealing {
                     idkg_pool
                         .expect_get()
@@ -533,9 +671,15 @@ mod tests {
                     idkg_pool.expect_get().once().return_const(None);
                 }
             }
+            PoolMessage::CanisterHttpResponse(maybe_response) => {
+                ingress_pool.expect_get().never();
+                idkg_pool.expect_get().never();
+                canister_http_pool = FakeCanisterHttpPool::new(maybe_response);
+            }
             PoolMessage::None => {
                 ingress_pool.expect_get().never();
                 idkg_pool.expect_get().never();
+                canister_http_pool.expect_never_get_response_content_by_hash();
             }
         }
 
@@ -558,6 +702,7 @@ mod tests {
             consensus_pool: Arc::new(RwLock::new(consensus_pool)),
             ingress_pool: Arc::new(RwLock::new(ingress_pool)),
             idkg_pool: Arc::new(RwLock::new(idkg_pool)),
+            canister_http_pool: Arc::new(RwLock::new(canister_http_pool)),
             metrics: StrippedMessageSenderMetrics::new(&MetricsRegistry::new()),
         }
     }
@@ -574,6 +719,10 @@ mod tests {
             GetStrippedMessageRequest::IDkgDealing(req) => (
                 Bytes::from(pb::GetIDkgDealingInBlockRequest::proxy_encode(req)),
                 IDKG_DEALING_URI,
+            ),
+            GetStrippedMessageRequest::CanisterHttpResponse(req) => (
+                Bytes::from(pb::GetCanisterHttpResponseInBlockRequest::proxy_encode(req)),
+                CANISTER_HTTP_RESPONSE_URI,
             ),
         };
 
@@ -604,6 +753,14 @@ mod tests {
                     })
                     .expect("Should return a valid proto");
                 Ok(GetStrippedMessageResponse::IDkgDealing(response))
+            }
+            GetStrippedMessageRequest::CanisterHttpResponse(_) => {
+                let response = pb::GetCanisterHttpResponseInBlockResponse::proxy_decode(&bytes)
+                    .and_then(|proto: pb::GetCanisterHttpResponseInBlockResponse| {
+                        GetCanisterHttpResponseInBlockResponse::try_from(proto)
+                    })
+                    .expect("Should return a valid proto");
+                Ok(GetStrippedMessageResponse::CanisterHttpResponse(response))
             }
         }
     }
@@ -1005,6 +1162,170 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn rpc_get_canister_http_response_from_pool_test() {
+        let response = fake_canister_http_response(7, 1024);
+        let block = fake_block_proposal(vec![]);
+        let pools = mock_pools(
+            PoolMessage::CanisterHttpResponse(Some(response.clone())),
+            None,
+            /*expect_consensus_pool_access=*/ false,
+        );
+        let router = build_axum_router(pools);
+
+        let rpc_response = send_request(
+            router,
+            canister_http_response_request(ConsensusMessageId::from(&block), &response),
+        )
+        .await
+        .expect("Should return a valid response")
+        .unwrap_canister_http_response();
+
+        assert_eq!(rpc_response.response, response);
+    }
+
+    /// The response of an outcall that has already been answered is dropped from
+    /// the pool while the block that delivered it is still around, so the block
+    /// has to be able to serve it.
+    #[tokio::test]
+    async fn rpc_get_canister_http_response_from_consensus_pool_test() {
+        let success = fake_canister_http_response(7, 1024);
+        let reject = fake_canister_http_reject(7);
+        for (response, message) in [
+            (
+                success.clone(),
+                fake_flexible_canister_http_responses_message(7, &[(success.clone(), NODE_1)]),
+            ),
+            (
+                success.clone(),
+                fake_canister_http_response_message(&success, &[NODE_1]),
+            ),
+            (
+                success.clone(),
+                fake_canister_http_response_message(&success, &[NODE_1, NODE_2]),
+            ),
+            // The rejects that made a flexible outcall fail are delivered too.
+            (
+                reject.clone(),
+                fake_flexible_canister_http_too_many_rejects_message(
+                    7,
+                    &[(reject.clone(), NODE_1)],
+                ),
+            ),
+        ] {
+            let block = ConsensusMessage::BlockProposal(fake_block_proposal_with_canister_http(
+                fake_canister_http_payload(vec![message]),
+            ));
+            let pools = mock_pools(
+                PoolMessage::CanisterHttpResponse(None),
+                Some(block.clone()),
+                /*expect_consensus_pool_access=*/ true,
+            );
+            let router = build_axum_router(pools);
+
+            let rpc_response = send_request(
+                router,
+                canister_http_response_request(ConsensusMessageId::from(&block), &response),
+            )
+            .await
+            .expect("Should return a valid response")
+            .unwrap_canister_http_response();
+
+            assert_eq!(rpc_response.response, response);
+        }
+    }
+
+    #[tokio::test]
+    async fn rpc_get_canister_http_response_not_found_test() {
+        let response = fake_canister_http_response(7, 1024);
+        // A block that delivers a different response.
+        let block = ConsensusMessage::BlockProposal(fake_block_proposal_with_canister_http(
+            fake_canister_http_payload(vec![fake_flexible_canister_http_responses_message(
+                8,
+                &[(fake_canister_http_response(8, 1024), NODE_1)],
+            )]),
+        ));
+        let pools = mock_pools(
+            PoolMessage::CanisterHttpResponse(None),
+            Some(block.clone()),
+            /*expect_consensus_pool_access=*/ true,
+        );
+        let router = build_axum_router(pools);
+
+        let rpc_response = send_request(
+            router,
+            canister_http_response_request(ConsensusMessageId::from(&block), &response),
+        )
+        .await;
+
+        assert_eq!(rpc_response, Err(StatusCode::NOT_FOUND));
+    }
+
+    #[tokio::test]
+    async fn rpc_get_canister_http_response_block_not_found_test() {
+        let response = fake_canister_http_response(7, 1024);
+        let block = fake_block_proposal(vec![]);
+        let pools = mock_pools(
+            PoolMessage::CanisterHttpResponse(None),
+            None,
+            /*expect_consensus_pool_access=*/ true,
+        );
+        let router = build_axum_router(pools);
+
+        let rpc_response = send_request(
+            router,
+            canister_http_response_request(ConsensusMessageId::from(&block), &response),
+        )
+        .await;
+
+        assert_eq!(rpc_response, Err(StatusCode::NOT_FOUND));
+    }
+
+    #[tokio::test]
+    async fn rpc_get_canister_http_response_from_summary_block_test() {
+        let response = fake_canister_http_response(7, 1024);
+        let summary_block = fake_summary_block_proposal();
+        let pools = mock_pools(
+            PoolMessage::CanisterHttpResponse(None),
+            Some(summary_block.clone()),
+            /*expect_consensus_pool_access=*/ true,
+        );
+        let router = build_axum_router(pools);
+
+        let rpc_response = send_request(
+            router,
+            canister_http_response_request(ConsensusMessageId::from(&summary_block), &response),
+        )
+        .await;
+
+        assert_eq!(rpc_response, Err(StatusCode::BAD_REQUEST));
+    }
+
+    #[tokio::test]
+    async fn rpc_get_canister_http_response_wrong_consensus_id_test() {
+        let response = fake_canister_http_response(7, 1024);
+        let finalization =
+            ConsensusMessage::Finalization(Finalization::fake(FinalizationContent::new(
+                Height::new(100),
+                CryptoHashOf::from(CryptoHash(vec![])),
+                test_replica_version(),
+            )));
+        let pools = mock_pools(
+            PoolMessage::None,
+            None,
+            /*expect_consensus_pool_access=*/ false,
+        );
+        let router = build_axum_router(pools);
+
+        let rpc_response = send_request(
+            router,
+            canister_http_response_request(ConsensusMessageId::from(&finalization), &response),
+        )
+        .await;
+
+        assert_eq!(rpc_response, Err(StatusCode::BAD_REQUEST));
+    }
+
     // Utility functions below
     fn fake_block_proposal(ingress_messages: Vec<SignedIngress>) -> ConsensusMessage {
         let block_proposal = fake_block_proposal_with_ingresses(ingress_messages);
@@ -1043,6 +1364,16 @@ mod tests {
             block_proposal_id: consensus_message_id,
             node_index,
             dealing_id,
+        })
+    }
+
+    fn canister_http_response_request(
+        consensus_message_id: ConsensusMessageId,
+        response: &CanisterHttpResponse,
+    ) -> GetStrippedMessageRequest {
+        GetStrippedMessageRequest::CanisterHttpResponse(GetCanisterHttpResponseInBlockRequest {
+            content_hash: ic_types::crypto::crypto_hash(response),
+            block_proposal_id: consensus_message_id,
         })
     }
 

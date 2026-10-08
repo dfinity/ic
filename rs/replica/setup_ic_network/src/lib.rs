@@ -225,6 +225,7 @@ impl AbortableBroadcastChannels {
                 consensus_pool.clone(),
                 artifact_pools.ingress_pool.clone(),
                 artifact_pools.idkg_pool.clone(),
+                artifact_pools.https_outcalls_pool.clone(),
                 bouncers.consensus,
                 metrics_registry.clone(),
                 node_id,
