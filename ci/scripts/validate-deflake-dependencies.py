@@ -20,10 +20,15 @@ base, fix = sys.argv[1:]
 kinds = ["dependencies", "dev-dependencies", "build-dependencies"]
 
 
+def printable(message):
+    # The paths and names from the fix can have any character, like a newline that starts a workflow command in the log.
+    return "".join(c if c.isprintable() and c != "\\" else ascii(c)[1:-1] for c in message)
+
+
 def load(rev, path):
     show = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True, text=True)
     if show.returncode != 0:
-        sys.exit(f"{path} is added or deleted")
+        sys.exit(printable(f"{path} is added or deleted"))
     return tomllib.loads(show.stdout)
 
 
@@ -83,11 +88,13 @@ for path in subprocess.check_output(diff, text=True).split("\0"):
         old, new = load(base, path), load(fix, path)
         added, removed = names(new) - names(old), names(old) - names(new)
         if unknown := added - set(workspace):
-            sys.exit(f"{path} adds dependencies the root Cargo.toml doesn't have: {', '.join(sorted(unknown))}")
+            sys.exit(
+                printable(f"{path} adds dependencies the root Cargo.toml doesn't have: {', '.join(sorted(unknown))}")
+            )
         crates[path] = new.get("package", {}).get("name")
         changes[crates[path]] = (added, removed, inherited(new))
         if without_workspace_dependencies(old) != without_workspace_dependencies(new):
-            sys.exit(f"{path} changes beyond adding or removing workspace dependencies")
+            sys.exit(printable(f"{path} changes beyond adding or removing workspace dependencies"))
 
 
 def lockfile(rev):
@@ -106,7 +113,7 @@ if old_metadata != new_metadata or old_packages.keys() != new_packages.keys():
 # of the root workspace, which have no source in Cargo.lock, may change.
 members = {name for name, _, source in old_packages if source is None}
 if outside := [path for path, crate in crates.items() if crate not in members]:
-    sys.exit(f"the fix changes manifests outside the root workspace: {', '.join(outside)}")
+    sys.exit(printable(f"the fix changes manifests outside the root workspace: {', '.join(outside)}"))
 
 CRATES_IO = "registry+https://github.com/rust-lang/crates.io-index"
 

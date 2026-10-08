@@ -664,6 +664,14 @@ class DependencyTest(ValidatorTest):
         self.assert_rejected({BETA_PATH: None}, "rs/beta/Cargo.toml is added or deleted")
         self.assert_rejected({BETA_PATH: None, "rs/beta2/Cargo.toml": BETA}, "rs/beta/Cargo.toml is added or deleted")
 
+    def test_escapes_the_paths_and_names_of_the_fix(self):
+        # Unescaped, the newlines would start workflow commands in the log.
+        self.assert_rejected({"rs/x\n::error::y/Cargo.toml": ALPHA}, r"rs/x\n::error::y/Cargo.toml is added or deleted")
+        self.assert_rejected(
+            {ALPHA_PATH: add(ALPHA, "dependencies", '"a\\n::error::b\\\\c" = { workspace = true }')},
+            r"rs/alpha/Cargo.toml adds dependencies the root Cargo.toml doesn't have: a\n::error::b\\c",
+        )
+
     def test_rejects_manifests_outside_the_root_workspace(self):
         for path, manifest in {NESTED_PATH: NESTED, NESTED_GIT_PATH: NESTED_GIT}.items():
             with self.subTest(path):
