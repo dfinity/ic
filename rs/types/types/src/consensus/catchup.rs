@@ -417,8 +417,12 @@ pub enum CupType {
         /// The hash of the state that the subnet should use.
         state_hash: CryptoHashOfState,
     },
-    /// A CUP used to indicate a subnet to split into two.
-    SubnetSplitting { destination_subnet_id: SubnetId },
+    /// A CUP used to indicate a subnet to split into two. This type is set on both the source and
+    /// destination subnets.
+    SubnetSplitting {
+        // The ID of the destination subnet that is being split off from the source subnet.
+        destination_subnet_id: SubnetId,
+    },
 }
 
 impl TryFrom<subnet_pb::catch_up_package_contents::CupType> for CupType {
