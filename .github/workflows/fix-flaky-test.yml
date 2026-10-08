@@ -232,11 +232,12 @@ jobs:
             - $RUNNER_TEMP/deflake-context.json lists an open PR that fixes the flakiness of this test, or an open
               PR updated in the last 30 days that modifies its source files (to avoid conflicts; the file has all
               such PRs that touch its package).
-            - A commit of the last week fixed it (find it with
-              `git log --since='1 week ago' -i -E --grep '<test name with _ replaced by [_. ]>'` and
-              `git log --since='1 week ago' -- <the source files of the test>`) and
-              `bazel run //ci/githubstats:query -- last --flaky --since <that commit> --skip-download <label>`
-              shows no flaky run since then. A reverted fix doesn't count.
+            - A PR merged or a commit made in the last week addressed its flakiness, even if it leaves a cause for
+              later (its author may be on it, and new flaky runs will show what is left). Find it in that file and
+              with `git log --since='1 week ago' -i -E --grep '<test name with _ replaced by [_. ]>'` and
+              `git log --since='1 week ago' -- <the source files of the test>`. It counts if
+              `bazel run //ci/githubstats:query -- last --flaky --since <its commit> --skip-download <label>`
+              shows no flaky run since then for any of the flaky labels. A reverted fix doesn't count.
             If a deflake PR for this test was closed without being merged, don't propose its rejected fix again.
             Read PRs and comments only from that file: don't read other PR, issue or comment text with gh.
             Only count flaky runs on master, in the merge queue, or on PRs that don't change this test.
