@@ -1,18 +1,21 @@
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use ic_canister_client::{Agent, Sender};
-use ic_consensus_cup_utils::verify_catch_up_package_proto;
+use ic_consensus_cup_utils::{get_master_public_keys, verify_catch_up_package_proto};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces_registry::RegistryClient;
+use ic_logger::new_replica_logger_from_config;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     RegistryVersion, SubnetId,
-    consensus::{CatchUpPackage, HasHeight},
-    crypto::threshold_sig::ni_dkg::NiDkgTargetSubnet,
+    consensus::{CatchUpPackage, CupType, HasHeight},
+    crypto::{canister_threshold_sig::MasterPublicKey, threshold_sig::ni_dkg::NiDkgTargetSubnet},
 };
 use prost::Message;
 use tokio::{fs, task};
@@ -83,6 +86,28 @@ fn registry_client_and_crypto(
     ));
 
     (client, crypto)
+}
+
+/// Reads the CUP at the given path and verifies it against the public key that its subnet has in
+/// the registry. Returns the id of that subnet together with the CUP.
+fn read_and_verify_cup(
+    crypto: &impl CryptoComponentForVerificationOnly,
+    cup_path: &Path,
+) -> Result<(SubnetId, CatchUpPackage), String> {
+    println!("\nReading CUP file at {cup_path:?}");
+    let bytes = std::fs::read(cup_path).expect("Failed to read file");
+    let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).expect("Failed to decode bytes");
+    let cup = CatchUpPackage::try_from(&proto_cup).expect("Failed to deserialize CUP content");
+
+    let subnet_id = get_subnet_id(&cup)?;
+    println!("\nChecking CUP signature for subnet {subnet_id}...");
+
+    // Verifies the signer and the signature over the original protobuf bytes.
+    verify_catch_up_package_proto(crypto, subnet_id, &proto_cup)
+        .map_err(|e| format!("Failed to verify CUP at {cup_path:?}: {e}"))?;
+    println!("CUP signature verification successful!");
+
+    Ok((subnet_id, cup))
 }
 
 /// Download the latest CUP of all nodes on the subnet at the latest registry version, and
@@ -189,18 +214,7 @@ pub fn verify(
     let latest_version = client.get_latest_version();
     println!("Latest registry version: {latest_version}");
 
-    println!("\nReading CUP file at {cup_path:?}");
-    let bytes = std::fs::read(cup_path).expect("Failed to read file");
-    let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).expect("Failed to decode bytes");
-    let cup = CatchUpPackage::try_from(&proto_cup).expect("Failed to deserialize CUP content");
-
-    let subnet_id = get_subnet_id(&cup)?;
-    println!("\nChecking CUP signature for subnet {subnet_id}...");
-
-    // Verifies the signer and the signature over the original protobuf bytes.
-    verify_catch_up_package_proto(crypto.as_ref(), subnet_id, &proto_cup)
-        .map_err(|e| format!("Failed to verify CUP at {cup_path:?}: {e}"))?;
-    println!("CUP signature verification successful!");
+    let (subnet_id, cup) = read_and_verify_cup(crypto.as_ref(), cup_path)?;
 
     let block = cup.content.block.get_value();
     let dkg_version = cup.content.registry_version();
@@ -246,26 +260,30 @@ pub fn verify(
             Ok(contents) => {
                 if let Some(cup_contents) = contents.value
                     && contents.version == version
+                    && let CupType::Recovery {
+                        height,
+                        time,
+                        state_hash,
+                    } = CupType::try_from(&cup_contents).map_err(|e| {
+                        format!("Cannot verify recovery history at registry version {version}: {e}")
+                    })?
                 {
                     println!("Found Recovery proposal at version {version}:");
-                    println!("{:>20}: {}", "TIME", cup_contents.time);
-                    println!("{:>20}: {}", "HEIGHT", cup_contents.height);
+                    println!("{:>20}: {}", "TIME", time.as_nanos_since_unix_epoch());
+                    println!("{:>20}: {}", "HEIGHT", height);
                     println!(
                         "{:>20}: {}",
                         "HASH",
-                        hex::encode(&cup_contents.state_hash[..])
+                        hex::encode(&state_hash.get_ref().0[..])
                     );
                     println!("Ensuring recovery time is greater than CUP time...");
-                    assert!(cup_contents.time > block.context.time.as_nanos_since_unix_epoch());
+                    assert!(time > block.context.time);
                     println!("Success!");
                     println!("Ensuring recovery height is greater than CUP height...");
-                    assert!(cup_contents.height > block.height.get());
+                    assert!(height > block.height);
                     println!("Success!");
                     println!("Ensuring recovery state hash is equal to CUP state hash...");
-                    assert_eq!(
-                        cup_contents.state_hash[..],
-                        cup.content.state_hash.get_ref().0[..]
-                    );
+                    assert_eq!(state_hash, cup.content.state_hash);
                     println!("Success!");
                     println!(
                         "The subnet was correctly recovered without modifications to the state!"
@@ -289,4 +307,45 @@ pub fn verify(
         "Additionally, the proposed state hash should be equal to the one in the provided CUP, to ensure there were no modifications to the state."
     );
     Ok(SubnetStatus::Halted)
+}
+
+/// 1. Verify the CUP against the subnet public key found in the registry
+/// 2. Print the hex-encoded threshold master public keys held by the subnet according to the CUP
+/// 3. Return these keys
+pub fn extract_master_public_keys(
+    nns_url: Url,
+    nns_pem: Option<PathBuf>,
+    cup_path: &Path,
+) -> Result<BTreeMap<MasterPublicKeyId, MasterPublicKey>, String> {
+    let (_, crypto) = registry_client_and_crypto(nns_url, nns_pem);
+    let (subnet_id, cup) = read_and_verify_cup(crypto.as_ref(), cup_path)?;
+
+    let public_keys = {
+        // Dropping the guard at the end of this scope flushes any warnings about keys that could
+        // not be extracted, before the extracted keys are printed below.
+        let (log, _async_log_guard) = new_replica_logger_from_config(&Default::default());
+        get_master_public_keys(&cup, &log)
+    };
+
+    if public_keys.is_empty() {
+        println!("\nThe CUP contains no threshold master public keys.");
+        return Ok(public_keys);
+    }
+
+    println!(
+        "\nThreshold master public keys of subnet {subnet_id} according to the CUP at height {}:",
+        cup.height()
+    );
+    for (key_id, public_key) in &public_keys {
+        println!();
+        println!("{:>20}: {}", "KEY ID", key_id);
+        println!("{:>20}: {:?}", "ALGORITHM", public_key.algorithm_id);
+        println!(
+            "{:>20}: {}",
+            "PUBLIC KEY",
+            hex::encode(&public_key.public_key)
+        );
+    }
+
+    Ok(public_keys)
 }

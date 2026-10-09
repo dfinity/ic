@@ -329,6 +329,7 @@ upload_artifacts(
         "//conditions:default": [
             "//publish/binaries:bundle-legacy",  # avoid overwriting legacy artifacts
             "//publish/canisters:bundle",
+            "//ic-os/guestos/envs/prod:bundle-disk",  # used by dfinity/open-cloud
             "//ic-os/guestos/envs/prod:bundle-update",
             "//ic-os/guestos/envs/dev:bundle-update",  # used by nested tests
             "//ic-os/hostos/envs/prod:bundle-update",
@@ -409,6 +410,21 @@ genrule(
     cmd = "dpkg-deb --fsys-tarfile $(execpath @ovmf_amdsev_deb//file) | tar -xO ./usr/share/ovmf/OVMF.amdsev.fd > $@",
     tags = ["manual"],
     target_compatible_with = [
+        "@platforms//os:linux",  # technically: Ubuntu/Debian with dpkg-deb
+    ],
+)
+
+# The ntpd-rs daemon, extracted the same way from its `.deb` (see MODULE.bazel
+# for the `ntpd_rs_deb` http_file). `tar -xO` drops the mode bits, hence the
+# `chmod`.
+genrule(
+    name = "ntp_daemon",
+    srcs = ["@ntpd_rs_deb//file"],
+    outs = ["ntp-daemon"],
+    cmd = "dpkg-deb --fsys-tarfile $(execpath @ntpd_rs_deb//file) | tar -xO ./usr/bin/ntp-daemon > $@ && chmod +x $@",
+    executable = True,
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",  # the `.deb` is amd64
         "@platforms//os:linux",  # technically: Ubuntu/Debian with dpkg-deb
     ],
 )

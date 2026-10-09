@@ -4,7 +4,7 @@ use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
 use ic_embedders::wasmtime_embedder::system_api::SystemApiImpl;
 use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::SandboxSafeSystemState;
-use ic_interfaces::execution_environment::{HypervisorResult, MessageMemoryUsage, SystemApi};
+use ic_interfaces::execution_environment::{Heap, HypervisorResult, MessageMemoryUsage, SystemApi};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
@@ -296,10 +296,10 @@ fn correct_charging_source_canister_for_a_request() {
 #[allow(clippy::type_complexity)]
 fn handle_heap_cycles<T>(
     slf: T,
-    f: &dyn Fn(T, usize, &mut [u8]) -> HypervisorResult<()>,
+    f: &dyn Fn(T, usize, &mut Heap<'_>) -> HypervisorResult<()>,
 ) -> HypervisorResult<Cycles> {
     let mut res = [0_u8; 16];
-    f(slf, 0, &mut res)?;
+    f(slf, 0, &mut Heap::unchecked(&mut res))?;
     Ok(Cycles::new(u128::from_le_bytes(res)))
 }
 
@@ -309,10 +309,10 @@ fn handle_heap_cycles<T>(
 fn handle_heap_cycles_1<T, A>(
     slf: T,
     a: A,
-    f: &dyn Fn(T, A, usize, &mut [u8]) -> HypervisorResult<()>,
+    f: &dyn Fn(T, A, usize, &mut Heap<'_>) -> HypervisorResult<()>,
 ) -> HypervisorResult<Cycles> {
     let mut res = [0_u8; 16];
-    f(slf, a, 0, &mut res)?;
+    f(slf, a, 0, &mut Heap::unchecked(&mut res))?;
     Ok(Cycles::new(u128::from_le_bytes(res)))
 }
 
@@ -470,7 +470,8 @@ fn call_increases_cycles_consumed_metric() {
         cycles_account_manager,
     );
 
-    api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]).unwrap();
+    api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &Heap::unchecked(&mut []))
+        .unwrap();
     api.ic0_call_perform().unwrap();
 
     let system_state_modifications = api.take_system_state_modifications();

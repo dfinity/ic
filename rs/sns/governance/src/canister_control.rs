@@ -17,6 +17,10 @@ use ic_nervous_system_clients::{
 };
 use std::convert::TryFrom;
 
+#[cfg(test)]
+#[path = "canister_control_tests.rs"]
+mod tests;
+
 /// Attempts to return a canister id given a principal id and returns an error if no id or an
 /// invalid id were given.
 pub fn get_canister_id(canister_id: &Option<PrincipalId>) -> Result<CanisterId, GovernanceError> {
@@ -275,41 +279,28 @@ pub async fn perform_execute_generic_nervous_system_function_validate_and_render
 }
 
 /// Executes a generic nervous system function (i.e., a non-native SNS proposal).
+///
+/// On success, returns the raw reply bytes from the target canister. We return
+/// them as-is and don't try to decode them.
 pub async fn perform_execute_generic_nervous_system_function_call(
     env: &dyn Environment,
     function: NervousSystemFunction,
     call: ExecuteGenericNervousSystemFunction,
-) -> Result<(), GovernanceError> {
+) -> Result<Vec<u8>, GovernanceError> {
     // Get the canister id and the method against which we execute the proposal.
     let valid_function = ValidGenericNervousSystemFunction::try_from(&function)
         .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))?;
 
-    let result = env
-        .call_canister(
-            valid_function.target_canister_id,
-            &valid_function.target_method,
-            call.payload,
-        )
-        .await;
-
-    // Convert result.
-    match result {
-        Err(err) => Err(GovernanceError::new_with_message(
+    env.call_canister(
+        valid_function.target_canister_id,
+        &valid_function.target_method,
+        call.payload,
+    )
+    .await
+    .map_err(|err| {
+        GovernanceError::new_with_message(
             ErrorType::External,
             format!("Canister method call to execute proposal failed: {err:?}"),
-        )),
-
-        Ok(_reply) => {
-            // TODO: Do something with reply. E.g. store it in the proposal,
-            // and/or deserialize it so that we can detect whether there was an
-            // application-level error, as opposed to a communication
-            // error. Detecting application error could be done as follows:
-            //
-            //   candid::!Decode(&reply, Result<String, String>)
-            //
-            // This could then be converted into a Result<(), GovernanceError>.
-            // For now, any reply is considered a success.
-            Ok(())
-        }
-    }
+        )
+    })
 }

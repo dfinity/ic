@@ -330,7 +330,7 @@ impl InstallCodeHelper {
             state
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&CyclesUseCase::BurnedCycles)
                 .map(|c| c.get())
                 .unwrap_or(0)

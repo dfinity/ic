@@ -2378,10 +2378,6 @@ impl ExecutionEnvironment {
         state
             .metadata
             .subnet_metrics
-            .observe_consumed_cycles_http_outcalls(nominal_consumed_cycles);
-        state
-            .metadata
-            .subnet_metrics
             .observe_consumed_cycles_with_use_case(
                 CyclesUseCase::HTTPOutcalls,
                 nominal_consumed_cycles,
@@ -3402,8 +3398,9 @@ impl ExecutionEnvironment {
         }
         let metrics = &state.metadata.subnet_metrics;
         // The same stored aggregate the certified state tree at
-        // `/subnet/<subnet_id>/metrics` reads from certification version `V29` on, so
-        // the two cannot drift. It is refreshed on every `commit_and_certify`
+        // `/subnet/<subnet_id>/metrics` reads at certification version `V29`, so
+        // the two cannot drift (from `V30` on, the tree reads its monotonic
+        // counterpart instead). It is refreshed on every `commit_and_certify`
         // (`rs/state_manager/src/lib.rs`), so a call executing in round N reads the
         // end-of-round-(N-1) value -- the same one-round lag as `num_canisters`
         // below. Reading it rather than recomputing the total is also what keeps a
@@ -4054,13 +4051,7 @@ impl ExecutionEnvironment {
             request.payment -= signature_fee.real();
             let nominal_fee = signature_fee.nominal();
             let use_case = match args {
-                ThresholdArguments::Ecdsa(_) => {
-                    state
-                        .metadata
-                        .subnet_metrics
-                        .observe_consumed_cycles_ecdsa_outcalls(nominal_fee);
-                    CyclesUseCase::ECDSAOutcalls
-                }
+                ThresholdArguments::Ecdsa(_) => CyclesUseCase::ECDSAOutcalls,
                 ThresholdArguments::Schnorr(_) => CyclesUseCase::SchnorrOutcalls,
                 ThresholdArguments::VetKd(_) => CyclesUseCase::VetKd,
             };
