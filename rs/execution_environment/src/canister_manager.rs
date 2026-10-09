@@ -781,6 +781,7 @@ impl CanisterManager {
 
         let original: OriginalContext = OriginalContext {
             method: context.method,
+            network_topology: Arc::clone(&network_topology),
             execution_parameters,
             mode: context.mode,
             config: self.config.clone(),

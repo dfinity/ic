@@ -2444,6 +2444,13 @@ fn read_canister_snapshot_metadata_fails_invalid_controller() {
         .subnet_message("read_canister_snapshot_metadata", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    assert!(
+        error.description().contains(&format!(
+            "Caller {} is not allowed to call read_canister_snapshot_metadata",
+            user_test_id(42).get()
+        )),
+        "{error}"
+    );
 }
 
 fn read_canister_snapshot_data(

@@ -416,6 +416,65 @@ fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
 }
 
 #[test]
+fn test_fetch_canister_logs_via_inter_canister_update_call_enabled_not_allowed() {
+    // Test fetch_canister_logs call fails for inter-canister update call if the
+    // caller is not allowed to read the logs.
+    // There are 3 actors with the following controller relationships: user -> canister_a and user -> canister_b.
+    // The user uses update call to canister_a to fetch logs of canister_b, which should fail
+    // since canister_a is not a controller of canister_b.
+    let replicated_inter_canister_log_fetch = FlagStatus::Enabled;
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let log_visibility = LogVisibilityV2::Controllers;
+    let env = setup_env_with(replicated_inter_canister_log_fetch);
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(log_visibility.clone())
+            .with_controllers(vec![user_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    // Create canister_b controlled by the user.
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(log_visibility)
+            .with_controllers(vec![user_controller])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    // Record some logs in canister_b.
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    // Fetch logs of canister_b via canister_a.
+    let result = env.execute_ingress(
+        canister_a,
+        "update",
+        wasm()
+            .call_with_cycles(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                call_args()
+                    .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                    .on_reject(wasm().reject_message().reject()),
+                Cycles::new(50_000_000_000),
+            )
+            .build(),
+    );
+    let reject_message = get_reject(result);
+    let expected_message = format!(
+        "Caller {} is not allowed to access canister logs",
+        canister_a.get()
+    );
+    assert!(
+        reject_message.contains(&expected_message),
+        "Expected: {expected_message}\nActual: {reject_message}"
+    );
+}
+
+#[test]
 fn test_fetch_canister_logs_via_composite_query_call() {
     // Test that fetch_canister_logs API is accessible via composite query call.
     // There are 3 actors with the following controller relationship: user -> canister_a -> canister_b.

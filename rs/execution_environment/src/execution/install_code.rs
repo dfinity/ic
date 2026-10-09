@@ -26,6 +26,7 @@ use ic_types::{CanisterTimer, MemoryAllocation, NumInstructions, Time, messages:
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 use ic_wasm_types::WasmHash;
+use std::sync::Arc;
 
 use crate::{
     CompilationCostHandling, RoundLimits,
@@ -529,7 +530,6 @@ impl InstallCodeHelper {
     pub fn validate_input(
         &mut self,
         original: &OriginalContext,
-        network_topology: &NetworkTopology,
     ) -> Result<(), CanisterManagerError> {
         self.steps.push(InstallCodeStep::ValidateInput);
 
@@ -540,7 +540,7 @@ impl InstallCodeHelper {
             &original.sender,
             original.method,
             &self.canister,
-            network_topology,
+            &original.network_topology,
             config.own_subnet_id,
         )?;
 
@@ -861,9 +861,7 @@ impl InstallCodeHelper {
         round: &RoundContext,
     ) -> Result<(), CanisterManagerError> {
         match step {
-            InstallCodeStep::ValidateInput => {
-                self.validate_input(original, &round.network_topology)
-            }
+            InstallCodeStep::ValidateInput => self.validate_input(original),
             InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 maybe_execution_state,
             } => self.replace_execution_state_and_allocations(maybe_execution_state),
@@ -918,6 +916,11 @@ impl InstallCodeHelper {
 pub(crate) struct OriginalContext {
     /// The management canister method (`InstallCode` or `InstallChunkedCode`).
     pub method: Ic00Method,
+    /// The network topology of the round in which the execution started. The
+    /// sender is validated against it in every round the execution spans, so
+    /// that replaying `InstallCodeStep::ValidateInput` in a later round cannot
+    /// reach a different verdict than the original validation did.
+    pub network_topology: Arc<NetworkTopology>,
     pub execution_parameters: ExecutionParameters,
     pub mode: CanisterInstallModeV2,
     pub config: CanisterMgrConfig,
