@@ -25482,6 +25482,7 @@ dependencies = [
  "futures",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
+ "ic-types",
  "slog",
  "systest-message-routing-common",
  "tokio",
