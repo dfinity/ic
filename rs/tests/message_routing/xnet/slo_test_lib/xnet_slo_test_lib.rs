@@ -33,10 +33,11 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet, VmResourceOver
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, SubnetSnapshot,
+    find_subnet_that_hosts_canister_id,
 };
 use ic_system_test_driver::util::{block_on, runtime_from_url};
-use slog::info;
+use slog::{info, warn};
 use std::fmt::Display;
 use std::time::Duration;
 use std::vec;
@@ -468,15 +469,18 @@ pub fn check_success(
     success
 }
 
-/// Takes as input a testing environment, a list of nodes s.t. each node is on
-/// one of the subnets to deploy XNet test canisters to, and a configuration,
-/// and runs an instance of the XNet SLO test. It assumes the IC instance under
-/// test is already set up and ignores all `config` parameters related to the
-/// IC topology (e.g., `nodes_per_subnet`).
+/// Takes as input a testing environment, a list of endpoint runtimes s.t. each
+/// runtime corresponds to a node on one of the subnets to deploy XNet test
+/// canisters to, and a configuration, and runs an instance of the XNet SLO test.
+/// It assumes the IC instance under test is already set up and ignores all
+/// `config` parameters related to the IC topology (e.g., `nodes_per_subnet`).
+/// The canisters are torn down via the most up-to-date node of their subnet in
+/// the topology of `env`.
 ///
 ///
 /// # Panics
-/// - If the nodes provided in `nodes` are incompatible with `config`.
+/// - If the endpoints provided in `endpoints_runtimes` are incompatible with `config`.
+/// - If the topology of `env` has no subnet hosting the canisters of an endpoint.
 /// - On test failure.
 pub async fn test_async_impl(
     env: TestEnv,
@@ -491,7 +495,7 @@ pub async fn test_async_impl(
 
     // Step 1: Install Xnet canisters on each subnet.
     // Step 2: Start all canisters (via update `start` call).
-    let canisters = deploy_and_start(env, &endpoints_runtimes, &config, logger).await;
+    let canisters = deploy_and_start(env.clone(), &endpoints_runtimes, &config, logger).await;
 
     // Step 3: Wait for canisters to exchange messages.
     info!(
@@ -500,6 +504,33 @@ pub async fn test_async_impl(
         config.runtime.as_secs()
     );
     tokio::time::sleep(Duration::from_secs(config.runtime.as_secs())).await;
+
+    // By now the node behind an endpoint may lag behind the rest of its subnet, e.g.
+    // when its host is oversubscribed. If it lags by more than 90s, it accepts an
+    // update call, but then drops it without telling the client: the client sets the
+    // call's `ingress_expiry` to `MAX_INGRESS_TTL - PERMITTED_DRIFT` (4 minutes) from
+    // now, but the node's ingress manager only accepts calls expiring at most
+    // `MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR` (5.5 minutes) after the time
+    // of its latest finalized block. The client then waits for the call until it
+    // times out. So send the tear down's calls to the most up-to-date node of each
+    // subnet instead. The tear down takes well under 90s, so that node is very
+    // unlikely to fall behind while it is running.
+    let teardown_runtimes = up_to_date_runtimes(&env, &canisters, logger).await;
+    let canisters = canisters
+        .iter()
+        .zip(&teardown_runtimes)
+        .map(|(subnet_canisters, teardown_runtime)| {
+            subnet_canisters
+                .iter()
+                .map(|canister| {
+                    let runtime = teardown_runtime
+                        .as_ref()
+                        .unwrap_or_else(|| canister.runtime());
+                    Canister::new(runtime, canister.canister_id())
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
 
     // Step 4: Stop all canisters (via update `stop` call).
     // Step 5: Collect metrics from all canisters (via query `metrics` call).
@@ -513,6 +544,88 @@ pub async fn test_async_impl(
         check_success(aggregated_metrics, &config, logger),
         "Test failed."
     );
+}
+
+/// Returns, for every subnet in `canisters`, a runtime for the most up-to-date node
+/// of the subnet hosting that subnet's canisters; or `None` if none of its nodes
+/// reported a certified height, in which case the caller should stick to the runtime
+/// it already has.
+///
+///
+/// # Panics
+/// - If one of the subnets in `canisters` has no canister.
+/// - If the topology of `env` has no subnet hosting the canisters of a subnet.
+async fn up_to_date_runtimes(
+    env: &TestEnv,
+    canisters: &[Vec<Canister<'_>>],
+    logger: &slog::Logger,
+) -> Vec<Option<Runtime>> {
+    // Taking a topology snapshot replays the registry local store, so take it once
+    // rather than once per subnet: some tests have over a hundred subnets.
+    let topology = env.topology_snapshot();
+    let subnets = canisters
+        .iter()
+        .map(|subnet_canisters| {
+            // All canisters of `subnet_canisters` were installed via the same
+            // endpoint, i.e. they are hosted by the same subnet.
+            let canister_id = subnet_canisters
+                .first()
+                .expect("Subnet without canisters")
+                .canister_id();
+            find_subnet_that_hosts_canister_id(&topology, canister_id)
+        })
+        .collect::<Vec<_>>();
+    join_all(
+        subnets
+            .iter()
+            .map(|subnet| up_to_date_runtime(subnet, logger)),
+    )
+    .await
+}
+
+/// Returns a runtime for the most up-to-date node of `subnet`, i.e. the one with the
+/// highest certified height; or `None` if none of its nodes reported a certified
+/// height.
+async fn up_to_date_runtime(subnet: &SubnetSnapshot, logger: &slog::Logger) -> Option<Runtime> {
+    let certified_heights = join_all(subnet.nodes().map(|node| async move {
+        let certified_height = node
+            .status_async()
+            .await
+            .ok()
+            .and_then(|status| status.certified_height);
+        (certified_height, node)
+    }))
+    .await;
+    info!(
+        logger,
+        "Certified heights of the nodes of subnet {}: {:?}",
+        subnet.subnet_id,
+        certified_heights
+            .iter()
+            .map(|(certified_height, node)| (node.node_id, *certified_height))
+            .collect::<Vec<_>>()
+    );
+    let Some((_, node)) = certified_heights
+        .into_iter()
+        .filter_map(|(certified_height, node)| certified_height.map(|height| (height, node)))
+        .max_by_key(|(certified_height, _)| *certified_height)
+    else {
+        warn!(
+            logger,
+            "No node of subnet {} reported a certified height, tearing down its canisters \
+             via the endpoint they were installed through",
+            subnet.subnet_id
+        );
+        return None;
+    };
+    info!(
+        logger,
+        "Tearing down the canisters of subnet {} via node {}", subnet.subnet_id, node.node_id
+    );
+    Some(runtime_from_url(
+        node.get_public_url(),
+        node.effective_canister_id(),
+    ))
 }
 
 pub async fn stop_all_canister(canisters: &[Vec<Canister<'_>>]) {
