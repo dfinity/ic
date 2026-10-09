@@ -266,3 +266,17 @@ The tool maintains a well-defined directory layout for all artifacts produced du
 - **WHEN** a `ReadRegistryStep` executes
 - **THEN** it queries and logs the requested registry value, labeled for operator review
 - **AND** if run interactively, it offers to re-read the registry (for a mutation not yet applied) until the operator declines
+
+## Crate: `ic-subnet-merging`
+
+- **Source**: `rs/recovery/subnet_merging/`
+- **Purpose**: Evaluates the "merge readiness" condition of a subnet `S` that is cooling down -- whether `S` has fully quiesced at the registry version `V` at which it was labeled as cooling down -- so a subnet-merging tool can wait for exactly the condition a system test checks.
+
+#### Scenario: Merge readiness terms
+- **WHEN** `evaluate_merge_readiness` is called for subnet `S` and registry version `V`
+- **THEN** it scrapes every replica's Prometheus metrics endpoint and evaluates one `Term` per `Condition`: every replica of every subnet observed a registry version `>= V`; no replica of another subnet still reports stream messages inbound from `S`; no replica of `S` reports outgoing stream messages to any remote subnet (including its own loopback stream); no replica of `S` reports ingress history entries other than in the `processing` state; no replica of `S` reports non-zero subnet input or output queue messages, subnet call contexts, or pending refunds
+- **AND** the registry-version term holds the minimum observed value across all replicas; every other term holds the maximum, so a single lagging or non-quiesced replica is enough to fail that term
+
+#### Scenario: Scrape failure fails the whole evaluation
+- **WHEN** any node of any subnet in scope -- the cooling-down one included -- cannot be scraped, including an unsuccessful HTTP status
+- **THEN** `evaluate_merge_readiness` returns a `ReadinessError` rather than evaluating the terms on partial data, since most terms compare against zero and missing data would otherwise appear to satisfy them
