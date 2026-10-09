@@ -1,9 +1,6 @@
 use crate::as_round_instructions;
 use crate::canister_settings::CanisterSettings;
-use crate::execution::common::{
-    validate_controller, validate_controller_or_subnet_admin, validate_snapshot_visibility,
-    validate_status_visibility, validate_subnet_admin,
-};
+use crate::execution::common::{validate_sender_on_subnet, validate_subnet_admin};
 use crate::execution::install_code::OriginalContext;
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
@@ -13,7 +10,6 @@ use crate::execution_environment::{
 use crate::execution_environment_metrics::ExecutionEnvironmentMetrics;
 use crate::hypervisor::{Hypervisor, MemorySource};
 use crate::types::{IngressResponse, Response};
-use crate::util::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID};
 
 use ic_base_types::EnvironmentVariables;
 use ic_config::flag_status::FlagStatus;
@@ -175,99 +171,43 @@ impl CanisterManager {
                 }
             }
 
-            // `CanisterStatus` is governed by the canister's status visibility
-            // settings: subnet admins always retain access; otherwise access is
-            // granted to the controllers plus any additional allowed viewers, or
-            // to everyone if the status is public.
-            Ok(Ic00Method::CanisterStatus) => {
+            // The access control of these methods is defined by
+            // `crate::execution::common::validate_sender`. We assume that the
+            // canister always wants to accept messages that pass it.
+            Ok(method @ Ic00Method::CanisterStatus)
+            | Ok(method @ Ic00Method::StartCanister)
+            | Ok(method @ Ic00Method::UninstallCode)
+            | Ok(method @ Ic00Method::StopCanister)
+            | Ok(method @ Ic00Method::DeleteCanister)
+            | Ok(method @ Ic00Method::CanisterMetrics)
+            | Ok(method @ Ic00Method::UpdateSettings)
+            | Ok(method @ Ic00Method::InstallCode)
+            | Ok(method @ Ic00Method::InstallChunkedCode)
+            | Ok(method @ Ic00Method::UploadChunk)
+            | Ok(method @ Ic00Method::StoredChunks)
+            | Ok(method @ Ic00Method::ClearChunkStore)
+            | Ok(method @ Ic00Method::TakeCanisterSnapshot)
+            | Ok(method @ Ic00Method::LoadCanisterSnapshot)
+            | Ok(method @ Ic00Method::DeleteCanisterSnapshot)
+            | Ok(method @ Ic00Method::UploadCanisterSnapshotMetadata)
+            | Ok(method @ Ic00Method::UploadCanisterSnapshotData)
+            | Ok(method @ Ic00Method::ListCanisterSnapshots)
+            | Ok(method @ Ic00Method::ReadCanisterSnapshotMetadata)
+            | Ok(method @ Ic00Method::ReadCanisterSnapshotData) => {
                 match effective_canister_id {
                     Some(canister_id) => {
                         let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
                             ErrorCode::CanisterNotFound,
                             format!("Canister {canister_id} not found"),
                         ))?;
-                        let subnet_admins = state.get_own_subnet_admins();
-                        validate_status_visibility(canister, subnet_admins, &sender.get()).map_err(|err| err.into())
-                    },
-                    None => Err(UserError::new(
-                        ErrorCode::InvalidManagementPayload,
-                        format!("Failed to decode payload for ic00 method: {method_name}"),
-                    )),
-                }
-            },
-
-            // These methods are only valid if they are sent by the controller
-            // of the canister or a subnet admin. We assume that the canister
-            // always wants to accept such messages.
-            Ok(Ic00Method::StartCanister)
-            | Ok(Ic00Method::UninstallCode)
-            | Ok(Ic00Method::StopCanister)
-            | Ok(Ic00Method::DeleteCanister)
-            | Ok(Ic00Method::CanisterMetrics) => {
-                match effective_canister_id {
-                    Some(canister_id) => {
-                        let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
-                            ErrorCode::CanisterNotFound,
-                            format!("Canister {canister_id} not found"),
-                        ))?;
-                        let subnet_admins = state.get_own_subnet_admins();
-                        validate_controller_or_subnet_admin(canister, subnet_admins, sender.get_ref()).map_err(|err| err.into())
-                    },
-                    None => Err(UserError::new(
-                        ErrorCode::InvalidManagementPayload,
-                        format!("Failed to decode payload for ic00 method: {method_name}"),
-                    )),
-                }
-            },
-
-            // These methods are only valid if they are sent by the controller
-            // of the canister. We assume that the canister always wants to
-            // accept messages from its controller.
-            Ok(Ic00Method::UpdateSettings)
-            | Ok(Ic00Method::InstallCode)
-            | Ok(Ic00Method::InstallChunkedCode)
-            | Ok(Ic00Method::UploadChunk)
-            | Ok(Ic00Method::StoredChunks)
-            | Ok(Ic00Method::ClearChunkStore)
-            | Ok(Ic00Method::TakeCanisterSnapshot)
-            | Ok(Ic00Method::LoadCanisterSnapshot)
-            | Ok(Ic00Method::DeleteCanisterSnapshot)
-            | Ok(Ic00Method::UploadCanisterSnapshotMetadata)
-            | Ok(Ic00Method::UploadCanisterSnapshotData) => {
-                match effective_canister_id {
-                    Some(canister_id) => {
-                        let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
-                            ErrorCode::CanisterNotFound,
-                            format!("Canister {canister_id} not found"),
-                        ))?;
-                        match canister.controllers().contains(&sender.get()) {
-                            true => Ok(()),
-                            false => Err(UserError::new(
-                                ErrorCode::CanisterInvalidController,
-                                format!(
-                                    "Only controllers of canister {canister_id} can call ic00 method {method_name}",
-                                ),
-                            )),
-                        }
-                    },
-                    None => Err(UserError::new(
-                        ErrorCode::InvalidManagementPayload,
-                        format!("Failed to decode payload for ic00 method: {method_name}"),
-                    )),
-                }
-            },
-
-            Ok(Ic00Method::ListCanisterSnapshots)
-            | Ok(Ic00Method::ReadCanisterSnapshotMetadata)
-            | Ok(Ic00Method::ReadCanisterSnapshotData) => {
-                match effective_canister_id {
-                    Some(canister_id) => {
-                        let canister_state = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
-                            ErrorCode::CanisterNotFound,
-                            format!("Canister {canister_id} not found"),
-                        ))?;
-                        validate_snapshot_visibility(canister_state, &sender.get(), method_name)?;
-                        Ok(())
+                        validate_sender_on_subnet(
+                            sender.get_ref(),
+                            method,
+                            canister,
+                            &state.metadata.network_topology,
+                            state.metadata.own_subnet_id,
+                        )
+                        .map_err(|err| err.into())
                     },
                     None => Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
@@ -582,10 +522,17 @@ impl CanisterManager {
         consumed_cycles: &mut ConsumedCyclesForInstructions,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         metrics: &ExecutionEnvironmentMetrics,
+        network_topology: &NetworkTopology,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let sender = origin.origin();
 
-        validate_controller(canister, &sender)?;
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::UpdateSettings,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         let heap_delta_increase = self.validate_and_update_canister_settings(
             canister,
@@ -782,7 +729,13 @@ impl CanisterManager {
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         log_dirty_pages: FlagStatus,
     ) -> DtsInstallCodeResult {
-        if let Err(err) = validate_controller(&canister, &context.sender()) {
+        if let Err(err) = validate_sender_on_subnet(
+            &context.sender(),
+            context.method,
+            &canister,
+            &network_topology,
+            self.config.own_subnet_id,
+        ) {
             return DtsInstallCodeResult::Finished {
                 canister,
                 message,
@@ -827,6 +780,8 @@ impl CanisterManager {
         };
 
         let original: OriginalContext = OriginalContext {
+            method: context.method,
+            network_topology: Arc::clone(&network_topology),
             execution_parameters,
             mode: context.mode,
             config: self.config.clone(),
@@ -870,17 +825,18 @@ impl CanisterManager {
         &self,
         origin: CanisterChangeOrigin,
         canister: &mut CanisterState,
-        subnet_admins: Option<BTreeSet<PrincipalId>>,
+        network_topology: &NetworkTopology,
         time: Time,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let sender = origin.origin();
 
-        // Skip the controller or subnet admins validation if the sender is the
-        // governance canister. The governance canister can forcefully
-        // uninstall the code of any canister.
-        if sender != GOVERNANCE_CANISTER_ID.get() {
-            validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
-        }
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::UninstallCode,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         // The memory freed by dropping the execution state etc. (net of the
         // `CanisterCodeUninstall` canister history change recorded below) is
@@ -922,9 +878,15 @@ impl CanisterManager {
         msg: &mut CanisterCall,
         call_id: StopCanisterCallId,
         canister: &mut CanisterState,
-        subnet_admins: Option<BTreeSet<PrincipalId>>,
+        network_topology: &NetworkTopology,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        validate_controller_or_subnet_admin(canister, subnet_admins, msg.sender())?;
+        validate_sender_on_subnet(
+            msg.sender(),
+            Ic00Method::StopCanister,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         // If the canister did not begin stopping, i.e., if the canister is already stopped,
         // then we produce a reply immediately and return the `call_id` to be closed.
@@ -964,9 +926,15 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         canister: &mut CanisterState,
-        subnet_admins: Option<BTreeSet<PrincipalId>>,
+        network_topology: &NetworkTopology,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::StartCanister,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         let stop_contexts_to_reject = canister.system_state.start_canister();
         canister.system_state.bump_canister_version();
@@ -991,13 +959,15 @@ impl CanisterManager {
         canister: &CanisterState,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         ready_for_migration: bool,
-        subnet_admins: Option<BTreeSet<PrincipalId>>,
+        network_topology: &NetworkTopology,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
-        // Skip the visibility check if the canister itself is requesting its
-        // own status, as the canister is considered in the same trust domain.
-        if sender != canister.canister_id().get() {
-            validate_status_visibility(canister, subnet_admins, &sender)?
-        }
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::CanisterStatus,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         let controller = canister.system_state.controller();
         let controllers = canister
@@ -1124,9 +1094,15 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         canister: &CanisterState,
-        subnet_admins: Option<BTreeSet<PrincipalId>>,
+        network_topology: &NetworkTopology,
     ) -> Result<CanisterMetricsResult, CanisterManagerError> {
-        validate_controller_or_subnet_admin(canister, subnet_admins, &sender)?;
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::CanisterMetrics,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         let consumed_cycles_by_use_case = canister
             .system_state
@@ -1192,7 +1168,6 @@ impl CanisterManager {
         canister_id_to_delete: CanisterId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
-        subnet_admins: Option<BTreeSet<PrincipalId>>,
     ) -> Result<(), CanisterManagerError> {
         let cost_schedule = state.get_own_cost_schedule();
 
@@ -1205,7 +1180,13 @@ impl CanisterManager {
 
         let canister_to_delete = self.validate_canister_exists(state, canister_id_to_delete)?;
 
-        validate_controller_or_subnet_admin(canister_to_delete, subnet_admins, &sender)?;
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::DeleteCanister,
+            canister_to_delete,
+            &state.metadata.network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         self.validate_canister_is_stopped(canister_to_delete)?;
 
@@ -1657,16 +1638,20 @@ impl CanisterManager {
     pub(crate) fn upload_chunk(
         &self,
         sender: PrincipalId,
+        network_topology: &NetworkTopology,
         canister: &mut CanisterState,
         chunk: Vec<u8>,
         round_limits: &mut RoundLimits,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        // Allow the canister itself to perform this operation.
-        if sender != canister.canister_id().into() {
-            validate_controller(canister, &sender)?
-        }
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::UploadChunk,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         // Charge for the upload. We charge before checking if the chunk has already been uploaded
         // since that check involves hash computation that we also want to charge for.
@@ -1746,12 +1731,16 @@ impl CanisterManager {
     pub(crate) fn clear_chunk_store(
         &self,
         sender: PrincipalId,
+        network_topology: &NetworkTopology,
         canister: &mut CanisterState,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        // Allow the canister itself to perform this operation.
-        if sender != canister.canister_id().into() {
-            validate_controller(canister, &sender)?
-        }
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::ClearChunkStore,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         // Clear the chunk store; the memory it took up is returned to the subnet
         // available memory by the caller.
@@ -1773,12 +1762,16 @@ impl CanisterManager {
     pub(crate) fn stored_chunks(
         &self,
         sender: PrincipalId,
+        network_topology: &NetworkTopology,
         canister: &CanisterState,
     ) -> Result<StoredChunksReply, CanisterManagerError> {
-        // Allow the canister itself to perform this operation.
-        if sender != canister.canister_id().into() {
-            validate_controller(canister, &sender)?
-        }
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::StoredChunks,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         let keys = canister
             .system_state
@@ -2008,6 +2001,7 @@ impl CanisterManager {
     pub(crate) fn take_canister_snapshot(
         &self,
         origin: CanisterChangeOrigin,
+        network_topology: &NetworkTopology,
         canister: &mut CanisterState,
         replace_snapshot: Option<SnapshotId>,
         uninstall_code: bool,
@@ -2015,8 +2009,13 @@ impl CanisterManager {
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let sender = origin.origin();
 
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::TakeCanisterSnapshot,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         // Validate that the snapshot to be replaced exists (if replacing) or that
         // the maximum number of snapshots has not been reached (if not replacing).
@@ -2155,6 +2154,7 @@ impl CanisterManager {
         &self,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         sender: PrincipalId,
+        network_topology: &NetworkTopology,
         canister: &mut CanisterState,
         snapshot_canister: Arc<CanisterState>,
         snapshot_id: SnapshotId,
@@ -2167,8 +2167,13 @@ impl CanisterManager {
         consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let canister_id = canister.canister_id();
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::LoadCanisterSnapshot,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
@@ -2492,9 +2497,16 @@ impl CanisterManager {
     pub(crate) fn list_canister_snapshot(
         &self,
         sender: PrincipalId,
+        network_topology: &NetworkTopology,
         canister: &CanisterState,
     ) -> Result<Vec<CanisterSnapshotResponse>, UserError> {
-        validate_snapshot_visibility(canister, &sender, "list_canister_snapshots")?;
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::ListCanisterSnapshots,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         let mut responses = vec![];
         for (snapshot_id, snapshot) in canister.canister_snapshots.list_snapshots() {
@@ -2516,11 +2528,17 @@ impl CanisterManager {
     pub(crate) fn delete_canister_snapshot(
         &self,
         sender: PrincipalId,
+        network_topology: &NetworkTopology,
         canister: &mut CanisterState,
         delete_snapshot_id: SnapshotId,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::DeleteCanisterSnapshot,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         // perform access validation, but don't use the result
         self.get_snapshot(canister, delete_snapshot_id)?;
@@ -2550,12 +2568,15 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         snapshot_id: SnapshotId,
+        network_topology: &NetworkTopology,
         canister: &CanisterState,
     ) -> Result<ReadCanisterSnapshotMetadataResponse, UserError> {
-        validate_snapshot_visibility(
-            canister,
+        validate_sender_on_subnet(
             &sender,
-            "read read_canister_snapshot_metadata snapshot metadata",
+            Ic00Method::ReadCanisterSnapshotMetadata,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
         )?;
         let snapshot = self
             .get_snapshot(canister, snapshot_id)
@@ -2598,6 +2619,7 @@ impl CanisterManager {
     pub(crate) fn read_snapshot_data(
         &self,
         sender: PrincipalId,
+        network_topology: &NetworkTopology,
         canister: &mut CanisterState,
         snapshot_id: SnapshotId,
         kind: CanisterSnapshotDataKind,
@@ -2606,7 +2628,13 @@ impl CanisterManager {
         consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
         let canister_id = canister.canister_id();
-        validate_snapshot_visibility(canister, &sender, "read_canister_snapshot_data")?;
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::ReadCanisterSnapshotData,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
         let snapshot = self.get_snapshot(canister, snapshot_id)?;
 
         // Charge upfront for the baseline plus the maximum possible size of the returned slice or fail.
@@ -2687,6 +2715,7 @@ impl CanisterManager {
     pub(crate) fn create_snapshot_from_metadata(
         &self,
         sender: PrincipalId,
+        network_topology: &NetworkTopology,
         canister: &mut CanisterState,
         args: UploadCanisterSnapshotMetadataArgs,
         time: Time,
@@ -2694,8 +2723,13 @@ impl CanisterManager {
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::UploadCanisterSnapshotMetadata,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         // validate args:
         let valid_args = ValidatedSnapshotMetadata::validate(args.clone()).map_err(|e| {
@@ -2797,14 +2831,20 @@ impl CanisterManager {
     pub(crate) fn write_snapshot_data(
         &self,
         sender: PrincipalId,
+        network_topology: &NetworkTopology,
         canister: &mut CanisterState,
         args: &UploadCanisterSnapshotDataArgs,
         round_limits: &mut RoundLimits,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
         consumed_cycles: &mut ConsumedCyclesForInstructions,
     ) -> Result<CanisterManagerResponse, CanisterManagerError> {
-        // Check sender is a controller.
-        validate_controller(canister, &sender)?;
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::UploadCanisterSnapshotData,
+            canister,
+            network_topology,
+            self.config.own_subnet_id,
+        )?;
         let snapshot_id = args.get_snapshot_id();
 
         let snapshot = self.get_snapshot(canister, snapshot_id)?;
@@ -2981,14 +3021,13 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
     ) -> Result<(), CanisterManagerError> {
-        // In addition to this endpoint only being available from the NNS subnet, the calling canister
-        // has to be a controller of the canister to be renamed.
-        validate_controller(canister, &sender)?;
-
-        // Only the migration orchestrator should be able to be the sender.
-        if sender != MIGRATION_CANISTER_ID.into() {
-            return Err(CanisterManagerError::CallerNotAuthorized);
-        }
+        validate_sender_on_subnet(
+            &sender,
+            Ic00Method::RenameCanister,
+            canister,
+            &state.metadata.network_topology,
+            self.config.own_subnet_id,
+        )?;
 
         if state.canister_state(&new_id).is_some() {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_id));
