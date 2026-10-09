@@ -258,6 +258,10 @@ impl LRUConnectionMetrics {
         lru
     }
 
+    pub fn get(&self) -> &BTreeMap<CanisterId, ConnectionMetrics> {
+        &self.metrics_per_sender
+    }
+
     /// Increments the message count for `sender` and updates its last access timestamp.
     pub fn increment(&mut self, sender: CanisterId, access_timestamp: Time) {
         let metrics_entry =
@@ -292,10 +296,6 @@ impl LRUConnectionMetrics {
 
         #[cfg(debug_assertions)]
         self.check_invariants();
-    }
-
-    pub fn get(&self) -> &BTreeMap<CanisterId, ConnectionMetrics> {
-        &self.metrics_per_sender
     }
 
     #[cfg(debug_assertions)]
