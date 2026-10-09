@@ -1,7 +1,8 @@
 name: Fix Flaky Test
 
 # Called by schedule-fix-flaky-tests.yml for each flaky test. Claude only commits the fix locally:
-# open-deflake-pr.yml opens it as a PR in a separate run (see there).
+# open-deflake-pr.yml opens it as a PR in a separate run (see there). Claude has DEADLINE_MINUTES to return its
+# result, which ci/scripts/deflake-deadline-hook.sh enforces.
 
 on:
   workflow_call:
@@ -66,6 +67,10 @@ jobs:
     env:
       GIT_TERMINAL_PROMPT: 0
       GH_PROMPT_DISABLED: 1
+      # Claude's share of timeout-minutes: one attempt at the slowest test that flaked in a month (36 minutes p90,
+      # three runs) takes 140-175 minutes including the log download, the analysis and the Rust checks. The other 40
+      # minutes cover a cold checkout (up to 15 minutes), the result after the hook starts denying, and the packaging.
+      DEADLINE_MINUTES: 200
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -176,6 +181,30 @@ jobs:
           jq -r '.[] | "#\(.number) \(.state) \(.title // "(untrusted author)")"' "$RUNNER_TEMP/deflake-context.json"
           echo "Trusted the PRs, reviews and comments of: $(jq -r 'join(", ")' <<<"$trusted")"
 
+      # Claude must return its result before the deadline, which the prompt states and the hook enforces: it denies
+      # every tool call after the deadline and cuts the timeout of each command to the time left. The hook and its
+      # configuration are installed as root, in the managed settings, because the hooks in Claude's own
+      # ~/.claude/settings.json reload on change. The job's timeout-minutes is the backstop.
+      - name: Set the deadline
+        id: deadline
+        run: |
+          set -euo pipefail
+          deadline=$(($(date +%s) + DEADLINE_MINUTES * 60))
+          echo "epoch=$deadline" >> "$GITHUB_OUTPUT"
+          echo "utc=$(date -u -d "@$deadline" '+%F %T')" >> "$GITHUB_OUTPUT"
+          sudo install -m 755 ci/scripts/deflake-deadline-hook.sh /usr/local/bin/deflake-deadline-hook
+          settings="$(mktemp)"
+          jq -n --arg command "/usr/local/bin/deflake-deadline-hook $deadline" \
+            '{hooks: {PreToolUse: [{hooks: [{type: "command", $command}]}]}}' > "$settings"
+          sudo install -D -m 644 "$settings" /etc/claude-code/managed-settings.json
+          # A hook that fails to run lets the call through, so it is checked here.
+          input='{"tool_name":"Bash","tool_input":{"command":"true"}}'
+          rc=0
+          deflake-deadline-hook 0 <<<"$input" 2>/dev/null || rc=$?
+          [ "$rc" -eq 2 ]
+          deflake-deadline-hook "$deadline" <<<"$input" \
+            | jq -e '.hookSpecificOutput.updatedInput | .command == "true" and (.timeout | type == "number")' >/dev/null
+
       # With sudo Claude would be root in this privileged container on a shared runner.
       - name: Drop sudo
         run: |
@@ -221,6 +250,14 @@ jobs:
             You run unattended in a GitHub Actions job of dfinity/ic (self-hosted dind-large runner, ic-build
             container, ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
             Nobody can answer questions: decide yourself, or stop and report.
+
+            Return your result before ${{ steps.deadline.outputs.utc }} UTC, ${{ env.DEADLINE_MINUTES }} minutes from
+            now (`date -u` shows the time). After that a hook denies every tool call, also in subagents, and until
+            then it cuts the timeout of each command to the time left. Reruns can't reproduce a flake seen once in
+            dozens of runs or refute a fix for it: find the cause in the logs and the code, run step 6 once, and
+            again only if the fix changed. The logs of step 2 show how long a run takes, so start the last one in
+            time. If the fix can't be verified before the deadline, stop with status "needs_human" and report what
+            you found, what you tried and what is left to do.
 
             Fix the flaky test ${{ inputs.label }} by following the fix-flaky-tests skill
             (.claude/skills/fix-flaky-tests/SKILL.md), starting at step 2 of "Fix a flaky test". These variants of
@@ -293,6 +330,8 @@ jobs:
         if: always()
         env:
           RESULT: ${{ steps.claude.outputs.structured_output }}
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+          DEADLINE: ${{ steps.deadline.outputs.epoch }}
           BASE_SHA: ${{ steps.base.outputs.sha }}
           LABELS: ${{ inputs.labels }}
           SLUG: ${{ inputs.slug }}
@@ -303,9 +342,22 @@ jobs:
           rm -rf ~/deflake ~/deflake-result
           status=failed
           reason="Claude returned no result"
+          # The action sets no structured_output when the result isn't a success, like after a connection drop that
+          # followed the StructuredOutput call (Claude Code 2.1.290 fixes that), so it is also read from the result
+          # message in the execution file. So is the text of a final turn that didn't call StructuredOutput.
+          result='{}'
+          [ ! -f "$EXECUTION_FILE" ] || result="$(jq -c 'map(select(.type == "result")) | first // {}' "$EXECUTION_FILE")"
+          [ -n "$RESULT" ] || RESULT="$(jq -c '.structured_output // empty' <<<"$result")"
           if [ -n "$RESULT" ] && jq -e '.status | IN("fixed", "skipped", "no_logs", "not_reproducible", "needs_human", "failed")' <<<"$RESULT" >/dev/null; then
             status="$(jq -r .status <<<"$RESULT")"
             reason="$(jq -r .reason <<<"$RESULT")"
+          else
+            text="$(jq -r '.result | strings' <<<"$result")"
+            [ -z "$text" ] || reason="$text"
+            # The hook makes Claude report before the deadline, so past it the time ran out and the test needs a
+            # human, like after any attempt that ended without a fix (find-flaky-tests.sh doesn't retry those for a
+            # week). Before it the job broke, and the test is retried.
+            [ "$(date +%s)" -lt "$DEADLINE" ] || status=needs_human
           fi
           if [ "$status" == fixed ]; then
             if ! git rev-parse --verify --quiet refs/heads/deflake >/dev/null \
@@ -332,10 +384,12 @@ jobs:
             fi
           fi
           mkdir -p ~/deflake-result
+          # Up to 10 000 characters: a time-boxed attempt hands its findings over here.
+          reason="$(jq -rn --arg reason "$reason" '$reason[:10000]')"
           jq -n --arg slug "$SLUG" --arg labels "$LABELS" --arg status "$status" --arg reason "$reason" \
-            '{$slug, $labels, $status, reason: $reason[:1000]}' > ~/deflake-result/"result-$SLUG.json"
+            '{$slug, $labels, $status, $reason}' > ~/deflake-result/"result-$SLUG.json"
           echo "status=$status" >> "$GITHUB_OUTPUT"
-          echo "**$status**: \`$(tr -d '`\n\r' <<<"${reason:0:1000}")\`" >> "$GITHUB_STEP_SUMMARY"
+          printf '**%s**\n\n```\n%s\n```\n' "$status" "$(tr -d '`\r' <<<"$reason")" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the fix
         if: steps.package.outputs.status == 'fixed' && !inputs.dry_run
@@ -352,6 +406,8 @@ jobs:
         with:
           name: deflake-result-${{ inputs.slug }}
           path: ~/deflake-result
+          # Also the memory of find-flaky-tests.sh: an attempt that ended as not_reproducible or needs_human isn't
+          # repeated while its result exists.
           retention-days: 7
 
   request-pr:
