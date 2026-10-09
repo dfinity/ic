@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Lists the tests that flaked since the previous daily run, or just $LABEL if set, grouped by base test, as
 # the matrix of .github/workflows/schedule-fix-flaky-tests.yml. Groups that are missing at HEAD, have an
-# open deflake PR or one merged after their last flaky run, or match a regex in $SKIP_PATTERNS (one per line)
-# are dropped, and only the first $MAX_FLAKY_TESTS_TO_FIX of the rest are kept.
+# open deflake PR or one merged after their last flaky run, whose last attempt ended as not_reproducible or
+# needs_human (unless $LABEL is set), or match a regex in $SKIP_PATTERNS (one per line) are dropped, and only
+# the first $MAX_FLAKY_TESTS_TO_FIX of the rest are kept.
+# The attempts are the deflake-result-* artifacts of fix-flaky-test.yml, which keeps them 7 days: deleting one
+# retries its test the next day.
 #
 # Prints the groups to stdout and, when run in GitHub Actions, writes them to $GITHUB_OUTPUT as
 # `tests` and a summary to $GITHUB_STEP_SUMMARY.
@@ -70,6 +73,27 @@ if [ -n "$flaky" ]; then
     done | jq -R . | jq -s -c .)"
     echo "Trusted the deflake PRs of: $(jq -r 'join(", ")' <<<"$trusted")" >&2
 
+    # The attempts of the last week by slug. Only the schedule's runs and dispatches on this branch count: a fork PR
+    # that may run workflows, or a test of this workflow on another branch, could upload a result under the same
+    # name. GITHUB_REF_NAME is master on schedule and dispatch, and the branch of such a test when run there. A human
+    # who dispatches a label wants the attempt, e.g. after reading the last report.
+    attempts='{}'
+    if [ -z "${LABEL:-}" ]; then
+        attempts="$(gh api -X GET repos/dfinity/ic/actions/workflows/schedule-fix-flaky-tests.yml/runs \
+            -f branch="${GITHUB_REF_NAME:-master}" -f created=">=$(date -u -d '7 days ago' +%F)" -F per_page=100 \
+            --jq '.workflow_runs[] | select(.event | IN("schedule", "workflow_dispatch")) | .id' \
+            | while read -r run; do
+                gh api "repos/dfinity/ic/actions/runs/$run/artifacts" \
+                    --jq '.artifacts[] | select((.name | startswith("deflake-result-")) and (.expired | not)) | "\(.name) \(.created_at) \(.expires_at)"' \
+                    | while read -r name created expires; do
+                        dir="$(mktemp -d)"
+                        gh run download "$run" --repo dfinity/ic -n "$name" --dir "$dir"
+                        jq -c --arg run "$run" --arg created "$created" --arg expires "$expires" \
+                            '{slug, status, $run, $created, $expires}' "$dir"/result-*.json
+                    done
+            done | jq -s -c 'group_by(.slug) | map(max_by(.created)) | INDEX(.slug)')"
+    fi
+
     groups="$(jq -n -c \
         --arg labels "$labels" \
         --arg flaky "$flaky" \
@@ -78,6 +102,7 @@ if [ -n "$flaky" ]; then
         --argjson prs "$prs" \
         --argjson trusted "$trusted" \
         --argjson merged "$merged" \
+        --argjson attempts "$attempts" \
         --arg patterns "${SKIP_PATTERNS:-}" \
         --argjson max_flaky_tests_to_fix "$max_flaky_tests_to_fix" '
         def lines: gsub("\r"; "") | split("\n") | map(select(length > 0));
@@ -124,6 +149,7 @@ if [ -n "$flaky" ]; then
             | ([.labels[] | $flaky_at[.] // empty] | max) as $last_flaky_at
             | ([$merged[] | select($last_flaky_at != null and .mergedAt > $last_flaky_at
                 and (.base == $base or (.headRefName | deflake_branch($slug))))] | first) as $fix
+            | ($attempts[$slug] // null) as $attempt
             | {
                 label: $present[0],
                 labels: ($present | join(" ")),
@@ -138,6 +164,9 @@ if [ -n "$flaky" ]; then
                     elif $fix != null then "fixed by #\($fix.number) after its last flaky run"
                     elif any($patterns[]; . as $p | any($base, $present[]; test($p)))
                     then "matches FIX_FLAKY_TESTS_SKIP_PATTERNS"
+                    # An attempt that cost hours is not repeated while its result exists: the next would end the same way.
+                    elif $attempt != null and ($attempt.status | IN("not_reproducible", "needs_human"))
+                    then "\($attempt.status) on \($attempt.created[:10]) until \($attempt.expires[:10]) (https://github.com/dfinity/ic/actions/runs/\($attempt.run))"
                     else null
                     end
                 )

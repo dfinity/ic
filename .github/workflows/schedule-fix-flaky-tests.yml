@@ -2,7 +2,7 @@ name: Schedule Fix Flaky Tests
 
 # Lets Claude fix the tests that flaked since the previous daily run, following
 # .claude/skills/fix-flaky-tests/SKILL.md: fix-flaky-test.yml fixes each test and open-deflake-pr.yml opens
-# the fixes as draft PRs.
+# the fixes as draft PRs. A test whose attempt ended as not_reproducible or needs_human is left alone for a week.
 # Set the repository variable MAX_FLAKY_TESTS_TO_FIX to the number of tests to fix per run,
 # FIX_FLAKY_TESTS_SCHEDULE to 'true' to enable the daily schedule, and optionally
 # FIX_FLAKY_TESTS_SKIP_PATTERNS to regexes (one per line) of tests that shouldn't be fixed.
@@ -33,6 +33,7 @@ on:
       - .github/workflows/fix-flaky-test.yml
       - .github/workflows/open-deflake-pr.yml
       - ci/scripts/find-flaky-tests.sh
+      - ci/scripts/deflake-deadline-hook.sh
       - ci/scripts/validate-deflake-bundle.sh
       - ci/scripts/validate-deflake-dependencies.py
       - ci/scripts/open-deflake-pr.sh
@@ -66,6 +67,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+      actions: read # for reading the results of earlier attempts
       pull-requests: read
     outputs:
       tests: ${{ steps.find.outputs.tests }}
