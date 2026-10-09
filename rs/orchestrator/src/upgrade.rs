@@ -513,6 +513,9 @@ impl Upgrade {
             .map_err(OrchestratorError::UpgradeError)?;
         let elapsed = instant.elapsed().as_millis();
         self.metrics.fstrim_duration.set(elapsed as i64);
+        // Bumped only once the trim succeeded, so that observers can tell apart the trim
+        // belonging to this state removal from the one of an earlier unassignment.
+        self.metrics.fstrim_total.inc();
         info!(
             self.logger,
             "Filesystem synced and trimmed in {}ms", elapsed

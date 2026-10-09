@@ -36,7 +36,10 @@ use crate::utils::{
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_system_test_utils::{
-    node::{assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session},
+    node::{
+        assert_node_is_assigned_with_ssh_session, assert_node_is_unassigned_with_ssh_session,
+        get_node_fstrim_count,
+    },
     rw_message::{install_nns_and_check_progress, store_message_with_retries},
     ssh_access::{disable_ssh_access_to_node, wait_until_authentication_is_granted},
     subnet::{
@@ -562,6 +565,13 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     .expect("Could not write guest launch measurements to file");
 
     let app_subnet_id = app_subnet.subnet_id;
+    // Record how often each node of the subnet has trimmed its filesystem so far, so that the
+    // check at the end can tell apart the trim caused by this recovery from any earlier one. Has
+    // to happen before the subnet is broken or halted, while the nodes still serve metrics.
+    let fstrim_counts_before: HashMap<_, _> = app_subnet
+        .nodes()
+        .map(|n| (n.node_id, get_node_fstrim_count(&n, &logger)))
+        .collect();
     let admin_helper = AdminHelper::new(
         get_dependency_path_from_env("IC_ADMIN_PATH"),
         nns_node.get_public_url(),
@@ -817,6 +827,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
             assert_node_is_unassigned_with_ssh_session(
                 &n,
                 admin_ssh_sessions.get(&n.node_id),
+                // A node that was already unassigned before the recovery has no recorded count;
+                // requiring any trim at all matches how this was checked before.
+                fstrim_counts_before.get(&n.node_id).copied().unwrap_or(0),
                 &logger,
             );
         });

@@ -715,14 +715,17 @@ impl Orchestrator {
             ..Default::default()
         };
 
+        // Register the metrics before starting to serve them: `MetricsHttpEndpoint::new` spawns
+        // the HTTP server, so doing it the other way around leaves a window in which the endpoint
+        // answers scrapes with a page that is missing every metric registered below.
+        let metrics = OrchestratorMetrics::new(metrics_registry);
+
         let metrics_endpoint = MetricsHttpEndpoint::new(
             tokio::runtime::Handle::current(),
             metrics_config,
             metrics_registry.clone(),
             logger,
         );
-
-        let metrics = OrchestratorMetrics::new(metrics_registry);
 
         (metrics, metrics_endpoint)
     }
