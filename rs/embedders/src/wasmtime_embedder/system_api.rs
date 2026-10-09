@@ -2125,9 +2125,17 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn slice_instructions_executed(&self, instruction_counter: i64) -> NumInstructions {
+        // The instruction counter can end up below zero, e.g., if a system API
+        // call charged a huge fee before failing with an out-of-instructions
+        // error. Capping the result at the instructions left for the message
+        // keeps it consistent with the instructions charged for the message.
+        let message_instructions_left = i64::try_from(self.message_instruction_limit().get())
+            .unwrap_or(i64::MAX)
+            .saturating_sub(self.instructions_executed_before_current_slice);
         let result = self
             .current_slice_instruction_limit
             .saturating_sub(instruction_counter)
+            .min(message_instructions_left)
             .max(0) as u64;
         NumInstructions::from(result)
     }

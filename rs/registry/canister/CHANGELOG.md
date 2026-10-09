@@ -11,6 +11,14 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-10-09: Proposal 144310
+
+http://dashboard.internetcomputer.org/proposal/144310
+
+No new features or fixes. Just a maintenance release. New feature code (for
+subnet splitting) is present, but dormant, not active, per feature flag.
+
+
 # 2026-10-02: Proposal 144199
 
 http://dashboard.internetcomputer.org/proposal/144199
