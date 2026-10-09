@@ -37,6 +37,7 @@ use ic_system_test_driver::driver::test_env_api::{
     find_subnet_that_hosts_canister_id,
 };
 use ic_system_test_driver::util::{block_on, runtime_from_url};
+use ic_types::messages::ReplicaHealthStatus;
 use slog::{info, warn};
 use std::fmt::Display;
 use std::time::Duration;
@@ -547,9 +548,8 @@ pub async fn test_async_impl(
 }
 
 /// Returns, for every subnet in `canisters`, a runtime for the most up-to-date node
-/// of the subnet hosting that subnet's canisters; or `None` if none of its nodes
-/// reported a certified height, in which case the caller should stick to the runtime
-/// it already has.
+/// of the subnet hosting that subnet's canisters; or `None` if none of its nodes is
+/// healthy, in which case the caller should stick to the runtime it already has.
 ///
 ///
 /// # Panics
@@ -583,37 +583,42 @@ async fn up_to_date_runtimes(
     .await
 }
 
-/// Returns a runtime for the most up-to-date node of `subnet`, i.e. the one with the
-/// highest certified height; or `None` if none of its nodes reported a certified
-/// height.
+/// Returns a runtime for the most up-to-date node of `subnet`, i.e. the healthy one
+/// with the highest certified height; or `None` if none of its nodes is healthy.
 async fn up_to_date_runtime(subnet: &SubnetSnapshot, logger: &slog::Logger) -> Option<Runtime> {
-    let certified_heights = join_all(subnet.nodes().map(|node| async move {
-        let certified_height = node
-            .status_async()
-            .await
-            .ok()
-            .and_then(|status| status.certified_height);
-        (certified_height, node)
+    let statuses = join_all(subnet.nodes().map(|node| async move {
+        let status = node.status_async().await.ok();
+        let health = status
+            .as_ref()
+            .and_then(|status| status.replica_health_status);
+        let certified_height = status.and_then(|status| status.certified_height);
+        (health, certified_height, node)
     }))
     .await;
     info!(
         logger,
-        "Certified heights of the nodes of subnet {}: {:?}",
+        "Status of the nodes of subnet {}: {:?}",
         subnet.subnet_id,
-        certified_heights
+        statuses
             .iter()
-            .map(|(certified_height, node)| (node.node_id, *certified_height))
+            .map(|(health, certified_height, node)| (node.node_id, *health, *certified_height))
             .collect::<Vec<_>>()
     );
-    let Some((_, node)) = certified_heights
+    // Skip nodes that are not healthy: they answer queries and `read_state` with 503,
+    // and the tear down needs both, `read_state` to await its update calls and
+    // queries to collect the metrics. In particular a node whose certified height
+    // lags its own finalized height reports `CertifiedStateBehind`, while still
+    // reporting that certified height.
+    let Some((_, node)) = statuses
         .into_iter()
-        .filter_map(|(certified_height, node)| certified_height.map(|height| (height, node)))
+        .filter(|(health, _, _)| *health == Some(ReplicaHealthStatus::Healthy))
+        .filter_map(|(_, certified_height, node)| certified_height.map(|height| (height, node)))
         .max_by_key(|(certified_height, _)| *certified_height)
     else {
         warn!(
             logger,
-            "No node of subnet {} reported a certified height, tearing down its canisters \
-             via the endpoint they were installed through",
+            "No healthy node of subnet {} reported a certified height, tearing down its \
+             canisters via the endpoint they were installed through",
             subnet.subnet_id
         );
         return None;
