@@ -54,12 +54,11 @@ fn load_metrics_e2e_test() {
                 .unwrap()
                 .path();
         let load_samples_baseline_path = dir.path().join("load_samples_baseline.csv");
-        let connectivity_samples_baseline_path =
-            dir.path().join("connectivity_samples_baseline.csv");
+        let connection_samples_baseline_path = dir.path().join("connection_samples_baseline.csv");
         ic_state_tool::commands::canister_metrics::get(
             checkpoint_dir,
             &load_samples_baseline_path,
-            &connectivity_samples_baseline_path,
+            &connection_samples_baseline_path,
         )
         .expect("Should compute canister metrics for a valid checkpoint");
 
@@ -123,7 +122,7 @@ fn load_metrics_e2e_test() {
             ])
             .args([
                 "--communication-baseline-data-path",
-                &connectivity_samples_baseline_path.display().to_string(),
+                &connection_samples_baseline_path.display().to_string(),
             ])
             .args(["--output-path", &split_output_path.display().to_string()])
             .args(["--load-type", "instructions_executed"])

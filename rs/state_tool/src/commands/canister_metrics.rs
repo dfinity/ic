@@ -20,12 +20,12 @@ const HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED: Height = Height::new(0);
 pub fn get(
     checkpoint_dir: PathBuf,
     load_metrics_output_path: &Path,
-    connectivity_metrics_output_path: &Path,
+    connection_metrics_output_path: &Path,
 ) -> Result<(), String> {
     // Otherwise the second file would silently overwrite the first one.
-    if load_metrics_output_path == connectivity_metrics_output_path {
+    if load_metrics_output_path == connection_metrics_output_path {
         return Err(format!(
-            "The load metrics and connectivity metrics output paths must differ, got {} for both",
+            "The load metrics and connection metrics output paths must differ, got {} for both",
             load_metrics_output_path.display()
         ));
     }
@@ -47,8 +47,8 @@ pub fn get(
     write_load_metrics_file(&replicated_state, load_metrics_output_path)
         .map_err(|err| format!("Failed to write load metrics: {err}"))?;
 
-    write_connectivity_metrics_file(&replicated_state, connectivity_metrics_output_path)
-        .map_err(|err| format!("Failed to write connectivity metrics: {err}"))?;
+    write_connection_metrics_file(&replicated_state, connection_metrics_output_path)
+        .map_err(|err| format!("Failed to write connection metrics: {err}"))?;
 
     Ok(())
 }
@@ -92,7 +92,7 @@ fn write_load_metrics_file(
     Ok(())
 }
 
-fn write_connectivity_metrics_file(
+fn write_connection_metrics_file(
     replicated_state: &ReplicatedState,
     output_path: &Path,
 ) -> Result<(), String> {
