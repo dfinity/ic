@@ -513,7 +513,6 @@ impl Upgrade {
             .map_err(OrchestratorError::UpgradeError)?;
         let elapsed = instant.elapsed().as_millis();
         self.metrics.fstrim_duration.set(elapsed as i64);
-        // Only bumped on success, so observers can tell this trim from an earlier one.
         self.metrics.fstrim_total.inc();
         info!(
             self.logger,

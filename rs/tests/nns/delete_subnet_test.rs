@@ -8,7 +8,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use candid::{Decode, Encode};
-use ic_consensus_system_test_utils::node::{assert_node_is_unassigned, get_node_fstrim_count};
+use ic_consensus_system_test_utils::node::assert_node_is_unassigned;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
@@ -25,7 +25,7 @@ use ic_system_test_driver::util::{UniversalCanister, assert_create_agent, block_
 use ic_types::{Height, RegistryVersion, SubnetId};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::do_delete_subnet::DeleteSubnetPayload;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 const NUM_NODES: usize = 1;
@@ -96,8 +96,7 @@ pub fn test(env: TestEnv) {
         .filter(|s| s.subnet_type() == SubnetType::VerifiedApplication)
         .collect::<Vec<_>>();
     let vapp_subnet = vapp_subnet.first().unwrap();
-    let vapp_nodes: Vec<IcNodeSnapshot> = vapp_subnet.nodes().collect();
-    let vapp_node_ids = BTreeSet::from_iter(vapp_nodes.iter().map(|x| x.node_id));
+    let vapp_node_ids = BTreeSet::from_iter(vapp_subnet.nodes().map(|x| x.node_id));
     let engine_subnet = topology_snapshot
         .subnets()
         .filter(|s| s.subnet_type() == SubnetType::CloudEngine)
@@ -119,14 +118,6 @@ pub fn test(env: TestEnv) {
         vec![nns_node.get_public_url()],
         Duration::from_secs(10),
     );
-
-    // Baseline for the fstrim check below, read before the deletions trigger any trim.
-    let fstrim_counts_before: BTreeMap<_, _> = engine_nodes
-        .iter()
-        .chain(app_nodes.iter())
-        .chain(vapp_nodes.iter())
-        .map(|node| (node.node_id, get_node_fstrim_count(node, &env.logger())))
-        .collect();
 
     block_on(async move {
         let nns_agent = assert_create_agent(nns_node.get_public_url().as_str()).await;
@@ -207,7 +198,7 @@ pub fn test(env: TestEnv) {
 
         // The nodes' states should be wiped.
         for node in new_topology_snapshot.unassigned_nodes() {
-            assert_node_is_unassigned(&node, fstrim_counts_before[&node.node_id], &env.logger());
+            assert_node_is_unassigned(&node, /*expected_fstrim_count=*/ 1, &env.logger());
         }
     });
 }

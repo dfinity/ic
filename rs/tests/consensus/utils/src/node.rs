@@ -107,37 +107,25 @@ pub fn assert_node_is_assigned_with_ssh_session(
 
 /// Assert that the node deletes its state and local CUP within 5 minutes, then trims within 2 more.
 ///
-/// `fstrim_count_before` is [`get_node_fstrim_count`] read before the unassignment was triggered.
-pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, fstrim_count_before: u64, logger: &Logger) {
-    assert_node_is_unassigned_with_ssh_session(node, None, fstrim_count_before, logger)
-}
-
-/// Return how often the given node has synced and trimmed its filesystem after removing its state.
-///
-/// Read this before triggering an unassignment and pass it to [`assert_node_is_unassigned`], which
-/// waits for the count to grow. A fixed threshold wouldn't do: the count survives re-assignment, so
-/// a node unassigned twice starts out non-zero. It does reset if the orchestrator restarts.
-pub fn get_node_fstrim_count(node: &IcNodeSnapshot, logger: &Logger) -> u64 {
-    ic_system_test_driver::retry_with_msg!(
-        format!("fetching the fstrim count of node {}", node.node_id),
-        logger.clone(),
-        secs(120),
-        secs(10),
-        || block_on(fetch_metric_from_nodes::<u64>(
-            vec![node.clone()],
-            FSTRIM_TOTAL
-        ))
-        .map(|counts| counts[0])
-    )
-    .expect("Failed to fetch the fstrim count of the node.")
+/// `expected_fstrim_count` is how often this node has been unassigned over the test so far; the
+/// orchestrator trims exactly once per unassignment.
+pub fn assert_node_is_unassigned(
+    node: &IcNodeSnapshot,
+    expected_fstrim_count: u64,
+    logger: &Logger,
+) {
+    assert_node_is_unassigned_with_ssh_session(node, None, expected_fstrim_count, logger)
 }
 
 /// Assert that the node deletes its state and local CUP within 5 minutes, then trims within 2 more.
 /// Reuses the provided SSH session if given, otherwise creates a new one.
+///
+/// `expected_fstrim_count` is how often this node has been unassigned over the test so far; the
+/// orchestrator trims exactly once per unassignment.
 pub fn assert_node_is_unassigned_with_ssh_session(
     node: &IcNodeSnapshot,
     existing_session: Option<&Session>,
-    fstrim_count_before: u64,
+    expected_fstrim_count: u64,
     logger: &Logger,
 ) {
     info!(
@@ -175,10 +163,9 @@ pub fn assert_node_is_unassigned_with_ssh_session(
     )
     .expect("Failed to detect that node has deleted its state and local CUP.");
 
-    const STATE_REMOVAL_FAILED: &str = "orchestrator_state_removal_failed_total";
     let fetcher = MetricsFetcher::new_with_port(
         std::iter::once(node.clone()),
-        vec![STATE_REMOVAL_FAILED.to_string(), FSTRIM_TOTAL.0.to_string()],
+        vec![STATE_REMOVAL_FAILED.to_string(), FSTRIM_TOTAL.to_string()],
         ORCHESTRATOR_METRICS_PORT,
     );
 
@@ -198,9 +185,11 @@ pub fn assert_node_is_unassigned_with_ssh_session(
                 );
                 // Bumped only after the removal and the trim, so the check above can pass first.
                 ensure!(
-                    metrics[FSTRIM_TOTAL.0][0] > fstrim_count_before,
-                    "Node {} has not finished trimming its filesystem yet.",
-                    node.get_ip_addr()
+                    metrics[FSTRIM_TOTAL][0] == expected_fstrim_count,
+                    "Node {} has trimmed its filesystem {} times, expected {}.",
+                    node.get_ip_addr(),
+                    metrics[FSTRIM_TOTAL][0],
+                    expected_fstrim_count
                 );
                 Ok(())
             }
@@ -278,7 +267,8 @@ async fn await_metric_registry_version(
     .expect("The nodes did not reach the specified registry version in time")
 }
 
-const FSTRIM_TOTAL: (&str, u16) = ("orchestrator_fstrim_total", ORCHESTRATOR_METRICS_PORT);
+const STATE_REMOVAL_FAILED: &str = "orchestrator_state_removal_failed_total";
+const FSTRIM_TOTAL: &str = "orchestrator_fstrim_total";
 
 const EARLIEST_TOPOLOGY_VERSION: (&str, u16) = (
     "peer_manager_topology_earliest_registry_version",
