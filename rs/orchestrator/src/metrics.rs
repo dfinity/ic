@@ -105,8 +105,7 @@ impl OrchestratorMetrics {
             ),
             fstrim_total: metrics_registry.int_counter(
                 "orchestrator_fstrim_total",
-                "Number of times the data partition was synced and trimmed after \
-                removing the local node state",
+                "Number of times the data partition was synced and trimmed",
             ),
             critical_error_task_failed: metrics_registry.int_counter_vec(
                 "orchestrator_tasks_failed_total",

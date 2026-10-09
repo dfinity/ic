@@ -715,9 +715,7 @@ impl Orchestrator {
             ..Default::default()
         };
 
-        // Register the metrics before starting to serve them: `MetricsHttpEndpoint::new` spawns
-        // the HTTP server, so doing it the other way around leaves a window in which the endpoint
-        // answers scrapes with a page that is missing every metric registered below.
+        // `MetricsHttpEndpoint::new` spawns the server: register first or scrapes can miss these.
         let metrics = OrchestratorMetrics::new(metrics_registry);
 
         let metrics_endpoint = MetricsHttpEndpoint::new(

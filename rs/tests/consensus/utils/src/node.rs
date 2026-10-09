@@ -105,29 +105,18 @@ pub fn assert_node_is_assigned_with_ssh_session(
     .expect("Failed to detect that node has a state and local CUP.");
 }
 
-/// Assert that the given node deletes its state and local CUP within the next 5 minutes, and that
-/// it then syncs and trims its filesystem within another 2 minutes.
+/// Assert that the node deletes its state and local CUP within 5 minutes, then trims within 2 more.
 ///
-/// `fstrim_count_before` is the value [`get_node_fstrim_count`] returned for this node *before* the
-/// unassignment was triggered. It is what makes this check specific to the current unassignment.
+/// `fstrim_count_before` is [`get_node_fstrim_count`] read before the unassignment was triggered.
 pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, fstrim_count_before: u64, logger: &Logger) {
     assert_node_is_unassigned_with_ssh_session(node, None, fstrim_count_before, logger)
 }
 
-/// Return how many times the given node has already synced and trimmed its filesystem after
-/// removing its state.
+/// Return how often the given node has synced and trimmed its filesystem after removing its state.
 ///
-/// Call this *before* triggering an unassignment and pass the result to
-/// [`assert_node_is_unassigned`], which then waits for this counter to grow. The orchestrator bumps
-/// it only after it has removed the state and completed the trim, so a counter that has grown
-/// proves that the trim of *this* unassignment finished. Comparing against a fixed value would not:
-/// the counter keeps its value across re-assignments, so a node that is unassigned a second time
-/// starts out with a non-zero count.
-///
-/// The counter lives in the orchestrator process, so it restarts from zero if the orchestrator
-/// does. That only matters for a node whose count is already non-zero when it is captured, i.e. one
-/// that is being unassigned for at least the second time; no test currently restarts the
-/// orchestrator of such a node in between.
+/// Read this before triggering an unassignment and pass it to [`assert_node_is_unassigned`], which
+/// waits for the count to grow. A fixed threshold wouldn't do: the count survives re-assignment, so
+/// a node unassigned twice starts out non-zero. It does reset if the orchestrator restarts.
 pub fn get_node_fstrim_count(node: &IcNodeSnapshot, logger: &Logger) -> u64 {
     ic_system_test_driver::retry_with_msg!(
         format!("fetching the fstrim count of node {}", node.node_id),
@@ -143,8 +132,7 @@ pub fn get_node_fstrim_count(node: &IcNodeSnapshot, logger: &Logger) -> u64 {
     .expect("Failed to fetch the fstrim count of the node.")
 }
 
-/// Assert that the given node deletes its state and local CUP within the next 5 minutes, and that
-/// it then syncs and trims its filesystem within another 2 minutes.
+/// Assert that the node deletes its state and local CUP within 5 minutes, then trims within 2 more.
 /// Reuses the provided SSH session if given, otherwise creates a new one.
 pub fn assert_node_is_unassigned_with_ssh_session(
     node: &IcNodeSnapshot,
@@ -208,10 +196,7 @@ pub fn assert_node_is_unassigned_with_ssh_session(
                     "Node {} failed to remove its state",
                     node.get_ip_addr()
                 );
-                // The orchestrator removes the state and the local CUP before it syncs and trims
-                // the filesystem, and only bumps this counter once that is done. The check above
-                // may thus already see the node as unassigned while the counter still sits at the
-                // value it had before the unassignment.
+                // Bumped only after the removal and the trim, so the check above can pass first.
                 ensure!(
                     metrics[FSTRIM_TOTAL.0][0] > fstrim_count_before,
                     "Node {} has not finished trimming its filesystem yet.",
@@ -242,8 +227,7 @@ where
         .await
         .map_err(|err| anyhow!("Could not connect to metrics yet {:?}", err))?;
 
-    // Fall back to an empty vector if no node exports the metric yet, so that this case is
-    // reported like any other incomplete result instead of panicking.
+    // Empty if no node exports it yet, so the check below reports it instead of panicking.
     let vals = metrics.get(metric_name).cloned().unwrap_or_default();
     if vals.len() != nodes.len() {
         bail!(

@@ -513,8 +513,7 @@ impl Upgrade {
             .map_err(OrchestratorError::UpgradeError)?;
         let elapsed = instant.elapsed().as_millis();
         self.metrics.fstrim_duration.set(elapsed as i64);
-        // Bumped only once the trim succeeded, so that observers can tell apart the trim
-        // belonging to this state removal from the one of an earlier unassignment.
+        // Only bumped on success, so observers can tell this trim from an earlier one.
         self.metrics.fstrim_total.inc();
         info!(
             self.logger,

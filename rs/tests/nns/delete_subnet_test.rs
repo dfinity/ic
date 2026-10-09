@@ -120,8 +120,7 @@ pub fn test(env: TestEnv) {
         Duration::from_secs(10),
     );
 
-    // Record how often each node has trimmed its filesystem so far, so that we can later tell
-    // apart the trim triggered by the subnet deletion from any earlier one.
+    // Baseline for the fstrim check below, read before the deletions trigger any trim.
     let fstrim_counts_before: BTreeMap<_, _> = engine_nodes
         .iter()
         .chain(app_nodes.iter())

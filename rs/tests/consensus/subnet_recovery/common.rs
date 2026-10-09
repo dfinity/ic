@@ -565,9 +565,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     .expect("Could not write guest launch measurements to file");
 
     let app_subnet_id = app_subnet.subnet_id;
-    // Record how often each node of the subnet has trimmed its filesystem so far, so that the
-    // check at the end can tell apart the trim caused by this recovery from any earlier one. Has
-    // to happen before the subnet is broken or halted, while the nodes still serve metrics.
+    // Baseline for the fstrim check below; must precede breaking or halting the subnet.
     let fstrim_counts_before: HashMap<_, _> = app_subnet
         .nodes()
         .map(|n| (n.node_id, get_node_fstrim_count(&n, &logger)))
@@ -827,8 +825,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
             assert_node_is_unassigned_with_ssh_session(
                 &n,
                 admin_ssh_sessions.get(&n.node_id),
-                // A node that was already unassigned before the recovery has no recorded count;
-                // requiring any trim at all matches how this was checked before.
+                // Nodes already unassigned before the recovery have no baseline.
                 fstrim_counts_before.get(&n.node_id).copied().unwrap_or(0),
                 &logger,
             );
