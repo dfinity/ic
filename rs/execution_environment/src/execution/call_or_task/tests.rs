@@ -950,6 +950,64 @@ fn dts_abort_of_replicated_execution_works() {
 }
 
 #[test]
+fn dts_abort_of_replicated_execution_records_load_connection_metrics_once() {
+    // Test steps:
+    // 1. Canister A runs an update method that calls canister B.
+    // 2. The called update method of canister B runs with DTS.
+    // 3. The called update method is aborted.
+    // 4. The called update method resumes and succeeds.
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm()
+        .instruction_counter_is_at_least(1_000_000)
+        .push_bytes(&[42])
+        .append_and_reply()
+        .build();
+    let a = wasm().inter_update(b_id, call_args().other_side(b)).build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+
+    test.execute_slice(b_id);
+    assert_eq!(
+        test.canister_state(b_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+    test.abort_all_paused_executions();
+    test.execute_message(b_id);
+
+    test.induct_messages();
+    test.execute_message(a_id);
+    let result = check_ingress_status(test.ingress_status(&ingress_id)).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![42]));
+
+    // The request from A is recorded once, despite B executing it twice.
+    let load_metrics = test
+        .canister_state(b_id)
+        .system_state
+        .canister_metrics()
+        .load_metrics()
+        .get();
+    assert_eq!(load_metrics.local_subnet_messages_executed(), 1);
+    let connection_metrics = test
+        .canister_state(b_id)
+        .system_state
+        .canister_metrics()
+        .connection_metrics()
+        .get();
+    assert_eq!(connection_metrics.len(), 1);
+    assert_eq!(connection_metrics[&a_id].count, 1);
+}
+
+#[test]
 fn dts_ingress_induction_cycles_debit_is_applied_on_replicated_execution_aborts() {
     with_update_and_replicated_query(|method| {
         // Test steps:
