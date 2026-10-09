@@ -1315,7 +1315,8 @@ mod tests {
 
     #[test]
     fn test_sev_enabled_can_be_set_on_existing_subnet() {
-        let (mut registry, subnet_id) = make_sev_capable_registry_for_update_subnet_tests(false);
+        let (mut registry, subnet_id) =
+            make_sev_capable_registry_for_update_subnet_tests(/* sev_enabled = */ false);
 
         registry.do_update_subnet(
             GOVERNANCE_CANISTER_ID.get(),
@@ -1347,7 +1348,8 @@ mod tests {
         expected = "Proposal attempts to disable SEV for Subnet 'ge6io-epiam-aaaaa-aaaap-yai'"
     )]
     fn test_sev_enabled_cannot_be_disabled_explicitly() {
-        let (mut registry, subnet_id) = make_sev_capable_registry_for_update_subnet_tests(true);
+        let (mut registry, subnet_id) =
+            make_sev_capable_registry_for_update_subnet_tests(/* sev_enabled = */ true);
 
         registry.do_update_subnet(
             GOVERNANCE_CANISTER_ID.get(),
@@ -1362,7 +1364,8 @@ mod tests {
         expected = "Proposal attempts to disable SEV for Subnet 'ge6io-epiam-aaaaa-aaaap-yai'"
     )]
     fn test_sev_enabled_cannot_be_disabled_implicitly() {
-        let (mut registry, subnet_id) = make_sev_capable_registry_for_update_subnet_tests(true);
+        let (mut registry, subnet_id) =
+            make_sev_capable_registry_for_update_subnet_tests(/* sev_enabled = */ true);
 
         registry.do_update_subnet(
             GOVERNANCE_CANISTER_ID.get(),
@@ -1372,7 +1375,8 @@ mod tests {
 
     #[test]
     fn test_sev_enabled_no_op_keeps_subnet_sev_enabled() {
-        let (mut registry, subnet_id) = make_sev_capable_registry_for_update_subnet_tests(true);
+        let (mut registry, subnet_id) =
+            make_sev_capable_registry_for_update_subnet_tests(/* sev_enabled = */ true);
 
         // Update non-SEV features while explicitly preserving sev_enabled = true.
         let mut payload = make_empty_update_payload(subnet_id);
