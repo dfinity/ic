@@ -697,7 +697,7 @@ mod tests {
                 None,
                 payload,
                 SubnetType::Application,
-                MAX_NUM_INSTRUCTIONS,
+                NumInstructions::new(10_000_000_000),
             );
             let instruction_limit = api.slice_instruction_limit();
             let mut inst = embedder
