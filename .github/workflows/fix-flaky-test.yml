@@ -253,16 +253,18 @@ jobs:
 
             Return your result before ${{ steps.deadline.outputs.utc }} UTC, ${{ env.DEADLINE_MINUTES }} minutes from
             now (`date -u` shows the time). After that a hook denies every tool call, also in subagents, and until
-            then it cuts the timeout of each command to the time left. Reruns can't reproduce a flake seen once in
-            dozens of runs or refute a fix for it: find the cause in the logs and the code, run step 6 once, and
-            again only if the fix changed. The logs of step 2 show how long a run takes, so start the last one in
-            time. If the fix can't be verified before the deadline, stop with status "needs_human" and report what
-            you found, what you tried and what is left to do.
+            then it cuts the timeout of each command to the time left.
 
             Fix the flaky test ${{ inputs.label }} by following the fix-flaky-tests skill
             (.claude/skills/fix-flaky-tests/SKILL.md), starting at step 2 of "Fix a flaky test". These variants of
             the same test (same test binary) all flaked recently: ${{ inputs.labels }}.
             Fix ONE root cause.
+
+            If a flake was seen once in dozens of runs, reruns can neither reproduce it nor refute a fix for it:
+            find the cause in the logs and the code, run step 6 once, and again only if the fix changed. The logs
+            of step 2 show how long a run takes, so start the last one in time. If the fix can't be verified before
+            the deadline, stop with status "needs_human" and report what you found, what you tried and what is left
+            to do.
 
             First check whether the test is already fixed or being fixed, like step 1.2 of the skill, but unlike
             step 1.2 a mere mention is not enough. Stop with status "skipped", naming the PR or commit, if:
