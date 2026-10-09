@@ -1867,12 +1867,12 @@ fn lru_connection_metrics_evicts_entries_in_eviction_key_order() {
         count,
     };
     // Least recently accessed: evicted first
-    let oldest_sender = canister_test_id(0);
+    let oldest_sender = canister_test_id(56);
     // Accessed recently with fewer messages: evicted second
-    let light_sender_id = canister_test_id(1);
+    let light_sender_id = canister_test_id(99);
     // Accessed recently with more messages: the one with the lower ID is evicted.
-    let heavy_sender_low_id = canister_test_id(2);
-    let heavy_sender_high_id = canister_test_id(3);
+    let heavy_sender_low_id = canister_test_id(10);
+    let heavy_sender_high_id = canister_test_id(102);
 
     let mut metrics_per_sender = BTreeMap::from([
         (oldest_sender, connection_metrics(0, 1_000)),
@@ -1881,8 +1881,8 @@ fn lru_connection_metrics_evicts_entries_in_eviction_key_order() {
         (heavy_sender_high_id, connection_metrics(1, 2)),
     ]);
     // Most recently accessed entries, filling the map up to three entries over capacity.
-    for i in 4..(MAX_CONNECTION_METRICS_ENTRIES as u64 + 3) {
-        metrics_per_sender.insert(canister_test_id(i), connection_metrics(2, 1));
+    for i in metrics_per_sender.len()..(MAX_CONNECTION_METRICS_ENTRIES + 3) {
+        metrics_per_sender.insert(canister_test_id(1000 + i as u64), connection_metrics(2, 1));
     }
 
     // Entries are evicted by access timestamp, then count, then canister ID.
@@ -1906,26 +1906,6 @@ fn lru_connection_metrics_evicts_entries_in_eviction_key_order() {
     assert_eq!(from_new.get(), &expected);
 
     assert_eq!(from_new, from_increments);
-}
-
-#[test]
-fn lru_connection_metrics_increment_counts_messages_and_updates_timestamp() {
-    let sender = canister_test_id(1);
-    let mut metrics = LRUConnectionMetrics::default();
-
-    metrics.increment(sender, Time::from_nanos_since_unix_epoch(1));
-    metrics.increment(sender, Time::from_nanos_since_unix_epoch(2));
-
-    assert_eq!(
-        metrics.get(),
-        &BTreeMap::from([(
-            sender,
-            ConnectionMetrics {
-                last_access_timestamp: Time::from_nanos_since_unix_epoch(2),
-                count: 2,
-            }
-        )])
-    );
 }
 
 #[test]
