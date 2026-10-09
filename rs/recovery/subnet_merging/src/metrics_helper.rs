@@ -14,6 +14,9 @@ use std::{
 /// Timeout of a single metrics request, as in `ic_recovery::get_node_metrics`.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// The port a replica exports its metrics on.
+const METRICS_PORT: u16 = 9090;
+
 /// The labels of a series, by label name.
 pub type Labels = BTreeMap<String, String>;
 
@@ -74,7 +77,7 @@ pub async fn fetch_metrics(node_ips: &[IpAddr], metrics: &[&str]) -> Result<Metr
 
 async fn fetch_node_metrics(ip: &IpAddr) -> Result<String, String> {
     let response = tokio::time::timeout(REQUEST_TIMEOUT, async {
-        reqwest::get(format!("http://{}", SocketAddr::new(*ip, 9090)))
+        reqwest::get(format!("http://{}", SocketAddr::new(*ip, METRICS_PORT)))
             .await?
             .error_for_status()?
             .text()

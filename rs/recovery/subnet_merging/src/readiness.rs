@@ -113,20 +113,70 @@ pub async fn evaluate_merge_readiness(
     source_subnet_id: SubnetId,
     registry_version: u64,
 ) -> Result<Vec<Term>, ReadinessError> {
-    let own_metrics = subnet_metrics(
+    let metrics = fetch_readiness_metrics(subnets, source_subnet_id).await?;
+    Ok(evaluate(
         subnets,
+        &metrics,
         source_subnet_id,
-        &[
-            METRIC_REGISTRY_VERSION,
-            METRIC_STREAM_MESSAGES,
-            METRIC_INGRESS_HISTORY_BY_STATE,
-            METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
-            METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
-            METRIC_SUBNET_CALL_CONTEXTS,
-            METRIC_PENDING_REFUNDS,
-        ],
-    )
-    .await?;
+        registry_version,
+    ))
+}
+
+/// The metrics of every subnet, by subnet.
+type SubnetMetrics = BTreeMap<SubnetId, Metrics>;
+
+/// Fetches the metrics the terms are evaluated on: all of them from the subnet
+/// that is cooling down, and those of terms 1 and 2 from every other subnet.
+/// Fails if `subnets` lists no node for a subnet, the cooling down one
+/// included, or if any of its nodes cannot be scraped.
+async fn fetch_readiness_metrics(
+    subnets: &SubnetNodeIps,
+    source_subnet_id: SubnetId,
+) -> Result<SubnetMetrics, ReadinessError> {
+    let mut result = SubnetMetrics::new();
+    result.insert(
+        source_subnet_id,
+        subnet_metrics(
+            subnets,
+            source_subnet_id,
+            &[
+                METRIC_REGISTRY_VERSION,
+                METRIC_STREAM_MESSAGES,
+                METRIC_INGRESS_HISTORY_BY_STATE,
+                METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
+                METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
+                METRIC_SUBNET_CALL_CONTEXTS,
+                METRIC_PENDING_REFUNDS,
+            ],
+        )
+        .await?,
+    );
+    for &subnet_id in subnets.keys() {
+        if subnet_id != source_subnet_id {
+            result.insert(
+                subnet_id,
+                subnet_metrics(
+                    subnets,
+                    subnet_id,
+                    &[METRIC_REGISTRY_VERSION, METRIC_STREAM_MESSAGES],
+                )
+                .await?,
+            );
+        }
+    }
+    Ok(result)
+}
+
+/// Evaluates the terms on the metrics that `fetch_readiness_metrics` fetched,
+/// which hold an entry for every subnet of `subnets`, the cooling down one
+/// included.
+fn evaluate(
+    subnets: &SubnetNodeIps,
+    metrics: &SubnetMetrics,
+    source_subnet_id: SubnetId,
+    registry_version: u64,
+) -> Vec<Term> {
+    let own_metrics = &metrics[&source_subnet_id];
 
     // Terms 1 and 2 range over all subnets: the registry version of every
     // replica of every subnet and the streams of all remote subnets towards
@@ -135,18 +185,9 @@ pub async fn evaluate_merge_readiness(
     let mut min_registry_version = None;
     let mut incoming_stream_messages = 0.0;
     for (&subnet_id, node_ips) in subnets {
-        let metrics = if subnet_id == source_subnet_id {
-            own_metrics.clone()
-        } else {
-            subnet_metrics(
-                subnets,
-                subnet_id,
-                &[METRIC_REGISTRY_VERSION, METRIC_STREAM_MESSAGES],
-            )
-            .await?
-        };
+        let metrics = &metrics[&subnet_id];
         let version = metrics_helper::min_across_replicas(
-            &metrics,
+            metrics,
             METRIC_REGISTRY_VERSION,
             |_| true,
             node_ips,
@@ -154,7 +195,7 @@ pub async fn evaluate_merge_readiness(
         min_registry_version = Some(min_registry_version.map_or(version, |v: f64| v.min(version)));
         if subnet_id != source_subnet_id {
             incoming_stream_messages +=
-                metrics_helper::max_across_replicas(&metrics, METRIC_STREAM_MESSAGES, |labels| {
+                metrics_helper::max_across_replicas(metrics, METRIC_STREAM_MESSAGES, |labels| {
                     labels.get("remote") == Some(&source_subnet)
                 });
         }
@@ -162,9 +203,9 @@ pub async fn evaluate_merge_readiness(
     let min_registry_version = min_registry_version.unwrap_or(0.0);
 
     let outgoing_stream_messages =
-        metrics_helper::max_across_replicas(&own_metrics, METRIC_STREAM_MESSAGES, |_| true);
+        metrics_helper::max_across_replicas(own_metrics, METRIC_STREAM_MESSAGES, |_| true);
     let ingress_history_messages = metrics_helper::max_across_replicas(
-        &own_metrics,
+        own_metrics,
         METRIC_INGRESS_HISTORY_BY_STATE,
         |labels| {
             labels
@@ -173,26 +214,26 @@ pub async fn evaluate_merge_readiness(
         },
     );
     let subnet_input_queue_messages = metrics_helper::max_across_replicas(
-        &own_metrics,
+        own_metrics,
         METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
         |_| true,
     );
     let subnet_output_queue_messages = metrics_helper::max_across_replicas(
-        &own_metrics,
+        own_metrics,
         METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
         |_| true,
     );
     let subnet_call_contexts =
-        metrics_helper::max_across_replicas(&own_metrics, METRIC_SUBNET_CALL_CONTEXTS, |_| true);
+        metrics_helper::max_across_replicas(own_metrics, METRIC_SUBNET_CALL_CONTEXTS, |_| true);
     let pending_refunds =
-        metrics_helper::max_across_replicas(&own_metrics, METRIC_PENDING_REFUNDS, |_| true);
+        metrics_helper::max_across_replicas(own_metrics, METRIC_PENDING_REFUNDS, |_| true);
 
     let term = |condition, description: String, satisfied: bool| Term {
         condition,
         description,
         satisfied,
     };
-    Ok(vec![
+    vec![
         term(
             Condition::RegistryVersion,
             format!(
@@ -237,7 +278,7 @@ pub async fn evaluate_merge_readiness(
             "the refund pool holds no pending anonymous refund".to_string(),
             pending_refunds == 0.0,
         ),
-    ])
+    ]
 }
 
 /// Fetches the given metrics from all nodes of `subnet_id`.
@@ -254,4 +295,356 @@ async fn subnet_metrics(
     metrics_helper::fetch_metrics(node_ips, metrics)
         .await
         .map_err(|err| ReadinessError::Scrape(subnet_id, err))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::metrics_helper::Labels;
+
+    use ic_base_types::PrincipalId;
+
+    const V: u64 = 10;
+
+    fn subnet(n: u64) -> SubnetId {
+        SubnetId::from(PrincipalId::new_subnet_test_id(n))
+    }
+
+    fn ip(node: u8) -> IpAddr {
+        IpAddr::from([127, 0, 0, node])
+    }
+
+    /// The cooling down subnet `S` with nodes 1 and 2, and the remote subnet
+    /// `R` with nodes 3 and 4.
+    fn s() -> SubnetId {
+        subnet(1)
+    }
+    fn r() -> SubnetId {
+        subnet(2)
+    }
+    fn subnets() -> SubnetNodeIps {
+        SubnetNodeIps::from([(s(), vec![ip(1), ip(2)]), (r(), vec![ip(3), ip(4)])])
+    }
+
+    /// Sets the value that `node` of `subnet_id` reports for the series of
+    /// `metric` with the given labels.
+    fn set(
+        metrics: &mut SubnetMetrics,
+        subnet_id: SubnetId,
+        node: u8,
+        metric: &str,
+        labels: &[(&str, &str)],
+        value: f64,
+    ) {
+        let labels: Labels = labels
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect();
+        metrics
+            .entry(subnet_id)
+            .or_default()
+            .entry((metric.to_string(), labels))
+            .or_default()
+            .insert(ip(node), value);
+    }
+
+    /// Metrics on which the condition holds: every replica reports registry
+    /// version `V`, and empty streams, queues etc.
+    fn ready_metrics() -> SubnetMetrics {
+        let mut metrics = SubnetMetrics::new();
+        let (s_id, r_id) = (s().to_string(), r().to_string());
+        for node in [1, 2] {
+            set(
+                &mut metrics,
+                s(),
+                node,
+                METRIC_REGISTRY_VERSION,
+                &[],
+                V as f64,
+            );
+            for remote in [&s_id, &r_id] {
+                set(
+                    &mut metrics,
+                    s(),
+                    node,
+                    METRIC_STREAM_MESSAGES,
+                    &[("remote", remote.as_str())],
+                    0.0,
+                );
+            }
+            set(
+                &mut metrics,
+                s(),
+                node,
+                METRIC_INGRESS_HISTORY_BY_STATE,
+                &[("state", "processing")],
+                3.0,
+            );
+            set(
+                &mut metrics,
+                s(),
+                node,
+                METRIC_INGRESS_HISTORY_BY_STATE,
+                &[("state", "completed")],
+                0.0,
+            );
+            set(
+                &mut metrics,
+                s(),
+                node,
+                METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
+                &[("kind", "request")],
+                0.0,
+            );
+            set(
+                &mut metrics,
+                s(),
+                node,
+                METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
+                &[],
+                0.0,
+            );
+            set(
+                &mut metrics,
+                s(),
+                node,
+                METRIC_SUBNET_CALL_CONTEXTS,
+                &[("type", "install_code")],
+                0.0,
+            );
+            set(&mut metrics, s(), node, METRIC_PENDING_REFUNDS, &[], 0.0);
+        }
+        for node in [3, 4] {
+            set(
+                &mut metrics,
+                r(),
+                node,
+                METRIC_REGISTRY_VERSION,
+                &[],
+                V as f64 + 1.0,
+            );
+            for remote in [&s_id, &r_id] {
+                set(
+                    &mut metrics,
+                    r(),
+                    node,
+                    METRIC_STREAM_MESSAGES,
+                    &[("remote", remote.as_str())],
+                    0.0,
+                );
+            }
+        }
+        metrics
+    }
+
+    /// The conditions that do not hold on `metrics`.
+    fn violated(metrics: &SubnetMetrics) -> Vec<Condition> {
+        evaluate(&subnets(), metrics, s(), V)
+            .into_iter()
+            .filter(|term| !term.satisfied)
+            .map(|term| term.condition)
+            .collect()
+    }
+
+    #[test]
+    fn holds_when_ready() {
+        let terms = evaluate(&subnets(), &ready_metrics(), s(), V);
+        assert_eq!(
+            terms.iter().map(|term| term.condition).collect::<Vec<_>>(),
+            vec![
+                Condition::RegistryVersion,
+                Condition::IncomingStreams,
+                Condition::OutgoingStreams,
+                Condition::IngressHistory,
+                Condition::SubnetInputQueues,
+                Condition::SubnetOutputQueues,
+                Condition::SubnetCallContexts,
+                Condition::RefundPool,
+            ]
+        );
+        assert!(terms.iter().all(|term| term.satisfied));
+    }
+
+    /// A condition, and the value of a series on a node of a subnet that
+    /// violates that condition alone.
+    type Violation<'a> = (
+        Condition,
+        SubnetId,
+        u8,
+        &'a str,
+        &'a [(&'a str, &'a str)],
+        f64,
+    );
+
+    #[test]
+    fn each_condition_is_violated_on_its_own() {
+        let (s_id, r_id) = (s().to_string(), r().to_string());
+        let cases: [Violation; 9] = [
+            (
+                Condition::RegistryVersion,
+                r(),
+                4,
+                METRIC_REGISTRY_VERSION,
+                &[],
+                V as f64 - 1.0,
+            ),
+            (
+                Condition::IncomingStreams,
+                r(),
+                3,
+                METRIC_STREAM_MESSAGES,
+                &[("remote", s_id.as_str())],
+                1.0,
+            ),
+            (
+                Condition::OutgoingStreams,
+                s(),
+                2,
+                METRIC_STREAM_MESSAGES,
+                &[("remote", r_id.as_str())],
+                1.0,
+            ),
+            // The loopback stream of `S` is an outgoing stream, not an incoming one.
+            (
+                Condition::OutgoingStreams,
+                s(),
+                1,
+                METRIC_STREAM_MESSAGES,
+                &[("remote", s_id.as_str())],
+                1.0,
+            ),
+            (
+                Condition::IngressHistory,
+                s(),
+                2,
+                METRIC_INGRESS_HISTORY_BY_STATE,
+                &[("state", "completed")],
+                1.0,
+            ),
+            (
+                Condition::SubnetInputQueues,
+                s(),
+                1,
+                METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
+                &[("kind", "response")],
+                1.0,
+            ),
+            (
+                Condition::SubnetOutputQueues,
+                s(),
+                2,
+                METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
+                &[],
+                1.0,
+            ),
+            (
+                Condition::SubnetCallContexts,
+                s(),
+                1,
+                METRIC_SUBNET_CALL_CONTEXTS,
+                &[("type", "install_code")],
+                1.0,
+            ),
+            (
+                Condition::RefundPool,
+                s(),
+                2,
+                METRIC_PENDING_REFUNDS,
+                &[],
+                1.0,
+            ),
+        ];
+        for (condition, subnet_id, node, metric, labels, value) in cases {
+            let mut metrics = ready_metrics();
+            set(&mut metrics, subnet_id, node, metric, labels, value);
+            assert_eq!(
+                violated(&metrics),
+                vec![condition],
+                "{metric}{labels:?} = {value} on node {node}"
+            );
+        }
+    }
+
+    #[test]
+    fn irrelevant_series_do_not_violate_the_condition() {
+        let mut metrics = ready_metrics();
+        // Streams of `R` to subnets other than `S`.
+        set(
+            &mut metrics,
+            r(),
+            3,
+            METRIC_STREAM_MESSAGES,
+            &[("remote", r().to_string().as_str())],
+            5.0,
+        );
+        set(
+            &mut metrics,
+            r(),
+            4,
+            METRIC_STREAM_MESSAGES,
+            &[("remote", subnet(3).to_string().as_str())],
+            5.0,
+        );
+        // `processing` entries of the ingress history.
+        set(
+            &mut metrics,
+            s(),
+            1,
+            METRIC_INGRESS_HISTORY_BY_STATE,
+            &[("state", "processing")],
+            7.0,
+        );
+        // A replica of `R` that reports a higher registry version.
+        set(
+            &mut metrics,
+            r(),
+            3,
+            METRIC_REGISTRY_VERSION,
+            &[],
+            V as f64 + 5.0,
+        );
+        assert_eq!(violated(&metrics), vec![]);
+    }
+
+    #[test]
+    fn registry_version_requires_every_replica_to_report() {
+        for (subnet_id, node) in [(s(), 2), (r(), 3)] {
+            let mut metrics = ready_metrics();
+            metrics
+                .get_mut(&subnet_id)
+                .unwrap()
+                .retain(|(name, _), _| name != METRIC_REGISTRY_VERSION);
+            // The other replica of the subnet still reports `V`.
+            let other = if node == 2 { 1 } else { 4 };
+            set(
+                &mut metrics,
+                subnet_id,
+                other,
+                METRIC_REGISTRY_VERSION,
+                &[],
+                V as f64,
+            );
+            assert_eq!(
+                violated(&metrics),
+                vec![Condition::RegistryVersion],
+                "node {node} reports no registry version"
+            );
+        }
+    }
+
+    #[test]
+    fn fails_if_a_subnet_has_no_nodes() {
+        let evaluate = |subnets: SubnetNodeIps| {
+            futures::executor::block_on(evaluate_merge_readiness(&subnets, s(), V))
+        };
+
+        let mut without_s = subnets();
+        without_s.remove(&s());
+        assert!(matches!(evaluate(without_s), Err(ReadinessError::NoNodes(id)) if id == s()));
+
+        let mut s_without_nodes = subnets();
+        s_without_nodes.insert(s(), vec![]);
+        assert!(matches!(evaluate(s_without_nodes), Err(ReadinessError::NoNodes(id)) if id == s()));
+    }
 }

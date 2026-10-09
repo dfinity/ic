@@ -402,6 +402,7 @@ async fn check_conditions_violated(
          for V={registry_version}",
     );
 
+    let subnets = subnet_node_ips(topology);
     let terms = retry_with_msg_async!(
         format!(
             "waiting for subnet {} to violate the conditions {VIOLATED_CONDITIONS:?} all at once",
@@ -411,12 +412,8 @@ async fn check_conditions_violated(
         CONDITIONS_TIMEOUT,
         CONDITIONS_BACKOFF,
         || async {
-            let terms = evaluate_merge_readiness(
-                &subnet_node_ips(topology),
-                m_subnet.subnet_id,
-                registry_version,
-            )
-            .await?;
+            let terms =
+                evaluate_merge_readiness(&subnets, m_subnet.subnet_id, registry_version).await?;
             let satisfied: Vec<&str> = VIOLATED_CONDITIONS
                 .iter()
                 .map(|condition| term(&terms, *condition))
