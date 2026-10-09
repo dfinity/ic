@@ -105,12 +105,14 @@ pub fn assert_node_is_assigned_with_ssh_session(
     .expect("Failed to detect that node has a state and local CUP.");
 }
 
-/// Assert that the given node has deleted its state within the next 5 minutes.
+/// Assert that the given node deletes its state and local CUP within the next 5 minutes, and that
+/// it then syncs and trims its filesystem within another 2 minutes.
 pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
     assert_node_is_unassigned_with_ssh_session(node, None, logger)
 }
 
-/// Assert that the given node has deleted its state within the next 5 minutes.
+/// Assert that the given node deletes its state and local CUP within the next 5 minutes, and that
+/// it then syncs and trims its filesystem within another 2 minutes.
 /// Reuses the provided SSH session if given, otherwise creates a new one.
 pub fn assert_node_is_unassigned_with_ssh_session(
     node: &IcNodeSnapshot,
@@ -152,12 +154,15 @@ pub fn assert_node_is_unassigned_with_ssh_session(
     )
     .expect("Failed to detect that node has deleted its state and local CUP.");
 
-    let state_removal_failed = "orchestrator_state_removal_failed_total".to_string();
-    let fs_trim_duration = "orchestrator_fstrim_duration_milliseconds".to_string();
+    const STATE_REMOVAL_FAILED: &str = "orchestrator_state_removal_failed_total";
+    const FS_TRIM_DURATION: &str = "orchestrator_fstrim_duration_milliseconds";
     let fetcher = MetricsFetcher::new_with_port(
         std::iter::once(node.clone()),
-        vec![state_removal_failed.clone(), fs_trim_duration.clone()],
-        9091,
+        vec![
+            STATE_REMOVAL_FAILED.to_string(),
+            FS_TRIM_DURATION.to_string(),
+        ],
+        ORCHESTRATOR_METRICS_PORT,
     );
 
     ic_system_test_driver::retry_with_msg!(
@@ -167,14 +172,36 @@ pub fn assert_node_is_unassigned_with_ssh_session(
         secs(10),
         || match block_on(fetcher.fetch::<u64>()) {
             Ok(metrics) => {
-                assert_eq!(metrics[&state_removal_failed][0], 0);
-                assert!(metrics[&fs_trim_duration][0] > 0);
+                // The orchestrator registers its metrics only after it starts serving them, so
+                // shortly after a restart they may still be missing from the response.
+                let metric = |name: &str| {
+                    metrics
+                        .get(name)
+                        .and_then(|values| values.first())
+                        .copied()
+                        .ok_or_else(|| anyhow!("Node does not export {} yet", name))
+                };
+                // This counter never goes back to zero, so retrying wouldn't help.
+                assert_eq!(
+                    metric(STATE_REMOVAL_FAILED)?,
+                    0,
+                    "Node {} failed to remove its state",
+                    node.get_ip_addr()
+                );
+                // The orchestrator removes the state and the local CUP before it syncs and trims
+                // the filesystem, and only sets this gauge once that is done. The check above may
+                // thus already see the node as unassigned while the gauge is still zero.
+                ensure!(
+                    metric(FS_TRIM_DURATION)? > 0,
+                    "Node {} has not finished trimming its filesystem yet.",
+                    node.get_ip_addr()
+                );
                 Ok(())
             }
             Err(e) => bail!("Failed to fetch metrics: {}", e),
         }
     )
-    .expect("Failed to detect that node has deleted its state.");
+    .expect("Failed to detect that node has deleted its state and trimmed its filesystem.");
 }
 
 async fn fetch_metric_from_nodes<T>(
@@ -194,7 +221,9 @@ where
         .await
         .map_err(|err| anyhow!("Could not connect to metrics yet {:?}", err))?;
 
-    let vals = metrics[metric_name].clone();
+    // Fall back to an empty vector if no node exports the metric yet, so that this case is
+    // reported like any other incomplete result instead of panicking.
+    let vals = metrics.get(metric_name).cloned().unwrap_or_default();
     if vals.len() != nodes.len() {
         bail!(
             "Metrics not available for all nodes yet. {} metrics, {} nodes",
