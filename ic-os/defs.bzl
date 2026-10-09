@@ -15,7 +15,7 @@ load("//bazel:defs.bzl", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "oci_rootfs", "upgrade_image")
 
 def icos_build(
         name,
@@ -116,7 +116,7 @@ def icos_build(
     # -------------------- Build the container image --------------------
 
     if build_local_base_image:
-        base_image_tag = "base-image-" + name  # Reuse for build_container_filesystem_tar
+        base_image_tag = "base-image-" + name
         package_files_arg = "PACKAGE_FILES=packages.common"
         if "dev" in mode:
             package_files_arg += " packages.dev"
@@ -131,29 +131,27 @@ def icos_build(
             tags = ["manual"],
         )
 
-        build_container_filesystem(
-            name = "rootfs-tree.tar",
-            context_files = [image_deps["container_context_files"]],
-            component_files = image_deps["component_files"],
-            dockerfile = image_deps["dockerfile"],
-            build_args = image_deps["build_args"],
-            file_build_arg = image_deps["file_build_arg"],
-            base_image_tar_file = ":base_image.tar",
-            base_image_tar_file_tag = base_image_tag,
+        oci_rootfs(
+            name = "base_image_rootfs",
+            layout = ":base_image.tar",
             target_compatible_with = ["@platforms//os:linux"],
             tags = ["manual"],
         )
-    else:
-        build_container_filesystem(
-            name = "rootfs-tree.tar",
-            context_files = [image_deps["container_context_files"]],
-            component_files = image_deps["component_files"],
-            dockerfile = image_deps["dockerfile"],
-            build_args = image_deps["build_args"],
-            file_build_arg = image_deps["file_build_arg"],
-            target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual"],
-        )
+
+    # The Dockerfile's FROM names base_image_ref; the local-base-* images replace that base image
+    # with the one built above.
+    build_container_filesystem(
+        name = "rootfs-tree.tar",
+        context_files = [image_deps["container_context_files"]],
+        component_files = image_deps["component_files"],
+        dockerfile = image_deps["dockerfile"],
+        build_args = image_deps["build_args"],
+        file_build_arg = image_deps["file_build_arg"],
+        base_rootfs = ":base_image_rootfs" if build_local_base_image else image_deps["base_rootfs"],
+        base_image_ref = image_deps["base_image_ref"],
+        target_compatible_with = ["@platforms//os:linux"],
+        tags = ["manual"],
+    )
 
     # Extract SElinux file_contexts to use later when building ext4 filesystems
     tar_extract(
@@ -170,34 +168,44 @@ def icos_build(
     # (see //ic-os/guestos/envs/sev-recovery:build-sev-recovery).
     native.genrule(
         name = "alternative_guestos_base_bootfs_tree_tar",
-        srcs = [":base-update-img.tar.zst"],
+        srcs = [
+            ":base-update-img.tar.zst",
+            # The dev-container image tag stands in for its fakeroot and tar (see
+            # //toolchains/sysimage:toolchain.bzl).
+            "//:ci/container/TAG",
+        ],
         outs = ["alternative_guestos_base_bootfs_tree.tar"],
+        # Dump the boot partition's files with debugfs under fakeroot, which records
+        # their owners, rather than mounting it: no /dev/fuse or setuid fusermount
+        # needed, so this runs sandboxed and remotely. The files keep their modes and
+        # owners; the downstream ext4_image resets all timestamps anyway.
         cmd = """
 set -euo pipefail
 
-tmpdir=$$(mktemp -d)
-mounted=0
-cleanup() {
-  set +e
-  if [[ $$mounted -eq 1 ]]; then
-    fusermount3 -u "$$tmpdir/bootfs" || fusermount -u "$$tmpdir/bootfs" || umount "$$tmpdir/bootfs"
-  fi
-  rm -rf "$$tmpdir"
-}
-trap cleanup EXIT
+umask 022
+tmpdir=$$(mktemp -d -p "$$PWD")
+chmod g-s "$$tmpdir"  # see toolchains/sysimage/tmpdir_wrapper.sh
+trap 'rm -rf "$$tmpdir"' EXIT
 
 # Extract boot.img from the base GuestOS update image.
-tar --extract --zstd --to-stdout --file "$<" boot.img > "$$tmpdir/boot.img"
+tar --extract --zstd --to-stdout --file $(location :base-update-img.tar.zst) boot.img > "$$tmpdir/boot.img"
 
 mkdir "$$tmpdir/bootfs"
-$(location //:fuse2fs) -o ro,norecovery,fakeroot "$$tmpdir/boot.img" "$$tmpdir/bootfs"
-mounted=1
-tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
+# In the sandbox's user namespace a real chown fails with EINVAL, which fakeroot
+# doesn't ignore; the owners are recorded by fakeroot either way.
+# debugfs exits 0 even when it fails, so check that it reported nothing but its
+# version and dumped something.
+FAKEROOTDONTTRYCHOWN=1 fakeroot -- sh -ec '
+    "$$1" -R "rdump / $$2/bootfs" "$$2/boot.img" 2> "$$2/debugfs.err"
+    if grep -v "^debugfs [0-9]" "$$2/debugfs.err" >&2; then exit 1; fi
+    [ -n "$$(ls -A "$$2/bootfs")" ] || { echo "nothing dumped from boot.img" >&2; exit 1; }
+    tar --create --file "$$3" --numeric-owner --sort=name --mtime=@0 -C "$$2/bootfs" .
+' sh $(location //:debugfs) "$$tmpdir" "$@"
 """,
-        message = "Extracting base GuestOS boot partition via fuse2fs",
-        tags = ["manual", "no-cache"],
+        message = "Extracting base GuestOS boot partition",
+        tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
-        tools = ["//:fuse2fs"],
+        tools = ["//:debugfs"],
     )
 
     ext4_image(
@@ -209,7 +217,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         extra_files = {
             ":alternative_guestos_proposal.cbor": "/alternative_guestos_proposal.cbor:0644",
         },
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
     )
 
     # -------------------- Extract root and boot partitions --------------------
@@ -262,7 +270,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                 ])
             },
             target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
 
         ext4_image(
@@ -282,7 +290,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                     ]
                 )
             },
-            tags = ["manual", "no-cache"],
+            tags = ["manual"],
         )
 
         # Extract individual files (boot args, initrd, vmlinuz, OVMF firmware) from the
@@ -301,8 +309,12 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                 extracted_vmlinuz,
                 extracted_ovmf_sev,
             ],
+            # Scratch in the working directory, not /tmp: the boot partition image
+            # is 1 GiB, which the remote executors' 1 GB /tmp can't hold (#10797).
             cmd = """
-                tmpdir="$$(mktemp -d)"
+                umask 022
+                tmpdir="$$(mktemp -d -p "$$PWD")"
+                chmod g-s "$$tmpdir"  # see toolchains/sysimage/tmpdir_wrapper.sh
                 trap 'rm -rf "$$tmpdir"' EXIT
 
                 tar --extract -a --file "$<" --directory "$$tmpdir"
@@ -337,22 +349,27 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
             native.genrule(
                 name = "generate-" + partition_root_signed_tzst,
                 testonly = malicious,
-                srcs = [partition_root_unsigned_tzst],
+                # The dev-container image tag stands in for its veritysetup (see
+                # //toolchains/sysimage:toolchain.bzl).
+                srcs = [
+                    partition_root_unsigned_tzst,
+                    "//:ci/container/TAG",
+                ],
                 outs = [partition_root_signed_tzst, partition_root_hash],
-                cmd = "$(location //toolchains/sysimage:proc_wrapper) " +
+                cmd = "$(location //toolchains/sysimage:tmpdir_wrapper) " +
                       "$(location //toolchains/sysimage:verity_sign) " +
-                      "-i $< -o $(location :" + partition_root_signed_tzst + ") " +
+                      "-i $(location " + partition_root_unsigned_tzst + ") -o $(location :" + partition_root_signed_tzst + ") " +
                       "-r $(location " + partition_root_hash + ") " +
                       "--dflate $(location //rs/ic_os/build_tools/dflate) " +
                       "--zstd $(location @zstd//:zstd_cli)",
                 executable = False,
                 tools = [
-                    "//toolchains/sysimage:proc_wrapper",
+                    "//toolchains/sysimage:tmpdir_wrapper",
                     "//toolchains/sysimage:verity_sign",
                     "//rs/ic_os/build_tools/dflate",
                     "@zstd//:zstd_cli",
                 ],
-                tags = ["manual", "no-cache"],
+                tags = ["manual"],
                 visibility = ["//rs/tests:__subpackages__", "//ic-os:__subpackages__"],
             )
 
@@ -366,7 +383,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
             )
         else:
             # No signing required, no ROOT_HASH substitution
-            native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual", "no-cache"])
+            native.alias(name = partition_root_signed_tzst, actual = partition_root_unsigned_tzst, tags = ["manual"])
             native.alias(
                 name = boot_args,
                 actual = ":boot_args_template",
@@ -390,6 +407,9 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
             # are validated against the proposal *in the same genrule* so that the
             # validation can never become a leaf target that is silently skipped.
             measurement_srcs = [
+                # The dev-container image tag stands in for its jq (see
+                # //toolchains/sysimage:toolchain.bzl).
+                "//:ci/container/TAG",
                 ":" + extracted_ovmf_sev,
                 ":" + extracted_boot_args,
                 ":" + extracted_initrd,
@@ -474,7 +494,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         layout = image_deps["partition_table"],
         partitions = partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
         target_compatible_with = ["@platforms//os:linux"],
     )
 
@@ -484,7 +504,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
         partitions = partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
         populate_b_partitions = True,
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
         testonly = True,
         target_compatible_with = ["@platforms//os:linux"],
         visibility = [
@@ -529,14 +549,14 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                     file_contexts = ":file_contexts",
                     partition_size = "1G",
                     target_compatible_with = ["@platforms//os:linux"],
-                    tags = ["manual", "no-cache"],
+                    tags = ["manual"],
                 )
 
             upgrade_image_kwargs = {
                 "name": update_image_tar,
                 "boot_partition": ":partition-boot-alternative.tzst" if build_alternative_guestos_image else ":partition-boot" + test_suffix + ".tzst",
                 "root_partition": ":partition-root" + test_suffix + ".tzst",
-                "tags": ["manual", "no-cache"],
+                "tags": ["manual"],
                 "target_compatible_with": ["@platforms//os:linux"],
                 "version_file": ":version" + test_suffix + ".txt",
             } | (

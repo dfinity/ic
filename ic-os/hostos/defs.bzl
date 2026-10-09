@@ -65,11 +65,15 @@ def image_deps(mode, _malicious = False):
         deps.update({
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
+            "base_rootfs": Label("//toolchains/sysimage:icos_base_hostos_dev_rootfs"),
+            "base_image_ref": Label("//ic-os/hostos/context:docker-base.dev"),
         })
     else:
         deps.update({
             "build_args": prod_build_args,
             "file_build_arg": prod_file_build_arg,
+            "base_rootfs": Label("//toolchains/sysimage:icos_base_hostos_prod_rootfs"),
+            "base_image_ref": Label("//ic-os/hostos/context:docker-base.prod"),
         })
 
     # Update dev rootfs
@@ -114,7 +118,7 @@ def _custom_partitions(_):
         vg_name = "hostlvm",
         vg_uuid = "4c7GVZ-Df82-QEcJ-xXtV-JgRL-IjLE-hK0FgA",
         pv_uuid = "eu0VQE-HlTi-EyRc-GceP-xZtn-3j6t-iqEwyv",
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],

@@ -38,7 +38,7 @@ def main():
         help="Partitions to write. These must match the CSV volume table entries.",
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
-    parser.add_argument("--zstd", help="Path to the zstd tool", type=str)
+    parser.add_argument("--zstd", help="Path to the zstd tool", type=str, required=True)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -74,7 +74,7 @@ def main():
         partition_file = select_partition_file(name, partition_files)
 
         if partition_file:
-            write_partition_image_from_tzst(entry, lvm_image, partition_file)
+            write_partition_image_from_tzst(entry, lvm_image, partition_file, args.zstd)
         else:
             print("No partition file for '%s' found, leaving empty" % name)
 
@@ -105,7 +105,7 @@ def main():
         check=True,
     )
 
-    # tempfile cleanup is handled by proc_wrapper.sh
+    # tempfile cleanup is handled by tmpdir_wrapper.sh
 
 
 def read_volume_description(data):
@@ -176,10 +176,10 @@ def select_partition_file(name, partition_files):
     return None
 
 
-def write_partition_image_from_tzst(lvm_entry, image_file, partition_tzst):
+def write_partition_image_from_tzst(lvm_entry, image_file, partition_tzst, zstd):
     with tempfile.TemporaryDirectory() as tmpdir:
         partition_tf = os.path.join(tmpdir, "partition.tar")
-        subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
+        subprocess.run([zstd, "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
 
         partition_tf = tarfile.open(partition_tf, mode="r:")
         base = LVM_HEADER_SIZE_BYTES + (lvm_entry["start"] * EXTENT_SIZE_BYTES)

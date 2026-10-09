@@ -29,6 +29,7 @@ llvm
 # IC-OS
 clang
 cryptsetup-bin
+fakeroot
 faketime
 fdisk
 ipmitool # to connect to baremetal test instances

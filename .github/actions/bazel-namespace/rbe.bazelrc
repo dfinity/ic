@@ -19,8 +19,8 @@
 #       --bazelrc=.github/actions/bazel-namespace/rbe.bazelrc test //some:test
 
 # Run actions remotely, falling back to the sandbox or to local execution for actions that can't
-# run remotely, like the ic-os image builds that bazel/conf/.bazelrc.build forces to run locally
-# with --strategy_regexp.
+# run remotely, like the local-base-* ic-os base image builds that bazel/conf/.bazelrc.build forces
+# to run locally with --strategy=IcosContainerBaseImage=local.
 build --spawn_strategy=remote,sandboxed,local
 build --strategy=Genrule=remote,sandboxed,local
 
@@ -33,7 +33,7 @@ build --strategy=Genrule=remote,sandboxed,local
 # ic-os image builds) and remotely. The update-image-references job of
 # .github/workflows/container-autobuild.yml rewrites both.
 build --remote_default_exec_properties=namespace_action_isolation=sandboxed
-build --remote_default_exec_properties=container-image=docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c
+build --remote_default_exec_properties=container-image=docker://nscr.io/c9ptjuknd7oc6/ic-build@sha256:fac27369c3b2e018d78a5d6ab90201974007188f98da67c4c76b7692bbf37d1a
 
 # Namespace currently deploys 30 RBE workers that each can run 16 actions concurrently:
 build --jobs=480

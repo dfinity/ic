@@ -11,7 +11,6 @@ icos_images = icos_build(
     name = "recovery",
     image_deps_func = image_deps,
     tags = [
-        "no-cache",
     ],
     visibility = [
         "//rs:ic-os-pkg",
@@ -24,7 +23,6 @@ file_size_check(
     max_file_size = 475 * 1000 * 1000,  # 453 MB on 2026-06-18
     tags = [
         "manual",
-        "no-cache",
     ],
 )
 
@@ -34,7 +32,6 @@ file_size_check(
     max_file_size = 475 * 1000 * 1000,  # 451 MB on 2026-06-18
     tags = [
         "manual",
-        "no-cache",
     ],
 )
 
@@ -44,7 +41,6 @@ file_size_check(
     max_file_size = 475 * 1000 * 1000,  # 451 MB on 2026-06-18
     tags = [
         "manual",
-        "no-cache",
     ],
 )
 

@@ -13,6 +13,54 @@ use crate::gpt;
 
 const STORE_NAME: &str = "backing_store";
 
+/// Where distributions install libfaketime, which is preloaded to run debugfs with
+/// the clock frozen at the epoch; the first one present is used. Set `LIBFAKETIME`
+/// to override. We don't use the `faketime` wrapper and disable libfaketime's
+/// shared memory: both create a semaphore and shared memory in /dev/shm named after
+/// the PID, which collide between Bazel sandboxes (separate PID namespaces, shared
+/// /dev/shm).
+const LIBFAKETIME_PATHS: &[&str] = &[
+    "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1",
+    "/usr/lib/aarch64-linux-gnu/faketime/libfaketime.so.1",
+    "/usr/lib64/faketime/libfaketime.so.1",
+    "/usr/lib/faketime/libfaketime.so.1",
+];
+
+/// The path of libfaketime, or an error if it isn't installed.
+fn find_libfaketime() -> Result<PathBuf> {
+    // If the library is missing, ld.so only warns and debugfs runs with the
+    // real clock, silently producing non-reproducible images. Fail instead.
+    let candidates: Vec<PathBuf> = match std::env::var_os("LIBFAKETIME").filter(|v| !v.is_empty()) {
+        Some(path) => vec![PathBuf::from(path)],
+        None => LIBFAKETIME_PATHS.iter().map(PathBuf::from).collect(),
+    };
+    candidates
+        .iter()
+        .find(|path| path.is_file())
+        .cloned()
+        .ok_or_else(|| {
+            anyhow!(
+                "libfaketime not found at {}: install libfaketime, set LIBFAKETIME to its path, \
+                 or build in the dev container",
+                candidates.iter().map(|path| path.display()).join(", ")
+            )
+        })
+}
+
+/// A debugfs command that runs with the clock frozen at the epoch.
+fn debugfs_with_frozen_clock() -> Result<Command> {
+    let mut preload = find_libfaketime()?.into_os_string();
+    if let Some(existing) = std::env::var_os("LD_PRELOAD").filter(|v| !v.is_empty()) {
+        preload.push(":");
+        preload.push(existing);
+    }
+    let mut cmd = Command::new("/usr/sbin/debugfs");
+    cmd.env("LD_PRELOAD", preload)
+        .env("FAKETIME", "1970-1-1 0:0:0")
+        .env("FAKETIME_DISABLE_SHM", "1");
+    Ok(cmd)
+}
+
 pub struct ExtPartition {
     backing_dir: TempDir,
     original: PathBuf,
@@ -92,11 +140,8 @@ impl Partition for ExtPartition {
 
     /// Copy a file into place
     fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
-        let mut cmd = Command::new("faketime")
+        let mut cmd = debugfs_with_frozen_clock()?
             .args([
-                "-f",
-                "1970-1-1 0:0:0",
-                "/usr/sbin/debugfs",
                 "-w",
                 (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
@@ -204,11 +249,8 @@ impl ExtPartition {
         mode: usize,
         context: Option<&str>,
     ) -> Result<()> {
-        let mut cmd = Command::new("faketime")
+        let mut cmd = debugfs_with_frozen_clock()?
             .args([
-                "-f",
-                "1970-1-1 0:0:0",
-                "/usr/sbin/debugfs",
                 "-w",
                 (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",

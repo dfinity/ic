@@ -260,6 +260,20 @@ oci.pull(
 )
 use_repo(oci, "minica", "minica_linux_amd64")
 
+# IC-OS base images, pulled by the digests in ic-os/*/context/docker-base* for
+# building the IC-OS container filesystems in a microVM.
+icos_base_images = use_extension("//toolchains/sysimage:base_images.bzl", "icos_base_images")
+use_repo(
+    icos_base_images,
+    "icos_base_bootloader_linux_amd64",
+    "icos_base_guestos_dev_linux_amd64",
+    "icos_base_guestos_prod_linux_amd64",
+    "icos_base_hostos_dev_linux_amd64",
+    "icos_base_hostos_prod_linux_amd64",
+    "icos_base_setupos_dev_linux_amd64",
+    "icos_base_setupos_prod_linux_amd64",
+)
+
 # used by rosetta image
 oci.pull(
     name = "rust_base",
@@ -846,15 +860,6 @@ http_archive(
     urls = [
         "https://codeload.github.com/jemalloc/jemalloc/tar.gz/refs/tags/5.3.0",
     ],
-)
-
-http_archive(
-    name = "libfuse",
-    build_file = "@//third_party:BUILD.libfuse.bazel",
-    sha256 = "f01de85717e20adf5f98aff324acd85dd73d61a5ca3834d573dcf0bd6e54a298",
-    strip_prefix = "fuse-3.18.2",
-    type = "tar.gz",
-    urls = ["https://github.com/libfuse/libfuse/releases/download/fuse-3.18.2/fuse-3.18.2.tar.gz"],
 )
 
 http_archive(
