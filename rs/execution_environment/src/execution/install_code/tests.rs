@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::TEST_DEFAULT_LOG_MEMORY_USAGE;
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::{
@@ -12,7 +13,8 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_replicated_state::{
     ExecutionTask, ReplicatedState,
     canister_state::{
-        NextExecution, execution_state::WasmExecutionMode, system_state::wasm_chunk_store,
+        NextExecution, WASM_PAGE_SIZE_IN_BYTES, execution_state::WasmExecutionMode,
+        system_state::wasm_chunk_store,
     },
     metadata_state::testing::{NetworkTopologyTesting, SystemMetadataTesting},
 };
@@ -75,6 +77,67 @@ const DTS_INSTALL_WAT: &str = r#"
         (start $start)
         (memory 0 20)
     )"#;
+
+/// The cycles that the `canister_init` of `dts_install_burn_wat` burns.
+const CYCLES_BURNED_WHILE_RESUMING: Cycles = Cycles::new(987_654_321);
+
+/// The Wasm pages that the `canister_init` of `dts_install_burn_wat` grows by.
+/// The subnet memory threshold of the DTS `install_code` tests below is zero, so
+/// this growth reserves cycles for the extra storage.
+const PAGES_GROWN_WHILE_RESUMING: u64 = 100;
+
+/// Returns the same module as `DTS_INSTALL_WAT`, except that its `canister_init`
+/// burns `CYCLES_BURNED_WHILE_RESUMING` cycles and grows the memory at the very
+/// end, i.e. after the execution has been paused and resumed. The burn makes the
+/// execution report a non-zero `CyclesBalanceChange`, which is computed against
+/// the cycles balance at the start of the DTS execution and applied relative to
+/// the cycles balance of the clean canister state the execution is resumed on;
+/// the growth makes `install_code` reserve cycles for the extra storage.
+///
+/// The other cycles operations of the general DTS resume tests are unavailable
+/// here: `canister_init` has no call context to accept cycles from, cannot
+/// perform outgoing calls, and cannot mint cycles.
+fn dts_install_burn_wat() -> String {
+    // The amount is passed as the low half of a 128-bit value, so the constant
+    // has to fit into an `i64`.
+    let amount_low = i64::try_from(CYCLES_BURNED_WHILE_RESUMING.get()).unwrap();
+    let pages_grown = PAGES_GROWN_WHILE_RESUMING;
+    format!(
+        r#"
+    (module
+        (import "ic0" "cycles_burn128"
+            (func $cycles_burn128 (param i64 i64 i32))
+        )
+        (func $start
+            (drop (memory.grow (i32.const 1)))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+        )
+        (func (export "canister_init")
+            (drop (memory.grow (i32.const 1)))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            (memory.fill (i32.const 0) (i32.const 12) (i32.const 50000))
+            ;; Grow the memory, so that `install_code` reserves cycles for the
+            ;; extra storage at the end. Unlike an update call, `canister_init`
+            ;; does not reserve while it runs.
+            (drop (memory.grow (i32.const {pages_grown})))
+            ;; The burned amount is written back to the (unused) heap[0..16].
+            (call $cycles_burn128
+                (i64.const 0) (i64.const {amount_low}) (i32.const 0))
+        )
+        (start $start)
+        (memory 0 200)
+    )"#
+    )
+}
 
 #[test]
 fn dts_resume_works_in_install_code() {
@@ -139,6 +202,26 @@ fn consumed_cycles_for_instructions(
         .unwrap_or_default()
 }
 
+/// Returns the cycles that the given canister has burned via
+/// `ic0.cycles_burn128` so far.
+fn burned_cycles(test: &ExecutionTest, canister_id: CanisterId) -> Cycles {
+    Cycles::new(
+        test.canister_state(canister_id)
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::BurnedCycles)
+            .map_or(0, |cycles| cycles.get()),
+    )
+}
+
+/// Returns the reserved cycles balance of the given canister.
+fn reserved_cycles(test: &ExecutionTest, canister_id: CanisterId) -> Cycles {
+    test.canister_state(canister_id)
+        .system_state
+        .reserved_balance()
+}
+
 /// The instruction limits of the DTS `install_code` tests that change the cycles
 /// balance of the canister while its execution is paused.
 const DTS_INSTALL_CODE_INSTRUCTION_LIMIT: u64 = 50_000_000;
@@ -156,6 +239,12 @@ struct PausedInstallCode {
     ingress_id: MessageId,
     /// The cycles balance before the execution cycles were prepaid.
     original_balance: Cycles,
+    /// The reserved cycles balance, which is already non-zero because creating
+    /// the canister reserved cycles for its base memory usage.
+    original_reserved_cycles: Cycles,
+    /// The subnet memory saturation before the installation, which only grows
+    /// while the canister is being installed.
+    original_subnet_memory_saturation: ResourceSaturation,
     /// The cycles consumed for instructions.
     original_consumed_cycles: NominalCycles,
     /// The instructions executed by all the slices of the canister.
@@ -166,19 +255,23 @@ struct PausedInstallCode {
 
 /// Starts an `install_code` execution that pauses after its first slice: that
 /// slice compiles the Wasm module and executes its `(start)` function, which
-/// together exceed the slice instruction limit.
+/// together exceed the slice instruction limit. The `canister_init` of the
+/// module burns `CYCLES_BURNED_WHILE_RESUMING` cycles at its very end, i.e. only
+/// once the execution has been resumed.
 fn install_code_paused_after_first_slice() -> PausedInstallCode {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(DTS_INSTALL_CODE_INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(DTS_INSTALL_CODE_SLICE_INSTRUCTION_LIMIT)
         .with_create_execution_state_base_cost(0)
+        // Any memory growth of the installed canister reserves cycles.
+        .with_subnet_memory_threshold(0)
         .with_manual_execution()
         .build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
-        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
+        wasm_module: wat::parse_str(dts_install_burn_wat()).unwrap(),
         arg: vec![],
         sender_canister_version: None,
     };
@@ -186,6 +279,8 @@ fn install_code_paused_after_first_slice() -> PausedInstallCode {
     // Snapshot of the accounting counters before the execution cycles are prepaid,
     // which happens when the message execution starts.
     let original_balance = test.canister_state(canister_id).system_state.balance();
+    let original_reserved_cycles = reserved_cycles(&test, canister_id);
+    let original_subnet_memory_saturation = test.subnet_memory_saturation();
     let original_consumed_cycles = consumed_cycles_for_instructions(&test, canister_id);
     let original_executed_instructions = test.canister_executed_instructions(canister_id);
     let original_execution_cost = test.canister_execution_cost(canister_id);
@@ -219,6 +314,8 @@ fn install_code_paused_after_first_slice() -> PausedInstallCode {
         canister_id,
         ingress_id,
         original_balance,
+        original_reserved_cycles,
+        original_subnet_memory_saturation,
         original_consumed_cycles,
         original_executed_instructions,
         original_execution_cost,
@@ -230,7 +327,8 @@ fn install_code_paused_after_first_slice() -> PausedInstallCode {
 /// whose canister lost cycles while it was paused fails instead of replaying the
 /// recorded steps on a balance that can no longer cover them. The failed
 /// execution is charged for exactly the instructions it had already executed,
-/// including those of the paused Wasm execution.
+/// including those of the paused Wasm execution, and the cycles that its
+/// `canister_init` would have burned and reserved are dropped along with it.
 #[test]
 fn dts_install_code_resume_fails_due_to_cycles_decrease() {
     let PausedInstallCode {
@@ -238,6 +336,7 @@ fn dts_install_code_resume_fails_due_to_cycles_decrease() {
         canister_id,
         ingress_id,
         original_balance,
+        original_reserved_cycles,
         original_consumed_cycles,
         original_executed_instructions,
         ..
@@ -290,7 +389,14 @@ fn dts_install_code_resume_fails_due_to_cycles_decrease() {
         consumed_cycles_for_instructions(&test, canister_id) - original_consumed_cycles,
         expected_cost.nominal()
     );
-    // The balance also lost the single cycle removed above.
+    // The balance also lost the single cycle removed above, and nothing else:
+    // the cycles the `canister_init` would have burned are not burned and the
+    // cycles it would have reserved for the extra storage are not reserved.
+    assert_eq!(burned_cycles(&test, canister_id), Cycles::zero());
+    assert_eq!(
+        reserved_cycles(&test, canister_id),
+        original_reserved_cycles
+    );
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_balance - expected_cost.real() - Cycles::new(1)
@@ -301,6 +407,15 @@ fn dts_install_code_resume_fails_due_to_cycles_decrease() {
 /// resuming a paused `install_code` whose canister lost cycles fails, an
 /// increase of the cycles balance while the execution is paused is tolerated and
 /// the additional cycles are not lost when the execution completes.
+///
+/// The resumed `canister_init` burns `CYCLES_BURNED_WHILE_RESUMING` cycles and
+/// grows the memory, so the balance it reports is not merely the balance of the
+/// clean canister state minus the refunded prepaid execution cycles: the burn
+/// makes the Wasm execution report a non-zero `CyclesBalanceChange` and the
+/// growth reserves cycles for the extra storage, and both have to be applied
+/// relative to the increased balance for the added cycles to be preserved. The
+/// burn is computed against the cycles balance that the Wasm execution observed
+/// at the start of the DTS execution, so it is unaffected by the increase.
 #[test]
 fn dts_install_code_resume_succeeds_after_cycles_increase() {
     const CYCLES_ADDED_WHILE_PAUSED: Cycles = Cycles::new(1_234_567_890);
@@ -310,6 +425,8 @@ fn dts_install_code_resume_succeeds_after_cycles_increase() {
         canister_id,
         ingress_id,
         original_balance,
+        original_reserved_cycles,
+        original_subnet_memory_saturation,
         original_executed_instructions,
         original_execution_cost,
         ..
@@ -343,12 +460,35 @@ fn dts_install_code_resume_succeeds_after_cycles_increase() {
         DTS_INSTALL_CODE_SLICE_INSTRUCTION_LIMIT
     );
 
-    // The canister is charged exactly the cost of the executed instructions: the
-    // cycles added while the execution was paused are not lost.
+    // The resumed `canister_init` burned its cycles, and it burned exactly as
+    // many as it would have without the increase.
+    assert_eq!(
+        burned_cycles(&test, canister_id),
+        CYCLES_BURNED_WHILE_RESUMING
+    );
+
+    // It also reserved cycles for the memory it grew, on top of the cycles that
+    // creating the canister already reserved. The reservation covers at least
+    // the grown memory priced at the subnet memory saturation before the
+    // installation: the actual reservation is strictly larger because it also
+    // covers the memory of the installed module and because the saturation only
+    // grows while the canister is being installed.
+    let reserved_cycles = reserved_cycles(&test, canister_id) - original_reserved_cycles;
+    let grown_bytes = NumBytes::from(PAGES_GROWN_WHILE_RESUMING * WASM_PAGE_SIZE_IN_BYTES as u64);
+    assert_gt!(
+        reserved_cycles,
+        test.expected_storage_reservation_cycles(&original_subnet_memory_saturation, grown_bytes)
+    );
+
+    // The canister is charged exactly the cost of the executed instructions, the
+    // cycles it burned, and the cycles it reserved: the cycles added while the
+    // execution was paused are not lost.
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_balance
             - (test.canister_execution_cost(canister_id) - original_execution_cost).real()
+            - CYCLES_BURNED_WHILE_RESUMING
+            - reserved_cycles
             + CYCLES_ADDED_WHILE_PAUSED
     );
 }
