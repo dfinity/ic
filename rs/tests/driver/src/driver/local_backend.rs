@@ -653,6 +653,7 @@ impl LocalBackend {
     /// [`start_dnsmasq`](Self::start_dnsmasq).
     pub fn create_group(&self, group_name: &str) -> Result<()> {
         let bridge = Self::bridge_name(group_name);
+        let mac = bridge_mac(group_name);
         let prefix = Self::group_ipv6_prefix(group_name);
         // The gateway address (`<prefix>1`) lives on the bridge.
         let gateway = Self::group_gateway_ipv6(group_name);
@@ -698,7 +699,7 @@ impl LocalBackend {
         // metric 1024 and lose to the metric-256 kernel route.
         let create_script = format!(
             "ip link del {bridge} 2>/dev/null; \
-             ip link add name {bridge} type bridge && \
+             ip link add name {bridge} address {mac} type bridge && \
              ip link set dev {bridge} up && \
              ip -6 addr add {gateway}/64 dev {bridge} nodad && \
              ip addr add {ipv4_gateway}/24 dev {bridge} && \
@@ -1593,9 +1594,14 @@ key-exchange-timeout-ms = 10000
             );
         }
 
-        // virtio-balloon and virtio-rng, each on its own root port.
+        // virtio-balloon and virtio-rng, each on its own root port. Free page reporting
+        // hands the memory a guest frees back to the host, e.g. all of it when the guest
+        // reboots, rather than QEMU holding on to the guest's high-water mark.
         let rp = root_port!();
-        arg!("-device", format!("virtio-balloon-pci,bus={rp},addr=0x0"));
+        arg!(
+            "-device",
+            format!("virtio-balloon-pci,bus={rp},addr=0x0,free-page-reporting=on")
+        );
         let rp = root_port!();
         arg!("-object", "rng-random,id=rng0,filename=/dev/urandom");
         arg!(
@@ -1756,6 +1762,20 @@ key-exchange-timeout-ms = 10000
         serde_json::from_slice(&json)
             .with_context(|| format!("deserializing VM metadata {}", path.display()))
     }
+}
+
+/// Deterministic MAC address for `group_name`'s bridge, i.e. of the gateway.
+///
+/// A bridge without an explicitly set MAC takes the lowest MAC among its ports,
+/// so attaching or removing a TAP could change the gateway's MAC under the
+/// running guests, whose neighbour caches keep the old one for up to a minute,
+/// cutting them off from the host until then.
+fn bridge_mac(group_name: &str) -> MacAddr6 {
+    use ic_crypto_sha2::Sha256;
+    let hash = Sha256::hash(group_name.as_bytes());
+    // 0x6a as in `vm_mac`, but a second byte that is no `NodeType` index (see
+    // `calculate_deterministic_mac`), so it never equals a VM's MAC.
+    [0x6a, 0xff, hash[0], hash[1], hash[2], hash[3]].into()
 }
 
 /// Deterministic MAC address for a `(group, vm)` pair.

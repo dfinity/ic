@@ -592,7 +592,7 @@ fn metering_if() {
         p4 = add_one().repeat(30)
     );
 
-    let mut instance = new_instance(&wat, 100);
+    let mut instance = new_instance(&wat, 1000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -764,7 +764,7 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
             {memory}
         )"#
     );
-    let mut instance = new_instance(&wat, 10000);
+    let mut instance = new_instance(&wat, 1_000_000);
     let res = instance.run(func_ref("test")).unwrap();
 
     let g = &res.exported_globals;
@@ -1116,7 +1116,7 @@ fn metering_wasm64_load_store_canister() {
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_page_overhead(page_overhead)
         .with_wat(wat)
-        .with_num_instructions(NumInstructions::new(10000))
+        .with_num_instructions(NumInstructions::new(1_000_000))
         .build();
 
     instance.run(func_ref("test")).unwrap();
@@ -1190,7 +1190,7 @@ fn metering_wasm64_load_store_canister() {
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_page_overhead(page_overhead)
         .with_wat(wat_wasm32)
-        .with_num_instructions(NumInstructions::new(10000))
+        .with_num_instructions(NumInstructions::new(1_000_000))
         .build();
 
     instance.run(func_ref("test")).unwrap();

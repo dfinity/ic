@@ -1,14 +1,16 @@
-//! This module contains functions for constructing CUPs from registry and for
-//! verifying CUPs.
+//! This module contains functions for constructing CUPs from registry, for
+//! verifying CUPs, and for extracting the threshold master public keys of CUPs.
 
-use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
+use ic_consensus_dkg::{get_dkg_summary_from_cup_contents, get_vetkey_public_keys};
 use ic_consensus_idkg::{
     make_bootstrap_summary, make_bootstrap_summary_with_initial_dealings,
     utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
 };
+use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, warn};
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::{
     proxy::ProxyDecodeError, registry::subnet::v1::CatchUpPackageContents, types::v1 as pb,
 };
@@ -22,6 +24,7 @@ use ic_types::{
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoError, CryptoHash, Signable, Signed,
+        canister_threshold_sig::MasterPublicKey,
         crypto_hash,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag},
     },
@@ -29,7 +32,7 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use phantom_newtype::Id;
-use std::fmt;
+use std::{collections::BTreeMap, fmt};
 
 /// The reasons why a [`CatchUpPackage`] can fail verification.
 #[derive(Debug)]
@@ -422,6 +425,47 @@ fn bootstrap_idkg_summary(
         )),
         None => Ok(None),
     }
+}
+
+/// Returns the threshold master public keys held by the subnet according to the given CUP.
+///
+/// Keys whose master public key cannot be extracted from their transcript are skipped with a
+/// warning.
+pub fn get_master_public_keys(
+    cup: &CatchUpPackage,
+    log: &ReplicaLogger,
+) -> BTreeMap<MasterPublicKeyId, MasterPublicKey> {
+    let payload = cup.content.block.get_value().payload.as_ref();
+
+    let (mut public_keys, _) = get_vetkey_public_keys(&payload.as_summary().dkg, log);
+
+    let Some(idkg) = payload.as_idkg() else {
+        return public_keys;
+    };
+
+    for (key_id, key_transcript) in &idkg.key_transcripts {
+        let Some(transcript) = key_transcript
+            .current
+            .as_ref()
+            .and_then(|transcript_ref| idkg.idkg_transcripts.get(&transcript_ref.transcript_id()))
+        else {
+            continue;
+        };
+
+        match get_master_public_key_from_transcript(transcript) {
+            Ok(public_key) => {
+                public_keys.insert(key_id.clone().into(), public_key);
+            }
+            Err(err) => {
+                warn!(
+                    log,
+                    "Failed to get the master public key for key id {}: {:?}", key_id, err,
+                );
+            }
+        };
+    }
+
+    public_keys
 }
 
 #[cfg(test)]

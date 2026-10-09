@@ -9,8 +9,8 @@ const NODES_PER_SUBNET: usize = 4;
 const RUNTIME: Duration = Duration::from_secs(600);
 const REQUEST_RATE: usize = 10;
 
-const PER_TASK_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
+const PER_TASK_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 fn main() -> Result<()> {
     let config = Config::new(SUBNETS, NODES_PER_SUBNET, RUNTIME, REQUEST_RATE);

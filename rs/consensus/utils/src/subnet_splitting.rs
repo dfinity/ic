@@ -449,6 +449,57 @@ mod tests {
         assert_eq!(status, Status::NotScheduled);
     }
 
+    /// The registry marks the destination subnet's CUP contents with the same
+    /// [`CupType::SubnetSplitting`] record as the source's, at the same registry version. Since the
+    /// destination's chain starts from the post-split summary block, which adopts that very
+    /// registry version, the record must always be classified as a past split on the destination.
+    #[rstest]
+    fn get_status_should_return_not_scheduled_on_destination_subnet_after_split_test(
+        #[values(REGISTRY_CUP_REGISTRY_VERSION, REGISTRY_CUP_REGISTRY_VERSION.increment())]
+        looked_up_registry_version: RegistryVersion,
+    ) {
+        let (registry_data_provider, registry) = setup_registry_non_final(
+            DESTINATION_SUBNET_ID,
+            (1..=REGISTRY_CUP_REGISTRY_VERSION.increment().get())
+                .map(|version| (version, SubnetRecordBuilder::from(&[NODE_1]).build()))
+                .collect(),
+        );
+        registry_data_provider
+            .add(
+                &make_catch_up_package_contents_key(DESTINATION_SUBNET_ID),
+                REGISTRY_CUP_REGISTRY_VERSION,
+                Some(CatchUpPackageContents {
+                    cup_type: Some(CupType::SubnetSplitting(
+                        ic_protobuf::registry::subnet::v1::SubnetSplittingArgs {
+                            destination_subnet_id: Some(subnet_id_into_protobuf(
+                                DESTINATION_SUBNET_ID,
+                            )),
+                        },
+                    )),
+                    ..Default::default()
+                }),
+            )
+            .unwrap();
+        registry.update_to_latest_version();
+
+        let status = get_status(
+            registry.as_ref(),
+            DESTINATION_SUBNET_ID,
+            // The post-split summary block of the destination adopts the registry version at which
+            // the split was scheduled.
+            &make_summary_block(
+                SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                    new_subnet_id: DESTINATION_SUBNET_ID,
+                }),
+                REGISTRY_CUP_REGISTRY_VERSION,
+            ),
+            looked_up_registry_version,
+        )
+        .expect("Should succeed given correct inputs");
+
+        assert_eq!(status, Status::NotScheduled);
+    }
+
     /// Validation context registry versions never decrease along the chain, so `get_status` can
     /// never legitimately be asked about a version smaller than the last summary block's version.
     /// As defense-in-depth, such a call must fail — regardless of the other inputs.

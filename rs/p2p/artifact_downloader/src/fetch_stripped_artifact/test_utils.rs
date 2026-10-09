@@ -1,13 +1,24 @@
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
+use ic_error_types::RejectCode;
 use ic_protobuf::types::v1 as pb;
 use ic_test_utilities_consensus::{
     fake::{Fake, FakeContentSigner},
     make_genesis,
 };
 use ic_types::{
-    Height, NodeId, NodeIndex, RegistryVersion,
+    CountBytes, Height, NodeId, NodeIndex, NumBytes, RegistryVersion,
     artifact::ConsensusMessageId,
-    batch::{BatchPayload, IngressPayload},
+    batch::{
+        BatchPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
+        FlexibleCanisterHttpResponses, IngressPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+        iterator_to_bytes, slice_to_messages,
+    },
+    canister_http::{
+        CanisterHttpPaymentReceipt, CanisterHttpReject, CanisterHttpResponse,
+        CanisterHttpResponseContent, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
+        CanisterHttpResponseReceipt, CanisterHttpResponseSignature,
+        CanisterHttpResponseWithConsensus,
+    },
     consensus::{
         Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHash, DataPayload,
         Payload, Rank, SummaryPayload,
@@ -18,19 +29,20 @@ use ic_types::{
         },
     },
     crypto::{
-        AlgorithmId, CryptoHash, CryptoHashOf, Signed,
+        AlgorithmId, BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed,
         canister_threshold_sig::idkg::{
             IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptType,
             IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
         },
     },
     messages::{
-        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, RawSignedSenderInfo,
-        SignedIngress,
+        Blob, CallbackId, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope,
+        RawSignedSenderInfo, SignedIngress,
     },
-    signature::BasicSignatureBatch,
+    signature::{BasicSignature, BasicSignatureBatch},
     time::UNIX_EPOCH,
 };
+use ic_types_cycles::Cycles;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_0, node_test_id, test_replica_version};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -127,6 +139,21 @@ pub(crate) fn fake_block_proposal_with_ingresses_and_idkg(
     idkg_payload: Option<IDkgPayload>,
     is_summary: bool,
 ) -> BlockProposal {
+    fake_block_proposal(ingress_messages, idkg_payload, Vec::new(), is_summary)
+}
+
+pub(crate) fn fake_block_proposal_with_canister_http(
+    canister_http_payload: Vec<u8>,
+) -> BlockProposal {
+    fake_block_proposal(Vec::new(), None, canister_http_payload, false)
+}
+
+pub(crate) fn fake_block_proposal(
+    ingress_messages: Vec<SignedIngress>,
+    idkg_payload: Option<IDkgPayload>,
+    canister_http_payload: Vec<u8>,
+    is_summary: bool,
+) -> BlockProposal {
     let parent = make_genesis(DkgSummary::fake()).content.block;
     let payload = if is_summary {
         BlockPayload::Summary(SummaryPayload {
@@ -137,6 +164,7 @@ pub(crate) fn fake_block_proposal_with_ingresses_and_idkg(
         BlockPayload::Data(DataPayload {
             batch: BatchPayload {
                 ingress: IngressPayload::from(ingress_messages),
+                canister_http: canister_http_payload,
                 ..BatchPayload::default()
             },
             dkg: DkgDataPayload::new_empty(Height::from(0)),
@@ -258,4 +286,193 @@ pub(crate) fn fake_idkg_payload_with_dealing(
     node_index: NodeIndex,
 ) -> IDkgPayload {
     fake_idkg_payload_with_dealings(vec![(dealing, node_index)])
+}
+
+/// A canister http response for the given callback id, with a body of the given size.
+pub(crate) fn fake_canister_http_response(
+    callback_id: u64,
+    body_size: usize,
+) -> CanisterHttpResponse {
+    CanisterHttpResponse {
+        id: CallbackId::new(callback_id),
+        content: CanisterHttpResponseContent::Success(vec![42; body_size]),
+    }
+}
+
+/// A canister http reject response for the given callback id.
+pub(crate) fn fake_canister_http_reject(callback_id: u64) -> CanisterHttpResponse {
+    CanisterHttpResponse {
+        id: CallbackId::new(callback_id),
+        content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
+            reject_code: RejectCode::SysTransient,
+            message: String::from("rejected"),
+        }),
+    }
+}
+
+fn fake_canister_http_metadata(response: &CanisterHttpResponse) -> CanisterHttpResponseMetadata {
+    CanisterHttpResponseMetadata {
+        id: response.id,
+        content_hash: ic_types::crypto::crypto_hash(response),
+        content_size: response.content.count_bytes() as u32,
+        is_reject: response.content.is_reject(),
+        replica_version: test_replica_version(),
+    }
+}
+
+fn fake_canister_http_signature() -> CanisterHttpResponseSignature {
+    CanisterHttpResponseSignature {
+        payment_receipt: CanisterHttpPaymentReceipt::default(),
+        signature: BasicSigOf::new(BasicSig(vec![1; 32])),
+    }
+}
+
+/// A `responses` entry of a canister http payload, signed by the given signers.
+pub(crate) fn fake_canister_http_response_message(
+    response: &CanisterHttpResponse,
+    signers: &[NodeId],
+) -> pb::CanisterHttpResponseMessage {
+    let with_consensus = CanisterHttpResponseWithConsensus {
+        content: response.clone(),
+        proof: CanisterHttpResponseProof {
+            metadata: fake_canister_http_metadata(response),
+            signatures: signers
+                .iter()
+                .map(|signer| (*signer, fake_canister_http_signature()))
+                .collect(),
+        },
+        initial_spent: Cycles::new(0),
+    };
+
+    pb::CanisterHttpResponseMessage {
+        message_type: Some(pb::canister_http_response_message::MessageType::Response(
+            pb::CanisterHttpResponseWithConsensus::from(with_consensus),
+        )),
+    }
+}
+
+fn fake_flexible_responses_with_proof(
+    responses: &[(CanisterHttpResponse, NodeId)],
+) -> Vec<FlexibleCanisterHttpResponseWithProof> {
+    responses
+        .iter()
+        .map(|(response, signer)| FlexibleCanisterHttpResponseWithProof {
+            response: response.clone(),
+            proof: Signed {
+                content: CanisterHttpResponseReceipt {
+                    metadata: fake_canister_http_metadata(response),
+                    payment_receipt: CanisterHttpPaymentReceipt::default(),
+                },
+                signature: BasicSignature {
+                    signature: BasicSigOf::new(BasicSig(vec![1; 32])),
+                    signer: *signer,
+                },
+            },
+        })
+        .collect()
+}
+
+/// A `flexible_responses` entry of a canister http payload: the responses a
+/// flexible outcall delivers, each with the single-signer proof of the committee
+/// member that produced it.
+pub(crate) fn fake_flexible_canister_http_responses_message(
+    callback_id: u64,
+    responses: &[(CanisterHttpResponse, NodeId)],
+) -> pb::CanisterHttpResponseMessage {
+    let group = FlexibleCanisterHttpResponses {
+        callback_id: CallbackId::new(callback_id),
+        responses: fake_flexible_responses_with_proof(responses),
+        extra_shares: vec![],
+        initial_spent: Cycles::new(0),
+    };
+
+    pb::CanisterHttpResponseMessage {
+        message_type: Some(
+            pb::canister_http_response_message::MessageType::FlexibleResponses(
+                pb::FlexibleCanisterHttpResponses::from(group),
+            ),
+        ),
+    }
+}
+
+/// A `flexible_errors` entry of a canister http payload that delivers the
+/// rejects which made a flexible outcall fail.
+pub(crate) fn fake_flexible_canister_http_too_many_rejects_message(
+    callback_id: u64,
+    rejects: &[(CanisterHttpResponse, NodeId)],
+) -> pb::CanisterHttpResponseMessage {
+    let error = FlexibleCanisterHttpError::TooManyRejects {
+        callback_id: CallbackId::new(callback_id),
+        reject_responses: fake_flexible_responses_with_proof(rejects),
+        extra_shares: vec![],
+        initial_spent: Cycles::new(0),
+    };
+
+    pb::CanisterHttpResponseMessage {
+        message_type: Some(
+            pb::canister_http_response_message::MessageType::FlexibleError(
+                pb::FlexibleCanisterHttpError::from(error),
+            ),
+        ),
+    }
+}
+
+/// A `timeouts` entry of a canister http payload, which carries no response and
+/// is thus never stripped.
+pub(crate) fn fake_canister_http_timeout_message(
+    callback_id: u64,
+) -> pb::CanisterHttpResponseMessage {
+    pb::CanisterHttpResponseMessage {
+        message_type: Some(pb::canister_http_response_message::MessageType::Timeout(
+            callback_id,
+        )),
+    }
+}
+
+/// Like [`fake_canister_http_response_message`], but without the response
+/// content: what the payload of a block proposal that was stripped of it looks
+/// like.
+pub(crate) fn fake_stripped_canister_http_response_message(
+    response: &CanisterHttpResponse,
+    signers: &[NodeId],
+) -> pb::CanisterHttpResponseMessage {
+    let mut message = fake_canister_http_response_message(response, signers);
+    if let Some(pb::canister_http_response_message::MessageType::Response(response)) =
+        message.message_type.as_mut()
+    {
+        response.response = None;
+    }
+    message
+}
+
+/// Serializes the given messages the way the canister http payload builder does.
+///
+/// Panics if they do not all fit: `iterator_to_bytes` silently drops the messages
+/// that exceed the limit, which would leave a test quietly working on fewer
+/// messages than it asked for.
+pub(crate) fn fake_canister_http_payload(
+    messages: Vec<pb::CanisterHttpResponseMessage>,
+) -> Vec<u8> {
+    let expected_count = messages.len();
+    let bytes = iterator_to_bytes(
+        messages.into_iter(),
+        NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
+    );
+    assert_no_messages_dropped(&bytes, expected_count);
+
+    bytes
+}
+
+/// Fails unless `payload` carries all `expected_count` messages, i.e. unless every
+/// message given to `iterator_to_bytes` fit into the payload limit.
+fn assert_no_messages_dropped(payload: &[u8], expected_count: usize) {
+    let encoded_count = slice_to_messages::<pb::CanisterHttpResponseMessage>(payload)
+        .expect("Should encode a parseable payload")
+        .len();
+
+    assert_eq!(
+        encoded_count, expected_count,
+        "only {encoded_count} of {expected_count} messages fit into the \
+         {MAX_CANISTER_HTTP_PAYLOAD_SIZE} byte payload limit; use smaller responses"
+    );
 }

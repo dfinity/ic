@@ -26,7 +26,7 @@ use ic_replicated_state::metrics::ReplicatedStateMetrics;
 use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_counter_vec, fetch_gauge, fetch_gauge_vec,
-    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec,
+    fetch_histogram_stats, fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, labels,
     metric_vec, nonzero_values,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
@@ -1478,7 +1478,26 @@ fn consumed_cycles_for_instructions_are_updated_from_valid_canisters() {
             .system_state
             .consume_cycles(removed_cycles);
 
+        // As long as the prepayment is outstanding, nothing counts as consumed yet.
         observe_state_metrics(&mut test, 0);
+        assert_eq!(
+            fetch_gauge_vec(
+                test.metrics_registry(),
+                "replicated_state_consumed_cycles_from_replica_start",
+            ),
+            metric_vec(&[(&[("use_case", "Instructions")], 0.0)]),
+        );
+
+        // Settle the prepayment with a zero refund, as finishing the execution would,
+        // so that the cycles count as actually consumed.
+        test.canister_state_mut(canister_id)
+            .system_state
+            .refund_cycles(
+                removed_cycles,
+                CompoundCycles::<Instructions>::new(Cycles::zero(), cost_schedule),
+            );
+
+        observe_state_metrics(&mut test, 1);
 
         assert_eq!(
             fetch_gauge_vec(
@@ -1579,9 +1598,14 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
 
         let removed_cycles =
             CompoundCycles::<Instructions>::new(Cycles::from(1000_u128), cost_schedule);
-        test.canister_state_mut(canister_id)
-            .system_state
-            .consume_cycles(removed_cycles);
+        let system_state = &mut test.canister_state_mut(canister_id).system_state;
+        system_state.consume_cycles(removed_cycles);
+        // Settle the prepayment with a zero refund, as finishing the execution would,
+        // so that the cycles count as actually consumed.
+        system_state.refund_cycles(
+            removed_cycles,
+            CompoundCycles::<Instructions>::new(Cycles::zero(), cost_schedule),
+        );
 
         test.inject_call_to_ic00(
             Method::DeleteCanister,
@@ -1613,6 +1637,78 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
             ]),
         );
     }
+}
+
+/// HTTPS outcalls are recorded at the subnet level when they are charged, so
+/// deleting the canister that made them must not record them there again: that would
+/// double count them in the subnet's consumed cycles total and metrics.
+#[test]
+fn http_outcalls_consumed_cycles_are_not_double_counted_on_canister_deletion() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister_id = test.create_canister_with(
+        Cycles::from(5_000_000_000_000_u128),
+        ComputeAllocation::zero(),
+        MemoryAllocation::default(),
+        None,
+        None,
+        Some(CanisterStatusType::Stopped),
+    );
+
+    // Record an HTTPS outcall the way charging for one does: at the subnet level and
+    // in the canister's monotonic amounts.
+    let outcalls = NominalCycles::new(1_000_000);
+    let subnet_metrics = &mut test.state_mut().metadata.subnet_metrics;
+    subnet_metrics.observe_consumed_cycles_with_use_case(CyclesUseCase::HTTPOutcalls, outcalls);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .observe_consumed_cycles_for_https_outcall(outcalls);
+
+    test.state_mut().refresh_consumed_cycles();
+    let total_before = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_total_including_canisters();
+    let leftover_cycles = test.canister_state(canister_id).system_state.balance();
+
+    test.inject_call_to_ic00(
+        Method::DeleteCanister,
+        CanisterIdRecord::from(canister_id).encode(),
+        Cycles::zero(),
+        CanisterId::try_from(user_test_id(1).get()).unwrap(),
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.state().canister_state(&canister_id).is_none());
+
+    observe_state_metrics(&mut test, 0);
+
+    // The subnet-level `HTTPOutcalls` entry still holds just the outcall above.
+    let subnet_metrics = &test.state().metadata.subnet_metrics;
+    assert_eq!(subnet_metrics.get_consumed_cycles_http_outcalls(), outcalls);
+    // The deletion only adds the canister's leftover balance to the total.
+    assert_eq!(
+        subnet_metrics.consumed_cycles_total_including_canisters(),
+        total_before + NominalCycles::new(leftover_cycles.get())
+    );
+    // And the exported metrics report the outcall once.
+    let http_outcalls = labels(&[("use_case", "HTTPOutcalls")]);
+    assert_eq!(
+        fetch_gauge_vec(
+            test.metrics_registry(),
+            "replicated_state_consumed_cycles_from_replica_start",
+        )
+        .get(&http_outcalls),
+        Some(&(outcalls.get() as f64))
+    );
+    assert_eq!(
+        fetch_counter_vec(
+            test.metrics_registry(),
+            "replicated_state_consumed_cycles_from_replica_start_as_counters",
+        )
+        .get(&http_outcalls),
+        Some(&(outcalls.get() as f64))
+    );
 }
 
 #[test]
