@@ -235,8 +235,8 @@ impl From<(&CanisterId, &ConnectionMetrics)> for EvictionKey {
     }
 }
 
-/// Keeps track of the number of messages sent to each canister, and the last time a message was
-/// sent to that canister.
+/// Keeps track of the number of requests received from each canister, and the last time a request
+/// was received from that canister.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct LRUConnectionMetrics {
     metrics_per_sender: BTreeMap<CanisterId, ConnectionMetrics>,
