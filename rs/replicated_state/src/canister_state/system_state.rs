@@ -201,6 +201,118 @@ enum ConsumingCycles {
     Refund,
 }
 
+/// Maximum number of per-sender entries kept in a canister's `LRUConnectionMetrics`.
+pub(crate) const MAX_CONNECTION_METRICS_ENTRIES: usize = 100;
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct ConnectionMetrics {
+    pub last_access_timestamp: Time,
+    pub count: u64,
+}
+
+/// Eviction priority of a `LRUConnectionMetrics` entry: when the capacity is exceeded, the entry
+/// with the smallest key is evicted first.
+///
+/// Keys are ordered by the derived `Ord`, so changing the order of the fields changes the eviction
+/// policy.
+/// 1. `last_access_timestamp`: least recently accessed entries are evicted first.
+/// 2. `count`: among equally old entries, the one with the fewest messages is evicted first.
+/// 3. `sender`: deterministic final tie-breaker.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+struct EvictionKey {
+    last_access_timestamp: Time,
+    count: u64,
+    sender: CanisterId,
+}
+
+impl From<(&CanisterId, &ConnectionMetrics)> for EvictionKey {
+    fn from((sender, metrics): (&CanisterId, &ConnectionMetrics)) -> Self {
+        Self {
+            last_access_timestamp: metrics.last_access_timestamp,
+            count: metrics.count,
+            sender: *sender,
+        }
+    }
+}
+
+/// Keeps track of the number of requests received from each canister, and the last time a request
+/// was received from that canister.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct LRUConnectionMetrics {
+    metrics_per_sender: BTreeMap<CanisterId, ConnectionMetrics>,
+    eviction_order: BTreeSet<EvictionKey>,
+}
+
+impl LRUConnectionMetrics {
+    pub fn new(metrics_per_sender: BTreeMap<CanisterId, ConnectionMetrics>) -> Self {
+        let eviction_order = metrics_per_sender
+            .iter()
+            .map(|(sender, metrics)| EvictionKey::from((sender, metrics)))
+            .collect();
+
+        let mut lru = Self {
+            metrics_per_sender,
+            eviction_order,
+        };
+        lru.evict();
+        lru
+    }
+
+    pub fn get(&self) -> &BTreeMap<CanisterId, ConnectionMetrics> {
+        &self.metrics_per_sender
+    }
+
+    /// Increments the message count for `sender` and updates its last access timestamp.
+    pub fn increment(&mut self, sender: CanisterId, access_timestamp: Time) {
+        let metrics_entry =
+            self.metrics_per_sender
+                .entry(sender)
+                .or_insert_with(|| ConnectionMetrics {
+                    last_access_timestamp: access_timestamp,
+                    count: 0,
+                });
+
+        // Update the eviction priority by deleting the old entry...
+        self.eviction_order
+            .remove(&EvictionKey::from((&sender, &*metrics_entry)));
+
+        metrics_entry.count += 1;
+        metrics_entry.last_access_timestamp = access_timestamp;
+
+        // ...and inserting the updated entry.
+        self.eviction_order
+            .insert(EvictionKey::from((&sender, &*metrics_entry)));
+
+        self.evict();
+    }
+
+    /// Evicts entries in `EvictionKey` order until at most `MAX_CONNECTION_METRICS_ENTRIES` remain.
+    fn evict(&mut self) {
+        while self.metrics_per_sender.len() > MAX_CONNECTION_METRICS_ENTRIES
+            && let Some(entry) = self.eviction_order.pop_first()
+        {
+            self.metrics_per_sender.remove(&entry.sender);
+        }
+
+        #[cfg(debug_assertions)]
+        self.check_invariants();
+    }
+
+    #[cfg(debug_assertions)]
+    fn check_invariants(&self) {
+        // The number of entries should never exceed the maximum.
+        assert!(self.metrics_per_sender.len() <= MAX_CONNECTION_METRICS_ENTRIES);
+        // The internal data structures should always be consistent.
+        assert_eq!(self.eviction_order.len(), self.metrics_per_sender.len());
+        for (sender, metrics) in &self.metrics_per_sender {
+            assert!(
+                self.eviction_order
+                    .contains(&EvictionKey::from((sender, metrics)))
+            );
+        }
+    }
+}
+
 /// Keeps track of the types of messages executed by the canister.
 /// This will be useful for load balancing purposes (e.g. subnet splitting) to determine which
 /// canisters contribute to heavy subnet load.
@@ -278,6 +390,7 @@ pub struct CanisterMetrics {
     interrupted_during_execution: u64,
     instructions_executed: NumInstructions,
     load_metrics: LoadMetrics,
+    connection_metrics: LRUConnectionMetrics,
     consumed_cycles: NominalCycles,
     consumed_cycles_monotonic: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
@@ -296,6 +409,7 @@ impl CanisterMetrics {
         consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
         instructions_executed: NumInstructions,
         load_metrics: LoadMetrics,
+        connection_metrics: BTreeMap<CanisterId, ConnectionMetrics>,
     ) -> Self {
         Self {
             rounds_scheduled,
@@ -308,6 +422,7 @@ impl CanisterMetrics {
             consumed_cycles_by_use_cases_monotonic,
             instructions_executed,
             load_metrics,
+            connection_metrics: LRUConnectionMetrics::new(connection_metrics),
         }
     }
 
@@ -407,6 +522,14 @@ impl CanisterMetrics {
 
     pub fn load_metrics_mut(&mut self) -> &mut LoadMetrics {
         &mut self.load_metrics
+    }
+
+    pub fn connection_metrics(&self) -> &LRUConnectionMetrics {
+        &self.connection_metrics
+    }
+
+    pub fn connection_metrics_mut(&mut self) -> &mut LRUConnectionMetrics {
+        &mut self.connection_metrics
     }
 }
 

@@ -14,7 +14,9 @@ use ic_replicated_state::{
     CanisterStatus, ExportedFunctions, NumWasmPages,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{CanisterHistory, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata},
+        system_state::{
+            CanisterHistory, ConnectionMetrics, TaskQueue, wasm_chunk_store::WasmChunkStoreMetadata,
+        },
     },
     page_map::{Shard, StorageLayout, StorageResult},
 };
@@ -200,6 +202,7 @@ pub struct CanisterStateBits {
     pub canister_creation_timestamp_nanos: Option<u64>,
     pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub connection_metrics: BTreeMap<CanisterId, ConnectionMetrics>,
     pub instructions_executed: NumInstructions,
     pub ingress_messages_executed: u64,
     pub remote_subnet_messages_executed: u64,
