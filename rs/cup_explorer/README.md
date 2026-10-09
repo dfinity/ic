@@ -6,10 +6,11 @@ A command-line tool for exploring and verifying Catch-Up Packages (CUPs) of the 
 
 This tool provides utilities for interacting with Catch-Up Packages (CUPs) on subnets of the Internet Computer. CUPs are special artifacts that are created and signed by a subnet in periodic intervals (i.e. once every 500 blocks). Each CUP (via its state hash) corresponds to a specific state checkpoint of the subnet. 
 
-The tool supports two main functionalities:
+The tool supports three main functionalities:
 
 - **Exploring** the latest CUP of a subnet,
-- **Verifying** the integrity and signature of a locally stored CUP, and determining whether the subnet was halted on the given CUP.
+- **Verifying** the integrity and signature of a locally stored CUP, and determining whether the subnet was halted on the given CUP,
+- **Extracting** the threshold master public keys held by a subnet from a locally stored CUP.
 
 In particular, this tool can be used to verify whether a given Catch-Up Package represents the most recent state of a subnet that was intentionally halted via a governance proposal (e.g., during a key resharing maintenance). This is done by checking that the CUP references a registry version that explicitly instructs the subnet to halt at the next CUP height. If the verification succeeds, it provides the necessary parameters that should be included in a recovery proposal to safely restart the subnet, without making changes to the subnet state. Specifically, these parameters are:
 1. The `TIME` at which the CUP was created
@@ -54,6 +55,21 @@ The tool will:
 - Verify the combined threshold signature against the subnet public key in registry.
 - Confirm the subnet was configured to halt at the CUP’s height.
 - Check if the subnet was recovered with the correct parameters.
+
+### Extract master public keys
+
+Verify a CUP file's integrity and threshold signature, and print the threshold master public keys (of tECDSA, tSchnorr and vetKD keys) held by the subnet according to the CUP.
+
+```bash
+bazel run rs/cup_explorer:cup_explorer_bin -- extract-master-public-keys --cup-path <CUP_FILE>
+```
+
+- `--cup-path`: Path to a local CUP protobuf file (required). The latest CUP of a subnet can be downloaded using `explore --download-path`.
+
+The public keys are printed hex-encoded, in the encoding of the mainnet master public keys that are hardcoded for [`ic-pub-key`](../../packages/ic-pub-key) (in `ic-secp256k1`, `ic-ed25519` and `ic-vetkeys`):
+- ECDSA and BIP340 Schnorr keys as compressed SEC1 points (33 bytes),
+- Ed25519 keys as compressed Edwards points (32 bytes),
+- vetKD keys as compressed BLS12-381 G2 points (96 bytes).
 
 ## Example Output
 

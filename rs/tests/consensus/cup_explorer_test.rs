@@ -1,10 +1,12 @@
 /* tag::catalog[]
 Title:: CUP explorer test
 
-Goal:: Test that the CUP explorer tool can download and verify CUPs of a subnet
+Goal:: Test that the CUP explorer tool can download and verify CUPs of a subnet, and extract their
+threshold master public keys
 
 Runbook::
 . Setup:
+    . System subnet comprising 1 node, holding keys of all schemes.
     . App subnet comprising 4 nodes.
 . Download the latest CUP of the subnet using the CUP explorer
 . Check that the CUP verification correctly returns that the subnet is still running
@@ -14,6 +16,10 @@ Runbook::
 . Recover the subnet using the same state hash as in the downloaded CUP
 . Ensure that the CUP explorer finds the new recovery CUP and confirms that the subnet was
   recovered correctly
+. In parallel to the steps above, download the latest CUP of the system subnet and extract its
+  threshold master public keys using the CUP explorer, until the CUP contains all keys
+. Ensure that the public keys of a canister derived from the extracted master public keys are the
+  ones returned by the management canister
 
 end::catalog[] */
 use anyhow::bail;
@@ -21,15 +27,20 @@ use canister_test::Canister;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_threshold_sig_system_test_utils::{
     empty_subnet_update, execute_recover_subnet_proposal, execute_update_subnet_proposal,
+    get_public_key_with_retries, make_key_ids_for_all_schemes,
 };
-use ic_cup_explorer::{SubnetStatus, explore, verify};
+use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
+use ic_cup_explorer::{SubnetStatus, explore, extract_master_public_keys, verify};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
+use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_system_test_driver::driver::test_env::HasIcPrepDir;
 use ic_system_test_driver::driver::test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF};
-use ic_system_test_driver::util::{get_app_subnet_and_node, get_nns_node, runtime_from_url};
+use ic_system_test_driver::util::{
+    MessageCanister, get_app_subnet_and_node, get_nns_node, runtime_from_url,
+};
 use ic_system_test_driver::{
     driver::ic::{InternetComputer, Subnet},
     driver::{
@@ -39,22 +50,46 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_system_test_driver::{retry_with_msg, systest};
-use ic_types::Height;
 use ic_types::consensus::{CatchUpPackage, HasHeight};
+use ic_types::crypto::{
+    AlgorithmId, ExtendedDerivationPath, canister_threshold_sig::MasterPublicKey,
+};
+use ic_types::{Height, PrincipalId};
 
 use anyhow::Result;
 use prost::Message;
 use registry_canister::mutations::do_recover_subnet::RecoverSubnetPayload;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::info;
+use std::collections::BTreeSet;
 use tempfile::NamedTempFile;
 
+// A short DKG interval makes the app subnet halt faster, as it halts at the next CUP height, and
+// makes the system subnet generate its vetKD key faster.
 const DKG_INTERVAL: u64 = 14;
 const NODES_COUNT: usize = 4;
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
-        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .add_subnet(
+            Subnet::fast_single_node(SubnetType::System)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs: make_key_ids_for_all_schemes()
+                        .into_iter()
+                        .map(|key_id| KeyConfig {
+                            max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                            pre_signatures_to_create_in_advance: key_id
+                                .requires_pre_signatures()
+                                .then_some(5),
+                            key_id,
+                        })
+                        .collect(),
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
+                }),
+        )
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
@@ -214,10 +249,108 @@ fn test(env: TestEnv) {
     assert_eq!(status, SubnetStatus::Recovered);
 }
 
+/// Extracts the master public keys of the keys held by the system subnet from the latest CUP of the
+/// subnet using the CUP explorer. Checks the extracted master public keys by deriving the public
+/// keys of a canister from them, and comparing these to the public keys that the management
+/// canister returns for the same canister.
+fn test_extract_master_public_keys(env: TestEnv) {
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+
+    let nns_public_key = env.prep_dir("").unwrap().root_public_key_path();
+
+    let nns_node = get_nns_node(&topology);
+    let subnet_id = topology.root_subnet_id();
+
+    let tmp_file = NamedTempFile::new().unwrap();
+    let cup_path = tmp_file.path();
+
+    let key_ids = make_key_ids_for_all_schemes();
+    info!(
+        log,
+        "Extracting the master public keys of {:?} from the latest CUP of subnet {}",
+        key_ids,
+        subnet_id
+    );
+    let master_public_keys = retry_with_msg!(
+        "extract the master public keys of all keys",
+        log.clone(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || {
+            block_on(explore(
+                nns_node.get_public_url(),
+                Some(nns_public_key.clone()),
+                subnet_id,
+                Some(cup_path.into()),
+            ));
+            let master_public_keys = extract_master_public_keys(
+                nns_node.get_public_url(),
+                Some(nns_public_key.clone()),
+                cup_path,
+            )
+            .map_err(|e| anyhow::anyhow!(e))?;
+            let extracted_key_ids: BTreeSet<_> = master_public_keys.keys().collect();
+            if extracted_key_ids == key_ids.iter().collect::<BTreeSet<_>>() {
+                Ok(master_public_keys)
+            } else {
+                bail!("The CUP only contains the keys {:?}", extracted_key_ids)
+            }
+        }
+    )
+    .expect("The CUP never contained the master public keys of all keys");
+
+    let agent = nns_node.build_default_agent();
+    block_on(async {
+        let msg_can = MessageCanister::new(&agent, nns_node.effective_canister_id()).await;
+        let canister_id = PrincipalId::from(msg_can.canister_id());
+        for key_id in &key_ids {
+            let public_key = get_public_key_with_retries(key_id, &msg_can, &log, 100)
+                .await
+                .expect("Failed to get the public key");
+            assert_eq!(
+                derive_canister_public_key(&master_public_keys[key_id], canister_id),
+                public_key,
+                "The public key derived from the extracted master public key of {key_id} \
+                differs from the one returned by the management canister",
+            );
+        }
+    });
+}
+
+/// Derives the public key of the given canister from the given master public key, in the same way
+/// as the management canister does for an empty derivation path (or an empty context for vetKD).
+fn derive_canister_public_key(
+    master_public_key: &MasterPublicKey,
+    canister_id: PrincipalId,
+) -> Vec<u8> {
+    if master_public_key.algorithm_id == AlgorithmId::VetKD {
+        ic_vetkeys::MasterPublicKey::deserialize(&master_public_key.public_key)
+            .expect("Failed to deserialize the vetKD master public key")
+            .derive_canister_key(canister_id.as_slice())
+            .derive_sub_key(&[])
+            .serialize()
+    } else {
+        derive_threshold_public_key(
+            master_public_key,
+            ExtendedDerivationPath {
+                caller: canister_id,
+                derivation_path: vec![],
+            },
+        )
+        .expect("Failed to derive the public key")
+        .public_key
+    }
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_parallel(
+            SystemTestSubGroup::new()
+                .add_test(systest!(test))
+                .add_test(systest!(test_extract_master_public_keys)),
+        )
         // The replica is restarted when the orchestrator observes the recovery CUP in the registry
         .update_orchestrator_metrics_to_check("orchestrator_processes_start_attempts_total", 2)
         .execute_from_args()?;

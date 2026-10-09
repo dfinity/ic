@@ -1,5 +1,5 @@
 use clap::Parser;
-use ic_cup_explorer::{SubnetStatus, explore, verify};
+use ic_cup_explorer::{SubnetStatus, explore, extract_master_public_keys, verify};
 use ic_types::SubnetId;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -12,6 +12,8 @@ enum SubCommand {
     Explore(ExploreArgs),
     /// Verify a given CUP
     VerifyCUPOfHaltedSubnet(VerifyArgs),
+    /// Verify a given CUP and print the threshold master public keys of its subnet
+    ExtractMasterPublicKeys(VerifyArgs),
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -77,6 +79,10 @@ async fn main() {
                     "Verification failed: Subnet wasn't instructed to halt on this CUP. Therefore, this CUP is NOT guaranteed to represent the latest state of the subnet!"
                 );
             }
+        }
+        SubCommand::ExtractMasterPublicKeys(verify_args) => {
+            extract_master_public_keys(args.nns_url, args.nns_pem, &verify_args.cup_path)
+                .expect("Failed to extract the master public keys");
         }
     }
 }

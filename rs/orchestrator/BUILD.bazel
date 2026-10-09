@@ -21,7 +21,6 @@ rust_library(
         "//packages/ic-ed25519",
         "//rs/config",
         "//rs/consensus/cup_utils",
-        "//rs/consensus/dkg",
         "//rs/crypto",
         "//rs/crypto/node_key_generation",
         "//rs/crypto/tls_interfaces",
