@@ -17,14 +17,14 @@
     // Configuration of IPv4 networking (provided at first boot)
     // =========================================================
     initial_ipv4_config: {
-        public_address: "{{ ipv4_address }}",
-        public_gateway: "{{ ipv4_gateway }}",
+        public_address: {{ ipv4_address|json }},
+        public_gateway: {{ ipv4_gateway|json }},
     },
 
     // ============================================
     // Configuration of the domain name
     // ============================================
-    domain: "{{ domain_name }}",
+    domain: {{ domain_name|json }},
 
     // ============================================
     // Configuration of registry client
@@ -111,7 +111,7 @@
     // ==================================
 
     tracing: {
-        jaeger_addr: "{{ jaeger_addr }}",
+        jaeger_addr: {{ jaeger_addr|json }},
     },
 
     // ====================================
@@ -635,8 +635,8 @@ table ip6 filter {\n\
     },
 
     registration: {
-        node_reward_type: "{{ node_reward_type }}",
-        nns_url: "{{ nns_urls }}",
+        node_reward_type: {{ node_reward_type|json }},
+        nns_url: {{ nns_urls|json }},
         nns_pub_key_pem: "/run/config/nns_public_key.pem",
         node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem"
     },

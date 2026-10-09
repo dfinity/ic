@@ -1,0 +1,28 @@
+# Binaries to be shadowed within the limited console
+
+# Shells
+sh
+dash
+rbash
+ssh
+
+# Interpreters
+awk
+mawk
+nawk
+sed
+perl*
+python*
+
+# Cmd redirections
+env
+find
+xargs
+strace
+rsync
+output-wrapper.sh
+
+# Pagers
+less
+systemctl
+journalctl
