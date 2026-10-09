@@ -209,12 +209,15 @@ system_test_nns(
     tags = [
         "long_test",  # The P90 duration was over 6 minutes for the week starting on 2025-08-25.
     ],
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/crypto/utils/canister_threshold_sig",
         "//rs/cup_explorer",
         "//rs/nns/constants",
         "//rs/protobuf",
         "//rs/registry/canister",
+        "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/tecdsa/utils",
@@ -223,6 +226,7 @@ system_test_nns(
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:ic-vetkeys",
         "@crate_index//:prost",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
