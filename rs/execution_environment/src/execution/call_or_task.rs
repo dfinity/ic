@@ -53,68 +53,91 @@ pub fn execute_call_or_task(
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
-    let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
-        match prepaid_execution_cycles {
-            Some(prepaid_execution_cycles) => (clean_canister, prepaid_execution_cycles, true),
-            None => {
-                let mut canister = clean_canister;
-                let memory_usage = canister.memory_usage();
-                let message_memory_usage = canister.message_memory_usage();
-                let reveal_top_up = call_or_task
-                    .caller()
-                    .map(|caller| canister.controllers().contains(&caller))
-                    .unwrap_or_default();
+    let (clean_canister, prepaid_execution_cycles, resuming_aborted) = {
+        let mut canister = clean_canister;
+        let reveal_top_up = call_or_task
+            .caller()
+            .map(|caller| canister.controllers().contains(&caller))
+            .unwrap_or_default();
 
-                let wasm_execution_mode = canister
-                    .execution_state
-                    .as_ref()
-                    .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
+        let wasm_execution_mode = canister
+            .execution_state
+            .as_ref()
+            .map_or(WasmExecutionMode::Wasm32, |es| es.wasm_execution_mode);
 
-                let prepaid_execution_cycles = match round
+        let instruction_limit = execution_parameters.instruction_limits.message();
+        let memory_usage = canister.memory_usage();
+        let message_memory_usage = canister.message_memory_usage();
+
+        let (result, resuming_aborted) = match prepaid_execution_cycles {
+            // An aborted execution carries its prepayment over rather than prepaying
+            // again, so it may no longer match what executing it now costs.
+            Some(prepaid_execution_cycles) => (
+                round
                     .cycles_account_manager
-                    .prepay_execution_cycles(
+                    .adjust_prepaid_execution_cycles(
                         &mut canister.system_state,
+                        prepaid_execution_cycles,
                         memory_usage,
                         message_memory_usage,
                         execution_parameters.compute_allocation,
-                        execution_parameters.instruction_limits.message(),
+                        instruction_limit,
                         subnet_cycles_config,
                         reveal_top_up,
                         wasm_execution_mode,
-                    ) {
-                    Ok(cycles) => cycles,
-                    Err(err) => {
-                        if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
-                            // `OnLowWasmMemoryHook` was taken from `task_queue` (so the hook status is now
-                            // `Executed`), but it could not run because not enough cycles were available.
-                            // If we left the status as `Executed`, the hook would never be executed; if we
-                            // re-enqueued the hook as `Ready`, we would immediately pop it again and enter
-                            // an infinite loop (or spin until the round instruction limit is reached).
-                            //
-                            // Instead we "forget" the hook status and rely on the next message (or
-                            // management call) to re-enqueue it.
-                            //
-                            // This leaves the canister in a transiently inconsistent state
-                            // (`(ConditionNotSatisfied, condition = true)`).
-                            canister
-                                .system_state
-                                .task_queue
-                                .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
-                        }
-                        return finish_call_with_error(
-                            UserError::new(ErrorCode::CanisterOutOfCycles, err),
-                            canister,
-                            call_or_task,
-                            NumInstructions::from(0),
-                            round.time,
-                            execution_parameters.subnet_type,
-                            round.log,
-                        );
-                    }
-                };
-                (canister, prepaid_execution_cycles, false)
+                    ),
+                true,
+            ),
+            None => (
+                round.cycles_account_manager.prepay_execution_cycles(
+                    &mut canister.system_state,
+                    memory_usage,
+                    message_memory_usage,
+                    execution_parameters.compute_allocation,
+                    instruction_limit,
+                    subnet_cycles_config,
+                    reveal_top_up,
+                    wasm_execution_mode,
+                ),
+                false,
+            ),
+        };
+
+        let prepaid_execution_cycles = match result {
+            Ok(cycles) => cycles,
+            Err(err) => {
+                // Nothing left to refund below: a failed prepayment leaves the balance
+                // untouched, and a failed adjustment refunds the prepayment itself.
+                if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
+                    // `OnLowWasmMemoryHook` was taken from `task_queue` (so the hook status is now
+                    // `Executed`), but it could not run because not enough cycles were available.
+                    // If we left the status as `Executed`, the hook would never be executed; if we
+                    // re-enqueued the hook as `Ready`, we would immediately pop it again and enter
+                    // an infinite loop (or spin until the round instruction limit is reached).
+                    //
+                    // Instead we "forget" the hook status and rely on the next message (or
+                    // management call) to re-enqueue it.
+                    //
+                    // This leaves the canister in a transiently inconsistent state
+                    // (`(ConditionNotSatisfied, condition = true)`).
+                    canister
+                        .system_state
+                        .task_queue
+                        .remove(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                }
+                return finish_call_with_error(
+                    UserError::new(ErrorCode::CanisterOutOfCycles, err),
+                    canister,
+                    call_or_task,
+                    NumInstructions::from(0),
+                    round.time,
+                    execution_parameters.subnet_type,
+                    round.log,
+                );
             }
         };
+        (canister, prepaid_execution_cycles, resuming_aborted)
+    };
 
     let request_metadata = match &call_or_task {
         CanisterCallOrTask::Update(CanisterCall::Request(request))
