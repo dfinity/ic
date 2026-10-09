@@ -22887,6 +22887,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "futures",
+ "http 1.4.0",
  "ic-agent",
  "ic-base-types",
  "ic-nervous-system-agent",
