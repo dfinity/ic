@@ -756,12 +756,15 @@ impl BlockProposalAssembler {
 #[cfg(test)]
 mod tests {
     use crate::fetch_stripped_artifact::test_utils::{
-        fake_block_proposal_with_canister_http, fake_block_proposal_with_ingresses,
-        fake_block_proposal_with_ingresses_and_idkg, fake_canister_http_payload,
+        fake_block_proposal, fake_block_proposal_with_canister_http,
+        fake_block_proposal_with_ingresses, fake_block_proposal_with_ingresses_and_idkg,
+        fake_canister_http_payload, fake_canister_http_payload_with_every_kind,
         fake_canister_http_response, fake_canister_http_response_message,
-        fake_canister_http_stripped_message, fake_idkg_dealing, fake_idkg_payload_with_dealings,
-        fake_ingress_message, fake_ingress_message_with_arg_size, fake_ingress_message_with_sig,
-        fake_stripped_block_proposal_with_messages, fake_stripped_canister_http_response_message,
+        fake_canister_http_stripped_message, fake_canister_http_timeout_message,
+        fake_flexible_canister_http_responses_message, fake_idkg_dealing,
+        fake_idkg_payload_with_dealings, fake_ingress_message, fake_ingress_message_with_arg_size,
+        fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages,
+        fake_stripped_canister_http_response_message,
     };
     use crate::fetch_stripped_artifact::types::rpc::{
         GetCanisterHttpResponseInBlockResponse, GetIngressMessageInBlockResponse,
@@ -782,6 +785,7 @@ mod tests {
     use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_types::consensus::idkg::IDkgObject;
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_2};
+    use std::collections::BTreeSet;
 
     use super::*;
 
@@ -1405,6 +1409,189 @@ mod tests {
             AssemblyError::CanisterHttpPayload(CanisterHttpPayloadError::MissingResponse(hash))
                 if hash == ic_types::crypto::crypto_hash(&response)
         );
+    }
+
+    #[tokio::test]
+    async fn roundtrip_test_with_canister_http_responses_from_pool() {
+        let (payload, stripped_responses) = fake_canister_http_payload_with_every_kind();
+        let block_proposal = fake_block_proposal_with_canister_http(payload);
+
+        let assembler =
+            set_up_assembler_with_canister_http_responses(stripped_responses, /*peer=*/ None);
+        let stripped_block_proposal =
+            assembler.disassemble_message(ConsensusMessage::BlockProposal(block_proposal.clone()));
+        let reassembled = assembler
+            .assemble_message(
+                stripped_block_proposal.id(),
+                Some((stripped_block_proposal, NODE_1)),
+                MockPeers(NODE_1),
+            )
+            .await;
+
+        assert_assembled(reassembled, &block_proposal);
+    }
+
+    #[tokio::test]
+    async fn roundtrip_test_with_canister_http_response_from_peer() {
+        let response = fake_canister_http_response(1, 1024);
+        let block_proposal =
+            fake_block_proposal_with_canister_http(fake_canister_http_payload(vec![
+                fake_canister_http_response_message(&response, &[NODE_1]),
+            ]));
+
+        // The response is nowhere to be found locally, so it has to come from a peer.
+        let assembler = set_up_assembler_with_canister_http_responses(
+            /*pool=*/ vec![],
+            /*peer=*/ Some(response),
+        );
+        let stripped_block_proposal =
+            assembler.disassemble_message(ConsensusMessage::BlockProposal(block_proposal.clone()));
+        let reassembled = assembler
+            .assemble_message(
+                stripped_block_proposal.id(),
+                Some((stripped_block_proposal, NODE_1)),
+                MockPeers(NODE_1),
+            )
+            .await;
+
+        assert_assembled(reassembled, &block_proposal);
+    }
+
+    /// Committee members of a flexible outcall that agree deliver the very same
+    /// response, once each, which the receiver has to fetch only once. A response too
+    /// small to be worth stripping travels in the block, and is not fetched at all.
+    #[tokio::test]
+    async fn roundtrip_test_with_identical_and_tiny_canister_http_responses() {
+        let response = fake_canister_http_response(1, 1024);
+        let tiny = fake_canister_http_response(2, 1);
+        let block_proposal =
+            fake_block_proposal_with_canister_http(fake_canister_http_payload(vec![
+                fake_flexible_canister_http_responses_message(
+                    1,
+                    &[(response.clone(), NODE_1), (response.clone(), NODE_2)],
+                ),
+                fake_canister_http_response_message(&tiny, &[NODE_1]),
+            ]));
+
+        // Neither response is in the pool, and the peer expects to be asked once.
+        let assembler = set_up_assembler_with_canister_http_responses(
+            /*pool=*/ vec![],
+            /*peer=*/ Some(response),
+        );
+        let stripped_block_proposal =
+            assembler.disassemble_message(ConsensusMessage::BlockProposal(block_proposal.clone()));
+        let reassembled = assembler
+            .assemble_message(
+                stripped_block_proposal.id(),
+                Some((stripped_block_proposal, NODE_1)),
+                MockPeers(NODE_1),
+            )
+            .await;
+
+        assert_assembled(reassembled, &block_proposal);
+    }
+
+    /// The whole point of the exercise: the block proposal that goes on the wire is
+    /// smaller than the one it was stripped from, by about the response contents it
+    /// no longer carries.
+    #[test]
+    fn stripping_a_block_removes_the_canister_http_responses() {
+        let (payload, stripped_responses) = fake_canister_http_payload_with_every_kind();
+        let block_proposal = fake_block_proposal_with_canister_http(payload.clone());
+        let unstripped_size =
+            pb::StrippedConsensusMessage::proxy_encode(MaybeStrippedConsensusMessage::Unstripped(
+                ConsensusMessage::BlockProposal(block_proposal.clone()),
+            ))
+            .len();
+
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) =
+            ConsensusMessage::BlockProposal(block_proposal).strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+
+        // Every response was worth stripping, and is declared...
+        assert_eq!(
+            stripped
+                .stripped_canister_http_responses
+                .stripped_responses
+                .iter()
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            stripped_responses
+                .iter()
+                .map(ic_types::crypto::crypto_hash)
+                .collect()
+        );
+        // ...at a cost of exactly 36 bytes each...
+        let undeclared = StrippedBlockProposal {
+            stripped_canister_http_responses: StrippedCanisterHttpResponses::default(),
+            ..stripped.clone()
+        };
+        assert_eq!(
+            pb::StrippedBlockProposal::proxy_encode(stripped.clone()).len()
+                - pb::StrippedBlockProposal::proxy_encode(undeclared).len(),
+            36 * stripped_responses.len()
+        );
+        // ...while the payload shrank by at least their contents.
+        let pruned_payload = &stripped
+            .pruned_block_proposal_proto
+            .value
+            .as_ref()
+            .unwrap()
+            .canister_http_payload_bytes;
+        let removed_size: usize = stripped_responses
+            .iter()
+            .map(|response| response.content.count_bytes())
+            .sum();
+        assert!(
+            payload.len() - pruned_payload.len() >= removed_size,
+            "the payload shrank from {} B to {} B, by less than the {removed_size} B removed",
+            payload.len(),
+            pruned_payload.len()
+        );
+
+        let stripped_size = pb::StrippedConsensusMessage::proxy_encode(
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped),
+        )
+        .len();
+        assert!(
+            stripped_size < unstripped_size,
+            "the stripped proposal ({stripped_size} B) is not smaller than the \
+             unstripped one ({unstripped_size} B)"
+        );
+    }
+
+    #[test]
+    fn a_block_without_canister_http_responses_is_left_untouched() {
+        // A payload with nothing to strip, and a block with no payload at all.
+        for payload in [
+            fake_canister_http_payload(vec![fake_canister_http_timeout_message(5)]),
+            Vec::new(),
+        ] {
+            let block_proposal = fake_block_proposal(vec![], None, payload.clone(), false);
+            let MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) =
+                ConsensusMessage::BlockProposal(block_proposal).strip()
+            else {
+                panic!("Didn't properly strip the block proposal");
+            };
+
+            assert_eq!(
+                stripped
+                    .pruned_block_proposal_proto
+                    .value
+                    .as_ref()
+                    .unwrap()
+                    .canister_http_payload_bytes,
+                payload
+            );
+            let assembler = BlockProposalAssembler::new(stripped);
+            assert!(
+                PayloadAssembler::<CanisterHttpResponse>::missing_artifacts(&assembler)
+                    .next()
+                    .is_none()
+            );
+        }
     }
 
     /// A peer set that advertises no peers (so missing stripped messages can never be fetched
