@@ -187,6 +187,8 @@ if [ -n "$flaky" ]; then
 fi
 
 echo "$tests" | jq .
+# The log and the terminal get the summary too, as that is where the dropped tests and their reasons are looked up.
+echo "$summary" >&2
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
     echo "tests=$tests" >>"$GITHUB_OUTPUT"
     echo "$summary" >>"$GITHUB_STEP_SUMMARY"
