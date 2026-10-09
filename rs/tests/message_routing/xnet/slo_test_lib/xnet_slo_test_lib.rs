@@ -470,18 +470,15 @@ pub fn check_success(
     success
 }
 
-/// Takes as input a testing environment, a list of endpoint runtimes s.t. each
-/// runtime corresponds to a node on one of the subnets to deploy XNet test
-/// canisters to, and a configuration, and runs an instance of the XNet SLO test.
-/// It assumes the IC instance under test is already set up and ignores all
-/// `config` parameters related to the IC topology (e.g., `nodes_per_subnet`).
-/// The canisters are torn down via the most up-to-date node of their subnet in
-/// the topology of `env`.
+/// Takes as input a testing environment, a list of nodes s.t. each node is on
+/// one of the subnets to deploy XNet test canisters to, and a configuration,
+/// and runs an instance of the XNet SLO test. It assumes the IC instance under
+/// test is already set up and ignores all `config` parameters related to the
+/// IC topology (e.g., `nodes_per_subnet`).
 ///
 ///
 /// # Panics
-/// - If the endpoints provided in `endpoints_runtimes` are incompatible with `config`.
-/// - If the topology of `env` has no subnet hosting the canisters of an endpoint.
+/// - If the nodes provided in `nodes` are incompatible with `config`.
 /// - On test failure.
 pub async fn test_async_impl(
     env: TestEnv,
@@ -506,16 +503,10 @@ pub async fn test_async_impl(
     );
     tokio::time::sleep(Duration::from_secs(config.runtime.as_secs())).await;
 
-    // By now the node behind an endpoint may lag behind the rest of its subnet, e.g.
-    // when its host is oversubscribed. If it lags by more than 90s, it accepts an
-    // update call, but then drops it without telling the client: the client sets the
-    // call's `ingress_expiry` to `MAX_INGRESS_TTL - PERMITTED_DRIFT` (4 minutes) from
-    // now, but the node's ingress manager only accepts calls expiring at most
-    // `MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR` (5.5 minutes) after the time
-    // of its latest finalized block. The client then waits for the call until it
-    // times out. So send the tear down's calls to the most up-to-date node of each
-    // subnet instead. The tear down takes well under 90s, so that node is very
-    // unlikely to fall behind while it is running.
+    // The node behind an endpoint may by now lag behind its subnet, e.g. when its
+    // host is oversubscribed. A node lagging by more than 90s still accepts update
+    // calls, but its ingress manager silently drops them. So tear down via the most
+    // up-to-date node of each subnet instead.
     let teardown_runtimes = up_to_date_runtimes(&env, &canisters, logger).await;
     let canisters = canisters
         .iter()
@@ -547,27 +538,19 @@ pub async fn test_async_impl(
     );
 }
 
-/// Returns, for every subnet in `canisters`, a runtime for the most up-to-date node
-/// of the subnet hosting that subnet's canisters; or `None` if none of its nodes is
-/// healthy, in which case the caller should stick to the runtime it already has.
-///
-///
-/// # Panics
-/// - If one of the subnets in `canisters` has no canister.
-/// - If the topology of `env` has no subnet hosting the canisters of a subnet.
+/// Returns, for every subnet in `canisters`, a runtime for its most up-to-date
+/// healthy node, or `None` if it has none.
 async fn up_to_date_runtimes(
     env: &TestEnv,
     canisters: &[Vec<Canister<'_>>],
     logger: &slog::Logger,
 ) -> Vec<Option<Runtime>> {
-    // Taking a topology snapshot replays the registry local store, so take it once
-    // rather than once per subnet: some tests have over a hundred subnets.
+    // Take the snapshot once: it replays the registry local store.
     let topology = env.topology_snapshot();
     let subnets = canisters
         .iter()
         .map(|subnet_canisters| {
-            // All canisters of `subnet_canisters` were installed via the same
-            // endpoint, i.e. they are hosted by the same subnet.
+            // All canisters of a subnet were installed via the same endpoint.
             let canister_id = subnet_canisters
                 .first()
                 .expect("Subnet without canisters")
@@ -583,8 +566,8 @@ async fn up_to_date_runtimes(
     .await
 }
 
-/// Returns a runtime for the most up-to-date node of `subnet`, i.e. the healthy one
-/// with the highest certified height; or `None` if none of its nodes is healthy.
+/// Returns a runtime for the healthy node of `subnet` with the highest certified
+/// height, or `None` if there is none.
 async fn up_to_date_runtime(subnet: &SubnetSnapshot, logger: &slog::Logger) -> Option<Runtime> {
     let statuses = join_all(subnet.nodes().map(|node| async move {
         let status = node.status_async().await.ok();
@@ -604,11 +587,8 @@ async fn up_to_date_runtime(subnet: &SubnetSnapshot, logger: &slog::Logger) -> O
             .map(|(health, certified_height, node)| (node.node_id, *health, *certified_height))
             .collect::<Vec<_>>()
     );
-    // Skip nodes that are not healthy: they answer queries and `read_state` with 503,
-    // and the tear down needs both, `read_state` to await its update calls and
-    // queries to collect the metrics. In particular a node whose certified height
-    // lags its own finalized height reports `CertifiedStateBehind`, while still
-    // reporting that certified height.
+    // Only a healthy node serves the tear down's queries and `read_state` calls; an
+    // unhealthy one still reports a certified height but answers both with 503.
     let Some((_, node)) = statuses
         .into_iter()
         .filter(|(health, _, _)| *health == Some(ReplicaHealthStatus::Healthy))
