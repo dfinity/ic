@@ -50,7 +50,8 @@ use std::{
 };
 
 use crate::fetch_stripped_artifact::types::{
-    StrippedMessage, StrippedMessageId, stripped::StrippedIDkgDealings,
+    StrippedMessage, StrippedMessageId,
+    stripped::{StrippedCanisterHttpResponses, StrippedIDkgDealings},
 };
 
 use super::types::{
@@ -64,6 +65,9 @@ impl StrippedMessage {
             StrippedMessage::Ingress(id, _) => StrippedMessageId::Ingress(id.clone()),
             StrippedMessage::IDkgDealing(id, node_index, _) => {
                 StrippedMessageId::IDkgDealing(id.clone(), *node_index)
+            }
+            StrippedMessage::CanisterHttpResponse(content_hash, _) => {
+                StrippedMessageId::CanisterHttpResponse(content_hash.clone())
             }
         }
     }
@@ -205,11 +209,22 @@ pub(crate) fn fake_stripped_block_proposal_with_messages(
             }
         })
         .collect::<Vec<_>>();
+    let stripped_responses = stripped_messages
+        .iter()
+        .filter_map(|msg_id| {
+            if let StrippedMessageId::CanisterHttpResponse(content_hash) = msg_id {
+                Some(content_hash.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
     StrippedBlockProposal {
         pruned_block_proposal_proto: pb::BlockProposal::default(),
         stripped_ingress_payload: StrippedIngressPayload { ingress_messages },
         unstripped_consensus_message_id: fake_consensus_message_id(),
         stripped_idkg_dealings: StrippedIDkgDealings { stripped_dealings },
+        stripped_canister_http_responses: StrippedCanisterHttpResponses { stripped_responses },
     }
 }
 
@@ -286,6 +301,12 @@ pub(crate) fn fake_idkg_payload_with_dealing(
     node_index: NodeIndex,
 ) -> IDkgPayload {
     fake_idkg_payload_with_dealings(vec![(dealing, node_index)])
+}
+
+/// A stripped canister http response, the response to the given callback id.
+pub(crate) fn fake_canister_http_stripped_message(callback_id: u64) -> StrippedMessage {
+    let response = fake_canister_http_response(callback_id, 1024);
+    StrippedMessage::CanisterHttpResponse(ic_types::crypto::crypto_hash(&response), response)
 }
 
 /// A canister http response for the given callback id, with a body of the given size.
