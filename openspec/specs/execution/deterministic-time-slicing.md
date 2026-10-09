@@ -42,6 +42,12 @@ DTS uses two levels of instruction limits: message-level and slice-level.
 - **AND** `max_instructions_per_install_code_slice` as the slice limit
 - **AND** these are typically larger than regular message limits (e.g., 100 slices for upgrades)
 
+#### Scenario: Reported slice instructions never exceed the message instructions left
+- **WHEN** `slice_instructions_executed` computes how many instructions the current slice executed
+- **AND** the Wasmtime instruction counter went deeply negative, e.g. because a system API call charged a large fee before failing with an out-of-instructions error
+- **THEN** the reported count is capped at the instructions left for the message (the message instruction limit minus the instructions already executed in previous slices), in addition to the existing floor of zero
+- **AND** this keeps the instructions accounted for the round consistent with the instructions charged for the message
+
 ### Requirement: Paused Execution State
 
 Paused executions maintain all necessary state for deterministic resumption.
