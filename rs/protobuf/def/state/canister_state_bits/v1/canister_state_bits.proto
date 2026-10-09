@@ -553,7 +553,7 @@ message CanisterStateBits {
 }
 
 message CanisterToCanisterMetrics {
-  types.v1.CanisterId other_canister_id = 1;
+  types.v1.CanisterId sender_canister_id = 1;
   uint64 timestamp_nanos = 2;
   uint64 count = 3;
 }

@@ -839,7 +839,7 @@ pub mod canister_state_bits {
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CanisterToCanisterMetrics {
     #[prost(message, optional, tag = "1")]
-    pub other_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    pub sender_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(uint64, tag = "2")]
     pub timestamp_nanos: u64,
     #[prost(uint64, tag = "3")]

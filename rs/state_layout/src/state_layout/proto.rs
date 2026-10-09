@@ -99,7 +99,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                         },
                     )| {
                         pb_canister_state_bits::CanisterToCanisterMetrics {
-                            other_canister_id: Some(sender_canister_id.into()),
+                            sender_canister_id: Some(sender_canister_id.into()),
                             timestamp_nanos: last_access_timestamp.as_nanos_since_unix_epoch(),
                             count,
                         }
@@ -277,16 +277,16 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 .into_iter()
                 .map(
                     |pb_canister_state_bits::CanisterToCanisterMetrics {
-                         other_canister_id,
+                         sender_canister_id,
                          timestamp_nanos,
                          count,
                      }| {
-                        let other_canister_id = try_from_option_field(
-                            other_canister_id,
-                            "CanisterStateBits::CanisterToCanisterMetrics::other_canister_id",
+                        let sender_canister_id = try_from_option_field(
+                            sender_canister_id,
+                            "CanisterStateBits::CanisterToCanisterMetrics::sender_canister_id",
                         )?;
                         Ok((
-                            other_canister_id,
+                            sender_canister_id,
                             ConnectionMetrics {
                                 last_access_timestamp: Time::from_nanos_since_unix_epoch(
                                     timestamp_nanos,

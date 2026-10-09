@@ -367,7 +367,7 @@ fn test_decode_connection_metrics_without_canister_id_fails() {
     pb_bits
         .connection_metrics
         .push(pb_canister_state_bits::CanisterToCanisterMetrics {
-            other_canister_id: None,
+            sender_canister_id: None,
             timestamp_nanos: 1_000,
             count: 7,
         });
