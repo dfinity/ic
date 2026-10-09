@@ -79,7 +79,7 @@ fn sharing_nizk_should_verify() {
     let rng = &mut reproducible_rng();
     let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
 
-    let instance = SharingInstance::new(pk, aa, rr, cc);
+    let instance = SharingInstance::new(pk, aa, rr, cc).expect("Valid sharing instance");
 
     let witness = SharingWitness::new(r, s);
     let sharing_proof = prove_sharing(&instance, &witness, rng);
@@ -100,7 +100,7 @@ fn sharing_nizk_is_stable() {
         "04c66ff4854bff12d8ce0c2a6aa69791812b5dc2e029040fd3f806936516ece3",
     );
 
-    let instance = SharingInstance::new(pk, aa, rr, cc);
+    let instance = SharingInstance::new(pk, aa, rr, cc).expect("Valid sharing instance");
 
     assert_expected_scalar(
         &instance.hash_to_scalar(),
@@ -144,48 +144,45 @@ fn sharing_nizk_is_stable() {
 }
 
 #[test]
-#[should_panic(expected = "The sharing proof instance is invalid: InvalidInstance")]
-fn sharing_prover_should_panic_on_empty_coefficients() {
+fn sharing_instance_new_should_fail_on_empty_coefficients() {
     let rng = &mut reproducible_rng();
-    let (pk, _aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
+    let (pk, _aa, rr, cc, _r, _s) = setup_sharing_instance_and_witness(rng);
 
-    let instance = SharingInstance::new(pk, vec![], rr, cc);
-    let witness = SharingWitness::new(r, s);
-    let _panic_one = prove_sharing(&instance, &witness, rng);
+    assert!(
+        matches!(
+            SharingInstance::new(pk, vec![], rr, cc),
+            Err(ZkProofSharingError::InvalidInstance)
+        ),
+        "SharingInstance::new rejects empty public coefficients"
+    );
 }
 
 #[test]
-#[should_panic(expected = "The sharing proof instance is invalid: InvalidInstance")]
-fn sharing_prover_should_panic_on_invalid_instance() {
+fn sharing_instance_new_should_fail_on_mismatched_lengths() {
     let rng = &mut reproducible_rng();
-    let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
+    let (mut pk, aa, rr, cc, _r, _s) = setup_sharing_instance_and_witness(rng);
     pk.push(G1Affine::generator().clone());
 
-    let instance = SharingInstance::new(pk, aa, rr, cc);
-
-    let witness = SharingWitness::new(r, s);
-    let _panic_one = prove_sharing(&instance, &witness, rng);
+    assert!(
+        matches!(
+            SharingInstance::new(pk, aa, rr, cc),
+            Err(ZkProofSharingError::InvalidInstance)
+        ),
+        "SharingInstance::new rejects mismatched public_keys / combined_ciphertexts lengths"
+    );
 }
 
 #[test]
-fn sharing_nizk_should_fail_on_invalid_instance() {
+fn sharing_instance_new_should_fail_on_empty_public_keys() {
     let rng = &mut reproducible_rng();
-    let (mut pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
+    let (_pk, aa, rr, _cc, _r, _s) = setup_sharing_instance_and_witness(rng);
 
-    let instance = SharingInstance::new(pk.clone(), aa.clone(), rr.clone(), cc.clone());
-
-    pk.push(G1Affine::generator().clone());
-
-    let invalid_instance = SharingInstance::new(pk, aa, rr, cc);
-
-    let witness = SharingWitness::new(r, s);
-    let _panic_one = prove_sharing(&instance, &witness, rng);
-
-    let sharing_proof = prove_sharing(&instance, &witness, rng);
-    assert_eq!(
-        Err(ZkProofSharingError::InvalidInstance),
-        verify_sharing(&invalid_instance, &sharing_proof),
-        "verify_sharing fails on invalid instance"
+    assert!(
+        matches!(
+            SharingInstance::new(vec![], aa, rr, vec![]),
+            Err(ZkProofSharingError::InvalidInstance)
+        ),
+        "SharingInstance::new rejects empty public keys"
     );
 }
 
@@ -194,10 +191,9 @@ fn sharing_nizk_should_fail_on_invalid_proof() {
     let rng = &mut reproducible_rng();
     let (pk, aa, rr, cc, r, s) = setup_sharing_instance_and_witness(rng);
 
-    let instance = SharingInstance::new(pk, aa, rr, cc);
+    let instance = SharingInstance::new(pk, aa, rr, cc).expect("Valid sharing instance");
 
     let witness = SharingWitness::new(r, s);
-    let _panic_one = prove_sharing(&instance, &witness, rng);
 
     let sharing_proof = prove_sharing(&instance, &witness, rng).serialize();
 
@@ -242,7 +238,7 @@ fn setup_chunking_instance_and_witness<R: RngCore + CryptoRng>(
         chunk.push(chunk_i.try_into().expect("Expected size"));
     }
 
-    let instance = ChunkingInstance::new(y, chunk, rr);
+    let instance = ChunkingInstance::new(y, chunk, rr).expect("Valid chunking instance");
     let witness = ChunkingWitness::new(r, s);
     (instance, witness)
 }
@@ -261,19 +257,36 @@ fn chunking_nizk_should_verify() {
 }
 
 #[test]
-#[should_panic(expected = "The chunking proof instance is invalid: InvalidInstance")]
-fn chunking_prover_should_panic_on_empty_chunks() {
+fn chunking_instance_new_should_fail_on_empty_chunks() {
     let rng = &mut reproducible_rng();
-    let (instance, witness) = setup_chunking_instance_and_witness(rng);
+    let (instance, _witness) = setup_chunking_instance_and_witness(rng);
 
     let empty_chunks = vec![];
-    let invalid_instance = ChunkingInstance::new(
-        instance.public_keys().to_vec(),
-        empty_chunks,
-        instance.randomizers_r().clone(),
+    assert!(
+        matches!(
+            ChunkingInstance::new(
+                instance.public_keys().to_vec(),
+                empty_chunks,
+                instance.randomizers_r().clone(),
+            ),
+            Err(ZkProofChunkingError::InvalidInstance)
+        ),
+        "ChunkingInstance::new rejects empty ciphertext chunks"
     );
+}
 
-    let _panic = prove_chunking(&invalid_instance, &witness, rng);
+#[test]
+fn chunking_instance_new_should_fail_on_empty_public_keys() {
+    let rng = &mut reproducible_rng();
+    let (instance, _witness) = setup_chunking_instance_and_witness(rng);
+
+    assert!(
+        matches!(
+            ChunkingInstance::new(vec![], vec![], instance.randomizers_r().clone(),),
+            Err(ZkProofChunkingError::InvalidInstance)
+        ),
+        "ChunkingInstance::new rejects empty public keys"
+    );
 }
 
 #[test]
@@ -298,43 +311,23 @@ fn chunking_nizk_is_stable() {
 }
 
 #[test]
-#[should_panic(expected = "The chunking proof instance is invalid: InvalidInstance")]
-fn chunking_prover_should_panic_on_invalid_instance() {
+fn chunking_instance_new_should_fail_on_mismatched_lengths() {
     let rng = &mut reproducible_rng();
-    let (instance, witness) = setup_chunking_instance_and_witness(rng);
+    let (instance, _witness) = setup_chunking_instance_and_witness(rng);
 
     let mut with_extra_key = instance.public_keys().to_vec();
     with_extra_key.push(G1Affine::generator().clone());
 
-    let invalid_instance = ChunkingInstance::new(
-        with_extra_key,
-        instance.ciphertext_chunks().to_vec(),
-        instance.randomizers_r().clone(),
-    );
-
-    let _panic = prove_chunking(&invalid_instance, &witness, rng);
-}
-
-#[test]
-fn chunking_nizk_should_fail_on_invalid_instance() {
-    let rng = &mut reproducible_rng();
-    let (instance, witness) = setup_chunking_instance_and_witness(rng);
-
-    let chunking_proof = prove_chunking(&instance, &witness, rng);
-
-    let mut with_extra_key = instance.public_keys().to_vec();
-    with_extra_key.push(G1Affine::generator().clone());
-
-    let invalid_instance = ChunkingInstance::new(
-        with_extra_key,
-        instance.ciphertext_chunks().to_vec(),
-        instance.randomizers_r().clone(),
-    );
-
-    assert_eq!(
-        Err(ZkProofChunkingError::InvalidInstance),
-        verify_chunking(&invalid_instance, &chunking_proof),
-        "verify_chunking fails on invalid instance"
+    assert!(
+        matches!(
+            ChunkingInstance::new(
+                with_extra_key,
+                instance.ciphertext_chunks().to_vec(),
+                instance.randomizers_r().clone(),
+            ),
+            Err(ZkProofChunkingError::InvalidInstance)
+        ),
+        "ChunkingInstance::new rejects mismatched public_keys / ciphertext_chunks lengths"
     );
 }
 
