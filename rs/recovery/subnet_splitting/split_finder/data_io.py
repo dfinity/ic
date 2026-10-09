@@ -29,12 +29,7 @@ def load_subnet_data(
                                `../test_data/fake_communication_sample.csv` for an example.
     communication_baseline_data_path -- path to a file in the same format as
                                         `communication_data_path`. Represents a sample collected at
-                                        an earlier time. It is subtracted from the communication
-                                        data to compute relative message counts. If a fresh count
-                                        is lower than its baseline (i.e. the counter was reset),
-                                        the fresh count is used instead.
-
-    Communication with canisters which are not in the load data is ignored.
+                                        an earlier time. 
 
     """
     canister_data = pd.read_csv(load_path).set_index("canister_id")
