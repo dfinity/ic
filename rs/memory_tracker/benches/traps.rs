@@ -51,6 +51,7 @@ fn new_tracker(ptr: *mut c_void) -> DeterministicMemoryTracker {
         },
         /* page_overhead */ 0,
         Arc::new(SignalMutex::new(|_| {})),
+        Arc::new(SignalMutex::new(|| {})),
     )
     .unwrap()
 }

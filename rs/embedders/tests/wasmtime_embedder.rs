@@ -1039,6 +1039,92 @@ fn wasm_memory_accessed_page_limit_for_host_functions() {
     }
 }
 
+/// The heap page budget global always equals `limit - accessed pages`,
+/// independently of whether the pages were accessed by Wasm code or by host
+/// functions.
+#[test]
+fn heap_page_budget_equals_limit_minus_accessed_pages() {
+    fn func_ref(name: &str) -> FuncRef {
+        FuncRef::Method(WasmMethod::Update(name.to_string()))
+    }
+    let wat = r#"
+            (module
+                (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32 i32 i32)))
+
+                (func (export "canister_update wasm_pages_0_and_1")
+                    (drop (i32.load (i32.const 0)))
+                    (i32.store (i32.const 65536) (i32.const 1))
+                    ;; accesses to already accessed pages do not use up budget,
+                    ;; including the write to the read-only mapped page 0
+                    (i32.store (i32.const 4) (i32.const 1))
+                    (drop (i32.load (i32.const 65540)))
+                )
+                (func (export "canister_update host_pages_2_and_3")
+                    (call $msg_arg_data_copy (i32.const 131072) (i32.const 0) (i32.const 131072))
+                )
+                (func (export "canister_update wasm_page_4")
+                    (drop (i32.load (i32.const 262144)))
+                )
+                (memory (export "memory") 8)
+            )"#;
+    const LIMIT: i64 = 4;
+    let config = config_with_wasm_memory_accessed_page_limit(LIMIT as u64);
+    let api_type = ApiType::update(
+        UNIX_EPOCH,
+        vec![7_u8; 2 * WASM_PAGE_SIZE_IN_BYTES],
+        Cycles::zero(),
+        user_test_id(24).get(),
+        call_context_test_id(13),
+        None,
+    );
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config.clone())
+        .with_api_type(api_type)
+        .with_wat(wat)
+        .build();
+    assert_eq!(instance.heap_page_budget(), LIMIT);
+
+    instance.run(func_ref("wasm_pages_0_and_1")).unwrap();
+    assert_eq!(instance.heap_page_budget(), LIMIT - 2);
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        2 * OS_PAGES_PER_WASM_PAGE
+    );
+
+    instance.run(func_ref("host_pages_2_and_3")).unwrap();
+    assert_eq!(instance.heap_page_budget(), 0);
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        4 * OS_PAGES_PER_WASM_PAGE
+    );
+
+    // Running out of budget means the next new page exceeds the limit, and a
+    // refused page does not change the budget.
+    let err = instance.run(func_ref("wasm_page_4")).unwrap_err();
+    assert_matches!(err, HypervisorError::MemoryAccessLimitExceeded(_));
+    assert_eq!(instance.heap_page_budget(), 0);
+    assert_eq!(
+        instance.get_stats().wasm_accessed_pages,
+        4 * OS_PAGES_PER_WASM_PAGE
+    );
+
+    // The budget is not persisted with the canister globals: only the
+    // instruction counter remains.
+    let globals = instance.get_exported_globals().unwrap();
+    assert_eq!(globals.len(), 1, "{globals:?}");
+
+    // With the default config the budget is the maximal heap size in pages.
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    let default_config = Config::default();
+    let expected = default_config.wasm_memory_accessed_page_limit.message.get() as i64
+        / OS_PAGES_PER_WASM_PAGE as i64;
+    assert_eq!(instance.heap_page_budget(), expected);
+    instance.run(func_ref("wasm_page_4")).unwrap();
+    assert_eq!(instance.heap_page_budget(), expected - 1);
+}
+
 #[test]
 fn multiple_stable_write() {
     let wat = r#"
