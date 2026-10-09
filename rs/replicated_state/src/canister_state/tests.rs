@@ -1861,58 +1861,103 @@ fn reverts_stopping_status_after_split() {
 }
 
 #[test]
-fn lru_connection_metrics_new_evicts_least_recently_accessed_entries() {
-    let extra = 3;
-    let metrics_per_canister: BTreeMap<_, _> = (0..(MAX_CONNECTION_METRICS_ENTRIES + extra) as u64)
-        .map(|i| {
-            (
-                canister_test_id(i),
-                ConnectionMetrics {
-                    last_access_timestamp: Time::from_nanos_since_unix_epoch(i),
-                    count: 1,
-                },
-            )
-        })
-        .collect();
+fn lru_connection_metrics_evicts_entries_in_eviction_key_order() {
+    let connection_metrics = |nanos, count| ConnectionMetrics {
+        last_access_timestamp: Time::from_nanos_since_unix_epoch(nanos),
+        count,
+    };
+    // Least recently accessed: evicted first
+    let oldest_sender = canister_test_id(0);
+    // Accessed recently with fewer messages: evicted second
+    let light_sender_id = canister_test_id(1);
+    // Accessed recently with more messages: the one with the lower ID is evicted.
+    let heavy_sender_low_id = canister_test_id(2);
+    let heavy_sender_high_id = canister_test_id(3);
 
-    let metrics = LRUConnectionMetrics::new(metrics_per_canister.clone());
+    let mut metrics_per_sender = BTreeMap::from([
+        (oldest_sender, connection_metrics(0, 1_000)),
+        (light_sender_id, connection_metrics(1, 1)),
+        (heavy_sender_low_id, connection_metrics(1, 2)),
+        (heavy_sender_high_id, connection_metrics(1, 2)),
+    ]);
+    // Most recently accessed entries, filling the map up to three entries over capacity.
+    for i in 4..(MAX_CONNECTION_METRICS_ENTRIES as u64 + 3) {
+        metrics_per_sender.insert(canister_test_id(i), connection_metrics(2, 1));
+    }
 
-    // Only the `extra` least recently accessed entries were evicted.
-    let expected: BTreeMap<_, _> = metrics_per_canister
-        .into_iter()
-        .filter(|(_, m)| m.last_access_timestamp.as_nanos_since_unix_epoch() >= extra as u64)
-        .collect();
-    assert_eq!(metrics.get(), &expected);
+    // Entries are evicted by access timestamp, then count, then canister ID.
+    let mut expected = metrics_per_sender.clone();
+    expected.remove(&oldest_sender);
+    expected.remove(&light_sender_id);
+    expected.remove(&heavy_sender_low_id);
+    assert_eq!(expected.len(), MAX_CONNECTION_METRICS_ENTRIES);
+
+    // Recording the messages one by one: entries are evicted as soon as the map overflows.
+    let mut from_increments = LRUConnectionMetrics::default();
+    for (sender, metrics) in &metrics_per_sender {
+        for _ in 0..metrics.count {
+            from_increments.increment(*sender, metrics.last_access_timestamp);
+        }
+    }
+    assert_eq!(from_increments.get(), &expected);
+
+    // Loading all the same entries at once, e.g. from a checkpoint.
+    let from_new = LRUConnectionMetrics::new(metrics_per_sender);
+    assert_eq!(from_new.get(), &expected);
+
+    assert_eq!(from_new, from_increments);
 }
 
 #[test]
-fn lru_connection_metrics_evicts_lowest_count_among_equally_old_entries() {
-    let heavy_canister = canister_test_id(0);
-    let light_canister = canister_test_id(MAX_CONNECTION_METRICS_ENTRIES as u64 / 2);
-    // `MAX_CONNECTION_METRICS_ENTRIES + 1` entries all accessed in the same round.
-    let metrics_per_canister: BTreeMap<_, _> = (0..=MAX_CONNECTION_METRICS_ENTRIES as u64)
-        .map(|i| {
-            let canister_id = canister_test_id(i);
-            let count = if canister_id == heavy_canister {
-                5
-            } else if canister_id == light_canister {
-                1
-            } else {
-                2
-            };
-            (
-                canister_id,
-                ConnectionMetrics {
-                    last_access_timestamp: UNIX_EPOCH,
-                    count,
-                },
-            )
-        })
-        .collect();
+fn lru_connection_metrics_increment_counts_messages_and_updates_timestamp() {
+    let sender = canister_test_id(1);
+    let mut metrics = LRUConnectionMetrics::default();
 
-    let metrics = LRUConnectionMetrics::new(metrics_per_canister);
+    metrics.increment(sender, Time::from_nanos_since_unix_epoch(1));
+    metrics.increment(sender, Time::from_nanos_since_unix_epoch(2));
+
+    assert_eq!(
+        metrics.get(),
+        &BTreeMap::from([(
+            sender,
+            ConnectionMetrics {
+                last_access_timestamp: Time::from_nanos_since_unix_epoch(2),
+                count: 2,
+            }
+        )])
+    );
+}
+
+#[test]
+fn lru_connection_metrics_increment_refreshes_eviction_order() {
+    let t0 = Time::from_nanos_since_unix_epoch(0);
+    let t1 = Time::from_nanos_since_unix_epoch(1);
+    let mut metrics = LRUConnectionMetrics::default();
+    for i in 0..MAX_CONNECTION_METRICS_ENTRIES as u64 {
+        metrics.increment(canister_test_id(i), t0);
+    }
+
+    // Accessing sender 0 again makes it the most recently accessed entry...
+    metrics.increment(canister_test_id(0), t1);
+    // ...so a new sender evicts sender 1 instead: the oldest entry with the lowest count and,
+    // among those, the lowest canister ID.
+    let new_sender = canister_test_id(MAX_CONNECTION_METRICS_ENTRIES as u64);
+    metrics.increment(new_sender, t1);
 
     assert_eq!(metrics.get().len(), MAX_CONNECTION_METRICS_ENTRIES);
-    assert!(!metrics.get().contains_key(&light_canister));
-    assert!(metrics.get().contains_key(&heavy_canister));
+    assert!(!metrics.get().contains_key(&canister_test_id(1)));
+    assert_eq!(
+        metrics.get()[&canister_test_id(0)],
+        ConnectionMetrics {
+            last_access_timestamp: t1,
+            count: 2,
+        }
+    );
+    assert_eq!(
+        metrics.get()[&new_sender],
+        ConnectionMetrics {
+            last_access_timestamp: t1,
+            count: 1,
+        }
+    );
 }

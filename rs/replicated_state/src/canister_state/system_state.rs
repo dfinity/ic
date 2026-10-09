@@ -210,56 +210,106 @@ pub struct ConnectionMetrics {
     pub count: u64,
 }
 
+/// Eviction priority of a `LRUConnectionMetrics` entry: when the capacity is exceeded, the entry
+/// with the smallest key is evicted first.
+///
+/// Keys are ordered by the derived `Ord`, so changing the order of the fields changes the eviction
+/// policy.
+/// 1. `last_access_timestamp`: least recently accessed entries are evicted first.
+/// 2. `count`: among equally old entries, the one with the fewest messages is evicted first.
+/// 3. `sender`: deterministic final tie-breaker.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+struct EvictionKey {
+    last_access_timestamp: Time,
+    count: u64,
+    sender: CanisterId,
+}
+
+impl From<(&CanisterId, &ConnectionMetrics)> for EvictionKey {
+    fn from((sender, metrics): (&CanisterId, &ConnectionMetrics)) -> Self {
+        Self {
+            last_access_timestamp: metrics.last_access_timestamp,
+            count: metrics.count,
+            sender: *sender,
+        }
+    }
+}
+
+/// Keeps track of the number of messages sent to each canister, and the last time a message was
+/// sent to that canister.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct LRUConnectionMetrics {
-    metrics_per_canister: BTreeMap<CanisterId, ConnectionMetrics>,
+    metrics_per_sender: BTreeMap<CanisterId, ConnectionMetrics>,
+    eviction_order: BTreeSet<EvictionKey>,
 }
 
 impl LRUConnectionMetrics {
-    /// Creates the metrics from the given map, evicting the least recently accessed
-    /// entries if it holds more than `MAX_CONNECTION_METRICS_ENTRIES` of them.
-    pub fn new(metrics_per_canister: BTreeMap<CanisterId, ConnectionMetrics>) -> Self {
-        let mut metrics = Self {
-            metrics_per_canister,
+    pub fn new(metrics_per_sender: BTreeMap<CanisterId, ConnectionMetrics>) -> Self {
+        let eviction_order = metrics_per_sender
+            .iter()
+            .map(|(sender, metrics)| EvictionKey::from((sender, metrics)))
+            .collect();
+
+        let mut lru = Self {
+            metrics_per_sender,
+            eviction_order,
         };
-        metrics.evict();
-        metrics
+        lru.evict();
+        lru
     }
 
-    pub fn increment(&mut self, canister_id: CanisterId, access_timestamp: Time) {
-        let entry = self
-            .metrics_per_canister
-            .entry(canister_id)
-            .or_insert_with(|| ConnectionMetrics {
-                last_access_timestamp: access_timestamp,
-                count: 0,
-            });
-        entry.count += 1;
-        entry.last_access_timestamp = access_timestamp;
+    /// Increments the message count for `sender` and updates its last access timestamp.
+    pub fn increment(&mut self, sender: CanisterId, access_timestamp: Time) {
+        let metrics_entry =
+            self.metrics_per_sender
+                .entry(sender)
+                .or_insert_with(|| ConnectionMetrics {
+                    last_access_timestamp: access_timestamp,
+                    count: 0,
+                });
+
+        // Update the eviction priority by deleting the old entry...
+        self.eviction_order
+            .remove(&EvictionKey::from((&sender, &*metrics_entry)));
+
+        metrics_entry.count += 1;
+        metrics_entry.last_access_timestamp = access_timestamp;
+
+        // ...and inserting the updated entry.
+        self.eviction_order
+            .insert(EvictionKey::from((&sender, &*metrics_entry)));
 
         self.evict();
     }
 
-    /// Evicts the least recently accessed entries until at most `MAX_CONNECTION_METRICS_ENTRIES` remain.
-    ///
-    /// All messages executed in a round share the same timestamp, so among equally old entries
-    /// the one with the lowest count is evicted first, keeping the heaviest connections.
+    /// Evicts entries in `EvictionKey` order until at most `MAX_CONNECTION_METRICS_ENTRIES` remain.
     fn evict(&mut self) {
-        while self.metrics_per_canister.len() > MAX_CONNECTION_METRICS_ENTRIES
-            && let Some(canister_id) = self
-                .metrics_per_canister
-                .iter()
-                .min_by_key(|(_canister_id, counter)| {
-                    (counter.last_access_timestamp, counter.count)
-                })
-                .map(|(canister_id, _)| *canister_id)
+        while self.metrics_per_sender.len() > MAX_CONNECTION_METRICS_ENTRIES
+            && let Some(entry) = self.eviction_order.pop_first()
         {
-            let _ = self.metrics_per_canister.remove(&canister_id);
+            self.metrics_per_sender.remove(&entry.sender);
         }
+
+        #[cfg(debug_assertions)]
+        self.check_invariants();
     }
 
     pub fn get(&self) -> &BTreeMap<CanisterId, ConnectionMetrics> {
-        &self.metrics_per_canister
+        &self.metrics_per_sender
+    }
+
+    #[cfg(debug_assertions)]
+    fn check_invariants(&self) {
+        // The number of entries should never exceed the maximum.
+        assert!(self.metrics_per_sender.len() <= MAX_CONNECTION_METRICS_ENTRIES);
+        // The internal data structures should always be consistent.
+        assert_eq!(self.eviction_order.len(), self.metrics_per_sender.len());
+        for (sender, metrics) in &self.metrics_per_sender {
+            assert!(
+                self.eviction_order
+                    .contains(&EvictionKey::from((sender, metrics)))
+            );
+        }
     }
 }
 
