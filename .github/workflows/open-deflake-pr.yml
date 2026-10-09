@@ -3,8 +3,10 @@ name: Open Deflake PR
 # Opens the fix that fix-flaky-test.yml made for a flaky test as a draft PR authored by claude[bot].
 # fix-flaky-test.yml dispatches this as a separate run from master because the claude[bot] token,
 # which claude-code-action gets through an OIDC token exchange, requires the running workflow file to
-# equal the one on master. To recover from a failed run, dispatch it again with the same inputs while
-# the deflake-<slug> artifact of the original run still exists.
+# equal the one on master. To recover from a failed run, dispatch it again (a new dispatch, not "Re-run
+# failed jobs") with the inputs shown by its "Validate inputs" step while the deflake-<slug> artifact of
+# the original run still exists. A re-run keeps github-actions[bot] as the actor; a dispatch by a person
+# has an actor with write access, which the token exchange accepts even if it refused the bot.
 
 on:
   workflow_dispatch:
