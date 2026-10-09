@@ -619,42 +619,46 @@ fn accessed_page_limit_refuses_the_page_after_the_limit(
     dirty_page_tracking: DirtyPageTracking,
     #[values(AccessKind::Read, AccessKind::Write)] access_kind: AccessKind,
 ) {
-    with_accessed_page_limit(dirty_page_tracking, Some(2), |tracker, accessed_callbacks| {
-        let flag = tracker.page_limit_exceeded_flag().clone();
+    with_accessed_page_limit(
+        dirty_page_tracking,
+        Some(2),
+        |tracker, accessed_callbacks| {
+            let flag = tracker.page_limit_exceeded_flag().clone();
 
-        assert_eq!(
-            sigsegv_wasm_page(&tracker, 0, access_kind),
-            SigsegvOutcome::Handled
-        );
-        assert_eq!(
-            sigsegv_wasm_page(&tracker, 5, access_kind),
-            SigsegvOutcome::Handled
-        );
-        assert_eq!(tracker.num_accessed_pages(), 2 * OS_PAGES_IN_WASM_PAGE);
-        assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 2);
-        assert!(!flag.load(Ordering::Relaxed));
-        assert_eq!(tracker.metrics().sigsegv_refused_count(), 0);
+            assert_eq!(
+                sigsegv_wasm_page(&tracker, 0, access_kind),
+                SigsegvOutcome::Handled
+            );
+            assert_eq!(
+                sigsegv_wasm_page(&tracker, 5, access_kind),
+                SigsegvOutcome::Handled
+            );
+            assert_eq!(tracker.num_accessed_pages(), 2 * OS_PAGES_IN_WASM_PAGE);
+            assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 2);
+            assert!(!flag.load(Ordering::Relaxed));
+            assert_eq!(tracker.metrics().sigsegv_refused_count(), 0);
 
-        // The third distinct page is refused and nothing changes.
-        assert_eq!(
-            sigsegv_wasm_page(&tracker, 3, access_kind),
-            SigsegvOutcome::Refused
-        );
-        assert_eq!(tracker.num_accessed_pages(), 2 * OS_PAGES_IN_WASM_PAGE);
-        assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 2);
-        assert!(!tracker.is_accessed(PageIndex::new((3 * OS_PAGES_IN_WASM_PAGE) as u64)));
-        assert!(flag.load(Ordering::Relaxed));
-        assert_eq!(tracker.metrics().sigsegv_refused_count(), 1);
-        assert_eq!(tracker.metrics().sigsegv_count(), 3);
+            // The third distinct page is refused and nothing changes.
+            assert_eq!(
+                sigsegv_wasm_page(&tracker, 3, access_kind),
+                SigsegvOutcome::Refused
+            );
+            assert_eq!(tracker.num_accessed_pages(), 2 * OS_PAGES_IN_WASM_PAGE);
+            assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 2);
+            assert!(!tracker.is_accessed(PageIndex::new((3 * OS_PAGES_IN_WASM_PAGE) as u64)));
+            assert!(flag.load(Ordering::Relaxed));
+            assert_eq!(tracker.metrics().sigsegv_refused_count(), 1);
+            assert_eq!(tracker.metrics().sigsegv_count(), 3);
 
-        // The refused page is still not mapped, so the same access is refused again.
-        assert_eq!(
-            sigsegv_wasm_page(&tracker, 3, access_kind),
-            SigsegvOutcome::Refused
-        );
-        assert_eq!(tracker.metrics().sigsegv_refused_count(), 2);
-        assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 2);
-    });
+            // The refused page is still not mapped, so the same access is refused again.
+            assert_eq!(
+                sigsegv_wasm_page(&tracker, 3, access_kind),
+                SigsegvOutcome::Refused
+            );
+            assert_eq!(tracker.metrics().sigsegv_refused_count(), 2);
+            assert_eq!(accessed_callbacks.load(Ordering::Relaxed), 2);
+        },
+    );
 }
 
 #[test]
