@@ -2,7 +2,7 @@
 //! artifacts.
 #![allow(clippy::result_large_err)]
 use crate::consensus::{
-    ConsensusMessageId, catchup_package_maker,
+    ConsensusMessageId, MEMBERSHIP_HOLD, catchup_package_maker,
     metrics::ValidatorMetrics,
     status::{self, Status},
 };
@@ -14,6 +14,7 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     get_current_transcript_from_summary_block, get_oldest_state_registry_version,
     membership::{Membership, MembershipError},
+    membership_hold,
     pool_reader::{PoolReader, UnexpectedChainLength},
     subnet_splitting,
 };
@@ -102,6 +103,10 @@ enum ValidationFailure {
     SubnetSplittingStatusError(subnet_splitting::StatusError),
     CatchUpPackageTypeError(String),
     SubnetSplittingError(String),
+    /// The registry could not be read while determining whether a membership
+    /// change may be adopted yet. Transient: the versions involved are agreed, so
+    /// a lagging node catches up rather than the block being wrong.
+    MembershipHoldError(membership_hold::MembershipHoldError),
 }
 
 /// Possible reasons for invalid artifacts.
@@ -152,6 +157,12 @@ enum InvalidArtifactReason {
     WrongRegistryVersionAtSubnetSplittingSummary {
         context_registry_version: RegistryVersion,
         expected_registry_version: RegistryVersion,
+    },
+    /// The block adopts a registry version carrying a membership change whose
+    /// newly added nodes have not yet had time to sync state.
+    RegistryVersionHeldBackForMembershipChange {
+        context_registry_version: RegistryVersion,
+        max_adoptable_registry_version: RegistryVersion,
     },
 }
 
@@ -1367,6 +1378,37 @@ impl Validator {
                 local_context,
             )
             .into());
+        }
+
+        // Ensure a membership change is not adopted before the nodes it adds have
+        // had time to sync state. Both inputs are agreed — the registry version and
+        // time come from the block, and the time a registry version was created is
+        // the registry canister's own stamp — so every validator reaches the same
+        // verdict as the block maker did, which is what makes the hold binding
+        // rather than advisory.
+        let max_adoptable_version = membership_hold::highest_adoptable_version(
+            self.registry_client.as_ref(),
+            self.replica_config.subnet_id,
+            last_summary_block
+                .payload
+                .as_ref()
+                .as_summary()
+                .dkg
+                .registry_version,
+            proposal.context.registry_version,
+            proposal.context.time,
+            MEMBERSHIP_HOLD,
+        )
+        .map_err(ValidationFailure::MembershipHoldError)?;
+
+        if proposal.context.registry_version > max_adoptable_version {
+            return Err(
+                InvalidArtifactReason::RegistryVersionHeldBackForMembershipChange {
+                    context_registry_version: proposal.context.registry_version,
+                    max_adoptable_registry_version: max_adoptable_version,
+                }
+                .into(),
+            );
         }
 
         // Ensure the registry version is as expected during subnet splitting

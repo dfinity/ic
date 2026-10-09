@@ -82,6 +82,23 @@ pub const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
 /// CUPs, which have no upper bound on the height to be validated.
 pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 130;
 
+/// How long a membership change waits in the registry before consensus acts on it.
+///
+/// A node added to a subnet starts syncing state as soon as the change is in the
+/// registry, but under the plain schedule it is expected to notarize roughly one
+/// DKG interval later. That is too little for a large state, and if more than `f`
+/// of the new members are still syncing by then, the subnet stalls. Holding the
+/// registry version back extends that transition phase, during which the outgoing
+/// members keep carrying consensus.
+///
+/// Sized off the minimum bandwidth requirement, i.e. state size over 300 Mbit/s
+/// (~37.5 MB/s), so 30 minutes covers roughly 65 GB. Deliberately a constant for
+/// now; a subnet record field would let it track each subnet's actual state size.
+///
+/// Once it expires, the change takes effect regardless — the subnet falls back to
+/// today's behaviour of stalling until enough of the new members have caught up.
+pub(crate) const MEMBERSHIP_HOLD: Duration = Duration::from_secs(30 * 60);
+
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 enum ConsensusSubcomponent {

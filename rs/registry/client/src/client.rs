@@ -82,23 +82,24 @@ impl RegistryClientImpl {
     /// provider failed. Returns `Ok` if querying the data provider succeeded,
     /// regardless of whether a newer registry version was available or not.
     pub fn poll_once(&self) -> Result<(), RegistryClientError> {
-        let (records, version) = {
+        let (records, version_timestamps, version) = {
             let latest_version = self.cache.read().unwrap().latest_version;
-            let records = match self
+            let updates = match self
                 .data_provider
-                .get_updates_since(latest_version)
+                .get_updates_since_with_timestamps(latest_version)
             {
-                Ok(records) if !records.is_empty() => records,
+                Ok(updates) if !updates.records.is_empty() => updates,
                 Ok(_) /*if version == cache_state.latest_version*/ => return Ok(()),
                 Err(e) => return Err(RegistryClientError::from(e)),
             };
-            let new_version = records
+            let new_version = updates
+                .records
                 .iter()
                 .max_by_key(|r| r.version)
                 .map(|r| r.version)
                 .unwrap_or(latest_version);
 
-            (records, new_version)
+            (updates.records, updates.version_timestamps, new_version)
         };
 
         // Ensure exclusive access to the cache.
@@ -107,7 +108,7 @@ impl RegistryClientImpl {
         // Check version again under write lock, to prevent race conditions.
         if version > cache_state.latest_version {
             self.metrics.registry_version.set(version.get() as i64);
-            cache_state.update(records, version);
+            cache_state.update(records, &version_timestamps, version);
         }
         Ok(())
     }
@@ -190,6 +191,10 @@ impl Drop for PollThread {
 struct CacheState {
     records: Vec<RegistryRecord>,
     timestamps: BTreeMap<RegistryVersion, Time>,
+    /// Only the versions the registry canister stamped, and only ever its own
+    /// stamp — never a local observation. See
+    /// `RegistryClient::get_version_canister_timestamp`.
+    canister_timestamps: BTreeMap<RegistryVersion, Time>,
     latest_version: RegistryVersion,
 }
 
@@ -199,15 +204,46 @@ impl CacheState {
             records: vec![],
             latest_version: ZERO_REGISTRY_VERSION,
             timestamps: Default::default(),
+            canister_timestamps: Default::default(),
         }
     }
 
-    fn update(&mut self, records: Vec<RegistryRecord>, new_version: RegistryVersion) {
+    /// Records the given updates.
+    ///
+    /// `version_timestamps` holds the times at which the registry canister
+    /// applied the covered versions. Those are replicated NNS state, so all
+    /// nodes agree on them; where one is missing — because the data provider
+    /// cannot supply it, or because the version predates the registry canister
+    /// recording timestamps — we fall back to the time at which this node
+    /// learned of the version.
+    fn update(
+        &mut self,
+        records: Vec<RegistryRecord>,
+        version_timestamps: &BTreeMap<RegistryVersion, u64>,
+        new_version: RegistryVersion,
+    ) {
         assert!(new_version > self.latest_version);
-        self.timestamps.insert(new_version, current_time());
+        let canister_timestamp_of = |version: RegistryVersion| {
+            version_timestamps
+                .get(&version)
+                .map(|nanos| Time::from_nanos_since_unix_epoch(*nanos))
+        };
+        let mut record_timestamps = |version: RegistryVersion| {
+            match canister_timestamp_of(version) {
+                Some(timestamp) => {
+                    self.canister_timestamps.insert(version, timestamp);
+                    self.timestamps.insert(version, timestamp);
+                }
+                None => {
+                    let _replaced = self.timestamps.insert(version, current_time());
+                }
+            };
+        };
+
+        record_timestamps(new_version);
         for record in records {
             assert!(record.version > self.latest_version);
-            self.timestamps.insert(record.version, current_time());
+            record_timestamps(record.version);
             let search_key = (&record.key, &record.version);
             match self
                 .records
@@ -344,6 +380,20 @@ impl RegistryClient for RegistryClientImpl {
             .get(&registry_version)
             .cloned()
     }
+
+    fn get_version_canister_timestamp(&self, registry_version: RegistryVersion) -> Option<Time> {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["get_version_canister_timestamp"])
+            .start_timer();
+        self.cache
+            .read()
+            .unwrap()
+            .canister_timestamps
+            .get(&registry_version)
+            .cloned()
+    }
 }
 
 #[cfg(test)]
@@ -351,7 +401,7 @@ impl RegistryClient for RegistryClientImpl {
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
-    use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
+    use ic_interfaces_registry::{RegistryUpdates, ZERO_REGISTRY_VERSION};
     use ic_registry_client_helpers::test_proto::TestProtoHelper;
     use ic_registry_common_proto::pb::test_protos::v1::TestProto;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -662,6 +712,82 @@ mod tests {
             res.retain(|r| r.version <= version + self.changelog_size);
             Ok(res)
         }
+    }
+
+    /// Reports one record per version, stamping only the versions listed in
+    /// `version_timestamps` — so a test can mix stamped and unstamped versions.
+    struct StampingDataProvider {
+        versions: Vec<RegistryVersion>,
+        version_timestamps: BTreeMap<RegistryVersion, u64>,
+    }
+
+    impl RegistryDataProvider for StampingDataProvider {
+        fn get_updates_since(
+            &self,
+            version: RegistryVersion,
+        ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
+            Ok(self
+                .versions
+                .iter()
+                .filter(|v| **v > version)
+                .map(|v| RegistryRecord {
+                    key: "A".to_string(),
+                    version: *v,
+                    value: Some(vec![]),
+                })
+                .collect::<Vec<RegistryRecord>>())
+        }
+
+        fn get_updates_since_with_timestamps(
+            &self,
+            version: RegistryVersion,
+        ) -> Result<RegistryUpdates, RegistryDataProviderError> {
+            Ok(RegistryUpdates {
+                records: self.get_updates_since(version)?,
+                version_timestamps: self.version_timestamps.clone(),
+            })
+        }
+    }
+
+    #[test]
+    fn test_version_timestamp_prefers_registry_canister_time() {
+        // Step 1: Prepare the world. Version 1 is stamped by the registry canister,
+        // version 2 is not.
+        let stamped_nanos = 1_700_000_000_000_000_000_u64;
+        let data_provider = Arc::new(StampingDataProvider {
+            versions: vec![v(1), v(2)],
+            version_timestamps: BTreeMap::from([(v(1), stamped_nanos)]),
+        });
+        let registry = RegistryClientImpl::new(data_provider, None);
+        let before_poll = current_time();
+
+        // Step 2: Run the code under test.
+        registry.poll_once().unwrap();
+
+        // Step 3: Verify results.
+
+        // Step 3.1: The stamped version reports the registry canister's own time,
+        // which every node observes identically.
+        assert_eq!(
+            registry.get_version_timestamp(v(1)),
+            Some(Time::from_nanos_since_unix_epoch(stamped_nanos))
+        );
+
+        // Step 3.2: The unstamped version falls back to the time this node learned
+        // of it, i.e. no earlier than when the poll started.
+        let fallback = registry.get_version_timestamp(v(2)).unwrap();
+        assert!(
+            fallback >= before_poll,
+            "expected a local timestamp at or after {before_poll}, got {fallback}"
+        );
+
+        // Step 3.3: The strict accessor reports only the registry canister's own
+        // stamp, so that consensus never gates on a node-local value.
+        assert_eq!(
+            registry.get_version_canister_timestamp(v(1)),
+            Some(Time::from_nanos_since_unix_epoch(stamped_nanos))
+        );
+        assert_eq!(registry.get_version_canister_timestamp(v(2)), None);
     }
     #[cfg(test)]
     mod metrics {
