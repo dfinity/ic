@@ -48,3 +48,11 @@ The `ic-cup-explorer` crate (`rs/cup_explorer/`) provides tools for exploring an
 - **WHEN** `--nns-url <url>` is provided
 - **THEN** the specified URL is used as the NNS entry point
 - **AND** `--nns-pem <path>` optionally specifies a PEM file for verifying registry replies
+
+#### Scenario: Extract threshold master public keys from a CUP
+- **WHEN** `cup-explorer extract-master-public-keys --cup-path <path>` is executed
+- **THEN** the CUP at the given path is read and verified against the NNS registry the same way as `verify-cup-of-halted-subnet`
+- **AND** the key id, algorithm, and hex-encoded public key of every threshold key the subnet holds according to the CUP are printed
+- **AND** the public keys use the encoding of the mainnet master public keys hardcoded in `ic-secp256k1`, `ic-ed25519`, and `ic-vetkeys`: compressed SEC1 points for ECDSA and BIP340, 32-byte points for Ed25519, and compressed G2 points for vetKD
+- **AND** the underlying `extract_master_public_keys` function, shared with `verify`'s CUP-reading helper, returns the keys for programmatic use (e.g. by system tests)
+- **AND** key extraction itself is shared with the orchestrator via `get_master_public_keys` in `ic-consensus-cup-utils`, which both the orchestrator (alerting on key changes) and the CUP explorer call

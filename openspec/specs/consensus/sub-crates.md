@@ -177,6 +177,14 @@ During NNS subnet recovery, the block validation context must reference the reco
 - **WHEN** the CUP contents do NOT include a `registry_store_uri`
 - **THEN** the block's validation context uses the standard registry version passed to the function
 
+### Requirement: Threshold Master Public Key Extraction from a CUP
+`get_master_public_keys` extracts the threshold master public keys a subnet holds from a CUP. It originated in the orchestrator (to alert on key changes across upgrades) and now lives here so the CUP explorer tool can reuse it without the orchestrator depending on `ic-consensus-dkg`.
+
+#### Scenario: Keys extracted for every scheme the CUP's IDKG summary holds
+- **WHEN** `get_master_public_keys` is called with a CUP
+- **THEN** it returns the master public key for every key id present in the CUP's IDKG summary, across ECDSA, Schnorr (BIP340 and Ed25519), and vetKD schemes
+- **AND** both the orchestrator and `ic-cup-explorer`'s `extract-master-public-keys` subcommand call this same function, so the two never diverge in how a key is derived from CUP data
+
 ---
 
 ## Crate: ic-consensus-features
