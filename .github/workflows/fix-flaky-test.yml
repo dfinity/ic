@@ -391,8 +391,9 @@ jobs:
           echo "status=$status" >> "$GITHUB_OUTPUT"
           printf '**%s**\n\n```\n%s\n```\n' "$status" "$(tr -d '`\r' <<<"$reason")" >> "$GITHUB_STEP_SUMMARY"
 
+      # Not only on success: a fix that Package read from the execution file after the action failed counts too.
       - name: Upload the fix
-        if: steps.package.outputs.status == 'fixed' && !inputs.dry_run
+        if: "!cancelled() && steps.package.outputs.status == 'fixed' && !inputs.dry_run"
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: deflake-${{ inputs.slug }}
@@ -413,7 +414,7 @@ jobs:
   request-pr:
     name: Request PR
     needs: fix
-    if: needs.fix.outputs.status == 'fixed' && !inputs.dry_run
+    if: "!cancelled() && needs.fix.outputs.status == 'fixed' && !inputs.dry_run"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

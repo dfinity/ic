@@ -79,11 +79,11 @@ if [ -n "$flaky" ]; then
     # who dispatches a label wants the attempt, e.g. after reading the last report.
     attempts='{}'
     if [ -z "${LABEL:-}" ]; then
-        attempts="$(gh api -X GET repos/dfinity/ic/actions/workflows/schedule-fix-flaky-tests.yml/runs \
+        attempts="$(gh api -X GET repos/dfinity/ic/actions/workflows/schedule-fix-flaky-tests.yml/runs --paginate \
             -f branch="${GITHUB_REF_NAME:-master}" -f created=">=$(date -u -d '7 days ago' +%F)" -F per_page=100 \
             --jq '.workflow_runs[] | select(.event | IN("schedule", "workflow_dispatch")) | .id' \
             | while read -r run; do
-                gh api "repos/dfinity/ic/actions/runs/$run/artifacts" \
+                gh api -X GET "repos/dfinity/ic/actions/runs/$run/artifacts" --paginate -F per_page=100 \
                     --jq '.artifacts[] | select((.name | startswith("deflake-result-")) and (.expired | not)) | "\(.name) \(.created_at) \(.expires_at)"' \
                     | while read -r name created expires; do
                         dir="$(mktemp -d)"
