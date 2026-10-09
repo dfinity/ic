@@ -6,3 +6,15 @@ py_test(
     srcs = ["repro_check_test.py"],
     data = ["repro-check"],
 )
+
+py_test(
+    name = "validate_deflake_bundle_test",
+    size = "medium",
+    srcs = ["validate_deflake_bundle_test.py"],
+    data = [
+        "validate-deflake-bundle.sh",
+        "validate-deflake-dependencies.py",
+    ],
+    # Like the GitHub runners that validate the bundles, it assumes GNU tools.
+    target_compatible_with = ["@platforms//os:linux"],
+)

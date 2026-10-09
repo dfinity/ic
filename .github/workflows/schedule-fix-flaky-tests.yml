@@ -1,0 +1,187 @@
+name: Schedule Fix Flaky Tests
+
+# Lets Claude fix the tests that flaked since the previous daily run, following
+# .claude/skills/fix-flaky-tests/SKILL.md: fix-flaky-test.yml fixes each test and open-deflake-pr.yml opens
+# the fixes as draft PRs. A test whose attempt ended as not_reproducible or needs_human is left alone for a week.
+# Set the repository variable MAX_FLAKY_TESTS_TO_FIX to the number of tests to fix per run,
+# FIX_FLAKY_TESTS_SCHEDULE to 'true' to enable the daily schedule, and optionally
+# FIX_FLAKY_TESTS_SKIP_PATTERNS to regexes (one per line) of tests that shouldn't be fixed.
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      label:
+        description: Fix only this test label instead of the tests that flaked in the last 28 hours
+        required: false
+        default: ''
+        type: string
+      max_parallel:
+        description: The maximum number of tests to fix at the same time
+        required: false
+        default: '4'
+        type: string
+      dry_run:
+        description: Fix the tests but don't open PRs
+        required: false
+        default: false
+        type: boolean
+  pull_request:
+    paths:
+      - .github/workflows/schedule-fix-flaky-tests.yml
+      - .github/workflows/fix-flaky-test.yml
+      - .github/workflows/open-deflake-pr.yml
+      - ci/scripts/find-flaky-tests.sh
+      - ci/scripts/deflake-deadline-hook.sh
+      - ci/scripts/validate-deflake-bundle.sh
+      - ci/scripts/validate-deflake-dependencies.py
+      - ci/scripts/open-deflake-pr.sh
+      - ci/githubstats/**
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || inputs.label || 'daily' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CI_JOB_NAME: ${{ github.job }}
+
+jobs:
+  find:
+    name: Find Flaky Tests
+    # for dfinity/ic: run on all events except on PRs from forks;
+    # never run on other repos such as dfinity/ic-private
+    if: |
+      github.repository == 'dfinity/ic' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.event_name != 'schedule' || vars.FIX_FLAKY_TESTS_SCHEDULE == 'true')
+    runs-on:
+      labels: dind-small
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:0b6a915e614105c632a0c7a0f6e530ed506decfbd0316b297b28e9c555c532a2
+      options: >-
+        -e NODE_NAME --mount type=tmpfs,target="/tmp/containers"
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read # for reading the results of earlier attempts
+      pull-requests: read
+    outputs:
+      tests: ${{ steps.find.outputs.tests }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: ./.github/actions/netrc
+
+      - name: Setup gh cli
+        # Same step as in update-mainnet-canister-revisions.yaml.
+        env:
+          GH_CLI_VERSION: 2.98.0
+          # sha256 of gh_${GH_CLI_VERSION}_linux_amd64.tar.gz. When bumping the
+          # version, take the new value from that release's
+          # gh_${GH_CLI_VERSION}_checksums.txt asset.
+          GH_CLI_SHA256: 3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de
+        run: |
+          set -eEuxo pipefail
+
+          # Without --fail, 4xx and 5xx are considered "success", because UNIX.
+          # If this keeps failing, consider applying other --retry-??? flags.
+          curl \
+            --location https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_amd64.tar.gz \
+            --output gh_cli.tar.gz \
+            --fail \
+            --retry 7
+
+          # Release assets are mutable under an existing tag, so the URL alone is
+          # not a trust anchor: verify against the checksum pinned above before
+          # unpacking or running anything.
+          echo "${GH_CLI_SHA256}  gh_cli.tar.gz" | sha256sum --check
+
+          tar -xvf gh_cli.tar.gz
+          mv "gh_${GH_CLI_VERSION}_linux_amd64" gh_cli
+          chmod +x ./gh_cli/bin/gh
+          sudo cp ./gh_cli/bin/gh /usr/local/bin/
+          rm -rf gh_cli*
+
+      - name: Find flaky tests
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LABEL: ${{ inputs.label }}
+          SKIP_PATTERNS: ${{ vars.FIX_FLAKY_TESTS_SKIP_PATTERNS }}
+          MAX_FLAKY_TESTS_TO_FIX: ${{ vars.MAX_FLAKY_TESTS_TO_FIX }}
+        run: ci/scripts/find-flaky-tests.sh
+
+  fix:
+    name: ${{ matrix.test.label }}
+    needs: find
+    if: github.event_name != 'pull_request' && needs.find.outputs.tests != '[]'
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJSON(inputs.max_parallel || '4') }}
+      matrix:
+        test: ${{ fromJSON(needs.find.outputs.tests) }}
+    uses: ./.github/workflows/fix-flaky-test.yml
+    with:
+      label: ${{ matrix.test.label }}
+      labels: ${{ matrix.test.labels }}
+      base: ${{ matrix.test.base }}
+      slug: ${{ matrix.test.slug }}
+      ci_all_bazel_targets: ${{ matrix.test.ci_all_bazel_targets }}
+      # inputs.dry_run is '' on schedule, which isn't a boolean.
+      dry_run: ${{ inputs.dry_run == true }}
+    # Empty here, but a called workflow only gets the environment secrets whose names its caller passes.
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    permissions:
+      contents: read
+      actions: write # for dispatching open-deflake-pr.yml
+      pull-requests: read
+
+  summary:
+    name: Summary
+    needs: [find, fix]
+    if: always() && needs.find.result == 'success' && needs.find.outputs.tests != '[]' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+    steps:
+      - name: Download the results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: deflake-result-*
+          path: results
+          merge-multiple: true
+
+      # The results were written next to Claude, so only their status and an escaped reason are shown. The links find
+      # the PRs of a test by the start of their branch, which is what `head:` matches.
+      - name: Summarize
+        env:
+          TESTS: ${{ needs.find.outputs.tests }}
+          DRY_RUN: ${{ inputs.dry_run == true }}
+        run: |
+          set -euo pipefail
+          {
+            echo "| Test | Status | Reason |"
+            echo "| - | - | - |"
+            for slug in $(jq -r '.[].slug' <<<"$TESTS"); do
+              base="$(jq -r --arg slug "$slug" '.[] | select(.slug == $slug) | .base' <<<"$TESTS")"
+              if [ -f "results/result-$slug.json" ]; then
+                jq -r --arg base "$base" --arg slug "$slug" --arg dry_run "$DRY_RUN" '
+                  (.reason | tostring | gsub("[`|\r\n]"; " ") | .[:300]) as $reason
+                  | (.status | if IN("fixed", "skipped", "no_logs", "not_reproducible", "needs_human", "failed") then . else "invalid" end) as $status
+                  | if $status == "fixed" and $dry_run != "true"
+                    then "| `\($base)` | [fixed](https://github.com/dfinity/ic/pulls?q=is%3Apr+head%3Aai%2Fdeflake-\($slug)-) | `\($reason)` |"
+                    elif $status == "fixed" then "| `\($base)` | fixed (dry run) | `\($reason)` |"
+                    else "| `\($base)` | \($status) | `\($reason)` |"
+                    end' "results/result-$slug.json"
+              else
+                echo "| \`$base\` | no result | the job failed, timed out or was cancelled |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
