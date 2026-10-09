@@ -18,6 +18,7 @@ pub(crate) struct OrchestratorMetrics {
     pub(crate) critical_error_cup_deserialization_failed: IntCounter,
     pub(crate) critical_error_state_removal_failed: IntCounter,
     pub(crate) fstrim_duration: IntGauge,
+    pub(crate) fstrim_total: IntCounter,
     pub(crate) critical_error_task_failed: IntCounterVec,
     pub(crate) processes_start_attempts: IntCounterVec,
     pub(crate) processes_stop_attempts: IntCounterVec,
@@ -101,6 +102,10 @@ impl OrchestratorMetrics {
             fstrim_duration: metrics_registry.int_gauge(
                 "orchestrator_fstrim_duration_milliseconds",
                 "The duration of the last fstrim call, in milliseconds",
+            ),
+            fstrim_total: metrics_registry.int_counter(
+                "orchestrator_fstrim_total",
+                "Number of times the data partition was synced and trimmed",
             ),
             critical_error_task_failed: metrics_registry.int_counter_vec(
                 "orchestrator_tasks_failed_total",

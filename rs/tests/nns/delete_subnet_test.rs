@@ -198,7 +198,11 @@ pub fn test(env: TestEnv) {
 
         // The nodes' states should be wiped.
         for node in new_topology_snapshot.unassigned_nodes() {
-            assert_node_is_unassigned(&node, &env.logger());
+            assert_node_is_unassigned(
+                &node,
+                1, // expected_fstrim_count
+                &env.logger(),
+            );
         }
     });
 }
