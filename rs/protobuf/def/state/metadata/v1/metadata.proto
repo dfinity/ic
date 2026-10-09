@@ -313,8 +313,10 @@ message SubnetCallContextManager {
 
 message SubnetMetrics {
   types.v1.NominalCycles consumed_cycles_by_deleted_canisters = 1;
-  types.v1.NominalCycles consumed_cycles_http_outcalls = 2;
-  types.v1.NominalCycles consumed_cycles_ecdsa_outcalls = 3;
+  reserved 2;
+  reserved "consumed_cycles_http_outcalls";
+  reserved 3;
+  reserved "consumed_cycles_ecdsa_outcalls";
   reserved 4;
   reserved "ecdsa_signature_agreements";
   repeated canister_state_bits.v1.ConsumedCyclesByUseCase consumed_cycles_by_use_case = 5;
@@ -326,7 +328,8 @@ message SubnetMetrics {
   optional uint64 canister_state_bytes = 9;
   optional uint64 update_transactions_total = 10;
   repeated ThresholdSignatureAgreementsEntry threshold_signature_agreements = 11;
-  repeated canister_state_bits.v1.ConsumedCyclesByUseCase consumed_cycles_by_use_case_monotonic = 12;
+  reserved 12;
+  reserved "consumed_cycles_by_use_case_monotonic";
   optional uint64 round_instructions_total = 13;
 }
 
