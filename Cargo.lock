@@ -3744,6 +3744,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-governance",
+ "ic-nervous-system-lock",
  "ic-nervous-system-runtime",
  "ic-nervous-system-time-helpers",
  "ic-nns-common",
