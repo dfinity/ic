@@ -146,14 +146,19 @@ fn test(test_env: TestEnv) {
         sudo chown --reference=. image.bin
         "#,
     );
-    for n in &nodes {
-        let s = n
-            .block_on_ssh_session()
-            .expect("Failed to establish SSH session");
-        if let Err(err) = execute_bash_command(&s, command.clone()) {
-            panic!("{}", err)
+    let command = &command;
+    std::thread::scope(|scope| {
+        for node in &nodes {
+            scope.spawn(move || {
+                let session = node
+                    .block_on_ssh_session()
+                    .expect("Failed to establish SSH session");
+                if let Err(err) = execute_bash_command(&session, command.clone()) {
+                    panic!("{}", err)
+                }
+            });
         }
-    }
+    });
 
     info!(logger, "Starting orchestrator...");
     for n in &nodes {
