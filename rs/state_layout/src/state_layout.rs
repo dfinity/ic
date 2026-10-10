@@ -1940,11 +1940,12 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     /// Other methods should use this function rather than checking markers directly.
     pub fn checkpoint_status(&self) -> CheckpointStatus {
         if self.state_sync_checkpoint_marker().exists() {
-            // Checkpoints with state sync marker are always unverified. Therefore both markers should be present.
-            // For defensive programming, we treat it as unverified even if the unverified marker
-            // is accidentally missing, since the presence of a state sync marker alone indicates
-            // the checkpoint should never be considered verified.
-            debug_assert!(self.unverified_checkpoint_marker().exists());
+            // The state sync marker alone makes the checkpoint unverified. The unverified marker is
+            // normally present too, but `finalize_and_remove_unverified_marker` removes the unverified
+            // marker first and the state sync marker last, so a concurrent reader (e.g. the state sync
+            // advert loop via `verified_or_state_sync_checkpoint_heights`) can legitimately observe only
+            // the state sync marker while a state sync checkpoint is being verified. The same holds on
+            // disk if the process dies in between; the checkpoint is then archived at startup.
             return CheckpointStatus::UnverifiedStateSync;
         }
         if self.unverified_checkpoint_marker().exists() {
@@ -2145,7 +2146,8 @@ impl CheckpointLayout<ReadOnly> {
         let _result = self.mark_files_readonly_and_sync(thread_pool, true)?;
         self.remove_unverified_checkpoint_marker()?;
         // Remove the state sync marker last to avoid briefly appearing as UnverifiedRegular
-        // if a concurrent thread observes the checkpoint between marker removals.
+        // if a concurrent thread observes the checkpoint between marker removals;
+        // `checkpoint_status` reports that intermediate state as UnverifiedStateSync.
         self.remove_state_sync_checkpoint_marker()
     }
 
