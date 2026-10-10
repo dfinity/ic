@@ -4,7 +4,7 @@ use ic_types::CanisterId;
 
 use icp_ledger::{AccountIdentifier, BlockIndex};
 use rosetta_core::request_types::NetworkRequest;
-use slog::info;
+use slog::{info, warn};
 
 use crate::store_threshold_sig_pk;
 use ic_rosetta_api::models::Operation;
@@ -505,16 +505,30 @@ impl RosettaApiHandle {
 
     // safe to call this multiple times
     pub fn stop(&mut self) {
-        const TIMEOUT: Duration = Duration::from_secs(10 * 60); // 10 minutes
+        // Rosetta's graceful shutdown normally completes within ~6 seconds (actix-web keeps the
+        // test's idle keep-alive connection open for 5 seconds) and actix-server force-stops
+        // workers after 30 seconds, but it can also deadlock: actix-server 2.x stops its accept
+        // thread, which closes every worker's connection channel, *before* it queues the stop
+        // message of each worker, so an idle worker can be exiting while its stop message is
+        // being sent, and tokio's mpsc then leaves that message, with the completion channel
+        // the server waits for, stranded in the dead worker's channel. Rosetta then runs forever
+        // with no HTTP server, so after this timeout it is killed instead.
+        const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(60);
         const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_secs(1);
 
         use nix::sys::signal::{Signal::SIGTERM, kill};
         use nix::unistd::Pid;
+
+        // Don't signal a process that was already reaped by an earlier call: its pid may have
+        // been reused by an unrelated process.
+        if matches!(self.process.try_wait(), Ok(Some(_))) {
+            return;
+        }
         kill(Pid::from_raw(self.process.id() as i32), SIGTERM).ok();
 
         let now = std::time::SystemTime::now();
 
-        while now.elapsed().unwrap() < TIMEOUT {
+        while now.elapsed().unwrap() < GRACEFUL_SHUTDOWN_TIMEOUT {
             match self.process.try_wait() {
                 Ok(Some(status)) => {
                     if self.can_panic {
@@ -546,13 +560,14 @@ impl RosettaApiHandle {
                 }
             }
         }
+        warn!(
+            self.logger,
+            "Rosetta (pid {}) did not stop within {} secs of SIGTERM, which happens when its graceful shutdown deadlocks; killing it with SIGKILL",
+            self.process.id(),
+            GRACEFUL_SHUTDOWN_TIMEOUT.as_secs()
+        );
         self.process.kill().ok();
-        if self.can_panic {
-            panic!(
-                "Rosetta did not stop after {} sec",
-                now.elapsed().unwrap().as_secs()
-            );
-        }
+        self.process.wait().ok();
     }
 
     pub async fn raw_construction_endpoint(
