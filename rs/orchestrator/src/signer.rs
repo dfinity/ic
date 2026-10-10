@@ -1,3 +1,4 @@
+use crate::registration::NodeRegistrationCrypto;
 use ic_agent::{
     Identity, Signature, agent::EnvelopeContent, export::Principal, identity::Secp256k1Identity,
 };
@@ -14,7 +15,7 @@ pub trait Signer: Send + Sync {
 }
 
 type SignBytes = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> + Send + Sync>;
-type SignMessageId =
+pub(crate) type SignMessageId =
     Arc<dyn Fn(&MessageId) -> Result<Vec<u8>, Box<dyn std::error::Error>> + Send + Sync>;
 
 pub struct Hsm;
@@ -115,6 +116,33 @@ impl NodeSender {
             der_encoded_pub_key,
             sign,
         })
+    }
+
+    /// A sender that signs as this node, with the node signing key held by the
+    /// crypto component.
+    pub(crate) fn for_this_node(crypto: Arc<dyn NodeRegistrationCrypto>) -> Result<Self, String> {
+        // Reading the public keys is an RPC to the CSP vault that uses Tokio's
+        // `block_on` internally, which panics in an async context without this.
+        #[allow(clippy::disallowed_methods)]
+        let public_keys = tokio::task::block_in_place(|| crypto.current_node_public_keys())
+            .map_err(|err| format!("Failed to retrieve current node public keys: {err}"))?;
+        let public_key = public_keys
+            .node_signing_public_key
+            .ok_or("Missing node signing key.")?;
+
+        let sign = move |message: &MessageId| {
+            // `sign_basic` blocks on an RPC to the crypto service in the same
+            // way, so it needs the same treatment.
+            #[allow(clippy::disallowed_methods)]
+            tokio::task::block_in_place(|| {
+                crypto
+                    .sign_basic(message)
+                    .map(|signature| signature.get().0)
+                    .map_err(|err| Box::new(err) as Box<dyn std::error::Error>)
+            })
+        };
+
+        Self::new(public_key, Arc::new(sign))
     }
 }
 

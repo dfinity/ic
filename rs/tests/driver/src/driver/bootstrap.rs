@@ -764,6 +764,7 @@ fn create_guestos_config_for_node(
 
     let guestos_settings = GuestOSSettings {
         guestos_dev_settings,
+        engine_management_canister_id: None,
     };
 
     // Assemble GuestOSConfig
