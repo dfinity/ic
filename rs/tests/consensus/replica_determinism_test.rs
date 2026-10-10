@@ -6,14 +6,18 @@ Goal:: Ensure that a node restarts and catches up after realizing a divergence o
 Runbook::
 . Set up one subnet
 . Make a node diverge
-. Wait until we see the newly started node's PID finalizing a block.
+. Wait until the restarted node reports healthy and its certified height has caught up with an honest node
+. Send update and query calls through the restarted node
 
-Success:: The restarted node reports block finalizations.
+Success:: The restarted node catches up and correctly serves update and query calls.
 
 
 end::catalog[] */
 
 use ic_agent::AgentError;
+use ic_consensus_system_test_utils::node::{
+    await_node_certified_height_with_retries_async, get_node_certified_height_with_retries_async,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
@@ -70,6 +74,11 @@ fn test(env: TestEnv) {
         .nodes()
         .find(|n| n.is_malicious())
         .expect("No malicious node found in the subnet.");
+    let honest_node = topology
+        .root_subnet()
+        .nodes()
+        .find(|n| !n.is_malicious())
+        .expect("No honest node found in the subnet.");
 
     let rt = tokio::runtime::Runtime::new().expect("could not create tokio runtime");
     rt.block_on({
@@ -134,6 +143,34 @@ fn test(env: TestEnv) {
                 .await_status_is_healthy_async()
                 .await
                 .expect("Node didn't report healthy");
+
+            // The restarted node reports healthy as soon as it has any certified state, i.e. the CUP
+            // state it synced, and only reports `CertifiedStateBehind` once it lags its own finalized
+            // block by more than 20 heights. Until it has replayed the blocks after the CUP its ingress
+            // filter validates calls against that stale certified state and rejects them with
+            // "Requested canister has no wasm module" if the canister was installed after the CUP.
+            // So wait until it has caught up with an honest node.
+            let target_height = get_node_certified_height_with_retries_async(
+                &honest_node,
+                &log,
+                Duration::from_secs(120),
+                Duration::from_secs(2),
+            )
+            .await;
+            info!(
+                log,
+                "Waiting until the certified height of the restarted node {} exceeds {}...",
+                malicious_node.node_id,
+                target_height
+            );
+            await_node_certified_height_with_retries_async(
+                &malicious_node,
+                target_height,
+                &log,
+                Duration::from_secs(120),
+                Duration::from_secs(2),
+            )
+            .await;
 
             // For the same reason as before, if N = DKG_INTERVAL + 1, it's guaranteed
             // that a catch up package is proposed by the faulty node.
