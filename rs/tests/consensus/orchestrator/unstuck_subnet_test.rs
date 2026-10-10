@@ -146,14 +146,33 @@ fn test(test_env: TestEnv) {
         sudo chown --reference=. image.bin
         "#,
     );
-    for n in &nodes {
-        let s = n
-            .block_on_ssh_session()
-            .expect("Failed to establish SSH session");
-        if let Err(err) = execute_bash_command(&s, command.clone()) {
-            panic!("{}", err)
+    let command = &command;
+    std::thread::scope(|scope| {
+        let downloads: Vec<_> = nodes
+            .iter()
+            .map(|node| {
+                scope.spawn(move || {
+                    let session = node.block_on_ssh_session().map_err(|err| {
+                        format!(
+                            "Failed to establish SSH session to {}: {err:#}",
+                            node.get_ip_addr()
+                        )
+                    })?;
+                    execute_bash_command(&session, command.clone()).map_err(|err| {
+                        format!(
+                            "Failed to download the image on {}: {err}",
+                            node.get_ip_addr()
+                        )
+                    })
+                })
+            })
+            .collect();
+        for download in downloads {
+            if let Err(err) = download.join().expect("Download thread panicked") {
+                panic!("{}", err)
+            }
         }
-    }
+    });
 
     info!(logger, "Starting orchestrator...");
     for n in &nodes {
