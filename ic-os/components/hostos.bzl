@@ -42,6 +42,7 @@ component_files = {
 
     # misc
     Label("misc/config/config-hostos.sh"): "/opt/ic/bin/config.sh",
+    Label("misc/guestos-vm-count.sh"): "/opt/ic/bin/guestos-vm-count.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
