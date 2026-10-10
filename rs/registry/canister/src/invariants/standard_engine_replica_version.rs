@@ -105,8 +105,9 @@ mod tests {
             .into_iter()
             .map(|v| {
                 insert(
-                    make_replica_version_key(v).as_bytes(),
+                    make_replica_version_key(&v).as_bytes(),
                     ReplicaVersionRecord {
+                        replica_version_id: v,
                         // Versions of the StandardEngineReplicaVersionRecord must
                         // have launch measurements.
                         guest_launch_measurements: Some(GUEST_LAUNCH_MEASUREMENTS.clone()),
@@ -175,7 +176,11 @@ mod tests {
         let replica_version_id_without_measurements = "b4f14b18a1b4a3d3ba31c1b0a3c53e35a1e1b0dc";
         registry.maybe_apply_mutation_internal(vec![insert(
             make_replica_version_key(replica_version_id_without_measurements).as_bytes(),
-            ReplicaVersionRecord::default().encode_to_vec(),
+            ReplicaVersionRecord {
+                replica_version_id: replica_version_id_without_measurements.to_string(),
+                ..Default::default()
+            }
+            .encode_to_vec(),
         )]);
 
         // Step 2: Run the code under test. Start upgrading the engines to that
