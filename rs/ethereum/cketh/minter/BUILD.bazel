@@ -304,8 +304,8 @@ rust_test(
     # The end-to-end tests each run a live PocketIC and wait (wall-clock) for the minter's periodic
     # tasks — and the sweep tests drive twenty deposits through two sweeps — so the target needs a
     # far larger timeout than the pure-anvil tests. RUST_TEST_THREADS=1 below runs the nine live
-    # tests one after the other, which takes 10-13 minutes on CI and up to 15 on a loaded runner:
-    # the 900s that "large" alone grants made the target time out on slow days.
+    # tests one after the other, which takes ten minutes on an idle machine and 10-13 on CI: the
+    # 900s that "large" alone grants left no room for a loaded runner, where the target timed out.
     size = "large",
     timeout = "eternal",
     srcs = ["tests/deposit_from_cex.rs"],
@@ -345,6 +345,10 @@ rust_test(
         "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
+    # A loaded runner also slows the minter's outcalls past what the harness' settle windows can
+    # drain, so ticks are wasted and their budgets run out: reserve the CPUs the test binary,
+    # PocketIC and anvil share, as the other PocketIC-heavy tests do.
+    exec_properties = {"test.cpu": "4"},
     tags = ["long_test"],
     deps = [
         # Keep sorted.
