@@ -770,7 +770,6 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::RwLock;
 
-    use crate::CanisterRangesFilter;
     use assert_matches::assert_matches;
     use axum::response::IntoResponse;
     use axum_server::tls_rustls::RustlsConfig;
@@ -786,6 +785,7 @@ mod tests {
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_nns_delegation_reader::DelegationVerificationError;
     use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
@@ -1242,12 +1242,13 @@ mod tests {
     #[tokio::test]
     async fn manager_load_root_delegation_on_nns_should_return_none_test() {
         let rt_handle = tokio::runtime::Handle::current();
-        let (registry_client, tls_config, state_reader, _) = set_up_nns_delegation_dependencies(
-            rt_handle.clone(),
-            Arc::new(RwLock::new(None)),
-            /*delay=*/ None,
-            NNS_SUBNET_ID,
-        );
+        let (registry_client, tls_config, state_reader, mutable_state) =
+            set_up_nns_delegation_dependencies(
+                rt_handle.clone(),
+                Arc::new(RwLock::new(None)),
+                /*delay=*/ None,
+                NNS_SUBNET_ID,
+            );
 
         let (_, mut reader) = start_nns_delegation_manager(
             &MetricsRegistry::new(),
@@ -1265,7 +1266,15 @@ mod tests {
 
         reader.wait_until_updated().await.unwrap();
 
-        assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_none());
+        assert!(
+            reader
+                .get_delegation(
+                    CanisterRangesCheck::AllSubnetRanges,
+                    &*mutable_state.read().unwrap()
+                )
+                .expect("Delegation should be valid")
+                .is_none()
+        );
     }
 
     #[tokio::test]
@@ -1276,12 +1285,13 @@ mod tests {
             (APP_SUBNET_ID, SubnetType::Application),
             (VERIFIED_APP_SUBNET_ID, SubnetType::VerifiedApplication),
         ] {
-            let (registry_client, tls_config, state_reader, _) = set_up_nns_delegation_dependencies(
-                rt_handle.clone(),
-                Arc::new(RwLock::new(None)),
-                /*delay=*/ None,
-                subnet_id,
-            );
+            let (registry_client, tls_config, state_reader, mutable_state) =
+                set_up_nns_delegation_dependencies(
+                    rt_handle.clone(),
+                    Arc::new(RwLock::new(None)),
+                    /*delay=*/ None,
+                    subnet_id,
+                );
 
             let (_, mut reader) = start_nns_delegation_manager(
                 &MetricsRegistry::new(),
@@ -1300,7 +1310,11 @@ mod tests {
             reader.wait_until_updated().await.unwrap();
 
             let delegation = reader
-                .get_delegation(CanisterRangesFilter::Flat)
+                .get_delegation(
+                    CanisterRangesCheck::AllSubnetRanges,
+                    &*mutable_state.read().unwrap(),
+                )
+                .expect("Delegation should be valid")
                 .expect("Should return some delegation on non NNS subnet");
             let parsed_delegation: Certificate = serde_cbor::from_slice(&delegation.certificate)
                 .expect("Should return a certificate which can be deserialized");
@@ -1476,12 +1490,13 @@ mod tests {
             (APP_SUBNET_ID, SubnetType::Application),
             (VERIFIED_APP_SUBNET_ID, SubnetType::VerifiedApplication),
         ] {
-            let (registry_client, tls_config, _, _) = set_up_nns_delegation_dependencies(
-                rt_handle.clone(),
-                Arc::new(RwLock::new(None)),
-                /*delay=*/ None,
-                subnet_id,
-            );
+            let (registry_client, tls_config, _, mutable_state) =
+                set_up_nns_delegation_dependencies(
+                    rt_handle.clone(),
+                    Arc::new(RwLock::new(None)),
+                    /*delay=*/ None,
+                    subnet_id,
+                );
 
             let builder = load_root_delegation(
                 &Config::default(),
@@ -1499,7 +1514,12 @@ mod tests {
             let builder = builder.expect("Should return Some delegation on non NNS subnet");
             let parsed_delegation: Certificate = serde_cbor::from_slice(
                 &builder
-                    .build_unverified(CanisterRangesFilter::Flat, &no_op_logger())
+                    .build_verified(
+                        CanisterRangesCheck::AllSubnetRanges,
+                        &*mutable_state.read().unwrap(),
+                        &no_op_logger(),
+                    )
+                    .expect("Delegation should be valid")
                     .certificate,
             )
             .expect("Should return a certificate which can be deserialized");
@@ -1921,7 +1941,15 @@ mod tests {
         .await
         .expect("The initial delegation should be published without waiting for the state")
         .unwrap();
-        assert!(reader.get_delegation(CanisterRangesFilter::Flat).is_some());
+
+        assert_matches!(
+            reader.get_delegation(
+                CanisterRangesCheck::AllSubnetRanges,
+                &*mutable_state.read().unwrap()
+            ),
+            // Available, but inconsistent
+            Err(DelegationVerificationError::Inconsistent)
+        );
 
         // Since the state disagrees with what the NNS keeps serving, the manager should keep
         // reactively refreshing the delegation.

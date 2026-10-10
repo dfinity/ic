@@ -170,7 +170,7 @@ fn read_state_valid_succeeds(env: TestEnv, version: read_state::Version) {
 
     block_on(async {
         // Test that well formed read state requests work
-        let response = CanisterReadState::new(
+        let response = ReadState::new(
             vec![Path::from(vec![
                 Label::from("canister"),
                 Label::from(primary),
@@ -195,7 +195,7 @@ fn read_state_malformed_rejected(env: TestEnv, version: read_state::Version) {
     block_on(async {
         // Test that malformed read_state requests are rejected
         for effective_canister_id in test_ids {
-            let response = CanisterReadState::new(
+            let response = ReadState::new(
                 vec![Path::from(vec![
                     Label::from("canister"),
                     Label::from(primary),
@@ -222,7 +222,7 @@ fn read_time(env: TestEnv, version: read_state::Version) {
     block_on(async {
         // Test that requesting the "time" path on an existing canister id works.
         let read_state = |effective_canister_id: CanisterId, url: Url| {
-            CanisterReadState::new(
+            ReadState::new(
                 vec![Path::from(Label::from("time"))],
                 effective_canister_id.into(),
                 version,
