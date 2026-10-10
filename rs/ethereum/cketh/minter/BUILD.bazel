@@ -302,9 +302,12 @@ rust_test(
 rust_test(
     name = "deposit_from_cex",
     # The end-to-end tests each run a live PocketIC and wait (wall-clock) for the minter's periodic
-    # tasks — and the sweep test drives twenty deposits through two sweeps — so the target needs a
-    # far larger timeout than the pure-anvil tests.
+    # tasks — and the sweep tests drive twenty deposits through two sweeps — so the target needs a
+    # far larger timeout than the pure-anvil tests. RUST_TEST_THREADS=1 below runs the nine live
+    # tests one after the other, which takes 10-13 minutes on CI and up to 15 on a loaded runner:
+    # the 900s that "large" alone grants made the target time out on slow days.
     size = "large",
+    timeout = "eternal",
     srcs = ["tests/deposit_from_cex.rs"],
     data = [
         "//:anvil",
