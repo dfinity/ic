@@ -46,6 +46,13 @@ const NODES: usize = 3 * FAULTY + 1; // 49
 
 const IDLE_DURATION: Duration = Duration::from_secs(10 * 60);
 
+/// Heights the node that receives the update must certify after the (f+1)-th node is restarted
+/// before the subnet is considered to be producing blocks again. Typically two heights can be
+/// certified without a block made after the restart: the pre-halt finalized height whose
+/// certification was still pending, and a block proposed before the halt that is only finalized
+/// once the restarted node rejoins. Both carry pre-halt timestamps; 5 leaves margin on top.
+const POST_HALT_PROGRESS: Height = Height::new(5);
+
 pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .with_resource_overrides(VmResourceOverrides {
@@ -174,6 +181,10 @@ pub fn test(env: TestEnv) {
         &log,
         Height::new(1),
     );
+    // Replicas validate the expiry of an incoming update against the time of their latest
+    // finalized block and silently drop it when that time lags by more than a minute, so only
+    // submit the update once `node` has certified blocks produced after the halt.
+    ic_consensus_system_test_utils::assert_node_is_making_progress(&node, &log, POST_HALT_PROGRESS);
 
     info!(log, "Storing message '{}' ...", UPDATE_MSG_5);
     block_on(message_canister.try_store_msg(UPDATE_MSG_5)).expect("Update canister call failed.");
