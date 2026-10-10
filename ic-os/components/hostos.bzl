@@ -42,6 +42,7 @@ component_files = {
 
     # misc
     Label("misc/config/config-hostos.sh"): "/opt/ic/bin/config.sh",
+    Label("misc/guestos-vm-count.sh"): "/opt/ic/bin/guestos-vm-count.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/output-wrapper.sh"): "/opt/ic/bin/output-wrapper.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
@@ -79,8 +80,9 @@ component_files = {
     Label("monitoring/node_exporter/node_exporter"): "/etc/default/node_exporter",
     Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.sh"): "/opt/ic/bin/setup-node_exporter-keys.sh",
     Label("monitoring/node_exporter/setup-node_exporter-keys/setup-node_exporter-keys.service"): "/etc/systemd/system/setup-node_exporter-keys.service",
-    Label("monitoring/metrics-proxy/hostos/metrics-proxy.yaml"): "/etc/metrics-proxy.yaml",
     Label("monitoring/metrics-proxy/metrics-proxy.service"): "/etc/systemd/system/metrics-proxy.service",
+    Label("monitoring/metrics-proxy/hostos/override.conf"): "/etc/systemd/system/metrics-proxy.service.d/override.conf",
+    Label("monitoring/metrics-proxy/hostos/generate-metrics-proxy-config.service"): "/etc/systemd/system/generate-metrics-proxy-config.service",
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
     Label("misc/log-config/log-config-hostos.service"): "/etc/systemd/system/log-config.service",
     Label("monitoring/grub-version/grub-version.sh"): "/opt/ic/bin/grub-version.sh",

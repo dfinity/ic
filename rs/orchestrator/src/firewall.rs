@@ -1406,6 +1406,7 @@ mod tests {
             malicious_behavior: "null".to_string(),
             extra_api_boundary_node_trust_anchors_pem: "null".to_string(),
             peer_guest_vm_address: Some("2001:db8::6802:94ff:feef:2978".parse().unwrap()),
+            hostos_address: "2001:db8::6800:94ff:feef:2978".parse().unwrap(),
         };
 
         let ic_json = generate_ic_config::render_ic_config(template)
