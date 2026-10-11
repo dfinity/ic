@@ -705,9 +705,15 @@ impl Player {
             self.wait_for_state(height);
             // Poll rather than read the hash once: `wait_for_state` can return before the
             // state manager has published the manifest of a checkpoint it already reports
-            // as the latest state. Only a permanent error means that the latest state
-            // exists in memory only.
-            if let Some(hash_raw) = self.get_state_hash(height) {
+            // as the latest state. Only `StateNotFullyCertified` means that the latest
+            // state exists in memory only. Height 0 is never a checkpoint, so there is
+            // nothing to poll for.
+            let hash_raw = if height > Height::from(0) {
+                self.get_state_hash(height)
+            } else {
+                None
+            };
+            if let Some(hash_raw) = hash_raw {
                 (height, hash_raw)
             } else if self.consensus_pool.is_some() {
                 // The latest state exists in memory only, so it has no hash. Report the
@@ -728,8 +734,7 @@ impl Player {
                          is no persisted state to report",
                     );
                 let hash_raw = self
-                    .state_manager
-                    .get_state_hash_at(height)
+                    .get_state_hash(height)
                     .expect("Failed to get the hash of the highest checkpoint");
                 (height, hash_raw)
             }
