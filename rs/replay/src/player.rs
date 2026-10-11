@@ -703,7 +703,11 @@ impl Player {
         let (height, hash_raw) = {
             let height = self.state_manager.latest_state_height();
             self.wait_for_state(height);
-            if let Ok(hash_raw) = self.state_manager.get_state_hash_at(height) {
+            // Poll rather than read the hash once: `wait_for_state` can return before the
+            // state manager has published the manifest of a checkpoint it already reports
+            // as the latest state. Only a permanent error means that the latest state
+            // exists in memory only.
+            if let Some(hash_raw) = self.get_state_hash(height) {
                 (height, hash_raw)
             } else if self.consensus_pool.is_some() {
                 // The latest state exists in memory only, so it has no hash. Report the
@@ -1976,6 +1980,20 @@ mod tests {
         let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
 
         assert!(state_hash.is_some());
+    }
+
+    #[test]
+    fn get_state_hash_returns_none_for_a_not_fully_certified_state_test() {
+        let mut state_manager = MockStateManager::new();
+        state_manager.expect_get_state_hash_at().return_once(|_| {
+            Err(StateHashError::Permanent(
+                PermanentStateHashError::StateNotFullyCertified(Height::new(1)),
+            ))
+        });
+
+        let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
+
+        assert_eq!(state_hash, None);
     }
 
     #[test]
