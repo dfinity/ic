@@ -18,7 +18,7 @@ use ic_universal_canister::{call_args, wasm};
 use more_asserts::assert_gt;
 use std::time::Duration;
 
-use ic_config::embedders::StableMemoryPageLimit;
+use ic_config::embedders::MemoryPageLimit;
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status,
 };
@@ -120,7 +120,7 @@ fn with_update_and_replicated_query<F: Fn(&str)>(test: F) {
 #[test]
 fn can_write_to_each_page_in_stable_memory() {
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(10),
             message: NumOsPages::new(10),
             query: NumOsPages::new(10),
@@ -565,7 +565,7 @@ fn dirty_pages_cost_the_same_on_app_and_system_subnets() {
 fn hitting_page_delta_limit_fails_message() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages),
             message: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages),
@@ -592,7 +592,7 @@ fn hitting_page_delta_limit_fails_message() {
 fn hitting_page_delta_limit_fails_message_system_subnet() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages),
             message: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages),
@@ -622,7 +622,7 @@ fn hitting_page_delta_limit_fails_for_install_code() {
     // A large enough limit that will never be triggered.
     let no_pages_other_messages = no_pages_upgrade * 10_000_000;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages_upgrade),
             message: NumOsPages::new(no_pages_other_messages),
             query: NumOsPages::new(no_pages_other_messages),
@@ -654,7 +654,7 @@ fn hitting_page_delta_limit_fails_for_install_code() {
 fn hitting_page_delta_limit_fails_non_replicated_query() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages),
             message: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages - 1),
@@ -678,7 +678,7 @@ fn hitting_page_delta_limit_fails_non_replicated_query() {
 fn hitting_page_delta_limit_fails_replicated_query() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_dirty_page_limit(StableMemoryPageLimit {
+        .with_stable_memory_dirty_page_limit(MemoryPageLimit {
             upgrade: NumOsPages::new(no_pages),
             message: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages - 1),
@@ -700,7 +700,7 @@ fn hitting_page_delta_limit_fails_replicated_query() {
 fn hitting_access_limit_fails_non_replicated_query() {
     let no_pages = 10;
     let mut test = ExecutionTestBuilder::new()
-        .with_stable_memory_access_limit(StableMemoryPageLimit {
+        .with_stable_memory_access_limit(MemoryPageLimit {
             message: NumOsPages::new(no_pages),
             upgrade: NumOsPages::new(no_pages),
             query: NumOsPages::new(no_pages - 1),
