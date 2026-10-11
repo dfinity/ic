@@ -26,6 +26,7 @@ expression: out
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)
+  (global (;3;) (mut i64) i64.const 0)
   (export "e" (func 1))
   (export "table" (table 0))
   (export "memory" (memory 0))
@@ -34,6 +35,7 @@ expression: out
   (export "canister counter_instructions" (global 0))
   (export "canister counter_dirty_pages" (global 1))
   (export "canister counter_accessed_pages" (global 2))
+  (export "canister heap_page_budget" (global 3))
   (export "canister_start" (func $foo))
   (func $foo (;7;) (type 3)
     global.get 0
