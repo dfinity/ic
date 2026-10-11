@@ -61,11 +61,26 @@ pub fn assert_subnet_is_healthy(
         node.get_ip_addr()
     );
     info!(logger, "Ensure that the subnet is accepting updates");
-    assert!(
-        can_store_msg(logger, &node.get_public_url(), can_id, new_msg),
-        "Failed to store new message on {}",
-        node.get_ip_addr()
-    );
+    // A subnet that was just recovered or upgraded can finalize slowly for a while, so a
+    // single 30 s attempt is not enough.
+    ic_system_test_driver::retry_with_msg!(
+        format!(
+            "store a message in canister {} via {}",
+            can_id,
+            node.get_public_url()
+        ),
+        logger.clone(),
+        secs(300),
+        secs(5),
+        || {
+            if can_store_msg(logger, &node.get_public_url(), can_id, new_msg) {
+                Ok(())
+            } else {
+                bail!("Failed to store new message on {}", node.get_ip_addr())
+            }
+        }
+    )
+    .expect("Subnet should accept updates");
     // Wait until all nodes answer with the new message.
     // Use 30 retries (up to ~155s total with 5s sleeps) to give nodes enough time to sync state,
     // especially after recovery operations.
