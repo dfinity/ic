@@ -1185,10 +1185,12 @@ fn refill_pool_empty(
 
         runtime.block_on(async {
             let mut count: u64 = 0;
-            // Keep polling until the pull was recorded, which happens after the slice
-            // was pooled.
+            // Keep polling until the pull was recorded, which happens after `put()` returned.
             loop {
-                if !fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS).is_empty() {
+                if fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS)
+                    .values()
+                    .any(|&v| v > 0)
+                {
                     break;
                 }
                 count += 1;
@@ -1337,10 +1339,12 @@ fn refill_pool_append(
 
         runtime.block_on(async {
             let mut count: u64 = 0;
-            // Keep polling until the pull was recorded, which happens after the slice
-            // was appended.
+            // Keep polling until the pull was recorded, which happens after `append()` returned.
             loop {
-                if !fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS).is_empty() {
+                if fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS)
+                    .values()
+                    .any(|&v| v > 0)
+                {
                     break;
                 }
                 count += 1;
