@@ -1,5 +1,6 @@
 use crate::rw_message::{
-    can_read_msg, can_read_msg_with_retries, can_store_msg, cert_state_makes_progress_with_retries,
+    can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
+    store_msg_with_timeout,
 };
 use crate::upgrade::assert_assigned_replica_version;
 use anyhow::bail;
@@ -61,8 +62,9 @@ pub fn assert_subnet_is_healthy(
         node.get_ip_addr()
     );
     info!(logger, "Ensure that the subnet is accepting updates");
-    // A subnet that was just recovered or upgraded can finalize slowly for a while, so a
-    // single 30 s attempt is not enough.
+    // An update needs a few heights (inclusion, finalization, certification). Right after a
+    // recovery on a CPU-starved worker the subnet was seen finalizing one height every
+    // 6-14 s, so a single 30 s attempt is not enough.
     ic_system_test_driver::retry_with_msg!(
         format!(
             "store a message in canister {} via {}",
@@ -70,15 +72,9 @@ pub fn assert_subnet_is_healthy(
             node.get_public_url()
         ),
         logger.clone(),
-        secs(300),
+        secs(180),
         secs(5),
-        || {
-            if can_store_msg(logger, &node.get_public_url(), can_id, new_msg) {
-                Ok(())
-            } else {
-                bail!("Failed to store new message on {}", node.get_ip_addr())
-            }
-        }
+        || store_msg_with_timeout(logger, &node.get_public_url(), can_id, new_msg, secs(120))
     )
     .expect("Subnet should accept updates");
     // Wait until all nodes answer with the new message.
