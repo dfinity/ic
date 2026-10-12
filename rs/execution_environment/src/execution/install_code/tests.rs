@@ -2233,6 +2233,12 @@ fn install_chunked_fails_from_noncontroller_of_store() {
                 )),
                 "Unexpected reject message {reject}"
             );
+            // The store canister is validated as `stored_chunks`, which must
+            // not leak into the reject message of `install_chunked_code`.
+            assert!(
+                !reject.contains("stored_chunks"),
+                "Unexpected reject message {reject}"
+            );
         }
         other => panic!("Expected reject, but got {other:?}"),
     }

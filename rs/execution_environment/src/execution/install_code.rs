@@ -1,7 +1,7 @@
 // This module defines types and functions common between canister installation
 // and upgrades.
 
-use crate::execution::common::{log_dirty_pages, validate_controller};
+use crate::execution::common::{log_dirty_pages, validate_sender_on_subnet};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
@@ -14,18 +14,19 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, fatal, info, warn};
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, Method as Ic00Method,
 };
 use ic_replicated_state::canister_state::system_state::{
     ReservationError, log_memory_store::LogMemoryStore,
 };
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
+use ic_replicated_state::{CanisterState, ExecutionState, NetworkTopology, num_bytes_try_from};
 use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall};
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 use ic_wasm_types::WasmHash;
+use std::sync::Arc;
 
 use crate::{
     CompilationCostHandling, RoundLimits,
@@ -535,7 +536,13 @@ impl InstallCodeHelper {
         let config = &original.config;
         let id = self.canister.canister_id();
 
-        validate_controller(&self.canister, &original.sender)?;
+        validate_sender_on_subnet(
+            &original.sender,
+            original.method,
+            &self.canister,
+            &original.network_topology,
+            config.own_subnet_id,
+        )?;
 
         match original.mode {
             CanisterInstallModeV2::Install => {
@@ -907,6 +914,13 @@ impl InstallCodeHelper {
 /// time slicing execution of `install_code`.
 #[derive(Debug)]
 pub(crate) struct OriginalContext {
+    /// The management canister method (`InstallCode` or `InstallChunkedCode`).
+    pub method: Ic00Method,
+    /// The network topology of the round in which the execution started. The
+    /// sender is validated against it in every round the execution spans, so
+    /// that replaying `InstallCodeStep::ValidateInput` in a later round cannot
+    /// reach a different verdict than the original validation did.
+    pub network_topology: Arc<NetworkTopology>,
     pub execution_parameters: ExecutionParameters,
     pub mode: CanisterInstallModeV2,
     pub config: CanisterMgrConfig,
