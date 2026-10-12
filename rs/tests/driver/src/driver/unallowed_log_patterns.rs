@@ -47,6 +47,7 @@ use crate::driver::{
     test_setup::GroupSetup,
 };
 use crate::util::block_on;
+use anyhow::Result;
 use chrono::{DateTime, SecondsFormat, Utc};
 use slog::{Logger, info, warn};
 use std::{
@@ -224,31 +225,37 @@ fn check_journald_log_files(
 /// that is expected (no IC deployed) or a sign that `logs_stream_task` never
 /// captured the IC node logs.
 fn log_no_records_hint(env: &TestEnv, logger: &Logger, nodes_dir: &Path) {
-    let node_count = deployed_ic_nodes(env);
-    if node_count == 0 {
-        info!(
-            logger,
-            "No IC node journald records under {} and no IC is deployed in this group \
-             => skipping unallowed log pattern check.",
-            nodes_dir.display()
-        );
-    } else {
-        warn!(
-            logger,
-            "{node_count} IC node(s) are deployed but there are no journald records under {}: \
-             logs_stream_task never captured the IC node logs \
-             => skipping unallowed log pattern check.",
-            nodes_dir.display()
-        );
-    }
+    let deployed_nodes = match deployed_ic_nodes(env) {
+        Ok(0) => {
+            info!(
+                logger,
+                "No IC node journald records under {} and no IC is deployed in this group \
+                 => skipping unallowed log pattern check.",
+                nodes_dir.display()
+            );
+            return;
+        }
+        Ok(deployed_nodes) => deployed_nodes.to_string(),
+        Err(e) => format!("an unknown number of ({NODES_INFO} could not be read: {e:?})"),
+    };
+    warn!(
+        logger,
+        "{deployed_nodes} IC node(s) are deployed but there are no journald records under {}: \
+         logs_stream_task never captured the IC node logs \
+         => skipping unallowed log pattern check.",
+        nodes_dir.display()
+    );
 }
 
-/// The number of IC node VMs the group deployed (`nodes_info.json`), which
-/// excludes registry-only nodes of tests that import mainnet state.
-fn deployed_ic_nodes(env: &TestEnv) -> usize {
+/// The number of IC node VMs the group deployed (`nodes_info.json`, which
+/// excludes registry-only nodes of tests that import mainnet state); 0 when
+/// the file does not exist yet, an error when it cannot be read.
+fn deployed_ic_nodes(env: &TestEnv) -> Result<usize> {
+    if !env.get_json_path(NODES_INFO).exists() {
+        return Ok(0);
+    }
     env.read_json_object::<NodesInfo, _>(NODES_INFO)
         .map(|nodes| nodes.len())
-        .unwrap_or(0)
 }
 
 /// A source-agnostic candidate log line: the ElasticSearch `_source` triple
@@ -476,10 +483,11 @@ fn warn_if_no_logs_were_shipped(
     group_name: &str,
     start_time: DateTime<Utc>,
 ) {
-    let deployed_nodes = deployed_ic_nodes(env);
-    if deployed_nodes == 0 {
-        return;
-    }
+    let deployed_nodes = match deployed_ic_nodes(env) {
+        Ok(0) => return,
+        Ok(deployed_nodes) => deployed_nodes.to_string(),
+        Err(e) => format!("an unknown number of ({NODES_INFO} could not be read: {e:?})"),
+    };
     let body = serde_json::json!({
         "query": {
             "bool": {

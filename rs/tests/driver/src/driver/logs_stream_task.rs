@@ -278,7 +278,21 @@ fn process_discovered(
 /// local stores; an IC whose store is not readable yet is skipped until the
 /// next poll. Returns a map from node id to its IPv6 address.
 fn discover_ic_nodes(env: &TestEnv, logger: &Logger) -> HashMap<String, Ipv6Addr> {
-    let deployed: NodesInfo = env.read_json_object(NODES_INFO).unwrap_or_default();
+    // Written once the first IC starts its node VMs; nothing to stream before.
+    let deployed: NodesInfo = if env.get_json_path(NODES_INFO).exists() {
+        match env.read_json_object(NODES_INFO) {
+            Ok(deployed) => deployed,
+            Err(err) => {
+                warn!(
+                    logger,
+                    "Not streaming any IC node: could not read {NODES_INFO}: {err:?}"
+                );
+                return HashMap::new();
+            }
+        }
+    } else {
+        NodesInfo::new()
+    };
     let mut nodes: HashMap<String, Ipv6Addr> = HashMap::new();
     for (ic_name, topology) in env.safe_topology_snapshots() {
         let topology = match topology {
