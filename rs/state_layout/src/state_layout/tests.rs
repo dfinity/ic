@@ -616,6 +616,66 @@ fn test_can_remove_unverified_marker_file_twice() {
 }
 
 #[test]
+fn test_state_sync_checkpoint_stays_unverified_between_marker_removals() {
+    // `finalize_and_remove_unverified_marker` removes the unverified marker before the state sync marker.
+    // Readers on other threads, like the state sync advert loop calling `verified_or_state_sync_checkpoint_heights`,
+    // can observe the checkpoint in between and must still see an unverified state sync checkpoint.
+    with_test_replica_logger(|log| {
+        let tempdir = tmpdir("state_layout");
+        let root_path = tempdir.path().to_path_buf();
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
+
+        let height = Height::new(1);
+        let scratchpad_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            state_layout.state_sync_scratchpad(height),
+            height,
+        )
+        .expect("failed to create checkpoint layout");
+        File::create(scratchpad_layout.raw_path().join(SYSTEM_METADATA_FILE)).unwrap();
+        // State sync marks its scratchpad before promoting it, which adds the unverified marker.
+        scratchpad_layout
+            .create_state_sync_checkpoint_marker()
+            .unwrap();
+        let checkpoint = state_layout
+            .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height)
+            .unwrap()
+            .as_readonly();
+        assert!(checkpoint.is_unverified_state_sync_checkpoint());
+
+        checkpoint.remove_unverified_checkpoint_marker().unwrap();
+        assert!(checkpoint.is_unverified_state_sync_checkpoint());
+        assert!(matches!(
+            state_layout.checkpoint_status(height),
+            Ok(CheckpointStatus::UnverifiedStateSync)
+        ));
+        assert_eq!(
+            state_layout
+                .verified_or_state_sync_checkpoint_heights()
+                .unwrap(),
+            vec![height]
+        );
+        assert!(
+            state_layout
+                .verified_checkpoint_heights()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(matches!(
+            state_layout.checkpoint_verified(height),
+            Err(LayoutError::CheckpointUnverified(_))
+        ));
+
+        checkpoint.remove_state_sync_checkpoint_marker().unwrap();
+        assert!(checkpoint.is_checkpoint_verified());
+        assert_eq!(
+            state_layout.verified_checkpoint_heights().unwrap(),
+            vec![height]
+        );
+    });
+}
+
+#[test]
 fn test_canister_id_from_path() {
     assert_eq!(
         Some(CanisterId::from_u64(1)),

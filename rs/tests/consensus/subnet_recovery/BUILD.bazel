@@ -41,6 +41,7 @@ rust_library(
 system_test_nns(
     name = "sr_app_same_nodes_test",
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
+    cpus_oversubscription_factor = 1,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -59,6 +60,7 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_provision_write_access_test",
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
+    cpus_oversubscription_factor = 1,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -77,6 +79,7 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_same_nodes_enable_chain_keys_test",
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
+    cpus_oversubscription_factor = 1,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -95,6 +98,7 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_same_nodes_with_chain_keys_test",
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 unassigned) * 6 vCPUs.
+    cpus_oversubscription_factor = 1,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -170,6 +174,7 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_test",
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
+    cpus_oversubscription_factor = 1,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -188,6 +193,7 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_locally_test",
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
+    cpus_oversubscription_factor = 1,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -206,6 +212,7 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_enable_chain_keys_test",
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
+    cpus_oversubscription_factor = 1,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -224,6 +231,7 @@ system_test_nns(
 system_test_nns(
     name = "sr_app_no_upgrade_with_chain_keys_test",
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 unassigned) * 6 vCPUs.
+    cpus_oversubscription_factor = 1,
     guestos_update = "test",
     tags = [
         "colocate",
@@ -262,6 +270,7 @@ system_test_nns(
 system_test_nns(
     name = "sr_nns_failover_nodes_test",
     cpus = MIN_LOCAL_CPUS + 9 * DEFAULT_VCPUS_PER_VM,  # 9 IC Node VMs (4 broken NNS + 1 restore NNS + 4 unassigned) * 6 vCPUs.
+    cpus_oversubscription_factor = 1,
     enable_uvm = True,
     tags = [
         "colocate",
