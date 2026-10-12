@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "1b25f1d51dfcd97599c90a69aab3e767bf47e9532633ceb5ef0c82f055b12a82",
+  "checksum": "7574ad99d5a416635fa1b66d8161465eff119e9f033a8e0cfdaa1add7280a72e",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -6260,15 +6260,15 @@
       ],
       "version": "1.5.0"
     },
-    "aws-lc-rs 1.17.3": {
+    "aws-lc-rs 1.18.1": {
       "build_script_attrs": {
         "link_deps": [
           {
-            "id": "aws-lc-sys 0.43.0",
+            "id": "aws-lc-sys 0.45.0",
             "target": "aws_lc_sys"
           }
         ],
-        "links": "aws_lc_rs_1_17_3_sys"
+        "links": "aws_lc_rs_1_18_1_sys"
       },
       "common_attrs": {
         "crate_features": [
@@ -6281,7 +6281,7 @@
         ],
         "deps": [
           {
-            "id": "aws-lc-sys 0.43.0",
+            "id": "aws-lc-sys 0.45.0",
             "target": "aws_lc_sys"
           },
           {
@@ -6309,8 +6309,8 @@
       "package_url": "https://github.com/aws/aws-lc-rs",
       "repository": {
         "Http": {
-          "sha256": "00bdb5da18dac48ca2cc7cd4a98e533e8635a58e2361d13a1a4ee3888e0d72f1",
-          "url": "https://static.crates.io/crates/aws-lc-rs/1.17.3/download"
+          "sha256": "b281d307588d634de920874890732659e2e7672f72b5e10e81badc1a8a83621e",
+          "url": "https://static.crates.io/crates/aws-lc-rs/1.18.1/download"
         }
       },
       "targets": [
@@ -6327,9 +6327,9 @@
           }
         }
       ],
-      "version": "1.17.3"
+      "version": "1.18.1"
     },
-    "aws-lc-sys 0.43.0": {
+    "aws-lc-sys 0.45.0": {
       "build_script_attrs": {
         "deps": {
           "common": [
@@ -6359,7 +6359,7 @@
             ]
           }
         },
-        "links": "aws_lc_0_43_0"
+        "links": "aws_lc_0_45_0"
       },
       "common_attrs": {
         "crate_features": [
@@ -6384,8 +6384,8 @@
       "package_url": "https://github.com/aws/aws-lc-rs",
       "repository": {
         "Http": {
-          "sha256": "43103168cc76fe62678a375e722fc9cb3a0146159ac5828bc4f0dfd755c2224c",
-          "url": "https://static.crates.io/crates/aws-lc-sys/0.43.0/download"
+          "sha256": "9bff6c3b54fad79a2e60b8102caf565819711497c1f5f092f49508e2f5c31b27",
+          "url": "https://static.crates.io/crates/aws-lc-sys/0.45.0/download"
         }
       },
       "targets": [
@@ -6402,7 +6402,7 @@
           }
         }
       ],
-      "version": "0.43.0"
+      "version": "0.45.0"
     },
     "axum 0.8.9": {
       "common_attrs": {
@@ -6878,7 +6878,7 @@
             "target": "pin_project_lite"
           },
           {
-            "id": "rustls 0.23.27",
+            "id": "rustls 0.23.45",
             "target": "rustls"
           },
           {
@@ -17862,7 +17862,7 @@
             "target": "rustc_hash"
           },
           {
-            "id": "rustls 0.23.27",
+            "id": "rustls 0.23.45",
             "target": "rustls"
           },
           {
@@ -22074,7 +22074,7 @@
             "target": "futures_io"
           },
           {
-            "id": "rustls 0.23.27",
+            "id": "rustls 0.23.45",
             "target": "rustls"
           },
           {
@@ -24112,7 +24112,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.3",
+              "id": "aws-lc-rs 1.18.1",
               "target": "aws_lc_rs"
             },
             {
@@ -24176,7 +24176,7 @@
               "target": "rand"
             },
             {
-              "id": "rustls 0.23.27",
+              "id": "rustls 0.23.45",
               "target": "rustls"
             },
             {
@@ -24270,7 +24270,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.3",
+              "id": "aws-lc-rs 1.18.1",
               "target": "aws_lc_rs"
             },
             {
@@ -24419,7 +24419,7 @@
               "target": "resolv_conf"
             },
             {
-              "id": "rustls 0.23.27",
+              "id": "rustls 0.23.45",
               "target": "rustls"
             },
             {
@@ -25283,7 +25283,7 @@
             "target": "log"
           },
           {
-            "id": "rustls 0.23.27",
+            "id": "rustls 0.23.45",
             "target": "rustls"
           },
           {
@@ -26113,7 +26113,7 @@
             "target": "reqwest"
           },
           {
-            "id": "rustls 0.23.27",
+            "id": "rustls 0.23.45",
             "target": "rustls"
           },
           {
@@ -27370,7 +27370,7 @@
             "target": "reqwest"
           },
           {
-            "id": "rustls 0.23.27",
+            "id": "rustls 0.23.45",
             "target": "rustls"
           },
           {
@@ -30334,7 +30334,7 @@
         ],
         "deps": [
           {
-            "id": "aws-lc-rs 1.17.3",
+            "id": "aws-lc-rs 1.18.1",
             "target": "aws_lc_rs"
           },
           {
@@ -30378,7 +30378,7 @@
             "target": "rcgen"
           },
           {
-            "id": "rustls 0.23.27",
+            "id": "rustls 0.23.45",
             "target": "rustls"
           },
           {
@@ -43306,7 +43306,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.27",
+              "id": "rustls 0.23.45",
               "target": "rustls"
             },
             {
@@ -43383,7 +43383,7 @@
         "deps": {
           "common": [
             {
-              "id": "aws-lc-rs 1.17.3",
+              "id": "aws-lc-rs 1.18.1",
               "target": "aws_lc_rs"
             },
             {
@@ -43403,7 +43403,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.27",
+              "id": "rustls 0.23.45",
               "target": "rustls"
             },
             {
@@ -44459,7 +44459,7 @@
         ],
         "deps": [
           {
-            "id": "aws-lc-rs 1.17.3",
+            "id": "aws-lc-rs 1.18.1",
             "target": "aws_lc_rs"
           },
           {
@@ -44528,7 +44528,7 @@
         ],
         "deps": [
           {
-            "id": "aws-lc-rs 1.17.3",
+            "id": "aws-lc-rs 1.18.1",
             "target": "aws_lc_rs"
           },
           {
@@ -45465,7 +45465,7 @@
                 "target": "once_cell"
               },
               {
-                "id": "rustls 0.23.27",
+                "id": "rustls 0.23.45",
                 "target": "rustls"
               },
               {
@@ -45507,7 +45507,7 @@
                 "target": "once_cell"
               },
               {
-                "id": "rustls 0.23.27",
+                "id": "rustls 0.23.45",
                 "target": "rustls"
               },
               {
@@ -45619,7 +45619,7 @@
                 "target": "once_cell"
               },
               {
-                "id": "rustls 0.23.27",
+                "id": "rustls 0.23.45",
                 "target": "rustls"
               },
               {
@@ -45661,7 +45661,7 @@
                 "target": "once_cell"
               },
               {
-                "id": "rustls 0.23.27",
+                "id": "rustls 0.23.45",
                 "target": "rustls"
               },
               {
@@ -47214,11 +47214,11 @@
       ],
       "version": "1.1.4"
     },
-    "rustls 0.23.27": {
+    "rustls 0.23.45": {
       "build_script_attrs": {
         "link_deps": [
           {
-            "id": "aws-lc-rs 1.17.3",
+            "id": "aws-lc-rs 1.18.1",
             "target": "aws_lc_rs"
           }
         ]
@@ -47235,7 +47235,7 @@
         ],
         "deps": [
           {
-            "id": "aws-lc-rs 1.17.3",
+            "id": "aws-lc-rs 1.18.1",
             "target": "aws_lc_rs"
           },
           {
@@ -47260,7 +47260,7 @@
             "target": "rustls_pki_types"
           },
           {
-            "id": "rustls-webpki 0.103.13",
+            "id": "rustls-webpki 0.103.15",
             "target": "webpki"
           },
           {
@@ -47289,8 +47289,8 @@
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "sha256": "730944ca083c1c233a75c09f199e973ca499344a2b7ba9e755c457e86fb4a321",
-          "url": "https://static.crates.io/crates/rustls/0.23.27/download"
+          "sha256": "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634",
+          "url": "https://static.crates.io/crates/rustls/0.23.45/download"
         }
       },
       "targets": [
@@ -47307,7 +47307,7 @@
           }
         }
       ],
-      "version": "0.23.27"
+      "version": "0.23.45"
     },
     "rustls-acme 0.15.4": {
       "common_attrs": {
@@ -47326,7 +47326,7 @@
             "target": "async_web_client"
           },
           {
-            "id": "aws-lc-rs 1.17.3",
+            "id": "aws-lc-rs 1.18.1",
             "target": "aws_lc_rs"
           },
           {
@@ -47590,7 +47590,7 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.23.27",
+              "id": "rustls 0.23.45",
               "target": "rustls"
             }
           ],
@@ -47601,7 +47601,7 @@
                 "target": "rustls_native_certs"
               },
               {
-                "id": "rustls-webpki 0.103.13",
+                "id": "rustls-webpki 0.103.15",
                 "target": "webpki"
               }
             ],
@@ -47625,7 +47625,7 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "rustls-webpki 0.103.13",
+                "id": "rustls-webpki 0.103.15",
                 "target": "webpki"
               },
               {
@@ -47647,7 +47647,7 @@
                 "target": "rustls_platform_verifier_android"
               },
               {
-                "id": "rustls-webpki 0.103.13",
+                "id": "rustls-webpki 0.103.15",
                 "target": "webpki"
               }
             ],
@@ -47695,7 +47695,7 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.23.27",
+              "id": "rustls 0.23.45",
               "target": "rustls"
             }
           ],
@@ -47706,7 +47706,7 @@
                 "target": "rustls_native_certs"
               },
               {
-                "id": "rustls-webpki 0.103.13",
+                "id": "rustls-webpki 0.103.15",
                 "target": "webpki"
               }
             ],
@@ -47730,7 +47730,7 @@
             ],
             "cfg(target_arch = \"wasm32\")": [
               {
-                "id": "rustls-webpki 0.103.13",
+                "id": "rustls-webpki 0.103.15",
                 "target": "webpki"
               },
               {
@@ -47752,7 +47752,7 @@
                 "target": "rustls_platform_verifier_android"
               },
               {
-                "id": "rustls-webpki 0.103.13",
+                "id": "rustls-webpki 0.103.15",
                 "target": "webpki"
               }
             ],
@@ -47819,7 +47819,7 @@
       ],
       "version": "0.1.1"
     },
-    "rustls-webpki 0.103.13": {
+    "rustls-webpki 0.103.15": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -47828,7 +47828,7 @@
         ],
         "deps": [
           {
-            "id": "aws-lc-rs 1.17.3",
+            "id": "aws-lc-rs 1.18.1",
             "target": "aws_lc_rs"
           },
           {
@@ -47853,8 +47853,8 @@
       "package_url": "https://github.com/rustls/webpki",
       "repository": {
         "Http": {
-          "sha256": "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e",
-          "url": "https://static.crates.io/crates/rustls-webpki/0.103.13/download"
+          "sha256": "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2",
+          "url": "https://static.crates.io/crates/rustls-webpki/0.103.15/download"
         }
       },
       "targets": [
@@ -47865,7 +47865,7 @@
           }
         }
       ],
-      "version": "0.103.13"
+      "version": "0.103.15"
     },
     "rustversion 1.0.14": {
       "build_script_attrs": {},
@@ -55963,7 +55963,7 @@
         ],
         "deps": [
           {
-            "id": "rustls 0.23.27",
+            "id": "rustls 0.23.45",
             "target": "rustls"
           },
           {
@@ -67087,7 +67087,7 @@
     "rust_decimal_macros 1.40.0",
     "rustc-demangle 0.1.26",
     "rustc-hash 1.1.0",
-    "rustls 0.23.27",
+    "rustls 0.23.45",
     "rustls-pemfile 2.2.0",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",

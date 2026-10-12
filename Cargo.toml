@@ -890,7 +890,7 @@ rust_decimal = { version = "^1.42", default-features = false, features = [
 rust_decimal_macros = "^1.40"
 rustc-demangle = { version = "0.1.16" }
 rustc-hash = "^1.1.0"
-rustls = { version = "0.23.18", default-features = false, features = [
+rustls = { version = "0.23.45", default-features = false, features = [
     "aws_lc_rs",
     "std",
     "brotli",
