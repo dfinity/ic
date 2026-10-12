@@ -64,9 +64,9 @@ Runbook::
    expected to hold and are only logged; `VIOLATED_CONDITIONS` says why.
 8. Hand over to the subnet merging tool, which runs one step at a time; the
    checks of the steps below are made in between its steps, at the points the
-   step names give. The tool labels `M` as "cooling down" and reads back the
-   registry version `V` this created (`CoolDownSourceSubnet`,
-   `CheckRegistryForCoolingDownFlag`).
+   step names give. The tool labels `M` as "cooling down" and records the
+   registry version `V` at which it reads the label back
+   (`CoolDownSourceSubnet`, `CheckRegistryForCoolingDownFlag`).
 9. After `CheckRegistryForCoolingDownFlag`: wait until `M` rejects ingress
    messages, i.e. the replicas of `M` observed the "cooling down" label, and
    then until it rejects query calls too, which is the other half of what a
