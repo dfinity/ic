@@ -2,11 +2,12 @@
 //!
 //!
 use candid::{CandidType, Principal, Reserved};
-use ic_cdk_timers::set_timer_interval;
+use ic_cdk::println;
+use ic_cdk_timers::{TimerId, clear_timer, set_timer_interval};
 use ic_stable_structures::{Storable, storable::Bound};
 use serde::{Deserialize, Serialize};
 use serde_cbor::{from_slice, to_vec};
-use std::{borrow::Cow, fmt::Display, time::Duration};
+use std::{borrow::Cow, cell::RefCell, fmt::Display, future::Future, time::Duration};
 use strum_macros::Display;
 
 use crate::{
@@ -456,70 +457,114 @@ impl Storable for Event {
 // ========================================================================= //
 // Internal methods
 
-#[allow(clippy::disallowed_methods)]
+const PROCESSING_INTERVAL: Duration = Duration::from_secs(1);
+const SAFETY_NET_INTERVAL: Duration = Duration::from_secs(600);
+
+thread_local! {
+    /// Ids of the processing timers while they are armed; empty while idle.
+    static TIMER_IDS: RefCell<Vec<TimerId>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Arms the processing timers if there are requests to process and they are
+/// not armed yet.
 pub fn start_timers() {
-    let interval = Duration::from_secs(1);
-    set_timer_interval(interval, async || {
-        process_all_by_predicate(
-            "accepted",
-            |r| matches!(r, RequestState::Accepted { .. }),
-            process_accepted,
-        )
-        .await
-    });
-    set_timer_interval(interval, async || {
-        process_all_by_predicate(
-            "controllers_changed",
-            |r| matches!(r, RequestState::ControllersChanged { .. }),
-            process_controllers_changed,
-        )
-        .await
-    });
-    set_timer_interval(interval, async || {
-        process_all_by_predicate(
-            "stopped",
-            |r| matches!(r, RequestState::StoppedAndReady { .. }),
-            process_stopped,
-        )
-        .await
-    });
-    set_timer_interval(interval, async || {
-        process_all_by_predicate(
-            "renamed_replaced_canister",
-            |r| matches!(r, RequestState::RenamedReplacedCanister { .. }),
-            process_renamed,
-        )
-        .await
-    });
-    set_timer_interval(interval, async || {
-        process_all_by_predicate(
-            "updated_routing_table",
-            |r| matches!(r, RequestState::UpdatedRoutingTable { .. }),
-            process_updated,
-        )
-        .await
-    });
-    set_timer_interval(interval, async || {
-        process_all_by_predicate(
-            "routing_table_change_accepted",
-            |r| matches!(r, RequestState::RoutingTableChangeAccepted { .. }),
-            process_routing_table,
-        )
-        .await
-    });
-    set_timer_interval(interval, async || {
-        process_all_by_predicate(
-            "migrated_canister_deleted",
-            |r| matches!(r, RequestState::MigratedCanisterDeleted { .. }),
-            process_migrated_canister_deleted,
-        )
-        .await
-    });
+    if num_requests() == 0 || timers_armed() {
+        return;
+    }
+    TIMER_IDS.set(arm_timers());
+    println!("Armed processing timers.");
+}
 
-    set_timer_interval(interval, async || process_all_succeeded().await);
+/// Arms the never-cleared safety-net timer, which arms the processing timers
+/// if a request is pending while they are not armed.
+pub fn start_safety_net() {
+    set_timer_interval(SAFETY_NET_INTERVAL, || async { start_timers() });
+}
 
-    // This one has a different type from the generic ones above.
-    set_timer_interval(interval, async || process_all_failed().await);
+pub fn timers_armed() -> bool {
+    TIMER_IDS.with_borrow(|ids| !ids.is_empty())
+}
+
+/// Disarms the processing timers once nothing is left to process; called at
+/// the end of every tick.
+fn stop_timers_if_idle() {
+    if num_requests() > 0 || !timers_armed() {
+        return;
+    }
+    TIMER_IDS.take().into_iter().for_each(clear_timer);
+    println!("Disarmed processing timers: no requests in flight.");
+}
+
+/// One interval timer whose tick runs `run()` and then checks whether the
+/// processing timers are still needed.
+fn processing_timer<Fut: Future<Output = ()> + 'static>(
+    mut run: impl FnMut() -> Fut + 'static,
+) -> TimerId {
+    set_timer_interval(PROCESSING_INTERVAL, move || {
+        let tick = run();
+        async move {
+            tick.await;
+            stop_timers_if_idle();
+        }
+    })
+}
+
+/// One timer per request state, plus the ones recording succeeded and
+/// cleaning up failed requests.
+fn arm_timers() -> Vec<TimerId> {
+    vec![
+        processing_timer(|| {
+            process_all_by_predicate(
+                "accepted",
+                |r| matches!(r, RequestState::Accepted { .. }),
+                process_accepted,
+            )
+        }),
+        processing_timer(|| {
+            process_all_by_predicate(
+                "controllers_changed",
+                |r| matches!(r, RequestState::ControllersChanged { .. }),
+                process_controllers_changed,
+            )
+        }),
+        processing_timer(|| {
+            process_all_by_predicate(
+                "stopped",
+                |r| matches!(r, RequestState::StoppedAndReady { .. }),
+                process_stopped,
+            )
+        }),
+        processing_timer(|| {
+            process_all_by_predicate(
+                "renamed_replaced_canister",
+                |r| matches!(r, RequestState::RenamedReplacedCanister { .. }),
+                process_renamed,
+            )
+        }),
+        processing_timer(|| {
+            process_all_by_predicate(
+                "updated_routing_table",
+                |r| matches!(r, RequestState::UpdatedRoutingTable { .. }),
+                process_updated,
+            )
+        }),
+        processing_timer(|| {
+            process_all_by_predicate(
+                "routing_table_change_accepted",
+                |r| matches!(r, RequestState::RoutingTableChangeAccepted { .. }),
+                process_routing_table,
+            )
+        }),
+        processing_timer(|| {
+            process_all_by_predicate(
+                "migrated_canister_deleted",
+                |r| matches!(r, RequestState::MigratedCanisterDeleted { .. }),
+                process_migrated_canister_deleted,
+            )
+        }),
+        processing_timer(process_all_succeeded),
+        processing_timer(process_all_failed),
+    ]
 }
 
 /// Rate limit active requests:

@@ -345,6 +345,14 @@ struct Logs {
 }
 
 impl Logs {
+    pub async fn collect(&mut self, pic: &PocketIc, controller: Principal) {
+        self.add(
+            pic.fetch_canister_logs(MIGRATION_CANISTER_ID.into(), controller)
+                .await
+                .unwrap(),
+        );
+    }
+
     pub fn add(&mut self, logs: Vec<CanisterLogRecord>) {
         for x in logs.into_iter() {
             self.map
@@ -816,10 +824,17 @@ async fn metrics() {
         0.0
     );
 
+    assert_eq!(get_gauge(&metrics, TIMERS_ARMED_METRIC), 0.0);
+
     assert_eq!(oldest_request_age(&metrics), 0.0);
 }
 
 const OLDEST_REQUEST_AGE_METRIC: &str = "migration_canister_oldest_request_in_flight_age_seconds";
+const TIMERS_ARMED_METRIC: &str = "migration_canister_timers_armed";
+
+async fn gauge(pic: &PocketIc, name: &str) -> f64 {
+    get_gauge(&fetch_metrics(pic).await, name)
+}
 
 /// Reads the age (in seconds) of the oldest request in flight.
 /// The metric is always set and equal to 0 if no request is in flight.
@@ -2346,4 +2361,179 @@ async fn migration_completes_after_subnet_deletion() {
             pic.drop().await;
         }
     }
+}
+
+async fn succeeded(pic: &PocketIc, sender: Principal, args: &MigrateCanisterArgs) -> bool {
+    matches!(
+        get_status(pic, sender, args).await,
+        Some(MigrationStatus::Succeeded { .. })
+    )
+}
+
+/// Stops, upgrades (to the same wasm) and restarts the migration canister, as
+/// an NNS upgrade proposal would.
+async fn upgrade_migration_canister(pic: &PocketIc, controller: Principal) {
+    let wasm = Project::cargo_bin_maybe_from_env("migration-canister", &[]);
+    pic.stop_canister(MIGRATION_CANISTER_ID.into(), Some(controller))
+        .await
+        .unwrap();
+    pic.upgrade_canister(
+        MIGRATION_CANISTER_ID.into(),
+        wasm.bytes(),
+        Encode!(&MigrationCanisterInitArgs::default()).unwrap(),
+        Some(controller),
+    )
+    .await
+    .unwrap();
+    pic.start_canister(MIGRATION_CANISTER_ID.into(), Some(controller))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn timers_armed_only_while_requests_in_flight() {
+    let Setup {
+        pic,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
+        system_controller,
+        ..
+    } = setup(Settings {
+        num_migrations: 3,
+        ..Default::default()
+    })
+    .await;
+    let sender = migrated_canister_controllers[0];
+    let args = |i: usize| MigrateCanisterArgs {
+        migrated_canister_id: migrated_canisters[i],
+        replaced_canister_id: replaced_canisters[i],
+    };
+    let (first, second, third) = (args(0), args(1), args(2));
+    let mut logs = Logs::default();
+
+    // Nothing to process after installation: no processing timers.
+    assert_eq!(gauge(&pic, TIMERS_ARMED_METRIC).await, 0.0);
+
+    // Accepting a request arms them; it is processed within a second, not before.
+    migrate_canister(&pic, sender, &first).await.unwrap();
+    assert_eq!(gauge(&pic, TIMERS_ARMED_METRIC).await, 1.0);
+    assert_in_progress_state_stable(&pic, sender, &first, MigrationState::Accepted).await;
+    advance(&pic).await;
+    assert_in_progress_state_stable(&pic, sender, &first, MigrationState::ControllersChanged).await;
+    for _ in 0..100 {
+        if succeeded(&pic, sender, &first).await {
+            break;
+        }
+        pic.advance_time(Duration::from_secs(250)).await;
+        pic.tick().await;
+        logs.collect(&pic, system_controller).await;
+    }
+    assert!(succeeded(&pic, sender, &first).await);
+    assert_eq!(gauge(&pic, TIMERS_ARMED_METRIC).await, 0.0);
+    logs.collect(&pic, system_controller).await;
+
+    // Idle means idle: time jumps that would make armed timers catch up (and
+    // log about it) leave the canister log untouched.
+    let log_before = pic
+        .fetch_canister_logs(MIGRATION_CANISTER_ID.into(), system_controller)
+        .await
+        .unwrap();
+    for _ in 0..20 {
+        pic.advance_time(Duration::from_secs(250)).await;
+        pic.tick().await;
+    }
+    let log_after = pic
+        .fetch_canister_logs(MIGRATION_CANISTER_ID.into(), system_controller)
+        .await
+        .unwrap();
+    assert_eq!(log_after, log_before);
+
+    // Re-armed after the idle period; a request accepted while another one is
+    // in flight keeps the timers armed until both are done.
+    migrate_canister(&pic, sender, &second).await.unwrap();
+    assert_eq!(gauge(&pic, TIMERS_ARMED_METRIC).await, 1.0);
+    advance(&pic).await;
+    advance(&pic).await;
+    migrate_canister(&pic, sender, &third).await.unwrap();
+    assert_eq!(
+        gauge(&pic, "migration_canister_requests_in_flight").await,
+        2.0
+    );
+    logs.collect(&pic, system_controller).await;
+    // The second request's 6 min wait started before this jump, the third's
+    // starts after it, so the second completes first while the third waits.
+    pic.advance_time(Duration::from_secs(360)).await;
+    for _ in 0..20 {
+        if succeeded(&pic, sender, &second).await {
+            break;
+        }
+        advance(&pic).await;
+        logs.collect(&pic, system_controller).await;
+    }
+    assert!(succeeded(&pic, sender, &second).await);
+    assert_eq!(
+        gauge(&pic, "migration_canister_requests_in_flight").await,
+        1.0
+    );
+    assert_eq!(gauge(&pic, TIMERS_ARMED_METRIC).await, 1.0);
+    pic.advance_time(Duration::from_secs(360)).await;
+    for _ in 0..20 {
+        if succeeded(&pic, sender, &third).await {
+            break;
+        }
+        advance(&pic).await;
+        logs.collect(&pic, system_controller).await;
+    }
+    assert!(succeeded(&pic, sender, &third).await);
+    assert_eq!(
+        gauge(&pic, "migration_canister_requests_in_flight").await,
+        0.0
+    );
+    assert_eq!(gauge(&pic, TIMERS_ARMED_METRIC).await, 0.0);
+    logs.collect(&pic, system_controller).await;
+
+    assert!(logs.contains_in_order(vec![
+        "Armed processing timers",
+        "Entering `accepted` with 1 pending",
+        "Disarmed processing timers",
+        "Armed processing timers",
+        "Entering `accepted` with 1 pending",
+        "Disarmed processing timers",
+    ]));
+}
+
+#[tokio::test]
+async fn post_upgrade_arms_timers_only_for_pending_requests() {
+    let Setup {
+        pic,
+        migrated_canisters,
+        replaced_canisters,
+        migrated_canister_controllers,
+        system_controller,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = migrated_canister_controllers[0];
+    let args = MigrateCanisterArgs {
+        migrated_canister_id: migrated_canisters[0],
+        replaced_canister_id: replaced_canisters[0],
+    };
+
+    // Without pending requests an upgrade leaves the processing timers disarmed.
+    upgrade_migration_canister(&pic, system_controller).await;
+    assert_eq!(gauge(&pic, TIMERS_ARMED_METRIC).await, 0.0);
+
+    // With a pending request the upgrade loses the timers (they live on the
+    // heap), `post_upgrade` re-arms them and the request completes.
+    bring_to_state(&pic, sender, &args, MigrationState::MigratedCanisterDeleted).await;
+    upgrade_migration_canister(&pic, system_controller).await;
+    assert_eq!(gauge(&pic, TIMERS_ARMED_METRIC).await, 1.0);
+    assert_in_progress_state_stable(&pic, sender, &args, MigrationState::MigratedCanisterDeleted)
+        .await;
+    pic.advance_time(Duration::from_secs(360)).await;
+    advance(&pic).await;
+    assert_in_progress_state_stable(&pic, sender, &args, MigrationState::RestoredControllers).await;
+    advance(&pic).await;
+    assert!(succeeded(&pic, sender, &args).await);
+    assert_eq!(gauge(&pic, TIMERS_ARMED_METRIC).await, 0.0);
 }

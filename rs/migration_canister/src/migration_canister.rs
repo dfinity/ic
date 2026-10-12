@@ -19,7 +19,7 @@ use crate::{
         requests::{find_request, insert_request, num_requests, oldest_request_age_nanos},
         set_allowlist,
     },
-    rate_limited, start_timers,
+    rate_limited, start_safety_net, start_timers, timers_armed,
     validation::validate_request,
 };
 
@@ -30,12 +30,14 @@ pub(crate) struct MigrationCanisterInitArgs {
 
 #[init]
 fn init(args: MigrationCanisterInitArgs) {
-    start_timers();
+    start_safety_net();
     set_allowlist(args.allowlist);
 }
 
 #[post_upgrade]
 fn post_upgrade(args: MigrationCanisterInitArgs) {
+    start_safety_net();
+    // Re-arms the processing timers if requests survived the upgrade (timers do not).
     start_timers();
     set_allowlist(args.allowlist);
 }
@@ -87,6 +89,7 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), Option<Valida
             }
             println!("Accepted request {}", request);
             insert_request(RequestState::Accepted { request });
+            start_timers();
         }
     }
     Ok(())
@@ -131,6 +134,12 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "migration_canister_requests_in_flight",
         num_requests() as f64,
         "Number of currently ongoing migration requests.",
+    )?;
+
+    w.encode_gauge(
+        "migration_canister_timers_armed",
+        timers_armed() as u32 as f64,
+        "Whether the request-processing timers are armed.",
     )?;
 
     // This gauge is 0 if there is no request in flight.

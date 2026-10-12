@@ -1,5 +1,5 @@
 //! This module contains the request processing methods.
-//! They are scheduled every few seconds with a timer.
+//! They run every second from timers that are armed only while requests are in flight.
 //! Each method processes a specific type of request, and may
 //! process several requests concurrently.
 
