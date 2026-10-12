@@ -6,8 +6,8 @@ the individual terms of the "merge readiness" condition, i.e. that the
 condition the subnet merging tool waits for before merging such a subnet away
 is one that the subnet does not satisfy to begin with; and that once the tool
 (`rs/recovery/subnet_merging`) has labeled the subnet "cooling down", the
-subnet stops accepting ingress messages and answering queries and quiesces
-until the tool finds the condition to hold. The subnet also holds calls waiting
+subnet rejects ingress messages and query calls, and the tool eventually finds
+the condition to hold. The subnet also holds calls waiting
 for responses that never arrive: they are not drained, but make it possible to
 assert that a subnet merge populates the ingress history properly.
 
@@ -17,8 +17,8 @@ end of `M`'s cross-subnet calls, and is the subnet the tool is told to merge
 `M` into. The tool does not get as far as merging though: it stops once `M` is
 ready to be merged.
 
-The proposal labeling `M` as "cooling down" is submitted by the tool, through
-`ic-admin` with the test neuron; this test submits none.
+The tool submits the proposal labeling `M` as "cooling down" through
+`ic-admin`, with the test neuron.
 
 "Executing" an update call below always means submitting it as an ingress
 message without waiting for it to complete: most of the calls of this test are
@@ -68,19 +68,15 @@ Runbook::
    registry version `V` at which it reads the label back
    (`CoolDownSourceSubnet`, `CheckRegistryForCoolingDownFlag`).
 9. After `CheckRegistryForCoolingDownFlag`: wait until `M` rejects ingress
-   messages, i.e. the replicas of `M` observed the "cooling down" label, and
-   then until it rejects query calls too, which is the other half of what a
-   cooling down subnet stops doing.
+   messages, and then until it rejects query calls too.
 10. The tool waits until `M` is "merge ready" for `V`, i.e. until every term of
    the condition of step 7 holds, at `V` rather than at the version of the
    topology snapshot (`CheckMergeReadiness`).
-11. After `CheckMergeReadiness`: check that the two loops of step 2 are indeed
-   stalled: while `M` is cooling down, it executes no canister message, and
-   neither `M` nor `T` routes any message to or from `M`, so the messages of
-   both loops are retained in their senders' output queues. `UT`'s iteration
-   counter is read via a query to `T`; `UM` sits on `M`, which answers no query,
-   so `M`'s count of the rounds it skipped canister execution in stands in for
-   it.
+11. After `CheckMergeReadiness`: check that the two loops of step 2 are
+   stalled. `UT`'s iteration counter does not advance, as read via a query to
+   `T`. `UM`'s counter cannot be read, as `M` rejects query calls; instead,
+   the test checks that `M` keeps skipping canister execution, so that `UM`'s
+   loop cannot advance either.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
@@ -624,10 +620,9 @@ async fn check_ingress_and_queries_rejected(context: &Context) {
 /// became "merge ready" because it is cooling down and not because the loops
 /// stopped making calls.
 ///
-/// `UT` is on `T`, so its iteration counter can be read directly. `UM` is on
-/// `M`, which answers no query, so the number of rounds `M` skipped canister
-/// execution in stands in for it: while that keeps growing, `M` executes no
-/// canister message at all, the next iteration of `UM`'s loop included.
+/// `UT`'s iteration counter is read via a query to `T`. `UM`'s counter cannot
+/// be read, as `M` rejects query calls; instead, the test checks that `M` keeps
+/// skipping canister execution, so that `UM`'s loop cannot advance either.
 async fn check_stalled_loops(context: &Context) {
     let logger = &context.logger;
     info!(

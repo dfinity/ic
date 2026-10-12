@@ -441,10 +441,7 @@ pub fn await_merge_readiness(
 
 /// The nodes of every subnet in the registry, all read at the same registry
 /// version: the registry is polled once, for the latest version, and every
-/// read after that is a local one at that version. Reading the memberships of
-/// different subnets at different versions could miss a node that moves from
-/// one subnet to another in between, and polling the registry for every subnet
-/// would take one round trip to the NNS per subnet.
+/// read after that is a local one at that version.
 pub fn subnet_node_ips(registry_helper: &RegistryHelper) -> RecoveryResult<SubnetNodeIps> {
     let registry_version = registry_helper.latest_registry_version()?;
     let registry_client = registry_helper.registry_client();

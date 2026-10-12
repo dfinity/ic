@@ -17,9 +17,7 @@ use std::{
 /// then returned) or `timeout` elapses.
 ///
 /// What the steps below use it for is the registry catching up with a proposal
-/// that `ic-admin` just reported as executed: the local store is polled on
-/// every read, but the mutation may not have made it into the registry canister
-/// the poll reads from yet.
+/// that `ic-admin` just reported as executed.
 fn wait_for<T>(
     what: &str,
     timeout: Duration,
@@ -101,8 +99,8 @@ impl Step for CheckCoolingDownStep {
     }
 }
 
-/// Waits until the merge readiness condition of the `Subnet merging` dashboard
-/// holds for the subnet that is cooling down.
+/// Waits until the merge readiness condition holds for the subnet that is
+/// cooling down.
 pub(crate) struct CheckMergeReadinessStep {
     pub(crate) source_subnet_id: SubnetId,
     pub(crate) registry_helper: RegistryHelper,

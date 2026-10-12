@@ -3,9 +3,7 @@ use ic_recovery::admin_helper::{AdminHelper, CommandHelper, IcAdmin, SUMMARY_ARG
 
 const SUBNET_ARG: &str = "subnet";
 
-/// Propose to label the subnet as "cooling down", i.e. to have it stop
-/// accepting ingress messages, answering queries and executing canister
-/// messages, so that it quiesces and can be merged into another subnet.
+/// Propose to label the subnet as "cooling down".
 pub(crate) fn get_propose_to_cool_down_subnet_command(
     admin_helper: &AdminHelper,
     subnet_id: SubnetId,

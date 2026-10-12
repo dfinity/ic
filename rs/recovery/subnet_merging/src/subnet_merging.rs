@@ -124,19 +124,11 @@ impl SubnetMerging {
     }
 
     /// Checks whether the subnets satisfy the following preconditions:
-    ///
-    /// Both subnets:
-    /// 1) Are `Application` (or `VerifiedApplication`) subnets;
-    /// 2) Are not Chain key subnets;
-    /// 3) Are neither halted nor scheduled to halt at their next CUP: the
-    ///    source subnet has to keep executing to drain, and this tool halts
-    ///    both subnets itself, at the CUP whose state it merges;
-    /// 4) Have the same subnet type, as the merged state inherits the
-    ///    destination subnet's.
-    ///
-    /// And they are two different subnets. Unlike subnet splitting, the
-    /// destination subnet is a subnet in operation: it keeps serving its own
-    /// canisters across the merge, and it may or may not be empty.
+    /// 1) They are two different subnets;
+    /// 2) Both are `Application` (or `VerifiedApplication`) subnets, of the
+    ///    same subnet type;
+    /// 3) Neither holds any chain keys;
+    /// 4) Neither is halted nor scheduled to halt at its next CUP.
     fn check_subnets_preconditions(
         recovery: &Recovery,
         source_subnet_id: SubnetId,
@@ -148,14 +140,19 @@ impl SubnetMerging {
             )));
         }
 
-        let source_subnet_record =
-            Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id, None)?;
+        let source_subnet_type =
+            Self::get_and_pre_validate_subnet_record(recovery, source_subnet_id)?.subnet_type();
+        let destination_subnet_type =
+            Self::get_and_pre_validate_subnet_record(recovery, destination_subnet_id)?
+                .subnet_type();
 
-        let _ = Self::get_and_pre_validate_subnet_record(
-            recovery,
-            destination_subnet_id,
-            Some(source_subnet_record),
-        )?;
+        if source_subnet_type != destination_subnet_type {
+            return Err(RecoveryError::ValidationFailed(format!(
+                "Both subnets should have the same subnet type, but subnet {source_subnet_id} has \
+                 type {source_subnet_type:?} and subnet {destination_subnet_id} has type \
+                 {destination_subnet_type:?}"
+            )));
+        }
 
         Ok(())
     }
@@ -163,7 +160,6 @@ impl SubnetMerging {
     fn get_and_pre_validate_subnet_record(
         recovery: &Recovery,
         subnet_id: SubnetId,
-        other_subnet_record: Option<SubnetRecord>,
     ) -> RecoveryResult<SubnetRecord> {
         let validation_error = |error_message| {
             Err(RecoveryError::ValidationFailed(format!(
@@ -181,7 +177,7 @@ impl SubnetMerging {
             .as_ref()
             .is_some_and(|chain_key_config| !chain_key_config.key_configs.is_empty())
         {
-            return validation_error("Subnet should not be a Chain key subnet".to_string());
+            return validation_error("Subnet should not hold any chain keys".to_string());
         }
 
         let subnet_type = subnet_record
@@ -196,25 +192,11 @@ impl SubnetMerging {
         }
 
         // TODO: Once this tool halts the subnets itself, skip this check when
-        // resuming at or after that step (as `subnet_splitting` does with
-        // `check_whether_halted`): the preconditions are checked whenever the tool
-        // starts, `--resume` included.
+        // resuming after it has done so, as `subnet_splitting` does with
+        // `check_whether_halted`.
         if subnet_record.is_halted || subnet_record.halt_at_cup_height {
             return validation_error(String::from(
-                "Subnet should neither be halted nor scheduled to halt at its next CUP: the \
-                 subnet that is merged away has to keep executing to drain, and subnet merging \
-                 halts both subnets itself, at the CUP whose state it merges",
-            ));
-        }
-
-        if let Some(other_subnet_record) = other_subnet_record
-            && subnet_record.subnet_type() != other_subnet_record.subnet_type()
-        {
-            return validation_error(format!(
-                "Both subnets should have the same subnet type. \
-                 Expected subnet type = {:?}, actual subnet type = {:?}",
-                other_subnet_record.subnet_type(),
-                subnet_record.subnet_type(),
+                "Subnet should neither be halted nor scheduled to halt at its next CUP",
             ));
         }
 
