@@ -44,7 +44,6 @@ pub enum StepType {
     CoolDownSourceSubnet,
     CheckRegistryForCoolingDownFlag,
     CheckMergeReadiness,
-    Cleanup,
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Parser, Serialize)]
@@ -316,8 +315,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 logger: self.recovery.logger.clone(),
             }
             .into(),
-
-            StepType::Cleanup => self.recovery.get_cleanup_step().into(),
         };
 
         Ok(step)
