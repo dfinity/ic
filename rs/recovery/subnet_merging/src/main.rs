@@ -7,9 +7,6 @@ use url::Url;
 
 use std::path::PathBuf;
 
-const FORUM_ANNOUNCEMENT_TEMPLATE_URL: &str =
-    "https://wiki.internetcomputer.org/wiki/Subnet_merging_forum_announcement_template";
-
 #[derive(Parser)]
 struct MergeArgs {
     #[clap(
@@ -78,10 +75,7 @@ fn subnet_merging(
         "Don't forget to announce at the forum the upcoming series of proposals to merge the \
          subnet"
     );
-    warn!(
-        logger,
-        "See the template at: {}", FORUM_ANNOUNCEMENT_TEMPLATE_URL
-    );
+    // TODO: Point to a template for the forum announcement once one exists.
 
     if !recovery_args.skip_prompts {
         cli::wait_for_confirmation(&logger);
