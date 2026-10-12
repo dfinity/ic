@@ -1,21 +1,47 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/protobuf",
+    "//rs/recovery",
+    "//rs/recovery/subnet_tools",
+    "//rs/registry/helpers",
+    "//rs/registry/subnet_type",
     "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:prometheus-parse",
     "@crate_index//:reqwest",
+    "@crate_index//:serde",
+    "@crate_index//:slog",
+    "@crate_index//:strum",
     "@crate_index//:tokio",
+    "@crate_index//:url",
 ]
 
 rust_library(
     name = "subnet_merging",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
     crate_name = "ic_subnet_merging",
+    proc_macro_deps = ["@crate_index//:strum_macros"],
     version = "0.1.0",
     visibility = ["//rs:system-tests-pkg"],
     deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "subnet-merging-tool",
+    srcs = ["src/main.rs"],
+    visibility = ["//rs:release-pkg"],
+    deps = DEPENDENCIES + [
+        # Keep sorted.
+        ":subnet_merging",
+        "//rs/canister_sandbox:backend_lib",
+    ],
 )
 
 rust_test(
