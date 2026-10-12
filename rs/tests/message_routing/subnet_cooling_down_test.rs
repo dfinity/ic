@@ -336,6 +336,13 @@ fn main() -> Result<()> {
         // metrics to check have to stay prefix-free, so this updates the entry of
         // the default set rather than adding a more specific one.
         .update_orchestrator_metrics_to_check("orchestrator_processes_start_attempts_total", 2)
+        // Deleting the subnet that was merged away deletes its subnet record, and
+        // the replicas of that subnet that are still running panic if they notice
+        // before their orchestrator stops them (as in `delete_subnet_test`).
+        .add_unallowed_log_pattern_except(
+            "panicked",
+            "rs/consensus/src/consensus/allowed_panics.rs",
+        )
         .execute_from_args()?;
     Ok(())
 }
