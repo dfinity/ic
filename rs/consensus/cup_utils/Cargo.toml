@@ -9,9 +9,11 @@ documentation.workspace = true
 [dependencies]
 ic-consensus-idkg = { path = "../idkg" }
 ic-consensus-dkg = { path = "../dkg" }
+ic-crypto = { path = "../../crypto" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-types = { path = "../../types/types" }

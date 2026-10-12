@@ -697,6 +697,13 @@ impl LocalBackend {
         // `ip -6 addr add {gateway}/64` auto-creates (`proto kernel metric 256`):
         // replacing it in place sets its source. A separate route would land at
         // metric 1024 and lose to the metric-256 kernel route.
+        //
+        // The `lo` addresses need `nodad`: the kernel flags every new IPv6
+        // address tentative and only clears that flag from a workqueue item
+        // (loopback skips DAD, but in that same deferred step), while `ip -6
+        // route ... src` rejects a tentative source with "Invalid source
+        // address". Without `nodad` the route command races the workqueue, which
+        // it loses on a loaded host. `nodad` skips the tentative state entirely.
         let create_script = format!(
             "ip link del {bridge} 2>/dev/null; \
              ip link add name {bridge} address {mac} type bridge && \
@@ -704,9 +711,9 @@ impl LocalBackend {
              ip -6 addr add {gateway}/64 dev {bridge} nodad && \
              ip addr add {ipv4_gateway}/24 dev {bridge} && \
              {name_server_addrs}\
-             ip -6 addr replace {mgmt}/128 dev lo && \
-             ip -6 addr replace {logs}/128 dev lo && \
-             ip -6 addr replace {files}/128 dev lo && \
+             ip -6 addr replace {mgmt}/128 dev lo nodad && \
+             ip -6 addr replace {logs}/128 dev lo nodad && \
+             ip -6 addr replace {files}/128 dev lo nodad && \
              ip -6 route replace {prefix}/64 dev {bridge} proto kernel metric 256 src {mgmt}"
         );
         Self::run_shell(&create_script, "create group bridge")?;
