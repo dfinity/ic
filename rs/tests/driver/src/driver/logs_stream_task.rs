@@ -539,6 +539,11 @@ async fn stream_journald_with_retries(
         let result =
             stream_journald_from_cursor(&logger, &label, addr, bind_addr, &log_path, &mut state)
                 .await;
+        if state.records > 0 {
+            // The connection was healthy for a while: a later failure, even with
+            // the same text as the last one, is a new outage worth a line.
+            last_err = None;
+        }
         let outage = state.outage.get_or_insert(Outage { attempts: 0 });
         outage.attempts += 1;
         let from = match state.cursor {
