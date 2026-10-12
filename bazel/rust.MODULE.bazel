@@ -590,7 +590,7 @@ crate.spec(
 )
 crate.spec(
     package = "hickory-resolver",
-    version = "0.26.1",
+    version = "0.26.3",
 )
 crate.spec(
     package = "hkdf",
@@ -1379,7 +1379,7 @@ crate.spec(
         "tls12",
     ],
     package = "rustls",
-    version = "^0.23.18",
+    version = "^0.23.45",
 )
 crate.spec(
     package = "rustls-pemfile",

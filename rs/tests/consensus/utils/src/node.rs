@@ -105,16 +105,27 @@ pub fn assert_node_is_assigned_with_ssh_session(
     .expect("Failed to detect that node has a state and local CUP.");
 }
 
-/// Assert that the given node has deleted its state within the next 5 minutes.
-pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
-    assert_node_is_unassigned_with_ssh_session(node, None, logger)
+/// Assert that the node deletes its state and local CUP within 5 minutes, then trims within 2 more.
+///
+/// `expected_fstrim_count` is how often this node has been unassigned over the test so far; the
+/// orchestrator trims exactly once per unassignment.
+pub fn assert_node_is_unassigned(
+    node: &IcNodeSnapshot,
+    expected_fstrim_count: u64,
+    logger: &Logger,
+) {
+    assert_node_is_unassigned_with_ssh_session(node, None, expected_fstrim_count, logger)
 }
 
-/// Assert that the given node has deleted its state within the next 5 minutes.
+/// Assert that the node deletes its state and local CUP within 5 minutes, then trims within 2 more.
 /// Reuses the provided SSH session if given, otherwise creates a new one.
+///
+/// `expected_fstrim_count` is how often this node has been unassigned over the test so far; the
+/// orchestrator trims exactly once per unassignment.
 pub fn assert_node_is_unassigned_with_ssh_session(
     node: &IcNodeSnapshot,
     existing_session: Option<&Session>,
+    expected_fstrim_count: u64,
     logger: &Logger,
 ) {
     info!(
@@ -152,12 +163,10 @@ pub fn assert_node_is_unassigned_with_ssh_session(
     )
     .expect("Failed to detect that node has deleted its state and local CUP.");
 
-    let state_removal_failed = "orchestrator_state_removal_failed_total".to_string();
-    let fs_trim_duration = "orchestrator_fstrim_duration_milliseconds".to_string();
     let fetcher = MetricsFetcher::new_with_port(
         std::iter::once(node.clone()),
-        vec![state_removal_failed.clone(), fs_trim_duration.clone()],
-        9091,
+        vec![STATE_REMOVAL_FAILED.to_string(), FSTRIM_TOTAL.to_string()],
+        ORCHESTRATOR_METRICS_PORT,
     );
 
     ic_system_test_driver::retry_with_msg!(
@@ -167,14 +176,27 @@ pub fn assert_node_is_unassigned_with_ssh_session(
         secs(10),
         || match block_on(fetcher.fetch::<u64>()) {
             Ok(metrics) => {
-                assert_eq!(metrics[&state_removal_failed][0], 0);
-                assert!(metrics[&fs_trim_duration][0] > 0);
+                // This counter never goes back to zero, so retrying wouldn't help.
+                assert_eq!(
+                    metrics[STATE_REMOVAL_FAILED][0],
+                    0,
+                    "Node {} failed to remove its state",
+                    node.get_ip_addr()
+                );
+                // Bumped only after the removal and the trim, so the check above can pass first.
+                ensure!(
+                    metrics[FSTRIM_TOTAL][0] == expected_fstrim_count,
+                    "Node {} has trimmed its filesystem {} times, expected {}.",
+                    node.get_ip_addr(),
+                    metrics[FSTRIM_TOTAL][0],
+                    expected_fstrim_count
+                );
                 Ok(())
             }
             Err(e) => bail!("Failed to fetch metrics: {}", e),
         }
     )
-    .expect("Failed to detect that node has deleted its state.");
+    .expect("Failed to detect that node has deleted its state and trimmed its filesystem.");
 }
 
 async fn fetch_metric_from_nodes<T>(
@@ -194,7 +216,8 @@ where
         .await
         .map_err(|err| anyhow!("Could not connect to metrics yet {:?}", err))?;
 
-    let vals = metrics[metric_name].clone();
+    // Empty if no node exports it yet, so the check below reports it instead of panicking.
+    let vals = metrics.get(metric_name).cloned().unwrap_or_default();
     if vals.len() != nodes.len() {
         bail!(
             "Metrics not available for all nodes yet. {} metrics, {} nodes",
@@ -243,6 +266,9 @@ async fn await_metric_registry_version(
     .await
     .expect("The nodes did not reach the specified registry version in time")
 }
+
+const STATE_REMOVAL_FAILED: &str = "orchestrator_state_removal_failed_total";
+const FSTRIM_TOTAL: &str = "orchestrator_fstrim_total";
 
 const EARLIEST_TOPOLOGY_VERSION: (&str, u16) = (
     "peer_manager_topology_earliest_registry_version",

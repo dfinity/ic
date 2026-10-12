@@ -817,6 +817,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
             assert_node_is_unassigned_with_ssh_session(
                 &n,
                 admin_ssh_sessions.get(&n.node_id),
+                1, // expected_fstrim_count
                 &logger,
             );
         });
