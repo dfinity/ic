@@ -450,16 +450,27 @@ fn validate_controller_or_subnet_admin(
     }
 }
 
-/// Validates that `sender` is allowed to call the management canister method
-/// `method` targeting `canister` on a subnet of type `subnet_type` with cost
-/// schedule `cost_schedule` and subnet admins `subnet_admins`.
+/// The access to a canister that `validate_sender` validates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CanisterAccess {
+    /// Calling the management canister method targeting the canister.
+    Method(Ic00Method),
+    /// Using the chunks in the wasm chunk store of the canister as the store
+    /// canister of `install_chunked_code`.
+    InstallChunkedCodeStore,
+}
+
+/// Validates that `sender` is allowed the access `access` to `canister` on a
+/// subnet of type `subnet_type` with cost schedule `cost_schedule` and subnet
+/// admins `subnet_admins`.
 ///
 /// This is the single place defining which senders can call which management
 /// canister methods targeting a canister. It must be called after the method's
 /// payload has been decoded and `canister` has been looked up. A method
 /// targeting more than one canister must call it once per targeted canister,
-/// passing the method whose permission is required on that canister (e.g.,
-/// `install_chunked_code` validates its store canister as `stored_chunks`).
+/// passing the access required on that canister (e.g., `install_chunked_code`
+/// validates its target canister as `CanisterAccess::Method` and its store
+/// canister as `CanisterAccess::InstallChunkedCodeStore`).
 ///
 /// The `subnet_admins` are only taken into account if the subnet can have
 /// subnet admins (see `can_have_subnet_admins`).
@@ -486,7 +497,7 @@ fn validate_controller_or_subnet_admin(
 /// loaded by `load_canister_snapshot`.
 fn validate_sender(
     sender: &PrincipalId,
-    method: Ic00Method,
+    access: CanisterAccess,
     canister: &CanisterState,
     subnet_type: SubnetType,
     cost_schedule: CanisterCyclesCostSchedule,
@@ -494,6 +505,18 @@ fn validate_sender(
 ) -> Result<(), CanisterManagerError> {
     let subnet_admins = can_have_subnet_admins(subnet_type, cost_schedule).then_some(subnet_admins);
     let is_sender_the_canister = *sender == canister.canister_id().get();
+    let method = match access {
+        // Using the chunks of the store canister requires being the store
+        // canister itself or a controller of the store canister.
+        CanisterAccess::InstallChunkedCodeStore => {
+            return if is_sender_the_canister {
+                Ok(())
+            } else {
+                validate_controller(canister, sender)
+            };
+        }
+        CanisterAccess::Method(method) => method,
+    };
     match method {
         // A canister can always read its own status and manage its own chunk
         // store, as the canister is considered in the same trust domain.
@@ -524,9 +547,6 @@ fn validate_sender(
 
         Ic00Method::CanisterStatus => validate_status_visibility(canister, subnet_admins, sender),
 
-        // `StoredChunks` (including the exception for the canister itself
-        // above) is also used to validate the store canister of
-        // `install_chunked_code`: its errors must not refer to `stored_chunks`.
         Ic00Method::UpdateSettings
         | Ic00Method::InstallCode
         | Ic00Method::InstallChunkedCode
@@ -607,7 +627,7 @@ fn validate_sender(
 /// it, and callers pass whichever of the two is at hand.
 pub(crate) fn validate_sender_on_subnet(
     sender: &PrincipalId,
-    method: Ic00Method,
+    access: CanisterAccess,
     canister: &CanisterState,
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
@@ -628,7 +648,7 @@ pub(crate) fn validate_sender_on_subnet(
         };
     validate_sender(
         sender,
-        method,
+        access,
         canister,
         subnet_type,
         cost_schedule,
@@ -1310,6 +1330,21 @@ mod test {
             vec![],
             vec![],
         ));
+        let mut cases: Vec<(Vec<CanisterAccess>, Vec<PrincipalId>, Vec<PrincipalId>)> = cases
+            .into_iter()
+            .map(|(methods, with_subnet_admins, without_subnet_admins)| {
+                (
+                    methods.into_iter().map(CanisterAccess::Method).collect(),
+                    with_subnet_admins,
+                    without_subnet_admins,
+                )
+            })
+            .collect();
+        cases.push((
+            vec![CanisterAccess::InstallChunkedCodeStore],
+            vec![controller, canister_id.get()],
+            vec![controller, canister_id.get()],
+        ));
 
         for subnet_type in SubnetType::iter() {
             for cost_schedule in [
@@ -1321,18 +1356,19 @@ mod test {
                         subnet_type,
                         SubnetType::Application | SubnetType::CloudEngine
                     ) && matches!(cost_schedule, CanisterCyclesCostSchedule::Free);
-                for (methods, accepted_with_subnet_admins, accepted_without_subnet_admins) in &cases
+                for (accesses, accepted_with_subnet_admins, accepted_without_subnet_admins) in
+                    &cases
                 {
                     let accepted = if has_subnet_admins {
                         accepted_with_subnet_admins
                     } else {
                         accepted_without_subnet_admins
                     };
-                    for method in methods {
+                    for access in accesses {
                         for sender in senders {
                             let result = validate_sender(
                                 &sender,
-                                *method,
+                                *access,
                                 &canister,
                                 subnet_type,
                                 cost_schedule,
@@ -1341,7 +1377,7 @@ mod test {
                             assert_eq!(
                                 result.is_ok(),
                                 accepted.contains(&sender),
-                                "method: {method}, sender: {sender}, subnet type: {subnet_type:?}, cost schedule: {cost_schedule:?}, result: {result:?}"
+                                "access: {access:?}, sender: {sender}, subnet type: {subnet_type:?}, cost schedule: {cost_schedule:?}, result: {result:?}"
                             );
                         }
                     }
@@ -1392,7 +1428,7 @@ mod test {
             for method in Ic00Method::iter() {
                 let result = validate_sender(
                     &stranger,
-                    method,
+                    CanisterAccess::Method(method),
                     canister,
                     SubnetType::Application,
                     CanisterCyclesCostSchedule::Normal,
@@ -1450,7 +1486,7 @@ mod test {
                 );
                 let result = validate_sender(
                     &sender,
-                    Ic00Method::RenameCanister,
+                    CanisterAccess::Method(Ic00Method::RenameCanister),
                     &canister,
                     SubnetType::System,
                     CanisterCyclesCostSchedule::Normal,
