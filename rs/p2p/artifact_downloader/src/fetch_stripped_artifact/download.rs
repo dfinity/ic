@@ -550,34 +550,24 @@ fn parse_response(
 }
 
 fn parse_ingress_response(body: Bytes) -> Result<SignedIngress, ParseResponseError> {
-    let response = pb::GetIngressMessageInBlockResponse::proxy_decode(&body)
-        .and_then(|proto: pb::GetIngressMessageInBlockResponse| {
-            GetIngressMessageInBlockResponse::try_from(proto)
-        })
-        .map_err(|_| ParseResponseError::ParsingError("ingress_response_decoding_failed"))?;
+    let response: GetIngressMessageInBlockResponse =
+        pb::GetIngressMessageInBlockResponse::proxy_decode(&body)
+            .map_err(|_| ParseResponseError::ParsingError("ingress_response_decoding_failed"))?;
 
     SignedIngress::try_from(response.serialized_ingress_message)
         .map_err(|_| ParseResponseError::ParsingError("ingress_deserialization_failed"))
 }
 
 fn parse_canister_http_response(body: Bytes) -> Result<CanisterHttpResponse, ParseResponseError> {
-    let response = pb::GetCanisterHttpResponseInBlockResponse::proxy_decode(&body)
-        .and_then(|proto: pb::GetCanisterHttpResponseInBlockResponse| {
-            GetCanisterHttpResponseInBlockResponse::try_from(proto)
-        })
-        .map_err(|_| ParseResponseError::ParsingError("canister_http_response_decoding_failed"))?;
-
-    Ok(response.response)
+    pb::GetCanisterHttpResponseInBlockResponse::proxy_decode(&body)
+        .map(|response: GetCanisterHttpResponseInBlockResponse| response.response)
+        .map_err(|_| ParseResponseError::ParsingError("canister_http_response_decoding_failed"))
 }
 
 fn parse_dealing_response(body: Bytes) -> Result<SignedIDkgDealing, ParseResponseError> {
-    let response = pb::GetIDkgDealingInBlockResponse::proxy_decode(&body)
-        .and_then(|proto: pb::GetIDkgDealingInBlockResponse| {
-            GetIDkgDealingInBlockResponse::try_from(proto)
-        })
-        .map_err(|_| ParseResponseError::ParsingError("idkg_dealing_response_decoding_failed"))?;
-
-    Ok(response.signed_dealing)
+    pb::GetIDkgDealingInBlockResponse::proxy_decode(&body)
+        .map(|response: GetIDkgDealingInBlockResponse| response.signed_dealing)
+        .map_err(|_| ParseResponseError::ParsingError("idkg_dealing_response_decoding_failed"))
 }
 
 #[cfg(test)]
@@ -586,9 +576,10 @@ mod tests {
         fake_block_proposal_with_canister_http, fake_block_proposal_with_ingresses,
         fake_block_proposal_with_ingresses_and_idkg, fake_canister_http_payload,
         fake_canister_http_reject, fake_canister_http_response,
-        fake_canister_http_response_message, fake_flexible_canister_http_responses_message,
+        fake_canister_http_response_message, fake_canister_http_stripped_message,
+        fake_flexible_canister_http_responses_message,
         fake_flexible_canister_http_too_many_rejects_message, fake_idkg_payload_with_dealing,
-        fake_summary_block_proposal,
+        fake_summary_block_proposal, rpc_response,
     };
 
     use super::*;
@@ -1170,14 +1161,9 @@ mod tests {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let node_index = 1;
         let idkg_dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
-        let canister_http_response = fake_canister_http_response(1, 1024);
         for stripped_message in [
             StrippedMessage::Ingress(SignedIngressId::from(&ingress_message), ingress_message),
             StrippedMessage::IDkgDealing(idkg_dealing.message_id(), node_index, idkg_dealing),
-            StrippedMessage::CanisterHttpResponse(
-                ic_types::crypto::crypto_hash(&canister_http_response),
-                canister_http_response,
-            ),
         ] {
             let mut mock_transport = MockTransport::new();
             let mut mock_peers = MockPeers::default();
@@ -1185,7 +1171,7 @@ mod tests {
             mock_peers.expect_peers().return_const(vec![NODE_1]);
             mock_transport
                 .expect_rpc()
-                .returning(move |_, _| Ok(response(stripped_message_clone.clone())));
+                .returning(move |_, _| Ok(rpc_response(stripped_message_clone.clone())));
             let response = download_stripped_message(
                 Arc::new(mock_transport),
                 stripped_message.id(),
@@ -1205,14 +1191,14 @@ mod tests {
     #[tokio::test]
     async fn download_canister_http_response_request_test() {
         let block = fake_block_proposal(vec![]);
-        let canister_http_response = fake_canister_http_response(1, 1024);
-        let content_hash = ic_types::crypto::crypto_hash(&canister_http_response);
+        let stripped_message = fake_canister_http_stripped_message(1);
+        let StrippedMessage::CanisterHttpResponse(content_hash, _) = &stripped_message else {
+            unreachable!("A canister http stripped message");
+        };
         let expected_request = GetCanisterHttpResponseInBlockRequest {
             content_hash: content_hash.clone(),
             block_proposal_id: ConsensusMessageId::from(&block),
         };
-        let stripped_message =
-            StrippedMessage::CanisterHttpResponse(content_hash, canister_http_response);
 
         let mut mock_transport = MockTransport::new();
         let mut mock_peers = MockPeers::default();
@@ -1228,7 +1214,7 @@ mod tests {
                         })
             })
             .times(1)
-            .returning(move |_, _| Ok(response(stripped_message_clone.clone())));
+            .returning(move |_, _| Ok(rpc_response(stripped_message_clone.clone())));
 
         let downloaded = download_stripped_message(
             Arc::new(mock_transport),
@@ -1249,13 +1235,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn download_canister_http_response_with_another_hash_is_retried_test() {
         let block = fake_block_proposal(vec![]);
-        let [wanted, other] = [1, 2].map(|callback_id| {
-            let canister_http_response = fake_canister_http_response(callback_id, 1024);
-            StrippedMessage::CanisterHttpResponse(
-                ic_types::crypto::crypto_hash(&canister_http_response),
-                canister_http_response,
-            )
-        });
+        let [wanted, other] = [1, 2].map(fake_canister_http_stripped_message);
 
         let mut mock_transport = MockTransport::new();
         let mut mock_peers = MockPeers::default();
@@ -1266,7 +1246,7 @@ mod tests {
                 .expect_rpc()
                 .times(1)
                 .in_sequence(&mut sequence)
-                .returning(move |_, _| Ok(response(answer.clone())));
+                .returning(move |_, _| Ok(rpc_response(answer.clone())));
         }
 
         let downloaded = download_stripped_message(
@@ -1495,29 +1475,5 @@ mod tests {
             content_hash: ic_types::crypto::crypto_hash(response),
             block_proposal_id: consensus_message_id,
         })
-    }
-
-    fn response(stripped_message: StrippedMessage) -> axum::response::Response<Bytes> {
-        axum::response::Response::builder()
-            .body(Bytes::from(match stripped_message {
-                StrippedMessage::Ingress(_, ingress_message) => {
-                    pb::GetIngressMessageInBlockResponse::proxy_encode(
-                        GetIngressMessageInBlockResponse {
-                            serialized_ingress_message: ingress_message.binary().clone(),
-                        },
-                    )
-                }
-                StrippedMessage::IDkgDealing(_, _, dealing) => {
-                    pb::GetIDkgDealingInBlockResponse::proxy_encode(GetIDkgDealingInBlockResponse {
-                        signed_dealing: dealing,
-                    })
-                }
-                StrippedMessage::CanisterHttpResponse(_, response) => {
-                    pb::GetCanisterHttpResponseInBlockResponse::proxy_encode(
-                        GetCanisterHttpResponseInBlockResponse { response },
-                    )
-                }
-            }))
-            .unwrap()
     }
 }

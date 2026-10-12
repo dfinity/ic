@@ -1,6 +1,7 @@
+use bytes::Bytes;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
 use ic_error_types::RejectCode;
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{proxy::ProtoProxy, types::v1 as pb};
 use ic_test_utilities_consensus::{
     fake::{Fake, FakeContentSigner},
     make_genesis,
@@ -51,6 +52,10 @@ use std::{
 
 use crate::fetch_stripped_artifact::types::{
     StrippedMessage, StrippedMessageId,
+    rpc::{
+        GetCanisterHttpResponseInBlockResponse, GetIDkgDealingInBlockResponse,
+        GetIngressMessageInBlockResponse,
+    },
     stripped::{StrippedCanisterHttpResponses, StrippedIDkgDealings},
 };
 
@@ -71,6 +76,31 @@ impl StrippedMessage {
             }
         }
     }
+}
+
+/// What a peer answers when asked for the given stripped message.
+pub(crate) fn rpc_response(stripped_message: StrippedMessage) -> axum::response::Response<Bytes> {
+    axum::response::Response::builder()
+        .body(Bytes::from(match stripped_message {
+            StrippedMessage::Ingress(_, ingress_message) => {
+                pb::GetIngressMessageInBlockResponse::proxy_encode(
+                    GetIngressMessageInBlockResponse {
+                        serialized_ingress_message: ingress_message.binary().clone(),
+                    },
+                )
+            }
+            StrippedMessage::IDkgDealing(_, _, dealing) => {
+                pb::GetIDkgDealingInBlockResponse::proxy_encode(GetIDkgDealingInBlockResponse {
+                    signed_dealing: dealing,
+                })
+            }
+            StrippedMessage::CanisterHttpResponse(_, response) => {
+                pb::GetCanisterHttpResponseInBlockResponse::proxy_encode(
+                    GetCanisterHttpResponseInBlockResponse { response },
+                )
+            }
+        }))
+        .unwrap()
 }
 
 pub(crate) fn fake_ingress_message(method_name: &str) -> StrippedMessage {
@@ -189,36 +219,20 @@ pub(crate) fn fake_block_proposal(
 pub(crate) fn fake_stripped_block_proposal_with_messages(
     stripped_messages: Vec<StrippedMessageId>,
 ) -> StrippedBlockProposal {
-    let ingress_messages = stripped_messages
-        .iter()
-        .filter_map(|msg_id| {
-            if let StrippedMessageId::Ingress(ingress_id) = msg_id {
-                Some(ingress_id.clone())
-            } else {
-                None
+    let mut ingress_messages = Vec::new();
+    let mut stripped_dealings = Vec::new();
+    let mut stripped_responses = Vec::new();
+    for msg_id in stripped_messages {
+        match msg_id {
+            StrippedMessageId::Ingress(ingress_id) => ingress_messages.push(ingress_id),
+            StrippedMessageId::IDkgDealing(dealing_id, node_index) => {
+                stripped_dealings.push((node_index, dealing_id))
             }
-        })
-        .collect::<Vec<_>>();
-    let stripped_dealings = stripped_messages
-        .iter()
-        .filter_map(|msg_id| {
-            if let StrippedMessageId::IDkgDealing(dealing_id, node_index) = msg_id {
-                Some((*node_index, dealing_id.clone()))
-            } else {
-                None
+            StrippedMessageId::CanisterHttpResponse(content_hash) => {
+                stripped_responses.push(content_hash)
             }
-        })
-        .collect::<Vec<_>>();
-    let stripped_responses = stripped_messages
-        .iter()
-        .filter_map(|msg_id| {
-            if let StrippedMessageId::CanisterHttpResponse(content_hash) = msg_id {
-                Some(content_hash.clone())
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>();
+        }
+    }
     StrippedBlockProposal {
         pruned_block_proposal_proto: pb::BlockProposal::default(),
         stripped_ingress_payload: StrippedIngressPayload { ingress_messages },

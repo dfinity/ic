@@ -338,6 +338,45 @@ mod tests {
         );
     }
 
+    /// The message with the content of each of its responses taken out.
+    fn strip(mut message: pb::CanisterHttpResponseMessage) -> pb::CanisterHttpResponseMessage {
+        for (_, response) in response_slots(&mut message) {
+            *response = None;
+        }
+        message
+    }
+
+    /// Committee members of a flexible outcall that agree deliver the very same
+    /// response, so a single content goes back into several slots, whether the
+    /// outcall succeeded or failed with too many rejects.
+    #[test]
+    fn reinsert_a_content_into_several_slots_test() {
+        let response = fake_canister_http_response(1, 1024);
+        let reject = fake_canister_http_reject(2);
+        let messages = vec![
+            fake_flexible_canister_http_responses_message(
+                1,
+                &[(response.clone(), NODE_1), (response.clone(), NODE_2)],
+            ),
+            fake_flexible_canister_http_too_many_rejects_message(
+                2,
+                &[(reject.clone(), NODE_1), (reject.clone(), NODE_2)],
+            ),
+        ];
+        let unstripped = fake_canister_http_payload(messages.clone());
+        let stripped = fake_canister_http_payload(messages.into_iter().map(strip).collect());
+
+        let responses = BTreeMap::from_iter([
+            (hash_of(&response), Some(response)),
+            (hash_of(&reject), Some(reject)),
+        ]);
+
+        assert_eq!(
+            reinsert_responses(&stripped, &responses).unwrap(),
+            unstripped
+        );
+    }
+
     #[test]
     fn find_response_test() {
         let other = fake_canister_http_response(2, 1024);
