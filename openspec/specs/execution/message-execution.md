@@ -150,3 +150,11 @@ Ingress messages are filtered before entering the execution pipeline.
 #### Scenario: Certified state unavailable
 - **WHEN** the ingress filter cannot obtain certified state
 - **THEN** the ingress message is rejected with `CertifiedStateUnavailable`
+
+#### Scenario: Centralized sender validation for management canister methods
+- **WHEN** the ingress filter, replicated execution (including `install_code` and `install_chunked_code`), or a non-replicated query targets an existing canister via a management canister method
+- **THEN** `validate_sender` decides whether the call is allowed, based on the sender, the method, the targeted canister, and the subnet's type, cost schedule, and subnet admins
+- **AND** the ingress filter and replicated execution agree on every sender/method pair this check covers, so the ingress filter never admits a message that execution then rejects
+- **AND** a canister may call `canister_status`, `upload_chunk`, `stored_chunks`, and `clear_chunk_store` on itself, and the governance canister may call `uninstall_code`, consistently across the ingress filter and execution
+- **AND** a non-controller rejected by this check receives the standard `CanisterInvalidController` error, with the same message regardless of whether the rejection came from the ingress filter or from execution
+- **AND** checking the source canister's controllers for `load_canister_snapshot`, and checking a targeted canister's controllers for a private `canister_metadata` custom section, remain separate from `validate_sender`, as does access control for `create_canister`, `list_canisters`, and the provisional methods
