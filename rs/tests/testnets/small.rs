@@ -5,7 +5,7 @@
 // You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/container-run.sh
-//   $ bazel run //rs/tests/testnets:small --test_tmpdir=./small -- --keepalive
+//   $ bazel run //rs/tests/testnets:small_farm --test_tmpdir=./small -- --keepalive
 //
 // The --test_tmpdir=./small will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -16,9 +16,9 @@
 //
 // To get access to P8s and Grafana look for the following lines in the output:
 //
-//     prometheus: Prometheus Web UI at http://prometheus.small--1692597750709.testnet.farm.dfinity.systems,
-//     grafana: Grafana at http://grafana.small--1692597750709.testnet.farm.dfinity.systems,
-//     progress_clock: IC Progress Clock at http://grafana.small--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
+//     prometheus: Prometheus Web UI at http://prometheus.small_farm--1692597750709.testnet.farm.dfinity.systems,
+//     grafana: Grafana at http://grafana.small_farm--1692597750709.testnet.farm.dfinity.systems,
+//     progress_clock: IC Progress Clock at http://grafana.small_farm--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
 //
 // Happy testing!
 

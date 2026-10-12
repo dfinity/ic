@@ -186,7 +186,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "sr_app_no_upgrade_local_test",
+    name = "sr_app_no_upgrade_locally_test",
     cpus = MIN_LOCAL_CPUS + 12 * DEFAULT_VCPUS_PER_VM,  # 12 IC Node VMs (4 NNS + 4 source app + 4 app) * 6 vCPUs.
     guestos_update = "test",
     tags = [

@@ -20,7 +20,6 @@ ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-recovery = { path = "../../recovery" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-subnet-merging = { path = "../../recovery/subnet_merging" }
-ic-state-layout = { path = "../../state_layout" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }

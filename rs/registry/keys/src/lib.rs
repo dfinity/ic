@@ -41,6 +41,7 @@ pub const DATA_CENTER_KEY_PREFIX: &str = "data_center_record_";
 pub const ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX: &str = "key_id_";
 pub const CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX: &str = "master_public_key_id_";
 pub const CANISTER_RANGES_PREFIX: &str = "canister_ranges_";
+pub const CATCH_UP_PACKAGE_CONTENTS_KEY_PREFIX: &str = "catch_up_package_contents_";
 
 pub fn get_ecdsa_key_id_from_signing_subnet_list_key(
     signing_subnet_list_key: &str,
@@ -329,7 +330,7 @@ pub fn maybe_parse_crypto_threshold_signing_pubkey_key(key: &str) -> Option<Subn
 
 /// Makes a key for a record for the catch up package contents.
 pub fn make_catch_up_package_contents_key(subnet_id: SubnetId) -> String {
-    format!("catch_up_package_contents_{subnet_id}")
+    format!("{CATCH_UP_PACKAGE_CONTENTS_KEY_PREFIX}{subnet_id}")
 }
 
 /// Makes a key for a SubnetRecord registry entry.

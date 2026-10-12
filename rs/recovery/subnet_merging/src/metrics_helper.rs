@@ -1,161 +1,224 @@
-//! Scraping of replica metrics, as the `Subnet merging` dashboard reads them.
-//!
-//! The dashboard evaluates its conditions on Prometheus queries over the
-//! metrics of all replicas of a subnet; this module provides the same data to
-//! the tool, by scraping the metrics endpoints of the nodes directly.
+//! Scraping of replica metrics, and the aggregations across the replicas of a
+//! subnet that the "merge readiness" condition is evaluated on.
 
 use futures::future::join_all;
-use ic_recovery::util::block_on;
-use slog::{Logger, warn};
+use prometheus_parse::{Scrape, Value};
 
-use std::{collections::BTreeMap, net::IpAddr, time::Duration};
+use std::{
+    collections::BTreeMap,
+    fmt,
+    net::{IpAddr, SocketAddr},
+    time::Duration,
+};
 
 /// Timeout of a single metrics request, as in `ic_recovery::get_node_metrics`.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// The port a replica exports its metrics on.
+const METRICS_PORT: u16 = 9090;
+
+/// The labels of a series, by label name.
+pub type Labels = BTreeMap<String, String>;
+
 /// The metrics of a set of nodes, keyed by series (i.e. metric name plus
-/// labels), with one value per node reporting the series.
-pub type Metrics = BTreeMap<String, Vec<f64>>;
+/// labels), with values keyed by the IP of each node reporting the series.
+pub type Metrics = BTreeMap<(String, Labels), BTreeMap<IpAddr, f64>>;
+
+/// The nodes whose metrics could not be scraped, with the reason for each.
+#[derive(Debug)]
+pub struct ScrapeError {
+    pub failures: Vec<(IpAddr, String)>,
+}
+
+impl fmt::Display for ScrapeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "failed to scrape the metrics of {} node(s): ",
+            self.failures.len()
+        )?;
+        for (i, (ip, reason)) in self.failures.iter().enumerate() {
+            if i > 0 {
+                write!(f, "; ")?;
+            }
+            write!(f, "{ip}: {reason}")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for ScrapeError {}
 
 /// Fetches all series of the given metrics from the given nodes.
 ///
-/// Best effort, exactly like the dashboard: a node that cannot be scraped
-/// contributes no value, and a series that no node reports is absent (which
-/// every helper below reads as zero). A condition that has to hold on every
-/// node of every subnet therefore has to be written so that missing data keeps
-/// it unsatisfied -- see `readiness::evaluate_merge_readiness`.
-pub fn fetch_metrics(logger: &Logger, node_ips: &[IpAddr], metrics: &[&str]) -> Metrics {
-    let responses = block_on(join_all(
-        node_ips.iter().map(|ip| fetch_node_metrics(logger, ip)),
-    ));
+/// Fails if any node cannot be scraped: a condition evaluated across the nodes
+/// could otherwise hold on partial data. A series that no node reports is
+/// absent though, as a node that responds simply does not export that series.
+pub async fn fetch_metrics(node_ips: &[IpAddr], metrics: &[&str]) -> Result<Metrics, ScrapeError> {
+    let responses = join_all(node_ips.iter().map(fetch_node_metrics)).await;
 
     let mut result = Metrics::new();
+    let mut failures = Vec::new();
     for (ip, body) in node_ips.iter().zip(responses) {
-        let Some(body) = body else {
-            warn!(logger, "Failed to scrape the metrics of node {ip}");
-            continue;
-        };
-        for (series, value) in parse_metrics(&body, metrics) {
-            result.entry(series).or_default().push(value);
+        match body {
+            Ok(body) => {
+                for (series, value) in parse_metrics(&body, metrics) {
+                    result.entry(series).or_default().insert(*ip, value);
+                }
+            }
+            Err(reason) => failures.push((*ip, reason)),
         }
     }
-    result
+    if !failures.is_empty() {
+        return Err(ScrapeError { failures });
+    }
+    Ok(result)
 }
 
-async fn fetch_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<String> {
-    let response =
-        tokio::time::timeout(REQUEST_TIMEOUT, reqwest::get(format!("http://[{ip}]:9090"))).await;
+async fn fetch_node_metrics(ip: &IpAddr) -> Result<String, String> {
+    let response = tokio::time::timeout(REQUEST_TIMEOUT, async {
+        reqwest::get(format!("http://{}", SocketAddr::new(*ip, METRICS_PORT)))
+            .await?
+            .error_for_status()?
+            .text()
+            .await
+    })
+    .await;
     match response {
-        Ok(Ok(response)) => match response.text().await {
-            Ok(body) => Some(body),
-            Err(err) => {
-                warn!(logger, "Failed to decode the metrics of node {ip}: {err}");
-                None
-            }
-        },
-        Ok(Err(err)) => {
-            warn!(logger, "Failed to request the metrics of node {ip}: {err}");
-            None
-        }
-        Err(_) => {
-            warn!(logger, "Timed out requesting the metrics of node {ip}");
-            None
-        }
+        Ok(Ok(body)) => Ok(body),
+        Ok(Err(err)) => Err(format!("request failed: {err}")),
+        Err(_) => Err(format!("request timed out after {REQUEST_TIMEOUT:?}")),
     }
 }
 
-/// Picks the series of the requested metrics out of a Prometheus text exposition.
-fn parse_metrics(body: &str, metrics: &[&str]) -> Vec<(String, f64)> {
-    body.lines()
-        .filter(|line| !line.starts_with('#'))
-        .filter_map(|line| {
-            let (series, value) = line.rsplit_once(' ')?;
-            let series = series.trim();
-            if !metrics.iter().any(|metric| is_series_of(series, metric)) {
-                return None;
-            }
-            let value = value.trim().parse::<f64>().ok()?;
-            (!value.is_nan()).then(|| (series.to_string(), value))
+/// Picks the series of the requested metrics out of a Prometheus text
+/// exposition. Histograms and summaries are skipped, as are NaN values.
+fn parse_metrics(body: &str, metrics: &[&str]) -> Vec<((String, Labels), f64)> {
+    // `Scrape::parse` only fails if reading a line fails, which it cannot here.
+    let scrape = Scrape::parse(body.lines().map(|line| Ok(line.to_string())))
+        .expect("parsing a string should not fail");
+    scrape
+        .samples
+        .into_iter()
+        .filter(|sample| metrics.contains(&sample.metric.as_str()))
+        .filter_map(|sample| {
+            let value = match sample.value {
+                Value::Counter(value) | Value::Gauge(value) | Value::Untyped(value) => value,
+                Value::Histogram(_) | Value::Summary(_) => return None,
+            };
+            let labels = sample
+                .labels
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            (!value.is_nan()).then_some(((sample.metric, labels), value))
         })
         .collect()
 }
 
-/// Whether `series` is a series of `metric`, i.e. the metric name followed by
-/// its labels (if any). Metric names are prefixes of one another (e.g.
-/// `..._messages` and `..._messages_total`), so a plain prefix check would mix
-/// up their series.
-fn is_series_of(series: &str, metric: &str) -> bool {
-    match series.strip_prefix(metric) {
-        Some(labels) => labels.is_empty() || labels.starts_with('{'),
-        None => false,
-    }
-}
-
-/// The per-node values of every series of `metric` whose labels (`{...}`, or
-/// the empty string for an unlabeled series) match `labels_match`.
+/// The per-node values of every series of `metric` whose labels match
+/// `labels_match`.
 pub fn matching_series<'a>(
     metrics: &'a Metrics,
     metric: &str,
-    labels_match: impl Fn(&str) -> bool,
-) -> Vec<&'a Vec<f64>> {
+    labels_match: impl Fn(&Labels) -> bool,
+) -> Vec<&'a BTreeMap<IpAddr, f64>> {
     metrics
         .iter()
-        .filter(|(series, _)| match series.strip_prefix(metric) {
-            Some(labels) if labels.is_empty() || labels.starts_with('{') => labels_match(labels),
-            _ => false,
-        })
+        .filter(|((name, labels), _)| name == metric && labels_match(labels))
         .map(|(_, values)| values)
         .collect()
 }
 
-/// Prometheus' `quantile(0.5, ...)`: the median of `values`, interpolating
-/// between the two middle values if there is an even number of them. `None` iff
-/// `values` is empty.
-pub fn median(values: &[f64]) -> Option<f64> {
-    if values.is_empty() {
-        return None;
-    }
-    let mut values = values.to_vec();
-    values.sort_by(|a, b| a.partial_cmp(b).expect("metric value should not be NaN"));
-    let middle = (values.len() - 1) as f64 / 2.0;
-    Some((values[middle.floor() as usize] + values[middle.ceil() as usize]) / 2.0)
-}
-
-/// `sum(quantile by (<labels>) (0.5, <metric>{<filter>}))`: the median across
-/// the replicas reporting each matching series, summed over those series.
-pub fn sum_of_medians(metrics: &Metrics, metric: &str, labels_match: impl Fn(&str) -> bool) -> f64 {
-    matching_series(metrics, metric, labels_match)
-        .into_iter()
-        .filter_map(|values| median(values))
-        .sum()
-}
-
-/// `quantile(0.5, <metric>{<filter>})`: the median across all replicas
-/// reporting any matching series. `None` if there is no such series.
-pub fn median_across_replicas(
+/// The largest value any replica reports for any series of `metric` whose
+/// labels match `labels_match`. A series that a replica does not report reads
+/// as zero, so this is zero if there is no such series.
+pub fn max_across_replicas(
     metrics: &Metrics,
     metric: &str,
-    labels_match: impl Fn(&str) -> bool,
-) -> Option<f64> {
-    let values: Vec<f64> = matching_series(metrics, metric, labels_match)
+    labels_match: impl Fn(&Labels) -> bool,
+) -> f64 {
+    matching_series(metrics, metric, labels_match)
         .into_iter()
-        .flatten()
+        .flat_map(|values| values.values())
         .copied()
-        .collect();
-    median(&values)
+        .fold(0.0, f64::max)
+}
+
+/// The smallest value any of the given replicas reports for any series of
+/// `metric` whose labels match `labels_match`. A replica that reports no such
+/// series reads as zero, and so does an empty `replicas`.
+pub fn min_across_replicas(
+    metrics: &Metrics,
+    metric: &str,
+    labels_match: impl Fn(&Labels) -> bool,
+    replicas: &[IpAddr],
+) -> f64 {
+    let series = matching_series(metrics, metric, labels_match);
+    replicas
+        .iter()
+        .map(|ip| {
+            series
+                .iter()
+                .filter_map(|values| values.get(ip))
+                .copied()
+                .reduce(f64::min)
+                .unwrap_or(0.0)
+        })
+        .reduce(f64::min)
+        .unwrap_or(0.0)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn ip(node: u8) -> IpAddr {
+        IpAddr::from([127, 0, 0, node])
+    }
+
+    fn values(entries: &[(u8, f64)]) -> BTreeMap<IpAddr, f64> {
+        entries
+            .iter()
+            .map(|&(node, value)| (ip(node), value))
+            .collect()
+    }
+
+    #[test]
+    fn minimum_requires_each_replica_to_report() {
+        let metrics = Metrics::from([
+            (series("m", &[("kind", "a")]), values(&[(1, 5.0)])),
+            (series("m", &[("kind", "b")]), values(&[(1, 6.0)])),
+        ]);
+        assert_eq!(
+            min_across_replicas(&metrics, "m", |_| true, &[ip(1), ip(2)]),
+            0.0
+        );
+        assert_eq!(min_across_replicas(&metrics, "m", |_| true, &[ip(1)]), 5.0);
+        assert_eq!(min_across_replicas(&metrics, "m", |_| true, &[]), 0.0);
+    }
+
+    fn series(metric: &str, labels: &[(&str, &str)]) -> (String, Labels) {
+        let labels = labels
+            .iter()
+            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .collect();
+        (metric.to_string(), labels)
+    }
+
     const BODY: &str = "\
 # HELP mr_stream_messages Messages in streams.
 # TYPE mr_stream_messages gauge
 mr_stream_messages{remote=\"subnet_1\"} 3
-mr_stream_messages{remote=\"subnet_2\"} 4
+mr_stream_messages{remote=\"subnet_2\"} 4 1700000000000
+mr_stream_messages{remote=\"subnet 3\"} 5
 mr_stream_messages_total 7
-replicated_state_pending_refunds 0
+# TYPE some_histogram histogram
+some_histogram_bucket{le=\"1\"} 1
+some_histogram_bucket{le=\"+Inf\"} 2
+some_histogram_sum 1.5
+some_histogram_count 2
+replicated_state_pending_refunds 0 1700000000000
 some_other_metric 12
 ";
 
@@ -163,57 +226,61 @@ some_other_metric 12
     fn parse_metrics_test() {
         let parsed = parse_metrics(
             BODY,
-            &["mr_stream_messages", "replicated_state_pending_refunds"],
+            &[
+                "mr_stream_messages",
+                "replicated_state_pending_refunds",
+                "some_histogram",
+            ],
         );
 
         assert_eq!(
             parsed,
             vec![
-                ("mr_stream_messages{remote=\"subnet_1\"}".to_string(), 3.0),
-                ("mr_stream_messages{remote=\"subnet_2\"}".to_string(), 4.0),
-                ("replicated_state_pending_refunds".to_string(), 0.0),
+                (series("mr_stream_messages", &[("remote", "subnet_1")]), 3.0),
+                (series("mr_stream_messages", &[("remote", "subnet_2")]), 4.0),
+                (series("mr_stream_messages", &[("remote", "subnet 3")]), 5.0),
+                (series("replicated_state_pending_refunds", &[]), 0.0),
             ],
             "the series of `mr_stream_messages_total`, which `mr_stream_messages` is a prefix \
-             of, must not be picked up",
+             of, must not be picked up; a trailing timestamp must not be read as the value; a \
+             label value may contain a space; and histograms must be skipped",
         );
     }
 
     #[test]
-    fn median_test() {
-        assert_eq!(median(&[]), None);
-        assert_eq!(median(&[3.0]), Some(3.0));
-        assert_eq!(median(&[3.0, 1.0]), Some(2.0));
-        assert_eq!(median(&[3.0, 1.0, 2.0]), Some(2.0));
-        assert_eq!(median(&[4.0, 1.0, 3.0, 2.0]), Some(2.5));
-    }
-
-    #[test]
-    fn medians_across_series_test() {
+    fn across_replicas_test() {
         let metrics = Metrics::from([
             (
-                "mr_stream_messages{remote=\"a\"}".to_string(),
-                vec![1.0, 3.0],
+                series("mr_stream_messages", &[("remote", "a")]),
+                values(&[(1, 1.0), (2, 3.0)]),
             ),
-            ("mr_stream_messages{remote=\"b\"}".to_string(), vec![5.0]),
-            ("mr_stream_messages_total".to_string(), vec![100.0]),
+            (
+                series("mr_stream_messages", &[("remote", "b")]),
+                values(&[(1, 5.0)]),
+            ),
+            (
+                series("mr_stream_messages_total", &[]),
+                values(&[(1, 100.0)]),
+            ),
         ]);
 
         assert_eq!(
-            sum_of_medians(&metrics, "mr_stream_messages", |_| true),
-            7.0
-        );
-        assert_eq!(
-            sum_of_medians(&metrics, "mr_stream_messages", |labels| labels
-                .contains("remote=\"b\"")),
+            max_across_replicas(&metrics, "mr_stream_messages", |_| true),
             5.0
         );
         assert_eq!(
-            median_across_replicas(&metrics, "mr_stream_messages", |_| true),
-            Some(3.0)
+            max_across_replicas(&metrics, "mr_stream_messages", |labels| labels
+                .get("remote")
+                .is_some_and(|remote| remote == "a")),
+            3.0
         );
         assert_eq!(
-            median_across_replicas(&metrics, "mr_registry_version", |_| true),
-            None
+            max_across_replicas(&metrics, "mr_registry_version", |_| true),
+            0.0
+        );
+        assert_eq!(
+            min_across_replicas(&metrics, "mr_registry_version", |_| true, &[]),
+            0.0
         );
     }
 }

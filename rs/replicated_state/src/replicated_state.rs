@@ -21,6 +21,7 @@ use ic_interfaces::messaging::{
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types_private::CanisterStatusType;
+use ic_nns_delegation_reader::StateForDelegationVerification;
 use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::RoutingTable;
@@ -492,9 +493,10 @@ impl ReplicatedState {
         // just loaded. A running replica gets the same value from
         // `Self::refresh_consumed_cycles`, so the canonical state tree at
         // `/subnet/<subnet_id>/metrics` hashes identically across a restart.
-        metadata
-            .subnet_metrics
-            .refresh_consumed_cycles(canister_states.total_consumed_cycles());
+        metadata.subnet_metrics.refresh_consumed_cycles(
+            canister_states.total_consumed_cycles(),
+            canister_states.total_consumed_cycles_monotonic(),
+        );
 
         Self {
             canister_states,
@@ -695,15 +697,19 @@ impl ReplicatedState {
 
     /// Refreshes
     /// [`crate::metadata_state::SubnetMetrics::consumed_cycles_total_including_canisters`]
-    /// from the current canister states. The total is derived, not persisted;
-    /// [`Self::new_from_checkpoint`] derives it the same way.
+    /// and
+    /// [`crate::metadata_state::SubnetMetrics::consumed_cycles_total_including_canisters_monotonic`]
+    /// from the current canister states. The totals are derived, not persisted;
+    /// [`Self::new_from_checkpoint`] derives them the same way.
     ///
     /// `O(|hot canisters|)`.
     pub fn refresh_consumed_cycles(&mut self) {
         let consumed_by_canisters = self.canister_states.total_consumed_cycles();
+        let consumed_by_canisters_monotonic =
+            self.canister_states.total_consumed_cycles_monotonic();
         self.metadata
             .subnet_metrics
-            .refresh_consumed_cycles(consumed_by_canisters);
+            .refresh_consumed_cycles(consumed_by_canisters, consumed_by_canisters_monotonic);
     }
 
     /// Re-establishes strict hot / cold partitioning of canister states (see
@@ -1994,6 +2000,20 @@ impl ReplicatedStateMessageRouting for ReplicatedState {
         assert!(self.metadata.streams.is_empty());
 
         *Arc::make_mut(&mut self.metadata.streams) = streams;
+    }
+}
+
+impl StateForDelegationVerification for ReplicatedState {
+    fn routing_table(&self) -> &RoutingTable {
+        self.metadata.network_topology.routing_table()
+    }
+
+    fn subnet_public_key(&self, subnet_id: SubnetId) -> Option<&[u8]> {
+        self.metadata
+            .network_topology
+            .subnets()
+            .get(&subnet_id)
+            .map(|subnet_topology| subnet_topology.public_key.as_slice())
     }
 }
 

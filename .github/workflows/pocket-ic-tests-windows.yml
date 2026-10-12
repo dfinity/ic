@@ -25,6 +25,7 @@ jobs:
               - .github/workflows/pocket-ic-tests-windows.yml
               - packages/pocket-ic/**
               - rs/pocket_ic_server/**
+              - rust-toolchain.toml
       - name: Check Run Conditions
         id: set-output
         shell: bash
@@ -91,7 +92,7 @@ jobs:
       - *checkout
       - name: Linting
         run: |
-          cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off -A clippy::uninlined_format_args
+          cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off -A clippy::uninlined_format_args -A clippy::double_must_use -A clippy::redundant_field_names
 
   pocket-ic-tests-on-windows:
     name: PocketIC Tests on Windows

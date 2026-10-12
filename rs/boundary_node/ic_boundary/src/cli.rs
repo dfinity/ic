@@ -340,10 +340,6 @@ pub struct Cache {
     /// Time-to-live for cache entries
     #[clap(env, long, default_value = "1s", value_parser = parse_duration)]
     pub cache_ttl: Duration,
-
-    /// Whether to cache non-anonymous requests
-    #[clap(env, long)]
-    pub cache_non_anonymous: bool,
 }
 
 #[derive(Args)]

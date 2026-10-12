@@ -158,7 +158,11 @@ use ic_management_canister_types::{SnapshotId, TakeCanisterSnapshotArgs};
 use ic_recovery::{RecoveryArgs, file_sync_helper};
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::{
-    readiness::{SubnetNodeIps, evaluate_merge_readiness},
+    metrics_helper::{fetch_metrics, min_across_replicas},
+    readiness::{
+        METRIC_SUBNET_CALL_CONTEXTS, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, SubnetNodeIps,
+        evaluate_merge_readiness,
+    },
     subnet_merging::{StepType, SubnetMerging, SubnetMergingArgs},
     utils::read_cooling_down_registry_version,
 };
@@ -177,7 +181,7 @@ use ic_system_test_driver::driver::test_env_api::{
 use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    MetricsFetcher, UniversalCanister, assert_create_agent, create_canister, set_controller,
+    UniversalCanister, assert_create_agent, create_canister, set_controller,
 };
 use ic_types::{Height, SubnetId};
 use ic_universal_canister::management::InstallMode;
@@ -188,20 +192,20 @@ use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
+use std::net::IpAddr;
 use std::path::Path;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 
-/// Metrics this test reads itself; the ones making up the "merge readiness"
-/// condition are read by the merging tool.
-const METRIC_SUBNET_INPUT_QUEUE_MESSAGES: &str = "execution_subnet_input_queue_messages";
-const METRIC_SUBNET_CALL_CONTEXTS: &str = "replicated_state_subnet_call_contexts";
+/// The number of rounds a subnet executed no canister message in because it is
+/// cooling down. The metrics making up the "merge readiness" condition are read
+/// by the merging tool.
 const METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION: &str =
     "round_skipped_canister_execution_due_to_cooling_down";
 
-/// The label selecting the `install_code` call contexts of
+/// The value of the `type` label selecting the `install_code` call contexts of
 /// `METRIC_SUBNET_CALL_CONTEXTS`.
-const LABEL_INSTALL_CODE: &str = "type=\"install_code\"";
+const LABEL_INSTALL_CODE: &str = "install_code";
 
 /// Number of loop iterations each universal canister must have completed before
 /// the subnet is labeled "cooling down", so that the loops are known to be
@@ -266,8 +270,8 @@ const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 /// The number of nodes of every subnet. More than one so that the merge has to
 /// get the merged state to the other nodes of the destination subnet the way a
 /// recovery does, i.e. by state sync from the one node it was uploaded to, and so
-/// that the medians the merge readiness condition is made of are medians of more
-/// than one value.
+/// that the minima and maxima the merge readiness condition is made of range
+/// over more than one replica.
 const SUBNET_SIZE: usize = 4;
 
 /// The DKG interval length of the Application subnets, i.e. one less than the
@@ -305,6 +309,12 @@ const POLL_INTERVAL: Duration = Duration::from_secs(10);
 /// recomputing its manifest and draining the message loops of step 2 at the same
 /// time: this has been observed to take up to four minutes.
 const INGRESS_COMPLETION_TIMEOUT: Duration = Duration::from_secs(900);
+
+/// How long the test waits for `U1`'s `install_code` requests to be inducted,
+/// and how long it waits in between two checks. Induction takes a few rounds,
+/// so this is much shorter than a driver retry.
+const INDUCTION_TIMEOUT: Duration = Duration::from_secs(60);
+const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
 
 /// How long the loops are observed to be stalled (step 11).
 const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
@@ -744,7 +754,7 @@ fn merge(env: &TestEnv, context: &Context, runtime: &Runtime) {
         match step_type {
             StepType::CheckRegistryForCoolingDownFlag => {
                 runtime.block_on(check_ingress_rejected(context));
-                check_not_merge_ready_yet(&topology, context, &merging_dir);
+                check_not_merge_ready_yet(&topology, context, &merging_dir, runtime);
             }
             StepType::CheckMergeReadiness => {
                 runtime.block_on(check_no_queries_and_stalled_loops(context))
@@ -803,17 +813,23 @@ async fn check_ingress_rejected(context: &Context) {
 /// The very condition the tool waits for, evaluated by the tool's own code, at
 /// the very registry version `V` the tool recorded when it labeled `M` as
 /// cooling down.
-fn check_not_merge_ready_yet(topology: &TopologySnapshot, context: &Context, merging_dir: &Path) {
+fn check_not_merge_ready_yet(
+    topology: &TopologySnapshot,
+    context: &Context,
+    merging_dir: &Path,
+    runtime: &Runtime,
+) {
     let logger = &context.logger;
     let registry_version = read_cooling_down_registry_version(merging_dir)
         .expect("the merging tool should have recorded the cooling down registry version");
 
-    let terms = evaluate_merge_readiness(
-        &Context::subnet_node_ips(topology),
-        context.m_subnet.subnet_id,
-        registry_version,
-        logger,
-    );
+    let terms = runtime
+        .block_on(evaluate_merge_readiness(
+            &Context::subnet_node_ips(topology),
+            context.m_subnet.subnet_id,
+            registry_version,
+        ))
+        .expect("the merge readiness condition should be evaluable");
     let unsatisfied: Vec<&str> = terms
         .iter()
         .filter(|term| !term.satisfied)
@@ -1196,9 +1212,11 @@ fn install_code_payload(targets: &[Principal]) -> Vec<u8> {
 }
 
 /// Waits until all of `U1`'s `install_code` requests have left `U1`'s output
-/// queue, i.e. are either enqueued in `subnet`'s subnet input queues or already
-/// executing (and hence hold a call context in the subnet call context
-/// manager).
+/// queue, i.e. until, on every replica, one of them is executing (and hence
+/// holds a call context in the subnet call context manager) and the others are
+/// enqueued in `subnet`'s subnet input queues. Every `install_code` call
+/// executes `INIT_INSTRUCTIONS` instructions, so the first one keeps executing
+/// for long enough to observe this state.
 ///
 /// Only then may `subnet` start cooling down: a request still sitting in `U1`'s
 /// output queue would never be routed, not even into the loopback stream, and
@@ -1208,13 +1226,8 @@ fn install_code_payload(targets: &[Principal]) -> Vec<u8> {
 /// installing canisters, setting their controller) was waited for, so the subnet
 /// queues hold nothing but those calls by the time they are inducted.
 async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &Logger) {
-    let expected = INSTALL_CODE_TARGETS.len() as f64;
-    // The number of requests enqueued plus executing only reaches `expected`
-    // between the moment the last one is inducted and the moment the first one
-    // completes, so waiting for the current value to reach it would be waiting
-    // for a condition that stops holding. Remember the highest value seen
-    // instead, which only grows.
-    let highest = std::cell::Cell::new(0.0_f64);
+    let expected_queued = (INSTALL_CODE_TARGETS.len() - 1) as f64;
+    let node_ips = node_ips(subnet);
     retry_with_msg_async!(
         format!(
             "waiting until all {} `install_code` requests are inducted on subnet {}",
@@ -1222,27 +1235,37 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
             subnet.subnet_id
         ),
         logger,
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
+        INDUCTION_TIMEOUT,
+        INDUCTION_BACKOFF,
         || async {
             let metrics = fetch_metrics(
-                subnet,
+                &node_ips,
                 &[
                     METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
                     METRIC_SUBNET_CALL_CONTEXTS,
                 ],
             )
             .await?;
-            let enqueued = sum_of_medians(&metrics, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, |_| true);
-            let executing = sum_of_medians(&metrics, METRIC_SUBNET_CALL_CONTEXTS, |labels| {
-                labels.contains(LABEL_INSTALL_CODE)
-            });
-            highest.set(highest.get().max(enqueued + executing));
-            if highest.get() < expected {
+            let queued = min_across_replicas(
+                &metrics,
+                METRIC_SUBNET_INPUT_QUEUE_MESSAGES,
+                |labels| labels.get("kind").is_some_and(|kind| kind == "canister"),
+                &node_ips,
+            );
+            let executing = min_across_replicas(
+                &metrics,
+                METRIC_SUBNET_CALL_CONTEXTS,
+                |labels| {
+                    labels
+                        .get("type")
+                        .is_some_and(|ty| ty == LABEL_INSTALL_CODE)
+                },
+                &node_ips,
+            );
+            if queued < expected_queued || executing < 1.0 {
                 bail!(
-                    "{enqueued} request(s) enqueued and {executing} executing, at most {} of them \
-                     at once so far",
-                    highest.get(),
+                    "at least {queued} request(s) enqueued and {executing} executing per \
+                     replica; expected {expected_queued} enqueued and 1 executing"
                 );
             }
             Ok(())
@@ -1324,53 +1347,19 @@ async fn global_counter(canister: &UniversalCanister<'_>) -> Result<u64> {
     Ok(u64::from_le_bytes(reply))
 }
 
-/// Fetches the given metrics from all nodes of `subnet`, keyed by series (i.e.
-/// metric name plus labels), with one value per node reporting the series.
-async fn fetch_metrics(
-    subnet: &SubnetSnapshot,
-    metrics: &[&str],
-) -> Result<BTreeMap<String, Vec<f64>>> {
-    MetricsFetcher::new(
-        subnet.nodes(),
-        metrics.iter().map(|metric| metric.to_string()).collect(),
-    )
-    .fetch::<f64>()
-    .await
-    .map_err(|e| {
-        anyhow!(
-            "failed to fetch the metrics of subnet {}: {e}",
-            subnet.subnet_id
-        )
-    })
-}
-
-/// The per-node values of every series of `metric` whose labels (`{...}`, or the
-/// empty string for an unlabeled series) match `labels_match`.
-///
-/// `MetricsFetcher` matches metric names by prefix, so this also filters out
-/// the series of any other metric that `metric` happens to be a prefix of.
-fn matching_series<'a>(
-    metrics: &'a BTreeMap<String, Vec<f64>>,
-    metric: &str,
-    labels_match: impl Fn(&str) -> bool,
-) -> Vec<&'a Vec<f64>> {
-    metrics
-        .iter()
-        .filter(|(series, _)| match series.strip_prefix(metric) {
-            Some(labels) if labels.is_empty() || labels.starts_with('{') => labels_match(labels),
-            _ => false,
-        })
-        .map(|(_, values)| values)
-        .collect()
+/// The IPs of the nodes of `subnet`.
+fn node_ips(subnet: &SubnetSnapshot) -> Vec<IpAddr> {
+    subnet.nodes().map(|node| node.get_ip_addr()).collect()
 }
 
 /// The number of rounds `subnet` executed no canister message in because it is
-/// cooling down, as the median across its replicas.
+/// cooling down, as the minimum across its replicas.
 ///
 /// A subnet that is not cooling down never touches the counter, and a replica
 /// that never touched it does not report it at all, which is a zero here.
 async fn rounds_with_skipped_canister_execution(subnet: &SubnetSnapshot) -> f64 {
-    let metrics = fetch_metrics(subnet, &[METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION])
+    let node_ips = node_ips(subnet);
+    let metrics = fetch_metrics(&node_ips, &[METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION])
         .await
         .unwrap_or_else(|e| {
             panic!(
@@ -1378,47 +1367,10 @@ async fn rounds_with_skipped_canister_execution(subnet: &SubnetSnapshot) -> f64 
                 subnet.subnet_id
             )
         });
-    median_across_replicas(&metrics, METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION, |_| true)
-        .unwrap_or(0.0)
-}
-
-/// Prometheus' `quantile(0.5, ...)`: the median of `values`, interpolating
-/// between the two middle values if there is an even number of them. `None` iff
-/// `values` is empty.
-fn median(values: &[f64]) -> Option<f64> {
-    if values.is_empty() {
-        return None;
-    }
-    let mut values = values.to_vec();
-    values.sort_by(|a, b| a.partial_cmp(b).expect("metric value should not be NaN"));
-    let middle = (values.len() - 1) as f64 / 2.0;
-    Some((values[middle.floor() as usize] + values[middle.ceil() as usize]) / 2.0)
-}
-
-/// `sum(quantile by (<labels>) (0.5, <metric>{<filter>}))`: the median across
-/// the replicas reporting each matching series, summed over those series.
-fn sum_of_medians(
-    metrics: &BTreeMap<String, Vec<f64>>,
-    metric: &str,
-    labels_match: impl Fn(&str) -> bool,
-) -> f64 {
-    matching_series(metrics, metric, labels_match)
-        .into_iter()
-        .filter_map(|values| median(values))
-        .sum()
-}
-
-/// `quantile(0.5, <metric>{<filter>})`: the median across all replicas
-/// reporting any matching series. `None` if there is no such series.
-fn median_across_replicas(
-    metrics: &BTreeMap<String, Vec<f64>>,
-    metric: &str,
-    labels_match: impl Fn(&str) -> bool,
-) -> Option<f64> {
-    let values: Vec<f64> = matching_series(metrics, metric, labels_match)
-        .into_iter()
-        .flatten()
-        .copied()
-        .collect();
-    median(&values)
+    min_across_replicas(
+        &metrics,
+        METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION,
+        |_| true,
+        &node_ips,
+    )
 }

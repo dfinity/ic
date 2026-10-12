@@ -75,6 +75,7 @@ const PLAIN_TRANSFER_GAS: u64 = 21_000;
 const PRIORITY_FEE: u128 = 1_000_000_000; // 1 gwei
 const MAX_FEE: u128 = 50_000_000_000; // 50 gwei
 const SWEEP_GAS_LIMIT: u128 = 5_000_000;
+const GAS_FOR_THE_AUTHORIZATION_BUT_NOT_THE_SWEEP: u128 = 55_000;
 
 /// Each batch size is swept twice, for the same deposit addresses:
 ///   * `eip7702_*`: the first sweep, a type-0x04 transaction that installs each
@@ -801,6 +802,69 @@ fn attested_eth_sweep_rejects_a_forged_attestation() {
         anvil.balance(&deposit),
         ETH_DEPOSIT_AMOUNT,
         "the ETH must stay at the deposit address"
+    );
+}
+
+/// The rule the minter's per-address delegation nonce rests on: an authorization is applied
+/// before the call it rides with runs, and the delegation it installed survives that call's
+/// revert, so the address' nonce moves even when the sweep fails. The sweep here is the minter's
+/// own, sent with a gas limit that covers the authorization but not the call.
+#[test]
+fn a_reverting_sweep_still_installs_the_delegation_it_carries() {
+    let anvil = Anvil::start();
+    let chain_id = anvil.chain_id();
+
+    let minter_key = key_from_hex(MINTER_PRIVATE_KEY);
+    let minter = eth_address(&minter_key.public_key());
+    let cex = eth_address(&key_from_hex(CEX_PRIVATE_KEY).public_key());
+
+    let Contracts {
+        helper, attested, ..
+    } = deploy_contracts(&anvil, &minter, &cex);
+
+    let principal = Principal::self_authenticating([0xEB]);
+    let key = derive_deposit_key(&principal);
+    let deposit = eth_address(&key.public_key());
+    fund_eth(&anvil, &cex, &[deposit]);
+    assert_eq!(anvil.nonce(&deposit), 0);
+    assert!(anvil.code(&deposit).is_empty());
+
+    let attestation = attest(&key, chain_id, &helper, &principal, &[0_u8; 32]);
+    let sweep = ICkSweeperAttested::sweepEthBatchCall {
+        items: vec![SweepItem {
+            deposit: alloy_address(&deposit),
+            principal: B256::from(encode_principal(&principal)),
+            subaccount: B256::ZERO,
+            r: B256::from(attestation.r),
+            s: B256::from(attestation.s),
+            v: attestation.v,
+        }],
+    }
+    .abi_encode();
+    let receipt = anvil.send_eip7702_with_gas_limit(
+        &minter_key,
+        chain_id,
+        &attested,
+        sweep,
+        vec![sign_authorization(&key, chain_id, &attested, 0)],
+        GAS_FOR_THE_AUTHORIZATION_BUT_NOT_THE_SWEEP,
+    );
+
+    assert!(!status_ok(&receipt), "the sweep must run out of gas");
+    assert_eq!(
+        anvil.balance(&deposit),
+        ETH_DEPOSIT_AMOUNT,
+        "the ETH must stay at the deposit address"
+    );
+    assert_eq!(
+        anvil.code(&deposit),
+        [&[0xef_u8, 0x01, 0x00][..], attested.as_ref()].concat(),
+        "the delegation the reverted sweep carried must be installed"
+    );
+    assert_eq!(
+        anvil.nonce(&deposit),
+        1,
+        "the applied authorization must have spent the deposit address' nonce"
     );
 }
 
@@ -1740,13 +1804,32 @@ impl Anvil {
         data: Vec<u8>,
         authorization_list: Vec<SignedAuthorization>,
     ) -> Value {
+        self.send_eip7702_with_gas_limit(
+            key,
+            chain_id,
+            to,
+            data,
+            authorization_list,
+            SWEEP_GAS_LIMIT,
+        )
+    }
+
+    fn send_eip7702_with_gas_limit(
+        &self,
+        key: &PrivateKey,
+        chain_id: u64,
+        to: &Address,
+        data: Vec<u8>,
+        authorization_list: Vec<SignedAuthorization>,
+        gas_limit: u128,
+    ) -> Value {
         let from = eth_address(&key.public_key());
         let tx = Eip7702TransactionRequest {
             chain_id,
             nonce: TransactionNonce::from(self.nonce(&from)),
             max_priority_fee_per_gas: WeiPerGas::new(PRIORITY_FEE),
             max_fee_per_gas: WeiPerGas::new(MAX_FEE),
-            gas_limit: GasAmount::new(SWEEP_GAS_LIMIT),
+            gas_limit: GasAmount::new(gas_limit),
             destination: *to,
             amount: Wei::ZERO,
             data,

@@ -661,7 +661,10 @@ mod tests {
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_metrics::MetricsRegistry;
-    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetSplittingArgs,
+        catch_up_package_contents::CupType,
+    };
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
@@ -673,6 +676,7 @@ mod tests {
             dkg::{SplittingArgs, SubnetSplittingStatus},
         },
         crypto::crypto_hash,
+        subnet_id_into_protobuf,
     };
     use rstest::rstest;
     use std::collections::BTreeMap;
@@ -891,6 +895,11 @@ mod tests {
                                 initial_ni_dkg_transcript_high_threshold: Some(transcript_record(
                                     NiDkgTag::HighThreshold,
                                 )),
+                                cup_type: Some(CupType::SubnetSplitting(SubnetSplittingArgs {
+                                    destination_subnet_id: Some(subnet_id_into_protobuf(
+                                        destination_subnet_id,
+                                    )),
+                                })),
                                 ..Default::default()
                             }),
                         )

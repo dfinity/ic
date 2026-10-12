@@ -13,6 +13,7 @@ use ic_artifact_pool::{
 use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
 use ic_consensus::consensus::batch_delivery::deliver_batches_for_ic_replay;
 use ic_consensus_certification::VerifierImpl;
+use ic_consensus_cup_utils::verify_catch_up_package_proto;
 use ic_consensus_utils::{lookup_replica_version, membership::Membership, pool_reader::PoolReader};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_crypto_tree_hash::{Digest, Witness};
@@ -57,7 +58,7 @@ use ic_types::{
     Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
     batch::{Batch, BatchContent, BatchMessages},
     consensus::{
-        CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
+        CatchUpPackage, HasHeight, HasVersion,
         certification::{Certification, CertificationContent, CertificationShare},
     },
     crypto::{
@@ -1247,16 +1248,10 @@ impl Player {
         }
 
         // Verify the CUP signature.
-        if let Err(err) = self.crypto.verify_combined_threshold_sig_by_public_key(
-            &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
-            &CatchUpContentProtobufBytes::from(&protobuf),
-            self.subnet_id,
-            last_cup.content.block.get_value().context.registry_version,
-        ) {
-            error!(
-                self.log,
-                "Verification of the signature on the CUP failed: {:?}", err
-            );
+        if let Err(err) =
+            verify_catch_up_package_proto(self.crypto.as_ref(), self.subnet_id, &protobuf)
+        {
+            error!(self.log, "Verification of the CUP failed: {}", err);
             return Err(ReplayError::CUPVerificationFailed(last_cup.height()));
         }
 
@@ -1350,11 +1345,50 @@ pub async fn public_only_for_test_get_changes_since(
     get_changes_since(version, ingress_expiry, perform_query).await
 }
 
+/// Returns all registry records since `version` (exclusive), up to the latest version of the
+/// registry canister.
 async fn get_changes_since(
     version: u64,
     ingress_expiry: Time,
     perform_query: &(impl PerformQuery + Sync),
 ) -> Result<Vec<RegistryRecord>, String> {
+    let mut records = vec![];
+    let mut since = version;
+
+    // The registry canister caps the size of each `get_changes_since` response, so we keep querying
+    // until the latest version is reached.
+    loop {
+        let (page, latest_version) =
+            get_changes_since_page(since, ingress_expiry, perform_query).await?;
+        let Some(page_max_version) = page.iter().map(|r| r.version.get()).max() else {
+            break;
+        };
+
+        println!(
+            "Fetched {} registry records in versions ({since}, {page_max_version}] out of latest \
+            version {latest_version}",
+            page.len()
+        );
+        records.extend(page);
+
+        let is_page_max_in_window = since < page_max_version && page_max_version < latest_version;
+        if !is_page_max_in_window {
+            break;
+        }
+
+        since = page_max_version;
+    }
+
+    Ok(records)
+}
+
+/// Returns the registry records of a single `get_changes_since` response, along with the latest
+/// version of the registry canister reported in that response.
+async fn get_changes_since_page(
+    version: u64,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<(Vec<RegistryRecord>, u64), String> {
     let payload = serialize_get_changes_since_request(version).unwrap();
     let query = Query {
         source: QuerySource::User {
@@ -1370,7 +1404,7 @@ async fn get_changes_since(
     match perform_query.perform_query(query).await.unwrap() {
         Ok((Ok(wasm_result), _time)) => match wasm_result {
             WasmResult::Reply(v) => {
-                let (high_capacity_deltas, _version) =
+                let (high_capacity_deltas, version) =
                     deserialize_get_changes_since_response(v).map_err(|err| format!("{err:?}"))?;
 
                 // Dechunkify deltas.
@@ -1385,8 +1419,9 @@ async fn get_changes_since(
                     inlined_deltas.push(delta);
                 }
 
-                registry_deltas_to_registry_records(inlined_deltas)
-                    .map_err(|err| format!("{err:?}"))
+                let records = registry_deltas_to_registry_records(inlined_deltas)
+                    .map_err(|err| format!("{err:?}"))?;
+                Ok((records, version))
             }
 
             WasmResult::Reject(e) => Err(format!("Query rejected: {e}")),
@@ -2166,6 +2201,100 @@ mod tests {
                     value: Some(b"derp".to_vec()),
                     version: RegistryVersion::from(50),
                 },
+            ]),
+        );
+    }
+
+    /// Tests that `get_changes_since` keeps querying the registry canister when a response does
+    /// not reach the latest version, e.g. because the canister capped the size of the response,
+    /// whereas `get_changes_since_page` only returns the records of a single response.
+    #[tokio::test]
+    async fn test_get_changes_since_pages_until_latest_version() {
+        const LATEST_VERSION: u64 = 45;
+
+        fn inline_value(version: u64, value: &[u8]) -> HighCapacityRegistryValue {
+            HighCapacityRegistryValue {
+                version,
+                content: Some(high_capacity_registry_value::Content::Value(value.to_vec())),
+                timestamp_nanoseconds: 0,
+            }
+        }
+
+        // Each page is (version requested, deltas replied).
+        let pages = [
+            (
+                42,
+                vec![HighCapacityRegistryDelta {
+                    key: b"a".to_vec(),
+                    values: vec![inline_value(43, b"a43")],
+                }],
+            ),
+            (
+                43,
+                vec![
+                    HighCapacityRegistryDelta {
+                        key: b"a".to_vec(),
+                        values: vec![inline_value(45, b"a45")],
+                    },
+                    HighCapacityRegistryDelta {
+                        key: b"b".to_vec(),
+                        values: vec![inline_value(44, b"b44")],
+                    },
+                ],
+            ),
+        ];
+
+        let mut perform_query = MockPerformQuery::new();
+        for (requested_version, deltas) in pages {
+            let reply = HighCapacityRegistryGetChangesSinceResponse {
+                version: LATEST_VERSION,
+                deltas,
+                error: None,
+            }
+            .encode_to_vec();
+            perform_query
+                .expect_perform_query()
+                .withf(move |query| {
+                    query.method_name == "get_changes_since"
+                        && query.method_payload
+                            == serialize_get_changes_since_request(requested_version).unwrap()
+                })
+                // Once by `get_changes_since_page` and once by `get_changes_since`.
+                .times(2)
+                .returning(move |_query| {
+                    Ok(Ok((
+                        Ok(WasmResult::Reply(reply.clone())),
+                        Time::try_from(SystemTime::now()).unwrap(),
+                    )))
+                });
+        }
+
+        let record = |key: &str, value: &[u8], version: u64| RegistryRecord {
+            key: key.to_string(),
+            value: Some(value.to_vec()),
+            version: RegistryVersion::from(version),
+        };
+
+        // A single page stops short of the latest version, which is reported alongside it.
+        assert_eq!(
+            get_changes_since_page(42, expiry_time_from_now(), &perform_query).await,
+            Ok((vec![record("a", b"a43", 43)], LATEST_VERSION)),
+        );
+        assert_eq!(
+            get_changes_since_page(43, expiry_time_from_now(), &perform_query).await,
+            Ok((
+                vec![record("b", b"b44", 44), record("a", b"a45", 45)],
+                LATEST_VERSION
+            )),
+        );
+
+        // All pages together reach the latest version.
+        assert_eq!(
+            get_changes_since(42, expiry_time_from_now(), &perform_query).await,
+            Ok(vec![
+                record("a", b"a43", 43),
+                record("b", b"b44", 44),
+                record("a", b"a45", 45),
             ]),
         );
     }

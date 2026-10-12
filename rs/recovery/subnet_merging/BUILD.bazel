@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:clap",
     "@crate_index//:futures",
+    "@crate_index//:prometheus-parse",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
@@ -49,8 +50,8 @@ rust_binary(
 )
 
 rust_test(
-    name = "subnet_merging_tool_test",
-    crate = "subnet_merging",
+    name = "subnet_merging_test",
+    crate = ":subnet_merging",
     deps = DEPENDENCIES + [
         # Keep sorted.
         "//rs/test_utilities/tmpdir",

@@ -17,6 +17,7 @@ use crate::numeric::{
     CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
+use crate::state::receipt_fetch::ReceiptFetchWindow;
 use crate::sweeper_contract::{SweepItem, encode_sweep_erc20_batch, encode_sweep_eth_batch};
 use crate::tx::{
     Eip1559TransactionRequest, Finalized, FinalizedEip1559Transaction, GasFeeEstimate,
@@ -296,11 +297,15 @@ const SWEEP_GAS_PER_TRANSFER: GasAmount = GasAmount::new(110_000);
 /// Gas one EIP-7702 authorization costs: 25'000 (`PER_EMPTY_ACCOUNT_COST`) charged upfront for
 /// every tuple, before any of them is looked at.
 ///
-/// Budgeted for every address the sweep touches, since every one of them carries a tuple. A tuple
-/// the EVM skips — the address is already delegated, so the nonce it was signed for no longer
-/// matches — is charged the same 25'000 and refunded 12'500 for an authority the state trie
-/// already holds. That refund lands after execution and so cannot shrink the limit the transaction
-/// had to declare, leaving 25'000 the figure to budget either way. Rounded up as its siblings are.
+/// Budgeted for the authorizations the sweep carries, which are those of the addresses it still has
+/// to delegate. An authorization the EVM skips — another sweep delegated the address in between, so
+/// the nonce it was signed for no longer matches — still costs the full 25'000: [EIP-7702] refunds
+/// 12'500 for an authority that already exists only once the authorization passed every check,
+/// including the nonce. That refund lands after execution and so cannot shrink the limit the
+/// transaction had to declare, leaving 25'000 the figure to budget either way. Rounded up as its
+/// siblings are.
+///
+/// [EIP-7702]: https://eips.ethereum.org/EIPS/eip-7702
 const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
 
 /// Gas one address of an ETH sweep costs beyond its authorization: the per-address dispatch
@@ -311,31 +316,26 @@ const SWEEP_GAS_PER_AUTHORIZATION: GasAmount = GasAmount::new(40_000);
 const SWEEP_GAS_PER_ETH_DEPOSIT: GasAmount = GasAmount::new(40_000);
 
 pub fn sweep_gas_limit(asset: Asset, items: &[AuthorizedSweepItem]) -> GasAmount {
-    let addresses = u64::try_from(
-        items
-            .iter()
-            .map(|authorized| authorized.item.deposit)
-            .collect::<BTreeSet<_>>()
-            .len(),
-    )
-    .unwrap_or(u64::MAX);
+    let addresses = items
+        .iter()
+        .map(|authorized| authorized.item.deposit)
+        .collect::<BTreeSet<_>>()
+        .len() as u64;
+    let authorizations = items
+        .iter()
+        .filter(|authorized| authorized.authorization.is_some())
+        .count() as u64;
     let gas_per_address: &[GasAmount] = match asset {
-        Asset::Eth => &[SWEEP_GAS_PER_ETH_DEPOSIT, SWEEP_GAS_PER_AUTHORIZATION],
-        Asset::Erc20(_) => &[
-            SWEEP_GAS_PER_BALANCE_CHECK,
-            SWEEP_GAS_PER_TRANSFER,
-            SWEEP_GAS_PER_AUTHORIZATION,
-        ],
+        Asset::Eth => &[SWEEP_GAS_PER_ETH_DEPOSIT],
+        Asset::Erc20(_) => &[SWEEP_GAS_PER_BALANCE_CHECK, SWEEP_GAS_PER_TRANSFER],
     };
     gas_per_address
         .iter()
-        .fold(SWEEP_BASE_GAS, |total, gas_per_address| {
+        .map(|gas_each| (*gas_each, addresses))
+        .chain([(SWEEP_GAS_PER_AUTHORIZATION, authorizations)])
+        .fold(SWEEP_BASE_GAS, |total, (gas_each, occurrences)| {
             total
-                .checked_add(
-                    gas_per_address
-                        .checked_mul(addresses)
-                        .unwrap_or(GasAmount::MAX),
-                )
+                .checked_add(gas_each.checked_mul(occurrences).unwrap_or(GasAmount::MAX))
                 .unwrap_or(GasAmount::MAX)
         })
 }
@@ -355,10 +355,12 @@ impl SweepRequest {
         }
     }
 
-    /// The delegations the sweep installs on the way, one per deposit address it still has to
-    /// delegate. Signed for nonce zero, so a tuple whose delegation is already installed is
-    /// skipped rather than sinking the sweep. Empty once every address the sweep touches is
-    /// delegated, which is what makes it a plain EIP-1559 transaction.
+    /// The delegations the sweep installs on the way, one per deposit address it still has to point
+    /// at the configured sweeper contract, an address delegated to another contract included.
+    /// Signed for the nonce the minter tracks for the address, so an authorization another sweep's
+    /// delegation raced is skipped rather than sinking the sweep. Empty once every address the
+    /// sweep touches is delegated to that contract, which is what makes it a plain EIP-1559
+    /// transaction.
     pub fn authorizations(&self) -> Vec<SignedAuthorization> {
         self.items
             .iter()
@@ -567,6 +569,9 @@ pub struct TransactionPipeline<R: PipelineRequest> {
     sent_tx: MultiKeyMap<TransactionNonce, R::Id, Vec<SentTransaction<R>>>,
     finalized_tx: MultiKeyMap<TransactionNonce, R::Id, Finalized<R::Transaction>>,
     next_nonce: TransactionNonce,
+    /// Ids the next finalization round fetches receipts for, and where in the pending set it
+    /// resumes. Not event-sourced, so it is reset on upgrade.
+    receipt_fetch: ReceiptFetchWindow<R::Id>,
 }
 
 /// The pipeline sending from the minter's main address, on which user withdrawals travel.
@@ -640,6 +645,7 @@ where
             sent_tx: MultiKeyMap::default(),
             finalized_tx: MultiKeyMap::default(),
             next_nonce,
+            receipt_fetch: ReceiptFetchWindow::default(),
         }
     }
 
@@ -808,6 +814,24 @@ where
         assert_eq!(self.created_tx.try_insert(nonce, *id, new_tx), Ok(()));
     }
 
+    /// The transactions whose receipts the next round fetches: as many pending ids as this
+    /// pipeline's window allows, resumed past where the previous round stopped.
+    pub fn select_receipt_fetch_round(
+        &mut self,
+        finalized_transaction_count: &TransactionCount,
+    ) -> BTreeMap<Hash, R::Id> {
+        let pending = self.sent_transactions_to_finalize(finalized_transaction_count);
+        self.receipt_fetch.select_next_round(&pending)
+    }
+
+    pub fn receipt_fetch(&self) -> &ReceiptFetchWindow<R::Id> {
+        &self.receipt_fetch
+    }
+
+    pub fn receipt_fetch_mut(&mut self) -> &mut ReceiptFetchWindow<R::Id> {
+        &mut self.receipt_fetch
+    }
+
     pub fn sent_transactions_to_finalize(
         &self,
         finalized_transaction_count: &TransactionCount,
@@ -890,8 +914,49 @@ where
         self.pending_requests.iter()
     }
 
+    /// When the oldest request the pipeline still owes a finalized transaction was recorded, or
+    /// `None` when every request it holds has finalized.
+    pub fn oldest_unfinalized_request_timestamp(&self) -> Option<u64> {
+        self.unfinalized_requests_iter()
+            .filter_map(PipelineRequest::created_at)
+            .min()
+    }
+
+    /// Every request the pipeline still owes a finalized transaction: those queued, and those whose
+    /// transaction has been created or sent but not finalized. A resubmitted request is yielded
+    /// once per stage it sits in, which callers that only aggregate do not care about.
+    fn unfinalized_requests_iter(&self) -> impl Iterator<Item = &R> {
+        self.pending_requests.iter().chain(
+            self.created_tx
+                .alt_keys()
+                .chain(self.sent_tx.alt_keys())
+                .filter_map(|id| self.processed_requests.get(id)),
+        )
+    }
+
     pub fn requests_len(&self) -> usize {
         self.pending_requests.len()
+    }
+
+    /// Requests whose transaction is created but none of whose transactions is sent yet. A
+    /// transaction sits in one stage only, but a request being resubmitted has its fee-bumped
+    /// transaction in `created_tx` while its earlier attempts stay in `sent_tx`, and counts as sent.
+    pub fn created_tx_excluding_resubmissions_len(&self) -> usize {
+        self.created_tx
+            .alt_keys()
+            .filter(|id| !self.sent_tx.contains_alt(*id))
+            .count()
+    }
+
+    pub fn sent_tx_nonces_len(&self) -> usize {
+        self.sent_tx.len()
+    }
+
+    pub fn sent_tx_transactions_len(&self) -> usize {
+        self.sent_tx
+            .iter()
+            .map(|(_nonce, _id, txs)| txs.len())
+            .sum()
     }
 
     pub fn transactions_to_sign_iter(
@@ -1019,6 +1084,9 @@ where
             sent_tx,
             finalized_tx,
             next_nonce,
+            // Not event-sourced: a replayed pipeline has a default window while the live one may
+            // have advanced, so it is deliberately left out of the comparison.
+            receipt_fetch: _,
         } = self;
 
         // We can reorder request in `reschedule_request`. The audit log won't
@@ -1173,6 +1241,15 @@ impl WithdrawalTransactions {
         pipeline.is_equivalent_to(&other.pipeline)
     }
 
+    /// The pipeline carrying user withdrawals, whose receipt fetch the finalization round drives.
+    pub fn pipeline(&self) -> &MinterTransactionPipeline {
+        &self.pipeline
+    }
+
+    pub fn pipeline_mut(&mut self) -> &mut MinterTransactionPipeline {
+        &mut self.pipeline
+    }
+
     pub fn next_transaction_nonce(&self) -> TransactionNonce {
         self.pipeline.next_transaction_nonce()
     }
@@ -1215,6 +1292,18 @@ impl WithdrawalTransactions {
     ) -> BTreeMap<Hash, LedgerBurnIndex> {
         self.pipeline
             .sent_transactions_to_finalize(finalized_transaction_count)
+    }
+
+    pub fn created_tx_excluding_resubmissions_len(&self) -> usize {
+        self.pipeline.created_tx_excluding_resubmissions_len()
+    }
+
+    pub fn sent_tx_nonces_len(&self) -> usize {
+        self.pipeline.sent_tx_nonces_len()
+    }
+
+    pub fn sent_tx_transactions_len(&self) -> usize {
+        self.pipeline.sent_tx_transactions_len()
     }
 
     pub fn requests_batch(&self, requested_batch_size: usize) -> Vec<WithdrawalRequest> {
@@ -1416,18 +1505,10 @@ impl WithdrawalTransactions {
         );
     }
 
-    fn maybe_reimburse_requests_iter(&self) -> impl Iterator<Item = &WithdrawalRequest> {
-        self.maybe_reimburse
-            .iter()
-            .filter_map(|index| self.pipeline.get_processed_request(index))
-    }
-
-    /// Whether any request is still in flight, either awaiting a transaction or a reimbursement.
+    /// When the oldest withdrawal still awaiting a finalized transaction was recorded, or `None`
+    /// when none is outstanding.
     pub fn oldest_incomplete_request_timestamp(&self) -> Option<u64> {
-        self.requests_iter()
-            .chain(self.maybe_reimburse_requests_iter())
-            .flat_map(|req| req.created_at().into_iter())
-            .min()
+        self.pipeline.oldest_unfinalized_request_timestamp()
     }
 
     pub fn withdrawal_status(

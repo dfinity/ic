@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 16.1.0 - 2026-10-08
+
+### Changed
+- `LATEST_SERVER_VERSION` is now `16.1.0`, so by default the library downloads a PocketIC server that holds threshold ECDSA keys over secp256r1.
+
 ## 16.0.0 - 2026-09-01
 
 ### Added

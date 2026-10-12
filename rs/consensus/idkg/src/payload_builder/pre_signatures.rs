@@ -999,7 +999,15 @@ pub(super) mod tests {
             /*should_create_key_transcript=*/ true,
         );
 
-        let payload_capacity = 20;
+        let pre_sigs_per_key = 5;
+        // ECDSA pre-signatures cost two transcripts to a Schnorr one's single
+        // transcript, so a constant capacity leaves a remainder for some key sets
+        // and the split stops being even.
+        let payload_capacity = pre_sigs_per_key
+            * key_ids
+                .iter()
+                .map(|key_id| key_id.required_pre_sig_capacity() as u32)
+                .sum::<u32>();
         make_new_pre_signatures_by_priority(
             &make_config(Some(payload_capacity), stash_capacity.clone()),
             &mut payload,
@@ -1015,7 +1023,7 @@ pub(super) mod tests {
         // The same amount of pre-signatures should be started for each key
         assert_eq!(count.len(), key_ids.len());
         for key_id in key_ids {
-            assert_eq!(count[&key_id], 5);
+            assert_eq!(count[&key_id], pre_sigs_per_key as usize);
         }
 
         // The payload capacity was reduced (i.e. via proposal)

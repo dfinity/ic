@@ -13,7 +13,6 @@ path = "src/lib.rs"
 [dependencies]
 base64 = { workspace = true }
 bytes = { workspace = true }
-by_address = { workspace = true }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
@@ -23,18 +22,15 @@ ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-metrics-encoder = { workspace = true }
 icp-ledger = { path = "../../ledger_suite/icp" }
 ic-stable-structures = { workspace = true }
-json5 = { workspace = true }
 lazy_static = { workspace = true }
 maplit = { workspace = true }
 num-traits = { workspace = true }
-priority-queue = { workspace = true }
 prost = { workspace = true }
 rust_decimal = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-assert_matches = { workspace = true }
 
 [build-dependencies]
 build-info-build = { workspace = true }

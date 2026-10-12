@@ -16,7 +16,6 @@ rust_binary(
         "@crate_index//:ic-agent",
         "@crate_index//:rgb",
         "@crate_index//:rust_decimal",
-        "@crate_index//:serde",
         "@crate_index//:textplots",
         "@crate_index//:tokio",
     ],

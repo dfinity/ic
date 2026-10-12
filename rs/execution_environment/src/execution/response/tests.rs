@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::ErrorCode;
@@ -5,6 +7,7 @@ use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::canister_state::system_state::OutstandingPrepayments;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_execution_environment::{
     ExecutionResponse, ExecutionTest, ExecutionTestBuilder, check_ingress_status,
@@ -213,10 +216,11 @@ fn execute_response_refunds_cycles() {
 ///
 /// Note that the fallback leaves the call fee out: the gauge holds the whole call
 /// transmission prepayment, of which the response transmission prepayment accounts
-/// for only a part, and nothing ever refunds the rest. A canister that has not been
-/// backfilled yet is thus short of the gauge by that fee, but the first backfill
-/// credits it -- the gauge being what the canister really consumed -- while the
-/// callback is still open, so executing the response then keeps the two in step.
+/// for only a part, and nothing ever refunds the rest. The monotonic amounts thus
+/// stay short of the gauges by exactly that fee once the response is executed.
+///
+/// The call fee is a `RequestAndResponseTransmission` charge, so the by-use-case
+/// amounts are checked alongside the scalar ones throughout.
 #[test]
 fn execute_response_of_legacy_callback_settles_the_outstanding_prepayments() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
@@ -272,44 +276,71 @@ fn execute_response_of_legacy_callback_settles_the_outstanding_prepayments() {
     let outstanding_before = system_state.outstanding_prepayments().unwrap();
     assert_eq!(
         outstanding_before,
-        callback.prepayment_for_response_execution.nominal()
-            + callback.prepayment_for_response_transmission.nominal()
+        OutstandingPrepayments {
+            instructions: callback.prepayment_for_response_execution.nominal(),
+            transmission: callback.prepayment_for_response_transmission.nominal(),
+        }
     );
     let gauge_before = system_state.canister_metrics().consumed_cycles();
     let monotonic_before = system_state.canister_metrics().consumed_cycles_monotonic();
     assert_eq!(
         gauge_before,
-        monotonic_before + outstanding_before + call_fee
+        monotonic_before + outstanding_before.total() + call_fee
     );
-
-    // The first backfill, as a checkpoint round performs it while the callback is
-    // still open, credits the call fee: the gauge is what the canister consumed, of
-    // which only the outstanding prepayments are still to be refunded.
-    test.canister_state_mut(a_id)
-        .system_state
-        .migrate_consumed_cycles_to_monotonic();
-    let system_state = &test.canister_state(a_id).system_state;
+    // The call fee sits in the `RequestAndResponseTransmission` amounts, so the same
+    // offset shows up there.
+    let transmission_gauge_before = transmission(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases(),
+    );
+    let transmission_monotonic_before = transmission(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic(),
+    );
     assert_eq!(
-        system_state.canister_metrics().consumed_cycles_monotonic(),
-        monotonic_before + call_fee
+        transmission_gauge_before,
+        transmission_monotonic_before + outstanding_before.transmission + call_fee
     );
 
     // Execute the response on A.
     test.induct_messages();
     test.execute_message(a_id);
 
-    // Nothing is outstanding any more, and the monotonic amount is in step with the
-    // gauge without a further backfill: the refund path reported the very prepayments
+    // Nothing is outstanding any more, and the monotonic amounts are short of the
+    // gauges by just the call fee: the refund path reported the very prepayments
     // predicted above.
     let system_state = &test.canister_state(a_id).system_state;
     assert_eq!(
         system_state.outstanding_prepayments(),
-        Some(NominalCycles::zero())
+        Some(OutstandingPrepayments::default())
     );
     assert_eq!(
         system_state.canister_metrics().consumed_cycles(),
-        system_state.canister_metrics().consumed_cycles_monotonic()
+        system_state.canister_metrics().consumed_cycles_monotonic() + call_fee
     );
+    let mut gauges = system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .clone();
+    *gauges
+        .get_mut(&CyclesUseCase::RequestAndResponseTransmission)
+        .unwrap() -= call_fee;
+    assert_eq!(
+        &gauges,
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+    );
+}
+
+/// The `RequestAndResponseTransmission` entry of one of the by-use-case consumed
+/// cycles maps.
+fn transmission(amounts: &BTreeMap<CyclesUseCase, NominalCycles>) -> NominalCycles {
+    *amounts
+        .get(&CyclesUseCase::RequestAndResponseTransmission)
+        .unwrap()
 }
 
 #[test]

@@ -167,8 +167,13 @@ jobs:
           popd
           pushd .github
           sed -i -E "s|${IMAGE_PREFIX}ic-build(:\|@)[^\"]{5,}|$IMG_NAME_IC_BUILD|g" -- workflow*/*
+          # The RBE worker image is also referenced outside workflows/, by
+          # actions/bazel-namespace/rbe.bazelrc, so rewrite it in every file under .github that
+          # references it (the pattern is anchored on the digest). grep -r only lists regular files
+          # (sed -i fails on directories like actions/bazel/bin) and fails the step if there are none.
           WORKER_IMAGE='${{ needs.rbe-worker-image.outputs.worker-image }}'
-          sed -i -E "s|nscr\.io/[^\"/]+/ic-build@sha256:[0-9a-f]{64}|${WORKER_IMAGE}|g" -- workflow*/*
+          worker_image_re='nscr\.io/[^"/]+/ic-build@sha256:[0-9a-f]{64}'
+          grep -rlZE -- "$worker_image_re" . | xargs -0 -r sed -i -E "s|${worker_image_re}|${WORKER_IMAGE}|g" --
           popd
 
           git config --global user.name "IDX GitHub Automation"

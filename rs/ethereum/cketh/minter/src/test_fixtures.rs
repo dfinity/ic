@@ -1,6 +1,6 @@
-use crate::EVM_RPC_ID_STAGING;
 use crate::asset::Asset;
 use crate::attestation::AttestationRequest;
+use crate::balance_scan::batcher::Delegation;
 use crate::deposit_address::DepositAddress;
 use crate::eth_logs::LedgerSubaccount;
 use crate::eth_rpc::Hash;
@@ -20,11 +20,20 @@ use crate::tx::{
     AccessList, AuthorizationRequest, Eip1559TransactionRequest, FinalizedEip1559Transaction,
     GasFeeEstimate, Signed, TransactionSignature,
 };
+use crate::{EVM_RPC_ID_PRODUCTION, EVM_RPC_ID_STAGING};
 use candid::{Nat, Principal};
 use ethnum::u256;
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
+use evm_rpc_types::{ConsensusStrategy, Hex, MultiRpcResult, RpcServices};
+use ic_canister_runtime::{IcError, StubRuntime};
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeSet;
+use std::fmt::Debug;
+
+/// The block height every fixture pins its reads to, so a state built here can serve the
+/// delegation read the enqueue makes.
+pub const LATEST_BLOCK: BlockNumber = BlockNumber::new(1_000_000);
 
 pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
     f: F,
@@ -47,6 +56,13 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
         panic_message.contains(expected_message),
         "Expected panic message to contain: {expected_message}, but got: {panic_message}"
     );
+}
+
+pub fn only_one<T: Debug>(items: &[T]) -> &T {
+    let [item] = items else {
+        panic!("BUG: expected exactly one element, got {items:?}");
+    };
+    item
 }
 
 pub fn initial_state() -> State {
@@ -145,8 +161,7 @@ pub fn automatic_deposit() -> AutomaticDeposit {
 }
 
 /// An [`AutomaticDeposits`] whose sweep queue holds exactly these funded pairs, all taken by the
-/// one sweep [`create_pending_sweeper_requests`] enqueued for them, returned along with that
-/// request.
+/// one sweep [`create_pending_sweeper_requests`] enqueued for them, returned along with that request.
 pub async fn deposits_with_enqueued_sweep<A: Into<Asset> + Copy>(
     pairs: &[(Account, A)],
 ) -> (AutomaticDeposits, SweepRequest) {
@@ -203,17 +218,24 @@ pub fn prepay_sweep_gas(state: &mut State) {
 }
 
 /// A [`State`] whose sweep queue holds exactly these funded pairs, all taken by the one sweep
-/// [`create_pending_sweeper_requests`] enqueued for them, returned along with that request. The
-/// deposits, attestations and authorizations the enqueue pairs up arrive through the event log, so
-/// the sweep is assembled by the production path without the runtime signing anything.
+/// [`create_pending_sweeper_requests`] enqueued for them, returned along with that request. The deposits,
+/// attestations and authorizations the enqueue pairs up arrive through the event log, so the sweep
+/// is assembled by the production path without the runtime signing anything.
 pub async fn state_with_enqueued_sweep<A: Into<Asset> + Copy>(
     pairs: &[(Account, A)],
 ) -> (State, SweepRequest) {
     const SWEEP_DECIDED_AT: u64 = 1_620_328_630_000_000_000;
 
+    let addresses = pairs
+        .iter()
+        .map(|(account, _asset)| deposit_address(account))
+        .collect::<BTreeSet<_>>()
+        .len();
+
     let mut state = state_with_deposit_helper(deposit_helper());
     prepay_sweep_gas(&mut state);
     state.sweeper_contract_address = Some(sweeper_contract());
+    state.latest_block_height = Some(LATEST_BLOCK);
     state.last_transaction_price_estimate = Some((SWEEP_DECIDED_AT, gas_fee_estimate()));
     let chain_id = state.ethereum_network.chain_id();
     for (account, asset) in pairs {
@@ -256,19 +278,71 @@ pub async fn state_with_enqueued_sweep<A: Into<Asset> + Copy>(
     init_state(state);
     let mut runtime = mock::MockCanisterRuntime::new();
     runtime.expect_time().return_const(SWEEP_DECIDED_AT);
+    let undelegated = vec![Delegation::NotDelegated; addresses];
+    runtime
+        .expect_evm_rpc_client()
+        .times(1)
+        .return_once(move || stub_rpc_client(vec![delegation_response(&undelegated)]));
 
     create_pending_sweeper_requests(&runtime).await;
 
     read_state(|s| {
-        let [request] =
-            <[SweepRequest; 1]>::try_from(s.automatic_deposits.sweep_requests_batch(usize::MAX))
-                .expect("BUG: expected the pairs to become exactly one sweep");
+        let request = only_one(&s.automatic_deposits.sweep_requests_batch(usize::MAX)).clone();
         (s.clone(), request)
     })
 }
 
 pub fn sweeper_contract() -> Address {
     Address::new([0x5e; 20])
+}
+
+/// An [`EvmRpcClient`] answering the calls it is given, in order, with `responses`.
+pub fn stub_rpc_client(
+    responses: Vec<Result<MultiRpcResult<Hex>, IcError>>,
+) -> EvmRpcClient<StubRuntime, CandidResponseConverter, DoubleCycles> {
+    let mut runtime = StubRuntime::new();
+    for response in responses {
+        runtime = match response {
+            Ok(result) => runtime.add_stub_response(result),
+            Err(error) => runtime.add_stub_error(error),
+        };
+    }
+    EvmRpcClient::builder(runtime, EVM_RPC_ID_PRODUCTION)
+        .with_rpc_sources(RpcServices::EthMainnet(None))
+        .with_consensus_strategy(ConsensusStrategy::Threshold {
+            total: Some(4),
+            min: 3,
+        })
+        .with_retry_strategy(DoubleCycles::with_max_num_retries(10))
+        .build()
+}
+
+/// What the delegation batcher returns for addresses holding `delegations`, in the order the call
+/// named them: one 32-byte word of code prefix each, behind the zero word the program leads with.
+pub fn delegation_response(delegations: &[Delegation]) -> Result<MultiRpcResult<Hex>, IcError> {
+    const DELEGATION_DESIGNATOR_PREFIX: [u8; 3] = [0xef, 0x01, 0x00];
+    const CONTRACT_CODE_PREFIX: u8 = 0x60;
+
+    let leading_zero_word = [0_u8; 32];
+    let blob: Vec<u8> = leading_zero_word
+        .into_iter()
+        .chain(delegations.iter().flat_map(|delegation| {
+            let mut word = [0_u8; 32];
+            match delegation {
+                Delegation::NotDelegated => {}
+                Delegation::Delegated(delegate) => {
+                    word[..DELEGATION_DESIGNATOR_PREFIX.len()]
+                        .copy_from_slice(&DELEGATION_DESIGNATOR_PREFIX);
+                    word[DELEGATION_DESIGNATOR_PREFIX.len()
+                        ..DELEGATION_DESIGNATOR_PREFIX.len() + 20]
+                        .copy_from_slice(delegate.as_ref());
+                }
+                Delegation::Other => word.fill(CONTRACT_CODE_PREFIX),
+            }
+            word
+        }))
+        .collect();
+    Ok(MultiRpcResult::Consistent(Ok(Hex::from(blob))))
 }
 
 /// The estimate every sweep fixture prices and creates with, so a fixture sweep's transaction fee
@@ -308,6 +382,8 @@ pub mod mock {
     use crate::runtime::CanisterRuntime;
     use crate::time::TimeProvider;
     use async_trait::async_trait;
+    use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
+    use ic_canister_runtime::StubRuntime;
     use ic_cdk_management_canister::EcdsaPublicKeyResult;
     use mockall::mock;
 
@@ -334,6 +410,10 @@ pub mod mock {
 
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
+            type Rpc = StubRuntime;
+
+            fn evm_rpc_client(&self) -> EvmRpcClient<StubRuntime, CandidResponseConverter, DoubleCycles>;
+
             async fn sign_with_ecdsa(
                 &self,
                 key_name: String,

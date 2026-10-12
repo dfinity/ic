@@ -31,7 +31,6 @@ prometheus = { workspace = true }
 rand = { workspace = true }
 rustls = { workspace = true }
 serde_cbor = { workspace = true }
-slog = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 tokio-util = { workspace = true }

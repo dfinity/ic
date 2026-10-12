@@ -14,6 +14,10 @@ enum CosePublicKey {
     Ed25519(Vec<u8>),
 }
 
+/// The maximum length of a CBOR-encoded COSE key. The largest supported key
+/// (RSA-8192) is ~1.1 KiB.
+pub const MAX_COSE_PUBLIC_KEY_LEN: usize = 4096;
+
 // see https://tools.ietf.org/html/rfc8152 section 8.1
 const COSE_PARAM_KTY: serde_cbor::Value = serde_cbor::Value::Integer(1);
 const COSE_PARAM_ALG: serde_cbor::Value = serde_cbor::Value::Integer(3);
@@ -54,6 +58,8 @@ enum CosePublicKeyParseError {
     MalformedPublicKey(AlgorithmId),
     /// The key seems valid, but is for an algorithm that is not supported
     AlgorithmNotSupported,
+    /// The key is longer than [`MAX_COSE_PUBLIC_KEY_LEN`]
+    KeyTooLong,
 }
 
 impl CosePublicKey {
@@ -63,10 +69,15 @@ impl CosePublicKey {
     /// * `pk_cose` the CBOR-encoded COSE public key
     /// # Errors
     /// * `AlgorithmNotSupported` if some unsupported algorithm is used
+    /// * `KeyTooLong` if the public key is longer than
+    ///   [`MAX_COSE_PUBLIC_KEY_LEN`]
     /// * `MalformedPublicKey` if the public key could not be parsed
     /// # Returns
     /// The decoded public key
     pub fn from_cbor(pk_cose: &[u8]) -> Result<Self, CosePublicKeyParseError> {
+        if pk_cose.len() > MAX_COSE_PUBLIC_KEY_LEN {
+            return Err(CosePublicKeyParseError::KeyTooLong);
+        }
         let parsed_value: serde_cbor::value::Value = serde_cbor::from_slice(pk_cose)
             .map_err(|_| CosePublicKeyParseError::MalformedPublicKey(AlgorithmId::Unspecified))?;
 
@@ -254,7 +265,8 @@ impl CosePublicKey {
 /// # Arguments
 /// * `pk_cose` the CBOR-encoded COSE key
 /// # Errors
-/// * `MalformedPublicKey` if the data could not be CBOR-decoded
+/// * `MalformedPublicKey` if the data is longer than
+///   [`MAX_COSE_PUBLIC_KEY_LEN`] or could not be CBOR-decoded
 /// * `AlgorithmNotSupported` if the key was decoded but is some unsupported
 ///   algorithm
 ///
@@ -276,5 +288,13 @@ pub fn parse_cose_public_key(pk_cose: &[u8]) -> CryptoResult<(AlgorithmId, Vec<u
                 reason: "Algorithm not supported in COSE parser".to_string(),
             })
         }
+        Err(CosePublicKeyParseError::KeyTooLong) => Err(CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::Unspecified,
+            key_bytes: Some(pk_cose.to_vec()),
+            internal_error: format!(
+                "COSE public key length {} exceeds the maximum of {MAX_COSE_PUBLIC_KEY_LEN}",
+                pk_cose.len()
+            ),
+        }),
     }
 }

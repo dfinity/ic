@@ -4,6 +4,7 @@ use crate::{
 };
 use core::{convert::Into, option::Option::Some};
 use ic_sns_governance_api::pb::v1 as pb_api;
+use num_bigint::BigUint;
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
     fn from(item: pb::NeuronPermission) -> Self {
@@ -154,6 +155,9 @@ impl From<pb::Neuron> for pb_api::Neuron {
             topic_followees: item
                 .topic_followees
                 .map(pb_api::neuron::TopicFollowees::from),
+            latest_reward_event_participation: item
+                .latest_reward_event_participation
+                .map(pb_api::neuron::RewardEventParticipation::from),
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
             source_nns_neuron_id: item.source_nns_neuron_id,
@@ -184,6 +188,9 @@ impl From<pb_api::Neuron> for pb::Neuron {
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
             topic_followees: item.topic_followees.map(pb::neuron::TopicFollowees::from),
+            latest_reward_event_participation: item
+                .latest_reward_event_participation
+                .map(pb::neuron::RewardEventParticipation::from),
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
             source_nns_neuron_id: item.source_nns_neuron_id,
@@ -196,6 +203,26 @@ impl From<pb_api::Neuron> for pb::Neuron {
                 .map(|x| x.into())
                 .collect(),
             dissolve_state: item.dissolve_state.map(|x| x.into()),
+        }
+    }
+}
+
+impl From<pb::neuron::RewardEventParticipation> for pb_api::neuron::RewardEventParticipation {
+    fn from(item: pb::neuron::RewardEventParticipation) -> Self {
+        Self {
+            reward_event_end_timestamp_seconds: Some(item.reward_event_end_timestamp_seconds),
+            reward_shares: Some(candid::Nat(BigUint::from_bytes_be(&item.reward_shares))),
+        }
+    }
+}
+
+impl From<pb_api::neuron::RewardEventParticipation> for pb::neuron::RewardEventParticipation {
+    fn from(item: pb_api::neuron::RewardEventParticipation) -> Self {
+        Self {
+            reward_event_end_timestamp_seconds: item
+                .reward_event_end_timestamp_seconds
+                .unwrap_or_default(),
+            reward_shares: item.reward_shares.unwrap_or_default().0.to_bytes_be(),
         }
     }
 }
@@ -1301,6 +1328,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
             topic: item.topic.and_then(topic_id_to_api),
+            execution_reply: item.execution_reply,
         }
     }
 }
@@ -1334,6 +1362,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
             topic: item.topic.map(|topic| i32::from(pb::Topic::from(topic))),
+            execution_reply: item.execution_reply,
         }
     }
 }
