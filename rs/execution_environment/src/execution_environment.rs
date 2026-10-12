@@ -2883,7 +2883,7 @@ impl ExecutionEnvironment {
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister(canister_id, state)?;
         self.canister_manager
-            .get_canister_metadata(sender, canister, name)
+            .get_canister_metadata(sender, &state.metadata.network_topology, canister, name)
             .map(|res| res.encode())
             .map_err(|err| err.into())
     }
