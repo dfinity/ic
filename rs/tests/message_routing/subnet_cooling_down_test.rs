@@ -92,7 +92,7 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_agent::Agent;
-use ic_recovery::{RecoveryArgs, file_sync_helper};
+use ic_recovery::RecoveryArgs;
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::metrics_helper::{fetch_metrics, min_across_replicas};
 use ic_subnet_merging::readiness::{
@@ -100,10 +100,6 @@ use ic_subnet_merging::readiness::{
     Term, evaluate_merge_readiness,
 };
 use ic_subnet_merging::subnet_merging::{StepType, SubnetMerging, SubnetMergingArgs};
-use ic_system_test_driver::driver::constants::SSH_USERNAME;
-use ic_system_test_driver::driver::driver_setup::{
-    SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
-};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -496,13 +492,6 @@ fn cool_down(env: &TestEnv, context: &Context, runtime: &Runtime) {
     let logger = &context.logger;
     let topology = env.topology_snapshot();
 
-    let ssh_priv_key_path = env
-        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
-        .join(SSH_USERNAME);
-    let readonly_pub_key =
-        file_sync_helper::read_file(&env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME))
-            .expect("Couldn't read public key");
-
     let recovery_args = RecoveryArgs {
         dir: env.get_path(MERGING_DIR),
         nns_url: topology
@@ -512,14 +501,14 @@ fn cool_down(env: &TestEnv, context: &Context, runtime: &Runtime) {
             .unwrap()
             .get_public_url(),
         replica_version: Some(get_guestos_img_version()),
-        admin_key_file: Some(ssh_priv_key_path),
+        // No step of this phase of the tool accesses a node via ssh.
+        admin_key_file: None,
         test_mode: true,
         skip_prompts: true,
     };
     let merging_args = SubnetMergingArgs {
         source_subnet_id: context.m_subnet.subnet_id,
         destination_subnet_id: context.t_subnet.subnet_id,
-        readonly_pub_key: Some(readonly_pub_key),
         merge_ready_timeout_secs: MERGE_READY_TIMEOUT.as_secs(),
         registry_timeout_secs: REGISTRY_TIMEOUT.as_secs(),
         poll_interval_secs: POLL_INTERVAL.as_secs(),
@@ -583,7 +572,10 @@ async fn check_ingress_and_queries_rejected(context: &Context) {
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            match um.update(wasm().reply_data(&[])).await {
+            // Submitted rather than called: an ingress message that is still
+            // accepted is never executed by a cooling down subnet, so waiting for
+            // its completion would only wait for it to expire.
+            match um.submit_update(wasm().reply_data(&[])).await {
                 Ok(_) => bail!("ingress message to UM was still accepted"),
                 Err(err) => {
                     let err = err.to_string();

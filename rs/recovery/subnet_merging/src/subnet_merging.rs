@@ -9,7 +9,6 @@ use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
     NeuronArgs, Recovery, RecoveryArgs,
-    cli::read_optional,
     error::{RecoveryError, RecoveryResult},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
@@ -58,10 +57,6 @@ pub struct SubnetMergingArgs {
     /// merge, and that is recovered at the merged state.
     #[clap(long, value_parser=ic_recovery::util::subnet_id_from_str)]
     pub destination_subnet_id: SubnetId,
-
-    /// Public ssh key to be deployed to the source subnet for read only access.
-    #[clap(long)]
-    pub readonly_pub_key: Option<String>,
 
     /// How long to wait for the subnet that is cooling down to become ready to
     /// be merged, in seconds.
@@ -257,30 +252,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
     }
 
     fn read_step_params(&mut self, step_type: StepType) {
-        match step_type {
-            StepType::CoolDownSourceSubnet => {
-                if self.params.readonly_pub_key.is_none() {
-                    self.params.readonly_pub_key = read_optional(
-                        &self.logger,
-                        "Enter public key to add readonly SSH access to the source subnet. Ensure the right format.\n\
-                        Format:   ssh-ed25519 <pubkey> <identity>\n\
-                        Example:  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org\n\
-                        Enter your key: ",
-                    )
-                }
-            }
-
-            StepType::CheckMergeReadiness => {
-                print_url_and_ask_for_confirmation(
-                    &self.logger,
-                    self.dashboard_url("subnet-merging"),
-                    "The tool evaluates the merge readiness condition itself, and waits until it \
-                     holds. Please check the dashboard as well, to see whether it is safe to \
-                     merge the subnet",
-                );
-            }
-
-            _ => (),
+        if step_type == StepType::CheckMergeReadiness {
+            print_url_and_ask_for_confirmation(
+                &self.logger,
+                self.dashboard_url("subnet-merging"),
+                "The tool evaluates the merge readiness condition itself, and waits until it \
+                 holds. Please check the dashboard as well, to see whether it is safe to merge \
+                 the subnet",
+            );
         }
     }
 
@@ -291,7 +270,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetMerging {
                 ic_admin_cmd: get_propose_to_cool_down_subnet_command(
                     &self.recovery.admin_helper,
                     self.params.source_subnet_id,
-                    &self.params.readonly_pub_key,
                 ),
             }
             .into(),
