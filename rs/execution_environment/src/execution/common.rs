@@ -541,9 +541,6 @@ fn validate_sender(
             validate_status_visibility(canister, subnet_admins, sender)
         }
 
-        // Using the chunks of the store canister in `install_chunked_code`
-        // requires being a controller of the store canister (unless the sender
-        // is the store canister itself, see above).
         CanisterAccess::Method(
             Ic00Method::UpdateSettings
             | Ic00Method::InstallCode
