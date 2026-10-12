@@ -374,8 +374,6 @@ async fn get_or_fetch<P: Peers>(
         }
         StrippedMessageId::CanisterHttpResponse(content_hash) => {
             // First check if the response content exists in the canister HTTP pool.
-            // It is kept there, indexed by exactly this hash, until the outcall it
-            // answers has been answered, which is what this very block does.
             if let Some(response) = canister_http_pool
                 .read()
                 .unwrap()
@@ -436,11 +434,10 @@ pub(crate) enum AssemblyError {
 /// and tries to reconstruct the block from it.
 trait PayloadAssembler<ArtifactMessage> {
     type ArtifactId;
-    type MissingArtifactId;
     type Payload;
 
     /// Returns an iterator over stripped artifacts that are still missing.
-    fn missing_artifacts(&self) -> impl Iterator<Item = Self::MissingArtifactId>;
+    fn missing_artifacts(&self) -> impl Iterator<Item = Self::ArtifactId>;
 
     /// Tries to insert a missing artifact into this payload assembler.
     fn try_insert(
@@ -451,14 +448,13 @@ trait PayloadAssembler<ArtifactMessage> {
 
     /// Tries to reconstruct the part of the block corresponding to this payload assembler.
     fn try_reconstruct_payload(
-        messages: Vec<(Self::MissingArtifactId, Option<ArtifactMessage>)>,
+        messages: BTreeMap<Self::ArtifactId, Option<ArtifactMessage>>,
         payload: &mut Self::Payload,
     ) -> Result<(), AssemblyError>;
 }
 
 impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
     type ArtifactId = SignedIngressId;
-    type MissingArtifactId = SignedIngressId;
     type Payload = Option<pb::IngressPayload>;
 
     fn missing_artifacts(&self) -> impl Iterator<Item = SignedIngressId> {
@@ -473,12 +469,9 @@ impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
         signed_ingress_id: SignedIngressId,
         ingress_message: SignedIngress,
     ) -> Result<(), InsertionError> {
-        // We can have at most 1000 elements in the vector, so it should be reasonably fast to do a
-        // linear scan here.
-        let (_, ingress) = self
+        let ingress = self
             .ingress_messages
-            .iter_mut()
-            .find(|(id, _maybe_ingress)| *id == signed_ingress_id)
+            .get_mut(&signed_ingress_id)
             .ok_or(InsertionError::NotNeeded)?;
 
         if ingress.is_some() {
@@ -490,7 +483,7 @@ impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
     }
 
     fn try_reconstruct_payload(
-        ingress_messages: Vec<(SignedIngressId, Option<SignedIngress>)>,
+        ingress_messages: BTreeMap<SignedIngressId, Option<SignedIngress>>,
         payload: &mut Self::Payload,
     ) -> Result<(), AssemblyError> {
         let ingresses = ingress_messages
@@ -510,11 +503,10 @@ impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
 }
 
 impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
-    type ArtifactId = IDkgArtifactId;
-    type MissingArtifactId = (NodeIndex, IDkgArtifactId);
+    type ArtifactId = (NodeIndex, IDkgArtifactId);
     type Payload = pb::IDkgPayload;
 
-    fn missing_artifacts(&self) -> impl Iterator<Item = Self::MissingArtifactId> {
+    fn missing_artifacts(&self) -> impl Iterator<Item = Self::ArtifactId> {
         self.signed_dealings
             .iter()
             .filter(|(_, maybe_dealing)| maybe_dealing.is_none())
@@ -523,17 +515,16 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
 
     fn try_insert(
         &mut self,
-        signed_dealing_id: IDkgArtifactId,
+        (node_index, signed_dealing_id): (NodeIndex, IDkgArtifactId),
         signed_dealing: SignedIDkgDealing,
     ) -> Result<(), InsertionError> {
         let IDkgArtifactId::Dealing(_, _) = &signed_dealing_id else {
             return Err(InsertionError::NotNeeded);
         };
 
-        let (_, dealing) = self
+        let dealing = self
             .signed_dealings
-            .iter_mut()
-            .find(|((_, id), _maybe_dealing)| *id == signed_dealing_id)
+            .get_mut(&(node_index, signed_dealing_id))
             .ok_or(InsertionError::NotNeeded)?;
 
         if dealing.is_some() {
@@ -545,7 +536,7 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
     }
 
     fn try_reconstruct_payload(
-        signed_dealings: Vec<(Self::MissingArtifactId, Option<SignedIDkgDealing>)>,
+        signed_dealings: BTreeMap<Self::ArtifactId, Option<SignedIDkgDealing>>,
         payload: &mut Self::Payload,
     ) -> Result<(), AssemblyError> {
         let mut idkg_dealings =
@@ -580,10 +571,9 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
 
 impl PayloadAssembler<CanisterHttpResponse> for BlockProposalAssembler {
     type ArtifactId = CanisterHttpResponseContentHash;
-    type MissingArtifactId = CanisterHttpResponseContentHash;
     type Payload = Vec<u8>;
 
-    fn missing_artifacts(&self) -> impl Iterator<Item = Self::MissingArtifactId> {
+    fn missing_artifacts(&self) -> impl Iterator<Item = Self::ArtifactId> {
         self.canister_http_responses
             .iter()
             .filter(|(_, maybe_response)| maybe_response.is_none())
@@ -609,16 +599,15 @@ impl PayloadAssembler<CanisterHttpResponse> for BlockProposalAssembler {
     }
 
     fn try_reconstruct_payload(
-        responses: Vec<(Self::MissingArtifactId, Option<CanisterHttpResponse>)>,
+        responses: BTreeMap<Self::ArtifactId, Option<CanisterHttpResponse>>,
         payload: &mut Self::Payload,
     ) -> Result<(), AssemblyError> {
         if responses.is_empty() {
-            // Nothing was stripped from this payload, so it is already the payload
-            // the block maker put into the block, down to the very bytes.
+            // No response was declared stripped from this payload.
             return Ok(());
         }
 
-        *payload = reinsert_responses(payload, &responses.into_iter().collect())?;
+        *payload = reinsert_responses(payload, &responses)?;
         Ok(())
     }
 }
@@ -645,9 +634,8 @@ fn idkg_dealing_proto(signed_dealing: SignedIDkgDealing) -> IDkgSignedDealingTup
 
 struct BlockProposalAssembler {
     stripped_block_proposal: StrippedBlockProposal,
-    ingress_messages: Vec<(SignedIngressId, Option<SignedIngress>)>,
-    signed_dealings: Vec<((NodeIndex, IDkgArtifactId), Option<SignedIDkgDealing>)>,
-    /// The contents stripped from the canister http payload, keyed by their hash.
+    ingress_messages: BTreeMap<SignedIngressId, Option<SignedIngress>>,
+    signed_dealings: BTreeMap<(NodeIndex, IDkgArtifactId), Option<SignedIDkgDealing>>,
     canister_http_responses:
         BTreeMap<CanisterHttpResponseContentHash, Option<CanisterHttpResponse>>,
 }
@@ -702,8 +690,8 @@ impl BlockProposalAssembler {
             StrippedMessage::Ingress(signed_ingress_id, signed_ingress) => {
                 self.try_insert(signed_ingress_id, signed_ingress)
             }
-            StrippedMessage::IDkgDealing(dealing_id, _, signed_dealing) => {
-                self.try_insert(dealing_id, signed_dealing)
+            StrippedMessage::IDkgDealing(dealing_id, node_index, signed_dealing) => {
+                self.try_insert((node_index, dealing_id), signed_dealing)
             }
             StrippedMessage::CanisterHttpResponse(content_hash, response) => {
                 self.try_insert(content_hash, response)
@@ -733,7 +721,7 @@ impl BlockProposalAssembler {
                 Self::try_reconstruct_payload(signed_dealings, idkg)?;
             }
             Self::try_reconstruct_payload(
-                canister_http_responses.into_iter().collect(),
+                canister_http_responses,
                 &mut block.canister_http_payload_bytes,
             )?;
         }
@@ -786,11 +774,6 @@ mod tests {
     use super::*;
 
     /// Asserts that `reassembled` is `original`, down to the last byte of its payload.
-    ///
-    /// Block proposals compare equal as soon as their hashes do, and a stripped
-    /// proposal carries those over verbatim, so `==` alone cannot tell whether its
-    /// payload was put back together correctly. Consensus can: before it accepts a
-    /// block, it checks that the payload matches those hashes. So check that too.
     fn assert_same_block(reassembled: &BlockProposal, original: &BlockProposal) {
         assert_eq!(reassembled, original);
         assert_eq!(
@@ -943,7 +926,7 @@ mod tests {
 
         // insert back only one missing message
         assembler
-            .try_insert(dealing_1.message_id(), dealing_1)
+            .try_insert((1, dealing_1.message_id()), dealing_1)
             .unwrap();
 
         // try to reassemble the block
@@ -981,10 +964,10 @@ mod tests {
 
         // insert back only the missing message
         assembler
-            .try_insert(dealing_1.message_id(), dealing_1)
+            .try_insert((1, dealing_1.message_id()), dealing_1)
             .unwrap();
         let err = assembler
-            .try_insert(dealing_2.message_id(), dealing_2)
+            .try_insert((2, dealing_2.message_id()), dealing_2)
             .unwrap_err();
         assert_matches!(err, InsertionError::NotNeeded);
 
@@ -1033,10 +1016,10 @@ mod tests {
 
         // insert back only the missing message
         assembler
-            .try_insert(dealing_1.message_id(), dealing_1)
+            .try_insert((node_index, dealing_1.message_id()), dealing_1)
             .unwrap();
         let err = assembler
-            .try_insert(dealing_2.message_id(), dealing_2)
+            .try_insert((node_index, dealing_2.message_id()), dealing_2)
             .unwrap_err();
         assert_matches!(err, InsertionError::NotNeeded);
 
@@ -1063,16 +1046,17 @@ mod tests {
 
         let assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
-        assert_eq!(
-            assembler.missing_stripped_messages(),
-            vec![
-                ingress_1_id,
-                ingress_2_id,
-                idkg_dealing_1_id,
-                idkg_dealing_2_id,
-                canister_http_response_id,
-            ]
-        );
+        let mut missing = assembler.missing_stripped_messages();
+        missing.sort();
+        let mut expected = vec![
+            ingress_1_id,
+            ingress_2_id,
+            idkg_dealing_1_id,
+            idkg_dealing_2_id,
+            canister_http_response_id,
+        ];
+        expected.sort();
+        assert_eq!(missing, expected);
     }
 
     #[test]

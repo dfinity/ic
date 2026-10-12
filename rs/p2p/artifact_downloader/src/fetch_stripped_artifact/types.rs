@@ -23,7 +23,7 @@ pub(crate) type CanisterHttpResponseContentHash = CryptoHashOf<CanisterHttpRespo
 /// [`SignedIngress`] because all the fields of [`SignedIngress`] are derived from it.
 /// Note also that [`IngressMessageId`] is not strictly required here to uniquely identify
 /// [`SignedIngress`] but we keep it here because of [`IngressPool`] API.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct SignedIngressId {
     pub(crate) ingress_message_id: IngressMessageId,
     pub(crate) ingress_bytes_hash: IngressBytesHash,
@@ -60,7 +60,7 @@ impl TryFrom<pb::StrippedIngressMessage> for SignedIngressId {
 }
 
 /// Unique identifiers for messages that may be stripped from block proposals.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum StrippedMessageId {
     Ingress(SignedIngressId),
     IDkgDealing(IDkgArtifactId, NodeIndex),
