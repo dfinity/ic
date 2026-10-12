@@ -1062,13 +1062,13 @@ key-exchange-timeout-ms = 10000
     /// Stop the QEMU process recorded in `pid_path`, if running. Best-effort and
     /// idempotent.
     ///
-    /// Sends SIGTERM (QEMU powers the guest off and exits), waits briefly for a
-    /// graceful exit, then escalates to SIGKILL. Signalling via the pid-file
-    /// (rather than a `Child` handle) lets any process tear a VM down: QEMU is
-    /// daemonized and reparented to an init-like ancestor (PID 1 of the test
-    /// action's execution environment), so no process holds a handle on it. The
-    /// teardown of that environment (bazel's `linux-sandbox`) remains the final
-    /// safety net.
+    /// Sends SIGTERM (QEMU exits at once without shutting the guest down),
+    /// waits briefly for it to exit, then escalates to SIGKILL. Signalling via
+    /// the pid-file (rather than a `Child` handle) lets any process tear a VM
+    /// down: QEMU is daemonized and reparented to an init-like ancestor (PID 1
+    /// of the test action's execution environment), so no process holds a
+    /// handle on it. The teardown of that environment (bazel's `linux-sandbox`)
+    /// remains the final safety net.
     fn stop_qemu(&self, pid_path: &Path) {
         let Ok(contents) = std::fs::read_to_string(pid_path) else {
             return;
