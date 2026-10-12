@@ -1239,6 +1239,56 @@ fn stable64_read_out_of_bounds() {
     assert_eq!(trap_code, StableMemoryOutOfBounds);
 }
 
+/// A `stable64_read`/`stable64_write` with a `size` argument so large that
+/// `size + overhead` would overflow an `i64` must still trap cleanly on the
+/// bounds check, rather than driving the instruction counter negative via the
+/// up-front metering and surfacing as an out-of-instructions error. This guards
+/// the ordering in the Wasm replacement functions where metering happens only
+/// after `size` is known to fit in a heap address.
+#[test]
+fn stable64_read_write_huge_size_traps_on_bounds() {
+    fn func_ref(name: &str) -> FuncRef {
+        FuncRef::Method(WasmMethod::Update(name.to_string()))
+    }
+
+    // 2^63: `size + overhead` wraps to a negative i64, which previously forced
+    // the instruction counter to a hugely negative value before any bounds
+    // check ran.
+    let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+            (import "ic0" "stable64_read"
+                (func $stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+            (import "ic0" "stable64_write"
+                (func $stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+            (func (export "canister_update test_read")
+                (drop (call $stable_grow (i32.const 1)))
+                (call $stable64_read (i64.const 0) (i64.const 0) (i64.const 0x8000000000000000))
+            )
+            (func (export "canister_update test_write")
+                (drop (call $stable_grow (i32.const 1)))
+                (call $stable64_write (i64.const 0) (i64.const 0) (i64.const 0x8000000000000000))
+            )
+            (memory 1 1)
+        )"#;
+
+    use TrapCode::*;
+
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    let err = instance.run(func_ref("test_read")).unwrap_err();
+    let HypervisorError::Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {err}");
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
+
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    let err = instance.run(func_ref("test_write")).unwrap_err();
+    let HypervisorError::Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {err}");
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
+}
+
 #[test]
 fn stable_write_out_of_bounds() {
     fn func_ref(name: &str) -> FuncRef {
