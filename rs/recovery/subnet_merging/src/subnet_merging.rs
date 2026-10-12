@@ -128,7 +128,9 @@ impl SubnetMerging {
     /// Both subnets:
     /// 1) Are `Application` (or `VerifiedApplication`) subnets;
     /// 2) Are not Chain key subnets;
-    /// 3) Are not halted: this tool halts them itself, at their next CUP;
+    /// 3) Are neither halted nor scheduled to halt at their next CUP: the
+    ///    source subnet has to keep executing to drain, and this tool halts
+    ///    both subnets itself, at the CUP whose state it merges;
     /// 4) Have the same subnet type, as the merged state inherits the
     ///    destination subnet's.
     ///
@@ -193,10 +195,15 @@ impl SubnetMerging {
             ));
         }
 
-        if subnet_record.is_halted {
+        // TODO: Once this tool halts the subnets itself, skip this check when
+        // resuming at or after that step (as `subnet_splitting` does with
+        // `check_whether_halted`): the preconditions are checked whenever the tool
+        // starts, `--resume` included.
+        if subnet_record.is_halted || subnet_record.halt_at_cup_height {
             return validation_error(String::from(
-                "Subnet should not be halted: subnet merging halts both subnets itself, at the \
-                 CUP whose state it merges",
+                "Subnet should neither be halted nor scheduled to halt at its next CUP: the \
+                 subnet that is merged away has to keep executing to drain, and subnet merging \
+                 halts both subnets itself, at the CUP whose state it merges",
             ));
         }
 
