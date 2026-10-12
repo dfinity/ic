@@ -11,7 +11,9 @@
 //! * Farm (without `--no-logs`): ElasticSearch, fed by the Vector VM
 //!   (`vector_vm.rs`, `assets/vector.toml`). The query is filtered on
 //!   `ic == GroupSetup::infra_group_name` and the `GroupStartTime..now` range
-//!   and uses `match_phrase` as a server-side pre-filter.
+//!   and uses `match_phrase` as a server-side pre-filter. Zero hits are
+//!   cross-checked against a count of the group's lines, so a group whose logs
+//!   never reached ElasticSearch is warned about instead of passing silently.
 //! * Local (with `--stream-ic-node-logs`): the JSON Lines files that
 //!   `logs_stream_task` persists under `<group_dir>/journald_logs/nodes/`, one
 //!   per IC node. Only that directory is scanned, mirroring the `ic` filter
@@ -37,10 +39,11 @@
 //! real matches panic.
 
 use crate::driver::{
+    config::NODES_INFO,
     group::GroupStartTime,
     logs_stream_task::{JOURNALD_LOG_FILE_EXTENSION, JournalRecord},
     test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::{HasTopologySnapshot, IcNodeContainer},
+    test_env_api::NodesInfo,
     test_setup::GroupSetup,
 };
 use crate::util::block_on;
@@ -79,6 +82,8 @@ const MAX_SAMPLES_PER_PATTERN: usize = 3;
 /// replica panicking while being killed) time to land on disk.
 const LOCAL_LOGS_SETTLE_DELAY: Duration = Duration::from_secs(5);
 const ELASTICSEARCH_SEARCH_URL: &str = "https://elasticsearch.testnet.dfinity.network/testnet-vector-push-*/_search?filter_path=hits.hits";
+const ELASTICSEARCH_COUNT_URL: &str =
+    "https://elasticsearch.testnet.dfinity.network/testnet-vector-push-*/_count";
 const ES_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const ES_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -158,6 +163,7 @@ fn check_elasticsearch(
     };
     let hits = fetch_elasticsearch_lines(logger, group_name, start_time, Utc::now(), patterns)?;
     if hits.is_empty() {
+        warn_if_no_logs_were_shipped(env, logger, group_name, start_time);
         return None;
     }
     let matches = attribute_lines(&hits, compiled);
@@ -218,29 +224,31 @@ fn check_journald_log_files(
 /// that is expected (no IC deployed) or a sign that `logs_stream_task` never
 /// captured the IC node logs.
 fn log_no_records_hint(env: &TestEnv, logger: &Logger, nodes_dir: &Path) {
-    match env.safe_topology_snapshot() {
-        Err(_) => info!(
+    let node_count = deployed_ic_nodes(env);
+    if node_count == 0 {
+        info!(
             logger,
             "No IC node journald records under {} and no IC is deployed in this group \
              => skipping unallowed log pattern check.",
             nodes_dir.display()
-        ),
-        Ok(topology) => {
-            let node_count = topology
-                .subnets()
-                .flat_map(|subnet| subnet.nodes())
-                .chain(topology.unassigned_nodes())
-                .chain(topology.api_boundary_nodes())
-                .count();
-            warn!(
-                logger,
-                "The IC has {node_count} node(s) but there are no journald records under {}: \
-                 logs_stream_task never captured the IC node logs \
-                 => skipping unallowed log pattern check.",
-                nodes_dir.display()
-            );
-        }
+        );
+    } else {
+        warn!(
+            logger,
+            "{node_count} IC node(s) are deployed but there are no journald records under {}: \
+             logs_stream_task never captured the IC node logs \
+             => skipping unallowed log pattern check.",
+            nodes_dir.display()
+        );
     }
+}
+
+/// The number of IC node VMs the group deployed (`nodes_info.json`), which
+/// excludes registry-only nodes of tests that import mainnet state.
+fn deployed_ic_nodes(env: &TestEnv) -> usize {
+    env.read_json_object::<NodesInfo, _>(NODES_INFO)
+        .map(|nodes| nodes.len())
+        .unwrap_or(0)
 }
 
 /// A source-agnostic candidate log line: the ElasticSearch `_source` triple
@@ -443,6 +451,78 @@ fn panic_with_report(group_name: &str, report: &str) -> ! {
     );
 }
 
+/// POSTs `body` to `url` and returns the parsed JSON response.
+fn elasticsearch_post(url: &str, body: &serde_json::Value) -> reqwest::Result<serde_json::Value> {
+    block_on(async {
+        reqwest::Client::builder()
+            .connect_timeout(ES_CONNECT_TIMEOUT)
+            .timeout(ES_REQUEST_TIMEOUT)
+            .build()?
+            .post(url)
+            .json(body)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await
+    })
+}
+
+/// Zero pattern hits is also what a group whose IC node logs never reached
+/// ElasticSearch looks like, in which case the check was vacuous; say so.
+fn warn_if_no_logs_were_shipped(
+    env: &TestEnv,
+    logger: &Logger,
+    group_name: &str,
+    start_time: DateTime<Utc>,
+) {
+    let deployed_nodes = deployed_ic_nodes(env);
+    if deployed_nodes == 0 {
+        return;
+    }
+    let body = serde_json::json!({
+        "query": {
+            "bool": {
+                "must": [
+                    { "match_phrase": { "ic": group_name } },
+                    { "range": { "timestamp": {
+                        "gte": start_time.to_rfc3339(),
+                        "lte": Utc::now().to_rfc3339(),
+                    }}},
+                ],
+            }
+        },
+    });
+    info!(
+        logger,
+        "Querying {ELASTICSEARCH_COUNT_URL} for the number of log lines of group {group_name} with body: {body} ..."
+    );
+    match elasticsearch_post(ELASTICSEARCH_COUNT_URL, &body) {
+        Ok(response) => match response.get("count").and_then(|count| count.as_u64()) {
+            Some(0) => warn!(
+                logger,
+                "No log line of group {group_name} reached ElasticSearch although it deployed \
+                 {deployed_nodes} IC node(s) (no Vector VM, or a dead pipeline): the unallowed \
+                 log pattern check was vacuous."
+            ),
+            Some(lines) => info!(
+                logger,
+                "{lines} log line(s) of group {group_name} reached ElasticSearch; none matched an \
+                 unallowed pattern."
+            ),
+            None => warn!(
+                logger,
+                "Could not count the log lines of group {group_name}: unexpected ElasticSearch \
+                 response {response}"
+            ),
+        },
+        Err(e) => warn!(
+            logger,
+            "Could not count the log lines of group {group_name} in ElasticSearch ({e:?})."
+        ),
+    }
+}
+
 /// Queries ElasticSearch for the IC log lines of `group_name` in the given time
 /// range whose `MESSAGE` matches (ES `match_phrase`) at least one pattern
 /// without matching that pattern's exclusions. `None` on any transport or parse
@@ -495,35 +575,8 @@ fn fetch_elasticsearch_lines(
         "Querying {ELASTICSEARCH_SEARCH_URL} for unallowed log patterns with body: {body} ..."
     );
 
-    let client = match reqwest::Client::builder()
-        .connect_timeout(ES_CONNECT_TIMEOUT)
-        .timeout(ES_REQUEST_TIMEOUT)
-        .build()
-    {
-        Ok(c) => c,
-        Err(e) => {
-            info!(
-                logger,
-                "Failed to build reqwest client for ES query ({e:?}) \
-                 => skipping unallowed log pattern check."
-            );
-            return None;
-        }
-    };
-
-    let response: Result<serde_json::Value, reqwest::Error> = block_on(async {
-        client
-            .post(ELASTICSEARCH_SEARCH_URL)
-            .json(&body)
-            .send()
-            .await?
-            .error_for_status()?
-            .json::<serde_json::Value>()
-            .await
-    });
-
-    let value = match response {
-        Ok(v) => v,
+    let value = match elasticsearch_post(ELASTICSEARCH_SEARCH_URL, &body) {
+        Ok(value) => value,
         Err(e) => {
             info!(
                 logger,

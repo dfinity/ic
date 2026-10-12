@@ -1,6 +1,6 @@
-use crate::driver::test_env::HasIcPrepDir;
 use crate::driver::vector_vm::VectorVm;
 use crate::driver::{
+    config::NODES_INFO,
     constants::{GROUP_SETUP_DIR, KEEPALIVE_INTERVAL},
     context::GroupContext,
     test_env::TestEnv,
@@ -13,10 +13,17 @@ pub(crate) const VECTOR_LOGGING_TASK_NAME: &str = "vector_logging";
 pub(crate) fn vector_logging_task(group_ctx: GroupContext, start_time: DateTime<Utc>) -> () {
     let logger = group_ctx.logger().clone();
     debug!(logger, ">>> {VECTOR_LOGGING_TASK_NAME}");
-    let setup_dir = group_ctx.group_dir.join(GROUP_SETUP_DIR);
-    let env = TestEnv::new_without_duplicating_logger(setup_dir.clone(), logger.clone());
-    while !setup_dir.exists() || env.prep_dir("").is_none() {
-        info!(logger, "Setup and/or prep directories not created yet.");
+    let env = TestEnv::new_without_duplicating_logger(
+        group_ctx.group_dir.join(GROUP_SETUP_DIR),
+        logger.clone(),
+    );
+    // `nodes_info.json` is written once the first IC (named or not) starts its
+    // node VMs; a group without IC nodes never gets a Vector VM.
+    while !env.get_json_path(NODES_INFO).exists() {
+        info!(
+            logger,
+            "Waiting for IC nodes to be deployed before starting the Vector VM."
+        );
         std::thread::sleep(KEEPALIVE_INTERVAL);
     }
 
