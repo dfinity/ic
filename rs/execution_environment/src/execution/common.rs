@@ -38,7 +38,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmMethod};
 use ic_types::time::CoarseTime;
-use ic_types::{NumInstructions, PrincipalId, Time, UserId};
+use ic_types::{NumInstructions, PrincipalId, SnapshotId, Time, UserId};
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use lazy_static::lazy_static;
 use prometheus::IntCounter;
@@ -451,19 +451,22 @@ fn validate_controller_or_subnet_admin(
 }
 
 /// The access to a canister that `validate_sender` validates.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum CanisterAccess {
     /// Calling the management canister method targeting the canister.
     Method(Ic00Method),
     /// Using the chunks in the wasm chunk store of the canister as the store
     /// canister of `install_chunked_code`.
     InstallChunkedCodeStore,
-    /// Reading a private custom section of the canister via
+    /// Reading the private custom section `section_name` of the canister via
     /// `canister_metadata`.
-    ReadPrivateCustomSection,
-    /// Loading a snapshot of the canister into a different canister via
-    /// `load_canister_snapshot`.
-    LoadSnapshotIntoOtherCanister,
+    ReadPrivateCustomSection { section_name: String },
+    /// Loading the snapshot `snapshot_id` of the canister into the different
+    /// canister `canister_id` via `load_canister_snapshot`.
+    LoadSnapshotIntoOtherCanister {
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
 }
 
 /// Validates that `sender` is allowed the access `access` to `canister` on a
@@ -523,9 +526,34 @@ fn validate_sender(
                 validate_controller(canister, sender)
             };
         }
-        CanisterAccess::ReadPrivateCustomSection
-        | CanisterAccess::LoadSnapshotIntoOtherCanister => {
-            return validate_controller(canister, sender);
+        // Reading a private custom section requires being a controller of the
+        // canister. Other senders get the same error as for a missing custom
+        // section, which `canister_metadata` has always returned for them.
+        CanisterAccess::ReadPrivateCustomSection { section_name } => {
+            return if canister.controllers().contains(sender) {
+                Ok(())
+            } else {
+                Err(CanisterManagerError::CanisterMetadataSectionNotFound {
+                    canister_id: canister.canister_id(),
+                    section_name,
+                })
+            };
+        }
+        // Loading the snapshot of a canister into a different canister
+        // requires being a controller of the canister owning the snapshot.
+        CanisterAccess::LoadSnapshotIntoOtherCanister {
+            canister_id,
+            snapshot_id,
+        } => {
+            return if canister.controllers().contains(sender) {
+                Ok(())
+            } else {
+                Err(CanisterManagerError::CanisterSnapshotNotController {
+                    sender: *sender,
+                    canister_id,
+                    snapshot_id,
+                })
+            };
         }
         CanisterAccess::Method(method) => method,
     };
@@ -1359,8 +1387,13 @@ mod test {
         ));
         cases.push((
             vec![
-                CanisterAccess::ReadPrivateCustomSection,
-                CanisterAccess::LoadSnapshotIntoOtherCanister,
+                CanisterAccess::ReadPrivateCustomSection {
+                    section_name: "section".to_string(),
+                },
+                CanisterAccess::LoadSnapshotIntoOtherCanister {
+                    canister_id: CanisterId::from_u64(43),
+                    snapshot_id: SnapshotId::from((canister_id, 0)),
+                },
             ],
             vec![controller],
             vec![controller],
@@ -1388,7 +1421,7 @@ mod test {
                         for sender in senders {
                             let result = validate_sender(
                                 &sender,
-                                *access,
+                                access.clone(),
                                 &canister,
                                 subnet_type,
                                 cost_schedule,

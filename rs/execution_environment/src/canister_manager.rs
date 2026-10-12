@@ -1075,19 +1075,15 @@ impl CanisterManager {
 
         match custom_section.visibility() {
             CustomSectionType::Public => {}
-            // A sender not allowed to read a private custom section must not
-            // learn that it exists.
             CustomSectionType::Private => validate_sender_on_subnet(
                 &sender,
-                CanisterAccess::ReadPrivateCustomSection,
+                CanisterAccess::ReadPrivateCustomSection {
+                    section_name: section_name.to_string(),
+                },
                 canister,
                 network_topology,
                 self.config.own_subnet_id,
-            )
-            .map_err(|_| CanisterManagerError::CanisterMetadataSectionNotFound {
-                canister_id: canister.canister_id(),
-                section_name: section_name.to_string(),
-            })?,
+            )?,
         }
         Ok(CanisterMetadataResponse::new(
             custom_section.content().to_vec(),
@@ -2206,18 +2202,14 @@ impl CanisterManager {
                     if snapshot_canister_id != canister_id {
                         validate_sender_on_subnet(
                             &sender,
-                            CanisterAccess::LoadSnapshotIntoOtherCanister,
+                            CanisterAccess::LoadSnapshotIntoOtherCanister {
+                                canister_id,
+                                snapshot_id,
+                            },
                             &snapshot_canister,
                             network_topology,
                             self.config.own_subnet_id,
-                        )
-                        .map_err(|_| {
-                            CanisterManagerError::CanisterSnapshotNotController {
-                                sender,
-                                canister_id,
-                                snapshot_id,
-                            }
-                        })?;
+                        )?;
                     }
                     snapshot.clone()
                 }
