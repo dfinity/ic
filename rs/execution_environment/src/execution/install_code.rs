@@ -1,7 +1,7 @@
 // This module defines types and functions common between canister installation
 // and upgrades.
 
-use crate::execution::common::{log_dirty_pages, validate_sender_on_subnet};
+use crate::execution::common::{CanisterAccess, log_dirty_pages, validate_sender_on_subnet};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
@@ -538,7 +538,7 @@ impl InstallCodeHelper {
 
         validate_sender_on_subnet(
             &original.sender,
-            original.method,
+            CanisterAccess::Method(original.method),
             &self.canister,
             &original.network_topology,
             config.own_subnet_id,
