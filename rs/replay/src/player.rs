@@ -703,17 +703,7 @@ impl Player {
         let (height, hash_raw) = {
             let height = self.state_manager.latest_state_height();
             self.wait_for_state(height);
-            // Poll rather than read the hash once: `wait_for_state` can return before the
-            // state manager has published the manifest of a checkpoint it already reports
-            // as the latest state. Only `StateNotFullyCertified` means that the latest
-            // state exists in memory only. Height 0 is never a checkpoint, so there is
-            // nothing to poll for.
-            let hash_raw = if height > Height::from(0) {
-                self.get_state_hash(height)
-            } else {
-                None
-            };
-            if let Some(hash_raw) = hash_raw {
+            if let Some(hash_raw) = self.get_state_hash(height) {
                 (height, hash_raw)
             } else if self.consensus_pool.is_some() {
                 // The latest state exists in memory only, so it has no hash. Report the
@@ -1766,7 +1756,7 @@ fn setup_registry(
 }
 
 /// Returns the state hash for the given height once it is computed. For non-checkpoints heights
-/// [`None`] is returned.
+/// [`None`] is returned, including height 0, which is never a checkpoint.
 ///
 /// Panicks when a permanent error other than `StateNotFullyCertified` is returned.
 fn get_state_hash<T>(
@@ -1774,6 +1764,12 @@ fn get_state_hash<T>(
     log: &ReplicaLogger,
     height: Height,
 ) -> Option<CryptoHashOfState> {
+    // Without any state the state manager reports height 0 as not committed yet forever, so
+    // polling for it would never end.
+    if height == Height::from(0) {
+        return None;
+    }
+
     info!(log, "Polling the state manager for height: {height}.");
 
     loop {
@@ -1997,6 +1993,16 @@ mod tests {
         });
 
         let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
+
+        assert_eq!(state_hash, None);
+    }
+
+    #[test]
+    fn get_state_hash_returns_none_for_height_0_test() {
+        // Without expectations the mock panics if the state manager is consulted at all.
+        let state_manager = MockStateManager::new();
+
+        let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(0));
 
         assert_eq!(state_hash, None);
     }
