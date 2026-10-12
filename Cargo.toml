@@ -698,7 +698,7 @@ getrandom = { version = "0.2", features = ["custom"] }
 gpt = "4.1"
 hex = { version = "0.4.3", features = ["serde"] }
 hex-literal = "1.1"
-hickory-resolver = "0.26.1"
+hickory-resolver = "0.26.3"
 hkdf = "^0.12"
 hmac = "^0.12"
 http = "1.3.1"

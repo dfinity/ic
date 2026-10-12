@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "7574ad99d5a416635fa1b66d8161465eff119e9f033a8e0cfdaa1add7280a72e",
+  "checksum": "d4e719583881cf898774f83b5661851ff3da30493e262b0832a817b5022e50da",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17280,7 +17280,7 @@
             "target": "hex_literal"
           },
           {
-            "id": "hickory-resolver 0.26.1",
+            "id": "hickory-resolver 0.26.3",
             "target": "hickory_resolver"
           },
           {
@@ -17497,7 +17497,7 @@
             "target": "intmap"
           },
           {
-            "id": "ipnet 2.10.1",
+            "id": "ipnet 2.12.2",
             "target": "ipnet"
           },
           {
@@ -24097,7 +24097,7 @@
       ],
       "version": "0.1.1"
     },
-    "hickory-net 0.26.1": {
+    "hickory-net 0.26.3": {
       "common_attrs": {
         "crate_features": [
           "__dnssec",
@@ -24148,7 +24148,7 @@
               "target": "h2"
             },
             {
-              "id": "hickory-proto 0.26.1",
+              "id": "hickory-proto 0.26.3",
               "target": "hickory_proto"
             },
             {
@@ -24160,7 +24160,7 @@
               "target": "idna"
             },
             {
-              "id": "ipnet 2.10.1",
+              "id": "ipnet 2.12.2",
               "target": "ipnet"
             },
             {
@@ -24244,8 +24244,8 @@
       "package_url": "https://github.com/hickory-dns/hickory-dns",
       "repository": {
         "Http": {
-          "sha256": "e2295ed2f9c31e471e1428a8f88a3f0e1f4b27c15049592138d1eebe9c35b183",
-          "url": "https://static.crates.io/crates/hickory-net/0.26.1/download"
+          "sha256": "c480823ed7c2c5d0f09c41020cb6b7c28029ce60ec42dc942158dcf22f8e0a4d",
+          "url": "https://static.crates.io/crates/hickory-net/0.26.3/download"
         }
       },
       "targets": [
@@ -24256,9 +24256,9 @@
           }
         }
       ],
-      "version": "0.26.1"
+      "version": "0.26.3"
     },
-    "hickory-proto 0.26.1": {
+    "hickory-proto 0.26.3": {
       "common_attrs": {
         "crate_features": [
           "__dnssec",
@@ -24286,7 +24286,7 @@
               "target": "idna"
             },
             {
-              "id": "ipnet 2.10.1",
+              "id": "ipnet 2.12.2",
               "target": "ipnet"
             },
             {
@@ -24348,8 +24348,8 @@
       "package_url": "https://github.com/hickory-dns/hickory-dns",
       "repository": {
         "Http": {
-          "sha256": "0bab31817bfb44672a252e97fe81cd0c18d1b2cf892108922f6818820df8c643",
-          "url": "https://static.crates.io/crates/hickory-proto/0.26.1/download"
+          "sha256": "12b92608f679a6fa515dd1d15c1ff89443026e391200a2c840c7afcba482893d",
+          "url": "https://static.crates.io/crates/hickory-proto/0.26.3/download"
         }
       },
       "targets": [
@@ -24360,9 +24360,9 @@
           }
         }
       ],
-      "version": "0.26.1"
+      "version": "0.26.3"
     },
-    "hickory-resolver 0.26.1": {
+    "hickory-resolver 0.26.3": {
       "common_attrs": {
         "crate_features": [
           "__dnssec",
@@ -24387,15 +24387,15 @@
               "target": "futures_util"
             },
             {
-              "id": "hickory-net 0.26.1",
+              "id": "hickory-net 0.26.3",
               "target": "hickory_net"
             },
             {
-              "id": "hickory-proto 0.26.1",
+              "id": "hickory-proto 0.26.3",
               "target": "hickory_proto"
             },
             {
-              "id": "ipnet 2.10.1",
+              "id": "ipnet 2.12.2",
               "target": "ipnet"
             },
             {
@@ -24415,7 +24415,7 @@
               "target": "rand"
             },
             {
-              "id": "resolv-conf 0.7.0",
+              "id": "resolv-conf 0.7.6",
               "target": "resolv_conf"
             },
             {
@@ -24475,8 +24475,8 @@
       "package_url": "https://github.com/hickory-dns/hickory-dns",
       "repository": {
         "Http": {
-          "sha256": "f0d58d28879ceecde6607729660c2667a081ccdc082e082675042793960f178c",
-          "url": "https://static.crates.io/crates/hickory-resolver/0.26.1/download"
+          "sha256": "3f3da5255c95d5a716857d54b5b8f4e8d67c3484d3beaaaae2ce25063b3ba981",
+          "url": "https://static.crates.io/crates/hickory-resolver/0.26.3/download"
         }
       },
       "targets": [
@@ -24487,7 +24487,7 @@
           }
         }
       ],
-      "version": "0.26.1"
+      "version": "0.26.3"
     },
     "hkdf 0.12.4": {
       "common_attrs": {
@@ -24601,59 +24601,6 @@
         }
       ],
       "version": "0.5.9"
-    },
-    "hostname 0.3.1": {
-      "common_attrs": {
-        "crate_features": [
-          "default"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "match_cfg 0.1.0",
-              "target": "match_cfg"
-            }
-          ],
-          "selects": {
-            "cfg(any(unix, target_os = \"redox\"))": [
-              {
-                "id": "libc 0.2.186",
-                "target": "libc"
-              }
-            ],
-            "cfg(target_os = \"windows\")": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015"
-      },
-      "library_target_name": "hostname",
-      "license": "MIT",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "MIT"
-      ],
-      "name": "hostname",
-      "package_url": "https://github.com/svartalf/hostname",
-      "repository": {
-        "Http": {
-          "sha256": "3c731c3e10504cc8ed35cfe2f1db4c9274c3d35fa486e3b31df46f068ef3e867",
-          "url": "https://static.crates.io/crates/hostname/0.3.1/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hostname",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.3.1"
     },
     "hostname 0.4.0": {
       "common_attrs": {
@@ -25504,7 +25451,7 @@
               "target": "hyper"
             },
             {
-              "id": "ipnet 2.10.1",
+              "id": "ipnet 2.12.2",
               "target": "ipnet"
             },
             {
@@ -26001,11 +25948,11 @@
             "target": "hex"
           },
           {
-            "id": "hickory-proto 0.26.1",
+            "id": "hickory-proto 0.26.3",
             "target": "hickory_proto"
           },
           {
-            "id": "hickory-resolver 0.26.1",
+            "id": "hickory-resolver 0.26.3",
             "target": "hickory_resolver"
           },
           {
@@ -26053,7 +26000,7 @@
             "target": "instant_acme"
           },
           {
-            "id": "ipnet 2.10.1",
+            "id": "ipnet 2.12.2",
             "target": "ipnet"
           },
           {
@@ -30557,7 +30504,7 @@
       ],
       "version": "0.3.2"
     },
-    "ipnet 2.10.1": {
+    "ipnet 2.12.2": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -30583,8 +30530,8 @@
       "package_url": "https://github.com/krisprice/ipnet",
       "repository": {
         "Http": {
-          "sha256": "ddc24109865250148c2e0f3d25d4f0f479571723792d3802153c60922a4fb708",
-          "url": "https://static.crates.io/crates/ipnet/2.10.1/download"
+          "sha256": "791930b43c0d5973160d90a8f3894509f2b273430f5c5c73b668636d0287c5c0",
+          "url": "https://static.crates.io/crates/ipnet/2.12.2/download"
         }
       },
       "targets": [
@@ -30595,7 +30542,7 @@
           }
         }
       ],
-      "version": "2.10.1"
+      "version": "2.12.2"
     },
     "ipnetwork 0.21.1": {
       "common_attrs": {
@@ -34689,39 +34636,6 @@
         }
       ],
       "version": "0.35.0"
-    },
-    "match_cfg 0.1.0": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "use_core"
-        ],
-        "edition": "2015"
-      },
-      "library_target_name": "match_cfg",
-      "license": "MIT/Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "match_cfg",
-      "package_url": "https://github.com/gnzlbg/match_cfg",
-      "repository": {
-        "Http": {
-          "sha256": "ffbee8634e0d45d258acb448e7eaab3fce7a0a467395d4d9f228e3c1f01fb2e4",
-          "url": "https://static.crates.io/crates/match_cfg/0.1.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "match_cfg",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.0"
     },
     "match_token 0.35.0": {
       "common_attrs": {
@@ -41395,7 +41309,7 @@
             "target": "either"
           },
           {
-            "id": "ipnet 2.10.1",
+            "id": "ipnet 2.12.2",
             "target": "ipnet"
           },
           {
@@ -45453,7 +45367,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.26.1",
+                "id": "hickory-resolver 0.26.3",
                 "target": "hickory_resolver"
               },
               {
@@ -45495,7 +45409,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.26.1",
+                "id": "hickory-resolver 0.26.3",
                 "target": "hickory_resolver"
               },
               {
@@ -45607,7 +45521,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.26.1",
+                "id": "hickory-resolver 0.26.3",
                 "target": "hickory_resolver"
               },
               {
@@ -45649,7 +45563,7 @@
                 "target": "h2"
               },
               {
-                "id": "hickory-resolver 0.26.1",
+                "id": "hickory-resolver 0.26.3",
                 "target": "hickory_resolver"
               },
               {
@@ -45710,37 +45624,26 @@
       ],
       "version": "0.13.4"
     },
-    "resolv-conf 0.7.0": {
+    "resolv-conf 0.7.6": {
       "common_attrs": {
         "crate_features": [
-          "hostname",
           "system"
         ],
-        "deps": [
-          {
-            "id": "hostname 0.3.1",
-            "target": "hostname"
-          },
-          {
-            "id": "quick-error 1.2.3",
-            "target": "quick_error"
-          }
-        ],
-        "edition": "2015"
+        "edition": "2021"
       },
       "library_target_name": "resolv_conf",
-      "license": "MIT/Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_file": "LICENSE-APACHE",
       "license_ids": [
         "Apache-2.0",
         "MIT"
       ],
       "name": "resolv-conf",
-      "package_url": "http://github.com/tailhook/resolv-conf",
+      "package_url": "https://github.com/hickory-dns/resolv-conf",
       "repository": {
         "Http": {
-          "sha256": "52e44394d2086d010551b14b53b1f24e31647570cd1deb0379e2c21b329aba00",
-          "url": "https://static.crates.io/crates/resolv-conf/0.7.0/download"
+          "sha256": "1e061d1b48cb8d38042de4ae0a7a6401009d6143dc80d2e2d6f31f0bdd6470c7",
+          "url": "https://static.crates.io/crates/resolv-conf/0.7.6/download"
         }
       },
       "targets": [
@@ -45751,7 +45654,7 @@
           }
         }
       ],
-      "version": "0.7.0"
+      "version": "0.7.6"
     },
     "retry 2.1.0": {
       "common_attrs": {
@@ -58328,7 +58231,7 @@
             "target": "idna"
           },
           {
-            "id": "ipnet 2.10.1",
+            "id": "ipnet 2.12.2",
             "target": "ipnet"
           },
           {
@@ -58433,7 +58336,7 @@
             "target": "parking_lot"
           },
           {
-            "id": "resolv-conf 0.7.0",
+            "id": "resolv-conf 0.7.6",
             "target": "resolv_conf"
           },
           {
@@ -66939,7 +66842,7 @@
     "hashlink 0.10.0",
     "hex 0.4.3",
     "hex-literal 1.1.0",
-    "hickory-resolver 0.26.1",
+    "hickory-resolver 0.26.3",
     "hkdf 0.12.4",
     "hmac 0.12.1",
     "hpke 0.13.0",
@@ -66994,7 +66897,7 @@
     "inotify 0.11.2",
     "insta 1.31.0",
     "intmap 1.1.0",
-    "ipnet 2.10.1",
+    "ipnet 2.12.2",
     "itertools 0.12.0",
     "json5 0.4.1",
     "jsonrpc 0.20.1",
