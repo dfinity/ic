@@ -994,8 +994,7 @@ fn dts_abort_of_replicated_execution_records_load_connection_metrics_once() {
         .canister_state(b_id)
         .system_state
         .canister_metrics()
-        .load_metrics()
-        .get();
+        .load_metrics();
     assert_eq!(load_metrics.local_subnet_messages_executed(), 1);
     let connection_metrics = test
         .canister_state(b_id)
