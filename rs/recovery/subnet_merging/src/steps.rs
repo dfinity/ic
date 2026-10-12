@@ -97,7 +97,7 @@ impl Step for CheckCoolingDownStep {
         );
 
         self.layout
-            .write_cooling_down_registry_version(cooling_down_version.get())
+            .write_cooling_down_registry_version(source_subnet_id, cooling_down_version.get())
     }
 }
 
@@ -125,7 +125,9 @@ impl Step for CheckMergeReadinessStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let registry_version = self.layout.read_cooling_down_registry_version()?;
+        let registry_version = self
+            .layout
+            .read_cooling_down_registry_version(self.source_subnet_id)?;
 
         readiness::await_merge_readiness(
             &self.registry_helper,

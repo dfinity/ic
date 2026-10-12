@@ -69,8 +69,8 @@ pub struct SubnetMergingArgs {
     pub registry_timeout_secs: u64,
 
     /// How long to wait between two evaluations of a condition this tool waits
-    /// for, in seconds.
-    #[clap(long, default_value = "10")]
+    /// for, in seconds. Must be positive.
+    #[clap(long, default_value = "10", value_parser = clap::value_parser!(u64).range(1..))]
     pub poll_interval_secs: u64,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones.
