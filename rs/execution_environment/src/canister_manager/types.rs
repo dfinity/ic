@@ -946,22 +946,27 @@ impl From<CanisterManagerError> for UserError {
                     .map(|id| format!("{id}"))
                     .collect::<Vec<String>>()
                     .join(" ");
-                let action = match *role {
-                    ControlledCanisterRole::Target => "control it".to_string(),
+                let requirement = match *role {
+                    ControlledCanisterRole::Target => {
+                        format!("Only the controllers of the canister {canister_id} can control it")
+                    }
+                    // The store canister itself can also use its chunks.
                     ControlledCanisterRole::ChunkStore { target_canister_id } => format!(
-                        "use its chunks to install code on the canister {target_canister_id}"
+                        "Only the canister {canister_id} itself and its controllers can use its \
+                        chunks to install code on the canister {target_canister_id}"
                     ),
                     ControlledCanisterRole::SnapshotOwner {
                         target_canister_id,
                         snapshot_id,
                     } => format!(
-                        "load its snapshot {snapshot_id} into the canister {target_canister_id}"
+                        "Only the controllers of the canister {canister_id} can load its snapshot \
+                        {snapshot_id} into the canister {target_canister_id}"
                     ),
                 };
                 Self::new(
                     ErrorCode::CanisterInvalidController,
                     format!(
-                        "Only the controllers of the canister {canister_id} can {action}.\n\
+                        "{requirement}.\n\
                         Canister's controllers: {controllers_expected}\n\
                         Sender's ID: {controller_provided}{additional_help}"
                     ),

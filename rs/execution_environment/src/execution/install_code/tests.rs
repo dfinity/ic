@@ -2229,7 +2229,7 @@ fn install_chunked_fails_from_noncontroller_of_store() {
         Ok(WasmResult::Reject(reject)) => {
             assert!(
                 reject.contains(&format!(
-                    "Only the controllers of the canister {store_canister} can use its chunks to install code on the canister {target_canister}"
+                    "Only the canister {store_canister} itself and its controllers can use its chunks to install code on the canister {target_canister}"
                 )),
                 "Unexpected reject message {reject}"
             );
