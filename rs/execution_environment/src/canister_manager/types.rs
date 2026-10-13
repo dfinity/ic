@@ -589,18 +589,24 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: doc_ref("invalid-subnet-admin"),
             },
             CanisterManagerError::CanisterInvalidController { role, .. } => {
-                let canister = match **role {
-                    ControlledCanisterRole::Target => "the target canister",
-                    ControlledCanisterRole::ChunkStore { .. } => "the store canister",
+                let suggestion = match **role {
+                    ControlledCanisterRole::Target => {
+                        "Execute this call from a controller of the target canister or \
+                        add the current caller as a controller."
+                    }
+                    // The store canister itself can also use its chunks.
+                    ControlledCanisterRole::ChunkStore { .. } => {
+                        "Execute this call from the store canister itself or a controller \
+                        of the store canister, or add the current caller as a controller \
+                        of the store canister."
+                    }
                     ControlledCanisterRole::SnapshotOwner { .. } => {
-                        "the canister owning the snapshot"
+                        "Execute this call from a controller of the canister owning the \
+                        snapshot or add the current caller as a controller of that canister."
                     }
                 };
                 ErrorHelp::UserError {
-                    suggestion: format!(
-                        "Execute this call from a controller of {canister} or \
-                        add the current caller as a controller."
-                    ),
+                    suggestion: suggestion.to_string(),
                     doc_link: doc_ref("invalid-controller"),
                 }
             }
@@ -946,22 +952,27 @@ impl From<CanisterManagerError> for UserError {
                     .map(|id| format!("{id}"))
                     .collect::<Vec<String>>()
                     .join(" ");
-                let action = match *role {
-                    ControlledCanisterRole::Target => "control it".to_string(),
+                let requirement = match *role {
+                    ControlledCanisterRole::Target => {
+                        format!("Only the controllers of the canister {canister_id} can control it")
+                    }
+                    // The store canister itself can also use its chunks.
                     ControlledCanisterRole::ChunkStore { target_canister_id } => format!(
-                        "use its chunks to install code on the canister {target_canister_id}"
+                        "Only the canister {canister_id} itself and its controllers can use its \
+                        chunks to install code on the canister {target_canister_id}"
                     ),
                     ControlledCanisterRole::SnapshotOwner {
                         target_canister_id,
                         snapshot_id,
                     } => format!(
-                        "load its snapshot {snapshot_id} into the canister {target_canister_id}"
+                        "Only the controllers of the canister {canister_id} can load its snapshot \
+                        {snapshot_id} into the canister {target_canister_id}"
                     ),
                 };
                 Self::new(
                     ErrorCode::CanisterInvalidController,
                     format!(
-                        "Only the controllers of the canister {canister_id} can {action}.\n\
+                        "{requirement}.\n\
                         Canister's controllers: {controllers_expected}\n\
                         Sender's ID: {controller_provided}{additional_help}"
                     ),
