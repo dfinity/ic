@@ -64,16 +64,21 @@ use slog::info;
 use std::collections::BTreeSet;
 use tempfile::NamedTempFile;
 
-// A short DKG interval makes the app subnet halt faster, as it halts at the next CUP height, and
-// makes the system subnet generate its vetKD key faster.
+// A short DKG interval makes the app subnet halt faster, as it halts at the next CUP height.
 const DKG_INTERVAL: u64 = 14;
+// The system subnet's first signed CUP, after its first DKG interval, holds all keys (vetKD too).
+// It must exist when `test_extract_master_public_keys` first downloads a CUP, or that test panics.
+// The subnet must also answer the recovery's `SetupInitialDKG` request within 4-5 DKG intervals,
+// which include the 10-20s until it can use the registry version that the test creates right
+// before the recovery. At most 5 blocks per second, 4 intervals of 49+1 blocks take at least 40s.
+const SYSTEM_SUBNET_DKG_INTERVAL: u64 = 49;
 const NODES_COUNT: usize = 4;
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::fast_single_node(SubnetType::System)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_dkg_interval_length(Height::from(SYSTEM_SUBNET_DKG_INTERVAL))
                 .with_chain_key_config(ChainKeyConfig {
                     key_configs: make_key_ids_for_all_schemes()
                         .into_iter()
