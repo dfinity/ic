@@ -27,7 +27,7 @@ use ic_types::{
 use ic_types::{ComputeAllocation, MemoryAllocation};
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_universal_canister::{call_args, wasm};
-use more_asserts::{assert_ge, assert_gt, assert_lt};
+use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use slog::Level;
 
 #[test]
@@ -3428,8 +3428,10 @@ fn test_ic0_msg_deadline_best_effort_responses() {
 
 /// Canister A calls canister B with the given callbacks and executes the
 /// response callback (in as many slices as needed) with a slice instruction
-/// limit of 1M. Returns the replica logs.
-fn execute_callbacks_and_get_logs(callbacks: ic_universal_canister::CallArgs) -> LogEntriesAssert {
+/// limit of 1M. Returns the replica logs (and their messages).
+fn execute_callbacks_and_get_logs(
+    callbacks: ic_universal_canister::CallArgs,
+) -> (LogEntriesAssert, Vec<String>) {
     let logger = InMemoryReplicaLogger::new();
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
@@ -3465,31 +3467,62 @@ fn execute_callbacks_and_get_logs(callbacks: ic_universal_canister::CallArgs) ->
     );
 
     drop(test);
-    LogEntriesAssert::assert_that(logger.drain_logs())
+    let logs = logger.drain_logs();
+    let messages = logs.iter().map(|log| log.message.clone()).collect();
+    (LogEntriesAssert::assert_that(logs), messages)
 }
 
 const DTS_FINISHED_RESPONSE_LOG: &str = "[DTS] Finished response callback";
 const DTS_FINISHED_CLEANUP_LOG: &str = "[DTS] Finished cleanup callback";
 
+/// Parses the instructions executed in the last slice and the instructions
+/// used in total from the unique log message with the given prefix, e.g.,
+/// "[DTS] Finished ... after 1_234 / 5_678 instructions.".
+fn parse_dts_finished_instructions(messages: &[String], prefix: &str) -> (u64, u64) {
+    let [message] = messages
+        .iter()
+        .filter(|message| message.starts_with(prefix))
+        .collect::<Vec<_>>()[..]
+    else {
+        panic!("Expected exactly one log message starting with {prefix:?}: {messages:?}");
+    };
+    let parse = |s: &str| s.replace('_', "").parse::<u64>().unwrap();
+    let (_, instructions) = message.rsplit_once(" after ").unwrap();
+    let (slice, total) = instructions
+        .strip_suffix(" instructions.")
+        .unwrap()
+        .split_once(" / ")
+        .unwrap();
+    (parse(slice), parse(total))
+}
+
 #[test]
 fn dts_finished_log_not_emitted_for_short_response_callback() {
-    let logs = execute_callbacks_and_get_logs(call_args().on_reply(wasm().reply()));
+    let (logs, _) = execute_callbacks_and_get_logs(call_args().on_reply(wasm().reply()));
     logs.has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_RESPONSE_LOG)
         .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_CLEANUP_LOG);
 }
 
 #[test]
 fn dts_finished_log_emitted_for_long_response_callback() {
-    let logs = execute_callbacks_and_get_logs(
+    let (logs, messages) = execute_callbacks_and_get_logs(
         call_args().on_reply(wasm().instruction_counter_is_at_least(1_000_000)),
     );
     logs.has_only_one_message_containing(&Level::Info, DTS_FINISHED_RESPONSE_LOG)
         .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_CLEANUP_LOG);
+    // The callback executes slightly more than 1M instructions. In particular,
+    // the total must not include the 5M instructions (5% of the 100M message
+    // limit) reserved for the cleanup callback.
+    let (slice, total) = parse_dts_finished_instructions(&messages, DTS_FINISHED_RESPONSE_LOG);
+    assert_ge!(total, 1_000_000);
+    assert_lt!(total, 2_000_000);
+    assert_le!(slice, 1_000_000);
+    assert_lt!(slice, total);
 }
 
 #[test]
 fn dts_finished_log_not_emitted_for_short_cleanup_callback() {
-    let logs = execute_callbacks_and_get_logs(
+    let (logs, _) = execute_callbacks_and_get_logs(
         call_args()
             .on_reply(wasm().trap())
             .on_cleanup(wasm().build()),
@@ -3500,11 +3533,18 @@ fn dts_finished_log_not_emitted_for_short_cleanup_callback() {
 
 #[test]
 fn dts_finished_log_emitted_for_long_cleanup_callback() {
-    let logs = execute_callbacks_and_get_logs(
+    let (logs, messages) = execute_callbacks_and_get_logs(
         call_args()
             .on_reply(wasm().trap())
             .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000)),
     );
     logs.has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_RESPONSE_LOG)
         .has_only_one_message_containing(&Level::Info, DTS_FINISHED_CLEANUP_LOG);
+    // The total covers both the (short) response callback and the cleanup
+    // callback executing slightly more than 1M instructions.
+    let (slice, total) = parse_dts_finished_instructions(&messages, DTS_FINISHED_CLEANUP_LOG);
+    assert_ge!(total, 1_000_000);
+    assert_lt!(total, 2_000_000);
+    assert_le!(slice, 1_000_000);
+    assert_lt!(slice, total);
 }
