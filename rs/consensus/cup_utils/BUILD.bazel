@@ -10,12 +10,14 @@ rust_library(
     deps = [
         "//rs/consensus/dkg",
         "//rs/consensus/idkg",
+        "//rs/crypto",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/monitoring/logger",
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "//rs/registry/helpers",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:slog",
     ],
@@ -29,5 +31,6 @@ rust_test(
         "//rs/registry/keys",
         "//rs/types/types_test_utils",
         "@crate_index//:prost",
+        "@crate_index//:rstest",
     ],
 )

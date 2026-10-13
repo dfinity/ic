@@ -5,8 +5,11 @@ use std::{
 };
 use thiserror::Error;
 
-use ic_interfaces::p2p::consensus::{
-    ArtifactAssembler, AssembleResult, BouncerFactory, BouncerValue, Peers, ValidatedPoolReader,
+use ic_interfaces::{
+    canister_http::CanisterHttpPool,
+    p2p::consensus::{
+        ArtifactAssembler, AssembleResult, BouncerFactory, BouncerValue, Peers, ValidatedPoolReader,
+    },
 };
 use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
@@ -120,6 +123,7 @@ impl FetchStrippedConsensusArtifact {
         consensus_pool: Arc<RwLock<Pool>>,
         ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
         idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
+        canister_http_pool: Arc<RwLock<dyn CanisterHttpPool>>,
         bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
@@ -132,6 +136,7 @@ impl FetchStrippedConsensusArtifact {
             consensus_pool: consensus_pool_clone,
             ingress_pool: ingress_pool_clone,
             idkg_pool: idkg_pool_clone,
+            canister_http_pool,
             metrics: StrippedMessageSenderMetrics::new(&metrics_registry),
         });
 
@@ -663,6 +668,7 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_interfaces::p2p::consensus::BouncerValue;
     use ic_logger::no_op_logger;
+    use ic_p2p_test_utils::mocks::FakeCanisterHttpPool;
     use ic_p2p_test_utils::mocks::MockBouncerFactory;
     use ic_p2p_test_utils::mocks::MockTransport;
     use ic_p2p_test_utils::mocks::MockValidatedPoolReader;
@@ -1047,6 +1053,7 @@ mod tests {
             Arc::new(RwLock::new(consensus_pool)),
             Arc::new(RwLock::new(ingress_pool)),
             Arc::new(RwLock::new(idkg_pool)),
+            Arc::new(RwLock::new(FakeCanisterHttpPool::empty())),
             Arc::new(mock_bouncer_factory),
             MetricsRegistry::new(),
             NODE_1,
@@ -1144,6 +1151,7 @@ mod tests {
             Arc::new(RwLock::new(consensus_pool)),
             Arc::new(RwLock::new(ingress_pool)),
             Arc::new(RwLock::new(idkg_pool)),
+            Arc::new(RwLock::new(FakeCanisterHttpPool::empty())),
             Arc::new(mock_bouncer_factory),
             MetricsRegistry::new(),
             NODE_1,

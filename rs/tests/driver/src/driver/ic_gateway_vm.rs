@@ -60,14 +60,14 @@ const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 /// backend's variant of every system test by `_local_only_deps` in
 /// `rs/tests/system_tests.bzl`. Reading either on the Farm backend would panic,
 /// and must not happen: Farm uses a playnet certificate.
-struct DevRootCa {
+pub(crate) struct DevRootCa {
     /// PEM of the checked-in CA certificate, exactly as it sits in the images'
-    /// trust store. This is what the gateway serves as its chain and what a
-    /// driver-side client adds as a trust anchor.
-    cert_pem: String,
+    /// trust store. This is what the gateway and the local backend's time server
+    /// serve in their chains and what a driver-side client adds as a trust anchor.
+    pub(crate) cert_pem: String,
     /// The same CA as an `rcgen` issuer.
-    cert: rcgen::Certificate,
-    key: KeyPair,
+    pub(crate) cert: rcgen::Certificate,
+    pub(crate) key: KeyPair,
 }
 
 /// The PEM of the dev root CA certificate. See [`DevRootCa`].
@@ -82,7 +82,7 @@ fn dev_root_ca_cert_pem() -> Result<String> {
 }
 
 /// Loads the dev root CA so `rcgen` can issue certificates from it.
-fn dev_root_ca() -> Result<DevRootCa> {
+pub(crate) fn dev_root_ca() -> Result<DevRootCa> {
     let cert_pem = dev_root_ca_cert_pem()?;
     let key_path = get_dependency_path_from_env("ENV_DEPS__DEV_ROOT_CA_KEY_PATH");
     let key_pkcs1_pem = fs::read_to_string(&key_path)

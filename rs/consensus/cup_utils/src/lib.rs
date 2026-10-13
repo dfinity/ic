@@ -1,36 +1,38 @@
-//! This module contains functions for constructing CUPs from registry and for
-//! verifying CUPs.
+//! This module contains functions for constructing CUPs from registry, for
+//! verifying CUPs, and for extracting the threshold master public keys of CUPs.
 
-use ic_consensus_dkg::payload_builder::get_dkg_summary_from_cup_contents;
+use ic_consensus_dkg::{get_dkg_summary_from_cup_contents, get_vetkey_public_keys};
 use ic_consensus_idkg::{
     make_bootstrap_summary, make_bootstrap_summary_with_initial_dealings,
     utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
 };
+use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, warn};
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::{
-    proxy::ProxyDecodeError,
-    registry::subnet::v1::{CatchUpPackageContents, catch_up_package_contents::CupType},
-    types::v1 as pb,
+    proxy::ProxyDecodeError, registry::subnet::v1::CatchUpPackageContents, types::v1 as pb,
 };
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    Height, RegistryVersion, SubnetId, Time,
+    CryptoHashOfState, Height, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
-        Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes, CatchUpPackage,
+        Block, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes, CatchUpPackage, CupType,
         HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank, SummaryPayload, idkg,
     },
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoError, CryptoHash, Signable, Signed,
+        canister_threshold_sig::MasterPublicKey,
         crypto_hash,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag},
     },
     signature::ThresholdSignature,
+    time::UNIX_EPOCH,
 };
 use phantom_newtype::Id;
-use std::fmt;
+use std::{collections::BTreeMap, fmt};
 
 /// The reasons why a [`CatchUpPackage`] can fail verification.
 #[derive(Debug)]
@@ -194,14 +196,30 @@ pub fn make_registry_cup_from_cup_contents(
     registry_version: RegistryVersion,
     logger: &ReplicaLogger,
 ) -> Option<CatchUpPackage> {
-    // If the CUP we are about to build is a subnet splitting CUP, return early. It makes no sense
-    // to build a registry CUP out of subnet splitting CUP contents because the transcripts here are
-    // used directly by consensus to build the CUP themselves, i.e. nodes threshold-sign it, instead
-    // of blindly taking it from the registry here.
-    match cup_contents.cup_type {
-        Some(CupType::SubnetSplitting(..)) => return None,
-        Some(CupType::Genesis(..)) | Some(CupType::Recovery(..)) | None => {}
-    }
+    let (cup_height, time, state_hash) = match CupType::try_from(&cup_contents) {
+        Ok(CupType::Genesis) => (
+            Height::new(0),
+            UNIX_EPOCH,
+            CryptoHashOfState::from(CryptoHash(Vec::new())),
+        ),
+        Ok(CupType::Recovery {
+            height,
+            time,
+            state_hash,
+        }) => (height, time, state_hash),
+        // If the CUP we are about to build is a subnet splitting CUP, return early. It makes no sense
+        // to build a registry CUP out of subnet splitting CUP contents because the transcripts here are
+        // used directly by consensus to build the CUP themselves, i.e. nodes threshold-sign it, instead
+        // of blindly taking it from the registry here.
+        Ok(CupType::SubnetSplitting { .. }) => return None,
+        Err(err) => {
+            warn!(
+                logger,
+                "Failed to get the CUP type from the registry CUP contents: {}", err
+            );
+            return None;
+        }
+    };
 
     let replica_version = match registry.get_replica_version(subnet_id, registry_version) {
         Ok(Some(replica_version)) => replica_version,
@@ -217,6 +235,7 @@ pub fn make_registry_cup_from_cup_contents(
     };
     let dkg_summary = match get_dkg_summary_from_cup_contents(
         cup_contents.clone(),
+        cup_height,
         subnet_id,
         registry,
         registry_version,
@@ -231,10 +250,10 @@ pub fn make_registry_cup_from_cup_contents(
             return None;
         }
     };
-    let cup_height = Height::new(cup_contents.height);
 
     let idkg_summary = match bootstrap_idkg_summary(
         cup_contents.clone(),
+        cup_height,
         subnet_id,
         registry_version,
         registry,
@@ -294,7 +313,7 @@ pub fn make_registry_cup_from_cup_contents(
         context: ValidationContext {
             certified_height: cup_height,
             registry_version: block_registry_version,
-            time: Time::from_nanos_since_unix_epoch(cup_contents.time),
+            time,
         },
     };
     let random_beacon = Signed {
@@ -313,7 +332,7 @@ pub fn make_registry_cup_from_cup_contents(
         content: CatchUpContent::new(
             HashedBlock::new(crypto_hash, block),
             HashedRandomBeacon::new(crypto_hash, random_beacon),
-            Id::from(CryptoHash(cup_contents.state_hash)),
+            state_hash,
             /* oldest_registry_version_in_use_by_replicated_state */ None,
         ),
         signature: ThresholdSignature {
@@ -361,6 +380,7 @@ pub fn make_registry_cup(
 
 fn bootstrap_idkg_summary_from_cup_contents(
     cup_contents: CatchUpPackageContents,
+    height: Height,
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
@@ -372,25 +392,20 @@ fn bootstrap_idkg_summary_from_cup_contents(
         return Ok(None);
     };
 
-    make_bootstrap_summary_with_initial_dealings(
-        subnet_id,
-        Height::new(cup_contents.height),
-        initial_dealings,
-        logger,
-    )
-    .map_err(|err| format!("Failed to create IDKG summary block: {err:?}"))
+    make_bootstrap_summary_with_initial_dealings(subnet_id, height, initial_dealings, logger)
+        .map_err(|err| format!("Failed to create IDKG summary block: {err:?}"))
 }
 
 fn bootstrap_idkg_summary(
     cup_contents: CatchUpPackageContents,
+    height: Height,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
     logger: &ReplicaLogger,
 ) -> Result<idkg::Summary, String> {
-    let height = Height::new(cup_contents.height);
     if let Some(summary) =
-        bootstrap_idkg_summary_from_cup_contents(cup_contents, subnet_id, logger)?
+        bootstrap_idkg_summary_from_cup_contents(cup_contents, height, subnet_id, logger)?
     {
         return Ok(Some(summary));
     }
@@ -412,6 +427,47 @@ fn bootstrap_idkg_summary(
     }
 }
 
+/// Returns the threshold master public keys held by the subnet according to the given CUP.
+///
+/// Keys whose master public key cannot be extracted from their transcript are skipped with a
+/// warning.
+pub fn get_master_public_keys(
+    cup: &CatchUpPackage,
+    log: &ReplicaLogger,
+) -> BTreeMap<MasterPublicKeyId, MasterPublicKey> {
+    let payload = cup.content.block.get_value().payload.as_ref();
+
+    let (mut public_keys, _) = get_vetkey_public_keys(&payload.as_summary().dkg, log);
+
+    let Some(idkg) = payload.as_idkg() else {
+        return public_keys;
+    };
+
+    for (key_id, key_transcript) in &idkg.key_transcripts {
+        let Some(transcript) = key_transcript
+            .current
+            .as_ref()
+            .and_then(|transcript_ref| idkg.idkg_transcripts.get(&transcript_ref.transcript_id()))
+        else {
+            continue;
+        };
+
+        match get_master_public_key_from_transcript(transcript) {
+            Ok(public_key) => {
+                public_keys.insert(key_id.clone().into(), public_key);
+            }
+            Err(err) => {
+                warn!(
+                    log,
+                    "Failed to get the master public key for key id {}: {:?}", key_id, err,
+                );
+            }
+        };
+    }
+
+    public_keys
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -420,18 +476,24 @@ mod tests {
     use ic_crypto_test_utils_ni_dkg::dummy_initial_dkg_transcript;
     use ic_interfaces_registry::{RegistryClient, RegistryVersionedRecord};
     use ic_logger::no_op_logger;
-    use ic_protobuf::registry::subnet::v1::{
-        CatchUpPackageContents, RecoveryArgs, RegistryStoreUri, SubnetRecord,
-        catch_up_package_contents::CupType,
+    use ic_protobuf::{
+        registry::subnet::v1::{
+            CatchUpPackageContents, ChainKeyConfig, GenesisArgs, KeyConfig, RecoveryArgs,
+            RegistryStoreUri, SubnetRecord, SubnetSplittingArgs,
+            catch_up_package_contents::CupType,
+        },
+        types::v1::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, master_public_key_id::KeyId},
     };
     use ic_registry_keys::CATCH_UP_PACKAGE_CONTENTS_KEY_PREFIX;
     use ic_types::{
         Height, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, Time,
-        consensus::{ConsensusMessageHashable, HasVersion},
+        consensus::{ConsensusMessageHashable, HasVersion, idkg::IDkgUIDGenerator},
         crypto::{AlgorithmId, CryptoHash, CryptoResult, threshold_sig::ni_dkg::NiDkgTag},
         registry::RegistryClientError,
+        subnet_id_into_protobuf,
     };
     use ic_types_test_utils::ids::subnet_test_id;
+    use rstest::rstest;
     use std::cell::RefCell;
 
     const LATEST_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(12345);
@@ -440,7 +502,7 @@ mod tests {
     /// [`make_registry_cup`] needs, with the given `registry_store_uri` and `cup_type`.
     fn setup_registry_with_cup_type(
         registry_store_uri: Option<RegistryStoreUri>,
-        cup_type: CupType,
+        cup_type: Option<CupType>,
     ) -> impl RegistryClient {
         MockRegistryClient::new(LATEST_REGISTRY_VERSION, move |key, _| {
             use prost::Message;
@@ -455,13 +517,15 @@ mod tests {
                         initial_ni_dkg_transcript_high_threshold: Some(
                             dummy_initial_dkg_transcript(committee, NiDkgTag::HighThreshold),
                         ),
-                        height: 54321,
-                        time: 1,
-                        state_hash: vec![1, 2, 3, 4, 5],
+                        // `height`, `time` and `state_hash` purposely contradict the `cup_type` to
+                        // make sure that they are ignored.
+                        height: 7,
+                        time: 8,
+                        state_hash: vec![9],
                         registry_store_uri: registry_store_uri.clone(),
                         ecdsa_initializations: vec![],
                         chain_key_initializations: vec![],
-                        cup_type: Some(cup_type.clone()),
+                        cup_type: cup_type.clone(),
                     };
 
                 // Encode the cup to protobuf
@@ -469,12 +533,26 @@ mod tests {
                 cup.encode(&mut value).unwrap();
                 Some(value)
             } else if key.starts_with("subnet_record_") {
-                // Build a dummy subnet record. The only value used from this are the
-                // `membership` and `dkg_interval_length` fields.
+                // Build a dummy subnet record. The only fields that are read are the ones set
+                // below. We include a `chain_key_config` so that an IDKG bootstrap summary is
+                // built.
                 let subnet_record = SubnetRecord {
                     membership: vec![PrincipalId::new_subnet_test_id(1).to_vec()],
                     dkg_interval_length: 99,
                     replica_version_id: "TestID".to_string(),
+                    chain_key_config: Some(ChainKeyConfig {
+                        key_configs: vec![KeyConfig {
+                            key_id: Some(MasterPublicKeyId {
+                                key_id: Some(KeyId::Ecdsa(EcdsaKeyId {
+                                    curve: EcdsaCurve::Secp256k1 as i32,
+                                    name: "some_key".to_string(),
+                                })),
+                            }),
+                            pre_signatures_to_create_in_advance: Some(1),
+                            max_queue_size: Some(1),
+                        }],
+                        ..ChainKeyConfig::default()
+                    }),
                     ..SubnetRecord::default()
                 };
 
@@ -491,11 +569,11 @@ mod tests {
     fn setup_registry(registry_store_uri: Option<RegistryStoreUri>) -> impl RegistryClient {
         setup_registry_with_cup_type(
             registry_store_uri,
-            CupType::Recovery(RecoveryArgs {
+            Some(CupType::Recovery(RecoveryArgs {
                 height: 54321,
                 time: 1,
                 state_hash: vec![1, 2, 3, 4, 5],
-            }),
+            })),
         )
     }
 
@@ -698,34 +776,74 @@ mod tests {
         assert!(crypto.calls.borrow().is_empty());
     }
 
-    #[test]
-    fn test_make_registry_cup() {
-        let registry_client = setup_registry(/*registry_store_uri=*/ None);
+    /// A registry CUP is built at the height, with the block time and state hash given by the
+    /// `cup_type` of the CUP contents, and its DKG and IDKG summaries are bootstrapped at that
+    /// height as well. No registry CUP is built for subnet splitting or missing CUP types.
+    #[rstest]
+    #[case::genesis(
+        Some(CupType::Genesis(GenesisArgs {})),
+        Some((Height::from(0), UNIX_EPOCH, CryptoHash(vec![]))),
+    )]
+    #[case::recovery(
+        Some(CupType::Recovery(RecoveryArgs {
+            height: 54321,
+            time: 1,
+            state_hash: vec![1, 2, 3, 4, 5],
+        })),
+        Some((
+            Height::from(54321),
+            Time::from_nanos_since_unix_epoch(1),
+            CryptoHash(vec![1, 2, 3, 4, 5]),
+        )),
+    )]
+    #[case::subnet_splitting(Some(CupType::SubnetSplitting(SubnetSplittingArgs {
+        destination_subnet_id: Some(subnet_id_into_protobuf(subnet_test_id(1))),
+    })), None)]
+    #[case::missing(None, None)]
+    fn test_make_registry_cup(
+        #[case] cup_type: Option<CupType>,
+        #[case] expected: Option<(Height, Time, CryptoHash)>,
+    ) {
+        let subnet_id = subnet_test_id(0);
+        let registry_client =
+            setup_registry_with_cup_type(/*registry_store_uri=*/ None, cup_type);
+
         let result = make_registry_cup(
             &registry_client,
-            subnet_test_id(0),
+            subnet_id,
             registry_client.get_latest_version(),
             &no_op_logger(),
-        )
-        .unwrap();
+        );
 
+        let (cup, (height, time, state_hash)) = match (result, expected) {
+            (Some(cup), Some(expected)) => (cup, expected),
+            (None, None) => return, // No registry CUP, as expected
+            (Some(_), None) => panic!("Expected no registry CUP"),
+            (None, Some(_)) => panic!("Expected a registry CUP"),
+        };
+
+        let block = cup.content.block.get_value();
+        assert_eq!(cup.content.state_hash.get_ref(), &state_hash);
+        assert_eq!(block.height, height);
+        assert_eq!(block.context.certified_height, height);
+        assert_eq!(block.context.time, time);
+        assert_eq!(block.context.registry_version, LATEST_REGISTRY_VERSION);
+        assert_eq!(cup.content.random_beacon.get_value().content.height, height);
         assert_eq!(
-            result.content.state_hash.get_ref(),
-            &CryptoHash(vec![1, 2, 3, 4, 5])
-        );
-        assert_eq!(
-            result.content.block.get_value().context.registry_version,
-            LATEST_REGISTRY_VERSION
-        );
-        assert_eq!(
-            result.content.block.get_value().context.certified_height,
-            Height::from(54321)
-        );
-        assert_eq!(
-            result.content.version(),
+            cup.content.version(),
             &ReplicaVersion::from_str("TestID").unwrap()
         );
-        assert_eq!(result.signature.signer.dealer_subnet, subnet_test_id(0));
+
+        let summary = block.payload.as_ref().as_summary();
+        assert_eq!(summary.dkg.height, height);
+        let idkg_summary = summary
+            .idkg
+            .as_ref()
+            .expect("Expected an IDKG summary, as the subnet has an IDKG key");
+        assert_eq!(
+            idkg_summary.uid_generator,
+            IDkgUIDGenerator::new(subnet_id, height)
+        );
     }
 
     /// A registry CUP must reference the same registry version in the DKG summary of its block and
@@ -762,26 +880,6 @@ mod tests {
             );
             assert_eq!(cup.content.registry_version(), expected_registry_version);
         }
-    }
-
-    #[test]
-    fn test_make_registry_cup_with_subnet_splitting_cup_type() {
-        let registry_client = setup_registry_with_cup_type(
-            /*registry_store_uri=*/ None,
-            CupType::SubnetSplitting(Default::default()),
-        );
-
-        let result = make_registry_cup(
-            &registry_client,
-            subnet_test_id(0),
-            registry_client.get_latest_version(),
-            &no_op_logger(),
-        );
-
-        assert!(
-            result.is_none(),
-            "Expected None for subnet splitting CUP contents"
-        );
     }
 
     /// `RegistryClient` implementation that allows to provide a custom function
