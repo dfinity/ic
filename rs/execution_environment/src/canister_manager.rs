@@ -2203,7 +2203,7 @@ impl CanisterManager {
                         validate_sender_on_subnet(
                             &sender,
                             CanisterAccess::LoadSnapshotIntoOtherCanister {
-                                canister_id,
+                                target_canister_id: canister_id,
                                 snapshot_id,
                             },
                             &snapshot_canister,

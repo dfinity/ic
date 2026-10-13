@@ -462,9 +462,9 @@ pub(crate) enum CanisterAccess {
     /// `canister_metadata`.
     ReadPrivateCustomSection { section_name: String },
     /// Loading the snapshot `snapshot_id` of the canister into the different
-    /// canister `canister_id` via `load_canister_snapshot`.
+    /// canister `target_canister_id` via `load_canister_snapshot`.
     LoadSnapshotIntoOtherCanister {
-        canister_id: CanisterId,
+        target_canister_id: CanisterId,
         snapshot_id: SnapshotId,
     },
 }
@@ -475,15 +475,9 @@ pub(crate) enum CanisterAccess {
 ///
 /// This is the single place defining which senders can call which management
 /// canister methods targeting a canister. It must be called after the method's
-/// payload has been decoded and `canister` has been looked up. A method
-/// targeting more than one canister must call it once per targeted canister,
-/// passing the access required on that canister (e.g., `install_chunked_code`
-/// validates its target canister as `CanisterAccess::Method` and its store
-/// canister as `CanisterAccess::InstallChunkedCodeStore`). Likewise, a method
-/// whose access control depends on more than the targeted canister validates
-/// the additional access separately (e.g., `canister_metadata` validates
-/// reading a private custom section as
-/// `CanisterAccess::ReadPrivateCustomSection`).
+/// payload has been decoded and `canister` has been looked up. A method that
+/// needs more than one access (e.g., to several canisters) must call it once
+/// per access, passing the corresponding `CanisterAccess`.
 ///
 /// The `subnet_admins` are only taken into account if the subnet can have
 /// subnet admins (see `can_have_subnet_admins`). On cloud engines on the free
@@ -504,11 +498,9 @@ pub(crate) enum CanisterAccess {
 /// that are not gated on the targeted canister at all (e.g., `create_canister`,
 /// `list_canisters`, or the provisional methods, which are gated on the subnet
 /// admins and the provisional whitelist, respectively) and `canister_metadata`,
-/// whose access control depends on the visibility of the requested custom
-/// section and is validated as `CanisterAccess::ReadPrivateCustomSection` for
-/// private custom sections. In contrast, `canister_info` and `deposit_cycles`
-/// are accepted for every sender: they target a canister but are subject to no
-/// access control.
+/// whose access control depends on the requested custom section. In contrast,
+/// `canister_info` and `deposit_cycles` are accepted for every sender: they
+/// target a canister but are subject to no access control.
 fn validate_sender(
     sender: &PrincipalId,
     access: CanisterAccess,
@@ -524,52 +516,10 @@ fn validate_sender(
         && subnet_admins.contains(sender);
     let subnet_admins = can_have_subnet_admins(subnet_type, cost_schedule).then_some(subnet_admins);
     let is_sender_the_canister = *sender == canister.canister_id().get();
-    let method = match access {
-        CanisterAccess::Method(method) => method,
-        _ if is_cloud_engine_admin => return Ok(()),
-        // Using the chunks of the store canister requires being the store
-        // canister itself or a controller of the store canister.
-        CanisterAccess::InstallChunkedCodeStore => {
-            return if is_sender_the_canister {
-                Ok(())
-            } else {
-                validate_controller(canister, sender)
-            };
-        }
-        // Reading a private custom section requires being a controller of the
-        // canister. Other senders get the same error as for a missing custom
-        // section, which `canister_metadata` has always returned for them.
-        CanisterAccess::ReadPrivateCustomSection { section_name } => {
-            return if canister.controllers().contains(sender) {
-                Ok(())
-            } else {
-                Err(CanisterManagerError::CanisterMetadataSectionNotFound {
-                    canister_id: canister.canister_id(),
-                    section_name,
-                })
-            };
-        }
-        // Loading the snapshot of a canister into a different canister
-        // requires being a controller of the canister owning the snapshot.
-        CanisterAccess::LoadSnapshotIntoOtherCanister {
-            canister_id,
-            snapshot_id,
-        } => {
-            return if canister.controllers().contains(sender) {
-                Ok(())
-            } else {
-                Err(CanisterManagerError::CanisterSnapshotNotController {
-                    sender: *sender,
-                    canister_id,
-                    snapshot_id,
-                })
-            };
-        }
-    };
-    match method {
+    match access {
         // The sender has to be a controller of the canister to be renamed and
         // equal to the migration canister.
-        Ic00Method::RenameCanister => {
+        CanisterAccess::Method(Ic00Method::RenameCanister) => {
             validate_controller(canister, sender)?;
             if *sender != MIGRATION_CANISTER_ID.get() {
                 return Err(CanisterManagerError::CallerNotAuthorized);
@@ -578,57 +528,63 @@ fn validate_sender(
         }
 
         // `validate_sender` does not define the access control of these methods.
-        Ic00Method::CanisterMetadata
-        | Ic00Method::ListCanisters
-        | Ic00Method::CreateCanister
-        | Ic00Method::HttpRequest
-        | Ic00Method::FlexibleHttpRequest
-        | Ic00Method::ECDSAPublicKey
-        | Ic00Method::RawRand
-        | Ic00Method::SetupInitialDKG
-        | Ic00Method::SignWithECDSA
-        | Ic00Method::ReshareChainKey
-        | Ic00Method::SchnorrPublicKey
-        | Ic00Method::SignWithSchnorr
-        | Ic00Method::VetKdPublicKey
-        | Ic00Method::VetKdDeriveKey
-        | Ic00Method::BitcoinGetBalance
-        | Ic00Method::BitcoinGetUtxos
-        | Ic00Method::BitcoinGetBlockHeaders
-        | Ic00Method::BitcoinSendTransaction
-        | Ic00Method::BitcoinGetCurrentFeePercentiles
-        | Ic00Method::BitcoinSendTransactionInternal
-        | Ic00Method::BitcoinGetSuccessors
-        | Ic00Method::NodeMetricsHistory
-        | Ic00Method::SubnetMetrics
-        | Ic00Method::SubnetInfo
-        | Ic00Method::ProvisionalCreateCanisterWithCycles
-        | Ic00Method::ProvisionalTopUpCanister => Err(CanisterManagerError::CallerNotAuthorized),
+        CanisterAccess::Method(
+            Ic00Method::CanisterMetadata
+            | Ic00Method::ListCanisters
+            | Ic00Method::CreateCanister
+            | Ic00Method::HttpRequest
+            | Ic00Method::FlexibleHttpRequest
+            | Ic00Method::ECDSAPublicKey
+            | Ic00Method::RawRand
+            | Ic00Method::SetupInitialDKG
+            | Ic00Method::SignWithECDSA
+            | Ic00Method::ReshareChainKey
+            | Ic00Method::SchnorrPublicKey
+            | Ic00Method::SignWithSchnorr
+            | Ic00Method::VetKdPublicKey
+            | Ic00Method::VetKdDeriveKey
+            | Ic00Method::BitcoinGetBalance
+            | Ic00Method::BitcoinGetUtxos
+            | Ic00Method::BitcoinGetBlockHeaders
+            | Ic00Method::BitcoinSendTransaction
+            | Ic00Method::BitcoinGetCurrentFeePercentiles
+            | Ic00Method::BitcoinSendTransactionInternal
+            | Ic00Method::BitcoinGetSuccessors
+            | Ic00Method::NodeMetricsHistory
+            | Ic00Method::SubnetMetrics
+            | Ic00Method::SubnetInfo
+            | Ic00Method::ProvisionalCreateCanisterWithCycles
+            | Ic00Method::ProvisionalTopUpCanister,
+        ) => Err(CanisterManagerError::CallerNotAuthorized),
 
-        // Subnet admins of cloud engines on the free cost schedule can call
-        // every other method.
+        // Subnet admins of cloud engines on the free cost schedule can access
+        // every canister in every other way.
         _ if is_cloud_engine_admin => Ok(()),
 
         // A canister can always read its own status and manage its own chunk
-        // store, as the canister is considered in the same trust domain.
-        Ic00Method::CanisterStatus
-        | Ic00Method::UploadChunk
-        | Ic00Method::StoredChunks
-        | Ic00Method::ClearChunkStore
+        // store (including having its chunks used by `install_chunked_code`),
+        // as the canister is considered in the same trust domain.
+        CanisterAccess::Method(
+            Ic00Method::CanisterStatus
+            | Ic00Method::UploadChunk
+            | Ic00Method::StoredChunks
+            | Ic00Method::ClearChunkStore,
+        )
+        | CanisterAccess::InstallChunkedCodeStore
             if is_sender_the_canister =>
         {
             Ok(())
         }
 
-        Ic00Method::StartCanister
-        | Ic00Method::StopCanister
-        | Ic00Method::DeleteCanister
-        | Ic00Method::CanisterMetrics => {
-            validate_controller_or_subnet_admin(canister, subnet_admins, sender)
-        }
+        CanisterAccess::Method(
+            Ic00Method::StartCanister
+            | Ic00Method::StopCanister
+            | Ic00Method::DeleteCanister
+            | Ic00Method::CanisterMetrics,
+        ) => validate_controller_or_subnet_admin(canister, subnet_admins, sender),
 
         // The governance canister can forcefully uninstall the code of any canister.
-        Ic00Method::UninstallCode => {
+        CanisterAccess::Method(Ic00Method::UninstallCode) => {
             if *sender == GOVERNANCE_CANISTER_ID.get() {
                 Ok(())
             } else {
@@ -636,34 +592,70 @@ fn validate_sender(
             }
         }
 
-        Ic00Method::CanisterStatus => validate_status_visibility(canister, subnet_admins, sender),
-
-        Ic00Method::UpdateSettings
-        | Ic00Method::InstallCode
-        | Ic00Method::InstallChunkedCode
-        | Ic00Method::UploadChunk
-        | Ic00Method::StoredChunks
-        | Ic00Method::ClearChunkStore
-        | Ic00Method::TakeCanisterSnapshot
-        | Ic00Method::LoadCanisterSnapshot
-        | Ic00Method::DeleteCanisterSnapshot
-        | Ic00Method::UploadCanisterSnapshotMetadata
-        | Ic00Method::UploadCanisterSnapshotData => validate_controller(canister, sender),
-
-        Ic00Method::ListCanisterSnapshots
-        | Ic00Method::ReadCanisterSnapshotMetadata
-        | Ic00Method::ReadCanisterSnapshotData => {
-            validate_snapshot_visibility(canister, sender, method)
+        CanisterAccess::Method(Ic00Method::CanisterStatus) => {
+            validate_status_visibility(canister, subnet_admins, sender)
         }
 
-        Ic00Method::FetchCanisterLogs => check_log_visibility_permission(
+        CanisterAccess::Method(
+            Ic00Method::UpdateSettings
+            | Ic00Method::InstallCode
+            | Ic00Method::InstallChunkedCode
+            | Ic00Method::UploadChunk
+            | Ic00Method::StoredChunks
+            | Ic00Method::ClearChunkStore
+            | Ic00Method::TakeCanisterSnapshot
+            | Ic00Method::LoadCanisterSnapshot
+            | Ic00Method::DeleteCanisterSnapshot
+            | Ic00Method::UploadCanisterSnapshotMetadata
+            | Ic00Method::UploadCanisterSnapshotData,
+        )
+        | CanisterAccess::InstallChunkedCodeStore => validate_controller(canister, sender),
+
+        // Reading a private custom section requires being a controller of the
+        // canister. Other senders get the same error as for a missing custom
+        // section.
+        CanisterAccess::ReadPrivateCustomSection { section_name } => {
+            if canister.controllers().contains(sender) {
+                Ok(())
+            } else {
+                Err(CanisterManagerError::CanisterMetadataSectionNotFound {
+                    canister_id: canister.canister_id(),
+                    section_name,
+                })
+            }
+        }
+
+        // Loading the snapshot of a canister into a different canister
+        // requires being a controller of the canister owning the snapshot.
+        CanisterAccess::LoadSnapshotIntoOtherCanister {
+            target_canister_id,
+            snapshot_id,
+        } => {
+            if canister.controllers().contains(sender) {
+                Ok(())
+            } else {
+                Err(CanisterManagerError::CanisterSnapshotNotController {
+                    sender: *sender,
+                    canister_id: target_canister_id,
+                    snapshot_id,
+                })
+            }
+        }
+
+        CanisterAccess::Method(
+            method @ (Ic00Method::ListCanisterSnapshots
+            | Ic00Method::ReadCanisterSnapshotMetadata
+            | Ic00Method::ReadCanisterSnapshotData),
+        ) => validate_snapshot_visibility(canister, sender, method),
+
+        CanisterAccess::Method(Ic00Method::FetchCanisterLogs) => check_log_visibility_permission(
             sender,
             canister.log_visibility(),
             canister.controllers(),
         ),
 
         // Anyone can call these methods.
-        Ic00Method::CanisterInfo | Ic00Method::DepositCycles => Ok(()),
+        CanisterAccess::Method(Ic00Method::CanisterInfo | Ic00Method::DepositCycles) => Ok(()),
     }
 }
 
@@ -1401,7 +1393,7 @@ mod test {
                         section_name: "section".to_string(),
                     },
                     CanisterAccess::LoadSnapshotIntoOtherCanister {
-                        canister_id: CanisterId::from_u64(43),
+                        target_canister_id: CanisterId::from_u64(43),
                         snapshot_id: SnapshotId::from((canister_id, 0)),
                     },
                 ],
