@@ -6,7 +6,7 @@ load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
-load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAX_LOCAL_MEMORY_GIB", "NNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:configure_icos.bzl", "configure_icos")
 
 default_vm_resources = {
@@ -46,6 +46,7 @@ def system_test(
         vm_allocation_mode = None,
         cpus = None,
         cpus_oversubscription_factor = 3,
+        memory_gib = None,
         **kwargs):
     """Declares a system-test.
 
@@ -110,6 +111,10 @@ def system_test(
         determine how many CPUs to reserve. Reserving less than the test uses lets
         more system-tests be packed onto a single worker, at the cost of
         deliberately overloading it. A factor of 1 disables oversubscription.
+      memory_gib: Optional GiB of memory the `_local` variant reserves via exec_properties, for tests
+        that need more than sharing an RBE worker leaves them. Must be an int in
+        [1, MAX_LOCAL_MEMORY_GIB]; MAX_LOCAL_MEMORY_GIB reserves a whole worker.
+        Unlike `cpus`, it isn't oversubscribed.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -356,6 +361,15 @@ def system_test(
         # Starlark has no math.ceil() so we round up using integer division.
         reserved_cpus = (cpus + cpus_oversubscription_factor - 1) // cpus_oversubscription_factor
 
+    if memory_gib != None and (type(memory_gib) != "int" or memory_gib < 1 or memory_gib > MAX_LOCAL_MEMORY_GIB):
+        fail("Invalid memory_gib {}: must be an int in [1, {}]".format(repr(memory_gib), MAX_LOCAL_MEMORY_GIB))
+
+    local_exec_properties = {}
+    if reserved_cpus != None:
+        local_exec_properties["test.cpu"] = str(reserved_cpus)
+    if memory_gib != None:
+        local_exec_properties["test.mem"] = "{}g".format(memory_gib)
+
     sh_test(
         name = test_name + "_local",
         srcs = ["//rs/tests:run_systest.sh"],
@@ -368,11 +382,11 @@ def system_test(
         },
         env_inherit = env_inherit,
         tags = tags + ["local_system_test"] + (["manual"] if backend == "farm" else []),
-        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we set the execution properties explicitly.
-        # The `test.` prefix scopes the reservation to the `test` exec group, i.e. to the test action only. Without it
-        # the reservation would also apply to every other action this target owns and those would needlessly reserve
-        # `reserved_cpus` cores on an RBE worker:
-        exec_properties = {"test.cpu": str(reserved_cpus)} if reserved_cpus != None else {},
+        # The `cpu:n` tag is not forwarded to the Remote Execution API, so we reserve CPUs and memory via execution
+        # properties. The `test.` prefix scopes the reservations to the `test` exec group, i.e. to the test action only.
+        # Without it the reservations would also apply to every other action this target owns and those would
+        # needlessly reserve `reserved_cpus` cores and `memory_gib` GiB on an RBE worker:
+        exec_properties = local_exec_properties,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         visibility = visibility,

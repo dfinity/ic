@@ -10,6 +10,9 @@ MIN_LOCAL_CPUS = 1
 # This should equal DEFAULT_VCPUS_PER_VM in rs/tests/driver/src/driver/resource.rs.
 DEFAULT_VCPUS_PER_VM = 6
 
+# The memory of an RBE worker @ Namespace: the most a system_test using the local backend can reserve.
+MAX_LOCAL_MEMORY_GIB = 32
+
 MAINNET_ENV = {
     "MAINNET_NNS_GUESTOS_REVISION_ENV": MAINNET_NNS["version"],
     "MAINNET_APP_GUESTOS_REVISION_ENV": MAINNET_APP["version"],
