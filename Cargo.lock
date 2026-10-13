@@ -9444,6 +9444,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-consensus",
  "ic-test-utilities-execution-environment",
+ "ic-test-utilities-in-memory-logger",
  "ic-test-utilities-logger",
  "ic-test-utilities-metrics",
  "ic-test-utilities-state",
