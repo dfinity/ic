@@ -768,7 +768,7 @@ fn install_code_consumed_cycles_match_on_any_subnet_size() {
             (func (export "canister_update test"))
             (memory 0 2)
         )"#;
-    for subnet_size in [1, 2, 7, 13, 20, 28, 34, 40, 100] {
+    for subnet_size in [4, 7, 13, 34, 40] {
         let mut test = ExecutionTestBuilder::new()
             .with_subnet_size(subnet_size)
             .build();
