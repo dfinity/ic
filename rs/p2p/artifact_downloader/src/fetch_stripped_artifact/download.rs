@@ -558,16 +558,16 @@ fn parse_ingress_response(body: Bytes) -> Result<SignedIngress, ParseResponseErr
         .map_err(|_| ParseResponseError::ParsingError("ingress_deserialization_failed"))
 }
 
-fn parse_canister_http_response(body: Bytes) -> Result<CanisterHttpResponse, ParseResponseError> {
-    pb::GetCanisterHttpResponseInBlockResponse::proxy_decode(&body)
-        .map(|response: GetCanisterHttpResponseInBlockResponse| response.response)
-        .map_err(|_| ParseResponseError::ParsingError("canister_http_response_decoding_failed"))
-}
-
 fn parse_dealing_response(body: Bytes) -> Result<SignedIDkgDealing, ParseResponseError> {
     pb::GetIDkgDealingInBlockResponse::proxy_decode(&body)
         .map(|response: GetIDkgDealingInBlockResponse| response.signed_dealing)
         .map_err(|_| ParseResponseError::ParsingError("idkg_dealing_response_decoding_failed"))
+}
+
+fn parse_canister_http_response(body: Bytes) -> Result<CanisterHttpResponse, ParseResponseError> {
+    pb::GetCanisterHttpResponseInBlockResponse::proxy_decode(&body)
+        .map(|response: GetCanisterHttpResponseInBlockResponse| response.response)
+        .map_err(|_| ParseResponseError::ParsingError("canister_http_response_decoding_failed"))
 }
 
 #[cfg(test)]
