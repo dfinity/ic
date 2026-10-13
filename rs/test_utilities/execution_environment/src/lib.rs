@@ -2493,6 +2493,7 @@ pub struct ExecutionTestBuilder {
     subnet_admins: BTreeSet<PrincipalId>,
     network_topology: Option<NetworkTopology>,
     log_level: Option<Level>,
+    replica_logger: Option<ReplicaLogger>,
     resource_limits: ResourceLimits,
 }
 
@@ -2534,6 +2535,7 @@ impl Default for ExecutionTestBuilder {
             subnet_admins: BTreeSet::new(),
             network_topology: None,
             log_level: Some(Level::Warning),
+            replica_logger: None,
             resource_limits: Default::default(),
         }
     }
@@ -2615,6 +2617,15 @@ impl ExecutionTestBuilder {
     /// Passing `None` turns off replica logs completely.
     pub fn with_log_level(self, log_level: Option<Level>) -> Self {
         Self { log_level, ..self }
+    }
+
+    /// Uses the given logger for replica logs (instead of a test logger
+    /// configured via `with_log_level`).
+    pub fn with_replica_logger(self, replica_logger: ReplicaLogger) -> Self {
+        Self {
+            replica_logger: Some(replica_logger),
+            ..self
+        }
     }
 
     pub fn with_ecdsa_signature_fee(self, ecdsa_signing_fee: u128) -> Self {
@@ -3197,7 +3208,10 @@ impl ExecutionTestBuilder {
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let state_manager = Arc::new(FakeStateManager::new());
 
-        let log = test_logger(self.log_level);
+        let log = self
+            .replica_logger
+            .clone()
+            .unwrap_or_else(|| test_logger(self.log_level));
         let execution_services = ExecutionServicesForTesting::setup_execution(
             log.clone(),
             &metrics_registry,

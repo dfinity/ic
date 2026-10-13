@@ -71,6 +71,7 @@ ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
+ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
