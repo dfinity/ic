@@ -565,8 +565,8 @@ fn validate_sender(
             | Ic00Method::UploadCanisterSnapshotData,
         ) => validate_controller(canister, sender, ControlledCanisterRole::Target),
 
-        // Using the chunks of the store canister requires being a controller
-        // of the store canister.
+        // Using the chunks of the store canister requires being the store
+        // canister itself (see above) or a controller of the store canister.
         CanisterAccess::InstallChunkedCodeStore { target_canister_id } => validate_controller(
             canister,
             sender,
