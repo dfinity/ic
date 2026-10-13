@@ -141,6 +141,7 @@ impl Discovery {
 impl Discovery {
     /// Bypass the API boundary node and use the given agent directly as the test
     /// environment doesn't provide an API BN with a valid certificate.
+    #[cfg(feature = "cloud_engine_integration_tests")]
     pub(super) fn use_agent(&mut self, agent: Agent) {
         self.agent_override = Some(agent);
     }
