@@ -446,6 +446,19 @@ pub(crate) async fn download_stripped_message<P: Peers>(
                 .body(bytes)
                 .unwrap()
         }
+        StrippedMessageId::CanisterHttpResponse(content_hash) => {
+            let request = GetCanisterHttpResponseInBlockRequest {
+                content_hash: content_hash.clone(),
+                block_proposal_id,
+            };
+            let bytes = Bytes::from(pb::GetCanisterHttpResponseInBlockRequest::proxy_encode(
+                request,
+            ));
+            Request::builder()
+                .uri(CANISTER_HTTP_RESPONSE_URI)
+                .body(bytes)
+                .unwrap()
+        }
     };
 
     loop {
@@ -522,29 +535,39 @@ fn parse_response(
                 ));
             }
         }
+        StrippedMessageId::CanisterHttpResponse(content_hash) => {
+            let response = parse_canister_http_response(body)?;
+            let derived_content_hash = ic_types::crypto::crypto_hash(&response);
+            if derived_content_hash == *content_hash {
+                return Ok(StrippedMessage::CanisterHttpResponse(
+                    derived_content_hash,
+                    response,
+                ));
+            }
+        }
     }
     Err(ParseResponseError::MessageIdMismatch)
 }
 
 fn parse_ingress_response(body: Bytes) -> Result<SignedIngress, ParseResponseError> {
-    let response = pb::GetIngressMessageInBlockResponse::proxy_decode(&body)
-        .and_then(|proto: pb::GetIngressMessageInBlockResponse| {
-            GetIngressMessageInBlockResponse::try_from(proto)
-        })
-        .map_err(|_| ParseResponseError::ParsingError("ingress_response_decoding_failed"))?;
+    let response: GetIngressMessageInBlockResponse =
+        pb::GetIngressMessageInBlockResponse::proxy_decode(&body)
+            .map_err(|_| ParseResponseError::ParsingError("ingress_response_decoding_failed"))?;
 
     SignedIngress::try_from(response.serialized_ingress_message)
         .map_err(|_| ParseResponseError::ParsingError("ingress_deserialization_failed"))
 }
 
 fn parse_dealing_response(body: Bytes) -> Result<SignedIDkgDealing, ParseResponseError> {
-    let response = pb::GetIDkgDealingInBlockResponse::proxy_decode(&body)
-        .and_then(|proto: pb::GetIDkgDealingInBlockResponse| {
-            GetIDkgDealingInBlockResponse::try_from(proto)
-        })
-        .map_err(|_| ParseResponseError::ParsingError("idkg_dealing_response_decoding_failed"))?;
+    pb::GetIDkgDealingInBlockResponse::proxy_decode(&body)
+        .map(|response: GetIDkgDealingInBlockResponse| response.signed_dealing)
+        .map_err(|_| ParseResponseError::ParsingError("idkg_dealing_response_decoding_failed"))
+}
 
-    Ok(response.signed_dealing)
+fn parse_canister_http_response(body: Bytes) -> Result<CanisterHttpResponse, ParseResponseError> {
+    pb::GetCanisterHttpResponseInBlockResponse::proxy_decode(&body)
+        .map(|response: GetCanisterHttpResponseInBlockResponse| response.response)
+        .map_err(|_| ParseResponseError::ParsingError("canister_http_response_decoding_failed"))
 }
 
 #[cfg(test)]
@@ -553,9 +576,10 @@ mod tests {
         fake_block_proposal_with_canister_http, fake_block_proposal_with_ingresses,
         fake_block_proposal_with_ingresses_and_idkg, fake_canister_http_payload,
         fake_canister_http_reject, fake_canister_http_response,
-        fake_canister_http_response_message, fake_flexible_canister_http_responses_message,
+        fake_canister_http_response_message, fake_canister_http_stripped_message,
+        fake_flexible_canister_http_responses_message,
         fake_flexible_canister_http_too_many_rejects_message, fake_idkg_payload_with_dealing,
-        fake_summary_block_proposal,
+        fake_summary_block_proposal, rpc_response,
     };
 
     use super::*;
@@ -1147,7 +1171,7 @@ mod tests {
             mock_peers.expect_peers().return_const(vec![NODE_1]);
             mock_transport
                 .expect_rpc()
-                .returning(move |_, _| Ok(response(stripped_message_clone.clone())));
+                .returning(move |_, _| Ok(rpc_response(stripped_message_clone.clone())));
             let response = download_stripped_message(
                 Arc::new(mock_transport),
                 stripped_message.id(),
@@ -1160,6 +1184,82 @@ mod tests {
 
             assert_eq!(response, (stripped_message, NODE_1));
         }
+    }
+
+    /// A canister http response is asked for at the endpoint that serves them, by its
+    /// content hash and the block that delivers it.
+    #[tokio::test]
+    async fn download_canister_http_response_request_test() {
+        let block = fake_block_proposal(vec![]);
+        let stripped_message = fake_canister_http_stripped_message(1);
+        let StrippedMessage::CanisterHttpResponse(content_hash, _) = &stripped_message else {
+            unreachable!("A canister http stripped message");
+        };
+        let expected_request = GetCanisterHttpResponseInBlockRequest {
+            content_hash: content_hash.clone(),
+            block_proposal_id: ConsensusMessageId::from(&block),
+        };
+
+        let mut mock_transport = MockTransport::new();
+        let mut mock_peers = MockPeers::default();
+        let stripped_message_clone = stripped_message.clone();
+        mock_peers.expect_peers().return_const(vec![NODE_1]);
+        mock_transport
+            .expect_rpc()
+            .withf(move |_, request| {
+                request.uri() == CANISTER_HTTP_RESPONSE_URI
+                    && pb::GetCanisterHttpResponseInBlockRequest::proxy_decode(request.body())
+                        .is_ok_and(|request: GetCanisterHttpResponseInBlockRequest| {
+                            request == expected_request
+                        })
+            })
+            .times(1)
+            .returning(move |_, _| Ok(rpc_response(stripped_message_clone.clone())));
+
+        let downloaded = download_stripped_message(
+            Arc::new(mock_transport),
+            stripped_message.id(),
+            ConsensusMessageId::from(&block),
+            &no_op_logger(),
+            &FetchStrippedConsensusArtifactMetrics::new(&MetricsRegistry::new()),
+            mock_peers,
+        )
+        .await;
+
+        assert_eq!(downloaded, (stripped_message, NODE_1));
+    }
+
+    /// A peer that answers with a response other than the one asked for is not
+    /// believed: what comes back is checked against the content hash that was asked
+    /// for, and the response is asked for again.
+    #[tokio::test(start_paused = true)]
+    async fn download_canister_http_response_with_another_hash_is_retried_test() {
+        let block = fake_block_proposal(vec![]);
+        let [wanted, other] = [1, 2].map(fake_canister_http_stripped_message);
+
+        let mut mock_transport = MockTransport::new();
+        let mut mock_peers = MockPeers::default();
+        let mut sequence = mockall::Sequence::new();
+        mock_peers.expect_peers().return_const(vec![NODE_1]);
+        for answer in [other, wanted.clone()] {
+            mock_transport
+                .expect_rpc()
+                .times(1)
+                .in_sequence(&mut sequence)
+                .returning(move |_, _| Ok(rpc_response(answer.clone())));
+        }
+
+        let downloaded = download_stripped_message(
+            Arc::new(mock_transport),
+            wanted.id(),
+            ConsensusMessageId::from(&block),
+            &no_op_logger(),
+            &FetchStrippedConsensusArtifactMetrics::new(&MetricsRegistry::new()),
+            mock_peers,
+        )
+        .await;
+
+        assert_eq!(downloaded, (wanted, NODE_1));
     }
 
     #[tokio::test]
@@ -1375,24 +1475,5 @@ mod tests {
             content_hash: ic_types::crypto::crypto_hash(response),
             block_proposal_id: consensus_message_id,
         })
-    }
-
-    fn response(stripped_message: StrippedMessage) -> axum::response::Response<Bytes> {
-        axum::response::Response::builder()
-            .body(Bytes::from(match stripped_message {
-                StrippedMessage::Ingress(_, ingress_message) => {
-                    pb::GetIngressMessageInBlockResponse::proxy_encode(
-                        GetIngressMessageInBlockResponse {
-                            serialized_ingress_message: ingress_message.binary().clone(),
-                        },
-                    )
-                }
-                StrippedMessage::IDkgDealing(_, _, dealing) => {
-                    pb::GetIDkgDealingInBlockResponse::proxy_encode(GetIDkgDealingInBlockResponse {
-                        signed_dealing: dealing,
-                    })
-                }
-            }))
-            .unwrap()
     }
 }
