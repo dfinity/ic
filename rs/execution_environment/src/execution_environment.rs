@@ -4171,7 +4171,9 @@ impl ExecutionEnvironment {
                         })?;
                 validate_sender_on_subnet(
                     &origin.origin(),
-                    CanisterAccess::InstallChunkedCodeStore,
+                    CanisterAccess::InstallChunkedCodeStore {
+                        target_canister_id: args.target_canister_id(),
+                    },
                     store_canister,
                     &state.metadata.network_topology,
                     state.metadata.own_subnet_id,

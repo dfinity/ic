@@ -6,7 +6,8 @@ use crate::execution_environment::ExecutionResponse;
 use crate::util::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID};
 use crate::{
     ExecuteMessageResult, HypervisorMetrics, RoundLimits, as_round_instructions,
-    canister_manager::types::CanisterManagerError, metrics::CallTreeMetrics,
+    canister_manager::types::{CanisterManagerError, ControlledCanisterRole},
+    metrics::CallTreeMetrics,
 };
 use candid::Encode;
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
@@ -349,13 +350,17 @@ pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserErro
     Ok(())
 }
 
+/// Validates that the `controller` is a controller of the `canister`, which
+/// plays the given `role` in the call.
 fn validate_controller(
     canister: &CanisterState,
     controller: &PrincipalId,
+    role: ControlledCanisterRole,
 ) -> Result<(), CanisterManagerError> {
     if !canister.controllers().contains(controller) {
         return Err(CanisterManagerError::CanisterInvalidController {
             canister_id: canister.canister_id(),
+            role: Box::new(role),
             controllers_expected: canister.system_state.controllers.clone(),
             controller_provided: *controller,
         });
@@ -444,6 +449,7 @@ fn validate_controller_or_subnet_admin(
         // the legacy `validate_controller` would to maintain backward compatibility.
         Err(CanisterManagerError::CanisterInvalidController {
             canister_id: canister.canister_id(),
+            role: Box::new(ControlledCanisterRole::Target),
             controllers_expected: canister.system_state.controllers.clone(),
             controller_provided: *sender,
         })
@@ -456,8 +462,9 @@ pub(crate) enum CanisterAccess {
     /// Calling the management canister method targeting the canister.
     Method(Ic00Method),
     /// Using the chunks in the wasm chunk store of the canister as the store
-    /// canister of `install_chunked_code`.
-    InstallChunkedCodeStore,
+    /// canister of `install_chunked_code` installing code on the canister
+    /// `target_canister_id`.
+    InstallChunkedCodeStore { target_canister_id: CanisterId },
     /// Reading the private custom section `section_name` of the canister via
     /// `canister_metadata`.
     ReadPrivateCustomSection { section_name: String },
@@ -518,7 +525,7 @@ fn validate_sender(
             | Ic00Method::StoredChunks
             | Ic00Method::ClearChunkStore,
         )
-        | CanisterAccess::InstallChunkedCodeStore
+        | CanisterAccess::InstallChunkedCodeStore { .. }
             if is_sender_the_canister =>
         {
             Ok(())
@@ -556,8 +563,15 @@ fn validate_sender(
             | Ic00Method::DeleteCanisterSnapshot
             | Ic00Method::UploadCanisterSnapshotMetadata
             | Ic00Method::UploadCanisterSnapshotData,
-        )
-        | CanisterAccess::InstallChunkedCodeStore => validate_controller(canister, sender),
+        ) => validate_controller(canister, sender, ControlledCanisterRole::Target),
+
+        // Using the chunks of the store canister requires being a controller
+        // of the store canister.
+        CanisterAccess::InstallChunkedCodeStore { target_canister_id } => validate_controller(
+            canister,
+            sender,
+            ControlledCanisterRole::ChunkStore { target_canister_id },
+        ),
 
         // Reading a private custom section requires being a controller of the
         // canister. Other senders get the same error as for a missing custom
@@ -578,22 +592,19 @@ fn validate_sender(
         CanisterAccess::LoadSnapshotIntoOtherCanister {
             target_canister_id,
             snapshot_id,
-        } => {
-            if canister.controllers().contains(sender) {
-                Ok(())
-            } else {
-                Err(CanisterManagerError::CanisterSnapshotNotController {
-                    sender: *sender,
-                    canister_id: target_canister_id,
-                    snapshot_id,
-                })
-            }
-        }
+        } => validate_controller(
+            canister,
+            sender,
+            ControlledCanisterRole::SnapshotOwner {
+                target_canister_id,
+                snapshot_id,
+            },
+        ),
 
         // The sender has to be a controller of the canister to be renamed and
         // equal to the migration canister.
         CanisterAccess::Method(Ic00Method::RenameCanister) => {
-            validate_controller(canister, sender)?;
+            validate_controller(canister, sender, ControlledCanisterRole::Target)?;
             if *sender != MIGRATION_CANISTER_ID.get() {
                 return Err(CanisterManagerError::CallerNotAuthorized);
             }
@@ -1374,7 +1385,9 @@ mod test {
             })
             .collect();
         cases.push((
-            vec![CanisterAccess::InstallChunkedCodeStore],
+            vec![CanisterAccess::InstallChunkedCodeStore {
+                target_canister_id: CanisterId::from_u64(43),
+            }],
             vec![controller, canister_id.get()],
             vec![controller, canister_id.get()],
         ));
