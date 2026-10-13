@@ -835,7 +835,7 @@ fn test_blocks() {
                             });
 
                             assert_eq!(
-                                hex::encode(block.clone().get_block_hash().clone()),
+                                hex::encode(block.clone().get_block_hash()),
                                 expected_block_response
                                     .clone()
                                     .block
@@ -849,7 +849,7 @@ fn test_blocks() {
                                     icrc1_ledgers[0].network_identifier().clone(),
                                     PartialBlockIdentifier {
                                         hash: Some(hex::encode(
-                                            block.clone().get_block_hash().clone(),
+                                            block.clone().get_block_hash(),
                                         )),
                                         index: Some(block.index),
                                     },
@@ -999,7 +999,7 @@ fn test_block_transaction() {
                                 });
 
                             assert_eq!(
-                                hex::encode(block.clone().get_transaction_hash().clone()),
+                                hex::encode(block.clone().get_transaction_hash()),
                                 expected_block_transaction_response
                                     .clone()
                                     .transaction
@@ -1020,11 +1020,11 @@ fn test_block_transaction() {
                                     icrc1_ledgers[0].network_identifier(),
                                     BlockIdentifier {
                                         index: block.index,
-                                        hash: hex::encode(block.clone().get_block_hash().clone()),
+                                        hash: hex::encode(block.clone().get_block_hash()),
                                     },
                                     TransactionIdentifier {
                                         hash: hex::encode(
-                                            block.clone().get_transaction_hash().clone(),
+                                            block.clone().get_transaction_hash(),
                                         ),
                                     },
                                 )
@@ -1042,12 +1042,12 @@ fn test_block_transaction() {
                                         BlockIdentifier {
                                             index: u64::MAX,
                                             hash: hex::encode(
-                                                block.clone().get_block_hash().clone()
+                                                block.clone().get_block_hash()
                                             ),
                                         },
                                         TransactionIdentifier {
                                             hash: hex::encode(
-                                                block.clone().get_transaction_hash().clone()
+                                                block.clone().get_transaction_hash()
                                             )
                                         }
                                     )
@@ -1268,7 +1268,6 @@ fn test_network_status() {
                                     .unwrap()
                                     .clone()
                                     .get_block_hash()
-                                    .clone()
                             ),
                             rosetta_response.genesis_block_identifier.hash,
                             "Genesis block hashes do not match"
@@ -1280,7 +1279,6 @@ fn test_network_status() {
                                     .unwrap()
                                     .clone()
                                     .get_block_hash()
-                                    .clone()
                             ),
                             rosetta_response.current_block_identifier.hash,
                             "Current block hashes do not match"
@@ -1292,7 +1290,6 @@ fn test_network_status() {
                                     .unwrap()
                                     .clone()
                                     .get_block_hash()
-                                    .clone()
                             ),
                             rosetta_response.oldest_block_identifier.unwrap().hash,
                             "Genesis block hashes do not match"

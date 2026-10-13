@@ -284,7 +284,7 @@ fn with_vault_gen_node_signing_key_pair(vault: &mut MockLocalCspVault) -> Public
         .expect_gen_node_signing_key_pair()
         .times(1)
         .return_const(Ok(csp_pk_ed25519_from_hex(&hex::encode(
-            node_signing_public_key.key_value.clone(),
+            &node_signing_public_key.key_value,
         ))));
     node_signing_public_key
 }
@@ -296,12 +296,12 @@ fn with_vault_gen_committee_signing_key_pair(vault: &mut MockLocalCspVault) -> P
         .times(1)
         .return_const(Ok((
             csp_pk_multi_bls12381_from_hex(&hex::encode(
-                committee_signing_public_key.key_value.clone(),
+                &committee_signing_public_key.key_value,
             )),
             csp_pop_multi_bls12381_from_hex(&hex::encode(
                 committee_signing_public_key
                     .proof_data
-                    .clone()
+                    .as_ref()
                     .expect("missing pop"),
             )),
         )));
