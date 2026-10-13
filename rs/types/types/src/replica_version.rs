@@ -39,7 +39,10 @@ impl AsRef<str> for ReplicaVersion {
     }
 }
 
-/// Checks if a given char is invalid for use in a replica version.
+/// Only alphanumeric, dot, underscore, and dash characters are allowed in
+/// replica version IDs. In practice, replica version IDs are generally git
+/// commit IDs (from the dfinity/ic repo), which are lower case hexadecimal
+/// strings of length 40.
 fn is_invalid_version_symbol(c: char) -> bool {
     !matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '_' | '-')
 }

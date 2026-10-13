@@ -51,7 +51,7 @@ fn registry_snapshot_range<T: Message + Default>(
     snapshot: &RegistrySnapshot,
     prefix: &str,
 ) -> Result<BTreeMap<String, T>, InvariantCheckError> {
-    let mut nodes = BTreeMap::new();
+    let mut records = BTreeMap::new();
 
     // Note: effectively .range(PREFIX..)
     for (k, v) in snapshot.range::<[u8], _>((Included(prefix.as_bytes()), Unbounded)) {
@@ -61,7 +61,9 @@ fn registry_snapshot_range<T: Message + Default>(
 
         let key = str::from_utf8(k)
             .map_err(|err| InvariantCheckError {
-                msg: format!("Failed to decode keys from the RegistrySnapshot: {err}"),
+                msg: format!(
+                    "Failed to decode keys for prefix '{prefix}' from the RegistrySnapshot: {err}"
+                ),
                 source: None,
             })?
             .to_string();
@@ -70,10 +72,10 @@ fn registry_snapshot_range<T: Message + Default>(
             source: None,
         })?;
 
-        nodes.insert(key, value);
+        records.insert(key, value);
     }
 
-    Ok(nodes)
+    Ok(records)
 }
 
 /// Returns all node records in the snapshot.
@@ -81,6 +83,7 @@ pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> BTreeMap<Node
     registry_snapshot_range::<NodeRecord>(snapshot, NODE_RECORD_KEY_PREFIX)
         .unwrap()
         .into_iter()
+        // NOTE: An unwrap is unlikely to occur here, as we are very careful to keep our keys valid.
         .map(|(k, v)| (NodeId::from(k.parse::<PrincipalId>().unwrap()), v))
         .collect()
 }
@@ -122,6 +125,7 @@ pub(crate) fn get_api_boundary_node_records_from_snapshot(
     registry_snapshot_range::<ApiBoundaryNodeRecord>(snapshot, API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
         .unwrap()
         .into_iter()
+        // NOTE: An unwrap is unlikely to occur here, as we are very careful to keep our keys valid.
         .map(|(k, v)| (NodeId::from(k.parse::<PrincipalId>().unwrap()), v))
         .collect()
 }
