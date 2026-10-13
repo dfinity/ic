@@ -38,7 +38,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmMethod};
 use ic_types::time::CoarseTime;
-use ic_types::{NumInstructions, PrincipalId, Time, UserId};
+use ic_types::{NumInstructions, PrincipalId, SnapshotId, Time, UserId};
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use lazy_static::lazy_static;
 use prometheus::IntCounter;
@@ -451,13 +451,22 @@ fn validate_controller_or_subnet_admin(
 }
 
 /// The access to a canister that `validate_sender` validates.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum CanisterAccess {
     /// Calling the management canister method targeting the canister.
     Method(Ic00Method),
     /// Using the chunks in the wasm chunk store of the canister as the store
     /// canister of `install_chunked_code`.
     InstallChunkedCodeStore,
+    /// Reading the private custom section `section_name` of the canister via
+    /// `canister_metadata`.
+    ReadPrivateCustomSection { section_name: String },
+    /// Loading the snapshot `snapshot_id` of the canister into the different
+    /// canister `target_canister_id` via `load_canister_snapshot`.
+    LoadSnapshotIntoOtherCanister {
+        target_canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
 }
 
 /// Validates that `sender` is allowed the access `access` to `canister` on a
@@ -466,11 +475,9 @@ pub(crate) enum CanisterAccess {
 ///
 /// This is the single place defining which senders can call which management
 /// canister methods targeting a canister. It must be called after the method's
-/// payload has been decoded and `canister` has been looked up. A method
-/// targeting more than one canister must call it once per targeted canister,
-/// passing the access required on that canister (e.g., `install_chunked_code`
-/// validates its target canister as `CanisterAccess::Method` and its store
-/// canister as `CanisterAccess::InstallChunkedCodeStore`).
+/// payload has been decoded and `canister` has been looked up. A method that
+/// needs more than one access (e.g., to several canisters) must call it once
+/// per access, passing the corresponding `CanisterAccess`.
 ///
 /// The `subnet_admins` are only taken into account if the subnet can have
 /// subnet admins (see `can_have_subnet_admins`).
@@ -488,13 +495,9 @@ pub(crate) enum CanisterAccess {
 /// that are not gated on the targeted canister at all (e.g., `create_canister`,
 /// `list_canisters`, or the provisional methods, which are gated on the subnet
 /// admins and the provisional whitelist, respectively) and `canister_metadata`,
-/// whose access control also depends on the visibility of the requested custom
-/// section. In contrast, `canister_info` and `deposit_cycles` are accepted for
-/// every sender: they target a canister but are subject to no access control.
-///
-/// A few checks on a method that this function does validate are implemented
-/// elsewhere, namely the controller check on the canister owning the snapshot
-/// loaded by `load_canister_snapshot`.
+/// whose access control depends on the requested custom section. In contrast,
+/// `canister_info` and `deposit_cycles` are accepted for every sender: they
+/// target a canister but are subject to no access control.
 fn validate_sender(
     sender: &PrincipalId,
     access: CanisterAccess,
@@ -555,6 +558,37 @@ fn validate_sender(
             | Ic00Method::UploadCanisterSnapshotData,
         )
         | CanisterAccess::InstallChunkedCodeStore => validate_controller(canister, sender),
+
+        // Reading a private custom section requires being a controller of the
+        // canister. Other senders get the same error as for a missing custom
+        // section.
+        CanisterAccess::ReadPrivateCustomSection { section_name } => {
+            if canister.controllers().contains(sender) {
+                Ok(())
+            } else {
+                Err(CanisterManagerError::CanisterMetadataSectionNotFound {
+                    canister_id: canister.canister_id(),
+                    section_name,
+                })
+            }
+        }
+
+        // Loading the snapshot of a canister into a different canister
+        // requires being a controller of the canister owning the snapshot.
+        CanisterAccess::LoadSnapshotIntoOtherCanister {
+            target_canister_id,
+            snapshot_id,
+        } => {
+            if canister.controllers().contains(sender) {
+                Ok(())
+            } else {
+                Err(CanisterManagerError::CanisterSnapshotNotController {
+                    sender: *sender,
+                    canister_id: target_canister_id,
+                    snapshot_id,
+                })
+            }
+        }
 
         // The sender has to be a controller of the canister to be renamed and
         // equal to the migration canister.
@@ -1344,6 +1378,19 @@ mod test {
             vec![controller, canister_id.get()],
             vec![controller, canister_id.get()],
         ));
+        cases.push((
+            vec![
+                CanisterAccess::ReadPrivateCustomSection {
+                    section_name: "section".to_string(),
+                },
+                CanisterAccess::LoadSnapshotIntoOtherCanister {
+                    target_canister_id: CanisterId::from_u64(43),
+                    snapshot_id: SnapshotId::from((canister_id, 0)),
+                },
+            ],
+            vec![controller],
+            vec![controller],
+        ));
 
         for subnet_type in SubnetType::iter() {
             for cost_schedule in [
@@ -1367,7 +1414,7 @@ mod test {
                         for sender in senders {
                             let result = validate_sender(
                                 &sender,
-                                *access,
+                                access.clone(),
                                 &canister,
                                 subnet_type,
                                 cost_schedule,
