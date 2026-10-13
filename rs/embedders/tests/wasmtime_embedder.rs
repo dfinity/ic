@@ -1240,11 +1240,7 @@ fn stable64_read_out_of_bounds() {
 }
 
 /// A `stable64_read`/`stable64_write` with a `size` argument so large that
-/// `size + overhead` would overflow an `i64` must still trap cleanly on the
-/// bounds check, rather than driving the instruction counter negative via the
-/// up-front metering and surfacing as an out-of-instructions error. This guards
-/// the ordering in the Wasm replacement functions where metering happens only
-/// after `size` is known to fit in a heap address.
+/// `size + overhead` would overflow an `i64` must trap.
 #[test]
 fn stable64_read_write_huge_size_traps_on_bounds() {
     fn func_ref(name: &str) -> FuncRef {
