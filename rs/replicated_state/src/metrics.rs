@@ -56,7 +56,7 @@ pub struct ReplicatedStateMetrics {
     available_canister_ids: IntGauge,
     consumed_cycles: Gauge,
     consumed_cycles_by_use_case: GaugeVec,
-    consumed_cycles_by_use_case_as_counters: CounterVec,
+    consumed_cycles_by_use_case_monotonic: CounterVec,
     input_queue_messages: IntGaugeVec,
     input_queues_size_bytes: IntGaugeVec,
     subnet_input_queue_messages: IntGaugeVec,
@@ -171,7 +171,7 @@ impl ReplicatedStateMetrics {
                 "Number of cycles consumed by use cases.",
                 &["use_case"],
             ),
-            consumed_cycles_by_use_case_as_counters: metrics_registry.counter_vec(
+            consumed_cycles_by_use_case_monotonic: metrics_registry.counter_vec(
                 "replicated_state_consumed_cycles_from_replica_start_as_counters",
                 "Number of cycles consumed by use cases.",
                 &["use_case"],
@@ -319,7 +319,7 @@ impl ReplicatedStateMetrics {
             "replicated_state_consumed_cycles_by_use_case",
         );
         metrics_registry.register_alias(
-            &metrics.consumed_cycles_by_use_case_as_counters,
+            &metrics.consumed_cycles_by_use_case_monotonic,
             "replicated_state_consumed_cycles_by_use_case_as_counters",
         );
 
@@ -337,15 +337,15 @@ impl ReplicatedStateMetrics {
         }
     }
 
-    fn observe_consumed_cycles_by_use_case_as_counters(
+    fn observe_consumed_cycles_by_use_case_monotonic(
         &self,
-        consumed_cycles_by_use_case_as_counters: &BTreeMap<CyclesUseCase, NominalCycles>,
+        consumed_cycles_by_use_case_monotonic: &BTreeMap<CyclesUseCase, NominalCycles>,
     ) {
-        for (use_case, cycles) in consumed_cycles_by_use_case_as_counters.iter() {
-            self.consumed_cycles_by_use_case_as_counters
+        for (use_case, cycles) in consumed_cycles_by_use_case_monotonic.iter() {
+            self.consumed_cycles_by_use_case_monotonic
                 .with_label_values(&[use_case.as_str()])
                 .reset();
-            self.consumed_cycles_by_use_case_as_counters
+            self.consumed_cycles_by_use_case_monotonic
                 .with_label_values(&[use_case.as_str()])
                 .inc_by(cycles.get() as f64);
         }
@@ -415,7 +415,6 @@ impl ReplicatedStateMetrics {
         let mut num_aborted_install = 0;
 
         let mut consumed_cycles_total_by_use_case = BTreeMap::new();
-        let mut consumed_cycles_total_by_use_case_as_counters = BTreeMap::new();
 
         let mut ingress_queue_message_count = 0;
         let mut ingress_queue_size_bytes = 0;
@@ -473,26 +472,18 @@ impl ReplicatedStateMetrics {
                 | Some(ExecutionTask::OnLowWasmMemory)
                 | None => {}
             }
-            join_consumed_cycles_by_use_case(
-                &mut consumed_cycles_total_by_use_case,
-                canister
-                    .system_state
-                    .canister_metrics()
-                    .consumed_cycles_by_use_cases(),
-            );
-            // For the purpose of exporting the total counters to prometheus, filter out HTTPS
-            // outcalls from canister level metrics as they will be added later from the subnet level metrics.
-            // This only applies for the counter version of metrics as the gauge version only updates
-            // the subnet level part.
-            let mut counter_metrics_map = canister
+            // For the purpose of exporting the totals to prometheus, filter out HTTPS
+            // outcalls from canister level metrics as they will be added later from the
+            // subnet level metrics.
+            let mut canister_metrics_map = canister
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases_as_counters()
+                .consumed_cycles_by_use_cases_monotonic()
                 .clone();
-            counter_metrics_map.remove(&CyclesUseCase::HTTPOutcalls);
+            canister_metrics_map.remove(&CyclesUseCase::HTTPOutcalls);
             join_consumed_cycles_by_use_case(
-                &mut consumed_cycles_total_by_use_case_as_counters,
-                &counter_metrics_map,
+                &mut consumed_cycles_total_by_use_case,
+                &canister_metrics_map,
             );
             let queues = canister.system_state.queues();
             ingress_queue_message_count += queues.ingress_queue_message_count();
@@ -562,29 +553,23 @@ impl ReplicatedStateMetrics {
                 .subnet_metrics
                 .get_consumed_cycles_by_use_case(),
         );
-        join_consumed_cycles_by_use_case(
-            &mut consumed_cycles_total_by_use_case_as_counters,
-            state
-                .metadata
-                .subnet_metrics
-                .get_consumed_cycles_by_use_case(),
-        );
 
         // Read from the shared definition rather than re-folding, so the gauge cannot
-        // drift from the certified state tree. The per-use-case breakdowns below do
-        // still fold over the canisters, as no aggregate holds them.
+        // drift from the certified state tree (from certification version `V30` on).
+        // The per-use-case breakdowns below do still fold over the canisters, as no
+        // aggregate holds them.
         self.consumed_cycles.set(
             state
                 .metadata
                 .subnet_metrics
-                .consumed_cycles_total_including_canisters()
+                .consumed_cycles_total_including_canisters_monotonic()
                 .get() as f64,
         );
 
+        // The gauge and the counter export the same amounts: the canisters' monotonic
+        // ones plus the subnet-level ones, which only ever grow.
         self.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
-        self.observe_consumed_cycles_by_use_case_as_counters(
-            &consumed_cycles_total_by_use_case_as_counters,
-        );
+        self.observe_consumed_cycles_by_use_case_monotonic(&consumed_cycles_total_by_use_case);
 
         for (key_id, count) in &state.metadata.subnet_metrics.threshold_signature_agreements {
             self.threshold_signature_agreements

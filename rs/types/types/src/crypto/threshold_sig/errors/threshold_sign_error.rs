@@ -36,10 +36,10 @@ impl fmt::Display for ThresholdSignError {
                 f,
                 "Transient internal error in threshold signing: {internal_error}"
             ),
-            ThresholdSignError::KeyIdInstantiationError(internal_error) => write! {
+            ThresholdSignError::KeyIdInstantiationError(internal_error) => write!(
                 f,
                 "Error instantiating KeyId from public coefficients: {internal_error}"
-            },
+            ),
             ThresholdSignError::InternalError(internal_error) => {
                 write!(f, "{prefix}Internal error: {internal_error}")
             }

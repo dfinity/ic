@@ -19,8 +19,10 @@ on the process that this file is part of, see
   (super admin) into the `subnet_admins` list. The supplied list is now
   forwarded to the registry as-is.
 
-* `update_subnet` rejects the new `UpdateSubnetPayload.cooling_down` field:
-  only `subnet_admins` and `is_halted` remain in the engine controller's scope.
+* `update_subnet` accepts the new `UpdateSubnetPayload.cooling_down` field, so
+  the engine controller can make a cloud engine subnet cool down (and stop
+  cooling down again). Its scope is now `subnet_admins`, `is_halted` and
+  `cooling_down`; every other field is still rejected.
 
 ## Deprecated
 

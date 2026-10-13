@@ -14,7 +14,7 @@ SELECT
 
   bi.build_id,
 
-  wr.head_branch,
+  bi.head_branch,
 
   CASE
       -- This is to fix the weird reality that all master commits have pull_request_number 855
@@ -23,20 +23,33 @@ SELECT
       ELSE ''
   END AS "pull_request_number",
 
-  bi.head_sha
+  bi.head_sha,
+
+  bi.run_id,
+
+  bi.job_name,
+
+  -- Whether bazel took the result from the cache, i.e. its test summary says '(cached) PASSED':
+  -- the test passed and all its runs were cached. (No test is sharded, and bazel_tests has no shard count.)
+  -- The logs of such a result are those of the earlier bazel invocation that ran the test.
+  COALESCE(bt.overall_status = 1 AND COALESCE(bt.total_num_cached, 0) >= GREATEST(bt.run_count, 1), FALSE) AS "cached"
 
 FROM
-  workflow_runs     AS wr JOIN
-  bazel_invocations AS bi ON wr.id = bi.run_id JOIN
-  bazel_tests       AS bt ON bi.build_id = bt.build_id
+  bazel_tests       AS bt JOIN
+  bazel_invocations AS bi ON bt.build_id = bi.build_id LEFT JOIN LATERAL (
+    -- Some invocations have no workflow run, and runs until 2025-10-09 can have a row per attempt, some without the PR number.
+    SELECT * FROM workflow_runs WHERE id = bi.run_id ORDER BY pull_request_number IS NULL, run_attempt DESC LIMIT 1
+  ) AS wr ON TRUE
 
 WHERE
    ({test_target} = '' OR bt.label LIKE {test_target})
    AND bt.overall_status IN ({overall_statuses})
    AND ({time_filter})
    AND (NOT {only_prs} OR wr.event_type = 'pull_request')
-   AND ({branch} = '' OR wr.head_branch LIKE {branch})
-   AND (wr.event_type != 'pull_request' OR wr.pull_request_number != ALL({exclude_prs}))
+   AND ({branch} = '' OR bi.head_branch LIKE {branch})
+   AND ({job} = '' OR bi.job_name LIKE {job})
+   AND (bi.job_name IS NULL OR bi.job_name NOT LIKE ALL({exclude_jobs}))
+   AND (wr.event_type IS DISTINCT FROM 'pull_request' OR wr.pull_request_number != ALL({exclude_prs}))
    AND (bi.head_sha != ALL({exclude_commits}))
 
 ORDER BY bt.first_start_time DESC

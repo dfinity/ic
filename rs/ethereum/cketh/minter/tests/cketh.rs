@@ -1,3 +1,5 @@
+use alloy_consensus::TxEip1559;
+use alloy_primitives::U256;
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
@@ -109,8 +111,18 @@ fn should_deposit_and_withdraw() {
         let gas_limit = Nat::from(21_000_u32);
         let max_priority_fee_per_gas = Nat::from(1_500_000_000_u32);
 
-        let cketh = cketh
-            .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
+        let finalized = cketh.wait_and_validate_withdrawal(ProcessWithdrawalParams::default());
+        finalized
+            .setup
+            .check_minter_metrics()
+            .assert_contains_metric_matching(
+                r#"cketh_minter_receipt_fetch_window\{pipeline="withdrawal"\} 20 \d+"#,
+            )
+            .assert_contains_metric_matching(
+                r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="receipt"\} 1 \d+"#,
+            );
+
+        let cketh = finalized
             .expect_finalized_status(TxFinalizedStatus::Success {
                 transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
                 effective_transaction_fee: Some((GAS_USED * EFFECTIVE_GAS_PRICE).into()),
@@ -389,7 +401,18 @@ fn should_not_finalize_transaction_when_receipts_do_not_match() {
         )
         .expect_status(RetrieveEthStatus::TxSent(EthTransaction {
             transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-        }));
+        }))
+        .setup
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_window\{pipeline="withdrawal"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="error"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_abandoned_rounds_total\{pipeline="withdrawal"\} 0 \d+"#,
+        );
 }
 
 #[test]
@@ -413,20 +436,20 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
         .retrieve_fee_history(move |mock| {
             mock.modify_response(
                 JsonRpcProvider::Provider1,
-                &mut |response: &mut ethers_core::types::FeeHistory| {
-                    response.oldest_block = 0x17740742_u64.into()
+                &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                    response.oldest_block = 0x17740742_u64
                 },
             )
             .modify_response(
                 JsonRpcProvider::Provider2,
-                &mut |response: &mut ethers_core::types::FeeHistory| {
-                    response.oldest_block = 0x17740743_u64.into()
+                &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                    response.oldest_block = 0x17740743_u64
                 },
             )
             .modify_response(
                 JsonRpcProvider::Provider3,
-                &mut |response: &mut ethers_core::types::FeeHistory| {
-                    response.oldest_block = 0x17740744_u64.into()
+                &mut |response: &mut alloy_rpc_types_eth::FeeHistory| {
+                    response.oldest_block = 0x17740744_u64
                 },
             )
         })
@@ -509,7 +532,7 @@ fn should_reimburse() {
         .0
         .to_u128()
         .unwrap()
-        .checked_sub(tx.value.unwrap().as_u128())
+        .checked_sub(tx.value.to::<u128>())
         .unwrap();
     assert_eq!(cost_of_failed_transaction, 693_077_873_418_000);
 
@@ -519,7 +542,7 @@ fn should_reimburse() {
         balance_before_withdrawal.clone() - cost_of_failed_transaction
     );
 
-    let reimbursed_amount = Nat::from(tx.value.unwrap().as_u128());
+    let reimbursed_amount = Nat::from(tx.value.to::<u128>());
     let reimbursed_in_block = withdrawal_id.clone() + Nat::from(1_u8);
     let failed_tx_hash = DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string();
     assert_eq!(
@@ -628,15 +651,17 @@ fn should_resubmit_new_transaction_when_price_increased() {
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
     let first_tx_hash = hash_transaction(expected_tx.clone(), expected_sig);
     let resubmitted_sent_tx = "0x02f873018084625900808507b81d70e382520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cc412e75c2de80c001a0a50a97743db2c45bfafaa668abb848ea6a15818d7c704b06c8957827fa68c6e8a04175e5fa7fbda1bb84e254f31acafd0fdf95f094127b0520b4e447e80d1afe37";
-    let (resubmitted_tx, resubmitted_tx_sig) = decode_transaction(resubmitted_sent_tx);
-    let resubmitted_tx_hash = hash_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
+    let resubmitted = decode_transaction(resubmitted_sent_tx);
+    let (resubmitted_tx, resubmitted_tx_sig) = (resubmitted.tx().clone(), *resubmitted.signature());
+    let resubmitted_tx_hash = *resubmitted.hash();
     assert_eq!(
         resubmitted_tx,
-        expected_tx
-            .clone()
-            .value(99_303_772_126_560_990_u64)
-            .max_priority_fee_per_gas(1_650_000_000_u64)
-            .max_fee_per_gas(33_153_708_259_u64)
+        TxEip1559 {
+            value: U256::from(99_303_772_126_560_990_u64),
+            max_priority_fee_per_gas: 1_650_000_000,
+            max_fee_per_gas: 33_153_708_259,
+            ..expected_tx.clone()
+        }
     );
     assert_ne!(first_tx_hash, resubmitted_tx_hash);
 
@@ -668,13 +693,11 @@ fn should_resubmit_new_transaction_when_price_increased() {
                 transaction: UnsignedTransaction {
                     chain_id: Nat::from(1_u8),
                     nonce: Nat::from(0_u8),
-                    max_priority_fee_per_gas: Nat::from(
-                        resubmitted_tx.max_priority_fee_per_gas.unwrap().as_u128(),
-                    ),
-                    max_fee_per_gas: Nat::from(resubmitted_tx.max_fee_per_gas.unwrap().as_u128()),
+                    max_priority_fee_per_gas: Nat::from(resubmitted_tx.max_priority_fee_per_gas),
+                    max_fee_per_gas: Nat::from(resubmitted_tx.max_fee_per_gas),
                     gas_limit: Nat::from(21_000_u32),
                     destination: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
-                    value: Nat::from(resubmitted_tx.value.unwrap().as_u128()),
+                    value: Nat::from(resubmitted_tx.value.to::<u128>()),
                     data: Default::default(),
                     access_list: vec![],
                 },
@@ -1190,6 +1213,8 @@ fn should_derive_minter_address() {
 #[allow(deprecated)]
 #[test]
 fn should_retrieve_minter_info() {
+    const MINIMUM_ETH_DEPOSIT_WEI: u64 = 5_000_000_000_000_000;
+
     let cketh = CkEthSetup::default();
     let max_eth_logs_block_range = cketh.max_logs_block_range();
     let caller: Principal = cketh.caller.into();
@@ -1221,6 +1246,7 @@ fn should_retrieve_minter_info() {
             last_gas_fee_estimate: None,
             erc20_balances: None,
             minimum_deposit_amounts: None,
+            minimum_eth_deposit_amount: Some(Nat::from(MINIMUM_ETH_DEPOSIT_WEI)),
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_deposit_with_subaccount_scraped_block_number: Some(
@@ -1338,6 +1364,174 @@ fn decode_ledger_memo_smoke() {
         Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
         if msg.contains("Error decoding MintMemo")
     );
+}
+
+#[test]
+fn should_export_the_sweeper_funding_metrics() {
+    CkEthSetup::default()
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_cketh_burned_total 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_eth_spent_total 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeper_funding_finalized_total\{status="success"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeper_funding_finalized_total\{status="failure"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_burned_not_yet_spent 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_gas_balance 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_low_water_mark \d+ \d+")
+        .assert_contains_metric_matching(r"cketh_minter_sweeper_funding_target \d+ \d+")
+        .assert_contains_metric_matching(
+            r"cketh_minter_sweeper_funding_in_flight_age_seconds 0 \d+",
+        );
+}
+
+#[test]
+fn should_export_the_sweep_pipeline_metrics() {
+    let cketh = CkEthSetup::default();
+    cketh.advance_time(Duration::from_secs(90));
+    cketh.env.tick();
+    cketh
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_armed_deposits 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_longest_armed_age_seconds 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_queued_deposits 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeps_finalized_total\{status="success"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_sweeps_finalized_total\{status="failure"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_unfinalized_sweep_age_seconds 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_balance_scan_candidates_total 0 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="ok"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="eth_call_error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_balance_scan_chunks_total\{outcome="decode_error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(r"cketh_minter_last_balance_scan_age_seconds 90 \d+")
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="queued"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="unsent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="sent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="sweeper"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_window\{pipeline="withdrawal"\} 10 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_window\{pipeline="sweeper"\} 10 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_rounds_since_chain_read\{pipeline="withdrawal"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_rounds_since_chain_read\{pipeline="sweeper"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="receipt"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="not_mined"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="withdrawal",outcome="error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="sweeper",outcome="receipt"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="sweeper",outcome="not_mined"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_lookups_total\{pipeline="sweeper",outcome="error"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_abandoned_rounds_total\{pipeline="withdrawal"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_receipt_fetch_abandoned_rounds_total\{pipeline="sweeper"\} 0 \d+"#,
+        );
+}
+
+#[test]
+fn should_export_the_unfinalized_backlog_metrics() {
+    let cketh = CkEthSetup::default();
+    cketh
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="queued"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="unsent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="sent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="withdrawal"\} 0 \d+"#,
+        );
+
+    let caller: Principal = cketh.caller.into();
+    let cketh = cketh
+        .deposit(DepositParams::default())
+        .expect_mint()
+        .call_ledger_approve_minter(caller, EXPECTED_BALANCE, None)
+        .expect_ok(1)
+        .call_minter_withdraw_eth(
+            caller,
+            Nat::from(CKETH_WITHDRAWAL_AMOUNT),
+            DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        )
+        .expect_withdrawal_request_accepted()
+        .wait_and_validate_withdrawal(
+            ProcessWithdrawalParams::default().with_inconsistent_transaction_receipt(),
+        )
+        .expect_status(RetrieveEthStatus::TxSent(EthTransaction {
+            transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+        }))
+        .setup;
+
+    cketh
+        .check_minter_metrics()
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="sent"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="withdrawal"\} 1 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="queued"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="withdrawal",stage="unsent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_requests\{pipeline="sweeper",stage="sent"\} 0 \d+"#,
+        )
+        .assert_contains_metric_matching(
+            r#"cketh_minter_unfinalized_transactions\{pipeline="sweeper"\} 0 \d+"#,
+        );
+}
+
+#[test]
+fn should_export_the_stored_attestation_and_authorization_metrics() {
+    CkEthSetup::default()
+        .check_minter_metrics()
+        .assert_contains_metric_matching(r"cketh_minter_stored_attestations 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_stored_authorizations 0 \d+")
+        .assert_contains_metric_matching(r"cketh_minter_delegated_deposit_addresses 0 \d+");
 }
 
 /// Tests with the EVM RPC canister

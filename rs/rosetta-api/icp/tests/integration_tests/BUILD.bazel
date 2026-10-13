@@ -13,7 +13,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/ledger_suite/icp:icp_ledger",
-        "//rs/ledger_suite/icp/ledger",
         "//rs/ledger_suite/icp/test_utils",
         "//rs/rosetta-api/icp:rosetta-api",
         "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client",
@@ -46,7 +45,7 @@ rust_test_suite(
         "IC_SENDER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp/test_utils/sender_canister:ic-sender-canister)",
         "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ledger.wasm.gz)",
     },
-    exec_properties = {"cpu": "4"},
+    exec_properties = {"test.cpu": "4"},
     # The test is critical to get resources timely and therefore fails sometimes when run on heavily loaded node.
     # TODO(IDX-2225): reconsider when we will use Remote Execution.
     proc_macro_deps = [
@@ -57,7 +56,6 @@ rust_test_suite(
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//packages/pocket-ic",
         "//rs/ledger_suite/icp:icp_ledger",
-        "//rs/ledger_suite/icp/ledger",
         "//rs/ledger_suite/icp/test_utils",
         "//rs/nns/constants",
         "//rs/rosetta-api/common/rosetta_core:rosetta-core",

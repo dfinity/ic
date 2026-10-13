@@ -24,7 +24,7 @@
 // You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/container-run.sh
-//   $ bazel run //rs/tests/testnets:from_config --test_env=IC_CONFIG='
+//   $ bazel run //rs/tests/testnets:from_config_farm --test_env=IC_CONFIG='
 //   {
 //     "subnets": [
 //       { "subnet_type": "application", "num_nodes": 1 },
@@ -38,9 +38,9 @@
 //
 // To get access to P8s and Grafana look for the following lines in the output:
 //
-//     prometheus: Prometheus Web UI at http://prometheus.from_config--1692597750709.testnet.farm.dfinity.systems,
-//     grafana: Grafana at http://grafana.from_config--1692597750709.testnet.farm.dfinity.systems,
-//     progress_clock: IC Progress Clock at http://grafana.from_config--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
+//     prometheus: Prometheus Web UI at http://prometheus.from_config_farm--1692597750709.testnet.farm.dfinity.systems,
+//     grafana: Grafana at http://grafana.from_config_farm--1692597750709.testnet.farm.dfinity.systems,
+//     progress_clock: IC Progress Clock at http://grafana.from_config_farm--1692597750709.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10su0026from=now-5mu0026to=now,
 //
 // Happy testing!
 

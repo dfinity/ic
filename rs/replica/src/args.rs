@@ -26,6 +26,10 @@ pub struct ReplicaArgs {
     #[clap(long)]
     pub catch_up_package: Option<PathBuf>,
 
+    /// The version of the GuestOS the node booted from
+    #[clap(long)]
+    pub guestos_version: ReplicaVersion,
+
     /// The version of the Replica being run
     #[clap(long)]
     pub replica_version: ReplicaVersion,

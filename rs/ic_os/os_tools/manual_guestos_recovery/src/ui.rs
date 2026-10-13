@@ -130,7 +130,7 @@ fn render_if_too_small(f: &mut Frame, size: Rect) -> bool {
 fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
     let calculated_version_hash = params.version_hash_full.as_deref().unwrap_or("<pending>");
     let mut lines = vec![
-        format!("Inputted parameters:"),
+        "Inputted parameters:".to_string(),
         format!("VERSION: {}", params.version),
     ];
 

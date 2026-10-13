@@ -149,7 +149,7 @@ impl RingBuffer {
         }
         let mut index_table = self.io.load_index_table();
         let mut h = self.io.load_header();
-        for record in iter.map(LogRecord::from) {
+        for mut record in iter.map(LogRecord::from) {
             // Check that records are added in order, otherwise it breaks the index.
             if record.idx < h.next_idx {
                 debug_assert!(
@@ -168,11 +168,14 @@ impl RingBuffer {
                 continue;
             }
 
+            // A single record must fit the ring buffer. That holds when the record is
+            // created, but not once the capacity has been lowered underneath it (see
+            // `LogRecord::truncate_to_capacity`), so re-establish it here — truncating
+            // the record rather than dropping it, which is what `add_record` does when
+            // the same limit is applied at creation time.
+            record.truncate_to_capacity(h.data_capacity.get() as usize);
+
             let added_size = MemorySize::new(record.bytes_len() as u64);
-            if added_size > h.data_capacity {
-                debug_assert!(false, "Log record size exceeds ring buffer capacity");
-                continue;
-            }
             self.evict_for_size(&mut h, added_size);
 
             // Save the record at the tail position.

@@ -9,10 +9,12 @@ use ic_management_canister_types::{
     SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
 use ic_management_canister_types_private::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload,
+    BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, DerivationPath,
+    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
     FlexibleCanisterHttpRequestArgs, FlexibleHttpGlobalError, FlexibleHttpRequestErr,
     FlexibleHttpRequestResult, HttpMethod, HttpRequestResourceReport,
-    PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, TransformContext, TransformFunc,
+    PRICING_VERSION_PAY_AS_YOU_GO, ReplicationCounts, SignWithECDSAArgs, SignWithECDSAReply,
+    TransformContext, TransformFunc,
 };
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 use ic_transport_types::{CallResponse, Envelope};
@@ -61,6 +63,7 @@ enum RejectionCode {
     DestinationInvalid,
     CanisterReject,
     CanisterError,
+    SysUnknown,
     Unknown,
 }
 
@@ -1304,6 +1307,64 @@ fn test_ecdsa() {
         let pk = k256::ecdsa::VerifyingKey::from_sec1_bytes(&ecsda_public_key.public_key).unwrap();
         let sig = k256::ecdsa::Signature::try_from(ecdsa_signature.as_slice()).unwrap();
         pk.verify_prehash(&message_hash, &sig).unwrap();
+    }
+
+    // The test canister's `ecdsa_public_key` and `sign_with_ecdsa` endpoints only
+    // support secp256k1 because the published `ic-cdk-management-canister` has no
+    // other curve yet, so we call the management canister through `proxy_call`.
+    let call_management_canister = |method: &str, args: Vec<u8>, cycles: u128| {
+        let reply = pic
+            .update_call(
+                canister,
+                Principal::anonymous(),
+                "proxy_call",
+                proxy_call_arg(method, args, cycles),
+            )
+            .unwrap();
+        let result: Result<ByteBuf, (RejectionCode, String)> = decode_one(&reply).unwrap();
+        result.unwrap().into_vec()
+    };
+    let derivation_path = DerivationPath::new(vec![ByteBuf::from(b"my message".to_vec())]);
+    for name in ["key_1", "test_key_1", "dfx_test_key"] {
+        use p256::ecdsa::signature::hazmat::PrehashVerifier;
+
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256r1,
+            name: name.to_string(),
+        };
+
+        // We get the ECDSA public key.
+        let args = ECDSAPublicKeyArgs {
+            canister_id: None,
+            derivation_path: derivation_path.clone(),
+            key_id: key_id.clone(),
+        };
+        let reply = call_management_canister("ecdsa_public_key", Encode!(&args).unwrap(), 0);
+        let ecdsa_public_key = Decode!(&reply, ECDSAPublicKeyResponse).unwrap();
+        let pk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&ecdsa_public_key.public_key).unwrap();
+
+        // We sign several message hashes because only about half of all signatures
+        // need their `s` normalized.
+        for message_hash in [[0; 32], [1; 32], [2; 32], [3; 32]] {
+            let args = SignWithECDSAArgs {
+                message_hash,
+                derivation_path: derivation_path.clone(),
+                key_id: key_id.clone(),
+            };
+            // We attach the same fee as the test canister's `sign_with_ecdsa` endpoint.
+            let fee = if name == "key_1" {
+                26_153_846_153
+            } else {
+                10_000_000_000
+            };
+            let reply = call_management_canister("sign_with_ecdsa", Encode!(&args).unwrap(), fee);
+            let ecdsa_signature = Decode!(&reply, SignWithECDSAReply).unwrap().signature;
+
+            // We verify the ECDSA signature, which the IC returns with `s` normalized.
+            let sig = p256::ecdsa::Signature::from_slice(&ecdsa_signature).unwrap();
+            pk.verify_prehash(&message_hash, &sig).unwrap();
+            assert!(sig.normalize_s().is_none(), "{name}: `s` is not normalized");
+        }
     }
 }
 
@@ -2848,10 +2909,12 @@ fn test_canister_http_derived_spend_is_only_charged_under_pay_as_you_go() {
 /// Which outcalls are available, and which pricing model they end up with, on the
 /// three kinds of instance a test can build: one with beta features, a plain one,
 /// and one whose subnet does not charge for HTTP outcalls.
+///
+/// The pay-as-you-go pricing model is enabled on every subnet, so all three offer
+/// flexible outcalls and price them the same way; what differs between them is
+/// only whether anything is actually charged.
 #[test]
 fn test_canister_http_availability_and_pricing() {
-    // (label, instance, canister, whether the pay-as-you-go pricing model is
-    // enabled, whether HTTP outcalls are free)
     let beta = flexible_outcalls_pic();
     let beta_canister = deploy_test_canister(&beta);
     let default = PocketIc::new();
@@ -2862,10 +2925,10 @@ fn test_canister_http_availability_and_pricing() {
     system.add_cycles(system_canister, INIT_CYCLES);
     system.install_canister(system_canister, test_canister_wasm(), vec![], None);
 
-    for (env, pic, canister_id, pay_as_you_go_enabled, outcalls_are_free) in [
-        ("beta features", &beta, beta_canister, true, false),
-        ("default instance", &default, default_canister, false, false),
-        ("system subnet", &system, system_canister, false, true),
+    for (env, pic, canister_id) in [
+        ("beta features", &beta, beta_canister),
+        ("default instance", &default, default_canister),
+        ("system subnet", &system, system_canister),
     ] {
         for outcall in [
             Outcall::FullyReplicated {
@@ -2883,38 +2946,9 @@ fn test_canister_http_availability_and_pricing() {
             })),
         ] {
             let label = format!("{env}, {}", outcall.label());
-            // A flexible outcall is only offered where the pay-as-you-go pricing
-            // model is enabled or where HTTP outcalls are free.
-            if outcall.is_flexible() && !pay_as_you_go_enabled && !outcalls_are_free {
-                let (method, args) = outcall.call(None);
-                let reply = pic
-                    .update_call(
-                        canister_id,
-                        Principal::anonymous(),
-                        "proxy_call",
-                        proxy_call_arg(method, args, OUTCALL_CYCLES),
-                    )
-                    .unwrap();
-                let (reject_code, message) = decode_sync_rejection(&reply);
-                assert!(
-                    matches!(reject_code, RejectionCode::CanisterError),
-                    "{label}: unexpected reject code {reject_code:?} ({message})"
-                );
-                assert!(
-                    message.contains("This API is not enabled on this subnet"),
-                    "{label}: unexpected rejection message {message:?}"
-                );
-                continue;
-            }
             // `submit_outcall` asserts the reported replication and pricing model.
-            let (call_id, request) = submit_outcall(
-                pic,
-                canister_id,
-                &outcall,
-                None,
-                OUTCALL_CYCLES,
-                pay_as_you_go_enabled,
-            );
+            let (call_id, request) =
+                submit_outcall(pic, canister_id, &outcall, None, OUTCALL_CYCLES, true);
             let body = b"hello".to_vec();
             if outcall.is_flexible() {
                 mock_committee(

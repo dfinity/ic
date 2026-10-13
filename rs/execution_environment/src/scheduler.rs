@@ -435,6 +435,18 @@ impl SchedulerImpl {
         //      - Update the ingress history with the resulting ingress statuses.
         //      - Induct messages on the same subnet.
         let mut state = loop {
+            // In every iteration after the first, recompute the subnet available
+            // memory from the state.
+            //
+            // The memory consumed by the previous iteration's parallel execution
+            // threads is not subtracted from `scheduler_round_limits` (see
+            // `execute_canisters_in_inner_round()`), so this recomputation is what
+            // brings the subnet available memory back in sync with the state.
+            if !is_first_iteration {
+                scheduler_round_limits.subnet_available_memory =
+                    self.exec_env.scaled_subnet_available_memory(&state);
+            }
+
             // Execute subnet messages.
             // If new messages are inducted into the subnet input queues,
             // they are processed until the subnet messages' instruction limit is reached.
@@ -457,6 +469,22 @@ impl SchedulerImpl {
                     chain_key_data,
                 );
                 scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
+            }
+
+            // A cooling down subnet only drains its subnet queues: it executes no
+            // canister messages and no canister tasks, i.e. neither `Heartbeat` and
+            // `GlobalTimer` (which are not even enqueued, as they are enqueued right
+            // below) nor the on-low-wasm-memory hook (which, unlike the former two, is
+            // a persistent part of the canister's task queue and is thus simply left
+            // there until the subnet stops cooling down).
+            //
+            // It follows that a cooling down subnet also has no messages to induct on
+            // the same subnet.
+            if state.metadata.is_cooling_down() {
+                self.metrics
+                    .round_skipped_canister_execution_due_to_cooling_down
+                    .inc();
+                break state;
             }
 
             let mut round_limits = scheduler_round_limits.canister_round_limits();
@@ -494,14 +522,7 @@ impl SchedulerImpl {
             }
             drop(scheduling_timer);
 
-            // In every iteration after the first, recompute the subnet available memory,
-            // before taking out the canisters.
             let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
-            if !is_first_iteration {
-                round_limits.subnet_available_memory =
-                    self.exec_env.scaled_subnet_available_memory(&state);
-            }
-
             let canisters = state.take_canister_states();
             let (active_canisters_partitioned_by_cores, inactive_canisters) =
                 iteration_schedule.partition_canisters_to_cores(canisters);
@@ -754,8 +775,9 @@ impl SchedulerImpl {
         // Deduct all created callbacks from the available callbacks limit. This is a
         // pessimistic estimate, as it ignores any closed callbacks.
         round_limits.subnet_available_callbacks -= callbacks_created;
-        // `subnet_available_memory` will be recomputed at the beginning of the next
-        // iteration.
+        // The memory consumed by the threads is not deducted from
+        // `subnet_available_memory`; it is recomputed from the state at the very
+        // beginning of the next iteration instead (see `inner_round()`).
 
         IterationResult {
             canisters,
@@ -1098,17 +1120,6 @@ impl SchedulerImpl {
     //
     // TODO(DSM-103): Consider only aborting actually scheduled canisters.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
-        // Backfill the HTTP/ECDSA outcall cycles from the legacy scalar fields of
-        // `SubnetMetrics` into the corresponding entries of its by-use-case map.
-        // This must run regardless of subnet activity: the subnet-level use cases
-        // are only observed on outcalls, canister deletion and dropped messages,
-        // so tying the migration to an observation would leave the entries stale
-        // forever on a subnet that does none of these.
-        state
-            .metadata
-            .subnet_metrics
-            .migrate_outcalls_cycles_to_use_cases();
-
         let cost_schedule = state.get_own_cost_schedule();
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
@@ -1342,6 +1353,11 @@ impl Scheduler for SchedulerImpl {
                 self.metrics
                     .round_skipped_due_to_current_heap_delta_above_limit
                     .inc();
+                // The nested scope propagates into the root only on drop, so the root
+                // total is short by whatever was drained above until it is gone — and
+                // would silently stay so if anything ever cloned it.
+                drop(measurement_scope);
+                accumulate_round_subnet_metrics(&mut state, &root_measurement_scope);
                 return state;
             }
         }
@@ -1523,12 +1539,7 @@ impl Scheduler for SchedulerImpl {
                 );
             }
 
-            final_state
-                .metadata
-                .subnet_metrics
-                .update_transactions_total += root_measurement_scope.messages().get();
-            final_state.metadata.subnet_metrics.num_canisters =
-                final_state.canister_states().len() as u64;
+            accumulate_round_subnet_metrics(&mut final_state, &root_measurement_scope);
         }
 
         final_state
@@ -1537,6 +1548,21 @@ impl Scheduler for SchedulerImpl {
     fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
         self.finish_round(state, ExecutionRoundType::CheckpointRound);
     }
+}
+
+/// Accumulates the round's totals into the subnet metrics. Both exits of
+/// `execute_round` go through here, so a round's work cannot be missed.
+fn accumulate_round_subnet_metrics(
+    state: &mut ReplicatedState,
+    root_measurement_scope: &MeasurementScope,
+) {
+    let num_canisters = state.canister_states().len() as u64;
+    let subnet_metrics = &mut state.metadata.subnet_metrics;
+    subnet_metrics.update_transactions_total += root_measurement_scope.messages().get();
+    subnet_metrics.round_instructions_total = subnet_metrics
+        .round_instructions_total
+        .saturating_add(root_measurement_scope.instructions().get());
+    subnet_metrics.num_canisters = num_canisters;
 }
 
 fn observe_instructions_consumed_per_message(
@@ -1928,6 +1954,7 @@ fn get_instruction_limits_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | NodeMetricsHistory
+            | SubnetMetrics
             | SubnetInfo
             | FetchCanisterLogs
             | ProvisionalCreateCanisterWithCycles

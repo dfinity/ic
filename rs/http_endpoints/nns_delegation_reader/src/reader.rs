@@ -3,7 +3,6 @@ use ic_crypto_tree_hash::{
     sparse_labeled_tree_from_paths,
 };
 use ic_logger::{ReplicaLogger, warn};
-use ic_registry_routing_table::RoutingTable;
 use ic_types::{
     CanisterId, SubnetId,
     messages::{
@@ -16,10 +15,10 @@ use tokio::sync::watch;
 
 use crate::validation::{
     CanisterRangesCheck, DelegationValidationError, DelegationVerificationError,
-    is_tree_consistent_with,
+    StateForDelegationVerification, is_tree_consistent_with,
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 /// Filter for the canister ranges in the NNS delegation.
 pub enum CanisterRangesFilter {
     /// Keep the `/subnet/<subnet_id>/canister_ranges` leaf and purge
@@ -35,10 +34,18 @@ pub enum CanisterRangesFilter {
     None,
 }
 
+/// The canister ranges to serve a delegation with after the given check passed: the
+/// location which was checked, or the explicitly requested ranges for
+/// [`CanisterRangesCheck::NoCheck`].
 impl From<CanisterRangesCheck> for CanisterRangesFilter {
     fn from(ranges_check: CanisterRangesCheck) -> Self {
         match ranges_check {
             CanisterRangesCheck::AllSubnetRanges => CanisterRangesFilter::Flat,
+            CanisterRangesCheck::CanisterInFlat(_canister_id) => CanisterRangesFilter::Flat,
+            CanisterRangesCheck::CanisterInTree(canister_id) => {
+                CanisterRangesFilter::Tree(canister_id)
+            }
+            CanisterRangesCheck::NoCheck(canister_ranges_filter) => canister_ranges_filter,
         }
     }
 }
@@ -95,12 +102,12 @@ impl NNSDelegationReader {
         })
     }
 
-    pub async fn wait_until_initialized(&mut self) -> Result<(), watch::error::RecvError> {
+    pub async fn wait_until_updated(&mut self) -> Result<(), watch::error::RecvError> {
         self.receiver.changed().await
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub struct NNSDelegationBuilder {
     builder: NNSDelegationBuilderInner,
     precomputed_delegation_with_flat_canister_ranges: CertificateDelegation,
@@ -153,63 +160,34 @@ impl NNSDelegationBuilder {
         }
     }
 
-    /// Verifies that the delegation is consistent with the given view of the subnet
-    /// information recorded in a replicated state and, only if it is, builds it
-    /// according to the ranges check to be applied and returns it. The builder is
-    /// an immutable snapshot of the delegation, so the returned delegation is
-    /// guaranteed to be exactly the one which was verified.
+    /// Verifies that the delegation is consistent with the given replicated state and, only if it
+    /// is, builds it according to the ranges check to be applied and returns it.
     ///
     /// `ranges_check` specifies what to check the certified canister ranges against
-    /// (see [`CanisterRangesCheck`]). For the meaning of `routing_table` and
-    /// `public_key_for_subnet`, see [`Self::is_consistent_with`].
-    pub fn build_verified<'a>(
+    /// (see [`CanisterRangesCheck`]).
+    pub fn build_verified(
         &self,
         ranges_check: CanisterRangesCheck,
-        routing_table: &RoutingTable,
-        public_key_for_subnet: impl FnOnce(SubnetId) -> Option<&'a [u8]>,
+        state: &dyn StateForDelegationVerification,
         logger: &ReplicaLogger,
     ) -> Result<CertificateDelegation, DelegationVerificationError> {
-        match self.is_consistent_with(ranges_check, routing_table, public_key_for_subnet) {
+        match self.is_consistent_with(ranges_check, state) {
             Ok(true) => Ok(self.build_unverified(ranges_check.into(), logger)),
             Ok(false) => Err(DelegationVerificationError::Inconsistent),
             Err(err) => Err(DelegationVerificationError::Validation(err)),
         }
     }
 
-    /// Checks whether the delegation is consistent with the given view of the subnet
-    /// information recorded in a replicated state.
-    ///
-    /// `routing_table` should be the state's routing table, i.e.
-    /// `network_topology.routing_table()`. `public_key_for_subnet` should resolve
-    /// the threshold public key which the state assigns to the delegated subnet, e.g.
-    /// ```ignore
-    /// |subnet_id| {
-    ///     network_topology
-    ///         .subnets()
-    ///         .get(&subnet_id)
-    ///         .map(|topology| topology.public_key.as_slice())
-    /// }
-    /// ```
-    /// Resolving to `None` maps to [`DelegationValidationError::UnknownSubnet`].
-    /// `ranges_check` specifies what to check the certified canister ranges against
-    /// (see [`CanisterRangesCheck`]).
-    ///
-    /// See [`is_tree_consistent_with`] for the exact semantics.
-    pub fn is_consistent_with<'a>(
+    /// Checks whether the delegation is consistent with the given replicated state.
+    pub fn is_consistent_with(
         &self,
         ranges_check: CanisterRangesCheck,
-        routing_table: &RoutingTable,
-        public_key_for_subnet: impl FnOnce(SubnetId) -> Option<&'a [u8]>,
+        state: &dyn StateForDelegationVerification,
     ) -> Result<bool, DelegationValidationError> {
-        let subnet_public_key = public_key_for_subnet(self.builder.subnet_id).ok_or(
-            DelegationValidationError::UnknownSubnet(self.builder.subnet_id),
-        )?;
-
         is_tree_consistent_with(
             &self.builder.full_labeled_tree,
             self.builder.subnet_id,
-            subnet_public_key,
-            routing_table,
+            state,
             ranges_check,
         )
     }
@@ -263,7 +241,7 @@ impl NNSDelegationBuilder {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 struct NNSDelegationBuilderInner {
     full_certificate: Certificate,
     full_labeled_tree: LabeledTree<Vec<u8>>,
@@ -417,6 +395,7 @@ fn into_cbor(certificate: &Certificate) -> Result<Vec<u8>, String> {
 mod tests {
     use super::*;
 
+    use crate::validation::tests::MockState;
     use assert_matches::assert_matches;
     use ic_certification::verify_delegation_certificate;
     use ic_crypto_tree_hash::lookup_path;
@@ -424,6 +403,7 @@ mod tests {
     use ic_nns_delegation_reader_test_utils::create_fake_certificate_delegation;
     use ic_registry_routing_table::CanisterIdRange;
     use ic_test_utilities_types::ids::SUBNET_0;
+    use rstest::rstest;
 
     fn path_exists(delegation: &CertificateDelegation, path: &[&[u8]]) -> bool {
         let parsed_delegation: Certificate =
@@ -614,21 +594,16 @@ mod tests {
     /// The canister ranges the consistency check fixture's delegation certifies.
     const RANGES: &[(u64, u64)] = &[(0, 10), (100, 200)];
 
-    /// A routing table assigning `ranges` to `SUBNET_0`.
-    fn routing_table_with(ranges: &[(u64, u64)]) -> RoutingTable {
-        let mut routing_table = RoutingTable::default();
-        for (start, end) in ranges {
-            routing_table
-                .insert(
-                    CanisterIdRange {
-                        start: CanisterId::from(*start),
-                        end: CanisterId::from(*end),
-                    },
-                    SUBNET_0,
-                )
-                .unwrap();
-        }
-        routing_table
+    /// A state assigning `ranges` and, if given, `subnet_public_key` to `SUBNET_0`.
+    fn state_with(ranges: &[(u64, u64)], subnet_public_key: Option<&[u8]>) -> MockState {
+        let ranges: Vec<_> = ranges
+            .iter()
+            .map(|(start, end)| CanisterIdRange {
+                start: CanisterId::from(*start),
+                end: CanisterId::from(*end),
+            })
+            .collect();
+        MockState::new(SUBNET_0, &ranges, subnet_public_key)
     }
 
     /// Creates a builder holding a fake delegation for `SUBNET_0` certifying [`RANGES`],
@@ -662,8 +637,7 @@ mod tests {
         assert_matches!(
             builder.is_consistent_with(
                 CanisterRangesCheck::AllSubnetRanges,
-                &routing_table_with(RANGES),
-                |_subnet_id| Some(&public_key),
+                &state_with(RANGES, Some(&public_key)),
             ),
             Ok(true)
         );
@@ -677,8 +651,7 @@ mod tests {
         assert_matches!(
             builder.is_consistent_with(
                 CanisterRangesCheck::AllSubnetRanges,
-                &routing_table_with(RANGES),
-                |_subnet_id| Some(&different_public_key),
+                &state_with(RANGES, Some(&different_public_key)),
             ),
             Ok(false)
         );
@@ -693,8 +666,7 @@ mod tests {
                 CanisterRangesCheck::AllSubnetRanges,
                 // The state assigns an extra range to the subnet which is not certified
                 // in the delegation.
-                &routing_table_with(&[(0, 10), (100, 200), (300, 400)]),
-                |_subnet_id| Some(&public_key),
+                &state_with(&[(0, 10), (100, 200), (300, 400)], Some(&public_key)),
             ),
             Ok(false)
         );
@@ -707,8 +679,7 @@ mod tests {
         assert_matches!(
             builder.is_consistent_with(
                 CanisterRangesCheck::AllSubnetRanges,
-                &routing_table_with(RANGES),
-                |_subnet_id| None,
+                &state_with(RANGES, None),
             ),
             Err(DelegationValidationError::UnknownSubnet(subnet_id)) if subnet_id == SUBNET_0
         );
@@ -721,8 +692,7 @@ mod tests {
         let delegation = builder
             .build_verified(
                 CanisterRangesCheck::AllSubnetRanges,
-                &routing_table_with(RANGES),
-                |_subnet_id| Some(&public_key),
+                &state_with(RANGES, Some(&public_key)),
                 &no_op_logger(),
             )
             .expect("the delegation should be consistent with the state view");
@@ -741,6 +711,54 @@ mod tests {
         );
     }
 
+    #[rstest]
+    #[case::canister_in_flat(
+        CanisterRangesCheck::CanisterInFlat(CanisterId::from(150)),
+        false,
+        true
+    )]
+    #[case::canister_in_tree(
+        CanisterRangesCheck::CanisterInTree(CanisterId::from(150)),
+        true,
+        false
+    )]
+    #[case::no_check_flat(CanisterRangesCheck::NoCheck(CanisterRangesFilter::Flat), false, true)]
+    #[case::no_check_tree(
+        CanisterRangesCheck::NoCheck(CanisterRangesFilter::Tree(CanisterId::from(150))),
+        true,
+        false
+    )]
+    #[case::no_check_none(CanisterRangesCheck::NoCheck(CanisterRangesFilter::None), false, false)]
+    fn build_verified_serves_the_requested_ranges(
+        #[case] canister_ranges_check: CanisterRangesCheck,
+        #[case] expects_tree_ranges: bool,
+        #[case] expects_flat_ranges: bool,
+    ) {
+        let (builder, public_key) = create_consistency_check_fixture();
+
+        let delegation = builder
+            .build_verified(
+                canister_ranges_check,
+                &state_with(RANGES, Some(&public_key)),
+                &no_op_logger(),
+            )
+            .expect("the delegation should be consistent with the state view");
+
+        assert_eq!(
+            path_exists(
+                &delegation,
+                &[b"subnet", SUBNET_0.get().as_ref(), b"canister_ranges"],
+            ),
+            expects_flat_ranges,
+            "The delegation should be served with the requested canister ranges filter"
+        );
+        assert_eq!(
+            path_exists(&delegation, &[b"canister_ranges"]),
+            expects_tree_ranges,
+            "The delegation should be served with the requested canister ranges filter"
+        );
+    }
+
     #[test]
     fn build_verified_on_an_inconsistent_delegation_is_an_error() {
         let (builder, _public_key) = create_consistency_check_fixture();
@@ -750,8 +768,7 @@ mod tests {
         assert_matches!(
             builder.build_verified(
                 CanisterRangesCheck::AllSubnetRanges,
-                &routing_table_with(RANGES),
-                |_subnet_id| Some(&different_public_key),
+                &state_with(RANGES, Some(&different_public_key)),
                 &no_op_logger(),
             ),
             Err(DelegationVerificationError::Inconsistent)
@@ -765,8 +782,7 @@ mod tests {
         assert_matches!(
             builder.build_verified(
                 CanisterRangesCheck::AllSubnetRanges,
-                &routing_table_with(RANGES),
-                |_subnet_id| None,
+                &state_with(RANGES, None),
                 &no_op_logger(),
             ),
             Err(DelegationVerificationError::Validation(

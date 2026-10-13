@@ -86,11 +86,11 @@ proptest! {
 }
 
 mod validate_wasm_hashes {
-    use crate::state::{GitCommitHash, WasmHash};
-    use crate::storage::test_fixtures::{embedded_ledger_suite_version, empty_wasm_store};
-    use crate::storage::{
-        WasmHashError, WasmStore, record_icrc1_ledger_suite_wasms, validate_wasm_hashes,
+    use crate::state::WasmHash;
+    use crate::storage::test_fixtures::{
+        embedded_ledger_suite_version, empty_wasm_store, wasm_store_with_icrc1_ledger_suite,
     };
+    use crate::storage::{WasmHashError, validate_wasm_hashes};
     use assert_matches::assert_matches;
     use proptest::array::uniform32;
     use proptest::prelude::any;
@@ -207,19 +207,6 @@ mod validate_wasm_hashes {
                 Some(archive_hash.parse().unwrap())
             ])
         );
-    }
-
-    fn wasm_store_with_icrc1_ledger_suite() -> WasmStore {
-        let mut store = empty_wasm_store();
-        assert_eq!(
-            record_icrc1_ledger_suite_wasms(
-                &mut store,
-                1_620_328_630_000_000_000,
-                GitCommitHash::default(),
-            ),
-            Ok(embedded_ledger_suite_version())
-        );
-        store
     }
 
     fn valid_wasm_hashes() -> (String, String, String) {

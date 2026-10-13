@@ -34,6 +34,7 @@ ic-types = { path = "../../../../types/types" }
 ic-types-test-utils = { path = "../../../../types/types_test_utils" }
 ic-vetkeys = { workspace = true }
 k256 = { workspace = true }
+p256 = { workspace = true }
 registry-canister = { path = "../../../../registry/canister" }
 serde = { workspace = true }
 sha2 = { workspace = true }

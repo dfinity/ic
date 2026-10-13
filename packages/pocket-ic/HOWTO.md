@@ -811,6 +811,8 @@ PocketIC provides three subnet kinds that hold threshold keys (tECDSA, Schnorr, 
 - **Test threshold keys subnet** (`with_test_threshold_keys_subnet`): holds keys named `test_key_1` and `dfx_test_key` for all algorithms.
   Its canister range matches the mainnet subnet `fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae`.
 
+The algorithms are ECDSA over secp256k1 and secp256r1, Schnorr with BIP340 and Ed25519, and VetKd over BLS12-381 G2.
+
 To use `key_1`, add an II or fiduciary subnet to your PocketIC instance:
 
 ```rust

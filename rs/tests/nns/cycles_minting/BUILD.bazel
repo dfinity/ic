@@ -22,8 +22,6 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:rand",
         "@crate_index//:serde",
-        "@crate_index//:serde_cbor",
         "@crate_index//:url",
-        "@crate_index//:wat",
     ],
 )

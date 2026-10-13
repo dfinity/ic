@@ -438,19 +438,21 @@ pub enum BlobCompression {
 
 // By default, serde serializes Vec<u8> to a list of numbers, which is inefficient.
 // This enables serializing Vec<u8> to a compact base64 representation.
-#[allow(deprecated)]
 pub mod base64 {
+    use ::base64::prelude::*;
     use serde::{Deserialize, Serialize};
     use serde::{Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(v: &Vec<u8>, s: S) -> Result<S::Ok, S::Error> {
-        let base64 = base64::encode(v);
+        let base64 = BASE64_STANDARD.encode(v);
         String::serialize(&base64, s)
     }
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
         let base64 = String::deserialize(d)?;
-        base64::decode(base64.as_bytes()).map_err(serde::de::Error::custom)
+        BASE64_STANDARD
+            .decode(base64.as_bytes())
+            .map_err(serde::de::Error::custom)
     }
 }
 
@@ -1002,11 +1004,9 @@ impl ExtendedSubnetConfigSet {
             }
         }
         // canisters on the SNS subnet
-        for (flag, icp_feature_str) in [(sns, "sns")] {
-            if flag.is_some() {
-                check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
-                self.sns = Some(self.sns.unwrap_or_default());
-            }
+        if sns.is_some() {
+            check_empty_subnet(&self.sns, "SNS", "sns")?;
+            self.sns = Some(self.sns.unwrap_or_default());
         }
         // canisters on the Bitcoin subnet
         for (flag, icp_feature_str) in [(bitcoin, "bitcoin"), (dogecoin, "dogecoin")] {

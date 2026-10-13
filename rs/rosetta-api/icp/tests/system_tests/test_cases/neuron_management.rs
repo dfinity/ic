@@ -580,7 +580,7 @@ fn test_disburse_neuron() {
             Err(e) => panic!("Unexpected error: {e}"),
             Ok(_) => panic!("Expected an error but got success"),
         }
-        // Let rosetta catch up with the transfer that happended when creating the neuron
+        // Let rosetta catch up with the transfer that happened when creating the neuron
         wait_for_rosetta_to_catch_up_with_icp_ledger(
             &env.rosetta_client,
             env.network_identifier.clone(),
@@ -1535,7 +1535,7 @@ fn test_disburse_maturity() {
         let mut neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
-        // Assing maturity to the neuron
+        // Assign maturity to the neuron
         let new_maturity = 300_000_000;
         neuron.maturity_e8s_equivalent = new_maturity;
         update_neuron(&agent, neuron).await;

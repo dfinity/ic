@@ -2,7 +2,7 @@
 /// The default replica/guestos version that engines run, used when an engine's
 /// own SubnetRecord.replica_version_id is blank (i.e. the engine has not opted
 /// out of the standard upgrade train).
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct StandardEngineReplicaVersionRecord {
     /// In general, these are (hex encoded) git commit IDs from the dfinity/ic
     /// repo, identifying the source code from which Replica was built. (Also known

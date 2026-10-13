@@ -19,7 +19,7 @@
 // to unpack and 59G of disk space.
 //
 // ```
-// $ bazel run //rs/tests/testnets:mainnet_nns_state --test_tmpdir=./mainnet_nns_state -- --keepalive
+// $ bazel run //rs/tests/testnets:mainnet_nns_state_farm --test_tmpdir=./mainnet_nns_state -- --keepalive
 // ```
 //
 // Additional configuration:
@@ -28,9 +28,9 @@
 //
 // To get access to P8s and Grafana look for the following lines in the output:
 //
-//     prometheus: Prometheus Web UI at http://prometheus.mainnet-nns--1758812276301.testnet.farm.dfinity.systems,
-//     grafana: Grafana at http://grafana.mainnet-nns--1758812276301.testnet.farm.dfinity.systems,
-//     progress_clock: IC Progress Clock at http://grafana.mainnet-nns--1758812276301.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now,
+//     prometheus: Prometheus Web UI at http://prometheus.mainnet-nns_farm--1758812276301.testnet.farm.dfinity.systems,
+//     grafana: Grafana at http://grafana.mainnet-nns_farm--1758812276301.testnet.farm.dfinity.systems,
+//     progress_clock: IC Progress Clock at http://grafana.mainnet-nns_farm--1758812276301.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now,
 //
 // Happy testing!
 

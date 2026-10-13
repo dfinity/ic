@@ -297,7 +297,7 @@ mod database_access {
             .map(|block| block.unwrap())?;
         Ok(block_idx)
     }
-    // The option is left None if both verified and unverified blocks should be querried. It is set to False for only unverified blocks and True for only verified blocks
+    // The option is left None if both verified and unverified blocks should be queried. It is set to False for only unverified blocks and True for only verified blocks
     pub fn get_first_hashed_block(
         con: &mut Connection,
         verified: Option<bool>,
@@ -321,7 +321,7 @@ mod database_access {
             None => Err(BlockStoreError::Other("Blockchain is empty".to_string())),
         }
     }
-    // The option is left None if both verified and unverified blocks should be querried. It is set to False for only unverified blocks and True for only verified blocks
+    // The option is left None if both verified and unverified blocks should be queried. It is set to False for only unverified blocks and True for only verified blocks
 
     pub fn get_latest_hashed_block(
         con: &mut Connection,
@@ -1505,7 +1505,7 @@ impl Blocks {
         let mut connection = self
             .connection
             .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+            .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
 
         let sql_tx = connection
             .transaction()
@@ -1691,7 +1691,7 @@ impl Blocks {
         let connection = self
             .connection
             .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+            .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
         let block_idx = match connection
             .prepare_cached("SELECT MAX(rosetta_block_idx) FROM rosetta_blocks")
             .map_err(|e| format!("Unable to prepare query: {e:?}"))?
@@ -1715,7 +1715,7 @@ impl Blocks {
         let connection = self
             .connection
             .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+            .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
         let mut statement = connection
             .prepare_cached(
                 "SELECT parent_hash, timestamp FROM rosetta_blocks WHERE rosetta_block_idx=:idx",
@@ -1743,7 +1743,7 @@ impl Blocks {
         let connection = self
             .connection
             .lock()
-            .map_err(|e| format!("Unable to aquire the connection mutex: {e:?}"))?;
+            .map_err(|e| format!("Unable to acquire the connection mutex: {e:?}"))?;
         let mut statement = connection
             .prepare_cached(
                 r#"SELECT blocks.block_idx, encoded_block

@@ -16,7 +16,7 @@ use axum::{
 };
 use axum_server::Handle;
 use axum_server::tls_rustls::RustlsConfig;
-use base64;
+use base64::prelude::*;
 use clap::Parser;
 use fqdn::fqdn;
 use futures::future::Shared;
@@ -43,10 +43,7 @@ use ic_gateway::{
         },
         ic_agent::agent::route_provider::RoundRobinRouteProvider,
     },
-    routing::{
-        domain::CustomDomainStorage,
-        ic::routing_table_manager::{LooksUpSubnetType, SubnetType},
-    },
+    routing::domain::CustomDomainStorage,
     setup_router,
 };
 use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
@@ -78,13 +75,6 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::reload;
-
-struct NoOpSubnetTypeLookup;
-impl LooksUpSubnetType for NoOpSubnetTypeLookup {
-    fn lookup_subnet_type(&self, _: &candid::Principal) -> Option<SubnetType> {
-        None
-    }
-}
 
 // The maximum wait time for a computation to finish synchronously.
 pub(crate) const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -387,8 +377,10 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::CanisterSnapshotError(msg)) => {
                 write!(f, "CanisterSnapshotError({msg})")
             }
-            OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
-            OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
+            OpOut::Bytes(bytes) => write!(f, "Bytes({})", BASE64_STANDARD.encode(bytes)),
+            OpOut::StableMemBytes(bytes) => {
+                write!(f, "StableMemory({})", BASE64_STANDARD.encode(bytes))
+            }
             OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({subnet_id})"),
             OpOut::MaybeSubnetId(None) => write!(f, "NoSubnetId"),
             OpOut::RawResponse(fut) => {
@@ -399,7 +391,7 @@ impl std::fmt::Debug for OpOut {
                         "{}:{:?}:{}",
                         status,
                         headers,
-                        base64::encode(bytes)
+                        BASE64_STANDARD.encode(bytes)
                     ))
                 )
             }
@@ -861,9 +853,14 @@ impl ApiState {
                 args.push("--domain-custom-provider-poll-interval".to_string());
                 args.push("1s".to_string());
                 args.push("--ic-unsafe-root-key-fetch".to_string());
+                // hickory >= 0.26.2 fails lookups on (false) DNSSEC-bogus
+                // answers, see hickory-dns#3963.
+                // TODO: remove this once we upgrade to a hickory-dns that includes
+                // https://github.com/hickory-dns/hickory-dns/pull/4062.
+                args.push("--dns-dnssec-disabled".to_string());
                 let cli = Cli::parse_from(args);
 
-                let resolver = Resolver::default();
+                let resolver = Resolver::new((&cli.dns).into()).unwrap();
 
                 let http_client_opts: ClientOptions = (&cli.http_client).into();
                 let http_client = Arc::new(
@@ -907,7 +904,7 @@ impl ApiState {
                     None,
                     None,
                     None,
-                    Arc::new(NoOpSubnetTypeLookup),
+                    None,
                 )
                 .await
                 .unwrap();

@@ -1,7 +1,7 @@
 // This module defines types and functions common between canister installation
 // and upgrades.
 
-use crate::execution::common::{log_dirty_pages, validate_controller};
+use crate::execution::common::{CanisterAccess, log_dirty_pages, validate_sender_on_subnet};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
@@ -10,23 +10,23 @@ use ic_embedders::{
     wasmtime_embedder::system_api::ExecutionParameters,
 };
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, MessageMemoryUsage, SubnetAvailableMemoryError,
-    WasmExecutionOutput,
+    HypervisorError, HypervisorResult, MessageMemoryUsage, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
 use ic_management_canister_types_private::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, Method as Ic00Method,
 };
 use ic_replicated_state::canister_state::system_state::{
     ReservationError, log_memory_store::LogMemoryStore,
 };
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
-use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
+use ic_replicated_state::{CanisterState, ExecutionState, NetworkTopology, num_bytes_try_from};
 use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterTimer, MemoryAllocation, NumInstructions, Time, messages::CanisterCall};
 use ic_types_cycles::{CompoundCycles, Cycles, CyclesUseCase, Instructions};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 use ic_wasm_types::WasmHash;
+use std::sync::Arc;
 
 use crate::{
     CompilationCostHandling, RoundLimits,
@@ -323,23 +323,35 @@ impl InstallCodeHelper {
         let instructions_left = self.instructions_left();
 
         // The balance should only change due to cycles explicitly burned via
-        // `ic0.cycles_burn128`. The execution cycles are already accounted for
-        // in the clean canister state, and `install_code` cannot accept or send
-        // cycles.
+        // `ic0.cycles_burn128` and the ingress induction debit charged by
+        // `handle_wasm_execution()`. The execution cycles are already accounted
+        // for in the clean canister state, and `install_code` cannot accept or
+        // send cycles.
         let get_burned = |state: &CanisterState| {
             state
                 .system_state
                 .canister_metrics()
-                .consumed_cycles_by_use_cases()
+                .consumed_cycles_by_use_cases_monotonic()
                 .get(&CyclesUseCase::BurnedCycles)
                 .map(|c| c.get())
                 .unwrap_or(0)
         };
         let burned_cycles_delta =
             Cycles::new(get_burned(&self.canister).saturating_sub(get_burned(&clean_canister)));
+        // The ingress induction debit of the clean canister state was charged in
+        // full by `handle_wasm_execution()` if a Wasm execution ran, and there
+        // is no debit to charge otherwise: the debit is always zero unless the
+        // canister has a paused execution, and a paused execution prevents
+        // executing an `install_code`, so the only debit that can accumulate
+        // here belongs to a paused Wasm execution of this very `install_code`.
+        debug_assert_eq!(
+            self.canister.system_state.ingress_induction_cycles_debit(),
+            Cycles::zero()
+        );
+        let charged_debit = clean_canister.system_state.ingress_induction_cycles_debit();
         debug_assert_eq!(
             clean_canister.system_state.balance(),
-            self.canister.system_state.balance() + burned_cycles_delta
+            self.canister.system_state.balance() + burned_cycles_delta + charged_debit
         );
 
         let instructions_used = NumInstructions::from(
@@ -358,16 +370,6 @@ impl InstallCodeHelper {
             original.wasm_execution_mode,
             round.log,
         );
-
-        self.canister
-            .system_state
-            .apply_ingress_induction_cycles_debit(
-                self.canister.canister_id(),
-                round.cost_schedule,
-                true, // strict
-                round.log,
-                round.counters.charging_from_balance_error,
-            );
 
         let wasm_memory_usage = self
             .canister
@@ -479,38 +481,14 @@ impl InstallCodeHelper {
             self.allocated_guaranteed_response_message_bytes,
             self.allocated_wasm_custom_sections_bytes,
         ) {
-            match err {
-                SubnetAvailableMemoryError::InsufficientMemory {
-                    execution_requested,
-                    guaranteed_response_message_requested: _,
-                    wasm_custom_sections_requested,
-                    available_execution,
-                    available_guaranteed_response_messages: _,
-                    available_wasm_custom_sections,
-                } => {
-                    let err = if wasm_custom_sections_requested.get() as i128
-                        > available_wasm_custom_sections as i128
-                    {
-                        CanisterManagerError::SubnetWasmCustomSectionCapacityOverSubscribed {
-                            requested: wasm_custom_sections_requested,
-                            available: NumBytes::new(available_wasm_custom_sections.max(0) as u64),
-                        }
-                    } else {
-                        CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                            requested: execution_requested,
-                            available: NumBytes::new(available_execution.max(0) as u64),
-                        }
-                    };
-                    return finish_err(
-                        clean_canister,
-                        self.instructions_left(),
-                        original,
-                        round,
-                        err,
-                        self.clone_log_memory_store(),
-                    );
-                }
-            }
+            return finish_err(
+                clean_canister,
+                self.instructions_left(),
+                original,
+                round,
+                err.into(),
+                self.clone_log_memory_store(),
+            );
         }
 
         // After this point `install_code` is guaranteed to succeed.
@@ -558,7 +536,13 @@ impl InstallCodeHelper {
         let config = &original.config;
         let id = self.canister.canister_id();
 
-        validate_controller(&self.canister, &original.sender)?;
+        validate_sender_on_subnet(
+            &original.sender,
+            CanisterAccess::Method(original.method),
+            &self.canister,
+            &original.network_topology,
+            config.own_subnet_id,
+        )?;
 
         match original.mode {
             CanisterInstallModeV2::Install => {
@@ -699,6 +683,79 @@ impl InstallCodeHelper {
             execution_state_changes,
             system_state_modifications,
         } = canister_state_changes;
+
+        // Charge the ingress induction debit before applying the state changes of
+        // the Wasm execution below: the latter may burn cycles via
+        // `ic0.cycles_burn128()`, which would otherwise leave a debit that the
+        // burnt balance can no longer cover. Every other kind of execution
+        // charges the debit before applying its state changes for the same
+        // reason, see `call_or_task::finish()` and
+        // `ResponseHelper::handle_wasm_execution_of_response_callback()`.
+        //
+        // Charging here is idempotent, so it is safe both for a second Wasm
+        // execution of the same `install_code` (e.g. `canister_init` after
+        // `(start)`) and for replaying this step on a DTS resume: the debit of
+        // the clean canister state is charged once and any further call finds a
+        // zero debit.
+        self.canister
+            .system_state
+            .apply_ingress_induction_cycles_debit(
+                self.canister.canister_id(),
+                round.cost_schedule,
+                true, // strict
+                round.log,
+                round.counters.charging_from_balance_error,
+            );
+
+        // The cycles burned by the Wasm execution must be covered by the cycles
+        // balance, without bringing it below the freezing threshold. The Wasm
+        // execution capped the burn accordingly, but against the balance from
+        // before the debit above was charged (and, on a DTS resume, from before
+        // the ingress messages inducted in the meantime), so the cap may be
+        // stale. Check it against the remaining balance and fail the
+        // `install_code` if the burn no longer fits, just like an update call
+        // whose balance changed concurrently.
+        //
+        // Nothing else can remove cycles from the balance here (an
+        // `install_code` can neither accept nor send cycles), so the check is
+        // skipped if nothing is burned: it would then only assert that the
+        // canister is not frozen, which is neither caused nor checked by this
+        // execution.
+        let requested = system_state_modifications.removed_cycles();
+        if !requested.is_zero() {
+            let new_memory_usage = output
+                .new_memory_usage
+                .unwrap_or_else(|| self.canister.memory_usage());
+            let new_message_memory_usage = output
+                .new_message_memory_usage
+                .unwrap_or_else(|| self.canister.message_memory_usage());
+            let new_reserved_balance = self.canister.system_state.reserved_balance()
+                + system_state_modifications.reserved_cycles();
+            let reveal_top_up = self.canister.controllers().contains(&original.sender);
+            if let Err(err) = round
+                .cycles_account_manager
+                .can_withdraw_cycles_with_threshold(
+                    &self.canister.system_state,
+                    requested,
+                    new_memory_usage,
+                    new_message_memory_usage,
+                    new_reserved_balance,
+                    original.subnet_cycles_config,
+                    reveal_top_up,
+                )
+            {
+                info!(
+                    round.log,
+                    "[DTS] Failed install_code execution of canister {} due to concurrent cycle change: {:?}.",
+                    self.canister.canister_id(),
+                    err,
+                );
+                return (
+                    instructions_consumed,
+                    Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
+                );
+            }
+        }
 
         // Apply system state changes always.
         // The result will be checked later after we've checked the wasm execution result so that we
@@ -857,6 +914,13 @@ impl InstallCodeHelper {
 /// time slicing execution of `install_code`.
 #[derive(Debug)]
 pub(crate) struct OriginalContext {
+    /// The management canister method (`InstallCode` or `InstallChunkedCode`).
+    pub method: Ic00Method,
+    /// The network topology of the round in which the execution started. The
+    /// sender is validated against it in every round the execution spans, so
+    /// that replaying `InstallCodeStep::ValidateInput` in a later round cannot
+    /// reach a different verdict than the original validation did.
+    pub network_topology: Arc<NetworkTopology>,
     pub execution_parameters: ExecutionParameters,
     pub mode: CanisterInstallModeV2,
     pub config: CanisterMgrConfig,
@@ -883,6 +947,7 @@ pub(crate) fn get_wasm_hash(canister: &CanisterState) -> Option<[u8; 32]> {
 ///
 /// The only state changes applied to the clean canister state:
 ///  - saving the new canister log
+///  - charging the ingress induction cycles debit
 ///  - refunding the prepaid execution cycles
 pub(crate) fn finish_err(
     clean_canister: CanisterState,

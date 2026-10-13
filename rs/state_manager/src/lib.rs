@@ -4198,6 +4198,8 @@ impl CertifiedStreamStore for StateManagerImpl {
             msg_from,
             to,
             byte_limit,
+            // For full slices, include one message (if any) regardless of `byte_limit`.
+            witness_from == msg_from,
         );
 
         let witness_partial_tree =

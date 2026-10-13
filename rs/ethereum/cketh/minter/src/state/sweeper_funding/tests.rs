@@ -12,9 +12,40 @@ mod accounting {
     use crate::eth_rpc::Hash;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::numeric::{BlockNumber, GasAmount, TransactionNonce};
-    use crate::test_fixtures::{gas_fee_estimate, transaction_signature};
+    use crate::test_fixtures::{finalized_funding, gas_fee_estimate, transaction_signature};
     use crate::tx::{AccessList, Eip1559TransactionRequest, Finalized, Signed, SweepTransaction};
     use ic_ethereum_types::Address;
+
+    #[test]
+    fn should_count_only_failed_fundings() {
+        let mut accounting = SweeperFundingAccounting::default();
+        accounting.record_burn(Wei::new(BURN));
+        accounting.record_finalized_funding(&finalized_funding(
+            Wei::new(BURN - FEE),
+            Wei::new(FEE),
+            TransactionStatus::Success,
+        ));
+
+        assert_eq!(
+            accounting.failed_fundings(),
+            0,
+            "a funding that delivered its ETH is not a failure"
+        );
+
+        accounting.record_burn(Wei::new(BURN));
+        accounting.record_finalized_funding(&finalized_funding(
+            Wei::new(BURN - FEE),
+            Wei::new(FEE),
+            TransactionStatus::Failure,
+        ));
+
+        assert_eq!(accounting.failed_fundings(), 1);
+        assert_eq!(
+            accounting.successful_fundings(),
+            1,
+            "the earlier funding is still counted as the success it was"
+        );
+    }
 
     #[test]
     fn should_start_empty() {
@@ -43,7 +74,11 @@ mod accounting {
         let mut accounting = SweeperFundingAccounting::default();
         for _ in 1..=3 {
             accounting.record_burn(Wei::new(BURN));
-            accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
+            accounting.record_finalized_funding(&finalized_funding(
+                Wei::new(BURN - FEE),
+                Wei::new(FEE),
+                TransactionStatus::Success,
+            ));
         }
 
         assert_eq!(
@@ -57,7 +92,11 @@ mod accounting {
     fn should_not_credit_the_sweeper_balance_bound_for_a_failed_funding() {
         let mut accounting = SweeperFundingAccounting::default();
         accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::ZERO, Wei::new(FEE));
+        accounting.record_finalized_funding(&finalized_funding(
+            Wei::new(BURN - FEE),
+            Wei::new(FEE),
+            TransactionStatus::Failure,
+        ));
 
         assert_eq!(
             accounting.sweeper_balance_lower_bound(),
@@ -70,7 +109,11 @@ mod accounting {
     fn should_leave_no_surplus_after_a_successful_funding() {
         let mut accounting = SweeperFundingAccounting::default();
         accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
+        accounting.record_finalized_funding(&finalized_funding(
+            Wei::new(BURN - FEE),
+            Wei::new(FEE),
+            TransactionStatus::Success,
+        ));
 
         assert_eq!(accounting.cumulative_spent(), Wei::new(BURN));
         assert_eq!(
@@ -84,7 +127,11 @@ mod accounting {
     fn should_keep_the_unspent_fee_as_surplus_after_a_successful_funding() {
         let mut accounting = SweeperFundingAccounting::default();
         accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE / 2));
+        accounting.record_finalized_funding(&finalized_funding(
+            Wei::new(BURN - FEE),
+            Wei::new(FEE / 2),
+            TransactionStatus::Success,
+        ));
 
         assert_eq!(
             accounting.burned_not_yet_spent(),
@@ -97,7 +144,11 @@ mod accounting {
     fn should_keep_the_burn_as_surplus_after_a_failed_funding() {
         let mut accounting = SweeperFundingAccounting::default();
         accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::ZERO, Wei::new(FEE));
+        accounting.record_finalized_funding(&finalized_funding(
+            Wei::new(BURN - FEE),
+            Wei::new(FEE),
+            TransactionStatus::Failure,
+        ));
 
         assert_eq!(accounting.cumulative_spent(), Wei::new(FEE));
         assert_eq!(
@@ -116,7 +167,11 @@ mod accounting {
         let mut accounting = SweeperFundingAccounting::default();
         for _ in 0..3 {
             accounting.record_burn(Wei::new(BURN));
-            accounting.record_finalized_funding(Wei::new(BURN - FEE), Wei::new(FEE));
+            accounting.record_finalized_funding(&finalized_funding(
+                Wei::new(BURN - FEE),
+                Wei::new(FEE),
+                TransactionStatus::Success,
+            ));
         }
 
         assert_eq!(accounting.cumulative_burned(), Wei::new(3 * BURN));
@@ -130,7 +185,11 @@ mod accounting {
         let mut accounting = SweeperFundingAccounting::default();
         accounting.record_burn(Wei::new(FEE));
 
-        accounting.record_finalized_funding(Wei::new(BURN), Wei::new(FEE));
+        accounting.record_finalized_funding(&finalized_funding(
+            Wei::new(BURN),
+            Wei::new(FEE),
+            TransactionStatus::Success,
+        ));
     }
 
     #[test]
@@ -178,7 +237,11 @@ mod accounting {
     fn funded_accounting() -> SweeperFundingAccounting {
         let mut accounting = SweeperFundingAccounting::default();
         accounting.record_burn(Wei::new(BURN));
-        accounting.record_finalized_funding(Wei::new(BURN), Wei::ZERO);
+        accounting.record_finalized_funding(&finalized_funding(
+            Wei::new(BURN),
+            Wei::ZERO,
+            TransactionStatus::Success,
+        ));
         accounting
     }
 

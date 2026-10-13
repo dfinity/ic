@@ -97,6 +97,7 @@ mod tests {
 
     mod ecdsa {
         use super::*;
+        use base64::prelude::*;
 
         /// An ECDSA P256 public key in COSE format, DER wrapped. The key was
         /// obtained analogous to the RSA keys in the rsa mod, but in an
@@ -150,7 +151,7 @@ mod tests {
 
                     let client_data = ClientData {
                         r#type: "brunettes".to_string(),
-                        challenge: base64::encode(msg),
+                        challenge: BASE64_URL_SAFE_NO_PAD.encode(msg),
                         origin: "https://localhost/".to_string(),
                     };
 

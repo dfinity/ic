@@ -378,6 +378,24 @@ impl Registry {
         })
     }
 
+    /// Makes a registry mutation that merges all canister ID ranges currently
+    /// assigned to the `source` subnet into the canister ID range set of the
+    /// `destination` subnet. After the mutation, `source` does not host any
+    /// canister ID range anymore.
+    pub fn merge_subnets_mutation(
+        &self,
+        version: u64,
+        source: SubnetId,
+        destination: SubnetId,
+    ) -> Vec<RegistryMutation> {
+        self.modify_routing_table(version, |routing_table| {
+            let source_ranges = routing_table.ranges(source);
+            routing_table
+                .assign_ranges(source_ranges, destination)
+                .unwrap();
+        })
+    }
+
     /// Retrieves the canister migrations if the key exists.
     pub fn get_canister_migrations(&self, version: u64) -> Option<CanisterMigrations> {
         self.get(make_canister_migrations_record_key().as_bytes(), version)

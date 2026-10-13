@@ -1,4 +1,5 @@
 use crate::{AuthenticationError, HttpRequestVerifier, RequestValidationError};
+use base64::prelude::*;
 use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_types::Time;
 use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider};
@@ -145,7 +146,8 @@ impl IngressMessageVerifier<ConstantRootOfTrustProvider> {
 
 fn nns_root_public_key() -> IcRootOfTrust {
     use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
-    let decoded_nns_mainnet_key = base64::decode(IC_NNS_ROOT_PUBLIC_KEY_BASE64)
+    let decoded_nns_mainnet_key = BASE64_STANDARD
+        .decode(IC_NNS_ROOT_PUBLIC_KEY_BASE64)
         .expect("Failed to decode mainnet public key from base64.");
     IcRootOfTrust::from(
         parse_threshold_sig_key_from_der(&decoded_nns_mainnet_key)

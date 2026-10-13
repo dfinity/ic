@@ -59,7 +59,7 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
                 Error::unable_to_find_block(&"Unable to find block".to_owned()).into(),
                 Error::invalid_block_identifier(&"Unable to find block".to_owned()).into(),
                 Error::failed_to_build_block_response(
-                    &"Faild to create a response for fetching blocks.".to_owned(),
+                    &"Failed to create a response for fetching blocks.".to_owned(),
                 )
                 .into(),
                 Error::invalid_transaction_identifier().into(),
@@ -69,7 +69,7 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
                 Error::ledger_communication_unsuccessful(&"Rosetta could not communicate with the ICRC-1 Ledger successfully.".to_owned()).into(),
                 Error::unable_to_find_account_balance(&"The balance for the given account could not be fetched.".to_owned()).into(),
                 Error::request_processing_error(&"The input of the user resulted in an error while trying to process the request.".to_owned()).into(),
-                Error::processing_construction_failed(&"An error while processing an construction api endpoint occured.".to_owned()).into(),
+                Error::processing_construction_failed(&"An error while processing a construction api endpoint occurred.".to_owned()).into(),
                 Error::invalid_metadata(&"The metadata provided by the user is invalid.".to_owned()).into(),
             ],
             historical_balance_lookup: true,

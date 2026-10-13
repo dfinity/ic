@@ -116,6 +116,7 @@ system_test_nns(
     enable_uvm = True,
     tags = [
         "colocate",
+        "long_test",  # The P90 duration was over 8 minutes in the month up to 2026-09-17.
     ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
         "BTC_WASM_PATH": "@btc_canister//file",
@@ -138,7 +139,6 @@ system_test_nns(
     system_test(
         name = "adapter_basics_test",
         cpus = MIN_LOCAL_CPUS + DEFAULT_VCPUS_PER_VM + DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs + 1 UniversalVm (bitcoind) * 6 vCPUs.
-        enable_metrics = True,
         enable_uvm = True,
         env = {
             "ADAPTER_TO_TEST": adapter,

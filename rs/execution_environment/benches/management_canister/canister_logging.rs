@@ -189,8 +189,6 @@ fn run_bench_fetch_canister_log<M: criterion::measurement::Measurement>(
     filter: Option<FetchCanisterLogsFilter>,
 ) {
     let (env, target) = setup_canister_with_full_log(log_memory_limit, log_message_size);
-    // The target's logs are public, so any sender is allowed to read them.
-    let sender = PrincipalId::new_anonymous();
     let state = env.get_latest_state();
     let canister = state.canister_state(&target).unwrap();
     group.bench_function(bench_name, |b| {
@@ -200,7 +198,7 @@ fn run_bench_fetch_canister_log<M: criterion::measurement::Measurement>(
                 request.filter = filter;
                 request
             },
-            |request| fetch_canister_logs_response_for_bench(sender, canister, request),
+            |request| fetch_canister_logs_response_for_bench(canister, request),
             BatchSize::LargeInput,
         );
     });
@@ -219,8 +217,6 @@ fn run_bench_fetch_single_log_in_middle<M: criterion::measurement::Measurement>(
     log_message_size: usize,
 ) {
     let (env, target) = setup_canister_with_full_log(log_memory_limit, log_message_size);
-    // The target's logs are public, so any sender is allowed to read them.
-    let sender = PrincipalId::new_anonymous();
     let state = env.get_latest_state();
     let canister = state.canister_state(&target).unwrap();
     // Pick a record in the middle of the live idx range and filter for exactly
@@ -242,7 +238,7 @@ fn run_bench_fetch_single_log_in_middle<M: criterion::measurement::Measurement>(
                 request.filter = Some(filter);
                 request
             },
-            |request| fetch_canister_logs_response_for_bench(sender, canister, request),
+            |request| fetch_canister_logs_response_for_bench(canister, request),
             BatchSize::LargeInput,
         );
     });
@@ -268,8 +264,6 @@ fn run_bench_fetch_no_match_scan<M: criterion::measurement::Measurement>(
     log_message_size: usize,
 ) {
     let (env, target) = setup_canister_with_full_log(log_memory_limit, log_message_size);
-    // The target's logs are public, so any sender is allowed to read them.
-    let sender = PrincipalId::new_anonymous();
     let state = env.get_latest_state();
     let canister = state.canister_state(&target).unwrap();
     let log_memory_store = &canister.system_state.log_memory_store;
@@ -308,7 +302,7 @@ fn run_bench_fetch_no_match_scan<M: criterion::measurement::Measurement>(
                 request.filter = Some(filter);
                 request
             },
-            |request| fetch_canister_logs_response_for_bench(sender, canister, request),
+            |request| fetch_canister_logs_response_for_bench(canister, request),
             BatchSize::LargeInput,
         );
     });
@@ -323,16 +317,11 @@ fn fetch_response(
     log_message_size: usize,
 ) -> Vec<u8> {
     let (env, target) = setup_canister_with_full_log(log_memory_limit, log_message_size);
-    // The target's logs are public, so any sender is allowed to read them.
-    let sender = PrincipalId::new_anonymous();
     let state = env.get_latest_state();
     let mut request = FetchCanisterLogsRequest::new(target);
     request.filter = filter;
-    let (reply, _instructions) = fetch_canister_logs_response_for_bench(
-        sender,
-        state.canister_state(&target).unwrap(),
-        request,
-    );
+    let (reply, _instructions) =
+        fetch_canister_logs_response_for_bench(state.canister_state(&target).unwrap(), request);
     reply
 }
 

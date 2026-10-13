@@ -62,7 +62,11 @@
 <table>
     <tr>
         <td>Replica Version</td>
-        <td class="debug">{{ self.replica_version.to_string() }}</td>
+        <td class="debug">{{ self.platform_version.replica_version.to_string() }}</td>
+    </tr>
+    <tr>
+        <td>GuestOS Version</td>
+        <td class="debug">{{ self.platform_version.guestos_version.to_string() }}</td>
     </tr>
     <tr>
         <td>Subnet Type</td>

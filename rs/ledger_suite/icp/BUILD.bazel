@@ -189,7 +189,6 @@ rust_ic_test_suite(
         ":icp_ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//rs/ledger_suite/common/ledger_core",
-        "//rs/ledger_suite/icp/archive:ic-icp-archive",
         "//rs/ledger_suite/icp/index:ic-icp-index",
         "//rs/ledger_suite/icp/test_utils",
         "//rs/ledger_suite/test_utils/in_memory_ledger:ic-ledger-suite-in-memory-ledger",

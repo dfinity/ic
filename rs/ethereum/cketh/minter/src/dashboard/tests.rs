@@ -19,8 +19,8 @@ use ic_cketh_minter::state::transactions::{
 };
 use ic_cketh_minter::state::{MintedEvent, State};
 use ic_cketh_minter::tx::{
-    Eip1559TransactionRequest, GasFeeEstimate, SignedEip1559TransactionRequest, TransactionPrice,
-    TransactionSignature,
+    Eip1559TransactionRequest, FinalizedEip1559Transaction, GasFeeEstimate,
+    SignedEip1559TransactionRequest, TransactionPrice, TransactionSignature,
 };
 use ic_ethereum_types::Address;
 use maplit::{btreemap, btreeset};
@@ -92,6 +92,61 @@ fn should_display_block_sync() {
             "0xE1788E4834c896F1932188645cc36c54d1b80AC1",
             &[2552370, 3552370],
         );
+}
+
+#[test]
+fn should_display_sweeper_funding() {
+    let mut state = initial_state();
+    state.sweeper_funding.record_burn(Wei::from(1_000_000_u64));
+    state
+        .sweeper_funding
+        .record_finalized_funding(&finalized_funding(
+            Wei::from(900_000_u64),
+            Wei::from(50_000_u64),
+            TransactionStatus::Success,
+        ));
+
+    let dashboard = DashboardTemplate::from_state(&state, DashboardPaginationParameters::default());
+
+    DashboardAssert::assert_that(dashboard)
+        .has_sweeper_cketh_burned("1_000_000")
+        .has_sweeper_eth_spent("950_000")
+        .has_sweeper_burned_not_yet_spent("50_000")
+        .has_sweeper_prepaid_gas("900_000");
+}
+
+#[test]
+fn should_display_an_in_flight_sweeper_funding() {
+    let mut state = initial_state();
+    apply_state_transition(
+        &mut state,
+        &EventType::AcceptedSweeperFundingRequest(EthWithdrawalRequest {
+            withdrawal_amount: Wei::from(900_000_u64),
+            created_at: Some(1_620_328_630_000_000_000),
+            ..cketh_withdrawal_request_with_index(LedgerBurnIndex::new(42))
+        }),
+    );
+
+    let dashboard = DashboardTemplate::from_state(&state, DashboardPaginationParameters::default());
+
+    DashboardAssert::assert_that(dashboard).has_sweeper_in_flight_funding(
+        "burn index 42, 900_000 Wei, accepted at 2021-05-06T19:17:10+00:00",
+    );
+}
+
+#[test]
+fn should_display_no_in_flight_sweeper_funding_when_idle() {
+    DashboardAssert::assert_that(initial_dashboard()).has_sweeper_in_flight_funding("none");
+}
+
+#[test]
+fn should_display_sweeper_funding_before_any_funding_has_landed() {
+    let dashboard = initial_dashboard();
+
+    DashboardAssert::assert_that(dashboard)
+        .has_sweeper_prepaid_gas("0")
+        .has_sweeper_cketh_burned("0")
+        .has_sweeper_eth_spent("0");
 }
 
 #[test]
@@ -1471,6 +1526,43 @@ fn cketh_withdrawal_flow(
     )
 }
 
+fn finalized_funding(
+    amount: Wei,
+    transaction_fee: Wei,
+    status: TransactionStatus,
+) -> FinalizedEip1559Transaction {
+    let effective_gas_price: WeiPerGas = transaction_fee.change_units();
+    let signed = SignedEip1559TransactionRequest::from((
+        Eip1559TransactionRequest {
+            chain_id: EthereumNetwork::Sepolia.chain_id(),
+            nonce: TransactionNonce::ZERO,
+            max_priority_fee_per_gas: WeiPerGas::ZERO,
+            max_fee_per_gas: effective_gas_price,
+            gas_limit: GasAmount::ONE,
+            destination: Address::from_str("0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0").unwrap(),
+            amount,
+            data: vec![],
+            access_list: Default::default(),
+        },
+        TransactionSignature {
+            signature_y_parity: false,
+            r: Default::default(),
+            s: Default::default(),
+        },
+    ));
+    let receipt = TransactionReceipt {
+        block_hash: "0xce67a85c9fb8bc50213815c32814c159fd75160acf7cb8631e8e7b7cf7f1d472"
+            .parse()
+            .unwrap(),
+        block_number: BlockNumber::new(4190269),
+        effective_gas_price,
+        gas_used: GasAmount::ONE,
+        status,
+        transaction_hash: signed.hash(),
+    };
+    signed.try_finalize(receipt).unwrap()
+}
+
 fn ckerc20_withdrawal_flow(
     cketh_ledger_burn_index: LedgerBurnIndex,
     nonce: TransactionNonce,
@@ -1706,6 +1798,46 @@ mod assertions {
 
         pub fn has_eth_balance(&self, expected_value: &str) -> &Self {
             self.has_string_value("#eth-balance > td", expected_value, "wrong ETH balance")
+        }
+
+        pub fn has_sweeper_prepaid_gas(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#sweeper-prepaid-gas > td",
+                expected_value,
+                "wrong sweeper prepaid gas",
+            )
+        }
+
+        pub fn has_sweeper_in_flight_funding(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#sweeper-in-flight-funding > td",
+                expected_value,
+                "wrong in-flight funding",
+            )
+        }
+
+        pub fn has_sweeper_cketh_burned(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#sweeper-cketh-burned > td",
+                expected_value,
+                "wrong ckETH burned for sweeping",
+            )
+        }
+
+        pub fn has_sweeper_eth_spent(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#sweeper-eth-spent > td",
+                expected_value,
+                "wrong ETH spent on sweeping",
+            )
+        }
+
+        pub fn has_sweeper_burned_not_yet_spent(&self, expected_value: &str) -> &Self {
+            self.has_string_value(
+                "#sweeper-burned-not-yet-spent > td",
+                expected_value,
+                "wrong burned-but-not-yet-spent amount",
+            )
         }
 
         pub fn has_total_effective_tx_fees(&self, expected_value: &str) -> &Self {

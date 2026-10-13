@@ -44,6 +44,7 @@ filegroup(
             "//rs/phantom_newtype",
             "//rs/types/management_canister_types",
             "//rs/utils/ensure",
+            "//rs/utils/thousands",
             "@crate_index//:candid",
             "@crate_index//:ethnum",
             "@crate_index//:evm_rpc_client",
@@ -68,7 +69,6 @@ filegroup(
             "@crate_index//:serde_json",
             "@crate_index//:strum",
             "@crate_index//:thiserror",
-            "@crate_index//:thousands",
         ] + extra_deps,
     )
     for (name, features, extra_deps) in [
@@ -112,8 +112,11 @@ rust_test(
         ":minter",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/ethereum/cketh/test_utils",
+        "@crate_index//:alloy-consensus",
+        "@crate_index//:alloy-eips",
+        "@crate_index//:alloy-primitives",
+        "@crate_index//:alloy-sol-types",
         "@crate_index//:assert_matches",
-        "@crate_index//:ethers-core",
         "@crate_index//:flate2",
         "@crate_index//:ic-agent",
         "@crate_index//:maplit",
@@ -241,9 +244,11 @@ rust_ic_test_suite(
         "//rs/ethereum/cketh/test_utils",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",
         "//rs/types/base_types",
+        "@crate_index//:alloy-consensus",
+        "@crate_index//:alloy-primitives",
+        "@crate_index//:alloy-rpc-types-eth",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
-        "@crate_index//:ethers-core",
         "@crate_index//:hex",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:minicbor",
@@ -267,6 +272,7 @@ rust_test(
         "CkSweeperAttested.sol",
         "tests/deposit_from_cex_demo/CkSweeperViaHelper.sol",
         "tests/deposit_from_cex_demo/MockUSDT.sol",
+        "tests/deposit_from_cex_demo/StipendForwarder.sol",
     ],
     env = {
         "ANVIL_BIN": "$(rootpath //:anvil)",
@@ -274,6 +280,7 @@ rust_test(
         "CKSWEEPER_ATTESTED_SOL": "$(rootpath CkSweeperAttested.sol)",
         "CKSWEEPER_VIA_HELPER_SOL": "$(rootpath tests/deposit_from_cex_demo/CkSweeperViaHelper.sol)",
         "MOCKUSDT_SOL": "$(rootpath tests/deposit_from_cex_demo/MockUSDT.sol)",
+        "STIPEND_FORWARDER_SOL": "$(rootpath tests/deposit_from_cex_demo/StipendForwarder.sol)",
         "SOLC_BIN": "$(rootpath //:solc)",
     },
     deps = [
@@ -281,8 +288,9 @@ rust_test(
         ":minter",
         "//packages/ic-ethereum-types",
         "//packages/ic-secp256k1",
+        "@crate_index//:alloy-primitives",
+        "@crate_index//:alloy-sol-types",
         "@crate_index//:candid",
-        "@crate_index//:ethers-core",
         "@crate_index//:ethnum",
         "@crate_index//:hex",
         "@crate_index//:ic-sha3",
@@ -294,9 +302,12 @@ rust_test(
 rust_test(
     name = "deposit_from_cex",
     # The end-to-end tests each run a live PocketIC and wait (wall-clock) for the minter's periodic
-    # tasks — and the sweep test drives twenty deposits through two sweeps — so the target needs a
-    # far larger timeout than the pure-anvil tests.
+    # tasks — and the sweep tests drive twenty deposits through two sweeps — so the target needs a
+    # far larger timeout than the pure-anvil tests. RUST_TEST_THREADS=1 below runs the nine live
+    # tests one after the other, which takes ten minutes on an idle machine and 10-13 on CI: the
+    # 900s that "large" alone grants left no room for a loaded runner, where the target timed out.
     size = "large",
+    timeout = "eternal",
     srcs = ["tests/deposit_from_cex.rs"],
     data = [
         "//:anvil",
@@ -334,6 +345,10 @@ rust_test(
         "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
+    # A loaded runner also slows the minter's outcalls past what the harness' settle windows can
+    # drain, so ticks are wasted and their budgets run out: reserve the CPUs the test binary,
+    # PocketIC and anvil share, as the other PocketIC-heavy tests do.
+    exec_properties = {"test.cpu": "4"},
     tags = ["long_test"],
     deps = [
         # Keep sorted.
@@ -356,13 +371,15 @@ rust_binary(
         "//packages/ic-ethereum-types",
         "//packages/icrc-ledger-types",
         "//rs/phantom_newtype",
+        "@crate_index//:alloy-consensus",
+        "@crate_index//:alloy-eips",
+        "@crate_index//:alloy-primitives",
         "@crate_index//:candid",
-        "@crate_index//:ethers-core",
         "@crate_index//:ethnum",
         "@crate_index//:flate2",
+        "@crate_index//:hex",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:num-traits",
-        "@crate_index//:rlp",
     ],
 )
 

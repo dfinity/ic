@@ -11,6 +11,28 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-10-09: Proposal 144311
+
+http://dashboard.internetcomputer.org/proposal/144311
+
+## Fixed
+
+* Proposals that execute a generic (non-native) nervous system function now
+  store the raw reply bytes from the target canister on the proposal
+  (`ProposalData.execution_reply`), instead of silently discarding them, so
+  the outcome of the call can be inspected after the fact.
+
+
+# 2026-10-02: Proposal 144202
+
+http://dashboard.internetcomputer.org/proposal/144202
+
+## Added
+
+- Expose each neuron's exact voting reward shares for its latest participating reward event through
+  `get_neuron` and `list_neurons`.
+
+
 # 2026-08-31: Proposal 143747
 
 http://dashboard.internetcomputer.org/proposal/143747

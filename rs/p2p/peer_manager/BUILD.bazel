@@ -24,7 +24,6 @@ rust_library(
         "//rs/registry/helpers",
         "//rs/types/base_types",
         "@crate_index//:prometheus",
-        "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
 )
@@ -64,7 +63,6 @@ rust_test_suite(
         "//rs/types/base_types",
         "//rs/types/types_test_utils",
         "@crate_index//:prometheus",
-        "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
 )

@@ -181,6 +181,40 @@
                 </tbody>
             </table>
 
+            <h3 id="sweeper-funding">Sweeper fee funding</h3>
+            <table>
+                <tbody>
+                    <tr id="sweeper-address">
+                        <th>Sweeper gas address (derived from the minter's key)</th>
+                        <td>{% match sweeper_funding.sweeper_address %}{%- when Some with (address) -%}{% call etherscan_address_link(address) %}{% endcall %}{%- when None -%}unknown (ECDSA public key not yet available){% endmatch %}</td>
+                    </tr>
+                    <tr id="sweeper-prepaid-gas">
+                        <th>Prepaid sweep gas, lower bound (Wei)</th>
+                        <td>{{ sweeper_funding.prepaid_gas_lower_bound }}</td>
+                    </tr>
+                    <tr id="sweeper-funding-bounds">
+                        <th>Fund below / up to (Wei)</th>
+                        <td>{{ sweeper_funding.low_water_mark }} / {{ sweeper_funding.target }}</td>
+                    </tr>
+                    <tr id="sweeper-cketh-burned">
+                        <th>ckETH burned for sweeping (Wei)</th>
+                        <td>{{ sweeper_funding.cketh_burned }}</td>
+                    </tr>
+                    <tr id="sweeper-eth-spent">
+                        <th>ETH spent on sweeping (Wei)</th>
+                        <td>{{ sweeper_funding.eth_spent }}</td>
+                    </tr>
+                    <tr id="sweeper-in-flight-funding">
+                        <th>Funding in flight</th>
+                        <td>{% match sweeper_funding.in_flight %}{%- when Some with (in_flight) -%}burn index {{ in_flight.ledger_burn_index }}, {{ in_flight.amount }} Wei, accepted at {% call format_opt_timestamp(in_flight.created_at) %}{% endcall %}{%- when None -%}none{% endmatch %}</td>
+                    </tr>
+                    <tr id="sweeper-burned-not-yet-spent">
+                        <th>Burned but not yet spent (Wei)</th>
+                        <td>{{ sweeper_funding.burned_not_yet_spent }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
             <h3 id="helper-smart-contracts">Helper Smart Contracts</h3>
             <table>
                 <thead>
@@ -330,7 +364,7 @@
                 <tr>
                     <td class="numeric">{{ withdrawal.cketh_ledger_burn_index }}</td>
                     <td>{% call etherscan_address_link(withdrawal.destination) %}{% endcall %}</td>
-                    <td>{{ withdrawal.token_symbol }}</td>
+                    <td>{{ withdrawal.token_symbol }}{% if withdrawal.is_sweeper_funding %} (sweeper funding){% endif %}</td>
                     <td class="numeric">{{ withdrawal.value }}</td>
                     <td>{% call format_opt_timestamp(withdrawal.created_at) %}{% endcall %}</td>
                 </tr>

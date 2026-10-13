@@ -8,24 +8,26 @@
 //!    principal and subaccount.
 
 use assert_matches::assert_matches;
-use candid::Principal;
+use ic_cketh_minter::asset::Asset;
 use ic_cketh_minter::balance_scan::batcher::{
-    BalanceOfCall, decode_balance_batch, encode_balance_batch,
+    BalanceOfCall, Delegation, MAX_CALLS_PER_BATCH, decode_balance_batch, decode_delegation_batch,
+    encode_balance_batch, encode_delegation_batch, encode_eth_balance_batch,
 };
 use ic_cketh_minter::deposit_address::DepositAddress;
-use ic_cketh_minter::endpoints::DepositStatus;
 use ic_cketh_minter::endpoints::events::EventPayload;
+use ic_cketh_minter::endpoints::{DepositEthStatus, DepositStatus};
 use ic_cketh_minter::numeric::Erc20Value;
 use ic_cketh_test_utils::anvil::{
-    Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, deploy_mock_erc20,
+    Anvil, DEV_ACCOUNT, SentTransaction, address_from_hex, delegation_designator,
+    deploy_mock_erc20, deploy_sweeper_delegate,
 };
-use ic_cketh_test_utils::ckerc20::Erc20Token;
-use ic_cketh_test_utils::live::{Holding, LiveSetup, contract_address};
-use ic_cketh_test_utils::{MINTER_ADDRESS, SWEEPER_ADDRESS};
+use ic_cketh_test_utils::ckerc20::{CkErc20Setup, Erc20Token};
+use ic_cketh_test_utils::live::{
+    CexDeposit, DELEGATING_SWEEP_TRANSACTION_TYPE, DepositPlan, EthCexDeposit, EthDepositPlan,
+    LiveSetup, PLAIN_SWEEP_TRANSACTION_TYPE, contract_address,
+};
+use ic_cketh_test_utils::{CkEthSetup, SWEEPER_ADDRESS};
 use ic_ethereum_types::Address;
-use icrc_ledger_types::icrc1::account::Account;
-use std::collections::BTreeSet;
-use std::str::FromStr;
 
 #[test]
 fn should_read_erc20_balances_across_tokens_and_holders() {
@@ -133,6 +135,229 @@ fn should_read_many_balances_in_a_single_call() {
 }
 
 #[test]
+fn should_scan_a_full_batch_in_a_single_call() {
+    let anvil = Anvil::start();
+    let dev = address_from_hex(DEV_ACCOUNT);
+    let token = deploy_mock_erc20(&anvil, &dev);
+
+    let batch_of = |num_calls: usize| -> Vec<BalanceOfCall> {
+        (0..num_calls as u64)
+            .map(|index| BalanceOfCall {
+                token,
+                holder: DepositAddress::new(holder_at(index)),
+            })
+            .collect()
+    };
+
+    const LAST_HOLDER_BALANCE: u128 = 123_456;
+    let last_holder = holder_at((MAX_CALLS_PER_BATCH - 1) as u64);
+    anvil.fund(&token, &dev, &last_holder, LAST_HOLDER_BALANCE);
+
+    let full_batch = batch_of(MAX_CALLS_PER_BATCH);
+    let out = anvil
+        .eth_call_create(&dev, &encode_balance_batch(&full_batch))
+        .expect(
+            "a batch of MAX_CALLS_PER_BATCH calls must stay within the EIP-3860 initcode limit",
+        );
+    let mut expected_balances = vec![Erc20Value::ZERO; MAX_CALLS_PER_BATCH];
+    *expected_balances.last_mut().unwrap() = Erc20Value::from(LAST_HOLDER_BALANCE);
+    assert_eq!(
+        decode_balance_batch(&out, full_batch.len()).expect("decode failed"),
+        expected_balances
+    );
+
+    let one_call_too_many = batch_of(MAX_CALLS_PER_BATCH + 1);
+    let error = anvil
+        .eth_call_create(&dev, &encode_balance_batch(&one_call_too_many))
+        .expect_err("a batch above MAX_CALLS_PER_BATCH must exceed the EIP-3860 initcode limit");
+    assert!(
+        error.to_lowercase().contains("initcode"),
+        "expected an EIP-3860 initcode limit error, got: {error}"
+    );
+}
+
+#[test]
+fn should_read_eth_balances_across_holders() {
+    let anvil = Anvil::start();
+    let dev = address_from_hex(DEV_ACCOUNT);
+
+    let h1 = Address::new([0x11; 20]);
+    let h2 = Address::new([0x22; 20]);
+    let never_funded = Address::new([0x33; 20]);
+
+    anvil.send_eth(&dev, &h1, 5_000_000_000_000_000);
+    anvil.send_eth(&dev, &h2, 1_234_567_890_123_456_789);
+
+    let holders = vec![
+        DepositAddress::new(h1),
+        DepositAddress::new(h2),
+        DepositAddress::new(never_funded),
+    ];
+    let out = anvil
+        .eth_call_create(&dev, &encode_eth_balance_batch(&holders))
+        .expect("the ETH balance batch must not revert");
+    let balances = decode_balance_batch(&out, holders.len()).expect("decode failed");
+
+    assert_eq!(
+        balances,
+        vec![
+            Erc20Value::new(5_000_000_000_000_000),
+            Erc20Value::new(1_234_567_890_123_456_789),
+            Erc20Value::new(0),
+        ]
+    );
+
+    // The batcher must agree with anvil's own view of every balance.
+    for holder in &holders {
+        let expected = anvil.balance(holder.as_address());
+        let single = anvil
+            .eth_call_create(
+                &dev,
+                &encode_eth_balance_batch(std::slice::from_ref(holder)),
+            )
+            .expect("single-holder batch reverted");
+        assert_eq!(
+            decode_balance_batch(&single, 1).unwrap()[0],
+            Erc20Value::new(expected)
+        );
+    }
+}
+
+#[test]
+fn should_read_many_eth_balances_in_a_single_call() {
+    let anvil = Anvil::start();
+    let dev = address_from_hex(DEV_ACCOUNT);
+
+    const N: u64 = 32;
+    let holders: Vec<Address> = (0..N).map(holder_at).collect();
+    for (i, holder) in holders.iter().enumerate() {
+        anvil.send_eth(&dev, holder, (i as u128 + 1) * 1_000);
+    }
+
+    let batch: Vec<DepositAddress> = holders.iter().copied().map(DepositAddress::new).collect();
+    let out = anvil
+        .eth_call_create(&dev, &encode_eth_balance_batch(&batch))
+        .expect("the ETH balance batch must not revert");
+    let balances = decode_balance_batch(&out, batch.len()).expect("decode failed");
+
+    let expected: Vec<Erc20Value> = (0..N)
+        .map(|i| Erc20Value::new((i as u128 + 1) * 1_000))
+        .collect();
+    assert_eq!(balances, expected);
+}
+
+#[test]
+fn should_read_delegations_across_addresses() {
+    let anvil = Anvil::start();
+    let dev = address_from_hex(DEV_ACCOUNT);
+
+    let bare = |address_byte: u8| {
+        (
+            DepositAddress::new(Address::new([address_byte; 20])),
+            Delegation::NotDelegated,
+        )
+    };
+    let delegated = |address_byte: u8, delegate_byte: u8| {
+        let address = DepositAddress::new(Address::new([address_byte; 20]));
+        let delegate = Address::new([delegate_byte; 20]);
+        anvil.set_code(address.as_address(), &delegation_designator(&delegate));
+        (address, Delegation::Delegated(delegate))
+    };
+    let contract = || {
+        (
+            DepositAddress::new(deploy_mock_erc20(&anvil, &dev)),
+            Delegation::Other,
+        )
+    };
+    let addresses_with_expected_delegation_by_kind = [
+        [bare(0x11), bare(0x22), bare(0x33)],
+        [
+            delegated(0x44, 0xa1),
+            delegated(0x55, 0xa2),
+            delegated(0x66, 0xa3),
+        ],
+        [contract(), contract(), contract()],
+    ];
+
+    for first in 0..3 {
+        for second in 0..3 {
+            for third in 0..3 {
+                let batch = [
+                    &addresses_with_expected_delegation_by_kind[first][0],
+                    &addresses_with_expected_delegation_by_kind[second][1],
+                    &addresses_with_expected_delegation_by_kind[third][2],
+                ];
+                let addresses: Vec<DepositAddress> =
+                    batch.iter().map(|(address, _)| *address).collect();
+                let expected: Vec<Delegation> =
+                    batch.iter().map(|(_, delegation)| *delegation).collect();
+                let out = anvil
+                    .eth_call_create(&dev, &encode_delegation_batch(&addresses))
+                    .expect("the delegation batch must not revert");
+                assert_eq!(
+                    decode_delegation_batch(&out, addresses.len()).expect("decode failed"),
+                    expected,
+                    "decoding is positional: the argument order alone decides the result; in \
+                     particular a designator first must not make the returned blob look like code \
+                     starting with 0xef, which EIP-3541 forbids a create-style call to return \
+                     (batch: {addresses:?})"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn should_read_a_full_batch_of_delegations_in_a_single_call() {
+    let anvil = Anvil::start();
+    let dev = address_from_hex(DEV_ACCOUNT);
+
+    let batch_of = |num_addresses: usize| -> Vec<DepositAddress> {
+        (0..num_addresses as u64)
+            .map(|index| DepositAddress::new(holder_at(index)))
+            .collect()
+    };
+
+    let delegate = Address::new([0xcd; 20]);
+    let first = holder_at(0);
+    let last = holder_at((MAX_CALLS_PER_BATCH - 1) as u64);
+    anvil.set_code(&first, &delegation_designator(&delegate));
+    anvil.set_code(&last, &delegation_designator(&delegate));
+
+    let full_batch = batch_of(MAX_CALLS_PER_BATCH);
+    let out = anvil
+        .eth_call_create(&dev, &encode_delegation_batch(&full_batch))
+        .expect("a batch of MAX_CALLS_PER_BATCH addresses must stay within the node limits");
+    let mut expected = vec![Delegation::NotDelegated; MAX_CALLS_PER_BATCH];
+    *expected.first_mut().unwrap() = Delegation::Delegated(delegate);
+    *expected.last_mut().unwrap() = Delegation::Delegated(delegate);
+    assert_eq!(
+        decode_delegation_batch(&out, full_batch.len()).expect("decode failed"),
+        expected
+    );
+
+    const EIP_170_MAX_CODE_SIZE: usize = 24_576;
+    const RETURNED_BYTES_PER_ADDRESS: usize = 32;
+    const LEADING_ZERO_WORDS: usize = 1;
+    const ONE_ADDRESS_PAST_THE_RETURNED_BLOB_CEILING: usize =
+        EIP_170_MAX_CODE_SIZE / RETURNED_BYTES_PER_ADDRESS - LEADING_ZERO_WORDS + 1;
+    let error = anvil
+        .eth_call_create(
+            &dev,
+            &encode_delegation_batch(&batch_of(ONE_ADDRESS_PAST_THE_RETURNED_BLOB_CEILING)),
+        )
+        .expect_err(
+            "with one argument word per address the EIP-3860 initcode limit never binds; the \
+             returned blob (one leading word, then one per address) hits EIP-170 first, well \
+             above MAX_CALLS_PER_BATCH",
+        );
+    assert!(
+        error.to_lowercase().contains("contractsizelimit"),
+        "expected an EIP-170 code size error, got: {error}"
+    );
+}
+
+#[test]
 fn should_revert_the_whole_call_when_a_token_is_not_a_contract() {
     let anvil = Anvil::start();
     let dev = address_from_hex(DEV_ACCOUNT);
@@ -179,314 +404,727 @@ fn should_revert_the_whole_call_when_a_token_is_not_a_contract() {
 /// periodic balance scan makes genuine outcalls through the IC's HTTPS-outcalls feature — reaching
 /// anvil over HTTP — and reads real ERC-20 balances from it.
 ///
-/// Three independent depositors each fund a single token — 20 USDT, 15 USDC and 1 USDT — so the
-/// scan reads several addresses and tokens and must apply the per-token minimum to each. Only the
-/// two at-or-above-minimum deposits are flagged as candidates; the 1 USDT deposit is scanned but,
-/// being below the ~$10 minimum, is not.
+/// Three independent depositors each fund a single token — USDT at twice its minimum, USDC at
+/// exactly its minimum, and USDT at a tenth of it, every amount derived from the minimum the
+/// minter itself reports through `get_minter_info` — so the scan reads several addresses and
+/// tokens and must apply the per-token minimum to each. Only the two at-or-above-minimum deposits
+/// are flagged as candidates; the below-minimum deposit is scanned but not flagged.
 #[test]
-fn should_flag_only_deposits_at_or_above_the_per_token_minimum() {
+fn should_flag_only_erc20_deposits_at_or_above_the_per_token_minimum() {
     const DEPOSIT_SUBACCOUNT: [u8; 32] = [42; 32];
-    // 6-decimal amounts; ckUSDC and ckUSDT share a 10_000_000 (~$10) candidate minimum.
-    const USDT_ABOVE_MINIMUM: u128 = 20_000_000;
-    const USDC_ABOVE_MINIMUM: u128 = 15_000_000;
-    const USDT_BELOW_MINIMUM: u128 = 1_000_000;
 
-    let setup = LiveSetup::new_balance_scan();
-    // `supported_erc20_tokens()` registers ckUSDC then ckUSDT, in that order.
-    let [usdc, usdt] = setup.supported_erc20_tokens() else {
-        panic!("expected exactly 2 supported tokens")
-    };
-    let deposits = [
-        (setup.depositor(1), usdt, USDT_ABOVE_MINIMUM),
-        (setup.depositor(2), usdc, USDC_ABOVE_MINIMUM),
-        (setup.depositor(3), usdt, USDT_BELOW_MINIMUM),
-    ];
+    let setup = LiveSetup::<CkErc20Setup>::new();
+    // `supported_erc20_tokens_owned()` registers ckUSDC then ckUSDT, in that order.
+    let [usdc, usdt]: [Erc20Token; 2] = setup
+        .supported_erc20_tokens_owned()
+        .try_into()
+        .expect("expected exactly 2 supported tokens");
+    let usdt_minimum = setup.minimum_deposit_amount(contract_address(&usdt));
+    let usdt_above_minimum = 2 * usdt_minimum;
+    let usdc_at_minimum = setup.minimum_deposit_amount(contract_address(&usdc));
+    let usdt_below_minimum = usdt_minimum / 10;
+    let plans = [
+        (setup.depositor(1), usdt.clone(), usdt_above_minimum),
+        (setup.depositor(2), usdc.clone(), usdc_at_minimum),
+        (setup.depositor(3), usdt.clone(), usdt_below_minimum),
+    ]
+    .map(|(owner, token, amount)| DepositPlan {
+        owner,
+        subaccount: DEPOSIT_SUBACCOUNT,
+        token,
+        amount,
+    });
 
-    let holdings: Vec<Holding<'_>> = deposits
-        .iter()
-        .map(|&(depositor, token, amount)| Holding {
-            deposit: setup.register_deposit_address(depositor, DEPOSIT_SUBACCOUNT, token),
-            token,
-            amount,
-        })
-        .collect();
-    setup.credit_deposits(&holdings);
+    let (setup, deposits) = setup
+        .call_minter_deposit_erc20(plans)
+        .expect_deposit_responses();
+    let setup = setup
+        .credit_deposits_from_cex(&deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
 
     assert_matches!(
-        setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, usdt).status,
+        setup.await_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT, &usdt).status,
         DepositStatus::AwaitingSweep(detected)
             if detected.erc20_contract_address == usdt.contract.address
-                && detected.scanned_balance == USDT_ABOVE_MINIMUM
+                && detected.scanned_balance == usdt_above_minimum
                 && detected.detected_at_block > 0_u8
     );
     assert_matches!(
-        setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, usdc).status,
+        setup.await_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT, &usdc).status,
         DepositStatus::AwaitingSweep(detected)
             if detected.erc20_contract_address == usdc.contract.address
-                && detected.scanned_balance == USDC_ABOVE_MINIMUM
+                && detected.scanned_balance == usdc_at_minimum
                 && detected.detected_at_block > 0_u8
     );
     assert_matches!(
-        setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, usdt).status,
+        setup.await_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT, &usdt).status,
         DepositStatus::Scanning { scan_count, last_scanned_block, .. }
             if scan_count >= 1 && last_scanned_block.is_some()
     );
 }
 
-/// A budget, not a cost: driving stops the moment the transfer lands, so this only has to be more
-/// ticks than the run needs. One sends the transfer; the spares cover a tick landing before the
-/// funding task has burned, and a tick lost to an outcall the jump timed out.
-const FUNDING_TICKS: u32 = 6;
+#[test]
+fn should_credit_mixed_erc20_and_eth_deposits_through_one_sweep_per_asset() {
+    let setup = LiveSetup::<CkErc20Setup>::new()
+        .fund_fee_account()
+        .expect_fee_account_credited()
+        .upgrade_minter()
+        .expect_sweeper_address_derived()
+        .expect_eth_received()
+        .expect_funding_finalized();
+
+    let sweeper = setup.await_sweeper_address();
+    let funded_gas = setup.anvil_eth_balance(&sweeper);
+    let delegate = setup.sweep_contracts().delegate;
+    let minter_eth_before = setup.minter_eth_balance();
+    let [usdc, usdt]: [Erc20Token; 2] = setup
+        .supported_erc20_tokens_owned()
+        .try_into()
+        .expect("expected exactly 2 supported tokens");
+
+    let erc20_only = (setup.depositor(1), [1_u8; 32]);
+    let both_assets = (setup.depositor(2), [2_u8; 32]);
+    let eth_only = (setup.depositor(3), [3_u8; 32]);
+    let usdc_amount = 3 * setup.minimum_deposit_amount(contract_address(&usdc));
+    let usdt_amount = 5 * setup.minimum_deposit_amount(contract_address(&usdt));
+    let eth_minimum = setup.minimum_deposit_amount(Asset::Eth);
+    let both_eth_amount = 4 * eth_minimum;
+    let eth_only_amount = 7 * eth_minimum;
+
+    let (setup, erc20_deposits) = setup
+        .call_minter_deposit_erc20([
+            DepositPlan {
+                owner: erc20_only.0,
+                subaccount: erc20_only.1,
+                token: usdc.clone(),
+                amount: usdc_amount,
+            },
+            DepositPlan {
+                owner: both_assets.0,
+                subaccount: both_assets.1,
+                token: usdt.clone(),
+                amount: usdt_amount,
+            },
+        ])
+        .expect_deposit_responses();
+    let (setup, eth_deposits) = setup
+        .call_minter_deposit_eth([
+            EthDepositPlan {
+                owner: both_assets.0,
+                subaccount: both_assets.1,
+                amount: both_eth_amount,
+            },
+            EthDepositPlan {
+                owner: eth_only.0,
+                subaccount: eth_only.1,
+                amount: eth_only_amount,
+            },
+        ])
+        .expect_deposit_responses();
+    assert_eq!(
+        erc20_deposits[1].address, eth_deposits[0].address,
+        "one account deposits both assets at one address"
+    );
+
+    let setup = setup
+        .credit_deposits_from_cex(&erc20_deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+    let setup = setup
+        .credit_eth_deposits_from_cex(&eth_deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+
+    assert_matches!(
+        setup.await_detection(erc20_only.0, erc20_only.1, &usdc).status,
+        DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == usdc_amount
+    );
+    assert_matches!(
+        setup.await_detection(both_assets.0, both_assets.1, &usdt).status,
+        DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == usdt_amount
+    );
+    assert_matches!(
+        setup.await_eth_detection(both_assets.0, both_assets.1).status,
+        DepositEthStatus::AwaitingSweep(detected) if detected.scanned_balance == both_eth_amount
+    );
+    assert_matches!(
+        setup.await_eth_detection(eth_only.0, eth_only.1).status,
+        DepositEthStatus::AwaitingSweep(detected) if detected.scanned_balance == eth_only_amount
+    );
+
+    let (setup, _sweeps) = setup
+        .await_sweeps(&sweeper, 3)
+        .expect_all_delegating_sweeps();
+
+    let setup = setup
+        .assert_sweeps_batched_per_token(&erc20_deposits)
+        .assert_eth_sweeps_batched(&eth_deposits)
+        .assert_addresses_swept_empty(&erc20_deposits)
+        .assert_eth_addresses_swept_empty(&eth_deposits)
+        .assert_minter_holds_swept_totals(&erc20_deposits)
+        .assert_minter_received_swept_eth_total(&eth_deposits, minter_eth_before)
+        .assert_delegations_installed(&erc20_deposits, &delegate)
+        .assert_eth_delegations_installed(&eth_deposits, &delegate)
+        .assert_sweeper_spent_gas(&sweeper, funded_gas);
+
+    let setup = setup.expect_mints(&erc20_deposits);
+    setup.expect_cketh_mints(&eth_deposits);
+}
 
 #[test]
-fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
-    let setup = LiveSetup::new_funding();
+fn should_flag_only_eth_deposits_at_or_above_the_minimum() {
+    const DEPOSIT_SUBACCOUNT: [u8; 32] = [42; 32];
 
-    // Only the fee account is funded: sweep gas must come from there and nowhere else. Read before
-    // the minter is armed, since the funding decision reads nothing off the chain and so its first
-    // run burns within milliseconds of the upgrade below — far too fast to snapshot after it.
-    let supply_before = setup.cketh_total_supply();
-    let fee_account_before = setup.cketh_balance_of(setup.fee_account());
-    let minter_eth_before = setup.anvil_eth_balance(&setup.minter_address());
+    let setup = LiveSetup::<CkErc20Setup>::new();
+    let minimum = setup.minimum_deposit_amount(Asset::Eth);
+    let above_minimum = 2 * minimum;
+    let at_minimum = minimum;
+    let below_minimum = minimum / 10;
+    let plans = [
+        (setup.depositor(1), above_minimum),
+        (setup.depositor(2), at_minimum),
+        (setup.depositor(3), below_minimum),
+    ]
+    .map(|(owner, amount)| EthDepositPlan {
+        owner,
+        subaccount: DEPOSIT_SUBACCOUNT,
+        amount,
+    });
 
-    setup.upgrade_minter();
-    let sweeper = setup.await_sweeper_address();
-    assert_eq!(
-        setup.anvil_eth_balance(&sweeper),
-        0,
-        "the sweeper address must start empty, so any balance proves the funding landed"
+    let (setup, deposits) = setup
+        .call_minter_deposit_eth(plans)
+        .expect_deposit_responses();
+    let setup = setup
+        .credit_eth_deposits_from_cex(&deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+
+    assert_matches!(
+        setup.await_eth_scan(setup.depositor(1), DEPOSIT_SUBACCOUNT).status,
+        DepositEthStatus::AwaitingSweep(detected)
+            if detected.scanned_balance == above_minimum
+                && detected.detected_at_block > 0_u8
     );
-
-    let received = setup.await_eth_received(&sweeper, FUNDING_TICKS);
-
-    let burned = supply_before
-        .checked_sub(setup.cketh_total_supply())
-        .expect("the funding must have burned ckETH, not minted it");
-    assert!(burned > 0, "funding must burn ckETH");
-    assert_eq!(
-        fee_account_before - setup.cketh_balance_of(setup.fee_account()),
-        burned,
-        "the burn must be debited from the fee account"
+    assert_matches!(
+        setup.await_eth_scan(setup.depositor(2), DEPOSIT_SUBACCOUNT).status,
+        DepositEthStatus::AwaitingSweep(detected)
+            if detected.scanned_balance == at_minimum
+                && detected.detected_at_block > 0_u8
     );
-
-    // The ETH moved, and never more than was burned — the backing invariant, observed end to end.
-    let spent = minter_eth_before - setup.anvil_eth_balance(&setup.minter_address());
-    assert!(
-        received > 0 && received < burned,
-        "the sweeper receives the burned amount minus the fee, got received={received} burned={burned}"
-    );
-    assert!(
-        spent <= burned,
-        "the ETH debited from the main address ({spent}) must never exceed the ckETH \
-         burned for it ({burned})"
+    assert_matches!(
+        setup.await_eth_scan(setup.depositor(3), DEPOSIT_SUBACCOUNT).status,
+        DepositEthStatus::Scanning { scan_count, last_scanned_block, .. }
+            if scan_count >= 1 && last_scanned_block.is_some()
     );
 }
 
 #[test]
-fn should_credit_twenty_cex_deposits_through_one_sweep_per_token() {
+fn should_fund_the_sweeper_address_by_burning_cketh_from_the_fee_account() {
+    let setup = LiveSetup::<CkEthSetup>::new()
+        .fund_fee_account()
+        .expect_fee_account_credited();
+    // Only the fee account is funded: sweep gas must come from there and nowhere else. Read before
+    // the minter is armed, since the funding decision reads nothing off the chain and so its first
+    // run burns within milliseconds of the upgrade below — far too fast to snapshot after it.
+    let baseline = setup.funding_baseline();
+    setup
+        .upgrade_minter()
+        .expect_sweeper_address(&address_from_hex(SWEEPER_ADDRESS))
+        .expect_sweeper_starts_empty()
+        .expect_eth_received()
+        .expect_funding_backed_by_burn(&baseline);
+}
+
+#[test]
+fn should_credit_twenty_erc20_deposits_through_one_sweep_per_token() {
     /// Ten depositors per token, so each sweep is a ten-deposit single-token batch — directly
     /// comparable with `deposit_from_cex_demo`'s measured scenarios.
     const DEPOSITORS_PER_TOKEN: u64 = 10;
-    // 6-decimal amounts, both far above the ~$10 per-token candidate minimum.
-    const USDC_DEPOSIT: u128 = 100_000_000;
-    const USDT_DEPOSIT: u128 = 150_000_000;
 
-    let sweeper = address_from_hex(SWEEPER_ADDRESS);
-    let setup = LiveSetup::new_sweep();
+    let setup = LiveSetup::<CkErc20Setup>::new()
+        .fund_fee_account()
+        .expect_fee_account_credited()
+        .upgrade_minter()
+        .expect_sweeper_address_derived()
+        .expect_eth_received()
+        .expect_funding_finalized();
+
+    let sweeper = setup.await_sweeper_address();
     let funded_gas = setup.anvil_eth_balance(&sweeper);
-    let contracts = setup.sweep_contracts();
-    let [usdc, usdt] = setup.supported_erc20_tokens() else {
-        panic!("expected exactly 2 supported tokens")
-    };
+    let delegate = setup.sweep_contracts().delegate;
+    let [usdc, usdt]: [Erc20Token; 2] = setup
+        .supported_erc20_tokens_owned()
+        .try_into()
+        .expect("expected exactly 2 supported tokens");
+    let usdc_deposit = 10 * setup.minimum_deposit_amount(contract_address(&usdc));
+    let usdt_deposit = 15 * setup.minimum_deposit_amount(contract_address(&usdt));
 
     // Every depositor gets a distinct principal and a distinct subaccount, so no two share a
     // deposit address and each attestation binds a different account.
-    let deposits: Vec<Deposit> = (0..2 * DEPOSITORS_PER_TOKEN)
+    let plans: Vec<DepositPlan> = (0..2 * DEPOSITORS_PER_TOKEN)
         .map(|index| {
             let (token, amount) = if index < DEPOSITORS_PER_TOKEN {
-                (usdc, USDC_DEPOSIT)
+                (usdc.clone(), usdc_deposit)
             } else {
-                (usdt, USDT_DEPOSIT)
+                (usdt.clone(), usdt_deposit)
             };
-            let owner = setup.depositor(index);
-            let subaccount = [u8::try_from(index).unwrap(); 32];
-            Deposit {
-                owner,
-                subaccount,
+            DepositPlan {
+                owner: setup.depositor(index),
+                subaccount: [u8::try_from(index).unwrap(); 32],
                 token,
                 amount,
-                address: setup.register_deposit_address(owner, subaccount, token),
             }
         })
         .collect();
 
-    let distinct: BTreeSet<_> = deposits.iter().map(|deposit| deposit.address).collect();
-    assert_eq!(
-        distinct.len(),
-        deposits.len(),
-        "every account must get its own deposit address"
-    );
-    for deposit in &deposits {
-        assert!(
-            setup.anvil().code(&deposit.address).is_empty(),
-            "a deposit address starts with no code"
-        );
-        assert_eq!(
-            setup.anvil().balance(&deposit.address),
-            0,
-            "a deposit address never needs ETH of its own"
-        );
-    }
+    let (setup, deposits) = setup
+        .call_minter_deposit_erc20(plans)
+        .expect_deposit_responses();
+    let setup = setup.assert_deposit_addresses_bare(&deposits);
 
     // The CEX withdrawals: a plain ERC-20 transfer to each address, carrying no principal.
-    let holdings: Vec<Holding<'_>> = deposits.iter().map(Deposit::holding).collect();
-    setup.credit_deposits(&holdings);
-
-    for deposit in &deposits {
-        assert_matches!(
-            setup.await_scan(deposit.owner, deposit.subaccount, deposit.token).status,
-            DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == deposit.amount
-        );
-    }
+    let setup = setup
+        .credit_deposits_from_cex(&deposits)
+        .expect_deposit_balances_on_anvil()
+        .expect_each_awaiting_sweep();
 
     // One sweep per token, and nothing more.
-    let sweeps = setup.await_sweeps(&sweeper, 2);
-    for sweep in &sweeps {
-        assert_eq!(
-            sweep.transaction_type, 4,
-            "a first sweep installs delegations, so it must be an EIP-7702 transaction: {sweep:?}"
-        );
-        assert!(sweep.succeeded, "the sweep reverted: {sweep:?}");
-    }
-    assert_sweep_gas_near_demo(&sweeps, DEPOSITORS_PER_TOKEN);
+    let (setup, sweeps) = setup
+        .await_sweeps(&sweeper, 2)
+        .expect_all_delegating_sweeps();
+    assert_ten_deposit_sweep_gas_near_demo(&sweeps, DEMO_TEN_ERC20_DEPOSITS_GAS);
 
-    // What each sweep actually batched, so that two transactions cannot pass as one per token.
-    let mut batched: Vec<(Address, usize)> = setup
-        .minter_events()
-        .into_iter()
-        .filter_map(|event| match event.payload {
-            EventPayload::AcceptedSweepRequest { token, items, .. } => Some((
-                Address::from_str(&token).expect("BUG: the sweep names an invalid token"),
-                items.len(),
-            )),
-            _ => None,
+    let setup = setup
+        .assert_sweeps_batched_per_token(&deposits)
+        .assert_addresses_swept_empty(&deposits)
+        .assert_minter_holds_swept_totals(&deposits)
+        .assert_delegations_installed(&deposits, &delegate)
+        .assert_sweeper_spent_gas(&sweeper, funded_gas);
+
+    setup.expect_mints(&deposits);
+}
+
+#[test]
+fn should_credit_twenty_eth_deposits_through_ten_deposit_sweeps() {
+    const DEPOSITORS: u64 = 20;
+
+    let setup = LiveSetup::<CkErc20Setup>::new()
+        .fund_fee_account()
+        .expect_fee_account_credited()
+        .upgrade_minter()
+        .expect_sweeper_address_derived()
+        .expect_eth_received()
+        .expect_funding_finalized();
+
+    let sweeper = setup.await_sweeper_address();
+    let funded_gas = setup.anvil_eth_balance(&sweeper);
+    let delegate = setup.sweep_contracts().delegate;
+    let minter_eth_before = setup.minter_eth_balance();
+    let eth_minimum = setup.minimum_deposit_amount(Asset::Eth);
+
+    let plans: Vec<EthDepositPlan> = (0..DEPOSITORS)
+        .map(|index| EthDepositPlan {
+            owner: setup.depositor(index),
+            subaccount: [u8::try_from(index).unwrap(); 32],
+            amount: (u128::from(index) + 2) * eth_minimum,
         })
         .collect();
-    batched.sort();
-    let per_token = usize::try_from(DEPOSITORS_PER_TOKEN).unwrap();
-    let mut expected = vec![
-        (contract_address(usdc), per_token),
-        (contract_address(usdt), per_token),
-    ];
-    expected.sort();
+
+    let (setup, deposits) = setup
+        .call_minter_deposit_eth(plans)
+        .expect_deposit_responses();
+    let setup = setup.assert_eth_deposit_addresses_bare(&deposits);
+
+    let setup = setup
+        .credit_eth_deposits_from_cex(&deposits)
+        .expect_deposit_balances_on_anvil()
+        .expect_each_awaiting_sweep();
+
+    let (setup, sweeps) = setup
+        .await_sweeps(&sweeper, 2)
+        .expect_all_delegating_sweeps();
+    assert_ten_deposit_sweep_gas_near_demo(&sweeps, DEMO_TEN_ETH_DEPOSITS_GAS);
+
+    let setup = setup
+        .assert_eth_sweeps_batched(&deposits)
+        .assert_eth_addresses_swept_empty(&deposits)
+        .assert_minter_received_swept_eth_total(&deposits, minter_eth_before)
+        .assert_eth_delegations_installed(&deposits, &delegate)
+        .assert_sweeper_spent_gas(&sweeper, funded_gas);
+
+    setup.expect_cketh_mints(&deposits);
+}
+
+#[test]
+fn should_sweep_a_second_eth_deposit_of_a_delegated_address_without_an_authorization() {
+    const DEPOSIT_SUBACCOUNT: [u8; 32] = [7; 32];
+
+    let setup = LiveSetup::<CkErc20Setup>::new()
+        .fund_fee_account()
+        .expect_fee_account_credited()
+        .upgrade_minter()
+        .expect_sweeper_address_derived()
+        .expect_eth_received()
+        .expect_funding_finalized();
+
+    let sweeper = setup.await_sweeper_address();
+    let delegate = setup.sweep_contracts().delegate;
+    let minter_eth_before = setup.minter_eth_balance();
+    let mints_before = setup
+        .minter_count_events(|event| matches!(event.payload, EventPayload::MintedCkEth { .. }));
+    let owner = setup.depositor(1);
+    let eth_minimum = setup.minimum_deposit_amount(Asset::Eth);
+
+    let (setup, first_deposits) = setup
+        .call_minter_deposit_eth([EthDepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            amount: 3 * eth_minimum,
+        }])
+        .expect_deposit_responses();
+    let setup = setup
+        .credit_eth_deposits_from_cex(&first_deposits)
+        .expect_deposit_balances_on_anvil()
+        .expect_each_awaiting_sweep();
+    let (setup, first_sweeps) = setup
+        .await_sweeps(&sweeper, 1)
+        .expect_all_delegating_sweeps();
     assert_eq!(
-        batched, expected,
-        "each sweep must batch one token's ten deposits, not a mixed batch and a redundant one"
+        setup.anvil().authorization_nonces(&first_sweeps[0].hash),
+        vec![0],
+        "the first sweep of an address must carry the authorization delegating it, signed for nonce 0"
+    );
+    let setup = setup
+        .expect_sweeps_finalized(1)
+        .expect_cketh_mints(&first_deposits);
+    let address = first_deposits[0].address;
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        1,
+        "applying the first sweep's authorization must spend the deposit address' nonce 0"
     );
 
-    // The funds left every deposit address and landed at the minter's main address.
-    let minter = address_from_hex(MINTER_ADDRESS);
-    for deposit in &deposits {
-        assert_eq!(
-            setup
-                .anvil()
-                .erc20_balance(&contract_address(deposit.token), &deposit.address),
-            Erc20Value::from(0_u8),
-            "the deposit address should have been swept empty"
-        );
-    }
-    for (token, amount) in [
-        (usdc, USDC_DEPOSIT * u128::from(DEPOSITORS_PER_TOKEN)),
-        (usdt, USDT_DEPOSIT * u128::from(DEPOSITORS_PER_TOKEN)),
-    ] {
-        assert_eq!(
-            setup
-                .anvil()
-                .erc20_balance(&contract_address(token), &minter),
-            Erc20Value::from(amount),
-            "the minter's main address should hold everything swept of {}",
-            token.contract.address
-        );
-    }
-
-    // Every address is now delegated, by the 23-byte EIP-7702 designator `0xef0100 || delegate`.
-    let mut designator = vec![0xef, 0x01, 0x00];
-    designator.extend_from_slice(contracts.delegate.as_ref());
-    for deposit in &deposits {
-        assert_eq!(
-            setup.anvil().code(&deposit.address),
-            designator,
-            "the sweep should have installed the delegation"
-        );
-    }
-    assert!(
-        setup.anvil().balance(&sweeper) < funded_gas,
-        "the sweeper address pays for the sweeps out of its own prepaid gas"
+    let second_deposits = [EthCexDeposit {
+        amount: 2 * eth_minimum,
+        ..first_deposits[0].clone()
+    }];
+    let setup = setup
+        .credit_eth_deposits_from_cex(&second_deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+    let (setup, second_registrations) = setup
+        .call_minter_deposit_eth([EthDepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            amount: second_deposits[0].amount,
+        }])
+        .expect_deposit_responses();
+    assert_eq!(
+        second_registrations[0].address, address,
+        "re-registering the pair must yield the same deposit address"
+    );
+    assert_matches!(
+        setup.await_eth_detection(owner, DEPOSIT_SUBACCOUNT).status,
+        DepositEthStatus::AwaitingSweep(detected)
+            if detected.scanned_balance == second_deposits[0].amount
     );
 
-    // Only now the mint, which the unchanged deposit pipeline drives off each sweep's own helper
-    // event — downstream of every effect asserted above.
-    let ledgers = [
-        (usdc, setup.ckerc20_token("ckUSDC").ledger_canister_id),
-        (usdt, setup.ckerc20_token("ckUSDT").ledger_canister_id),
-    ];
-    for deposit in &deposits {
-        let (_, ledger_id) = ledgers
-            .iter()
-            .find(|(token, _)| token.contract.address == deposit.token.contract.address)
-            .expect("every deposited token has a ledger");
-        let account = Account {
-            owner: deposit.owner,
-            subaccount: Some(deposit.subaccount),
-        };
-        setup.await_credited(*ledger_id, account, deposit.amount);
-    }
+    let (setup, sweeps) = setup.await_sweeps(&sweeper, 2).expect_sweeps_of_types(&[
+        DELEGATING_SWEEP_TRANSACTION_TYPE,
+        PLAIN_SWEEP_TRANSACTION_TYPE,
+    ]);
+    let second_sweep = &sweeps[1];
+    assert_eq!(
+        setup.anvil().authorization_nonces(&second_sweep.hash),
+        Vec::<u64>::new(),
+        "the type-2 transaction above is what proves no authorization was sent: an address already \
+         delegated is swept carrying none"
+    );
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        1,
+        "sweeping without an authorization must leave the deposit address at the nonce the first sweep spent"
+    );
+
+    let all_deposits = [first_deposits[0].clone(), second_deposits[0].clone()];
+    let setup = setup
+        .assert_eth_delegations_installed(&all_deposits, &delegate)
+        .assert_eth_addresses_swept_empty(&second_deposits)
+        .assert_minter_received_swept_eth_total(&all_deposits, minter_eth_before)
+        .expect_cketh_mints(&all_deposits);
+    assert_eq!(
+        setup
+            .minter_count_events(|event| matches!(event.payload, EventPayload::MintedCkEth { .. }))
+            - mints_before,
+        2,
+        "each deposit flow must be credited exactly once"
+    );
 }
 
-/// One user's deposit: who it credits, which token, and the address the CEX sends to.
-struct Deposit<'a> {
-    owner: Principal,
-    subaccount: [u8; 32],
-    token: &'a Erc20Token,
-    amount: u128,
-    address: Address,
+#[test]
+fn should_sweep_a_second_erc20_deposit_of_a_delegated_address_without_an_authorization() {
+    const DEPOSIT_SUBACCOUNT: [u8; 32] = [7; 32];
+
+    let setup = LiveSetup::<CkErc20Setup>::new()
+        .fund_fee_account()
+        .expect_fee_account_credited()
+        .upgrade_minter()
+        .expect_sweeper_address_derived()
+        .expect_eth_received()
+        .expect_funding_finalized();
+
+    let sweeper = setup.await_sweeper_address();
+    let delegate = setup.sweep_contracts().delegate;
+    let [usdc, _usdt]: [Erc20Token; 2] = setup
+        .supported_erc20_tokens_owned()
+        .try_into()
+        .expect("expected exactly 2 supported tokens");
+    let usdc_minimum = setup.minimum_deposit_amount(contract_address(&usdc));
+    let owner = setup.depositor(1);
+
+    let (setup, first_deposits) = setup
+        .call_minter_deposit_erc20([DepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            token: usdc.clone(),
+            amount: 3 * usdc_minimum,
+        }])
+        .expect_deposit_responses();
+    let setup = setup
+        .credit_deposits_from_cex(&first_deposits)
+        .expect_deposit_balances_on_anvil()
+        .expect_each_awaiting_sweep();
+    let (setup, first_sweeps) = setup
+        .await_sweeps(&sweeper, 1)
+        .expect_all_delegating_sweeps();
+    assert_eq!(
+        setup.anvil().authorization_nonces(&first_sweeps[0].hash),
+        vec![0],
+        "the first sweep of an address must carry the authorization delegating it, signed for nonce 0"
+    );
+    let setup = setup
+        .expect_sweeps_finalized(1)
+        .expect_mints(&first_deposits);
+    let address = first_deposits[0].address;
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        1,
+        "applying the first sweep's authorization must spend the deposit address' nonce 0"
+    );
+
+    let second_deposits = [CexDeposit {
+        amount: 2 * usdc_minimum,
+        ..first_deposits[0].clone()
+    }];
+    let setup = setup
+        .credit_deposits_from_cex(&second_deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+    let (setup, second_registrations) = setup
+        .call_minter_deposit_erc20([DepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            token: usdc.clone(),
+            amount: second_deposits[0].amount,
+        }])
+        .expect_deposit_responses();
+    assert_eq!(
+        second_registrations[0].address, address,
+        "re-registering the pair must yield the same deposit address"
+    );
+    assert_matches!(
+        setup.await_detection(owner, DEPOSIT_SUBACCOUNT, &usdc).status,
+        DepositStatus::AwaitingSweep(detected) if detected.scanned_balance == second_deposits[0].amount
+    );
+
+    let (setup, sweeps) = setup.await_sweeps(&sweeper, 2).expect_sweeps_of_types(&[
+        DELEGATING_SWEEP_TRANSACTION_TYPE,
+        PLAIN_SWEEP_TRANSACTION_TYPE,
+    ]);
+    let second_sweep = &sweeps[1];
+    assert_eq!(
+        setup.anvil().authorization_nonces(&second_sweep.hash),
+        Vec::<u64>::new(),
+        "the type-2 transaction above is what proves no authorization was sent: an address already \
+         delegated is swept carrying none"
+    );
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        1,
+        "sweeping without an authorization must leave the deposit address at the nonce the first sweep spent"
+    );
+
+    let all_deposits = [first_deposits[0].clone(), second_deposits[0].clone()];
+    let setup = setup
+        .assert_delegations_installed(&all_deposits, &delegate)
+        .assert_addresses_swept_empty(&second_deposits)
+        .assert_minter_holds_swept_totals(&all_deposits)
+        .expect_mints(&all_deposits);
+    let mints = setup
+        .minter_count_events(|event| matches!(event.payload, EventPayload::MintedCkErc20 { .. }));
+    assert_eq!(mints, 2, "each deposit flow must be credited exactly once");
 }
 
-impl<'a> Deposit<'a> {
-    fn holding(&self) -> Holding<'a> {
-        Holding {
-            deposit: self.address,
-            token: self.token,
-            amount: self.amount,
-        }
-    }
+/// Replacing the sweeper delegate re-delegates lazily the addresses already carrying the old one:
+/// the rotation authorization rides the sweep that would happen anyway, signed for the nonce the
+/// address has reached rather than for zero — which the protocol would skip — and once it has
+/// applied, the address is on the new delegate and needs no further authorization.
+#[test]
+fn should_rotate_a_delegated_address_onto_a_newly_configured_delegate() {
+    const DEPOSIT_SUBACCOUNT: [u8; 32] = [8; 32];
+
+    let setup = LiveSetup::<CkErc20Setup>::new()
+        .fund_fee_account()
+        .expect_fee_account_credited()
+        .upgrade_minter()
+        .expect_sweeper_address_derived()
+        .expect_eth_received()
+        .expect_funding_finalized();
+
+    let sweeper = setup.await_sweeper_address();
+    let first_delegate = setup.sweep_contracts().delegate;
+    let [usdc, _usdt]: [Erc20Token; 2] = setup
+        .supported_erc20_tokens_owned()
+        .try_into()
+        .expect("expected exactly 2 supported tokens");
+    let usdc_minimum = setup.minimum_deposit_amount(contract_address(&usdc));
+    let owner = setup.depositor(1);
+
+    let (setup, first_deposits) = setup
+        .call_minter_deposit_erc20([DepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            token: usdc.clone(),
+            amount: 4 * usdc_minimum,
+        }])
+        .expect_deposit_responses();
+    let setup = setup
+        .credit_deposits_from_cex(&first_deposits)
+        .expect_deposit_balances_on_anvil()
+        .expect_each_awaiting_sweep();
+    let (setup, first_sweeps) = setup
+        .await_sweeps(&sweeper, 1)
+        .expect_all_delegating_sweeps();
+    assert_eq!(
+        setup.anvil().authorization_nonces(&first_sweeps[0].hash),
+        vec![0],
+        "the first sweep of an address must carry the authorization delegating it, signed for nonce 0"
+    );
+    let address = first_deposits[0].address;
+    let setup = setup
+        .expect_sweeps_finalized(1)
+        .assert_delegations_installed(&first_deposits, &first_delegate)
+        .expect_mints(&first_deposits);
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        1,
+        "applying the first sweep's authorization must spend the deposit address' nonce 0"
+    );
+
+    let new_delegate = deploy_sweeper_delegate(setup.anvil(), &setup.sweep_contracts().helper);
+    assert_ne!(
+        new_delegate, first_delegate,
+        "the rotation must point the minter at another deployment for it to mean anything"
+    );
+    setup.rotate_delegate_to(&new_delegate);
+
+    let second_deposits = [CexDeposit {
+        amount: 3 * usdc_minimum,
+        ..first_deposits[0].clone()
+    }];
+    let setup = setup
+        .credit_deposits_from_cex(&second_deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+    let (setup, second_registrations) = setup
+        .call_minter_deposit_erc20([DepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            token: usdc.clone(),
+            amount: second_deposits[0].amount,
+        }])
+        .expect_deposit_responses();
+    assert_eq!(
+        second_registrations[0].address, address,
+        "re-registering the pair must yield the same deposit address"
+    );
+    let (setup, sweeps) = setup.await_sweeps(&sweeper, 2).expect_sweeps_of_types(&[
+        DELEGATING_SWEEP_TRANSACTION_TYPE,
+        DELEGATING_SWEEP_TRANSACTION_TYPE,
+    ]);
+    assert_eq!(
+        setup.anvil().authorization_nonces(&sweeps[1].hash),
+        vec![1],
+        "the rotation must be signed for the nonce the first sweep left the address at, since the \
+         protocol applies an authorization only at the authority's current nonce"
+    );
+    let both_deposits = [first_deposits[0].clone(), second_deposits[0].clone()];
+    let setup = setup
+        .expect_sweeps_finalized(2)
+        .assert_delegations_installed(&second_deposits, &new_delegate)
+        .assert_addresses_swept_empty(&second_deposits)
+        .assert_minter_holds_swept_totals(&both_deposits)
+        .expect_mints(&both_deposits);
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        2,
+        "applying the rotation authorization must spend the deposit address' nonce 1"
+    );
+
+    let third_deposits = [CexDeposit {
+        amount: 2 * usdc_minimum,
+        ..first_deposits[0].clone()
+    }];
+    let setup = setup
+        .credit_deposits_from_cex(&third_deposits)
+        .expect_deposit_balances_on_anvil()
+        .setup;
+    let (setup, _third_registrations) = setup
+        .call_minter_deposit_erc20([DepositPlan {
+            owner,
+            subaccount: DEPOSIT_SUBACCOUNT,
+            token: usdc.clone(),
+            amount: third_deposits[0].amount,
+        }])
+        .expect_deposit_responses();
+    let (setup, sweeps) = setup.await_sweeps(&sweeper, 3).expect_sweeps_of_types(&[
+        DELEGATING_SWEEP_TRANSACTION_TYPE,
+        DELEGATING_SWEEP_TRANSACTION_TYPE,
+        PLAIN_SWEEP_TRANSACTION_TYPE,
+    ]);
+    assert_eq!(
+        setup.anvil().authorization_nonces(&sweeps[2].hash),
+        Vec::<u64>::new(),
+        "a rotated address is delegated to the configured contract and needs no further authorization"
+    );
+    assert_eq!(
+        setup.anvil().transaction_count(&address),
+        2,
+        "sweeping without an authorization must leave the address at the nonce the rotation spent"
+    );
 }
 
-fn assert_sweep_gas_near_demo(sweeps: &[SentTransaction], deposits_per_sweep: u64) {
-    // `ATTESTED_SCENARIOS` in deposit_from_cex_demo.rs, EIP-7702 (first sweep) column.
-    const DEMO_ONE_DEPOSIT: u64 = 98_000;
-    const DEMO_TEN_DEPOSITS: u64 = 609_431;
+/// The EIP-7702 (first sweep) column of the ten-deposit scenarios in deposit_from_cex_demo.rs.
+const DEMO_TEN_ERC20_DEPOSITS_GAS: u64 = 609_750;
+const DEMO_TEN_ETH_DEPOSITS_GAS: u64 = 413_076;
+
+fn assert_ten_deposit_sweep_gas_near_demo(sweeps: &[SentTransaction], demo_gas: u64) {
+    const DEPOSITS_PER_SWEEP: u64 = 10;
     const GAS_BAND_PERCENT: u64 = 10;
 
-    assert_eq!(
-        deposits_per_sweep, 10,
-        "the demo baseline is measured for ten-deposit sweeps"
-    );
     for sweep in sweeps {
-        let per_deposit = sweep.gas_used / deposits_per_sweep;
         println!(
-            "[gas] {} deposits: {} total, {} per deposit \
-             (demo: {DEMO_TEN_DEPOSITS} total, {} per deposit for ten; {DEMO_ONE_DEPOSIT} for one)",
-            deposits_per_sweep,
+            "[gas] {DEPOSITS_PER_SWEEP} deposits: {} total, {} per deposit \
+             (demo: {demo_gas} total, {} per deposit)",
             sweep.gas_used,
-            per_deposit,
-            DEMO_TEN_DEPOSITS / 10,
+            sweep.gas_used / DEPOSITS_PER_SWEEP,
+            demo_gas / DEPOSITS_PER_SWEEP,
         );
         assert!(
-            sweep.gas_used.abs_diff(DEMO_TEN_DEPOSITS) * 100
-                <= DEMO_TEN_DEPOSITS * GAS_BAND_PERCENT,
+            sweep.gas_used.abs_diff(demo_gas) * 100 <= demo_gas * GAS_BAND_PERCENT,
             "a ten-deposit sweep used {} gas, more than {GAS_BAND_PERCENT}% away from the \
-             demo-measured {DEMO_TEN_DEPOSITS}: {sweep:?}",
+             demo-measured {demo_gas}: {sweep:?}",
             sweep.gas_used,
         );
     }

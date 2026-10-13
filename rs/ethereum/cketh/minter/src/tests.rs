@@ -93,34 +93,36 @@ mod rlp_encoding {
 
     const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
 
+    /// Cross-checks the minter's hand-rolled EIP-1559 encoding against `alloy`, which encodes the
+    /// same transaction independently: the payload to sign, the broadcast payload of the signed
+    /// transaction, and the hash the transaction is referenced by.
     #[test]
     fn test_rlp_encoding() {
         use crate::tx::{AccessList, Eip1559TransactionRequest};
-        use ethers_core::abi::ethereum_types::H160;
-        use ethers_core::types::Signature as EthersCoreSignature;
-        use ethers_core::types::transaction::eip1559::Eip1559TransactionRequest as EthersCoreEip1559TransactionRequest;
-        use ethers_core::types::transaction::eip2930::AccessList as EthersCoreAccessList;
-        use ethers_core::types::{Bytes, U256};
+        use alloy_consensus::{SignableTransaction, TxEip1559};
+        use alloy_eips::eip2718::Encodable2718;
+        use alloy_primitives::{Bytes, Signature, TxKind, U256};
         use ethnum::u256;
+
+        const EIP_1559_TRANSACTION_TYPE: u8 = 2;
+        const R: &str = "b92224ecdb5295f3b889059621909c6b7a2308ccd0e5f13812409d80706b13cd";
+        const S: &str = "0bec9da278e6388a9d6934c911684234e16db1610c2227545c7b192db277c4b1";
 
         let address_bytes: [u8; 20] = [
             180, 75, 94, 117, 106, 137, 71, 117, 252, 50, 237, 223, 51, 20, 187, 27, 25, 68, 220,
             52,
         ];
 
-        let ethers_core_tx = EthersCoreEip1559TransactionRequest {
-            from: None,
-            to: Some(ethers_core::types::NameOrAddress::Address(H160::from(
-                address_bytes,
-            ))),
-            gas: Some(1.into()),
-            value: Some(2.into()),
-            data: Some(Bytes::new()),
-            nonce: Some(0.into()),
-            access_list: EthersCoreAccessList::from(vec![]),
-            max_priority_fee_per_gas: Some(3.into()),
-            max_fee_per_gas: Some(4.into()),
-            chain_id: Some(1.into()),
+        let alloy_tx = TxEip1559 {
+            chain_id: 1,
+            nonce: 0,
+            gas_limit: 1,
+            max_fee_per_gas: 4,
+            max_priority_fee_per_gas: 3,
+            to: TxKind::Call(address_bytes.into()),
+            value: U256::from(2_u8),
+            access_list: Default::default(),
+            input: Bytes::new(),
         };
         let minter_tx = Eip1559TransactionRequest {
             chain_id: 1,
@@ -134,44 +136,33 @@ mod rlp_encoding {
             max_priority_fee_per_gas: 3_u64.into(),
         };
         assert_eq!(
-            minter_tx.rlp_bytes().to_vec(),
-            ethers_core_tx.rlp().to_vec()
+            prefix_with_transaction_type(EIP_1559_TRANSACTION_TYPE, minter_tx.rlp_bytes().to_vec()),
+            alloy_tx.encoded_for_signing()
         );
 
         let signature = TransactionSignature {
             signature_y_parity: true,
-            r: u256::from_str_radix(
-                "b92224ecdb5295f3b889059621909c6b7a2308ccd0e5f13812409d80706b13cd",
-                16,
-            )
-            .unwrap(),
-            s: u256::from_str_radix(
-                "0bec9da278e6388a9d6934c911684234e16db1610c2227545c7b192db277c4b1",
-                16,
-            )
-            .unwrap(),
+            r: u256::from_str_radix(R, 16).unwrap(),
+            s: u256::from_str_radix(S, 16).unwrap(),
         };
+        let minter_signed = SignedEip1559TransactionRequest::from((minter_tx, signature));
+        let alloy_signed = alloy_tx.into_signed(Signature::new(
+            U256::from_str_radix(R, 16).unwrap(),
+            U256::from_str_radix(S, 16).unwrap(),
+            true,
+        ));
 
         assert_eq!(
-            SignedEip1559TransactionRequest::from((minter_tx, signature))
-                .rlp_bytes()
-                .to_vec(),
-            ethers_core_tx
-                .rlp_signed(&EthersCoreSignature {
-                    v: 1,
-                    r: U256::from_str_radix(
-                        "b92224ecdb5295f3b889059621909c6b7a2308ccd0e5f13812409d80706b13cd",
-                        16
-                    )
-                    .unwrap(),
-                    s: U256::from_str_radix(
-                        "0bec9da278e6388a9d6934c911684234e16db1610c2227545c7b192db277c4b1",
-                        16
-                    )
-                    .unwrap(),
-                })
-                .to_vec()
+            minter_signed.raw_transaction_bytes(),
+            alloy_signed.encoded_2718()
         );
+        assert_eq!(minter_signed.hash().0, alloy_signed.hash().0);
+    }
+
+    fn prefix_with_transaction_type(transaction_type: u8, rlp: Vec<u8>) -> Vec<u8> {
+        let mut prefixed = rlp;
+        prefixed.insert(0, transaction_type);
+        prefixed
     }
 
     #[test]

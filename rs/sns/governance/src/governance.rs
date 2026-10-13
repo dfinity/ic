@@ -1,4 +1,5 @@
 use crate::{
+    MAX_SCALAR_FIELD_LEN_BYTES,
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
@@ -66,7 +67,7 @@ use crate::{
                 DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::{DissolveState, Followees, TopicFollowees},
+            neuron::{DissolveState, Followees, RewardEventParticipation, TopicFollowees},
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
@@ -120,6 +121,7 @@ use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
+use num_bigint::BigUint;
 
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -1371,6 +1373,8 @@ impl Governance {
             aging_since_timestamp_seconds: parent_neuron.aging_since_timestamp_seconds,
             followees: parent_neuron.followees.clone(),
             topic_followees: parent_neuron.topic_followees.clone(),
+            // The child did not participate in the parent's past reward event.
+            latest_reward_event_participation: None,
             maturity_e8s_equivalent: 0,
             dissolve_state: parent_neuron.dissolve_state,
             voting_power_percentage_multiplier: parent_neuron.voting_power_percentage_multiplier,
@@ -1760,6 +1764,22 @@ impl Governance {
                 );
             }
         }
+    }
+
+    /// Saves a generic function call's reply on its proposal, keeping at most
+    /// `MAX_SCALAR_FIELD_LEN_BYTES` bytes.
+    fn set_proposal_execution_reply(&mut self, pid: u64, mut execution_reply: Vec<u8>) {
+        execution_reply.truncate(MAX_SCALAR_FIELD_LEN_BYTES);
+        let Some(proposal) = self.proto.proposals.get_mut(&pid) else {
+            log!(
+                ERROR,
+                "Tried to record reply after executing proposal {}, but unable to find the proposal.",
+                pid,
+            );
+            return;
+        };
+
+        proposal.execution_reply = Some(execution_reply);
     }
 
     /// Returns the latest reward event.
@@ -2171,7 +2191,7 @@ impl Governance {
                 }
             }
             Action::ExecuteGenericNervousSystemFunction(call) => {
-                self.perform_execute_generic_nervous_system_function(call)
+                self.perform_execute_generic_nervous_system_function(proposal_id, call)
                     .await
             }
             Action::ExecuteExtensionOperation(execute_extension_operation) => {
@@ -2528,32 +2548,37 @@ impl Governance {
         Ok(())
     }
 
-    /// Executes a (non-native) nervous system function as a result of an adopted proposal.
+    /// Executes a (non-native) nervous system function for an adopted proposal.
+    /// On success, saves the target canister's reply on the proposal.
     async fn perform_execute_generic_nervous_system_function(
-        &self,
+        &mut self,
+        proposal_id: u64,
         call: ExecuteGenericNervousSystemFunction,
     ) -> Result<(), GovernanceError> {
-        match self
+        let function = match self
             .proto
             .id_to_nervous_system_functions
             .get(&call.function_id)
         {
-            None => Err(GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                format!(
-                    "There is no generic NervousSystemFunction with id: {}",
-                    call.function_id
-                ),
-            )),
-            Some(function) => {
-                perform_execute_generic_nervous_system_function_call(
-                    &*self.env,
-                    function.clone(),
-                    call,
-                )
-                .await
+            None => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    format!(
+                        "There is no generic NervousSystemFunction with id: {}",
+                        call.function_id
+                    ),
+                ));
             }
-        }
+            Some(function) => function.clone(),
+        };
+
+        let execution_reply =
+            perform_execute_generic_nervous_system_function_call(&*self.env, function, call)
+                .await?;
+
+        self.set_proposal_execution_reply(proposal_id, execution_reply);
+
+        Ok(())
     }
 
     async fn perform_execute_extension_operation(
@@ -3654,6 +3679,9 @@ impl Governance {
             is_eligible_for_rewards: true,
             action_auxiliary,
             topic: Some(i32::from(proposal_topic)),
+
+            // A new proposal has not been executed yet, so there is no reply.
+            execution_reply: None,
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -4363,6 +4391,7 @@ impl Governance {
             topic_followees: Some(TopicFollowees {
                 topic_id_to_followees: btreemap! {},
             }),
+            latest_reward_event_participation: None,
             maturity_e8s_equivalent: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
             // A neuron created through the `claim_or_refresh` ManageNeuron command will
@@ -4533,6 +4562,7 @@ impl Governance {
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
                 topic_followees: Some(neuron_recipe.construct_topic_followees()),
+                latest_reward_event_participation: None,
                 maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                     neuron_recipe.get_dissolve_delay_seconds_or_panic(),
@@ -5990,6 +6020,33 @@ impl Governance {
                     }
                 };
 
+                if neuron_reward_shares > dec!(0) {
+                    // SNS reward shares are currently sums of integer ballot voting powers, so
+                    // the fractional part is expected to be zero. If this invariant is violated,
+                    // truncate only the participation value and continue calculating native
+                    // rewards with the original Decimal below.
+                    if neuron_reward_shares.fract() != Decimal::ZERO {
+                        log!(
+                            ERROR,
+                            "Unexpected fractional SNS reward shares for neuron {neuron_id:?}: \
+                             {neuron_reward_shares}. SNS reward shares are expected to be sums of \
+                             integer ballot voting powers. Recording the truncated value in \
+                             latest_reward_event_participation while native reward calculation \
+                             continues using the original Decimal."
+                        );
+                    }
+
+                    // as_i128 truncates; otherwise this is lossless because reward shares are sums of u64s.
+                    // unsigned_abs does not lose the sign because this is inside the > 0 branch.
+                    let reward_shares =
+                        BigUint::from(neuron_reward_shares.as_i128().unsigned_abs()).to_bytes_be();
+
+                    neuron.latest_reward_event_participation = Some(RewardEventParticipation {
+                        reward_event_end_timestamp_seconds,
+                        reward_shares,
+                    });
+                }
+
                 // Dividing before multiplying maximizes our chances of success.
                 let neuron_reward_e8s =
                     rewards_purse_e8s * (neuron_reward_shares / total_reward_shares);
@@ -6717,10 +6774,16 @@ mod advance_target_sns_version_tests;
 mod proposal_topics_tests;
 
 #[cfg(test)]
+mod reward_event_participation_tests;
+
+#[cfg(test)]
 mod test_helpers;
 
 #[cfg(test)]
 mod get_metrics;
+
+#[cfg(test)]
+mod execute_generic_nervous_system_function_tests;
 
 #[cfg(feature = "canbench-rs")]
 mod benches;

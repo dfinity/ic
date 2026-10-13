@@ -9,19 +9,11 @@ on the process that this file is part of, see
 
 ## Added
 
-* A subnet-split request will now fail if a concurrent call modified the `StandardEngineReplicaVersionRecord`
-  while the fresh key material was being generated for the splitting subnet.
-
-* A subnet-split request whose source subnet is a cloud engine that derives its replica version from the
-  `StandardEngineReplicaVersionRecord` will now be rejected while a deployment of a new replica version is
-  in progress. This guarantees that both subnets run the same replica version after the split.
-
-* Invariant requiring that every elected GuestOS and HostOS version ID is well-formed, i.e. that it consists
-  only of alphanumeric characters, dots, dashes and underscores.  Such IDs are what `ReplicaVersion` and
-  `HostosVersion` accept, so until now, it was possible to elect a version that consumers could not read
-  back out of the Registry.
-
 ## Changed
+
+* `UpdateSubnet` can now enable SEV on an existing subnet, not only at subnet creation. Disabling SEV
+  is still rejected, and enabling it only succeeds if the subnet's nodes all have a chip ID and its
+  GuestOS version has launch measurements, as the SEV invariants demand.
 
 ## Deprecated
 

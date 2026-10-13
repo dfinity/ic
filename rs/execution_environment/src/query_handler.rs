@@ -19,7 +19,7 @@ use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_error_types::UserError;
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     QueryExecutionError, QueryExecutionInput, QueryExecutionResponse, QueryExecutionService,
     TransformExecutionInput, TransformExecutionService,
@@ -36,7 +36,7 @@ use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
     CanisterId, NumInstructions,
     ingress::WasmResult,
-    messages::{Blob, Certificate, CertificateDelegation, Query},
+    messages::{Blob, Certificate, CertificateDelegation, Query, QuerySource},
 };
 use prometheus::{Histogram, histogram_opts, labels};
 use serde::Serialize;
@@ -180,6 +180,22 @@ impl InternalHttpQueryHandler {
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
+        // While the subnet is cooling down it rejects all query calls, the ones
+        // addressed to the management canister included. System queries, i.e. the
+        // `transform` functions of HTTP outcalls, are still executed, because subnet
+        // messages are still executed by a cooling down subnet.
+        if matches!(query.source, QuerySource::User { .. })
+            && state.get_ref().metadata.is_cooling_down()
+        {
+            return Err(UserError::new(
+                ErrorCode::SubnetCoolingDown,
+                format!(
+                    "Subnet {} is cooling down and does not accept query calls",
+                    state.get_ref().metadata.own_subnet_id
+                ),
+            ));
+        }
+
         // Serve the query locally if it is addressed to the management canister.
         if query.receiver == CanisterId::ic_00() {
             let method = subnet_query::parse_query_method(&query.method_name)?;
@@ -203,7 +219,7 @@ impl InternalHttpQueryHandler {
         let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled
             && enable_query_stats_tracking
         {
-            Some(self.local_query_execution_stats.as_ref())
+            Some(Arc::clone(&self.local_query_execution_stats))
         } else {
             None
         };
@@ -221,7 +237,7 @@ impl InternalHttpQueryHandler {
             let state = state.get_ref().as_ref();
             if let Some(result) =
                 self.query_cache
-                    .get_valid_result(&key, state, query_stats_collector)
+                    .get_valid_result(&key, state, query_stats_collector.as_deref())
             {
                 return result;
             }
@@ -265,9 +281,9 @@ impl InternalHttpQueryHandler {
             None => resource_limits.maximum_query_instructions_or(self.max_instructions_per_query),
         };
         let mut context = query_context::QueryContext::new(
-            &self.log,
-            self.hypervisor.as_ref(),
-            self.canister_manager.as_ref(),
+            self.log.clone(),
+            Arc::clone(&self.hypervisor),
+            Arc::clone(&self.canister_manager),
             self.own_subnet_type,
             // For composite queries, the set of evaluated canisters is not known in advance,
             // so the whole state is needed to capture later the state of the call graph.
@@ -285,7 +301,7 @@ impl InternalHttpQueryHandler {
             self.config.instruction_overhead_per_query_call,
             self.config.composite_queries,
             query.receiver,
-            &self.metrics,
+            self.metrics.clone(),
             query_stats_collector,
             Arc::clone(&self.cycles_account_manager),
             instruction_observation,

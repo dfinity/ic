@@ -44,6 +44,7 @@ pub(crate) enum BatchPayloadSectionBuilder {
     CanisterHttp(Arc<dyn BatchPayloadBuilder>),
     QueryStats(Arc<dyn BatchPayloadBuilder>),
     ChainKey(Arc<dyn BatchPayloadBuilder>),
+    Upgrade(Arc<dyn BatchPayloadBuilder>),
 }
 
 impl BatchPayloadSectionBuilder {
@@ -94,6 +95,7 @@ impl BatchPayloadSectionBuilder {
             Self::CanisterHttp(_) => "canister_http",
             Self::QueryStats(_) => "query_stats",
             Self::ChainKey(_) => "chain_key",
+            Self::Upgrade(_) => "upgrade",
         }
     }
 
@@ -363,6 +365,44 @@ impl BatchPayloadSectionBuilder {
                     }
                 }
             }
+            Self::Upgrade(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.upgrade)
+                        }
+                    });
+
+                let upgrade = builder.build_payload(
+                    height,
+                    max_size,
+                    &past_payloads,
+                    proposal_context.validation_context,
+                );
+                let size = NumBytes::new(upgrade.len() as u64);
+
+                // Check validation as safety measure
+                match builder.validate_payload(height, proposal_context, &upgrade, &past_payloads) {
+                    Ok(()) => {
+                        payload.upgrade = upgrade;
+                        size
+                    }
+                    Err(err) => {
+                        error!(
+                            logger,
+                            "upgrade payload did not pass validation, this is a bug, {:?} @{}",
+                            err,
+                            CRITICAL_ERROR_VALIDATION_NOT_PASSED
+                        );
+
+                        metrics.critical_error_validation_not_passed.inc();
+                        payload.upgrade = vec![];
+                        NumBytes::new(0)
+                    }
+                }
+            }
         }
     }
 
@@ -471,6 +511,25 @@ impl BatchPayloadSectionBuilder {
                 )?;
 
                 Ok(NumBytes::new(payload.chain_key.len() as u64))
+            }
+            Self::Upgrade(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.upgrade)
+                        }
+                    });
+
+                builder.validate_payload(
+                    height,
+                    proposal_context,
+                    &payload.upgrade,
+                    &past_payloads,
+                )?;
+
+                Ok(NumBytes::new(payload.upgrade.len() as u64))
             }
         }
     }

@@ -12,19 +12,22 @@ on:
         required: false
         default: ''
         type: string
-    outputs:
-      release-build:
-        description: Whether this run was a release build, i.e. uploaded artifacts to the CDN.
-        value: ${{ jobs.config.outputs.release-build }}
-      manifest-sha256:
-        description: sha256 of the upload-manifest.
-        value: ${{ jobs.upload-manifests.outputs.manifest-sha256 }}
 
-permissions:
-  actions: write # needed for uploading artifacts to github
-  contents: read
-  id-token: write
-  pull-requests: read
+# This reusable workflow declares no `permissions:` of its own: its jobs run with
+# exactly the GITHUB_TOKEN permissions the calling job grants. Callers that run
+# release builds (ci-kickoff.yml, release-testing.yml) grant on their `ci-main` job:
+#   actions: write        # Actions artifacts (bazel-targets, BEP, execlogs)
+#   attestations: write   # Attest steps of bazel-test-all / upload-external-artifacts
+#   contents: read
+#   id-token: write       # AWS OIDC role assumption and Sigstore signing
+#   pull-requests: read
+# ci-kickoff-manual.yml (CI for pull requests from forks) grants the same set WITHOUT
+# `attestations: write`: it never runs a release build. A permission declared here
+# would be validated against every caller's grant at parse time regardless of `if:`
+# (https://github.com/orgs/community/discussions/155062) and so would force that
+# grant onto fork-PR runs. Not declaring it keeps fork-PR builds unable to store
+# attestations; the price is that a caller missing a grant fails at runtime (HTTP
+# 403 in the Attest step) rather than at parse time.
 
 env:
   CI_COMMIT_SHA: ${{ inputs.commit-sha }}
@@ -40,7 +43,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:caacdcf7c2346ff8b6d8b86ecfa89b1365fa111f744e0e777ac5bf9a5ca97c61
+      image: ghcr.io/dfinity/ic-build@sha256:0b6a915e614105c632a0c7a0f6e530ed506decfbd0316b297b28e9c555c532a2
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -88,11 +91,23 @@ jobs:
       diff-only: ${{ steps.config.outputs.diff-only }}
       skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
       skip_buf_checks: ${{ steps.config.outputs.skip_buf_checks }}
+      skip_system_tests: ${{ steps.config.outputs.skip_system_tests }}
     steps:
       - name: Infer build config
         id: config
         run: |
           set -euo pipefail
+
+          # PR labels. Both expand to 'false' on merge_group, push and workflow_dispatch.
+          all_bazel_targets='${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}'
+          skip_system_tests='${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_SKIP_SYSTEM_TESTS') }}'
+
+          if [[ "$all_bazel_targets" == 'true' && "$skip_system_tests" == 'true' ]]; then
+              msg="The PR labels CI_ALL_BAZEL_TARGETS and CI_SKIP_SYSTEM_TESTS are mutually exclusive. Remove one of them and retrigger CI (see .github/CI_README.md)."
+              echo "::error title=Conflicting CI labels::$msg"
+              echo "**Error:** $msg" >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+          fi
 
           # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
           # the full build to occur (including versioning)
@@ -116,7 +131,7 @@ jobs:
               release_build="false"
               diff_only="false"
               skip_long_tests="true"
-          elif [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}' == 'true' ]]; then
+          elif [[ "$all_bazel_targets" == 'true' ]]; then
               # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
               # branch
               release_build="false"
@@ -135,13 +150,7 @@ jobs:
           else
               # default behavior is to not release, only build targets with modified inputs and skip long_tests.
               release_build="false"
-
-              # The `infer-bazel-targets` job below is very unstable when diff_only is enabled so we temporarily disable it until we have a proper fix.
-              # When diff_only is enabled ci/scripts/targets.py will run a bazel query involving `rdeps` of modified files which will force all bazel repositories to be downloaded.
-              # These include several multi-GB mainnet ICOS images which will either cause the runner to run out of disk space or the bazel query to run for a very long time or timeout.
-              # diff_only="true"
-              diff_only="false"
-
+              diff_only="true"
               skip_long_tests="true"
           fi
 
@@ -175,51 +184,13 @@ jobs:
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
           echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
-  infer-bazel-targets:
-    name: Infer Bazel Targets
-    runs-on: ubuntu-latest
-    needs: [config]
-    steps:
-      # calculate which bazel targets may need to be rebuilt
-      - *checkout
-      - name: Infer Targets
-        uses: ./.github/actions/bazel
-        with:
-          run: |
-            # Local system-tests will run on the Remote Execution Cluster @ Namespace
-            # via the .github/workflows/ci-rbe-evaluation.yml job so skip them in this job:
-            targets_args=(--exclude_tags=local_system_test)
-            if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
-              targets_args+=("--skip_long_tests")
-            fi
-            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
-              targets_args+=("--exclude_tags=buf")
-            fi
-            if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
-              targets_args+=(
-                '--base=${{ github.event.pull_request.base.sha }}'
-                '--head=${{ github.event.pull_request.head.sha }}'
-                )
-            fi
-
-            # creates a list of targets suitable for --target_pattern_file and list
-            # the targets on the step summary
-            /usr/bin/time ci/scripts/targets.py build "${targets_args[@]}" >"${{ runner.temp }}/build-targets"
-            /usr/bin/time ci/scripts/targets.py test "${targets_args[@]}" >"${{ runner.temp }}/test-targets"
-
-      - name: Upload target files
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: bazel-targets
-          path: |
-            ${{ runner.temp }}/build-targets
-            ${{ runner.temp }}/test-targets
+          echo "skip_system_tests: $skip_system_tests"
+          echo "skip_system_tests=$skip_system_tests" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_system_tests\` | \`$skip_system_tests\` |" >> "$GITHUB_STEP_SUMMARY"
 
   bazel-test-all:
     name: Bazel Test All
-    needs: [config, infer-bazel-targets]
-    outputs:
-      manifest-sha256: ${{ steps.upload-artifacts.outputs.manifest-sha256 }}
+    needs: [config]
     environment:
       # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
       # It also requires the AWS and CF secrets which are only available in the `upload-artifacts` environment.
@@ -228,7 +199,7 @@ jobs:
       name: ${{ case(needs.config.outputs.release-build == 'true', 'upload-artifacts', '') }}
     runs-on: *dind-large-setup
     container: *container-setup
-    timeout-minutes: 150
+    timeout-minutes: 180
     steps:
       - *checkout
       - uses: ./.github/actions/netrc
@@ -257,11 +228,47 @@ jobs:
 
           echo "bazel-args=${bazel_args[@]}" >> $GITHUB_OUTPUT
 
-      - name: Download target files
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: Infer Bazel Targets
+        timeout-minutes: 30
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Local system-tests will run on the Remote Execution Cluster @ Namespace
+          # via the .github/workflows/ci-rbe-evaluation.yml job so skip them in this job:
+          targets_args=(--exclude_tags=local_system_test)
+          if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
+            targets_args+=("--skip_long_tests")
+          fi
+          if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+            targets_args+=("--exclude_tags=buf")
+          fi
+          if [[ '${{ needs.config.outputs.skip_system_tests }}' == 'true' ]]; then
+            targets_args+=("--exclude_tags=system_test")
+          fi
+          if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
+            targets_args+=(
+              '--base=${{ github.event.pull_request.base.sha }}'
+              '--head=${{ github.event.pull_request.head.sha }}'
+              )
+          fi
+
+          # Create the lists of targets to build and test which are consumed via
+          # --target_pattern_file by the steps below. The bazel server this starts and
+          # the packages and repositories it loads are reused by those steps.
+          # (${{ runner.temp }} is not used since it expands to the host path.)
+          mkdir -p "$HOME/bazel-targets"
+          /usr/bin/time ci/scripts/targets.py build "${targets_args[@]}" >"$HOME/bazel-targets/build-targets"
+          /usr/bin/time ci/scripts/targets.py test "${targets_args[@]}" >"$HOME/bazel-targets/test-targets"
+
+      - name: Upload target files
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: bazel-targets
-          path: ~/.cache/bazel-targets
+          retention-days: 14
+          path: |
+            ~/bazel-targets/build-targets
+            ~/bazel-targets/test-targets
 
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
@@ -275,7 +282,7 @@ jobs:
 
             bazel_args='${{ steps.infer-bazel-args.outputs.bazel-args }}'
 
-            build_targets="$HOME/.cache/bazel-targets/build-targets"
+            build_targets="$HOME/bazel-targets/build-targets"
             eval "bazel build $bazel_args --target_pattern_file=$build_targets"
 
       - name: Configure AWS credentials
@@ -295,11 +302,22 @@ jobs:
           CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
           name: Bazel Test All
-          manifest-name: upload-manifest-main
           # with --check_up_to_date Bazel will error out if the artifacts
           # to be uploaded were not built in the build step above
           # (this ensures that the exact artifacts built above are uploaded)
           upload-command: bazel run --check_up_to_date //:upload-artifacts
+
+      - name: Attest
+        # Mint the build-provenance attestation for the files the step above
+        # uploaded, from the manifest it wrote, in this same job: no artifact
+        # hop, so nothing has to be re-verified against a job output.
+        # Attestations exist only for the public repo: a build from ic-private
+        # gets attested when its branch is pushed to dfinity/ic as a hotfix-*
+        # branch and is re-built and re-uploaded byte-identically there.
+        if: needs.config.outputs.release-build == 'true' && github.repository == 'dfinity/ic'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: ${{ steps.upload-artifacts.outputs.manifest-path }}
 
       # GitHub runners override the container's entrypoint which is ci/container/init.sh
       # so we run it explicitly here to ensure the system is set up correctly for running local system-tests.
@@ -314,7 +332,7 @@ jobs:
           run: |
             bazel_args='${{ steps.infer-bazel-args.outputs.bazel-args }}'
 
-            test_targets="$HOME/.cache/bazel-targets/test-targets"
+            test_targets="$HOME/bazel-targets/test-targets"
             if [ -s "$test_targets" ]; then # bazel errors out if no test targets are listed
               eval "bazel test $bazel_args --target_pattern_file=$test_targets"
             fi
@@ -392,14 +410,6 @@ jobs:
           set -euo pipefail
           cd build
 
-          # macOS runners may only have perl's shasum, not GNU coreutils
-          # (same fallback as in .github/actions/bazel).
-          if command -v sha256sum >/dev/null; then
-            sha256() { sha256sum "$@"; }
-          else
-            sha256() { shasum -a 256 "$@"; }
-          fi
-
           # Record the sha256sum lines of every file uploaded as an Actions
           # artifact below in this job's outputs. The
           # upload-external-artifacts job re-checks the downloaded artifacts
@@ -411,7 +421,7 @@ jobs:
           # trust chain: should any of them overwrite these files, the
           # uploaded artifact no longer matches its recorded sums and
           # verification fails loudly.
-          sha256 \
+          shasum -a 256 \
             "pocket-ic-server-arm64-$OS.gz" \
             "ic-admin-arm64-$OS.gz" \
             "sns-arm64-$OS.gz" \
@@ -425,7 +435,7 @@ jobs:
           if [[ "$OS" == darwin ]]; then
             {
               echo "x86_64-darwin-sums<<SUMS"
-              sha256 pocket-ic-server-x86_64-darwin.gz
+              shasum -a 256 pocket-ic-server-x86_64-darwin.gz
               echo "SUMS"
             } >>"$GITHUB_OUTPUT"
           fi
@@ -485,8 +495,6 @@ jobs:
     name: Upload external artifacts
     needs: [bazel-test-arm64, config]
     if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
-    outputs:
-      manifest-sha256: ${{ steps.upload-artifacts.outputs.manifest-sha256 }}
     # The `Upload artifacts` step below requires the AWS & CF secrets
     # which are only available in the `upload-artifacts` environment.
     environment: upload-artifacts
@@ -561,14 +569,12 @@ jobs:
           mkdir -p "$bundledir/binaries/x86_64-darwin/"
           cp ~/.cache/pocket-ic-server-x86_64-darwin/pocket-ic-server-x86_64-darwin.gz "$bundledir/binaries/x86_64-darwin/pocket-ic.gz"
 
-          # Give these hand-assembled directories the same SHA256SUMS file
-          # that the bazel-built bundles get from the artifact_bundle rule
-          # so every binaries/<platform>/ directory on the CDN carries
-          # a checksum manifest that release workflows can verify
-          # against its attestation.
-          for d in arm64-linux arm64-darwin x86_64-darwin; do
-            (cd "$bundledir/binaries/$d" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
-          done
+          # Give these hand-assembled directories the same SHA256SUMS file that the bazel-built bundles get
+          # from the artifact_bundle rule so every binaries/<platform>/ directory on the CDN carries a
+          # checksum manifest that release workflows can verify against its attestation.
+          (cd "$bundledir/binaries/arm64-linux" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
+          (cd "$bundledir/binaries/arm64-darwin" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
+          (cd "$bundledir/binaries/x86_64-darwin" && sha256sum *.gz | LC_ALL=C sort -k2 >SHA256SUMS)
 
           echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
 
@@ -587,65 +593,14 @@ jobs:
           CF_AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_AWS_SECRET_ACCESS_KEY }}
         with:
           name: arm64 artifacts
-          manifest-name: upload-manifest-external
           upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
 
-  # Merge the per-job upload manifests into the single upload-manifest
-  # artifact exposed through this workflow's `manifest-sha256` output.
-  upload-manifests:
-    name: Merge upload manifests
-    needs: [config, bazel-test-all, upload-external-artifacts]
-    if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      manifest-sha256: ${{ steps.merge.outputs.sha256 }}
-    steps:
-      - name: Download main upload manifest
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: Attest
+        # See the Attest step of bazel-test-all.
+        if: needs.config.outputs.release-build == 'true' && github.repository == 'dfinity/ic'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
-          name: upload-manifest-main
-          path: ${{ runner.temp }}/upload-manifests/main
-
-      - name: Download external upload manifest
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: upload-manifest-external
-          path: ${{ runner.temp }}/upload-manifests/external
-
-      - name: Verify and merge manifests
-        id: merge
-        shell: bash
-        env:
-          MANIFEST_SHA256_MAIN: ${{ needs.bazel-test-all.outputs.manifest-sha256 }}
-          MANIFEST_SHA256_EXTERNAL: ${{ needs.upload-external-artifacts.outputs.manifest-sha256 }}
-        run: |
-          set -euo pipefail
-          cd "$RUNNER_TEMP/upload-manifests"
-
-          # Verify the downloaded artifacts against the hashes recorded in
-          # the producing jobs' outputs before merging anything: an Actions
-          # artifact can be replaced mid-run by anything holding an
-          # `actions: write` token, but job outputs cannot be tampered with
-          # by other jobs. A missing or empty output also fails here:
-          # sha256sum rejects the malformed line.
-          echo "$MANIFEST_SHA256_MAIN  main/upload-manifest.sha256sums" | sha256sum --check
-          echo "$MANIFEST_SHA256_EXTERNAL  external/upload-manifest.sha256sums" | sha256sum --check
-
-          LC_ALL=C sort -k2 \
-            main/upload-manifest.sha256sums \
-            external/upload-manifest.sha256sums \
-            >upload-manifest.sha256sums
-
-          echo "sha256=$(sha256sum upload-manifest.sha256sums | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
-
-      - name: Upload merged manifest
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: upload-manifest
-          path: ${{ runner.temp }}/upload-manifests/upload-manifest.sha256sums
-          if-no-files-found: error
+          subject-checksums: ${{ steps.upload-artifacts.outputs.manifest-path }}
 
   python-ci-tests:
     name: Python CI Tests
@@ -674,7 +629,7 @@ jobs:
           REPO_NAME: ${{ github.repository }}
 
   build-ic:
-    needs: [config, infer-bazel-targets]
+    needs: [config]
     name: Build IC
     runs-on: *dind-large-setup
     container: *container-setup
@@ -686,11 +641,6 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
-      - name: Download target files
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: bazel-targets
-          path: ~/.cache/bazel-targets
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
@@ -700,39 +650,9 @@ jobs:
 
             cd "$CI_PROJECT_DIR"
 
-            # run full release build on "protected" branches
-            if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
-                ci/container/build-ic.sh -i -c -b
-                exit 0
-            fi
-
-            # run full non-release build if not asked to diff
-            if [[ '${{ needs.config.outputs.diff-only }}' != 'true' ]]; then
-                ci/container/build-ic.sh -i -c -b --no-release
-                exit 0
-            fi
-
-            # otherwise, infer targets to build
-            target_pattern_file="$HOME/.cache/bazel-targets/build-targets"
-
-            ARGS=()
-
-            if grep -q '^//ic-os' <"$target_pattern_file"; then
-                ARGS+=(-i)
-            fi
-            if grep -q '^//publish/canisters' <"$target_pattern_file"; then
-                ARGS+=(-c)
-            fi
-            if grep -q '^//publish/binaries' <"$target_pattern_file"; then
-                ARGS+=(-b)
-            fi
-
-            if [[ ${#ARGS[@]} -eq 0 ]]; then
-                echo "No changes that require building IC-OS, binaries or canisters."
-                exit 0
-            fi
-
-            ci/container/build-ic.sh "${ARGS[@]}" --no-release
+            # Always build all IC-OS images, canisters and binaries: this is the
+            # no-cache side of the build-determinism comparison. Only release builds are stamped.
+            ci/container/build-ic.sh -i -c -b ${{ case(needs.config.outputs.release-build == 'true', '', '--no-release') }}
 
   build-determinism:
     name: Build Determinism

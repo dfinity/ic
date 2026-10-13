@@ -24,7 +24,9 @@ end::catalog[] */
 
 use anyhow::Result;
 use anyhow::bail;
-use ic_consensus_system_test_upgrade_common::elect_target_version;
+use ic_consensus_system_test_upgrade_common::{
+    UP_DOWNGRADE_OVERALL_TIMEOUT, UP_DOWNGRADE_PER_TEST_TIMEOUT, elect_target_version,
+};
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     upgrade::{deploy_guestos_to_all_unassigned_nodes, fetch_unassigned_node_version},
@@ -96,6 +98,8 @@ fn upgrade_downgrade_unassigned_nodes(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_overall_timeout(UP_DOWNGRADE_OVERALL_TIMEOUT)
+        .with_timeout_per_test(UP_DOWNGRADE_PER_TEST_TIMEOUT)
         .with_setup(setup)
         .add_test(systest!(upgrade_downgrade_unassigned_nodes))
         .execute_from_args()?;

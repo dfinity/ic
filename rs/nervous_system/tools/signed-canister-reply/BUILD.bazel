@@ -16,7 +16,6 @@ rust_library(
     crate_name = "ic_nervous_system_tools_signed_canister_reply",
     deps = [
         # Keep sorted.
-        "@crate_index//:base64",
         "@crate_index//:clap",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-certification",
@@ -65,7 +64,6 @@ rust_test(
         # Keep sorted.
         "//packages/pocket-ic",
         "//rs/rust_canisters/canister_test",
-        "@crate_index//:base64",
         "@crate_index//:candid",
         "@crate_index//:clap",
         "@crate_index//:hex",

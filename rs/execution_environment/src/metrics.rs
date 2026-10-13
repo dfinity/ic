@@ -172,6 +172,7 @@ impl CallTreeMetrics for CallTreeMetricsImpl {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
     pub query_initial_call: ScopedMetrics,
@@ -335,7 +336,7 @@ impl QueryHandlerMetrics {
 /// - the number of messages executed in the phase.
 ///
 /// Use `MeasurementScope` instead of observing the metrics manually.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct ScopedMetrics {
     pub duration: Histogram,
     pub instructions: Histogram,
@@ -421,6 +422,11 @@ impl<'a> MeasurementScope<'a> {
     /// Returns the number of messages associated with this measurement scope.
     pub fn messages(&self) -> NumMessages {
         self.core.borrow().messages
+    }
+
+    /// Returns the number of instructions associated with this measurement scope.
+    pub fn instructions(&self) -> NumInstructions {
+        self.core.borrow().instructions
     }
 }
 

@@ -190,6 +190,7 @@ pub struct CanisterStateBits {
     pub interrupted_during_execution: u64,
     pub certified_data: Vec<u8>,
     pub consumed_cycles: NominalCycles,
+    pub consumed_cycles_monotonic: NominalCycles,
     pub stable_memory_size: NumWasmPages,
     pub heap_delta_debit: NumBytes,
     pub install_code_debit: NumInstructions,
@@ -198,7 +199,7 @@ pub struct CanisterStateBits {
     pub canister_version: u64,
     pub canister_creation_timestamp_nanos: Option<u64>,
     pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
-    pub consumed_cycles_by_use_cases_as_counters: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub consumed_cycles_by_use_cases_monotonic: BTreeMap<CyclesUseCase, NominalCycles>,
     pub instructions_executed: NumInstructions,
     pub ingress_messages_executed: u64,
     pub remote_subnet_messages_executed: u64,
@@ -1939,11 +1940,9 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     /// Other methods should use this function rather than checking markers directly.
     pub fn checkpoint_status(&self) -> CheckpointStatus {
         if self.state_sync_checkpoint_marker().exists() {
-            // Checkpoints with state sync marker are always unverified. Therefore both markers should be present.
-            // For defensive programming, we treat it as unverified even if the unverified marker
-            // is accidentally missing, since the presence of a state sync marker alone indicates
-            // the checkpoint should never be considered verified.
-            debug_assert!(self.unverified_checkpoint_marker().exists());
+            // The state sync marker alone makes the checkpoint unverified. The unverified marker is
+            // normally present too, but is removed first, so a concurrent reader could observe only the
+            // state sync marker: let's thus not check that the unverified marker also exists.
             return CheckpointStatus::UnverifiedStateSync;
         }
         if self.unverified_checkpoint_marker().exists() {

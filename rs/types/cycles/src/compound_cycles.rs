@@ -55,7 +55,10 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 ///
 /// Extra type-safety is added via use of generics and phantom data to enforce
 /// that arithmetic operations can only be performed on amounts that were
-/// created for the same `CyclesUseCase` and `CanisterCyclesCostSchedule`.
+/// created for the same `CyclesUseCase`. The `CanisterCyclesCostSchedule` is not
+/// part of the type: `new` folds it into the real part and does not retain it, so
+/// nothing stops two amounts created under different cost schedules from being
+/// combined (see the note on ordering below).
 ///
 /// E.g. the following code would not compile:
 ///
@@ -74,7 +77,29 @@ use std::ops::{Add, AddAssign, Div, Mul, Sub, SubAssign};
 /// let total = cc_instructions + cc_memory;
 /// assert_eq!(total.real(), Cycles::new(30));
 /// ```
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
+///
+/// # No ordering
+///
+/// `CompoundCycles` deliberately implements neither `Ord` nor `PartialOrd`: its two
+/// parts are accounted for independently and there is no meaningful order on the
+/// pair. A derived impl would order lexicographically, i.e. by the real part first,
+/// and hence decide a comparison on the real parts alone whenever those differ, no
+/// matter how the nominal parts compare.
+///
+/// Two amounts carrying the same cost schedule are safe to compare that way: under
+/// the normal cost schedule the two parts of an amount coincide, and under the free
+/// cost schedule the real part of a use case made free is zero on both sides, so the
+/// comparison falls through to the nominal parts. Such an order is misleading
+/// precisely when the two amounts carry *different* cost schedules, e.g. because one
+/// was recorded when a call was performed and the other derived when its response is
+/// executed: the one made free has a zero real part and compares as the smaller
+/// amount however large its nominal part is.
+///
+/// Compare `real()` or `nominal()` explicitly instead, or use `component_wise_min`
+/// to bound both parts at once. Note also that subtraction saturates in both the
+/// real and the nominal part, so capping an amount before subtracting it is
+/// redundant: `x - y` already equals `x - x.component_wise_min(y)`.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 pub struct CompoundCycles<T: CyclesUseCaseKind> {
     real: Cycles,
     nominal: NominalCycles,
@@ -128,6 +153,22 @@ impl<T: CyclesUseCaseKind> CompoundCycles<T> {
     // are zero.
     pub fn is_zero(&self) -> bool {
         self.real.is_zero() && self.nominal.is_zero()
+    }
+
+    /// Returns the component-wise minimum of this amount and `other`, i.e. the
+    /// minimum of their real parts paired with the minimum of their nominal parts.
+    ///
+    /// The two components are minimized separately because there is no ordering on
+    /// the pair (see the note on this type). They coincide under the normal cost
+    /// schedule; under the free cost schedule the real part of a use case made free
+    /// is zero, so minimizing by the real parts alone would leave the nominal part
+    /// of the result unbounded.
+    pub fn component_wise_min(self, other: Self) -> Self {
+        Self {
+            real: self.real.min(other.real),
+            nominal: self.nominal.min(other.nominal),
+            _cycles_use_case_marker: self._cycles_use_case_marker,
+        }
     }
 
     /// Returns this amount reduced by the part of `real()` that could not be
@@ -241,5 +282,51 @@ impl<T: CyclesUseCaseKind> TryFrom<PbCompoundCycles> for CompoundCycles<T> {
             nominal,
             _cycles_use_case_marker: PhantomData,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cycles_use_case::Instructions;
+    use crate::nominal_cycles::testing::NominalCyclesTesting;
+
+    /// An `Instructions` amount has coincident parts under the normal cost schedule,
+    /// whereas its real part is zero under the free cost schedule. The two amounts
+    /// below therefore order one way in their real parts and the other way in their
+    /// nominal parts, which is exactly the case a lexicographic ordering of the pair
+    /// would decide on the real parts alone.
+    #[test]
+    fn arithmetic_is_component_wise() {
+        let x =
+            CompoundCycles::<Instructions>::new(Cycles::new(5), CanisterCyclesCostSchedule::Normal);
+        let y =
+            CompoundCycles::<Instructions>::new(Cycles::new(10), CanisterCyclesCostSchedule::Free);
+        assert_eq!(
+            (x.real(), x.nominal()),
+            (Cycles::new(5), NominalCycles::new(5))
+        );
+        assert_eq!(
+            (y.real(), y.nominal()),
+            (Cycles::zero(), NominalCycles::new(10))
+        );
+
+        // Subtracting `y` from `x` without going below zero in either part.
+        let difference = x - y;
+        assert_eq!(
+            (difference.real(), difference.nominal()),
+            (Cycles::new(5), NominalCycles::zero())
+        );
+
+        // The component-wise minimum takes each part from a different amount.
+        let minimum = x.component_wise_min(y);
+        assert_eq!(
+            (minimum.real(), minimum.nominal()),
+            (Cycles::zero(), NominalCycles::new(5))
+        );
+        assert_eq!(y.component_wise_min(x), minimum);
+
+        // Capping before subtracting is redundant.
+        assert_eq!(x - x.component_wise_min(y), difference);
     }
 }

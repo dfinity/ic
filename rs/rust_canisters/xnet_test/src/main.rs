@@ -12,8 +12,8 @@ use ic_cdk::api::{canister_cycle_balance, canister_self, msg_caller, time};
 use ic_cdk::call::{Call, CallFailed};
 use ic_cdk::{heartbeat, query, update};
 use ic_management_canister_types::CanisterId;
-use rand::Rng;
-use rand_pcg::Lcg64Xsh32;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::future::IntoFuture;
@@ -53,9 +53,7 @@ thread_local! {
 
     /// The pseudo-random number generator we use to pick the next canister to talk to.
     /// It doesn't need to be cryptographically secure, we just want it to be simple and fast.
-    /// The default values for state and stream parameters come from the official documentation:
-    /// https://rust-random.github.io/rand/rand_pcg/struct.Lcg64Xsh32.html
-    static RNG: RefCell<Lcg64Xsh32> = RefCell::new(Lcg64Xsh32::new(0xcafe_f00d_d15e_a5e5, 0x0a02_bdbf_7bb3_c0a7));
+    static RNG: RefCell<SmallRng> = RefCell::new(SmallRng::seed_from_u64(0xcafe_f00d_d15e_a5e5));
 }
 
 /// Input for `return_cycles` method.

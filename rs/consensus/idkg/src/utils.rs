@@ -32,7 +32,6 @@ use ic_types::{
     },
     registry::RegistryClientError,
 };
-use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -498,16 +497,6 @@ impl<T: Ord + Copy> IDkgSchedule<T> {
         let prev = self.last_purge.replace(new);
         new > prev
     }
-}
-
-/// Builds a rayon thread pool with the given number of threads.
-pub(crate) fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
-    Arc::new(
-        ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .expect("Failed to create thread pool"),
-    )
 }
 
 #[cfg(test)]

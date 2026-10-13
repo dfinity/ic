@@ -15,6 +15,7 @@ use crate::driver::{
     test_setup::{GroupSetup, SystemTestBackend},
 };
 use anyhow::{Context, Result};
+use duration_string::DurationString;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
 use ic_protobuf::registry::{dc::v1::DataCenterRecord, node::v1::NodeRewardType};
@@ -28,7 +29,7 @@ use ic_types::{Height, NodeId, PrincipalId};
 use ic_types_cycles::CanisterCyclesCostSchedule;
 use phantom_newtype::AmountOf;
 use rcgen::{BasicConstraints, CertificateParams, DnType, IsCa, KeyPair, KeyUsagePurpose};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use slog::info;
 use std::collections::BTreeMap;
 use std::collections::hash_map::DefaultHasher;
@@ -252,10 +253,10 @@ impl InternetComputer {
     ///
     /// Needed by tests that have a VM other than the driver talk to a node. Such
     /// a VM shares the nodes' `/64`, which the GuestOS firewall already accepts
-    /// on 7070, 9090, 9091, 9100, 19100, 19522 and 19531 (plus 9314 on cloud
-    /// engines and 9324 on API boundary nodes) — so this is only required to
-    /// reach a node on one of the *other* whitelisted ports: 22, 2497, 4100,
-    /// 8080 and 19523.
+    /// on 7070, 9090, 9091, 9100, 19100 and 19531 (plus 9314 on cloud
+    /// engines and 9324 on API boundary nodes; 19522 is restricted to the peer
+    /// Guest VM) — so this is only required to reach a node on one of the
+    /// *other* whitelisted ports: 22, 2497, 4100, 8080 and 19523.
     ///
     /// The prefixes and ports are added to the driver's, never replace them, so
     /// a caller cannot lock the driver out. Ignored on the Farm backend, whose
@@ -713,6 +714,14 @@ impl InternetComputer {
     }
 }
 
+/// Deserializes an optional [`Duration`] from a duration string such as `200ms`
+/// or `5s` (see the `duration-string` crate for the grammar).
+fn deserialize_optional_duration<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Duration>, D::Error> {
+    Option::<DurationString>::deserialize(deserializer).map(|d| d.map(Duration::from))
+}
+
 /// A builder for the initial configuration of a subnetwork.
 #[derive(Clone, PartialEq, Debug, Deserialize)]
 pub struct Subnet {
@@ -725,9 +734,9 @@ pub struct Subnet {
     pub max_ingress_messages_per_block: Option<u64>,
     pub max_ingress_bytes_per_block: Option<u64>,
     pub max_block_payload_size: Option<u64>,
-    #[serde(with = "humantime_serde")]
+    #[serde(deserialize_with = "deserialize_optional_duration")]
     pub unit_delay: Option<Duration>,
-    #[serde(with = "humantime_serde")]
+    #[serde(deserialize_with = "deserialize_optional_duration")]
     pub initial_notary_delay: Option<Duration>,
     pub dkg_interval_length: Option<Height>,
     pub dkg_dealings_per_block: Option<usize>,
