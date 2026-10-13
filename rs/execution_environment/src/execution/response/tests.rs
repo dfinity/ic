@@ -3516,6 +3516,8 @@ fn dts_finished_log_emitted_for_long_response_callback() {
     );
     execution
         .logs
+        // Check the log prefix separately: the exact message check below
+        // would not catch an additional log with different instruction counts.
         .has_only_one_message_containing(&Level::Info, DTS_FINISHED_RESPONSE_LOG)
         .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_CLEANUP_LOG)
         // In particular, the total must not include the instructions reserved
@@ -3555,6 +3557,8 @@ fn dts_finished_log_emitted_for_long_cleanup_callback() {
     execution
         .logs
         .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_RESPONSE_LOG)
+        // Check the log prefix separately: the exact message check below
+        // would not catch an additional log with different instruction counts.
         .has_only_one_message_containing(&Level::Info, DTS_FINISHED_CLEANUP_LOG)
         // The total covers both the response callback and the cleanup callback.
         .has_only_one_message_containing(
