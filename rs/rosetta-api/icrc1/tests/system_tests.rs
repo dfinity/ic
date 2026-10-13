@@ -474,7 +474,7 @@ fn test_network_options() {
                 .map(|op| op.to_string())
                 .collect::<Vec<String>>()
         );
-        assert_eq!(network_options.allow.errors.len(), 13);
+        assert_eq!(network_options.allow.errors.len(), 14);
         assert!(network_options.allow.historical_balance_lookup);
     });
 }

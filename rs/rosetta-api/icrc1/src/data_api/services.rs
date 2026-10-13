@@ -4,6 +4,7 @@ use crate::common::constants::DEFAULT_BLOCKCHAIN;
 use crate::common::constants::MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST;
 use crate::common::constants::MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST;
 use crate::common::constants::STATUS_COMPLETED;
+use crate::common::storage::types::RosettaBlock;
 use crate::common::types::OperationType;
 use crate::common::{
     constants::{NODE_VERSION, ROSETTA_VERSION},
@@ -68,6 +69,7 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
                 Error::unsupported_operation(OperationType::Transfer).into(),
                 Error::ledger_communication_unsuccessful(&"Rosetta could not communicate with the ICRC-1 Ledger successfully.".to_owned()).into(),
                 Error::unable_to_find_account_balance(&"The balance for the given account could not be fetched.".to_owned()).into(),
+                Error::block_not_yet_processed(&"The account balances for the requested block have not been computed yet.".to_owned()).into(),
                 Error::request_processing_error(&"The input of the user resulted in an error while trying to process the request.".to_owned()).into(),
                 Error::processing_construction_failed(&"An error while processing a construction api endpoint occurred.".to_owned()).into(),
                 Error::invalid_metadata(&"The metadata provided by the user is invalid.".to_owned()).into(),
@@ -191,6 +193,65 @@ pub async fn block(
     Ok(BlockResponse::new(Some(block)))
 }
 
+/// Resolves the block that an `/account/balance` response is labelled with.
+///
+/// Account balances are computed by a pass that runs after the blocks themselves have been stored,
+/// so the block store can be ahead of the `account_balances` table. Reading a balance at a height
+/// above the highest processed block silently yields the balance at the highest processed block,
+/// which would label a stale value with a block height at which it was never true. The highest
+/// processed block is therefore the upper bound for both the implicit and the explicit form of the
+/// query, and it is the same height that `network_status` reports.
+async fn get_balance_block(
+    storage_client: &StorageClient,
+    partial_block_identifier: &Option<PartialBlockIdentifier>,
+) -> Result<RosettaBlock, Error> {
+    async fn highest_processed_block_idx(storage_client: &StorageClient) -> Result<u64, Error> {
+        storage_client
+            .get_highest_processed_block_idx()
+            .await
+            .map_err(|e| Error::unable_to_find_block(&e))?
+            .ok_or_else(|| {
+                Error::block_not_yet_processed(
+                    &"No account balances have been computed yet.".to_owned(),
+                )
+            })
+    }
+
+    // A block identifier that specifies neither an index nor a hash is a request for the current
+    // block, just like providing no block identifier at all.
+    let explicitly_requested_block = partial_block_identifier
+        .as_ref()
+        .filter(|block_id| block_id.index.is_some() || block_id.hash.is_some());
+
+    match explicitly_requested_block {
+        // Resolve the requested block before looking at the processed height, so that an
+        // identifier that does not name a block is reported as such rather than as a block whose
+        // balances are still being computed.
+        Some(block_id) => {
+            let rosetta_block =
+                get_rosetta_block_from_partial_block_identifier(block_id, storage_client)
+                    .await
+                    .map_err(|err| Error::invalid_block_identifier(&err))?;
+            let highest_processed_block_idx = highest_processed_block_idx(storage_client).await?;
+            if rosetta_block.index > highest_processed_block_idx {
+                return Err(Error::block_not_yet_processed(&format!(
+                    "Block {} was requested but account balances have only been computed up to block {}.",
+                    rosetta_block.index, highest_processed_block_idx
+                )));
+            }
+            Ok(rosetta_block)
+        }
+        None => {
+            let highest_processed_block_idx = highest_processed_block_idx(storage_client).await?;
+            storage_client
+                .get_block_at_idx(highest_processed_block_idx)
+                .await
+                .map_err(|e| Error::unable_to_find_block(&e))?
+                .ok_or_else(|| Error::unable_to_find_block(&"Current block not found".to_owned()))
+        }
+    }
+}
+
 pub async fn account_balance(
     storage_client: &StorageClient,
     account_identifier: &AccountIdentifier,
@@ -198,16 +259,7 @@ pub async fn account_balance(
     decimals: u8,
     symbol: String,
 ) -> Result<AccountBalanceResponse, Error> {
-    let rosetta_block = match partial_block_identifier {
-        Some(block_id) => get_rosetta_block_from_partial_block_identifier(block_id, storage_client)
-            .await
-            .map_err(|err| Error::invalid_block_identifier(&err))?,
-        None => storage_client
-            .get_block_with_highest_block_idx()
-            .await
-            .map_err(|e| Error::unable_to_find_block(&e))?
-            .ok_or_else(|| Error::unable_to_find_block(&"Current block not found".to_owned()))?,
-    };
+    let rosetta_block = get_balance_block(storage_client, partial_block_identifier).await?;
 
     let balance = storage_client
         .get_account_balance_at_block_idx(
@@ -241,16 +293,7 @@ pub async fn account_balance_with_metadata(
     decimals: u8,
     symbol: String,
 ) -> Result<AccountBalanceResponse, Error> {
-    let rosetta_block = match partial_block_identifier {
-        Some(block_id) => get_rosetta_block_from_partial_block_identifier(block_id, storage_client)
-            .await
-            .map_err(|err| Error::invalid_block_identifier(&err))?,
-        None => storage_client
-            .get_block_with_highest_block_idx()
-            .await
-            .map_err(|e| Error::unable_to_find_block(&e))?
-            .ok_or_else(|| Error::unable_to_find_block(&"Current block not found".to_owned()))?,
-    };
+    let rosetta_block = get_balance_block(storage_client, partial_block_identifier).await?;
 
     // Check if aggregate_all_subaccounts flag is set in metadata
     let aggregate_all_subaccounts = metadata
@@ -2052,6 +2095,288 @@ mod test {
 
         // Aggregated balance: 480 (main) + 140 (account1) + 200 (account2) = 820
         assert_eq!(aggregated_balance.balances[0].value.to_string(), "820");
+    }
+
+    /// Three blocks: a mint of 1_000_000 to `a`, a transfer of 100_000 from `a` to `b`, and a
+    /// transfer of 50_000 back from `b` to `a`, each transfer paying a fee of 10_000. The balance
+    /// of `b` is therefore 100_000 at block 1 and 40_000 at block 2.
+    fn balance_test_blocks(a: Account, b: Account) -> Vec<RosettaBlock> {
+        use crate::common::storage::types::{IcrcBlock, IcrcOperation, IcrcTransaction};
+
+        let block = |operation, timestamp, index| {
+            RosettaBlock::from_icrc_ledger_block(
+                IcrcBlock {
+                    parent_hash: None,
+                    transaction: IcrcTransaction {
+                        operation,
+                        created_at_time: Some(timestamp),
+                        memo: None,
+                    },
+                    effective_fee: None,
+                    timestamp,
+                    fee_collector: None,
+                    fee_collector_block_index: None,
+                    btype: None,
+                },
+                index,
+            )
+        };
+
+        vec![
+            block(
+                IcrcOperation::Mint {
+                    to: a,
+                    amount: Nat::from(1_000_000_u64),
+                    fee: None,
+                },
+                1000,
+                0,
+            ),
+            block(
+                IcrcOperation::Transfer {
+                    from: a,
+                    to: b,
+                    spender: None,
+                    amount: Nat::from(100_000_u64),
+                    fee: Some(Nat::from(10_000_u64)),
+                },
+                2000,
+                1,
+            ),
+            block(
+                IcrcOperation::Transfer {
+                    from: b,
+                    to: a,
+                    spender: None,
+                    amount: Nat::from(50_000_u64),
+                    fee: Some(Nat::from(10_000_u64)),
+                },
+                3000,
+                2,
+            ),
+        ]
+    }
+
+    /// A block that has been stored but whose account balances have not been computed yet must not
+    /// be used to answer a balance query: the implicit form is answered at the highest processed
+    /// block, and the explicit form is rejected as retriable rather than silently answered from a
+    /// lower height.
+    #[tokio::test]
+    async fn test_account_balance_is_not_served_above_the_highest_processed_block() {
+        let storage_client = StorageClient::new_in_memory().await.unwrap();
+        let metadata = Metadata::from_args("ICP".to_string(), 8);
+
+        let a = Account {
+            owner: Principal::anonymous(),
+            subaccount: None,
+        };
+        let b = Account {
+            owner: Principal::management_canister(),
+            subaccount: None,
+        };
+        let blocks = balance_test_blocks(a, b);
+
+        // Store and process the first two blocks, then store the third one without processing it.
+        // This is the state the node is in between `store_blocks` and `update_account_balances`,
+        // and for the whole duration of a backlog ingestion.
+        storage_client
+            .store_blocks(blocks[..2].to_vec())
+            .await
+            .unwrap();
+        storage_client.update_account_balances().await.unwrap();
+        storage_client
+            .store_blocks(blocks[2..].to_vec())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            storage_client
+                .get_block_with_highest_block_idx()
+                .await
+                .unwrap()
+                .unwrap()
+                .index,
+            2
+        );
+        assert_eq!(
+            storage_client
+                .get_highest_processed_block_idx()
+                .await
+                .unwrap()
+                .unwrap(),
+            1
+        );
+
+        // The implicit form is labelled with the highest processed block, not with the tip, and
+        // the value is the one that is actually true at that block. A block identifier that
+        // specifies neither an index nor a hash is a request for the current block, so it is
+        // treated the same way.
+        let current_block = Some(PartialBlockIdentifier {
+            index: None,
+            hash: None,
+        });
+        for response in [
+            account_balance(
+                &storage_client,
+                &b.into(),
+                &None,
+                metadata.decimals,
+                metadata.symbol.clone(),
+            )
+            .await
+            .unwrap(),
+            account_balance_with_metadata(
+                &storage_client,
+                &b.into(),
+                &None,
+                &None,
+                metadata.decimals,
+                metadata.symbol.clone(),
+            )
+            .await
+            .unwrap(),
+            account_balance(
+                &storage_client,
+                &b.into(),
+                &current_block,
+                metadata.decimals,
+                metadata.symbol.clone(),
+            )
+            .await
+            .unwrap(),
+            account_balance_with_metadata(
+                &storage_client,
+                &b.into(),
+                &current_block,
+                &None,
+                metadata.decimals,
+                metadata.symbol.clone(),
+            )
+            .await
+            .unwrap(),
+        ] {
+            assert_eq!(response.block_identifier.index, 1);
+            assert_eq!(response.balances[0].value.to_string(), "100000");
+        }
+
+        // The explicit form is rejected for the stored but unprocessed block, rather than
+        // answering with the balance at block 1 labelled as block 2.
+        let block_2 = Some(PartialBlockIdentifier {
+            index: Some(2),
+            hash: None,
+        });
+        for error in [
+            account_balance(
+                &storage_client,
+                &b.into(),
+                &block_2,
+                metadata.decimals,
+                metadata.symbol.clone(),
+            )
+            .await
+            .unwrap_err(),
+            account_balance_with_metadata(
+                &storage_client,
+                &b.into(),
+                &block_2,
+                &None,
+                metadata.decimals,
+                metadata.symbol.clone(),
+            )
+            .await
+            .unwrap_err(),
+        ] {
+            assert_eq!(error.0.code, 14, "{error:?}");
+            assert!(error.0.retriable, "{error:?}");
+        }
+
+        // Once the balance pass has caught up, both forms answer at block 2.
+        storage_client.update_account_balances().await.unwrap();
+
+        let response = account_balance(
+            &storage_client,
+            &b.into(),
+            &None,
+            metadata.decimals,
+            metadata.symbol.clone(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.block_identifier.index, 2);
+        assert_eq!(response.balances[0].value.to_string(), "40000");
+
+        let response = account_balance(
+            &storage_client,
+            &b.into(),
+            &block_2,
+            metadata.decimals,
+            metadata.symbol.clone(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.block_identifier.index, 2);
+        assert_eq!(response.balances[0].value.to_string(), "40000");
+    }
+
+    /// While no balances have been computed at all, a balance query must fail rather than report
+    /// every account as holding zero at the tip.
+    #[tokio::test]
+    async fn test_account_balance_fails_when_no_balances_have_been_computed() {
+        let storage_client = StorageClient::new_in_memory().await.unwrap();
+        let metadata = Metadata::from_args("ICP".to_string(), 8);
+
+        let a = Account {
+            owner: Principal::anonymous(),
+            subaccount: None,
+        };
+        let b = Account {
+            owner: Principal::management_canister(),
+            subaccount: None,
+        };
+        storage_client
+            .store_blocks(balance_test_blocks(a, b))
+            .await
+            .unwrap();
+
+        // A block identifier that does not name a block is reported as an invalid block
+        // identifier, and not as a block whose balances are still being computed.
+        let error = account_balance(
+            &storage_client,
+            &a.into(),
+            &Some(PartialBlockIdentifier {
+                index: Some(17),
+                hash: None,
+            }),
+            metadata.decimals,
+            metadata.symbol.clone(),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.0.code, 3, "{error:?}");
+
+        for partial_block_identifier in [
+            None,
+            Some(PartialBlockIdentifier {
+                index: None,
+                hash: None,
+            }),
+            Some(PartialBlockIdentifier {
+                index: Some(2),
+                hash: None,
+            }),
+        ] {
+            let error = account_balance(
+                &storage_client,
+                &a.into(),
+                &partial_block_identifier,
+                metadata.decimals,
+                metadata.symbol.clone(),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(error.0.code, 14, "{error:?}");
+            assert!(error.0.retriable, "{error:?}");
+        }
     }
 
     #[test]
