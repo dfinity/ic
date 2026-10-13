@@ -96,11 +96,11 @@ def _copyfile(source, target, size):
         size -= len(data)
 
 
-def write_partition_image_from_tzst(gpt_entry, image_file, partition_tzst):
+def write_partition_image_from_tzst(gpt_entry, image_file, partition_tzst, zstd):
     tmpdir = tempfile.mkdtemp()
 
     partition_tf = os.path.join(tmpdir, "partition.tar")
-    subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
+    subprocess.run([zstd, "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
 
     partition_tf = tarfile.open(partition_tf, mode="r:")
     base = gpt_entry["start"] * 512
@@ -150,6 +150,7 @@ def main():
         help="Partitions to write. These must match the CSV partition table entries.",
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
+    parser.add_argument("--zstd", help="Path to the zstd tool", type=str, required=True)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -182,7 +183,7 @@ def main():
         partition_file = select_partition_file(name, partition_files)
 
         if partition_file:
-            write_partition_image_from_tzst(entry, disk_image, partition_file)
+            write_partition_image_from_tzst(entry, disk_image, partition_file, args.zstd)
         else:
             print("No partition file for '%s' found, leaving empty" % name)
 

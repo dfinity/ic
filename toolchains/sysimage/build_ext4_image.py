@@ -201,6 +201,9 @@ def main():
     fs_basedir = os.path.join(tmpdir, "fs")
     fakeroot_statefile = os.path.join(tmpdir, "fakeroot.state")
     os.mkdir(fs_basedir)
+    # The root directory of the image (when the whole tree is used): its mode
+    # mustn't depend on the umask or a setgid parent.
+    os.chmod(fs_basedir, 0o755)
     image_file = os.path.join(tmpdir, "partition.img")
 
     # Prepare a filesystem tree that represents what will go into

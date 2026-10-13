@@ -14,13 +14,16 @@ exports_files([
 
 genrule(
     name = "build-bootloader-tree",
+    # The dev-container image tag stands in for its podman and tar (see
+    # //toolchains/sysimage:toolchain.bzl).
     srcs = [
         "context/docker-base",
+        "//:ci/container/TAG",
     ],
     outs = [
         "bootloader-tree.tar",
     ],
-    cmd = "$(location build-bootloader-tree.sh) -b $< -o $@",
+    cmd = "$(location build-bootloader-tree.sh) -b $(location context/docker-base) -o $@",
     tags = [
         "manual",
         # Runs rootless 'podman build', which needs to create user namespaces:

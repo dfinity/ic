@@ -8,10 +8,15 @@ Tools for building IC OS image.
 # only operate on plain image files and run sandboxed or remotely.
 ICOS_CONTAINER_MNEMONICS = ["IcosContainerBaseImage", "IcosContainerBuild"]
 
-def _run_with_wrapper(ctx, wrapper, executable, arguments, tools, execution_requirements, **kwargs):
+def _run_with_wrapper(ctx, wrapper, executable, arguments, tools, execution_requirements, inputs, **kwargs):
     ctx.actions.run(
         executable = wrapper.files_to_run.executable,
         arguments = [executable] + arguments,
+        # Besides their declared tools, the image actions use some tools of the dev-container image
+        # (podman, fakeroot, libfaketime, tar, sfdisk, veritysetup, ...), which aren't Bazel inputs.
+        # Its tag stands in for them, so that a new image doesn't serve images built with the old
+        # tools from the cache.
+        inputs = inputs + [ctx.file._icos_host_tools],
         tools = tools + [wrapper.files_to_run],
         execution_requirements = execution_requirements |
                                  {"supports-graceful-termination": "1"},
@@ -22,15 +27,15 @@ def _run_with_wrapper(ctx, wrapper, executable, arguments, tools, execution_requ
 # wrapper that sets up a private podman storage. Only for the actions with a
 # mnemonic in ICOS_CONTAINER_MNEMONICS. Can only be used in rules defined by
 # _icos_build_rule.
-def _run_with_podman_wrapper(ctx, executable, arguments = [], tools = [], execution_requirements = {}, **kwargs):
+def _run_with_podman_wrapper(ctx, executable, arguments = [], tools = [], execution_requirements = {}, inputs = [], **kwargs):
     if kwargs.get("mnemonic") not in ICOS_CONTAINER_MNEMONICS:
         fail("podman actions must use a mnemonic of ICOS_CONTAINER_MNEMONICS")
-    _run_with_wrapper(ctx, ctx.attr._icos_build_proc_wrapper, executable, arguments, tools, execution_requirements, **kwargs)
+    _run_with_wrapper(ctx, ctx.attr._icos_build_proc_wrapper, executable, arguments, tools, execution_requirements, inputs, **kwargs)
 
 # Similar to ctx.actions.run but runs the command with a private TMPDIR that is
 # cleaned up afterwards. Can only be used in rules defined by _icos_build_rule.
-def _run_with_icos_wrapper(ctx, executable, arguments = [], tools = [], execution_requirements = {}, **kwargs):
-    _run_with_wrapper(ctx, ctx.attr._icos_tmpdir_wrapper, executable, arguments, tools, execution_requirements, **kwargs)
+def _run_with_icos_wrapper(ctx, executable, arguments = [], tools = [], execution_requirements = {}, inputs = [], **kwargs):
+    _run_with_wrapper(ctx, ctx.attr._icos_tmpdir_wrapper, executable, arguments, tools, execution_requirements, inputs, **kwargs)
 
 def _icos_build_rule(attrs = {}, **kwargs):
     return rule(
@@ -46,6 +51,10 @@ def _icos_build_rule(attrs = {}, **kwargs):
                 executable = True,
                 cfg = "exec",
                 allow_files = True,
+            ),
+            "_icos_host_tools": attr.label(
+                default = "//:ci/container/TAG",
+                allow_single_file = True,
             ),
         },
         **kwargs
@@ -498,6 +507,7 @@ def _disk_image_impl(ctx):
     outputs.append(output_file)
 
     args.extend(["-p", ctx.files.layout[0].path, "--dflate", ctx.executable._dflate.path])
+    args.extend(["--zstd", ctx.executable._zstd.path])
     inputs.extend(ctx.files.layout)
 
     if ctx.attr.expanded_size:
@@ -516,7 +526,7 @@ def _disk_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run],
+        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run, ctx.attr._zstd.files_to_run],
         mnemonic = "IcosDiskImage",
         progress_message = "Building disk image %{output}",
     )
@@ -542,6 +552,11 @@ disk_image = _icos_build_rule(
         ),
         "_dflate": attr.label(
             default = "//rs/ic_os/build_tools/dflate",
+            executable = True,
+            cfg = "exec",
+        ),
+        "_zstd": attr.label(
+            default = "@zstd//:zstd_cli",
             executable = True,
             cfg = "exec",
         ),
