@@ -11,8 +11,9 @@ awk
 mawk
 nawk
 sed
-perl*
-python*
+# Globbing requires we use the full path
+/usr/bin/perl*
+/usr/bin/python*
 
 # Cmd redirections
 env
