@@ -1640,16 +1640,38 @@ impl ExecutionTest {
             // Install and snapshot load messages are always charged at the
             // Wasm32 rate: the actual Wasm execution mode of the module being
             // installed is not known before compilation in the sandbox.
+            //
+            // They prepay the full message instruction limit and refund the
+            // unused instructions afterwards. Both amounts are scaled by the
+            // subnet size separately (with truncation), so the net charge is
+            // computed the same way here rather than as the cost of
+            // `instructions_used` alone. The two differ by rounding whenever
+            // the subnet size is not the reference subnet size.
             Ok(Method::InstallCode)
             | Ok(Method::InstallChunkedCode)
-            | Ok(Method::LoadCanisterSnapshot) => self
-                .cycles_account_manager()
-                .execution_cost(
-                    instructions_used,
-                    self.get_own_subnet_cycles_config(),
+            | Ok(Method::LoadCanisterSnapshot) => {
+                let mgr = self.cycles_account_manager();
+                let subnet_cycles_config = self.get_own_subnet_cycles_config();
+                let prepaid_instructions = self.install_code_instruction_limits.message();
+                debug_assert!(instructions_used <= prepaid_instructions);
+                let prepaid = mgr.execution_cost(
+                    prepaid_instructions,
+                    subnet_cycles_config,
                     WasmExecutionMode::Wasm32,
-                )
-                .nominal(),
+                );
+                let refunded = mgr
+                    .variable_execution_cost(
+                        NumInstructions::from(
+                            prepaid_instructions
+                                .get()
+                                .saturating_sub(instructions_used.get()),
+                        ),
+                        subnet_cycles_config,
+                        WasmExecutionMode::Wasm32,
+                    )
+                    .component_wise_min(prepaid);
+                (prepaid - refunded).nominal()
+            }
             Ok(Method::UpdateSettings)
             | Ok(Method::UploadChunk)
             | Ok(Method::TakeCanisterSnapshot)
