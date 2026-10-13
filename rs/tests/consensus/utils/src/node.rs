@@ -16,54 +16,13 @@ use std::time::Duration;
 use crate::ssh_access::execute_bash_command;
 
 pub fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height, log: Logger) {
-    ic_system_test_driver::retry_with_msg!(
-        format!(
-            "check if node {} is at height {}",
-            node.node_id, target_height
-        ),
-        log,
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        || {
-            node.status()
-                .and_then(|response| match response.certified_height {
-                    Some(height) if height > target_height => Ok(()),
-                    Some(height) => bail!(
-                        "Target height not yet reached, height: {}, target: {}",
-                        height,
-                        target_height
-                    ),
-                    None => bail!("Certified height not available"),
-                })
-        }
-    )
-    .expect("The node did not reach the specified height in time")
+    block_on(await_node_certified_height_async(node, target_height, &log))
 }
 
-pub fn get_node_certified_height(node: &IcNodeSnapshot, log: Logger) -> Height {
-    ic_system_test_driver::retry_with_msg!(
-        format!("get certified height of node {}", node.node_id),
-        log,
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        || {
-            node.status().and_then(|response| {
-                response
-                    .certified_height
-                    .ok_or_else(|| anyhow!("Certified height not available"))
-            })
-        }
-    )
-    .expect("Should be able to retrieve the certified height")
-}
-
-/// Waits until the certified height of `node` exceeds `target_height`.
-pub async fn await_node_certified_height_with_retries_async(
+pub async fn await_node_certified_height_async(
     node: &IcNodeSnapshot,
     target_height: Height,
     log: &Logger,
-    retry_timeout: Duration,
-    retry_backoff: Duration,
 ) {
     ic_system_test_driver::retry_with_msg_async!(
         format!(
@@ -71,8 +30,8 @@ pub async fn await_node_certified_height_with_retries_async(
             node.node_id, target_height
         ),
         log,
-        retry_timeout,
-        retry_backoff,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
         || async {
             node.status_async()
                 .await
@@ -91,17 +50,16 @@ pub async fn await_node_certified_height_with_retries_async(
     .expect("The node did not reach the specified height in time")
 }
 
-pub async fn get_node_certified_height_with_retries_async(
-    node: &IcNodeSnapshot,
-    log: &Logger,
-    retry_timeout: Duration,
-    retry_backoff: Duration,
-) -> Height {
+pub fn get_node_certified_height(node: &IcNodeSnapshot, log: Logger) -> Height {
+    block_on(get_node_certified_height_async(node, &log))
+}
+
+pub async fn get_node_certified_height_async(node: &IcNodeSnapshot, log: &Logger) -> Height {
     ic_system_test_driver::retry_with_msg_async!(
         format!("get certified height of node {}", node.node_id),
         log,
-        retry_timeout,
-        retry_backoff,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
         || async {
             node.status_async().await.and_then(|response| {
                 response

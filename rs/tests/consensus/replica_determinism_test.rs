@@ -16,7 +16,7 @@ end::catalog[] */
 
 use ic_agent::AgentError;
 use ic_consensus_system_test_utils::node::{
-    await_node_certified_height_with_retries_async, get_node_certified_height_with_retries_async,
+    await_node_certified_height_async, get_node_certified_height_async,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -144,33 +144,18 @@ fn test(env: TestEnv) {
                 .await
                 .expect("Node didn't report healthy");
 
-            // The restarted node reports healthy as soon as it has any certified state, i.e. the CUP
-            // state it synced, and only reports `CertifiedStateBehind` once it lags its own finalized
-            // block by more than 20 heights. Until it has replayed the blocks after the CUP its ingress
-            // filter validates calls against that stale certified state and rejects them with
-            // "Requested canister has no wasm module" if the canister was installed after the CUP.
-            // So wait until it has caught up with an honest node.
-            let target_height = get_node_certified_height_with_retries_async(
-                &honest_node,
-                &log,
-                Duration::from_secs(120),
-                Duration::from_secs(2),
-            )
-            .await;
+            // The faulty height could have landed between the canister creation and the code
+            // installation. In that case, the malicious node would restart on that CUP and reject
+            // calls with "Requested canister has no wasm module". By waiting for it to catch up
+            // with an honest node, we ensure the code is installed before issuing calls.
+            let target_height = get_node_certified_height_async(&honest_node, &log).await;
             info!(
                 log,
                 "Waiting until the certified height of the restarted node {} exceeds {}...",
                 malicious_node.node_id,
                 target_height
             );
-            await_node_certified_height_with_retries_async(
-                &malicious_node,
-                target_height,
-                &log,
-                Duration::from_secs(120),
-                Duration::from_secs(2),
-            )
-            .await;
+            await_node_certified_height_async(&malicious_node, target_height, &log).await;
 
             // For the same reason as before, if N = DKG_INTERVAL + 1, it's guaranteed
             // that a catch up package is proposed by the faulty node.
