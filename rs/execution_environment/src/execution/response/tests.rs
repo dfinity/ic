@@ -3430,8 +3430,6 @@ fn test_ic0_msg_deadline_best_effort_responses() {
 struct CallbacksExecution {
     /// The replica logs.
     logs: LogEntriesAssert,
-    /// The messages of the replica logs.
-    messages: Vec<String>,
     /// The ID of the canister executing the callbacks.
     canister_id: CanisterId,
     /// The instructions executed in the last slice of the callbacks.
@@ -3491,10 +3489,8 @@ fn execute_callbacks_and_get_logs(
 
     drop(test);
     let logs = logger.drain_logs();
-    let messages = logs.iter().map(|log| log.message.clone()).collect();
     CallbacksExecution {
         logs: LogEntriesAssert::assert_that(logs),
-        messages,
         canister_id: a_id,
         last_slice_instructions,
         total_instructions,
@@ -3503,18 +3499,6 @@ fn execute_callbacks_and_get_logs(
 
 const DTS_FINISHED_RESPONSE_LOG: &str = "[DTS] Finished response callback";
 const DTS_FINISHED_CLEANUP_LOG: &str = "[DTS] Finished cleanup callback";
-
-/// Asserts that the given log message occurs exactly once.
-fn assert_unique_message(messages: &[String], expected: &str) {
-    assert_eq!(
-        messages
-            .iter()
-            .filter(|message| *message == expected)
-            .count(),
-        1,
-        "Expected exactly one log message {expected:?}: {messages:?}"
-    );
-}
 
 #[test]
 fn dts_finished_log_not_emitted_for_short_response_callback() {
@@ -3533,19 +3517,19 @@ fn dts_finished_log_emitted_for_long_response_callback() {
     execution
         .logs
         .has_only_one_message_containing(&Level::Info, DTS_FINISHED_RESPONSE_LOG)
-        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_CLEANUP_LOG);
-    // In particular, the total must not include the instructions reserved for
-    // the cleanup callback.
-    assert_unique_message(
-        &execution.messages,
-        &format!(
-            "{DTS_FINISHED_RESPONSE_LOG} {} of canister {} after {} / {} instructions.",
-            CallbackId::from(1),
-            execution.canister_id,
-            execution.last_slice_instructions.display(),
-            execution.total_instructions.display(),
-        ),
-    );
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_CLEANUP_LOG)
+        // In particular, the total must not include the instructions reserved
+        // for the cleanup callback.
+        .has_only_one_message_containing(
+            &Level::Info,
+            &format!(
+                "{DTS_FINISHED_RESPONSE_LOG} {} of canister {} after {} / {} instructions.",
+                CallbackId::from(1),
+                execution.canister_id,
+                execution.last_slice_instructions.display(),
+                execution.total_instructions.display(),
+            ),
+        );
 }
 
 #[test]
@@ -3571,16 +3555,16 @@ fn dts_finished_log_emitted_for_long_cleanup_callback() {
     execution
         .logs
         .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_RESPONSE_LOG)
-        .has_only_one_message_containing(&Level::Info, DTS_FINISHED_CLEANUP_LOG);
-    // The total covers both the response callback and the cleanup callback.
-    assert_unique_message(
-        &execution.messages,
-        &format!(
-            "{DTS_FINISHED_CLEANUP_LOG} {:?} of canister {} after {} / {} instructions.",
-            CallbackId::from(1),
-            execution.canister_id,
-            execution.last_slice_instructions.display(),
-            execution.total_instructions.display(),
-        ),
-    );
+        .has_only_one_message_containing(&Level::Info, DTS_FINISHED_CLEANUP_LOG)
+        // The total covers both the response callback and the cleanup callback.
+        .has_only_one_message_containing(
+            &Level::Info,
+            &format!(
+                "{DTS_FINISHED_CLEANUP_LOG} {:?} of canister {} after {} / {} instructions.",
+                CallbackId::from(1),
+                execution.canister_id,
+                execution.last_slice_instructions.display(),
+                execution.total_instructions.display(),
+            ),
+        );
 }
