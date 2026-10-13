@@ -11,7 +11,9 @@ expression: out
   (type (;4;) (func (param i32 i32) (result i32)))
   (type (;5;) (func (param i64 i64 i32) (result i64)))
   (type (;6;) (func (param i64 i64 i64)))
-  (type (;7;) (func (param i32 i32) (result i32 i32)))
+  (type (;7;) (func (param i64 i64 i64 i32)))
+  (type (;8;) (func (param i32 i32 i32) (result i32 i32 i32)))
+  (type (;9;) (func (param i32 i32) (result i32 i32)))
   (import "ic0" "msg_cycles_accept" (func (;0;) (type 2)))
   (import "ic0" "msg_cycles_available" (func (;1;) (type 1)))
   (import "__" "out_of_instructions" (func (;2;) (type 0)))
@@ -19,6 +21,7 @@ expression: out
   (import "__" "try_grow_stable_memory" (func (;4;) (type 5)))
   (import "__" "internal_trap" (func (;5;) (type 3)))
   (import "__" "stable_read_first_access" (func (;6;) (type 6)))
+  (import "__" "check_heap_bulk_access" (func (;7;) (type 7)))
   (table (;0;) 5 5 funcref)
   (memory (;0;) i64 0 8192000)
   (memory (;1;) 2000 2000)
@@ -27,8 +30,8 @@ expression: out
   (global (;2;) (mut i64) i64.const 0)
   (global (;3;) (mut i64) i64.const 0)
   (export "Mt.call" (func 0))
-  (export "call Mt.call" (func 8))
-  (export "call" (func 9))
+  (export "call Mt.call" (func 9))
+  (export "call" (func 10))
   (export "table" (table 0))
   (export "stable_memory" (memory 0))
   (export "stable_bytemap_memory" (memory 1))
@@ -36,8 +39,8 @@ expression: out
   (export "canister counter_dirty_pages" (global 1))
   (export "canister counter_accessed_pages" (global 2))
   (export "canister heap_page_budget" (global 3))
-  (elem (;0;) (i32.const 0) func 7 7 7 1 0)
-  (func (;7;) (type 1) (result i64)
+  (elem (;0;) (i32.const 0) func 8 8 8 1 0)
+  (func (;8;) (type 1) (result i64)
     global.get 0
     i64.const 2
     i64.sub
@@ -50,7 +53,7 @@ expression: out
     end
     i64.const 5
   )
-  (func (;8;) (type 2) (param i64) (result i64)
+  (func (;9;) (type 2) (param i64) (result i64)
     global.get 0
     i64.const 7
     i64.sub
@@ -64,7 +67,7 @@ expression: out
     local.get 0
     call 0
   )
-  (func (;9;) (type 3) (param i32)
+  (func (;10;) (type 3) (param i32)
     global.get 0
     i64.const 12
     i64.sub
@@ -78,7 +81,7 @@ expression: out
     local.get 0
     call_indirect (type 0)
   )
-  (func (;10;) (type 2) (param i64) (result i64)
+  (func (;11;) (type 2) (param i64) (result i64)
     (local i64)
     global.get 0
     local.get 0
@@ -100,7 +103,106 @@ expression: out
     end
     local.get 0
   )
-  (func (;11;) (type 7) (param i32 i32) (result i32 i32)
+  (func (;12;) (type 8) (param i32 i32 i32) (result i32 i32 i32)
+    (local i64)
+    local.get 2
+    i64.extend_i32_u
+    local.tee 3
+    call 11
+    drop
+    local.get 3
+    i64.const 0
+    i64.ne
+    if ;; label = @1
+      local.get 0
+      i64.extend_i32_u
+      local.get 3
+      i64.add
+      i64.const 1
+      i64.sub
+      i64.const 16
+      i64.shr_u
+      local.get 0
+      i64.extend_i32_u
+      i64.const 16
+      i64.shr_u
+      i64.sub
+      i64.const 1
+      i64.add
+      local.get 1
+      i64.extend_i32_u
+      local.get 3
+      i64.add
+      i64.const 1
+      i64.sub
+      i64.const 16
+      i64.shr_u
+      local.get 1
+      i64.extend_i32_u
+      i64.const 16
+      i64.shr_u
+      i64.sub
+      i64.const 1
+      i64.add
+      i64.add
+      global.get 3
+      i64.gt_s
+      if ;; label = @2
+        local.get 0
+        i64.extend_i32_u
+        local.get 1
+        i64.extend_i32_u
+        local.get 3
+        i32.const 1
+        call 7
+      end
+    end
+    local.get 0
+    local.get 1
+    local.get 2
+  )
+  (func (;13;) (type 8) (param i32 i32 i32) (result i32 i32 i32)
+    (local i64)
+    local.get 2
+    i64.extend_i32_u
+    local.tee 3
+    call 11
+    drop
+    local.get 3
+    i64.const 0
+    i64.ne
+    if ;; label = @1
+      local.get 0
+      i64.extend_i32_u
+      local.get 3
+      i64.add
+      i64.const 1
+      i64.sub
+      i64.const 16
+      i64.shr_u
+      local.get 0
+      i64.extend_i32_u
+      i64.const 16
+      i64.shr_u
+      i64.sub
+      i64.const 1
+      i64.add
+      global.get 3
+      i64.gt_s
+      if ;; label = @2
+        local.get 0
+        i64.extend_i32_u
+        i64.const 0
+        local.get 3
+        i32.const 0
+        call 7
+      end
+    end
+    local.get 0
+    local.get 1
+    local.get 2
+  )
+  (func (;14;) (type 9) (param i32 i32) (result i32 i32)
     (local i32 i32 i32 i32)
     local.get 0
     local.get 1

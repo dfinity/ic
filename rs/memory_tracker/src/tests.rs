@@ -853,6 +853,54 @@ fn check_range_fits_beyond_the_tracked_memory() {
     });
 }
 
+#[test]
+fn check_ranges_fit_counts_shared_pages_once() {
+    with_accessed_page_limit(DirtyPageTracking::Track, Some(3), |tracker, _| {
+        // Accessed Wasm pages: {0}.
+        sigsegv_wasm_page(&tracker, 0, AccessKind::Read);
+        let r = wasm_page_byte_range;
+
+        // Empty ranges do not count.
+        assert!(tracker.check_ranges_fit(0..0, 0..0));
+        assert!(tracker.check_ranges_fit(r(1..3), 0..0));
+        assert!(tracker.check_ranges_fit(0..0, r(1..3)));
+        assert!(!tracker.check_ranges_fit(r(1..4), 0..0));
+        assert!(!tracker.check_ranges_fit(0..0, r(1..4)));
+
+        // Two disjoint new pages fit (1 + 2 <= 3), three do not.
+        assert!(tracker.check_ranges_fit(r(1..2), r(5..6)));
+        assert!(tracker.check_ranges_fit(r(5..6), r(1..2)));
+        assert!(!tracker.check_ranges_fit(r(1..3), r(5..6)));
+        assert!(!tracker.check_ranges_fit(r(5..6), r(1..3)));
+
+        // Overlapping ranges: pages {1, 2, 3} would be three new pages if
+        // counted twice, but they are only two.
+        assert!(tracker.check_ranges_fit(r(1..3), r(2..3)));
+        assert!(tracker.check_ranges_fit(r(2..3), r(1..3)));
+        // Identical ranges count once.
+        assert!(tracker.check_ranges_fit(r(1..3), r(1..3)));
+        // Adjacent ranges are merged, too.
+        assert!(tracker.check_ranges_fit(r(1..2), r(2..3)));
+        assert!(!tracker.check_ranges_fit(r(1..3), r(3..4)));
+        // Overlapping ranges with three distinct new pages do not fit.
+        assert!(!tracker.check_ranges_fit(r(1..3), r(2..4)));
+
+        // Accessed pages in the ranges do not count: {0, 1} and {0, 2} are
+        // two new pages.
+        assert!(tracker.check_ranges_fit(r(0..2), r(0..3)));
+        // Byte ranges that share a page in the middle of a page.
+        let half = (WASM_PAGE_SIZE_IN_BYTES / 2) as u64;
+        assert!(tracker.check_ranges_fit(
+            r(1..2).start..r(1..2).start + half,
+            r(1..2).start + half..r(2..3).end
+        ));
+
+        // Checking does not change the tracker state.
+        assert_eq!(tracker.num_accessed_pages(), OS_PAGES_IN_WASM_PAGE);
+        assert!(!tracker.page_limit_exceeded_flag().load(Ordering::Relaxed));
+    });
+}
+
 mod count_unaccessed_wasm_pages {
     use super::*;
     use proptest::prelude::*;
@@ -895,5 +943,69 @@ mod count_unaccessed_wasm_pages {
             .filter(|page| !accessed.contains(page))
             .count();
         assert_eq!(tracker.count_unaccessed_wasm_pages(wasm_pages), expected);
+    }
+
+    /// A byte range that starts and ends anywhere within the given Wasm pages.
+    fn byte_range() -> impl Strategy<Value = Range<u64>> {
+        let bytes = ((WASM_PAGES + 10) * WASM_PAGE_SIZE_IN_BYTES) as u64;
+        (0..bytes).prop_flat_map(move |start| (Just(start), start..=bytes).prop_map(|(s, e)| s..e))
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(512))]
+        /// Checking two ranges agrees with counting the distinct unaccessed
+        /// pages of their union.
+        #[test]
+        fn two_ranges_match_counting_the_union(
+            (accessed, limit) in prop::collection::btree_set(0..WASM_PAGES, 0..WASM_PAGES)
+                .prop_flat_map(|accessed| {
+                    let len = accessed.len();
+                    (Just(accessed), len..=WASM_PAGES + 10)
+                }),
+            first in byte_range(),
+            second in byte_range(),
+        ) {
+            run_two_ranges_match_counting_the_union(accessed, limit, first, second);
+        }
+    }
+
+    fn run_two_ranges_match_counting_the_union(
+        accessed: BTreeSet<usize>,
+        limit: usize,
+        first: Range<u64>,
+        second: Range<u64>,
+    ) {
+        let (tracker, _page_map, _memory, _vec) = setup_with_accessed_page_limit(
+            0,
+            WASM_PAGES * OS_PAGES_IN_WASM_PAGE,
+            vec![],
+            DirtyPageTracking::Ignore,
+            Some(NumWasmPages::new(limit)),
+            Arc::new(SignalMutex::new(|| {})),
+        );
+        for page in &accessed {
+            assert_eq!(
+                sigsegv_wasm_page(&tracker, *page, AccessKind::Read),
+                SigsegvOutcome::Handled
+            );
+        }
+        let pages_of = |range: &Range<u64>| -> BTreeSet<usize> {
+            if range.is_empty() {
+                return BTreeSet::new();
+            }
+            let page = |byte: u64| (byte / WASM_PAGE_SIZE_IN_BYTES as u64) as usize;
+            (page(range.start)..=page(range.end - 1)).collect()
+        };
+        let new_pages = pages_of(&first)
+            .union(&pages_of(&second))
+            .filter(|page| !accessed.contains(page))
+            .count();
+        let expected = accessed.len() + new_pages <= limit;
+        assert_eq!(
+            tracker.check_ranges_fit(first.clone(), second.clone()),
+            expected,
+            "accessed={accessed:?} limit={limit} first={first:?} second={second:?}"
+        );
+        assert_eq!(tracker.check_ranges_fit(second, first), expected);
     }
 }

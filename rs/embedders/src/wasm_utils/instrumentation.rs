@@ -21,7 +21,7 @@
 //! counter overflows, the value of the counter is the initial value minus the
 //! sum of cost of all executed instructions.
 //!
-//! In more details, first, it inserts up to five System API functions:
+//! In more details, first, it inserts six System API functions:
 //!
 //! ```wasm
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
@@ -29,8 +29,10 @@
 //! (import "__" "try_grow_stable_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
 //! (import "__" "internal_trap" (func (;1;) ((param i32))))
 //! (import "__" "stable_read_first_access" (func ((param i64) (param i64) (param i64))))
+//! (import "__" "check_heap_bulk_access" (func ((param i64) (param i64) (param i64) (param i32))))
 //! ```
-//! Where the last three will only be inserted if Wasm-native stable memory is enabled.
+//! The last one is the slow path of the heap page limit check that is
+//! injected before every bulk memory operation on the heap.
 //!
 //! It then inserts (and exports) a global mutable counter:
 //! ```wasm
@@ -165,6 +167,7 @@ pub(crate) struct InjectedFunctions {
     pub try_grow_stable_memory: u32,
     pub internal_trap: u32,
     pub stable_read_first_access: u32,
+    pub check_heap_bulk_access: u32,
 }
 
 // Gets the cost of an instruction.
@@ -713,6 +716,7 @@ const TRY_GROW_WASM_MEMORY_FUN_NAME: &str = "try_grow_wasm_memory";
 const TRY_GROW_STABLE_MEMORY_FUN_NAME: &str = "try_grow_stable_memory";
 const INTERNAL_TRAP_FUN_NAME: &str = "internal_trap";
 const STABLE_READ_FIRST_ACCESS_NAME: &str = "stable_read_first_access";
+const CHECK_HEAP_BULK_ACCESS_FUN_NAME: &str = "check_heap_bulk_access";
 const TABLE_STR: &str = "table";
 pub(crate) const INSTRUCTIONS_COUNTER_GLOBAL_NAME: &str = "canister counter_instructions";
 pub(crate) const DIRTY_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_dirty_pages";
@@ -787,12 +791,23 @@ fn inject_helper_functions(
         fr_type_idx,
     );
 
+    let chba_type_idx = module.types.add_func_type(
+        &[DataType::I64, DataType::I64, DataType::I64, DataType::I32],
+        &[],
+    );
+    let (check_heap_bulk_access_fn_id, _) = module.add_import_func(
+        INSTRUMENTED_FUN_MODULE.to_string(),
+        CHECK_HEAP_BULK_ACCESS_FUN_NAME.to_string(),
+        chba_type_idx,
+    );
+
     InjectedFunctions {
         out_of_instructions: *out_of_instructions_fn_id,
         try_grow_wasm_memory: *try_grow_wasm_memory_fn_id,
         try_grow_stable_memory: *try_grow_stable_memory_fn_id,
         internal_trap: *internal_trap_fn_id,
         stable_read_first_access: *stable_read_first_access_fn_id,
+        check_heap_bulk_access: *check_heap_bulk_access_fn_id,
     }
 }
 
@@ -801,15 +816,199 @@ pub(super) struct InjectedCounters {
     pub instructions_counter: u32,
     pub dirty_pages_counter: u32,
     pub accessed_pages_counter: u32,
-    /// Remaining number of Wasm heap pages that may be accessed. Not read by
-    /// the instrumentation yet; it is maintained for the heap page limit
-    /// pre-checks of bulk memory operations.
+    /// Remaining number of Wasm heap pages that may be accessed. Read by the
+    /// heap bulk check functions; the injected stable memory bodies do not
+    /// check it yet.
     #[allow(dead_code)]
     pub heap_page_budget: u32,
     /// Function to decrement the instruction counter.
     pub decr_instruction_counter_fn: u32,
     /// Function to count clean pages.
     pub count_clean_pages_fn: u32,
+    /// Functions that charge instructions for a bulk memory operation on the
+    /// heap and check it against the heap page budget.
+    pub heap_bulk_check_fns: HeapBulkCheckFns,
+}
+
+/// The bulk memory operations on the heap, which differ in which of their
+/// operands are heap addresses and in the types of their operands.
+#[derive(Copy, Clone, PartialEq, Debug)]
+enum HeapBulkOp {
+    /// `memory.copy`: destination and source are heap addresses.
+    Copy,
+    /// `memory.fill`: `(dst, value, len)`, only the destination is a heap address.
+    Fill,
+    /// `memory.init`: `(dst, segment offset, len)`, only the destination is a
+    /// heap address; the offset and length are `i32` even in Wasm64.
+    Init,
+}
+
+impl HeapBulkOp {
+    /// The operand types of the operation, which are also the parameter and
+    /// result types of its check function.
+    fn operand_types(self, mem_type: WasmMemoryType) -> [DataType; 3] {
+        match (mem_type, self) {
+            (WasmMemoryType::Wasm32, _) => [DataType::I32, DataType::I32, DataType::I32],
+            (WasmMemoryType::Wasm64, Self::Copy) => [DataType::I64, DataType::I64, DataType::I64],
+            (WasmMemoryType::Wasm64, Self::Fill) => [DataType::I64, DataType::I32, DataType::I64],
+            (WasmMemoryType::Wasm64, Self::Init) => [DataType::I64, DataType::I32, DataType::I32],
+        }
+    }
+}
+
+/// Indices of the per-operation heap bulk check functions.
+pub(super) struct HeapBulkCheckFns {
+    copy: u32,
+    fill: u32,
+    init: u32,
+}
+
+impl HeapBulkCheckFns {
+    fn get(&self, op: HeapBulkOp) -> u32 {
+        match op {
+            HeapBulkOp::Copy => self.copy,
+            HeapBulkOp::Fill => self.fill,
+            HeapBulkOp::Init => self.init,
+        }
+    }
+
+    fn contains(&self, func_id: u32) -> bool {
+        [self.copy, self.fill, self.init].contains(&func_id)
+    }
+}
+
+/// Injects the check function for the given bulk memory operation on the heap.
+///
+/// The function takes the three operands of the operation, charges
+/// instructions for its length like `decr_instruction_counter_fn`, checks the
+/// operation against the heap page budget and returns the operands unchanged,
+/// so that it can be called right before the operation.
+///
+/// The check has a fast path in Wasm: the operation touches at most `need`
+/// Wasm pages, the number of pages spanned by its heap ranges. If
+/// `need <= budget`, the operation cannot exceed the limit whatever the state
+/// of the pages. Otherwise `__.check_heap_bulk_access` counts exactly the
+/// pages that are not yet accessed and traps if the operation does not fit.
+fn inject_heap_bulk_check_fn(
+    module: &mut wirm::Module<'_>,
+    mem_type: WasmMemoryType,
+    op: HeapBulkOp,
+    heap_page_budget: u32,
+    decr_instruction_counter_fn: u32,
+    check_heap_bulk_access_fn: u32,
+) -> u32 {
+    use wirm::wasmparser::{BlockType, Operator::*};
+
+    let operand_types = op.operand_types(mem_type);
+    const DST: u32 = 0;
+    const SRC: u32 = 1;
+    const LEN: u32 = 2;
+    // Local holding the length as `i64`.
+    const LEN64: u32 = 3;
+
+    // Pushes the given operand zero-extended to `i64`.
+    let get_as_i64 = |local_index: u32| -> Vec<wirm::wasmparser::Operator<'static>> {
+        match operand_types[local_index as usize] {
+            DataType::I32 => vec![LocalGet { local_index }, I64ExtendI32U],
+            _ => vec![LocalGet { local_index }],
+        }
+    };
+    // Pushes the number of Wasm pages spanned by `[addr, addr + len)` for a
+    // non-zero length: `((addr + len - 1) >> 16) - (addr >> 16) + 1`.
+    // Computed in `i64`, so it does not wrap for Wasm32 operands.
+    let span = |addr: u32| -> Vec<wirm::wasmparser::Operator<'static>> {
+        let mut ops = get_as_i64(addr);
+        ops.extend([
+            LocalGet { local_index: LEN64 },
+            I64Add,
+            I64Const { value: 1 },
+            I64Sub,
+            I64Const {
+                value: WASM_PAGE_SIZE.trailing_zeros() as i64,
+            },
+            I64ShrU,
+        ]);
+        ops.extend(get_as_i64(addr));
+        ops.extend([
+            I64Const {
+                value: WASM_PAGE_SIZE.trailing_zeros() as i64,
+            },
+            I64ShrU,
+            I64Sub,
+            I64Const { value: 1 },
+            I64Add,
+        ]);
+        ops
+    };
+
+    let mut instructions = Vec::new();
+    // Charge instructions for the length, like `decr_instruction_counter_fn`.
+    instructions.extend(get_as_i64(LEN));
+    instructions.extend([
+        LocalTee { local_index: LEN64 },
+        Call {
+            function_index: decr_instruction_counter_fn,
+        },
+        Drop,
+        // Operations of length zero touch no page.
+        LocalGet { local_index: LEN64 },
+        I64Const { value: 0 },
+        I64Ne,
+        If {
+            blockty: BlockType::Empty,
+        },
+    ]);
+    // need = span(dst) [+ span(src)]
+    instructions.extend(span(DST));
+    if op == HeapBulkOp::Copy {
+        instructions.extend(span(SRC));
+        instructions.push(I64Add);
+    }
+    instructions.extend([
+        GlobalGet {
+            global_index: heap_page_budget,
+        },
+        I64GtS,
+        If {
+            blockty: BlockType::Empty,
+        },
+    ]);
+    // Slow path: `check_heap_bulk_access(dst, src, len, src_is_heap)`.
+    instructions.extend(get_as_i64(DST));
+    if op == HeapBulkOp::Copy {
+        instructions.extend(get_as_i64(SRC));
+        instructions.extend([LocalGet { local_index: LEN64 }, I32Const { value: 1 }]);
+    } else {
+        instructions.extend([
+            I64Const { value: 0 },
+            LocalGet { local_index: LEN64 },
+            I32Const { value: 0 },
+        ]);
+    }
+    instructions.extend([
+        Call {
+            function_index: check_heap_bulk_access_fn,
+        },
+        End,
+        End,
+        // Return the operands unchanged.
+        LocalGet { local_index: DST },
+        LocalGet { local_index: SRC },
+        LocalGet { local_index: LEN },
+    ]);
+
+    let num_instructions = instructions.len();
+    let instructions_with_offsets = instructions.into_iter().map(|op| (op, 0)).collect();
+    let body = Body {
+        locals: vec![(1, DataType::I64)],
+        num_locals: 1,
+        instructions: Instructions::new(instructions_with_offsets, 0, false),
+        num_instructions,
+        name: None,
+    };
+    let mut builder = FunctionBuilder::new(&operand_types, &operand_types);
+    builder.body = body;
+    *builder.finish_module(module)
 }
 
 fn export_table(mut module: wirm::Module) -> wirm::Module {
@@ -936,6 +1135,7 @@ fn export_additional_symbols<'a>(
     mut module: wirm::Module<'a>,
     injected_functions: &InjectedFunctions,
     stable_memory_index: u32,
+    main_memory_type: WasmMemoryType,
 ) -> (InjectedCounters, wirm::Module<'a>) {
     use wirm::wasmparser::{BlockType, Operator::*, ValType};
 
@@ -1027,6 +1227,30 @@ fn export_additional_symbols<'a>(
     let mut builder = FunctionBuilder::new(&[DataType::I64], &[DataType::I64]);
     builder.body = body;
     let decr_instruction_counter_fn_id = builder.finish_module(&mut module);
+
+    // push the functions checking bulk memory operations on the heap against
+    // the heap page budget
+    let heap_bulk_check_fns = {
+        let mut inject = |op| {
+            inject_heap_bulk_check_fn(
+                &mut module,
+                main_memory_type,
+                op,
+                heap_page_budget,
+                *decr_instruction_counter_fn_id,
+                injected_functions.check_heap_bulk_access,
+            )
+        };
+        let copy = inject(HeapBulkOp::Copy);
+        let fill = inject(HeapBulkOp::Fill);
+        let init = match main_memory_type {
+            // In Wasm32, `memory.fill` and `memory.init` have the same
+            // operand types and heap operands, so they share the function.
+            WasmMemoryType::Wasm32 => fill,
+            WasmMemoryType::Wasm64 => inject(HeapBulkOp::Init),
+        };
+        HeapBulkCheckFns { copy, fill, init }
+    };
 
     // function to count clean pages in a given range
     // Arg 0 - start of the range
@@ -1163,6 +1387,7 @@ fn export_additional_symbols<'a>(
             heap_page_budget,
             decr_instruction_counter_fn: *decr_instruction_counter_fn_id,
             count_clean_pages_fn: *count_clean_pages_fn_id,
+            heap_bulk_check_fns,
         },
         module,
     )
@@ -1186,8 +1411,10 @@ enum CostOperandOnStack {
 }
 // Describes how to calculate the instruction cost at this injection point.
 // `StaticCost` injection points contain information about the cost of the
-// following basic block. `DynamicCost` injection points assume there is an i32
-// on the stack which should be decremented from the instruction counter.
+// following basic block. `DynamicCost` injection points assume there is an
+// integer on the stack which should be decremented from the instruction
+// counter. `HeapBulkOp` injection points precede a bulk memory operation on
+// the heap, whose three operands are on the stack.
 #[derive(Copy, Clone, PartialEq, Debug)]
 enum InjectionPointCostDetail {
     StaticCost {
@@ -1197,6 +1424,7 @@ enum InjectionPointCostDetail {
     DynamicCost {
         operand_on_stack: CostOperandOnStack,
     },
+    HeapBulkOp(HeapBulkOp),
 }
 
 impl InjectionPointCostDetail {
@@ -1205,7 +1433,7 @@ impl InjectionPointCostDetail {
     fn increment_cost(&mut self, additional_cost: u64) {
         match self {
             Self::StaticCost { scope: _, cost } => *cost += additional_cost,
-            Self::DynamicCost { .. } => {}
+            Self::DynamicCost { .. } | Self::HeapBulkOp(_) => {}
         }
     }
 }
@@ -1228,6 +1456,13 @@ impl InjectionPoint {
     fn new_dynamic_cost(position: usize, operand_on_stack: CostOperandOnStack) -> Self {
         InjectionPoint {
             cost_detail: InjectionPointCostDetail::DynamicCost { operand_on_stack },
+            position,
+        }
+    }
+
+    fn new_heap_bulk_op(position: usize, op: HeapBulkOp) -> Self {
+        InjectionPoint {
+            cost_detail: InjectionPointCostDetail::HeapBulkOp(op),
             position,
         }
     }
@@ -1280,25 +1515,35 @@ fn injections(
             }
             // Bulk memory instructions require injected metering __before__ the instruction
             // executes so that size arguments can be read from the stack at runtime.
-            MemoryFill { .. } | MemoryCopy { .. } | TableCopy { .. } | TableFill { .. } => {
-                match mem_type {
-                    WasmMemoryType::Wasm32 => {
-                        // These ops in Wasm32 will need to extend the i32 to i64.
-                        res.push(InjectionPoint::new_dynamic_cost(
-                            position,
-                            CostOperandOnStack::X32Bit,
-                        ));
-                    }
-                    WasmMemoryType::Wasm64 => {
-                        res.push(InjectionPoint::new_dynamic_cost(
-                            position,
-                            CostOperandOnStack::X64Bit,
-                        ));
-                    }
-                }
+            // Canister code can only address the heap (multi-memory is not
+            // enabled), so the bulk memory instructions are also checked
+            // against the heap page budget.
+            MemoryCopy { .. } => {
+                res.push(InjectionPoint::new_heap_bulk_op(position, HeapBulkOp::Copy));
             }
-            // MemoryInit and TableInit have i32 arguments even in 64-bit mode.
-            MemoryInit { .. } | TableInit { .. } => {
+            MemoryFill { .. } => {
+                res.push(InjectionPoint::new_heap_bulk_op(position, HeapBulkOp::Fill));
+            }
+            MemoryInit { .. } => {
+                res.push(InjectionPoint::new_heap_bulk_op(position, HeapBulkOp::Init));
+            }
+            TableCopy { .. } | TableFill { .. } => match mem_type {
+                WasmMemoryType::Wasm32 => {
+                    // These ops in Wasm32 will need to extend the i32 to i64.
+                    res.push(InjectionPoint::new_dynamic_cost(
+                        position,
+                        CostOperandOnStack::X32Bit,
+                    ));
+                }
+                WasmMemoryType::Wasm64 => {
+                    res.push(InjectionPoint::new_dynamic_cost(
+                        position,
+                        CostOperandOnStack::X64Bit,
+                    ));
+                }
+            },
+            // TableInit has i32 arguments even in 64-bit mode.
+            TableInit { .. } => {
                 res.push(InjectionPoint::new_dynamic_cost(
                     position,
                     CostOperandOnStack::X32Bit,
@@ -1339,7 +1584,9 @@ fn inject_metering(
             cost: _,
         } => true,
         InjectionPointCostDetail::StaticCost { scope: _, cost } => cost > 0,
-        InjectionPointCostDetail::DynamicCost { .. } => true,
+        InjectionPointCostDetail::DynamicCost { .. } | InjectionPointCostDetail::HeapBulkOp(_) => {
+            true
+        }
     });
     let orig_elems = body
         .instructions
@@ -1401,6 +1648,15 @@ fn inject_metering(
                         ]);
                     }
                 }
+            }
+            InjectionPointCostDetail::HeapBulkOp(op) => {
+                // The check function takes the three operands of the
+                // operation, charges instructions for its length, checks it
+                // against the heap page budget and returns the operands
+                // unchanged.
+                elems.extend([Call {
+                    function_index: injected_counters.heap_bulk_check_fns.get(op),
+                }]);
             }
         }
         last_injection_position = point.position;
@@ -1599,8 +1855,12 @@ pub(super) fn instrument(
     module = export_mutable_globals(module);
 
     let injected_counters;
-    (injected_counters, module) =
-        export_additional_symbols(module, &injected_functions, stable_memory_index);
+    (injected_counters, module) = export_additional_symbols(
+        module,
+        &injected_functions,
+        stable_memory_index,
+        main_memory_type,
+    );
 
     // Start has be exported as `canister_start` so we can clear it.
     module.start = None;
@@ -1615,6 +1875,7 @@ pub(super) fn instrument(
         .filter(|f| {
             *f.func_id != injected_counters.decr_instruction_counter_fn
                 && *f.func_id != injected_counters.count_clean_pages_fn
+                && !injected_counters.heap_bulk_check_fns.contains(*f.func_id)
         })
     {
         inject_metering(
