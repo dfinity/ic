@@ -462,9 +462,9 @@ pub(crate) enum CanisterAccess {
     /// `canister_metadata`.
     ReadPrivateCustomSection { section_name: String },
     /// Loading the snapshot `snapshot_id` of the canister into the different
-    /// canister `canister_id` via `load_canister_snapshot`.
+    /// canister `target_canister_id` via `load_canister_snapshot`.
     LoadSnapshotIntoOtherCanister {
-        canister_id: CanisterId,
+        target_canister_id: CanisterId,
         snapshot_id: SnapshotId,
     },
 }
@@ -475,15 +475,9 @@ pub(crate) enum CanisterAccess {
 ///
 /// This is the single place defining which senders can call which management
 /// canister methods targeting a canister. It must be called after the method's
-/// payload has been decoded and `canister` has been looked up. A method
-/// targeting more than one canister must call it once per targeted canister,
-/// passing the access required on that canister (e.g., `install_chunked_code`
-/// validates its target canister as `CanisterAccess::Method` and its store
-/// canister as `CanisterAccess::InstallChunkedCodeStore`). Likewise, a method
-/// whose access control depends on more than the targeted canister validates
-/// the additional access separately (e.g., `canister_metadata` validates
-/// reading a private custom section as
-/// `CanisterAccess::ReadPrivateCustomSection`).
+/// payload has been decoded and `canister` has been looked up. A method that
+/// needs more than one access (e.g., to several canisters) must call it once
+/// per access, passing the corresponding `CanisterAccess`.
 ///
 /// The `subnet_admins` are only taken into account if the subnet can have
 /// subnet admins (see `can_have_subnet_admins`).
@@ -501,11 +495,9 @@ pub(crate) enum CanisterAccess {
 /// that are not gated on the targeted canister at all (e.g., `create_canister`,
 /// `list_canisters`, or the provisional methods, which are gated on the subnet
 /// admins and the provisional whitelist, respectively) and `canister_metadata`,
-/// whose access control depends on the visibility of the requested custom
-/// section and is validated as `CanisterAccess::ReadPrivateCustomSection` for
-/// private custom sections. In contrast, `canister_info` and `deposit_cycles`
-/// are accepted for every sender: they target a canister but are subject to no
-/// access control.
+/// whose access control depends on the requested custom section. In contrast,
+/// `canister_info` and `deposit_cycles` are accepted for every sender: they
+/// target a canister but are subject to no access control.
 fn validate_sender(
     sender: &PrincipalId,
     access: CanisterAccess,
@@ -569,7 +561,7 @@ fn validate_sender(
 
         // Reading a private custom section requires being a controller of the
         // canister. Other senders get the same error as for a missing custom
-        // section, which `canister_metadata` has always returned for them.
+        // section.
         CanisterAccess::ReadPrivateCustomSection { section_name } => {
             if canister.controllers().contains(sender) {
                 Ok(())
@@ -584,7 +576,7 @@ fn validate_sender(
         // Loading the snapshot of a canister into a different canister
         // requires being a controller of the canister owning the snapshot.
         CanisterAccess::LoadSnapshotIntoOtherCanister {
-            canister_id,
+            target_canister_id,
             snapshot_id,
         } => {
             if canister.controllers().contains(sender) {
@@ -592,7 +584,7 @@ fn validate_sender(
             } else {
                 Err(CanisterManagerError::CanisterSnapshotNotController {
                     sender: *sender,
-                    canister_id,
+                    canister_id: target_canister_id,
                     snapshot_id,
                 })
             }
@@ -1392,7 +1384,7 @@ mod test {
                     section_name: "section".to_string(),
                 },
                 CanisterAccess::LoadSnapshotIntoOtherCanister {
-                    canister_id: CanisterId::from_u64(43),
+                    target_canister_id: CanisterId::from_u64(43),
                     snapshot_id: SnapshotId::from((canister_id, 0)),
                 },
             ],
