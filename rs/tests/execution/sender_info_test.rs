@@ -170,16 +170,12 @@ impl CanisterSignerIdentity {
     fn sign_bytes(&self, bytes: &[u8]) -> Vec<u8> {
         let fut = self.signer.sign(bytes);
         // The `Identity` trait's `sign*` methods are sync; the underlying
-        // signer is async. `ic-agent` calls `sign` from inside the poll of the
-        // test's own future, and for the first query of a fresh agent it does
-        // so while that query is already in flight (`query_inner` signs the
-        // subnet `read_state` inside a `try_join!`). The test future runs
-        // under `Runtime::block_on`, whose wake-ups arrive through tokio's
-        // thread-local parker; a nested `Handle::block_on` on this thread
-        // would share that parker and swallow the in-flight query's wake-up.
-        // So drive the signing future from a helper thread, which parks on
-        // its own parker. `block_in_place` releases the runtime worker core
-        // while we block, in case this identity is ever used from a worker.
+        // signer is async. ic-agent calls `sign` while a request of the same
+        // future is in flight; a nested `block_on` on this thread shares tokio's
+        // thread-local parker and swallows that request’s wake-up, so block
+        // on a helper thread instead. `block_in_place` releases the runtime
+        // worker core while we block, in case this identity is ever used from
+        // a worker.
         let handle = tokio::runtime::Handle::current();
         #[allow(clippy::disallowed_methods)]
         tokio::task::block_in_place(|| {
