@@ -660,6 +660,9 @@ impl EventLogger for CkBtcEventLogger {
             }
         }
 
+        // Recovers a request orphaned by an older minter version.
+        state.clear_dangling_consolidate_utxos_request();
+
         Ok(state)
     }
 
