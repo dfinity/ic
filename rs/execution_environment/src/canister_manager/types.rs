@@ -589,18 +589,24 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: doc_ref("invalid-subnet-admin"),
             },
             CanisterManagerError::CanisterInvalidController { role, .. } => {
-                let canister = match **role {
-                    ControlledCanisterRole::Target => "the target canister",
-                    ControlledCanisterRole::ChunkStore { .. } => "the store canister",
+                let suggestion = match **role {
+                    ControlledCanisterRole::Target => {
+                        "Execute this call from a controller of the target canister or \
+                        add the current caller as a controller."
+                    }
+                    // The store canister itself can also use its chunks.
+                    ControlledCanisterRole::ChunkStore { .. } => {
+                        "Execute this call from the store canister itself or a controller \
+                        of the store canister, or add the current caller as a controller \
+                        of the store canister."
+                    }
                     ControlledCanisterRole::SnapshotOwner { .. } => {
-                        "the canister owning the snapshot"
+                        "Execute this call from a controller of the canister owning the \
+                        snapshot or add the current caller as a controller of that canister."
                     }
                 };
                 ErrorHelp::UserError {
-                    suggestion: format!(
-                        "Execute this call from a controller of {canister} or \
-                        add the current caller as a controller."
-                    ),
+                    suggestion: suggestion.to_string(),
                     doc_link: doc_ref("invalid-controller"),
                 }
             }
