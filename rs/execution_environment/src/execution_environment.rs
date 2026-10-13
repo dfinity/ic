@@ -6,7 +6,9 @@ use crate::canister_manager::types::{
 };
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
-use crate::execution::common::{canister_info, list_canisters, validate_sender_on_subnet};
+use crate::execution::common::{
+    CanisterAccess, canister_info, list_canisters, validate_sender_on_subnet,
+};
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
 use crate::execution_environment_metrics::{
@@ -4167,12 +4169,9 @@ impl ExecutionEnvironment {
                                 format!("InstallChunkedCode Error: Store canister {} was not found on subnet {} of target canister {}", store_canister_id, state.metadata.own_subnet_id, args.target_canister_id()),
                             )
                         })?;
-                // Using the chunks of the store canister requires the same
-                // permission as `stored_chunks` on the store canister: being
-                // a controller of the store canister or the store canister itself.
                 validate_sender_on_subnet(
                     &origin.origin(),
-                    Ic00Method::StoredChunks,
+                    CanisterAccess::InstallChunkedCodeStore,
                     store_canister,
                     &state.metadata.network_topology,
                     state.metadata.own_subnet_id,
