@@ -64,6 +64,8 @@ jobs:
             fuzzers:
               - ".github/workflows/ci-main.yml"
               - "ci/container/TAG"
+              - "ci/container/ic-build.digest"
+              - "ci/container/ic-dev.digest"
               - "bin/fuzzing/*.sh"
               - "**/BUILD.bazel"
               - "**/*.bzl"
@@ -742,6 +744,8 @@ jobs:
               - "**/*.lock"
               - "ci/scripts/rust-lint.sh"
               - "ci/container/TAG"
+              - "ci/container/ic-build.digest"
+              - "ci/container/ic-dev.digest"
               - ".github/**"
       - name: Run Cargo ${{ matrix.name }} Linux
         if: |
