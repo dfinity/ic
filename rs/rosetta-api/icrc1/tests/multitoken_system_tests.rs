@@ -848,9 +848,7 @@ fn test_blocks() {
                                 .block(
                                     icrc1_ledgers[0].network_identifier().clone(),
                                     PartialBlockIdentifier {
-                                        hash: Some(hex::encode(
-                                            block.clone().get_block_hash(),
-                                        )),
+                                        hash: Some(hex::encode(block.clone().get_block_hash())),
                                         index: Some(block.index),
                                     },
                                 )
@@ -1023,9 +1021,7 @@ fn test_block_transaction() {
                                         hash: hex::encode(block.clone().get_block_hash()),
                                     },
                                     TransactionIdentifier {
-                                        hash: hex::encode(
-                                            block.clone().get_transaction_hash(),
-                                        ),
+                                        hash: hex::encode(block.clone().get_transaction_hash()),
                                     },
                                 )
                                 .await
@@ -1041,14 +1037,10 @@ fn test_block_transaction() {
                                         icrc1_ledgers[0].network_identifier(),
                                         BlockIdentifier {
                                             index: u64::MAX,
-                                            hash: hex::encode(
-                                                block.clone().get_block_hash()
-                                            ),
+                                            hash: hex::encode(block.clone().get_block_hash()),
                                         },
                                         TransactionIdentifier {
-                                            hash: hex::encode(
-                                                block.clone().get_transaction_hash()
-                                            )
+                                            hash: hex::encode(block.clone().get_transaction_hash())
                                         }
                                     )
                                     .await
@@ -1262,35 +1254,17 @@ fn test_network_status() {
                         );
 
                         assert_eq!(
-                            hex::encode(
-                                rosetta_blocks
-                                    .first()
-                                    .unwrap()
-                                    .clone()
-                                    .get_block_hash()
-                            ),
+                            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash()),
                             rosetta_response.genesis_block_identifier.hash,
                             "Genesis block hashes do not match"
                         );
                         assert_eq!(
-                            hex::encode(
-                                rosetta_blocks
-                                    .last()
-                                    .unwrap()
-                                    .clone()
-                                    .get_block_hash()
-                            ),
+                            hex::encode(rosetta_blocks.last().unwrap().clone().get_block_hash()),
                             rosetta_response.current_block_identifier.hash,
                             "Current block hashes do not match"
                         );
                         assert_eq!(
-                            hex::encode(
-                                rosetta_blocks
-                                    .first()
-                                    .unwrap()
-                                    .clone()
-                                    .get_block_hash()
-                            ),
+                            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash()),
                             rosetta_response.oldest_block_identifier.unwrap().hash,
                             "Genesis block hashes do not match"
                         );
