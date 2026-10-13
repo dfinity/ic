@@ -353,6 +353,13 @@ impl Fixture {
         );
     }
 
+    /// Deletes the PocketIC instance. The non-blocking client has no `Drop`, so
+    /// without this call the instance, its subnets and their sandbox processes
+    /// would stay alive in the server until the test binary exits.
+    async fn teardown(self) {
+        self.pocket_ic.drop().await;
+    }
+
     fn gateway_env(&self) -> Option<String> {
         std::fs::read_to_string(&self.env_dump).ok()
     }
@@ -422,6 +429,8 @@ async fn the_operators_configuration_reaches_ic_gateway() {
     );
     // The shipped file stays the base layer.
     assert!(env.contains("LISTEN_PLAIN=[::]:80"), "{env}");
+
+    fixture.teardown().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -456,6 +465,8 @@ async fn ic_gateway_restarts_only_when_the_configuration_changes() {
     fixture.await_gateway_serving(OTHER_BASE_DOMAIN).await;
 
     assert_ne!(fixture.gateway_pid(), Some(pid));
+
+    fixture.teardown().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -481,6 +492,8 @@ async fn an_incomplete_configuration_leaves_ic_gateway_down() {
     assert_eq!(fixture.published_config(), None);
     assert!(!fixture.processes.is_ic_gateway_running());
     assert_eq!(fixture.gateway_env(), None);
+
+    fixture.teardown().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -497,6 +510,8 @@ async fn the_management_canister_names_the_operator() {
         .expect("the management canister should name an operator");
 
     assert_eq!(operator.get().0, fixture.operator);
+
+    fixture.teardown().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -514,6 +529,8 @@ async fn a_subnet_without_an_operator_is_a_failure() {
         .expect_err("an engine with no operator on file cannot resolve one");
 
     assert_matches!(err, CloudEngineError::Failed(msg) if msg.contains("does not know an operator"));
+
+    fixture.teardown().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -532,6 +549,8 @@ async fn an_operator_that_does_not_recognize_this_node_is_not_ready() {
 
     // Not a failure: the operator is ours, it has just not seen this node yet.
     assert_matches!(err, CloudEngineError::NotReady);
+
+    fixture.teardown().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -570,4 +589,6 @@ async fn an_operator_that_stays_unauthorized_is_resolved_again() {
     // answers, so the engine recovers on its own.
     assert_eq!(fixture.fetches(OUTCOME_OK), 1);
     assert!(fixture.published_config().is_some());
+
+    fixture.teardown().await;
 }
