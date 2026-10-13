@@ -66,11 +66,7 @@ use tempfile::NamedTempFile;
 
 // A short DKG interval makes the app subnet halt faster, as it halts at the next CUP height.
 const DKG_INTERVAL: u64 = 14;
-// The system subnet's first signed CUP, after its first DKG interval, holds all keys (vetKD too).
-// It must exist when `test_extract_master_public_keys` first downloads a CUP, or that test panics.
-// The subnet must also answer the recovery's `SetupInitialDKG` request within 4-5 DKG intervals,
-// which include the 10-20s until it can use the registry version that the test creates right
-// before the recovery. At most 5 blocks per second, 4 intervals of 49+1 blocks take at least 40s.
+// Slightly higher DKG interval length to allow all remote DKGs to be completed
 const SYSTEM_SUBNET_DKG_INTERVAL: u64 = 49;
 const NODES_COUNT: usize = 4;
 
