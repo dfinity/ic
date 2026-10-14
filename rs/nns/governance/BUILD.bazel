@@ -106,7 +106,6 @@ DEPENDENCIES = [
     "@crate_index//:candid_parser",
     "@crate_index//:chrono_canisters",
     "@crate_index//:comparable",
-    "@crate_index//:dyn-clone",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",

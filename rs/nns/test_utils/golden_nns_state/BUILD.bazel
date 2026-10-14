@@ -39,9 +39,7 @@ rust_library(
         "//rs/registry/subnet_type",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
-        "//rs/types/types",
         "@crate_index//:serde_json",
-        "@crate_index//:tempfile",
     ],
 )
 
@@ -56,8 +54,6 @@ rust_test(
         "//rs/registry/subnet_type",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
-        "//rs/types/types",
         "@crate_index//:serde_json",
-        "@crate_index//:tempfile",
     ],
 )

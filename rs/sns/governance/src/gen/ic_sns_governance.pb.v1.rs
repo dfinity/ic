@@ -144,6 +144,13 @@ pub struct Neuron {
     /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
     #[prost(message, optional, tag = "19")]
     pub topic_followees: ::core::option::Option<neuron::TopicFollowees>,
+    /// The neuron's positive reward shares from its most recent participating reward event,
+    /// tagged with that event's end timestamp. Consumers must compare this timestamp with
+    /// `latest_reward_event.end_timestamp_seconds`. An absent value or a different timestamp means
+    /// that the neuron had zero shares in the target event. A neuron might have a stale value here
+    /// from an earlier voting reward event because old values are not cleaned up.
+    #[prost(message, optional, tag = "20")]
+    pub latest_reward_event_participation: ::core::option::Option<neuron::RewardEventParticipation>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10e-8 of a governance token.
     ///
@@ -253,6 +260,28 @@ pub mod neuron {
     pub struct TopicFollowees {
         #[prost(btree_map = "int32, message", tag = "1")]
         pub topic_id_to_followees: ::prost::alloc::collections::BTreeMap<i32, FolloweesForTopic>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        Eq,
+        Hash,
+        ::prost::Message,
+    )]
+    pub struct RewardEventParticipation {
+        /// The end timestamp of the reward event that calculated these shares.
+        #[prost(uint64, tag = "1")]
+        pub reward_event_end_timestamp_seconds: u64,
+        /// The sum of the neuron's voting power over all
+        /// reward-eligible Yes and No ballots in proposals settled by this event.
+        ///
+        /// Encoded as the canonical big-endian unsigned integer magnitude produced
+        /// by BigUint::to_bytes_be().
+        #[prost(bytes = "vec", tag = "2")]
+        pub reward_shares: ::prost::alloc::vec::Vec<u8>,
     }
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
@@ -1566,6 +1595,11 @@ pub struct ProposalData {
     /// This proposal's topic.
     #[prost(enumeration = "Topic", optional, tag = "25")]
     pub topic: ::core::option::Option<i32>,
+    /// The raw reply bytes returned by the target canister for a successful
+    /// ExecuteGenericNervousSystemFunction call, truncated to at most
+    /// MAX_SCALAR_FIELD_LEN_BYTES.
+    #[prost(bytes = "vec", optional, tag = "26")]
+    pub execution_reply: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later
     /// during execution. This varies based on the action of the proposal.
     #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23, 24")]

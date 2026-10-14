@@ -5,10 +5,11 @@
 
 #[cfg(feature = "fuzzing_code")]
 use object::{Object, ObjectSection};
-use once_cell::sync::OnceCell;
 use std::{
+    ffi::OsStr,
     path::{Path, PathBuf},
     process::Command,
+    sync::OnceLock,
 };
 
 use crate::{
@@ -163,20 +164,20 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
     let executable_name = krate.executable_name();
     // In CI we expect the sandbox executable to be in our path so this should
     // succeed.
-    if let Ok(exec_path) = which::which(executable_name) {
+    if let Some(exec_path) = find_in_path(executable_name) {
         println!("Running sandbox with executable {exec_path:?}");
         return Some(vec![exec_path.to_str().unwrap().to_string()]);
     }
 
-    static SANDBOX_COMPILED: OnceCell<()> = OnceCell::new();
-    static LAUNCHER_COMPILED: OnceCell<()> = OnceCell::new();
-    static COMPILER_COMPILED: OnceCell<()> = OnceCell::new();
+    static SANDBOX_COMPILED: OnceLock<()> = OnceLock::new();
+    static LAUNCHER_COMPILED: OnceLock<()> = OnceLock::new();
+    static COMPILER_COMPILED: OnceLock<()> = OnceLock::new();
 
     // When running in a dev environment we expect `cargo` to be in our path and
     // we should be able to find the `canister_sandbox` or `sandbox_launcher`
     // cargo manifest so this should succeed.
-    match (which::which("cargo"), cargo_manifest_for_testing()) {
-        (Ok(path), Some(manifest_path)) => {
+    match (find_in_path("cargo"), cargo_manifest_for_testing()) {
+        (Some(path), Some(manifest_path)) => {
             println!(
                 "Building {executable_name} with cargo {path:?} and manifest {manifest_path:?}"
             );
@@ -199,6 +200,41 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
             ))
         }
         _ => None,
+    }
+}
+
+/// Only for testing purposes.
+/// Looks up an executable by name in the directories listed in the `PATH`
+/// environment variable, like a shell would, and returns the first match.
+fn find_in_path(executable_name: &str) -> Option<PathBuf> {
+    find_in_search_path(executable_name, &std::env::var_os("PATH")?)
+}
+
+/// Looks up an executable by name in the directories of the given
+/// `PATH`-style search path and returns the first match.
+fn find_in_search_path(executable_name: &str, search_path: &OsStr) -> Option<PathBuf> {
+    std::env::split_paths(search_path)
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .map(|dir| dir.join(executable_name))
+        .find(|candidate| is_executable_file(candidate))
+}
+
+/// Returns `true` if `path` points to a regular file that is executable.
+fn is_executable_file(path: &Path) -> bool {
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        metadata.permissions().mode() & 0o111 != 0
+    }
+    #[cfg(not(unix))]
+    {
+        true
     }
 }
 
@@ -324,6 +360,40 @@ fn get_profile_args(current_exe: Option<PathBuf>) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_find_in_search_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin_dir = dir.path().join("bin");
+        std::fs::create_dir(&bin_dir).unwrap();
+        let exe = bin_dir.join("some_exe");
+        std::fs::write(&exe, b"").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        // A non-executable file and a directory with the searched name must not
+        // be picked up.
+        std::fs::write(bin_dir.join("not_exe"), b"").unwrap();
+        std::fs::create_dir(bin_dir.join("a_dir")).unwrap();
+
+        // Includes a directory without the executable and an empty entry, both
+        // of which must be skipped.
+        let search_path =
+            std::env::join_paths([dir.path().to_path_buf(), PathBuf::new(), bin_dir.clone()])
+                .unwrap();
+
+        assert_eq!(find_in_search_path("some_exe", &search_path), Some(exe));
+        #[cfg(unix)]
+        assert_eq!(find_in_search_path("not_exe", &search_path), None);
+        assert_eq!(find_in_search_path("a_dir", &search_path), None);
+        assert_eq!(
+            find_in_search_path("definitely_missing_exe", &search_path),
+            None
+        );
+        assert_eq!(find_in_search_path("some_exe", OsStr::new("")), None);
+    }
 
     #[test]
     fn test_profile_args() {

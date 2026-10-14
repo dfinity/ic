@@ -12,14 +12,12 @@ axum = { workspace = true }
 axum-otel-metrics = { workspace = true }
 clap = { workspace = true }
 duration-string = { workspace = true }
-exitcode = { workspace = true }
 futures-util = { workspace = true }
 http = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 itertools = { workspace = true }
-log = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-prometheus = { workspace = true }
 opentelemetry_sdk = { workspace = true, features = ["metrics"] }
@@ -33,11 +31,12 @@ rustls = { workspace = true }
 rustls-pemfile = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
-simple_logger = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true, features = ["timeout"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]

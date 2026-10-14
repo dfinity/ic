@@ -407,6 +407,7 @@ fn build_types_proto(def: &Path, out: &Path) {
         def.join("types/v1/canister_http.proto"),
         def.join("types/v1/artifact.proto"),
         def.join("types/v1/errors.proto"),
+        def.join("types/v1/upgrade.proto"),
     ];
     compile_protos(config, def, &files);
 }

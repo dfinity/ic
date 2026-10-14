@@ -703,7 +703,7 @@ impl Player {
         let (height, hash_raw) = {
             let height = self.state_manager.latest_state_height();
             self.wait_for_state(height);
-            if let Ok(hash_raw) = self.state_manager.get_state_hash_at(height) {
+            if let Some(hash_raw) = self.get_state_hash(height) {
                 (height, hash_raw)
             } else if self.consensus_pool.is_some() {
                 // The latest state exists in memory only, so it has no hash. Report the
@@ -724,8 +724,7 @@ impl Player {
                          is no persisted state to report",
                     );
                 let hash_raw = self
-                    .state_manager
-                    .get_state_hash_at(height)
+                    .get_state_hash(height)
                     .expect("Failed to get the hash of the highest checkpoint");
                 (height, hash_raw)
             }
@@ -1345,11 +1344,50 @@ pub async fn public_only_for_test_get_changes_since(
     get_changes_since(version, ingress_expiry, perform_query).await
 }
 
+/// Returns all registry records since `version` (exclusive), up to the latest version of the
+/// registry canister.
 async fn get_changes_since(
     version: u64,
     ingress_expiry: Time,
     perform_query: &(impl PerformQuery + Sync),
 ) -> Result<Vec<RegistryRecord>, String> {
+    let mut records = vec![];
+    let mut since = version;
+
+    // The registry canister caps the size of each `get_changes_since` response, so we keep querying
+    // until the latest version is reached.
+    loop {
+        let (page, latest_version) =
+            get_changes_since_page(since, ingress_expiry, perform_query).await?;
+        let Some(page_max_version) = page.iter().map(|r| r.version.get()).max() else {
+            break;
+        };
+
+        println!(
+            "Fetched {} registry records in versions ({since}, {page_max_version}] out of latest \
+            version {latest_version}",
+            page.len()
+        );
+        records.extend(page);
+
+        let is_page_max_in_window = since < page_max_version && page_max_version < latest_version;
+        if !is_page_max_in_window {
+            break;
+        }
+
+        since = page_max_version;
+    }
+
+    Ok(records)
+}
+
+/// Returns the registry records of a single `get_changes_since` response, along with the latest
+/// version of the registry canister reported in that response.
+async fn get_changes_since_page(
+    version: u64,
+    ingress_expiry: Time,
+    perform_query: &(impl PerformQuery + Sync),
+) -> Result<(Vec<RegistryRecord>, u64), String> {
     let payload = serialize_get_changes_since_request(version).unwrap();
     let query = Query {
         source: QuerySource::User {
@@ -1365,7 +1403,7 @@ async fn get_changes_since(
     match perform_query.perform_query(query).await.unwrap() {
         Ok((Ok(wasm_result), _time)) => match wasm_result {
             WasmResult::Reply(v) => {
-                let (high_capacity_deltas, _version) =
+                let (high_capacity_deltas, version) =
                     deserialize_get_changes_since_response(v).map_err(|err| format!("{err:?}"))?;
 
                 // Dechunkify deltas.
@@ -1380,8 +1418,9 @@ async fn get_changes_since(
                     inlined_deltas.push(delta);
                 }
 
-                registry_deltas_to_registry_records(inlined_deltas)
-                    .map_err(|err| format!("{err:?}"))
+                let records = registry_deltas_to_registry_records(inlined_deltas)
+                    .map_err(|err| format!("{err:?}"))?;
+                Ok((records, version))
             }
 
             WasmResult::Reject(e) => Err(format!("Query rejected: {e}")),
@@ -1717,7 +1756,7 @@ fn setup_registry(
 }
 
 /// Returns the state hash for the given height once it is computed. For non-checkpoints heights
-/// [`None`] is returned.
+/// [`None`] is returned, including height 0, which is never a checkpoint.
 ///
 /// Panicks when a permanent error other than `StateNotFullyCertified` is returned.
 fn get_state_hash<T>(
@@ -1725,6 +1764,12 @@ fn get_state_hash<T>(
     log: &ReplicaLogger,
     height: Height,
 ) -> Option<CryptoHashOfState> {
+    // Without any state the state manager reports height 0 as not committed yet forever, so
+    // polling for it would never end.
+    if height == Height::from(0) {
+        return None;
+    }
+
     info!(log, "Polling the state manager for height: {height}.");
 
     loop {
@@ -1936,6 +1981,30 @@ mod tests {
         let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
 
         assert!(state_hash.is_some());
+    }
+
+    #[test]
+    fn get_state_hash_returns_none_for_a_not_fully_certified_state_test() {
+        let mut state_manager = MockStateManager::new();
+        state_manager.expect_get_state_hash_at().return_once(|_| {
+            Err(StateHashError::Permanent(
+                PermanentStateHashError::StateNotFullyCertified(Height::new(1)),
+            ))
+        });
+
+        let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(1));
+
+        assert_eq!(state_hash, None);
+    }
+
+    #[test]
+    fn get_state_hash_returns_none_for_height_0_test() {
+        // Without expectations the mock panics if the state manager is consulted at all.
+        let state_manager = MockStateManager::new();
+
+        let state_hash = get_state_hash(&state_manager, &no_op_logger(), Height::new(0));
+
+        assert_eq!(state_hash, None);
     }
 
     #[test]
@@ -2161,6 +2230,100 @@ mod tests {
                     value: Some(b"derp".to_vec()),
                     version: RegistryVersion::from(50),
                 },
+            ]),
+        );
+    }
+
+    /// Tests that `get_changes_since` keeps querying the registry canister when a response does
+    /// not reach the latest version, e.g. because the canister capped the size of the response,
+    /// whereas `get_changes_since_page` only returns the records of a single response.
+    #[tokio::test]
+    async fn test_get_changes_since_pages_until_latest_version() {
+        const LATEST_VERSION: u64 = 45;
+
+        fn inline_value(version: u64, value: &[u8]) -> HighCapacityRegistryValue {
+            HighCapacityRegistryValue {
+                version,
+                content: Some(high_capacity_registry_value::Content::Value(value.to_vec())),
+                timestamp_nanoseconds: 0,
+            }
+        }
+
+        // Each page is (version requested, deltas replied).
+        let pages = [
+            (
+                42,
+                vec![HighCapacityRegistryDelta {
+                    key: b"a".to_vec(),
+                    values: vec![inline_value(43, b"a43")],
+                }],
+            ),
+            (
+                43,
+                vec![
+                    HighCapacityRegistryDelta {
+                        key: b"a".to_vec(),
+                        values: vec![inline_value(45, b"a45")],
+                    },
+                    HighCapacityRegistryDelta {
+                        key: b"b".to_vec(),
+                        values: vec![inline_value(44, b"b44")],
+                    },
+                ],
+            ),
+        ];
+
+        let mut perform_query = MockPerformQuery::new();
+        for (requested_version, deltas) in pages {
+            let reply = HighCapacityRegistryGetChangesSinceResponse {
+                version: LATEST_VERSION,
+                deltas,
+                error: None,
+            }
+            .encode_to_vec();
+            perform_query
+                .expect_perform_query()
+                .withf(move |query| {
+                    query.method_name == "get_changes_since"
+                        && query.method_payload
+                            == serialize_get_changes_since_request(requested_version).unwrap()
+                })
+                // Once by `get_changes_since_page` and once by `get_changes_since`.
+                .times(2)
+                .returning(move |_query| {
+                    Ok(Ok((
+                        Ok(WasmResult::Reply(reply.clone())),
+                        Time::try_from(SystemTime::now()).unwrap(),
+                    )))
+                });
+        }
+
+        let record = |key: &str, value: &[u8], version: u64| RegistryRecord {
+            key: key.to_string(),
+            value: Some(value.to_vec()),
+            version: RegistryVersion::from(version),
+        };
+
+        // A single page stops short of the latest version, which is reported alongside it.
+        assert_eq!(
+            get_changes_since_page(42, expiry_time_from_now(), &perform_query).await,
+            Ok((vec![record("a", b"a43", 43)], LATEST_VERSION)),
+        );
+        assert_eq!(
+            get_changes_since_page(43, expiry_time_from_now(), &perform_query).await,
+            Ok((
+                vec![record("b", b"b44", 44), record("a", b"a45", 45)],
+                LATEST_VERSION
+            )),
+        );
+
+        // All pages together reach the latest version.
+        assert_eq!(
+            get_changes_since(42, expiry_time_from_now(), &perform_query).await,
+            Ok(vec![
+                record("a", b"a43", 43),
+                record("b", b"b44", 44),
+                record("a", b"a45", 45),
             ]),
         );
     }

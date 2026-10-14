@@ -15,7 +15,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "@crate_index//:ic-stable-structures",
-        "@crate_index//:serde",
     ],
 )
 
@@ -25,6 +24,5 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:ic-stable-structures",
-        "@crate_index//:serde",
     ],
 )

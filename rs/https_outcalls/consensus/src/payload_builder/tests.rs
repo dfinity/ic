@@ -35,6 +35,7 @@ use ic_management_canister_types_private::{
     HttpRequestResourceReport,
 };
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::DELIVERED_CANISTER_HTTP_REQUEST_CONTEXT_TIMEOUT;
 use ic_test_utilities::state_manager::RefMockStateManager;
@@ -49,7 +50,7 @@ use ic_types::{
     batch::{
         CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
         FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
-        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext, slice_to_messages,
     },
     canister_http::{
         CANDID_OVERHEAD_RESERVE_BYTES, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
@@ -88,13 +89,18 @@ const TEST_MAX_PAYLOAD_BYTES: NumBytes = NumBytes::new(2 * MAX_CANISTER_HTTP_PAY
 
 #[test]
 fn default_payload_serializes_to_empty_vec() {
-    assert!(
-        parse::payload_to_bytes(
-            CanisterHttpPayload::default(),
-            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64)
-        )
-        .is_empty()
+    let bytes = parse::payload_to_bytes(
+        CanisterHttpPayload::default(),
+        NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
     );
+    assert!(bytes.is_empty());
+
+    // An empty payload delivers nothing, and reports a zero payload size.
+    let (responses, spent, stats) = CanisterHttpPayloadBuilderImpl::into_messages(&bytes);
+    assert!(responses.is_empty(), "{responses:?}");
+    assert!(spent.initial.is_empty());
+    assert!(spent.asynchronous.is_empty());
+    assert_eq!(stats.payload_bytes, 0);
 }
 
 /// Check that a single well formed request with shares makes it through the block maker
@@ -377,9 +383,7 @@ fn max_responses() {
             });
 
         let parsed_payload = build_and_validate_and_parse_payload(&payload_builder);
-        assert!(
-            parsed_payload.num_non_timeout_responses() <= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
-        );
+        assert!(parsed_payload.num_limited_responses() <= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK);
     })
 }
 
@@ -418,7 +422,7 @@ fn timeouts_bypass_max_responses_per_block() {
 
             let parsed = bytes_to_payload(&payload).expect("Failed to parse payload");
 
-            assert_eq!(parsed.num_non_timeout_responses(), 0);
+            assert_eq!(parsed.num_limited_responses(), 0);
             assert_eq!(parsed.timeouts.len(), num_contexts);
 
             payload_builder
@@ -476,7 +480,7 @@ fn flexible_timeouts_bypass_max_responses_per_block() {
             assert!(parsed.responses.is_empty());
             assert!(parsed.timeouts.is_empty());
             // Flexible timeouts must not count against the per-block response cap.
-            assert_eq!(parsed.num_non_timeout_responses(), 0);
+            assert_eq!(parsed.num_limited_responses(), 0);
 
             // The builder's own honest payload must pass validation.
             payload_builder
@@ -491,7 +495,7 @@ fn flexible_timeouts_bypass_max_responses_per_block() {
     );
 }
 
-/// Divergence responses must be counted by num_non_timeout_responses() and
+/// Divergence responses must be counted by num_limited_responses() and
 /// therefore be subject to the CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK limit
 /// during validation.
 #[test]
@@ -1170,6 +1174,73 @@ fn validate_payload_succeeds_for_valid_non_replicated_response() {
 
         assert!(validation_result.is_ok());
     });
+}
+
+/// The block hash covers the bytes of the payload, so a payload must be exactly the
+/// canonical encoding of its messages: one that decodes to the very same, valid
+/// messages is rejected otherwise.
+#[test]
+fn validate_payload_rejects_a_non_canonical_encoding_of_a_valid_payload() {
+    let subnet_size = 4;
+    test_config_with_http_feature(true, subnet_size, |mut payload_builder, _| {
+        let delegated_node_id = node_test_id(1);
+        let callback_id = CallbackId::from(77);
+        let request_context = CanisterHttpRequestContext {
+            subnet_size: NumberOfNodes::from(subnet_size as u32),
+            ..request_context(Replication::NonReplicated(delegated_node_id))
+        };
+        inject_request_contexts(&mut payload_builder, [(callback_id, request_context)]);
+        let (response, metadata) = test_response_and_metadata(callback_id.get());
+        let mut proof = response_and_metadata_to_proof(&response, &metadata);
+        add_signer_to_proof(&mut proof, delegated_node_id);
+        proof.initial_spent =
+            non_flexible_initial_spent(&proof.proof, NumberOfNodes::from(subnet_size as u32));
+        let canonical = payload_to_bytes(
+            CanisterHttpPayload {
+                responses: vec![proof],
+                ..Default::default()
+            },
+            TEST_MAX_PAYLOAD_BYTES,
+        );
+        let non_canonical = with_unknown_field(&canonical);
+        let validate = |payload: &[u8]| {
+            payload_builder.validate_payload(
+                Height::from(1),
+                &test_proposal_context(&default_validation_context()),
+                payload,
+                &[],
+            )
+        };
+
+        assert_eq!(
+            bytes_to_payload(&non_canonical).unwrap(),
+            bytes_to_payload(&canonical).unwrap()
+        );
+        assert!(validate(&canonical).is_ok());
+        assert_matches!(
+            validate(&non_canonical),
+            Err(ValidationError::InvalidArtifact(
+                InvalidPayloadReason::InvalidCanisterHttpPayload(
+                    InvalidCanisterHttpPayloadReason::DecodeError(ProxyDecodeError::Other(_)),
+                ),
+            ))
+        );
+    });
+}
+
+/// Appends a field that `CanisterHttpResponseMessage` does not have to every message
+/// of the payload: the result decodes to the same messages, but is not what
+/// `payload_to_bytes` writes for them.
+fn with_unknown_field(payload: &[u8]) -> Vec<u8> {
+    let mut bytes = vec![];
+    for message in slice_to_messages::<pb::CanisterHttpResponseMessage>(payload).unwrap() {
+        let mut encoded = prost::Message::encode_to_vec(&message);
+        // Field 15, of wire type varint, with value 0.
+        encoded.extend_from_slice(&[15 << 3, 0]);
+        prost::encoding::encode_varint(encoded.len() as u64, &mut bytes);
+        bytes.extend(encoded);
+    }
+    bytes
 }
 
 #[test]
@@ -2319,7 +2390,7 @@ fn flexible_build_respects_max_responses_per_block() {
         let parsed = build_and_validate_and_parse_payload(&pb);
 
         assert_eq!(
-            parsed.num_non_timeout_responses(),
+            parsed.num_limited_responses(),
             CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
         );
     });
@@ -3276,6 +3347,7 @@ fn flexible_ok_responses_into_messages_success_round_trip() {
     assert_eq!(payloads[1], payload_b);
     assert_eq!(stats.flexible_ok_responses, 1);
     assert_eq!(stats.flexible_ok_responses_candid_failures, 0);
+    assert_eq!(stats.payload_bytes, bytes.len());
 }
 
 #[test]
@@ -3417,6 +3489,7 @@ fn into_messages_emits_initial_spend_reports() {
     assert!(spent.initial.iter().all(|r| r.callback != timeout_callback));
     assert!(spent.asynchronous.is_empty());
     assert_eq!(stats.out_of_cycles, 1);
+    assert_eq!(stats.payload_bytes, bytes.len());
 
     let signers: BTreeSet<NodeId> = [node_test_id(0), node_test_id(1)].into_iter().collect();
     let report = |callback: CallbackId| {
@@ -7711,17 +7784,31 @@ fn setup_test_with_delivered_contexts(
     delivered: Vec<(CallbackId, CanisterHttpRequestContext)>,
     run: impl FnOnce(CanisterHttpPayloadBuilderImpl, Arc<RwLock<CanisterHttpPoolImpl>>),
 ) {
+    setup_test_with_active_and_delivered_contexts(num_nodes, vec![], delivered, run);
+}
+
+/// Like [`setup_test_with_contexts`], but with both `active` contexts, awaiting a
+/// response, and `delivered` ones, awaiting their asynchronous receipts.
+fn setup_test_with_active_and_delivered_contexts(
+    num_nodes: usize,
+    active: Vec<(CallbackId, CanisterHttpRequestContext)>,
+    delivered: Vec<(CallbackId, CanisterHttpRequestContext)>,
+    run: impl FnOnce(CanisterHttpPayloadBuilderImpl, Arc<RwLock<CanisterHttpPoolImpl>>),
+) {
     // The context's subnet size must match the subnet the test registers, since
     // payload building and validation source the subnet size from the context.
-    let delivered: Vec<_> = delivered
-        .into_iter()
-        .map(|(cb, mut ctx)| {
-            ctx.subnet_size = NumberOfNodes::from(num_nodes as u32);
-            (cb, ctx)
-        })
-        .collect();
+    let with_subnet_size = |contexts: Vec<(CallbackId, CanisterHttpRequestContext)>| {
+        contexts
+            .into_iter()
+            .map(|(cb, mut ctx)| {
+                ctx.subnet_size = NumberOfNodes::from(num_nodes as u32);
+                (cb, ctx)
+            })
+            .collect::<Vec<_>>()
+    };
+    let (active, delivered) = (with_subnet_size(active), with_subnet_size(delivered));
     test_config_with_http_feature(true, num_nodes, |mut payload_builder, pool| {
-        inject_contexts(&mut payload_builder, [], delivered, None);
+        inject_contexts(&mut payload_builder, active, delivered, None);
         run(payload_builder, pool);
     });
 }
@@ -7821,10 +7908,10 @@ fn fully_replicated_contexts(
 
 pub(crate) fn request_context(replication: Replication) -> CanisterHttpRequestContext {
     CanisterHttpRequestContext {
-        request: RequestBuilder::default().build(),
+        request: RequestBuilder::default().build_arc(),
         url: "https://example.com".to_string(),
         max_response_bytes: None,
-        headers: vec![],
+        headers: Arc::new(vec![]),
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: None,
@@ -7873,10 +7960,10 @@ fn flexible_request_context_with_allowance(
     per_replica_allowance: Cycles,
 ) -> CanisterHttpRequestContext {
     CanisterHttpRequestContext {
-        request: RequestBuilder::default().build(),
+        request: RequestBuilder::default().build_arc(),
         url: "https://example.com".to_string(),
         max_response_bytes: None,
-        headers: vec![],
+        headers: Arc::new(vec![]),
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: None,
@@ -8400,15 +8487,78 @@ fn async_receipts_are_reported_for_the_committee_of_every_replication() {
     }
 }
 
-/// Receipts count towards the per-block response limit like any other message, and
-/// are collected across delivered contexts until it is reached.
+/// Receipts do not count towards the per-block response limit: a block that is already
+/// at the response limit still carries every receipt.
 #[test]
-fn async_receipts_of_many_delivered_contexts_stop_at_the_per_block_limit() {
-    // Enough delivered contexts, each answered by every replica, to produce more
-    // receipts than a single block may carry. The subnet size deliberately does not
-    // divide the limit, so that it is reached part-way through a context.
+fn async_receipts_do_not_count_towards_the_per_block_limit() {
+    // Enough requests awaiting a response to reach the per-block response limit on
+    // their own, next to enough delivered contexts, each answered by every replica, to
+    // produce more receipts than that limit.
     let num_nodes = 3;
-    let num_contexts = CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK / num_nodes + 1;
+    let num_active = CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK as u64;
+    let num_delivered = (CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK / num_nodes + 1) as u64;
+    let delivered_ids = num_active..num_active + num_delivered;
+    let active = fully_replicated_contexts(0..num_active);
+    let delivered = delivered_ids
+        .clone()
+        .map(|id| {
+            (
+                CallbackId::new(id),
+                delivered_context(Replication::FullyReplicated, []),
+            )
+        })
+        .collect();
+
+    setup_test_with_active_and_delivered_contexts(
+        num_nodes,
+        active,
+        delivered,
+        |payload_builder, pool| {
+            {
+                let mut pool_access = pool.write().unwrap();
+                for id in 0..num_active {
+                    let (response, metadata) = test_response_and_metadata(id);
+                    let shares = metadata_to_shares(num_nodes, &metadata);
+                    add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
+                    add_received_shares_to_pool(pool_access.deref_mut(), shares[1..].to_vec());
+                }
+                for id in delivered_ids {
+                    let (_, metadata) = test_response_and_metadata(id);
+                    add_received_shares_to_pool(
+                        pool_access.deref_mut(),
+                        metadata_to_shares(num_nodes, &metadata),
+                    );
+                }
+            }
+
+            let payload = build_and_validate_and_parse_payload(&payload_builder);
+
+            assert_eq!(
+                payload.responses.len(),
+                CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
+            );
+            assert_eq!(
+                payload.num_limited_responses(),
+                CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
+            );
+            assert_eq!(
+                payload.async_receipts.len(),
+                num_delivered as usize * num_nodes
+            );
+        },
+    );
+}
+
+/// Receipts are only bounded by the payload size, and are collected across delivered
+/// contexts until the next one no longer fits.
+#[test]
+fn async_receipts_of_many_delivered_contexts_stop_at_the_payload_size_limit() {
+    // Delivered contexts, each answered by every replica. The block has room for a
+    // number of receipts that the subnet size deliberately does not divide, so that it
+    // fills up part-way through a context.
+    let num_nodes = 3;
+    let num_contexts = 4;
+    let receipts_that_fit = 5;
     let contexts: Vec<_> = (0..num_contexts as u64)
         .map(|id| {
             (
@@ -8417,6 +8567,8 @@ fn async_receipts_of_many_delivered_contexts_stop_at_the_per_block_limit() {
             )
         })
         .collect();
+    let (_, metadata) = test_response_and_metadata(0);
+    let receipt_size = metadata_to_share(0, &metadata).count_bytes();
 
     setup_test_with_delivered_contexts(num_nodes, contexts, |payload_builder, pool| {
         {
@@ -8430,12 +8582,11 @@ fn async_receipts_of_many_delivered_contexts_stop_at_the_per_block_limit() {
             }
         }
 
-        let payload = build_and_validate_and_parse_payload(&payload_builder);
+        let max_size = NumBytes::new((receipts_that_fit * receipt_size + 1) as u64);
+        let payload =
+            build_and_validate_and_parse_payload_with_max_size(&payload_builder, max_size);
 
-        assert_eq!(
-            payload.async_receipts.len(),
-            CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
-        );
+        assert_eq!(payload.async_receipts.len(), receipts_that_fit);
         // The last context that fits is only partly reported, i.e. collecting stops
         // mid-context rather than at a context boundary.
         assert_eq!(
@@ -8445,7 +8596,7 @@ fn async_receipts_of_many_delivered_contexts_stop_at_the_per_block_limit() {
                 .map(|share| share.content.id())
                 .collect::<BTreeSet<_>>()
                 .len(),
-            CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK.div_ceil(num_nodes)
+            receipts_that_fit.div_ceil(num_nodes)
         );
     });
 }

@@ -133,7 +133,7 @@ pub struct GuestOSConfig {
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, securefmt::Debug, PartialEq, Eq, Clone, Default)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Default)]
 pub struct ICOSSettings {
     /// The node reward type determines node rewards
     pub node_reward_type: Option<String>,
@@ -145,8 +145,7 @@ pub struct ICOSSettings {
     pub deployment_environment: DeploymentEnvironment,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
-    /// PEM-encoded Node Operator private key
-    #[sensitive]
+    /// PEM-encoded Node Operator private key. Redacted by the `Debug` impl below.
     pub node_operator_private_key: Option<String>,
     /// Whether SEV-SNP should be enabled. This is configured when the machine is deployed.
     /// If the value is enabled, we check during deployment that SEV-SNP is supported
@@ -168,6 +167,25 @@ pub struct ICOSSettings {
     /// use_ssh_authorized_keys triggers the use of the ssh keys directory
     pub use_ssh_authorized_keys: bool,
     pub icos_dev_settings: ICOSDevSettings,
+}
+
+/// Hand-written so that the sensitive `node_operator_private_key` is never printed.
+impl std::fmt::Debug for ICOSSettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ICOSSettings")
+            .field("node_reward_type", &self.node_reward_type)
+            .field("mgmt_mac", &self.mgmt_mac)
+            .field("deployment_environment", &self.deployment_environment)
+            .field("nns_urls", &self.nns_urls)
+            .field("node_operator_private_key", &format_args!("<redacted>"))
+            .field(
+                "enable_trusted_execution_environment",
+                &self.enable_trusted_execution_environment,
+            )
+            .field("use_ssh_authorized_keys", &self.use_ssh_authorized_keys)
+            .field("icos_dev_settings", &self.icos_dev_settings)
+            .finish()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
@@ -380,6 +398,22 @@ mod tests {
     use super::*;
     use serde_json::Value;
     use std::collections::HashSet;
+
+    #[test]
+    fn icos_settings_debug_redacts_node_operator_private_key() {
+        let settings = ICOSSettings {
+            node_operator_private_key: Some("-----BEGIN PRIVATE KEY-----".to_string()),
+            ..Default::default()
+        };
+        let debug = format!("{settings:?}");
+        assert!(
+            debug.contains("node_operator_private_key: <redacted>"),
+            "{debug}"
+        );
+        assert!(!debug.contains("BEGIN PRIVATE KEY"), "{debug}");
+        // The remaining fields are still printed.
+        assert!(debug.contains("deployment_environment: "), "{debug}");
+    }
 
     #[test]
     fn test_guest_vm_type_forward_compatibility() -> Result<(), Box<dyn std::error::Error>> {

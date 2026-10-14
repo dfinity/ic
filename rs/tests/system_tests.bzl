@@ -60,7 +60,7 @@ def system_test(
         If "local" the non `_local` variants will be tagged as "manual".
         If None, both the `_local` and the non `_local` variants won't be tagged as "manual" and will run by default.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
-      enable_uvm: if True, depend on the @farm_universal_vm_img for local system-tests.
+      enable_uvm: if True, depend on //rs/tests:universal_vm_img (the Universal VM disk image) for local system-tests.
       enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
       prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
       prometheus_vm_resources: a structure describing the required resources of the PrometheusVm. For example:
@@ -300,12 +300,13 @@ def system_test(
         _local_only_deps[image_name + "_PATH"] = image_path
 
     if enable_uvm:
-        _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "@farm_universal_vm_img//file"
+        _local_only_deps["ENV_DEPS__UNIVERSAL_VM_DISK_IMG_PATH"] = "//rs/tests:universal_vm_img"
 
     if enable_metrics:
-        _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "@farm_prometheus_vm_img//file"
+        _local_only_deps["ENV_DEPS__PROMETHEUS_VM_DISK_IMG_PATH"] = "//rs/tests:prometheus_vm_img"
 
     _local_only_deps["ENV_DEPS__DNSMASQ_PATH"] = "@dnsmasq//:dnsmasq"
+    _local_only_deps["ENV_DEPS__NTP_DAEMON_PATH"] = "//:ntp_daemon"
     _local_only_deps["ENV_DEPS__QEMU_IMG_PATH"] = "@qemu_img_prebuilt_linux_amd64//:qemu-img"
     _local_only_deps["ENV_DEPS__QEMU_SYSTEM_X86_64_PATH"] = "@qemu_system_bin_prebuilt_linux_amd64_x86_64_softmmu//:qemu-system-x86_64"
     _local_only_deps["ENV_DEPS__QEMU_SYSTEM_DATA_PATH"] = "@qemu_system_data_prebuilt_linux_amd64//:qemu-system-data"
@@ -316,11 +317,12 @@ def system_test(
     _local_only_deps["ENV_DEPS__OVMF_CODE_PATH"] = "//:OVMF_CODE_4M.fd"
     _local_only_deps["ENV_DEPS__OVMF_VARS_PATH"] = "//:OVMF_VARS_4M.fd"
 
-    # The dev root CA, which the local backend's ic-gateway uses to issue its TLS
-    # certificate: every dev IC-OS image installs this CA into
-    # /usr/local/share/ca-certificates in the `output_dev` stage of the GuestOS and
-    # HostOS Dockerfiles, so a node trusts the gateway with no node-side config.
-    # See `IcGatewayVm::load_or_create_local_playnet`.
+    # The dev root CA, from which the local backend issues the TLS certificates of
+    # its ic-gateway and its time server: every dev IC-OS image installs this CA
+    # into /usr/local/share/ca-certificates in the `output_dev` stage of the
+    # GuestOS and HostOS Dockerfiles, so a node trusts both with no node-side
+    # config. See `IcGatewayVm::load_or_create_local_playnet` and
+    # `LocalBackend::start_time_server`.
     #
     # Local-only on purpose. The Farm backend uses a playnet certificate and never
     # reads these, and a runtime dep reaches *every* variant's runfiles -- which for
@@ -376,8 +378,10 @@ def system_test(
         visibility = visibility,
     )
 
+    farm_test_name = test_name + "_farm"
+
     sh_test(
-        name = test_name,
+        name = farm_test_name,
         srcs = ["//rs/tests:run_systest.sh"],
         data = data,
         env = env | farm_only_env | {
@@ -394,7 +398,7 @@ def system_test(
     # create a colocated version of the test (marked as manual _unless_ the test is tagged with "colocate")
     sh_test(
         srcs = ["//rs/tests:run_systest.sh"],
-        name = test_name + "_colocate",
+        name = farm_test_name + "_colocate",
         data = data + [
             "//rs/tests:colocate_uvm_config_image",
             "//rs/tests/idx:colocate_test_bin",

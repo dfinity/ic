@@ -3,10 +3,13 @@ use crate::types::Response;
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, HypervisorError};
+use ic_interfaces::execution_environment::{
+    CanisterOutOfCyclesError, HypervisorError, SubnetAvailableMemoryError,
+};
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterInstallModeV2, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    Method as Ic00Method,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -228,6 +231,8 @@ impl WasmSource {
 
 #[derive(Clone, Debug)]
 pub struct InstallCodeContext {
+    /// The management canister method (`InstallCode` or `InstallChunkedCode`).
+    pub method: Ic00Method,
     pub origin: CanisterChangeOrigin,
     pub mode: CanisterInstallModeV2,
     pub canister_id: CanisterId,
@@ -269,6 +274,7 @@ impl InstallCodeContext {
             InstallCodeContextError::InvalidHash(format!("Invalid wasm hash {hash:?}"))
         })?;
         Ok(InstallCodeContext {
+            method: Ic00Method::InstallChunkedCode,
             origin,
             mode: args.mode,
             canister_id,
@@ -294,6 +300,7 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
         let canister_id = CanisterId::unchecked_from_principal(args.canister_id);
 
         Ok(InstallCodeContext {
+            method: Ic00Method::InstallCode,
             origin,
             mode: args.mode,
             canister_id,
@@ -322,6 +329,10 @@ pub(crate) struct CanisterManagerResponse {
     /// Unflushed checkpoint operations that must be handled
     /// before the next checkpoint.
     pub unflushed_checkpoint_ops: UnflushedCheckpointOps,
+    /// Instructions used by the current request that should only be charged
+    /// upon success. These cover work that is not done while executing the
+    /// request itself, but only later, at checkpoint time.
+    pub instructions_to_charge_on_success: NumInstructions,
     /// (Reject) responses from call contexts that were marked as "deleted" while processing the current request.
     /// Note. A call context is marked as "deleted" when a canister is uninstalled.
     pub deleted_call_context_responses: Vec<Response>,
@@ -515,6 +526,38 @@ pub(crate) enum CanisterManagerError {
     FetchCanisterLogsAccessDenied {
         caller: PrincipalId,
     },
+}
+
+impl From<SubnetAvailableMemoryError> for CanisterManagerError {
+    fn from(err: SubnetAvailableMemoryError) -> Self {
+        let SubnetAvailableMemoryError::InsufficientMemory {
+            execution_requested,
+            guaranteed_response_message_requested,
+            wasm_custom_sections_requested,
+            available_execution,
+            available_guaranteed_response_messages: _,
+            available_wasm_custom_sections,
+        } = err;
+        debug_assert_eq!(
+            guaranteed_response_message_requested,
+            NumBytes::new(0),
+            "no guaranteed response message memory is requested by the `try_decrement` \
+             calls whose error is converted here"
+        );
+        if wasm_custom_sections_requested.get() != 0
+            && wasm_custom_sections_requested.get() as i128 > available_wasm_custom_sections as i128
+        {
+            Self::SubnetWasmCustomSectionCapacityOverSubscribed {
+                requested: wasm_custom_sections_requested,
+                available: NumBytes::new(available_wasm_custom_sections.max(0) as u64),
+            }
+        } else {
+            Self::SubnetMemoryCapacityOverSubscribed {
+                requested: execution_requested,
+                available: NumBytes::new(available_execution.max(0) as u64),
+            }
+        }
+    }
 }
 
 impl AsErrorHelp for CanisterManagerError {

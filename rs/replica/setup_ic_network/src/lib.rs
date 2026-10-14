@@ -16,6 +16,7 @@ use ic_consensus_chain_key::ChainKeyPayloadBuilderImpl;
 use ic_consensus_dkg::DkgBouncer;
 use ic_consensus_idkg::{IDkgBouncer, IDkgStatsImpl};
 use ic_consensus_manager::{AbortableBroadcastChannel, AbortableBroadcastChannelBuilder};
+use ic_consensus_upgrade::payload_builder::UpgradePayloadBuilderImpl;
 use ic_consensus_utils::{
     MAX_CONSENSUS_THREADS, build_thread_pool, crypto::ConsensusCrypto, pool_reader::PoolReader,
 };
@@ -224,6 +225,7 @@ impl AbortableBroadcastChannels {
                 consensus_pool.clone(),
                 artifact_pools.ingress_pool.clone(),
                 artifact_pools.idkg_pool.clone(),
+                artifact_pools.https_outcalls_pool.clone(),
                 bouncers.consensus,
                 metrics_registry.clone(),
                 node_id,
@@ -543,6 +545,8 @@ fn start_consensus(
         metrics_registry,
         log.clone(),
     ));
+
+    let upgrade_payload_builder = Arc::new(UpgradePayloadBuilderImpl);
     // ------------------------------------------------------------------------
 
     let replica_config = ReplicaConfig {
@@ -572,6 +576,7 @@ fn start_consensus(
         https_outcalls_payload_builder,
         Arc::from(query_stats_payload_builder),
         chain_key_payload_builder,
+        upgrade_payload_builder,
         Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
         Arc::clone(&artifact_pools.idkg_pool) as Arc<_>,
         Arc::clone(&dkg_key_manager) as Arc<_>,

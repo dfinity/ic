@@ -13,7 +13,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/ledger_suite/icp:icp_ledger",
-        "//rs/ledger_suite/icp/ledger",
         "//rs/ledger_suite/icp/test_utils",
         "//rs/rosetta-api/icp:rosetta-api",
         "//rs/rosetta-api/icrc1/client:ic-icrc-rosetta-client",
@@ -57,7 +56,6 @@ rust_test_suite(
         "//packages/icrc-ledger-types:icrc_ledger_types_storable",
         "//packages/pocket-ic",
         "//rs/ledger_suite/icp:icp_ledger",
-        "//rs/ledger_suite/icp/ledger",
         "//rs/ledger_suite/icp/test_utils",
         "//rs/nns/constants",
         "//rs/rosetta-api/common/rosetta_core:rosetta-core",

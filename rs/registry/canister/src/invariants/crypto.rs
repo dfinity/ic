@@ -54,7 +54,7 @@ type AllTlsCertificates = BTreeMap<NodeId, X509PublicKeyCert>;
 ///  * At most 1 subnet can be an ECDSA signing subnet for a given key_id (for now)
 ///  * Subnets specified in ECDSA signing subnet lists exists and contain the equivalent key in their configs
 ///  * The high threshold signing public key stored explicitly for a subnet matches the one in the
-///    CUP of the subnet
+///    CUP of the subnet, and the CUP of the subnet has a type set
 ///
 /// It is NOT CHECKED that the crypto keys are fully well-formed or valid, as these
 /// checks are expensive in terms of computation (about 200 times more expensive then just parsing,
@@ -67,7 +67,7 @@ pub(crate) fn check_node_crypto_keys_invariants(
     check_no_orphaned_node_crypto_records(snapshot)?;
     check_chain_key_configs(snapshot)?;
     check_chain_key_signing_subnet_lists(snapshot)?;
-    check_high_threshold_public_key_matches_the_one_in_cup(snapshot)?;
+    check_high_threshold_public_key_and_cup_contents(snapshot)?;
     Ok(())
 }
 
@@ -419,90 +419,103 @@ fn check_no_orphaned_node_crypto_records(
     Ok(())
 }
 
-fn check_high_threshold_public_key_matches_the_one_in_cup(
+fn check_high_threshold_public_key_and_cup_contents(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    println!("{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check_start");
+    println!("{LOG_PREFIX}high_threshold_public_key_and_cup_contents_check_start");
 
-    let mut bad_subnets: Vec<SubnetId> = vec![];
-    let mut ok_subnet_count = 0;
-    let mut bad_subnet_count = 0;
+    let all_subnets = get_subnet_ids_from_snapshot(snapshot);
+    let mut bad_subnets: BTreeSet<SubnetId> = BTreeSet::new();
 
-    for subnet_id in get_subnet_ids_from_snapshot(snapshot) {
+    for subnet_id in all_subnets.iter().copied() {
         let high_threshold_public_key_bytes: Option<PublicKey> = get_value_from_snapshot(
             snapshot,
             make_crypto_threshold_signing_pubkey_key(subnet_id),
         );
         let cup_contents_bytes: Option<CatchUpPackageContents> =
             get_value_from_snapshot(snapshot, make_catch_up_package_contents_key(subnet_id));
-        if let (Some(high_threshold_public_key_proto), Some(cup_contents)) =
-            (high_threshold_public_key_bytes, cup_contents_bytes)
-        {
-            let high_threshold_public_key = match ThresholdSigPublicKey::try_from(
-                high_threshold_public_key_proto,
-            ) {
-                Ok(pk) => pk,
-                Err(e) => {
-                    bad_subnets.push(subnet_id);
-                    bad_subnet_count += 1;
-                    println!(
-                        "{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check: error converting high threshold public key proto to ThresholdSigPublicKey for subnet {subnet_id}: {e:?}"
-                    );
-                    continue;
-                }
-            };
-            let separate_pk_bytes = high_threshold_public_key.into_bytes();
-
-            let initial_ni_dkg_transcript_high_threshold = match cup_contents
-                .initial_ni_dkg_transcript_high_threshold
-            {
-                Some(initial_ni_dkg_transcript_high_threshold) => {
-                    initial_ni_dkg_transcript_high_threshold
-                }
-                None => {
-                    bad_subnets.push(subnet_id);
-                    bad_subnet_count += 1;
-                    println!(
-                        "{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check: high threshold public key set, but no high threshold public key in cup contents for subnet {subnet_id}"
-                    );
-                    continue;
-                }
-            };
-            let public_key_bytes_from_cup = match extract_subnet_threshold_sig_public_key(
-                &initial_ni_dkg_transcript_high_threshold,
-            ) {
-                Ok(public_key_bytes_from_cup) => public_key_bytes_from_cup.into_bytes(),
-                Err(e) => {
-                    bad_subnets.push(subnet_id);
-                    bad_subnet_count += 1;
-                    println!(
-                        "{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check: error extracting high threshold public key bytes from cup contents for subnet {subnet_id}: {e:?}"
-                    );
-                    continue;
-                }
-            };
-
-            if separate_pk_bytes != public_key_bytes_from_cup {
-                bad_subnets.push(subnet_id);
-                bad_subnet_count += 1;
+        let high_threshold_public_key_proto = match high_threshold_public_key_bytes {
+            Some(high_threshold_public_key_proto) => high_threshold_public_key_proto,
+            None => {
+                bad_subnets.insert(subnet_id);
                 println!(
-                    "{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check: explicitly set high threshold public key does not match the one in cup contents for subnet {subnet_id}"
+                    "{LOG_PREFIX}high_threshold_public_key_and_cup_contents_check: high threshold public key not found for subnet {subnet_id}"
                 );
-            } else {
-                ok_subnet_count += 1;
+                continue;
             }
-        } else {
-            bad_subnets.push(subnet_id);
-            bad_subnet_count += 1;
+        };
+        let high_threshold_public_key = match ThresholdSigPublicKey::try_from(
+            high_threshold_public_key_proto,
+        ) {
+            Ok(pk) => pk,
+            Err(e) => {
+                bad_subnets.insert(subnet_id);
+                println!(
+                    "{LOG_PREFIX}high_threshold_public_key_and_cup_contents_check: error converting high threshold public key proto to ThresholdSigPublicKey for subnet {subnet_id}: {e:?}"
+                );
+                continue;
+            }
+        };
+        let separate_pk_bytes = high_threshold_public_key.into_bytes();
+
+        let cup_contents = match cup_contents_bytes {
+            Some(cup_contents) => cup_contents,
+            None => {
+                bad_subnets.insert(subnet_id);
+                println!(
+                    "{LOG_PREFIX}high_threshold_public_key_and_cup_contents_check: cup contents not found for subnet {subnet_id}"
+                );
+                continue;
+            }
+        };
+        let initial_ni_dkg_transcript_high_threshold = match cup_contents
+            .initial_ni_dkg_transcript_high_threshold
+        {
+            Some(initial_ni_dkg_transcript_high_threshold) => {
+                initial_ni_dkg_transcript_high_threshold
+            }
+            None => {
+                bad_subnets.insert(subnet_id);
+                println!(
+                    "{LOG_PREFIX}high_threshold_public_key_and_cup_contents_check: high threshold public key set, but no high threshold public key in cup contents for subnet {subnet_id}"
+                );
+                continue;
+            }
+        };
+        let public_key_bytes_from_cup = match extract_subnet_threshold_sig_public_key(
+            &initial_ni_dkg_transcript_high_threshold,
+        ) {
+            Ok(public_key_bytes_from_cup) => public_key_bytes_from_cup.into_bytes(),
+            Err(e) => {
+                bad_subnets.insert(subnet_id);
+                println!(
+                    "{LOG_PREFIX}high_threshold_public_key_and_cup_contents_check: error extracting high threshold public key bytes from cup contents for subnet {subnet_id}: {e:?}"
+                );
+                continue;
+            }
+        };
+
+        if separate_pk_bytes != public_key_bytes_from_cup {
+            bad_subnets.insert(subnet_id);
             println!(
-                "{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check: high threshold public key and/or cup contents not found for subnet {subnet_id}"
+                "{LOG_PREFIX}high_threshold_public_key_and_cup_contents_check: explicitly set high threshold public key does not match the one in cup contents for subnet {subnet_id}"
             );
+            continue;
+        }
+
+        // Also, check that the cup contents has a type set
+        if cup_contents.cup_type.is_none() {
+            bad_subnets.insert(subnet_id);
+            println!(
+                "{LOG_PREFIX}high_threshold_public_key_and_cup_contents_check: cup contents for subnet {subnet_id} has no cup_type set"
+            );
+            continue;
         }
     }
     let result = if !bad_subnets.is_empty() {
         Err(InvariantCheckError {
             msg: format!(
-                "high_threshold_public_key and cup_contents are inconsistent for subnet(s) {}",
+                "high_threshold_public_key and/or cup_contents are invalid for subnet(s) {}",
                 bad_subnets
                     .iter()
                     .map(|s| s.to_string())
@@ -515,12 +528,14 @@ fn check_high_threshold_public_key_matches_the_one_in_cup(
         Ok(())
     };
     let label = if result.is_ok() {
-        "high_threshold_public_key_matches_the_one_in_cup_check_success"
+        "high_threshold_public_key_and_cup_contents_check_success"
     } else {
-        "high_threshold_public_key_matches_the_one_in_cup_check_failure"
+        "high_threshold_public_key_and_cup_contents_check_failure"
     };
     println!(
-        "{LOG_PREFIX}{label}: # of ok subnets: {ok_subnet_count}, # of bad subnets: {bad_subnet_count}, result: {result:?}"
+        "{LOG_PREFIX}{label}: # of ok subnets: {ok_subnet_count}, # of bad subnets: {bad_subnet_count}, result: {result:?}",
+        ok_subnet_count = all_subnets.len() - bad_subnets.len(),
+        bad_subnet_count = bad_subnets.len()
     );
     result
 }

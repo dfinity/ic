@@ -59,20 +59,20 @@ jobs:
       group: zh1
       labels: dind-large
     container: *container-setup
-    timeout-minutes: 120
+    timeout-minutes: 130
     environment: Nightly Tests
     steps:
       - *checkout
       - uses: ./.github/actions/netrc
       - *backup-pod-access
       - name: Run NNS Recovery Test with Mainnet State
+        if: false # TODO: Re-enable once #11768 reaches mainnet NNS
         uses: ./.github/actions/bazel
         with:
           run: |
             bazel test \
-              --config=flaky_retry \
               --config=stamped \
-              //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state_colocate \
+              //rs/tests/nested/nns_recovery:nr_large_with_mainnet_state_farm_colocate \
               --keep_going --test_timeout=7200
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Post Slack Notification
@@ -91,7 +91,7 @@ jobs:
     name: Bazel Test NNS Nightly
     runs-on: *dind-large-setup
     container: *container-setup
-    timeout-minutes: 30
+    timeout-minutes: 45
     environment: Nightly Tests
     steps:
       - *checkout
@@ -103,6 +103,7 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
+              --config=flaky_retry \
               --test_tag_filters=nns_tests_nightly \
               //... \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \

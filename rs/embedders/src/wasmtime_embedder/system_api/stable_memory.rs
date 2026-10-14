@@ -1,5 +1,5 @@
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, TrapCode::HeapOutOfBounds,
+    Heap, HypervisorError, HypervisorResult, TrapCode::HeapOutOfBounds,
 };
 use ic_replicated_state::page_map;
 
@@ -32,7 +32,7 @@ impl StableMemory {
         dst: u64,
         offset: u64,
         size: u64,
-        heap: &mut [u8],
+        heap: &mut Heap<'_>,
     ) -> HypervisorResult<()> {
         let (heap_end, overflow) = dst.overflowing_add(size);
         if overflow || heap_end as usize > heap.len() {
@@ -41,8 +41,10 @@ impl StableMemory {
                 backtrace: None,
             });
         }
-        self.stable_memory_buffer
-            .read(&mut heap[dst as usize..heap_end as usize], offset as usize);
+        // The bounds check above guarantees that `get_mut` only fails the
+        // heap access check.
+        let dst_slice = heap.get_mut("stable_read", dst as usize, size as usize)?;
+        self.stable_memory_buffer.read(dst_slice, offset as usize);
         Ok(())
     }
 }
