@@ -15,12 +15,12 @@ use slog::{Logger, debug, error, info, warn};
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
-    fs::{DirEntry, File, create_dir_all, read_dir, remove_dir_all},
+    fs::{DirEntry, File, create_dir_all, read_dir, remove_dir_all, rename},
     io::Write,
     net::IpAddr,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
     time::{Duration, Instant, SystemTime},
 };
 
@@ -49,6 +49,9 @@ pub(crate) struct BackupHelper {
     pub(crate) versions_hot: usize,
     pub(crate) max_logs_age_to_keep: Option<Duration>,
     pub(crate) artifacts_guard: Mutex<bool>,
+    /// Held while `ic-replay` reads the spool, during which no synced artifacts may be moved
+    /// into the spool.
+    pub(crate) replay_guard: Mutex<()>,
     pub(crate) logs_dir: Arc<Mutex<PathBuf>>,
     pub(crate) daily_replays: usize,
     pub(crate) do_cold_storage: bool,
@@ -88,6 +91,12 @@ impl BackupHelper {
 
     fn spool_dir(&self) -> PathBuf {
         self.spool_root_dir().join(self.subnet_id.to_string())
+    }
+
+    /// Directory into which artifacts are synced before being moved into the spool, see
+    /// [`Self::move_staged_artifacts_to_spool`].
+    fn staging_dir(&self) -> PathBuf {
+        self.root_dir.join(format!("staging/{}", self.subnet_id))
     }
 
     fn local_store_dir(&self) -> PathBuf {
@@ -238,15 +247,27 @@ impl BackupHelper {
             node_ip,
             self.subnet_id
         );
+        // We sync into the staging directory rather than into the spool, which a replay may be
+        // reading at the same time. Files that are already in the spool are not transferred
+        // again. Note that rsync resolves a relative `--compare-dest` against the destination.
+        let spool_dir =
+            std::path::absolute(self.spool_dir()).expect("Failed to resolve the spool directory");
+        let compare_dest = format!("--compare-dest={}", spool_dir.display());
         for _ in 0..RETRIES_RSYNC_HOST {
             let artifacts_guard = self
                 .artifacts_guard
                 .lock()
                 .expect("artifacts mutex lock failed");
+            let staging_dir = create_if_not_exists(self.staging_dir());
             match self.rsync_remote_cmd(
                 remote_dir.clone(),
-                &self.spool_dir().into_os_string(),
-                &["-qam", "--ignore-existing", "--exclude='*.tmp'"],
+                staging_dir.as_os_str(),
+                &[
+                    "-qam",
+                    "--ignore-existing",
+                    "--exclude='*.tmp'",
+                    &compare_dest,
+                ],
             ) {
                 Ok(_) => return true,
                 Err(e) => warn!(
@@ -322,6 +343,11 @@ impl BackupHelper {
             .iter()
             .map(|node| self.rsync_spool(node) as usize)
             .sum();
+        // If a replay is running, the synced artifacts are instead moved into the spool right
+        // before the next replay starts.
+        if let Ok(replay_guard) = self.replay_guard.try_lock() {
+            self.move_staged_artifacts_to_spool(&replay_guard);
+        }
         if 2 * total_succeeded >= nodes.len() {
             let duration = start_time.elapsed();
             info!(
@@ -340,6 +366,32 @@ impl BackupHelper {
     pub(crate) fn create_spool_dir(&self) {
         if !self.spool_dir().exists() {
             create_dir_all(self.spool_dir()).expect("Failure creating a directory");
+        }
+    }
+
+    /// Moves the artifacts synced into the staging directory over to the spool, without
+    /// replacing any artifact already in the spool. Taking the replay guard ensures that the
+    /// spool doesn't change under a running replay.
+    fn move_staged_artifacts_to_spool(&self, _replay_guard: &MutexGuard<'_, ()>) {
+        let _artifacts_guard = self
+            .artifacts_guard
+            .lock()
+            .expect("artifacts mutex lock failed");
+        let staging_dir = self.staging_dir();
+        if !staging_dir.exists() {
+            return;
+        }
+        if let Err(err) = move_new_entries(&staging_dir, &self.spool_dir()) {
+            warn!(
+                self.log,
+                "Failed to move the synced artifacts into the spool: {err}"
+            );
+            return;
+        }
+        // Only directories that already exist in the spool and files that are already in the
+        // spool are left.
+        if let Err(err) = remove_dir_all(&staging_dir) {
+            warn!(self.log, "Failed to clear the staging directory: {err}");
         }
     }
 
@@ -462,6 +514,11 @@ impl BackupHelper {
             .map_err(|err| anyhow!("Failed to download binaries: {err}"))?;
         debug!(self.log, "[#{}] Binaries are downloaded.", self.thread_id);
 
+        // Make the latest synced artifacts available to the replay, and keep the spool unchanged
+        // while the replay reads it.
+        let replay_guard = self.replay_guard.lock().expect("replay mutex lock failed");
+        self.move_staged_artifacts_to_spool(&replay_guard);
+
         let ic_admin = self.binary_file("ic-replay", replica_version);
         let mut cmd = Command::new(ic_admin);
         cmd.arg("--data-root")
@@ -576,12 +633,15 @@ impl BackupHelper {
 
     pub(crate) fn retrieve_spool_top_height(&self) -> u64 {
         let mut spool_top_height = 0;
-        let spool_dirs = collect_spool_dirs(&self.log, self.spool_dir());
-        for spool_dir in spool_dirs {
-            if into_replica_version(&self.log, &spool_dir).is_some() {
-                let (top_height, _) = fetch_top_height(&spool_dir);
-                if spool_top_height < top_height {
-                    spool_top_height = top_height;
+        // Synced artifacts that are not yet moved into the spool count as well.
+        for dir in [self.spool_dir(), self.staging_dir()] {
+            let spool_dirs = collect_spool_dirs(&self.log, dir);
+            for spool_dir in spool_dirs {
+                if into_replica_version(&self.log, &spool_dir).is_some() {
+                    let (top_height, _) = fetch_top_height(&spool_dir);
+                    if spool_top_height < top_height {
+                        spool_top_height = top_height;
+                    }
                 }
             }
         }
@@ -1006,6 +1066,21 @@ fn collect_only_dirs(path: &PathBuf) -> Result<Vec<DirEntry>, String> {
         .collect())
 }
 
+/// Moves every entry of `src` that is missing from `dst` into `dst`, recursing into the
+/// directories present in both. Entries already in `dst` are left untouched.
+fn move_new_entries(src: &Path, dst: &Path) -> std::io::Result<()> {
+    for entry in read_dir(src)? {
+        let entry = entry?;
+        let target = dst.join(entry.file_name());
+        if !target.exists() {
+            rename(entry.path(), target)?;
+        } else if target.is_dir() && entry.file_type()?.is_dir() {
+            move_new_entries(&entry.path(), &target)?;
+        }
+    }
+    Ok(())
+}
+
 fn fetch_top_height(replica_version_dir: &DirEntry) -> (u64, PathBuf) {
     let replica_version_path = replica_version_dir.path();
     let height_bucket = last_dir_height(&replica_version_path, 10);
@@ -1174,6 +1249,72 @@ mod tests {
             .expect("should execute successfully");
 
         assert!(!need_cold_storage_move);
+    }
+
+    #[test]
+    fn move_staged_artifacts_to_spool_test() {
+        let dir = tmpdir("test_dir");
+
+        let backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
+        backup_helper.create_spool_dir();
+        let spool_dir = backup_helper.spool_dir();
+        let staging_dir = backup_helper.staging_dir();
+
+        let write_artifact = |dir: &Path, path: &str, content: &str| {
+            let path = dir.join(path);
+            create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, content).unwrap();
+        };
+        let artifact_in_spool = "replica_version_1/0/1/finalization.bin";
+        let new_artifacts = [
+            // Missing from a height that is already in the spool.
+            "replica_version_1/0/1/notarization.bin",
+            // At a height missing from the spool.
+            "replica_version_1/0/2/finalization.bin",
+            // At a replica version missing from the spool.
+            "replica_version_2/0/3/finalization.bin",
+        ];
+        write_artifact(&spool_dir, artifact_in_spool, "spool");
+        for path in new_artifacts.iter().chain([&artifact_in_spool]) {
+            write_artifact(&staging_dir, path, "staging");
+        }
+
+        let replay_guard = backup_helper.replay_guard.lock().unwrap();
+        backup_helper.move_staged_artifacts_to_spool(&replay_guard);
+
+        let read_artifact = |path: &str| std::fs::read_to_string(spool_dir.join(path)).unwrap();
+        // The artifact that is already in the spool is not replaced.
+        assert_eq!(read_artifact(artifact_in_spool), "spool");
+        for path in new_artifacts {
+            assert_eq!(read_artifact(path), "staging");
+        }
+        assert!(!staging_dir.exists());
+    }
+
+    #[test]
+    fn retrieve_spool_top_height_includes_staged_artifacts_test() {
+        let dir = tmpdir("test_dir");
+
+        let backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
+
+        create_artifacts_dir_with_heights(
+            &backup_helper.spool_dir().join("replica_version_1"),
+            vec![0, 50],
+        );
+        create_artifacts_dir_with_heights(
+            &backup_helper.staging_dir().join("replica_version_1"),
+            vec![0, 50, 100, 150],
+        );
+
+        assert_eq!(backup_helper.retrieve_spool_top_height(), 150);
     }
 
     #[test]
@@ -1470,6 +1611,7 @@ mod tests {
             cold_storage_dir: temp_dir.join("cold_storage"),
             versions_hot,
             artifacts_guard: Mutex::new(true),
+            replay_guard: Mutex::new(()),
             daily_replays,
             do_cold_storage: true,
             thread_id: 1,
