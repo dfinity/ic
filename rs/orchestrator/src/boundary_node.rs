@@ -132,15 +132,6 @@ mod tests {
         /// `REPLICA_VERSION`, backed by a [`FakeProcessRunner`].
         fn new() -> Self {
             let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-            data_provider
-                .add(
-                    &make_api_boundary_node_record_key(NODE_1),
-                    RegistryVersion::from(1),
-                    Some(ApiBoundaryNodeRecord {
-                        version: REPLICA_VERSION.to_string(),
-                    }),
-                )
-                .unwrap();
             let registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
             let registry = Arc::new(RegistryHelper::new(
                 NODE_1,
@@ -173,13 +164,30 @@ mod tests {
                 no_op_logger(),
             );
 
-            Self {
+            let setup = Self {
                 manager,
                 log,
                 data_provider,
                 registry_client,
                 _dir: dir,
-            }
+            };
+            setup.set_api_boundary_node(1, true);
+            setup
+        }
+
+        /// Adds (if `is_api_boundary_node`) or removes the node's API boundary node record at the
+        /// given registry version, and makes it the latest version.
+        fn set_api_boundary_node(&self, version: u64, is_api_boundary_node: bool) {
+            self.data_provider
+                .add(
+                    &make_api_boundary_node_record_key(NODE_1),
+                    RegistryVersion::from(version),
+                    is_api_boundary_node.then(|| ApiBoundaryNodeRecord {
+                        version: REPLICA_VERSION.to_string(),
+                    }),
+                )
+                .unwrap();
+            self.registry_client.update_to_latest_version();
         }
 
         /// Sets the node's domain at the given registry version (`None` means "no domain") and
@@ -269,5 +277,22 @@ mod tests {
         setup.set_domain(4, Some("api1.example.com"));
         setup.manager.check().await;
         assert_eq!(setup.state(), (2, 1, Some("api1.example.com".to_string())));
+    }
+
+    #[tokio::test]
+    async fn ic_boundary_stopped_when_api_boundary_node_is_removed() {
+        let mut setup = TestSetup::new();
+        setup.set_domain(2, Some("api1.example.com"));
+        setup.manager.check().await;
+        assert_eq!(setup.state(), (1, 0, Some("api1.example.com".to_string())));
+
+        setup.set_api_boundary_node(3, false);
+        setup.manager.check().await;
+        assert_eq!(setup.state(), (1, 1, None));
+
+        setup.set_domain(4, Some("api2.example.com"));
+        setup.set_api_boundary_node(5, true);
+        setup.manager.check().await;
+        assert_eq!(setup.state(), (2, 1, Some("api2.example.com".to_string())));
     }
 }
