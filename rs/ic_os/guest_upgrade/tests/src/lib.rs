@@ -45,9 +45,6 @@ static FREE_PORT: AtomicU16 = AtomicU16::new(DEFAULT_SERVER_PORT);
 
 const REPLICA_VERSION: &str = "replica_version_1";
 const LUKS_HEADER_SIZE_BYTES: usize = 16 * 1024 * 1024;
-/// Server-side budget for one key exchange, which moves the LUKS header above on a single thread.
-/// A hung exchange costs this plus the `join_with_timeout` grace, so keep the sum of all exchange
-/// tests (`RUST_TEST_THREADS` of them run at a time) well below the Bazel test timeout.
 const SERVER_SUCCESS_TIMEOUT: Duration = Duration::from_secs(60);
 /// We register the following two measurements in the mock registry.
 const DEFAULT_CLIENT_MEASUREMENT: [u8; 48] = [42; 48];
