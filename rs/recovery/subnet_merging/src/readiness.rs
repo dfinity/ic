@@ -363,9 +363,9 @@ fn evaluate(
 }
 
 /// Waits until every term of the readiness condition holds, logging the ones
-/// that do not after every round. A round in which the condition cannot be
-/// evaluated (e.g. because the registry cannot be read or a node cannot be
-/// scraped) counts as not ready.
+/// that do not after every round, along with the nodes that could not be
+/// scraped. A round in which the condition cannot be evaluated (e.g. because
+/// the registry cannot be read) counts as not ready.
 pub fn await_merge_readiness(
     registry_helper: &RegistryHelper,
     source_subnet_id: SubnetId,
@@ -385,7 +385,13 @@ pub fn await_merge_readiness(
             .map_err(|err| RecoveryError::UnexpectedError(err.to_string()))
         });
         let not_ready = match terms {
-            Ok(terms) => {
+            Ok(Readiness {
+                terms,
+                scrape_failures,
+            }) => {
+                for (subnet_id, err) in &scrape_failures {
+                    warn!(logger, "Subnet {subnet_id}: {err}");
+                }
                 let unsatisfied: Vec<&Term> = terms.iter().filter(|term| !term.satisfied).collect();
 
                 if unsatisfied.is_empty() {
