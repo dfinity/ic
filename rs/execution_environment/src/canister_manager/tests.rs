@@ -54,6 +54,7 @@ use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, Routin
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
+    canister_state::execution_state::WasmExecutionMode,
     canister_state::system_state::wasm_chunk_store::{self, ChunkValidationResult},
     metadata_state::{
         UnflushedCheckpointOp,
@@ -6205,11 +6206,11 @@ fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
     assert_eq!(error.code(), ErrorCode::SubnetOversubscribed);
 }
 
-/// Helper function that installs and runs an update call on a canister in
-/// Wasm32 and Wasm64 mode and returns the balance and the cost of the call(s).
-fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cycles, Cycles) {
+/// A canister with a Wasm32 or Wasm64 memory and an update method with a few
+/// instructions.
+fn wasm_mode_canister_wat(is_wasm64_mode: bool) -> String {
     let memory_type = if is_wasm64_mode { "i64" } else { "" };
-    let canister_wat = format!(
+    format!(
         r#"
         (module
             (func (export "canister_update test")
@@ -6222,7 +6223,13 @@ fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cy
             (memory {memory_type} 1)
         )
     "#
-    );
+    )
+}
+
+/// Helper function that installs and runs an update call on a canister in
+/// Wasm32 and Wasm64 mode and returns the balance and the cost of the call(s).
+fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cycles, Cycles) {
+    let canister_wat = wasm_mode_canister_wat(is_wasm64_mode);
 
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test
@@ -6255,15 +6262,27 @@ fn check_update_call_canister_in_wasm64_mode_is_charged_correctly() {
 
 #[test]
 fn check_install_code_in_wasm64_mode_is_charged_correctly() {
-    let (balance32, execution_cost32) = run_canister_in_wasm_mode(false, false);
-    let (balance64, execution_cost64) = run_canister_in_wasm_mode(true, false);
-
     // Install messages are always charged at the Wasm32 rate because the
     // execution mode of the new module is not known before it is compiled in
-    // the sandbox, so installing the (otherwise identical) Wasm64 module
-    // costs the same as the Wasm32 one.
-    assert_eq!(balance64, balance32);
-    assert_eq!(execution_cost32, execution_cost64);
+    // the sandbox. The instrumented Wasm32 and Wasm64 modules differ in size,
+    // so the two installs are compared against their compilation costs rather
+    // than against each other.
+    for is_wasm64_mode in [false, true] {
+        let wat = wasm_mode_canister_wat(is_wasm64_mode);
+        let mut test = ExecutionTestBuilder::new().build();
+        let canister_id = test
+            .canister_from_cycles_and_wat(DEFAULT_PROVISIONAL_BALANCE, &wat)
+            .unwrap();
+        assert_eq!(
+            test.canister_execution_cost(canister_id),
+            test.cycles_account_manager().execution_cost(
+                DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + wat_compilation_cost(&wat),
+                test.get_own_subnet_cycles_config(),
+                WasmExecutionMode::Wasm32,
+            ),
+            "is_wasm64_mode: {is_wasm64_mode}"
+        );
+    }
 }
 
 #[test]
