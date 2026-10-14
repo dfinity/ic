@@ -393,7 +393,10 @@ pub(crate) mod fake {
     impl<P: Process> ProcessRunner<P> for FakeProcessRunner<P> {
         fn start(&mut self, process: P) -> Result<()> {
             let mut log = self.log.lock().unwrap();
-            log.process = Some(Arc::new(process));
+            if log.process.replace(Arc::new(process)).is_some() {
+                // If a process was already running, the production implementation stops it.
+                log.stops += 1;
+            }
             log.starts += 1;
             Ok(())
         }
