@@ -374,8 +374,6 @@ async fn get_or_fetch<P: Peers>(
         }
         StrippedMessageId::CanisterHttpResponse(content_hash) => {
             // First check if the response content exists in the canister HTTP pool.
-            // It is kept there, indexed by exactly this hash, until the outcall it
-            // answers has been answered, which is what this very block does.
             if let Some(response) = canister_http_pool
                 .read()
                 .unwrap()
@@ -436,11 +434,10 @@ pub(crate) enum AssemblyError {
 /// and tries to reconstruct the block from it.
 trait PayloadAssembler<ArtifactMessage> {
     type ArtifactId;
-    type MissingArtifactId;
     type Payload;
 
     /// Returns an iterator over stripped artifacts that are still missing.
-    fn missing_artifacts(&self) -> impl Iterator<Item = Self::MissingArtifactId>;
+    fn missing_artifacts(&self) -> impl Iterator<Item = Self::ArtifactId>;
 
     /// Tries to insert a missing artifact into this payload assembler.
     fn try_insert(
@@ -451,14 +448,13 @@ trait PayloadAssembler<ArtifactMessage> {
 
     /// Tries to reconstruct the part of the block corresponding to this payload assembler.
     fn try_reconstruct_payload(
-        messages: Vec<(Self::MissingArtifactId, Option<ArtifactMessage>)>,
+        messages: BTreeMap<Self::ArtifactId, Option<ArtifactMessage>>,
         payload: &mut Self::Payload,
     ) -> Result<(), AssemblyError>;
 }
 
 impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
     type ArtifactId = SignedIngressId;
-    type MissingArtifactId = SignedIngressId;
     type Payload = Option<pb::IngressPayload>;
 
     fn missing_artifacts(&self) -> impl Iterator<Item = SignedIngressId> {
@@ -473,12 +469,9 @@ impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
         signed_ingress_id: SignedIngressId,
         ingress_message: SignedIngress,
     ) -> Result<(), InsertionError> {
-        // We can have at most 1000 elements in the vector, so it should be reasonably fast to do a
-        // linear scan here.
-        let (_, ingress) = self
+        let ingress = self
             .ingress_messages
-            .iter_mut()
-            .find(|(id, _maybe_ingress)| *id == signed_ingress_id)
+            .get_mut(&signed_ingress_id)
             .ok_or(InsertionError::NotNeeded)?;
 
         if ingress.is_some() {
@@ -490,7 +483,7 @@ impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
     }
 
     fn try_reconstruct_payload(
-        ingress_messages: Vec<(SignedIngressId, Option<SignedIngress>)>,
+        ingress_messages: BTreeMap<SignedIngressId, Option<SignedIngress>>,
         payload: &mut Self::Payload,
     ) -> Result<(), AssemblyError> {
         let ingresses = ingress_messages
@@ -510,11 +503,10 @@ impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
 }
 
 impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
-    type ArtifactId = IDkgArtifactId;
-    type MissingArtifactId = (NodeIndex, IDkgArtifactId);
+    type ArtifactId = (NodeIndex, IDkgArtifactId);
     type Payload = pb::IDkgPayload;
 
-    fn missing_artifacts(&self) -> impl Iterator<Item = Self::MissingArtifactId> {
+    fn missing_artifacts(&self) -> impl Iterator<Item = Self::ArtifactId> {
         self.signed_dealings
             .iter()
             .filter(|(_, maybe_dealing)| maybe_dealing.is_none())
@@ -523,17 +515,16 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
 
     fn try_insert(
         &mut self,
-        signed_dealing_id: IDkgArtifactId,
+        (node_index, signed_dealing_id): (NodeIndex, IDkgArtifactId),
         signed_dealing: SignedIDkgDealing,
     ) -> Result<(), InsertionError> {
         let IDkgArtifactId::Dealing(_, _) = &signed_dealing_id else {
             return Err(InsertionError::NotNeeded);
         };
 
-        let (_, dealing) = self
+        let dealing = self
             .signed_dealings
-            .iter_mut()
-            .find(|((_, id), _maybe_dealing)| *id == signed_dealing_id)
+            .get_mut(&(node_index, signed_dealing_id))
             .ok_or(InsertionError::NotNeeded)?;
 
         if dealing.is_some() {
@@ -545,7 +536,7 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
     }
 
     fn try_reconstruct_payload(
-        signed_dealings: Vec<(Self::MissingArtifactId, Option<SignedIDkgDealing>)>,
+        signed_dealings: BTreeMap<Self::ArtifactId, Option<SignedIDkgDealing>>,
         payload: &mut Self::Payload,
     ) -> Result<(), AssemblyError> {
         let mut idkg_dealings =
@@ -580,10 +571,9 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
 
 impl PayloadAssembler<CanisterHttpResponse> for BlockProposalAssembler {
     type ArtifactId = CanisterHttpResponseContentHash;
-    type MissingArtifactId = CanisterHttpResponseContentHash;
     type Payload = Vec<u8>;
 
-    fn missing_artifacts(&self) -> impl Iterator<Item = Self::MissingArtifactId> {
+    fn missing_artifacts(&self) -> impl Iterator<Item = Self::ArtifactId> {
         self.canister_http_responses
             .iter()
             .filter(|(_, maybe_response)| maybe_response.is_none())
@@ -609,16 +599,15 @@ impl PayloadAssembler<CanisterHttpResponse> for BlockProposalAssembler {
     }
 
     fn try_reconstruct_payload(
-        responses: Vec<(Self::MissingArtifactId, Option<CanisterHttpResponse>)>,
+        responses: BTreeMap<Self::ArtifactId, Option<CanisterHttpResponse>>,
         payload: &mut Self::Payload,
     ) -> Result<(), AssemblyError> {
         if responses.is_empty() {
-            // Nothing was stripped from this payload, so it is already the payload
-            // the block maker put into the block, down to the very bytes.
+            // No response was declared stripped from this payload.
             return Ok(());
         }
 
-        *payload = reinsert_responses(payload, &responses.into_iter().collect())?;
+        *payload = reinsert_responses(payload, &responses)?;
         Ok(())
     }
 }
@@ -644,36 +633,44 @@ fn idkg_dealing_proto(signed_dealing: SignedIDkgDealing) -> IDkgSignedDealingTup
 }
 
 struct BlockProposalAssembler {
-    stripped_block_proposal: StrippedBlockProposal,
-    ingress_messages: Vec<(SignedIngressId, Option<SignedIngress>)>,
-    signed_dealings: Vec<((NodeIndex, IDkgArtifactId), Option<SignedIDkgDealing>)>,
-    /// The contents stripped from the canister http payload, keyed by their hash.
+    /// The block proposal with every stripped message taken out of it.
+    pruned_block_proposal_proto: pb::BlockProposal,
+    /// The id of the block proposal the stripped messages belong in.
+    unstripped_consensus_message_id: ConsensusMessageId,
+    ingress_messages: BTreeMap<SignedIngressId, Option<SignedIngress>>,
+    signed_dealings: BTreeMap<(NodeIndex, IDkgArtifactId), Option<SignedIDkgDealing>>,
     canister_http_responses:
         BTreeMap<CanisterHttpResponseContentHash, Option<CanisterHttpResponse>>,
 }
 
 impl BlockProposalAssembler {
     fn new(stripped_block_proposal: StrippedBlockProposal) -> Self {
+        let StrippedBlockProposal {
+            pruned_block_proposal_proto,
+            unstripped_consensus_message_id,
+            stripped_ingress_payload,
+            stripped_idkg_dealings,
+            stripped_canister_http_responses,
+        } = stripped_block_proposal;
+
         Self {
-            ingress_messages: stripped_block_proposal
-                .stripped_ingress_payload
+            pruned_block_proposal_proto,
+            unstripped_consensus_message_id,
+            ingress_messages: stripped_ingress_payload
                 .ingress_messages
-                .iter()
-                .map(|signed_ingress_id| (signed_ingress_id.clone(), None))
+                .into_iter()
+                .map(|signed_ingress_id| (signed_ingress_id, None))
                 .collect(),
-            signed_dealings: stripped_block_proposal
-                .stripped_idkg_dealings
+            signed_dealings: stripped_idkg_dealings
                 .stripped_dealings
-                .iter()
-                .map(|(node_index, dealing_id)| ((*node_index, dealing_id.clone()), None))
+                .into_iter()
+                .map(|dealer_and_dealing_id| (dealer_and_dealing_id, None))
                 .collect(),
-            canister_http_responses: stripped_block_proposal
-                .stripped_canister_http_responses
+            canister_http_responses: stripped_canister_http_responses
                 .stripped_responses
-                .iter()
-                .map(|content_hash| (content_hash.clone(), None))
+                .into_iter()
+                .map(|content_hash| (content_hash, None))
                 .collect(),
-            stripped_block_proposal,
         }
     }
 
@@ -702,8 +699,8 @@ impl BlockProposalAssembler {
             StrippedMessage::Ingress(signed_ingress_id, signed_ingress) => {
                 self.try_insert(signed_ingress_id, signed_ingress)
             }
-            StrippedMessage::IDkgDealing(dealing_id, _, signed_dealing) => {
-                self.try_insert(dealing_id, signed_dealing)
+            StrippedMessage::IDkgDealing(dealing_id, node_index, signed_dealing) => {
+                self.try_insert((node_index, dealing_id), signed_dealing)
             }
             StrippedMessage::CanisterHttpResponse(content_hash, response) => {
                 self.try_insert(content_hash, response)
@@ -718,14 +715,12 @@ impl BlockProposalAssembler {
     /// assembled proposal has an ID that doesn't match the claimed ID.
     pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
         let BlockProposalAssembler {
-            stripped_block_proposal,
+            pruned_block_proposal_proto: mut reconstructed_block_proposal_proto,
+            unstripped_consensus_message_id: claimed_id,
             ingress_messages,
             signed_dealings,
             canister_http_responses,
         } = self;
-        let claimed_id = stripped_block_proposal.unstripped_consensus_message_id;
-        let mut reconstructed_block_proposal_proto =
-            stripped_block_proposal.pruned_block_proposal_proto;
 
         if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
             Self::try_reconstruct_payload(ingress_messages, &mut block.ingress_payload)?;
@@ -733,7 +728,7 @@ impl BlockProposalAssembler {
                 Self::try_reconstruct_payload(signed_dealings, idkg)?;
             }
             Self::try_reconstruct_payload(
-                canister_http_responses.into_iter().collect(),
+                canister_http_responses,
                 &mut block.canister_http_payload_bytes,
             )?;
         }
@@ -764,16 +759,10 @@ mod tests {
         fake_flexible_canister_http_responses_message, fake_idkg_dealing,
         fake_idkg_payload_with_dealings, fake_ingress_message, fake_ingress_message_with_arg_size,
         fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages,
-        fake_stripped_canister_http_response_message,
+        fake_stripped_canister_http_response_message, rpc_response,
     };
-    use crate::fetch_stripped_artifact::types::rpc::{
-        GetCanisterHttpResponseInBlockResponse, GetIngressMessageInBlockResponse,
-    };
-    use crate::fetch_stripped_artifact::types::stripped::{
-        StrippedCanisterHttpResponses, StrippedIDkgDealings, StrippedIngressPayload,
-    };
+    use crate::fetch_stripped_artifact::types::stripped::StrippedCanisterHttpResponses;
     use assert_matches::assert_matches;
-    use bytes::Bytes;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_interfaces::p2p::consensus::BouncerValue;
     use ic_logger::no_op_logger;
@@ -790,11 +779,6 @@ mod tests {
     use super::*;
 
     /// Asserts that `reassembled` is `original`, down to the last byte of its payload.
-    ///
-    /// Block proposals compare equal as soon as their hashes do, and a stripped
-    /// proposal carries those over verbatim, so `==` alone cannot tell whether its
-    /// payload was put back together correctly. Consensus can: before it accepts a
-    /// block, it checks that the payload matches those hashes. So check that too.
     fn assert_same_block(reassembled: &BlockProposal, original: &BlockProposal) {
         assert_eq!(reassembled, original);
         assert_eq!(
@@ -947,7 +931,7 @@ mod tests {
 
         // insert back only one missing message
         assembler
-            .try_insert(dealing_1.message_id(), dealing_1)
+            .try_insert((1, dealing_1.message_id()), dealing_1)
             .unwrap();
 
         // try to reassemble the block
@@ -985,10 +969,10 @@ mod tests {
 
         // insert back only the missing message
         assembler
-            .try_insert(dealing_1.message_id(), dealing_1)
+            .try_insert((1, dealing_1.message_id()), dealing_1)
             .unwrap();
         let err = assembler
-            .try_insert(dealing_2.message_id(), dealing_2)
+            .try_insert((2, dealing_2.message_id()), dealing_2)
             .unwrap_err();
         assert_matches!(err, InsertionError::NotNeeded);
 
@@ -1037,10 +1021,10 @@ mod tests {
 
         // insert back only the missing message
         assembler
-            .try_insert(dealing_1.message_id(), dealing_1)
+            .try_insert((node_index, dealing_1.message_id()), dealing_1)
             .unwrap();
         let err = assembler
-            .try_insert(dealing_2.message_id(), dealing_2)
+            .try_insert((node_index, dealing_2.message_id()), dealing_2)
             .unwrap_err();
         assert_matches!(err, InsertionError::NotNeeded);
 
@@ -1067,16 +1051,17 @@ mod tests {
 
         let assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
-        assert_eq!(
-            assembler.missing_stripped_messages(),
-            vec![
-                ingress_1_id,
-                ingress_2_id,
-                idkg_dealing_1_id,
-                idkg_dealing_2_id,
-                canister_http_response_id,
-            ]
-        );
+        let mut missing = assembler.missing_stripped_messages();
+        missing.sort();
+        let mut expected = vec![
+            ingress_1_id,
+            ingress_2_id,
+            idkg_dealing_1_id,
+            idkg_dealing_2_id,
+            canister_http_response_id,
+        ];
+        expected.sort();
+        assert_eq!(missing, expected);
     }
 
     #[test]
@@ -1175,6 +1160,43 @@ mod tests {
         }
     }
 
+    /// A bouncer factory whose bouncers want every block proposal.
+    fn wanting_bouncer_factory() -> MockBouncerFactory<ConsensusMessage> {
+        let mut bouncer_factory = MockBouncerFactory::default();
+        bouncer_factory
+            .expect_new_bouncer()
+            .returning(|_| Box::new(|_| BouncerValue::Wants));
+        bouncer_factory
+    }
+
+    /// The assembler of `NODE_1`, which looks for the messages stripped from a block
+    /// proposal in the given pools, and asks its peers for them through `transport`.
+    fn build_assembler(
+        ingress_pool: MockValidatedPoolReader<SignedIngress>,
+        canister_http_pool: FakeCanisterHttpPool,
+        bouncer_factory: MockBouncerFactory<ConsensusMessage>,
+        transport: MockTransport,
+    ) -> FetchStrippedConsensusArtifact {
+        let f = FetchStrippedConsensusArtifact::new(
+            no_op_logger(),
+            tokio::runtime::Handle::current(),
+            Arc::new(RwLock::new(
+                MockValidatedPoolReader::<ConsensusMessage>::default(),
+            )),
+            Arc::new(RwLock::new(ingress_pool)),
+            Arc::new(RwLock::new(
+                MockValidatedPoolReader::<IDkgMessage>::default(),
+            )),
+            Arc::new(RwLock::new(canister_http_pool)),
+            Arc::new(bouncer_factory),
+            MetricsRegistry::new(),
+            NODE_1,
+        )
+        .0;
+
+        (f)(Arc::new(transport))
+    }
+
     fn set_up_assembler_with_fake_dependencies(
         ingress_pool_message: Option<SignedIngress>,
         peers_message: Option<SignedIngress>,
@@ -1187,42 +1209,22 @@ mod tests {
         }
 
         if let Some(ingress_message) = peers_message {
-            let fake_response = axum::response::Response::builder()
-                .body(Bytes::from(
-                    pb::GetIngressMessageInBlockResponse::proxy_encode(
-                        GetIngressMessageInBlockResponse {
-                            serialized_ingress_message: ingress_message.binary().clone(),
-                        },
-                    ),
-                ))
-                .unwrap();
+            let fake_response = rpc_response(StrippedMessage::Ingress(
+                SignedIngressId::from(&ingress_message),
+                ingress_message,
+            ));
 
             mock_transport
                 .expect_rpc()
                 .returning(move |_, _| Ok(fake_response.clone()));
         }
 
-        let consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
-        let idkg_pool = MockValidatedPoolReader::<IDkgMessage>::default();
-        let mut mock_bouncer_factory = MockBouncerFactory::default();
-        mock_bouncer_factory
-            .expect_new_bouncer()
-            .returning(|_| Box::new(|_| BouncerValue::Wants));
-
-        let f = FetchStrippedConsensusArtifact::new(
-            no_op_logger(),
-            tokio::runtime::Handle::current(),
-            Arc::new(RwLock::new(consensus_pool)),
-            Arc::new(RwLock::new(ingress_pool)),
-            Arc::new(RwLock::new(idkg_pool)),
-            Arc::new(RwLock::new(FakeCanisterHttpPool::empty())),
-            Arc::new(mock_bouncer_factory),
-            MetricsRegistry::new(),
-            NODE_1,
+        build_assembler(
+            ingress_pool,
+            FakeCanisterHttpPool::empty(),
+            wanting_bouncer_factory(),
+            mock_transport,
         )
-        .0;
-
-        (f)(Arc::new(mock_transport))
     }
 
     /// Tests whether the assembler uses the ingress message with the correct signature in the case
@@ -1264,42 +1266,25 @@ mod tests {
     ) -> FetchStrippedConsensusArtifact {
         let mut mock_transport = MockTransport::new();
         if let Some(response) = peer_response {
-            let fake_response = axum::response::Response::builder()
-                .body(Bytes::from(
-                    pb::GetCanisterHttpResponseInBlockResponse::proxy_encode(
-                        GetCanisterHttpResponseInBlockResponse { response },
-                    ),
-                ))
-                .unwrap();
+            let fake_response = rpc_response(StrippedMessage::CanisterHttpResponse(
+                ic_types::crypto::crypto_hash(&response),
+                response,
+            ));
             mock_transport
                 .expect_rpc()
                 .times(1)
                 .returning(move |_, _| Ok(fake_response.clone()));
         }
 
-        let consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
         let mut ingress_pool = MockValidatedPoolReader::<SignedIngress>::default();
         ingress_pool.expect_get().returning(|_| None);
-        let idkg_pool = MockValidatedPoolReader::<IDkgMessage>::default();
-        let mut mock_bouncer_factory = MockBouncerFactory::default();
-        mock_bouncer_factory
-            .expect_new_bouncer()
-            .returning(|_| Box::new(|_| BouncerValue::Wants));
 
-        let f = FetchStrippedConsensusArtifact::new(
-            no_op_logger(),
-            tokio::runtime::Handle::current(),
-            Arc::new(RwLock::new(consensus_pool)),
-            Arc::new(RwLock::new(ingress_pool)),
-            Arc::new(RwLock::new(idkg_pool)),
-            Arc::new(RwLock::new(FakeCanisterHttpPool::new(pool_responses))),
-            Arc::new(mock_bouncer_factory),
-            MetricsRegistry::new(),
-            NODE_1,
+        build_assembler(
+            ingress_pool,
+            FakeCanisterHttpPool::new(pool_responses),
+            wanting_bouncer_factory(),
+            mock_transport,
         )
-        .0;
-
-        (f)(Arc::new(mock_transport))
     }
 
     /// A block proposal delivering `responses`, together with the stripped proposal
@@ -1323,31 +1308,25 @@ mod tests {
         let unstripped =
             fake_block_proposal_with_canister_http(fake_canister_http_payload(messages(false)));
 
-        // Prune the proto of the unstripped proposal, rather than building a
-        // proposal around the pruned payload: the block commits to the payload it
-        // was built with, and stripping must not disturb that.
-        let mut pruned_proto = pb::BlockProposal::from(unstripped.clone());
-        if let Some(block) = pruned_proto.value.as_mut() {
-            // The ingress payload is stripped from every data block as well.
-            block.ingress_payload = None;
+        // Strip the unstripped proposal, rather than building a proposal around the
+        // pruned payload: the block commits to the payload it was built with, and
+        // stripping must not disturb that.
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped) =
+            ConsensusMessage::BlockProposal(unstripped.clone()).strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+        if let Some(block) = stripped.pruned_block_proposal_proto.value.as_mut() {
             block.canister_http_payload_bytes = fake_canister_http_payload(messages(true));
         }
+        stripped.stripped_canister_http_responses = StrippedCanisterHttpResponses {
+            stripped_responses: responses
+                .iter()
+                .map(ic_types::crypto::crypto_hash)
+                .collect(),
+        };
 
-        (
-            StrippedBlockProposal {
-                pruned_block_proposal_proto: pruned_proto,
-                unstripped_consensus_message_id: unstripped.get_id(),
-                stripped_ingress_payload: StrippedIngressPayload::default(),
-                stripped_idkg_dealings: StrippedIDkgDealings::default(),
-                stripped_canister_http_responses: StrippedCanisterHttpResponses {
-                    stripped_responses: responses
-                        .iter()
-                        .map(ic_types::crypto::crypto_hash)
-                        .collect(),
-                },
-            },
-            unstripped,
-        )
+        (stripped, unstripped)
     }
 
     async fn assemble(
@@ -1384,6 +1363,29 @@ mod tests {
         let response = fake_canister_http_response(1, 1024);
         let (stripped, unstripped) =
             fake_stripped_proposal_with_canister_http(std::slice::from_ref(&response));
+
+        let assembler = set_up_assembler_with_canister_http_responses(
+            /*pool=*/ vec![],
+            /*peer=*/ Some(response),
+        );
+
+        assert_assembled(assemble(&assembler, stripped).await, &unstripped);
+    }
+
+    /// A content that goes back into several slots is fetched only once, even if
+    /// the stripped proposal declares it once for each of them.
+    #[tokio::test]
+    async fn assemble_canister_http_response_of_several_slots_test() {
+        let response = fake_canister_http_response(1, 1024);
+        let (stripped, unstripped) =
+            fake_stripped_proposal_with_canister_http(&[response.clone(), response.clone()]);
+        assert_eq!(
+            stripped
+                .stripped_canister_http_responses
+                .stripped_responses
+                .len(),
+            2
+        );
 
         let assembler = set_up_assembler_with_canister_http_responses(
             /*pool=*/ vec![],
@@ -1637,22 +1639,13 @@ mod tests {
         // from, so the fetch of the missing stripped message would otherwise stay pending forever.
         let mut ingress_pool = MockValidatedPoolReader::<SignedIngress>::default();
         ingress_pool.expect_get().returning(|_| None);
-        let consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
-        let idkg_pool = MockValidatedPoolReader::<IDkgMessage>::default();
 
-        let f = FetchStrippedConsensusArtifact::new(
-            no_op_logger(),
-            tokio::runtime::Handle::current(),
-            Arc::new(RwLock::new(consensus_pool)),
-            Arc::new(RwLock::new(ingress_pool)),
-            Arc::new(RwLock::new(idkg_pool)),
-            Arc::new(RwLock::new(FakeCanisterHttpPool::empty())),
-            Arc::new(mock_bouncer_factory),
-            MetricsRegistry::new(),
-            NODE_1,
-        )
-        .0;
-        let assembler = (f)(Arc::new(MockTransport::new()));
+        let assembler = build_assembler(
+            ingress_pool,
+            FakeCanisterHttpPool::empty(),
+            mock_bouncer_factory,
+            MockTransport::new(),
+        );
 
         let stripped_block_proposal =
             assembler.disassemble_message(ConsensusMessage::BlockProposal(block_proposal));

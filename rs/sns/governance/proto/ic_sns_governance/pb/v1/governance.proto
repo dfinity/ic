@@ -1123,6 +1123,11 @@ message ProposalData {
 
   // This proposal's topic.
   optional Topic topic = 25;
+
+  // The raw reply bytes returned by the target canister for a successful
+  // ExecuteGenericNervousSystemFunction call, truncated to at most
+  // MAX_SCALAR_FIELD_LEN_BYTES.
+  optional bytes execution_reply = 26;
 }
 
 message Valuation {

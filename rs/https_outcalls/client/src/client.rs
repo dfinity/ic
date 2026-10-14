@@ -215,6 +215,9 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             transform,
                         )
                         .await;
+                        metrics
+                            .transform_instructions
+                            .observe(instruction_count as f64);
                         let transform_result_size = match &transform_result {
                             Ok(data) => data.len(),
                             Err(reject) => reject.message.len(),
@@ -612,6 +615,7 @@ mod tests {
     };
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
+    use ic_test_utilities_metrics::{HistogramStats, fetch_histogram_stats};
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::{
         NumberOfNodes, RegistryVersion,
@@ -1303,6 +1307,66 @@ mod tests {
             }
         }
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
+    }
+
+    // Test that the instructions executed by a transform are recorded, and that
+    // requests without a transform are not.
+    #[tokio::test]
+    async fn test_client_records_transform_instructions() {
+        let response = HttpsOutcallResponse {
+            status: 200,
+            headers: vec![],
+            content: vec![],
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
+        let (svc, mut handle) = setup_system_query_mock();
+
+        // Report the executed instructions like the query handler does.
+        tokio::spawn(async move {
+            let (request, rsp) = handle.next_request().await.unwrap();
+            request
+                .instruction_observation
+                .fetch_add(1_234_567, std::sync::atomic::Ordering::Relaxed);
+            rsp.send_response(Ok((Ok(WasmResult::Reply(vec![])), current_time())));
+        });
+
+        let metrics_registry = MetricsRegistry::default();
+        let mut client = CanisterHttpAdapterClientImpl::new(
+            tokio::runtime::Handle::current(),
+            mock_grpc_channel,
+            svc,
+            100,
+            metrics_registry.clone(),
+            no_op_logger(),
+        );
+
+        assert_eq!(
+            client.send(build_mock_canister_http_request(420, None)),
+            Ok(())
+        );
+        assert_eq!(
+            client.send(build_mock_canister_http_request(
+                421,
+                Some("transform".to_string())
+            )),
+            Ok(())
+        );
+        // Yield to execute both requests on the client.
+        let mut received = 0;
+        while received < 2 {
+            match client.try_receive() {
+                Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
+                Ok(_) => received += 1,
+            }
+        }
+
+        assert_eq!(
+            fetch_histogram_stats(&metrics_registry, "canister_http_transform_instructions"),
+            Some(HistogramStats {
+                count: 1,
+                sum: 1_234_567.0
+            })
+        );
     }
 
     // Test that an oversized reject message is truncated (char-boundary-safe)

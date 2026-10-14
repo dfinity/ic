@@ -8,8 +8,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
-use ic_consensus_dkg::get_vetkey_public_keys;
-use ic_crypto::get_master_public_key_from_transcript;
+use ic_consensus_cup_utils::get_master_public_keys;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
     ImageUpgrader, ManagebootRunner, Rebooting,
@@ -17,18 +16,14 @@ use ic_image_upgrader::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, error, info, warn};
-use ic_management_canister_types_private::MasterPublicKeyId;
-use ic_protobuf::proxy::try_from_option_field;
+use ic_protobuf::{proxy::try_from_option_field, types::v1 as pb};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
     Height, NodeId, PlatformVersion, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::{CatchUpPackage, HasHeight},
-    crypto::{
-        canister_threshold_sig::MasterPublicKey,
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
-    },
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
 };
 use std::{
     collections::BTreeMap,
@@ -278,6 +273,20 @@ impl Upgrade {
         // When we arrived here, we are an assigned node.
         *self.subnet_assignment.write().unwrap() = SubnetAssignment::Assigned(subnet_id);
 
+        // Always check if there is an ongoing NNS recovery on failover nodes. If we indeed are in
+        // this scenario and everything succeeds, the process restarts and the below function will
+        // not return.
+        // We perform this check _before_ we fetch and persist the latest CUP, because if the latter
+        // indeed triggers this scenario but the registry download fails, the next iteration of the
+        // loop will fail to parse the CUP's subnet ID since that CUP corresponds to the new
+        // registry. Instead, we persist the CUP only after we have successfully downloaded the
+        // registry, just before we restart the process.
+        self.download_registry_and_restart_if_nns_failover_nodes_recovery(
+            subnet_id,
+            latest_registry_version,
+        )
+        .await?;
+
         let old_cup_height = maybe_local_cup.as_ref().map(HasHeight::height);
         let old_subnet_id = subnet_id;
 
@@ -328,9 +337,6 @@ impl Upgrade {
             );
         }
 
-        // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
-        // recovery scenario. Check if we're in an NNS subnet recovery case and download
-        // the new registry if needed.
         if !latest_cup.is_signed() {
             info!(
                 self.logger,
@@ -339,12 +345,6 @@ impl Upgrade {
                 latest_cup.content.registry_version(),
                 latest_cup.height(),
             );
-
-            self.download_registry_and_restart_if_nns_subnet_recovery(
-                subnet_id,
-                latest_registry_version,
-            )
-            .await?;
         }
 
         // Now when we have the most recent CUP, we check if we're still assigned.
@@ -432,7 +432,7 @@ impl Upgrade {
     // contents of the local registry store in the process of doing this, we
     // will not perpetually hit this case, and thus it is not important to
     // check the height.
-    async fn download_registry_and_restart_if_nns_subnet_recovery(
+    async fn download_registry_and_restart_if_nns_failover_nodes_recovery(
         &self,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
@@ -448,6 +448,12 @@ impl Upgrade {
             return Ok(());
         };
 
+        let registry_cup_proto = self
+            .registry
+            .get_registry_cup(registry_version, subnet_id)
+            .map(pb::CatchUpPackage::from)
+            .map_err(|_| OrchestratorError::MakeRegistryCupError(subnet_id, registry_version))?;
+
         warn!(
             self.logger,
             "Downloading registry data from {} with hash {} for subnet recovery",
@@ -455,26 +461,31 @@ impl Upgrade {
             registry_store_uri.hash,
         );
         let downloader = FileDownloader::new(Some(self.logger.clone()));
-        let local_store_location = tempfile::tempdir()
-            .expect("temporary location for local store download could not be created")
-            .keep();
+        let local_store_location = tempfile::tempdir().map_err(|e| {
+            OrchestratorError::IoError("Failed to create temporary directory".to_string(), e)
+        })?;
         downloader
             .download_and_extract_tar(
                 &registry_store_uri.uri,
-                &local_store_location,
+                local_store_location.path(),
                 Some(registry_store_uri.hash),
             )
             .await
             .map_err(OrchestratorError::FileDownloadError)?;
+
+        self.cup_provider.persist_cup(&registry_cup_proto)?;
+
         if let Err(e) = self.stop_children() {
             // Even though we fail to stop child processes, we should still
             // replace the registry local store, so we simply issue a warning.
             warn!(self.logger, "Failed to stop children with error {:?}", e);
         }
-        let new_local_store = LocalStoreImpl::new(local_store_location);
+
+        let new_local_store = LocalStoreImpl::new(local_store_location.path());
         self.registry_replicator
             .stop_polling_and_set_local_registry_data(&new_local_store)
             .await;
+
         // Restart the current process to pick up the new local store.
         // The call should not return. If it does, it is an error.
         Err(reexec_current_process(&self.logger))
@@ -1047,44 +1058,6 @@ fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
     OrchestratorError::ExecError(program, err.into())
 }
 
-/// Return the threshold master public key of the given CUP, if it exists.
-fn get_master_public_keys(
-    cup: &CatchUpPackage,
-    log: &ReplicaLogger,
-) -> BTreeMap<MasterPublicKeyId, MasterPublicKey> {
-    let payload = cup.content.block.get_value().payload.as_ref();
-
-    let (mut public_keys, _) = get_vetkey_public_keys(&payload.as_summary().dkg, log);
-
-    let Some(idkg) = payload.as_idkg() else {
-        return public_keys;
-    };
-
-    for (key_id, key_transcript) in &idkg.key_transcripts {
-        let Some(transcript) = key_transcript
-            .current
-            .as_ref()
-            .and_then(|transcript_ref| idkg.idkg_transcripts.get(&transcript_ref.transcript_id()))
-        else {
-            continue;
-        };
-
-        match get_master_public_key_from_transcript(transcript) {
-            Ok(public_key) => {
-                public_keys.insert(key_id.clone().into(), public_key);
-            }
-            Err(err) => {
-                warn!(
-                    log,
-                    "Failed to get the master public key for key id {}: {:?}", key_id, err,
-                );
-            }
-        };
-    }
-
-    public_keys
-}
-
 /// Get threshold master public keys of both CUPs and make sure previous keys weren't changed
 /// or deleted. Raise an alert if they were.
 fn compare_master_public_keys(
@@ -1211,11 +1184,16 @@ mod tests {
         RegistryClientVersionedResult, RegistryDataProvider, RegistryVersionedRecord,
     };
     use ic_management_canister_types_private::{
-        EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
+        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+        VetKdKeyId,
     };
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::log::log_entry::v1::LogEntry;
-    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
+    use ic_protobuf::registry::subnet::v1::GenesisArgs;
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, InitialNiDkgTranscriptRecord, RecoveryArgs,
+        catch_up_package_contents::CupType,
+    };
     use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
     use ic_protobuf::registry::{
         replica_version::v1::ReplicaVersionRecord,
@@ -1531,7 +1509,15 @@ mod tests {
         let cup_contents = CatchUpPackageContents {
             initial_ni_dkg_transcript_high_threshold: Some(high_initial_transcript),
             initial_ni_dkg_transcript_low_threshold: Some(low_initial_transcript),
-            height: cup_scenario.height.get(),
+            cup_type: if cup_scenario.height == Height::from(0) {
+                Some(CupType::Genesis(GenesisArgs {}))
+            } else {
+                Some(CupType::Recovery(RecoveryArgs {
+                    height: cup_scenario.height.get(),
+                    time: 123,
+                    state_hash: vec![1, 2, 3],
+                }))
+            },
             ..Default::default()
         };
 
