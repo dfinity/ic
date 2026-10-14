@@ -290,9 +290,7 @@ pub(crate) async fn query(
     })
     .await
     {
-        Ok(Ok(_)) => {
-            metrics.observe_validated_sender_info("query", request.sender_info());
-        }
+        Ok(Ok(_)) => {}
         Ok(Err(err)) => {
             let http_err = validation_error_to_http_error(&request, err, &log);
             return (http_err.status, http_err.message).into_response();
@@ -301,6 +299,7 @@ pub(crate) async fn query(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
+    metrics.observe_validated_sender_info("query", request.sender_info());
 
     let user_query = request.take_content();
 
