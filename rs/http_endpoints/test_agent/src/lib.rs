@@ -291,13 +291,18 @@ impl Query {
     }
 }
 
-pub struct CanisterReadState {
+/// A `read_state` request to the endpoint of a canister or of a subnet.
+pub struct ReadState {
     paths: Vec<Path>,
-    effective_canister_id: PrincipalId,
+    /// The effective canister ID for `read_state::Target::Canister`, or the subnet ID for
+    /// `read_state::Target::Subnet`.
+    effective_principal_id: PrincipalId,
+    target: read_state::Target,
     version: read_state::Version,
 }
 
-impl CanisterReadState {
+impl ReadState {
+    /// A request to `/api/<version>/canister/<effective_canister_id>/read_state`.
     pub fn new(
         paths: Vec<Path>,
         effective_canister_id: PrincipalId,
@@ -305,7 +310,22 @@ impl CanisterReadState {
     ) -> Self {
         Self {
             paths,
-            effective_canister_id,
+            effective_principal_id: effective_canister_id,
+            target: read_state::Target::Canister,
+            version,
+        }
+    }
+
+    /// A request to `/api/<version>/subnet/<subnet_id>/read_state`.
+    pub fn new_subnet(
+        paths: Vec<Path>,
+        subnet_id: PrincipalId,
+        version: read_state::Version,
+    ) -> Self {
+        Self {
+            paths,
+            effective_principal_id: subnet_id,
+            target: read_state::Target::Subnet,
             version,
         }
     }
@@ -341,10 +361,14 @@ impl CanisterReadState {
             read_state::Version::V2 => "v2",
             read_state::Version::V3 => "v3",
         };
+        let target_str = match self.target {
+            read_state::Target::Canister => "canister",
+            read_state::Target::Subnet => "subnet",
+        };
 
         url.set_path(&format!(
-            "api/{version_str}/canister/{}/read_state",
-            self.effective_canister_id
+            "api/{version_str}/{target_str}/{}/read_state",
+            self.effective_principal_id
         ));
 
         let client = reqwest::Client::builder()
