@@ -1088,14 +1088,11 @@ key-exchange-timeout-ms = 10000
         while Path::new(&format!("/proc/{pid}")).exists() {
             if Instant::now() >= deadline {
                 // Guard against PID reuse before force-killing: the pid-file may
-                // be old, so confirm the process still looks like QEMU (exec
-                // basename truncated to `qemu-system-x86` in `comm`, hence a
-                // prefix match). Failing closed just defers to the teardown of
-                // the test action's execution environment.
-                let still_qemu = std::fs::read_to_string(format!("/proc/{pid}/comm"))
-                    .map(|c| c.trim_end().starts_with("qemu-"))
-                    .unwrap_or(false);
-                if still_qemu {
+                // be old, so confirm the process is the QEMU that `start_vm`
+                // launched for this VM, i.e. its command line names this
+                // pid-file. Failing closed just defers to the teardown of the
+                // test action's execution environment.
+                if qemu_cmdline_names_pidfile(pid, pid_path) {
                     warn!(
                         self.logger,
                         "QEMU (pid {pid}) survived the SIGTERM grace period; sending SIGKILL"
@@ -2059,6 +2056,44 @@ fn has_gpt_header(path: &Path) -> Result<bool> {
         Err(err) if err.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
         Err(err) => {
             Err(err).with_context(|| format!("reading the GPT signature of {}", path.display()))
+        }
+    }
+}
+
+/// Whether `/proc/<pid>/cmdline` has an argument equal to `pid_path`, i.e. the
+/// process is the QEMU that `start_vm` launched with `-pidfile <pid_path>`.
+fn qemu_cmdline_names_pidfile(pid: i32, pid_path: &Path) -> bool {
+    let pid_path = pid_path.display().to_string();
+    std::fs::read(format!("/proc/{pid}/cmdline"))
+        .map(|cmdline| {
+            cmdline
+                .split(|b| *b == 0)
+                .any(|arg| arg == pid_path.as_bytes())
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn qemu_cmdline_names_pidfile_requires_the_pidfile_argument() {
+        let pid_path = Path::new("/nonexistent/vms/vm/qemu.pid");
+        // Two commands keep `sh` from exec'ing `sleep` in its place, so the
+        // process keeps the shell's argv, whose `$0` is the pid-file path.
+        let spawn = |args: &[&str]| std::process::Command::new("sh").args(args).spawn().unwrap();
+        let mut with = spawn(&["-c", "sleep 60; :", pid_path.to_str().unwrap()]);
+        let mut without = spawn(&["-c", "sleep 60; :"]);
+        assert!(qemu_cmdline_names_pidfile(with.id() as i32, pid_path));
+        assert!(!qemu_cmdline_names_pidfile(
+            with.id() as i32,
+            Path::new("/other/qemu.pid")
+        ));
+        assert!(!qemu_cmdline_names_pidfile(without.id() as i32, pid_path));
+        for child in [&mut with, &mut without] {
+            child.kill().unwrap();
+            child.wait().unwrap();
         }
     }
 }
