@@ -482,34 +482,53 @@ mod tests {
 
     const LONG_RUNNING: &str = "sleep 60";
 
+    /// Returns whether the process with the given PID exists on the OS level.
+    ///
+    /// A process that exited but was not reaped yet (a zombie) still exists. The processes started
+    /// by a [`SingleProcessRunner`] are reaped before they are reported as not running anymore, so
+    /// this is deterministic for them.
+    fn is_alive(pid: Pid) -> bool {
+        match signal::kill(pid, None) {
+            Ok(()) => true,
+            Err(Errno::ESRCH) => false,
+            Err(err) => panic!("Failed to check whether process {pid} is alive: {err}"),
+        }
+    }
+
     #[test]
     fn stop_waits_for_exit() {
         let mut runner = SingleProcessRunner::new(no_op_logger());
         let observer = runner.observer();
         runner.start(shell(LONG_RUNNING)).unwrap();
         assert!(runner.is_running());
-        assert!(observer.get_pid().is_some());
+        let pid = observer.get_pid().expect("the process should be running");
+        assert!(is_alive(pid));
 
         assert!(!runner.wait_for_exit(Duration::from_secs(1)));
         assert!(runner.is_running());
+        assert!(is_alive(pid));
 
         runner.stop().unwrap();
         assert!(!runner.is_running());
         assert_eq!(observer.get_pid(), None);
+        assert!(!is_alive(pid));
     }
 
     #[test]
     fn stop_when_not_running_is_noop() {
         let mut runner = SingleProcessRunner::new(no_op_logger());
+        let observer = runner.observer();
         assert!(!runner.is_running());
 
         runner.stop().unwrap();
         assert!(!runner.is_running());
 
         // The process exits on its own.
-        runner.start(shell("true")).unwrap();
+        runner.start(shell("sleep 1")).unwrap();
+        let pid = observer.get_pid().expect("the process should be running");
         assert!(runner.wait_for_exit(Duration::from_secs(10)));
         assert!(!runner.is_running());
+        assert!(!is_alive(pid));
 
         runner.stop().unwrap();
         assert!(!runner.is_running());
@@ -530,9 +549,13 @@ mod tests {
         // The observer obtained before the restart follows the new process.
         let new_pid = observer.get_pid().expect("a new process should be running");
         assert_ne!(old_pid, new_pid);
+        // The old process was stopped before starting the new one.
+        assert!(!is_alive(old_pid));
+        assert!(is_alive(new_pid));
 
         runner.stop().unwrap();
         assert_eq!(observer.get_pid(), None);
+        assert!(!is_alive(new_pid));
     }
 
     #[test]
@@ -540,6 +563,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let ready = dir.path().join("ready");
         let mut runner = SingleProcessRunner::new(no_op_logger());
+        let observer = runner.observer();
         // Ignore SIGTERM, then signal that the trap is installed.
         runner
             .start(shell(&format!(
@@ -553,10 +577,13 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
 
+        let pid = observer.get_pid().expect("the process should be running");
+
         let start = Instant::now();
         runner.stop().unwrap();
 
         assert!(start.elapsed() >= STOP_GRACE_PERIOD);
         assert!(!runner.is_running());
+        assert!(!is_alive(pid));
     }
 }
