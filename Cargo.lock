@@ -9701,6 +9701,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-test-utilities-consensus",
+ "ic-test-utilities-metrics",
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-tracing",
