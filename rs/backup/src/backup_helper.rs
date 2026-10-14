@@ -243,8 +243,6 @@ impl BackupHelper {
                 .artifacts_guard
                 .lock()
                 .expect("artifacts mutex lock failed");
-            // The arguments are passed to rsync as is, without going through a shell, so the
-            // pattern must not be quoted.
             match self.rsync_remote_cmd(
                 remote_dir.clone(),
                 &self.spool_dir().into_os_string(),
