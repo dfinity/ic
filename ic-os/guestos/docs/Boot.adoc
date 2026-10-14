@@ -49,19 +49,29 @@ After switch to the proper root filesystem, the following essential IC-specific 
 
 == Kernel Command Line Parameters
 
-We calculate kernel command line parameters at build time.
+The kernel command line is fixed at build time from
+`ic-os/bootloader/guestos_boot_args.template`, shared by all GuestOS envs
+(`ic-os/guestos/defs.bzl`). `ROOT_HASH` is replaced by the dm-verity root hash
+and the result is stored as `boot_args` on each boot partition. The file defines
+four complete command lines:
 
-=== boot_args.template
-
-The `boot_args.template` file in the GuestOS context directory defines the kernel command line parameters used when booting the GuestOS. This file contains two variables:
-
-* `BOOT_ARGS_A`: Kernel command line parameters for booting from partition set A
-* `BOOT_ARGS_B`: Kernel command line parameters for booting from partition set B
+* `BOOT_ARGS_A` / `BOOT_ARGS_B`: parameters for partition set A / B
+* `BOOT_ARGS_TEE_A` / `BOOT_ARGS_TEE_B`: the same plus `dfinity.tee=1`, used for
+  SEV-SNP guests
 
 === During the boot process
 
-1. The GRUB bootloader checks for the existence of a `boot_args` file on the boot partition.
-2. If found, it sources this file to get the appropriate boot arguments based on the active partition set (A or B).
+* Without direct boot (e.g. CI VMs), GRUB (`ic-os/bootloader/guestos_grub.cfg`)
+  sources `boot_args` from the boot partition and boots `vmlinuz` with
+  `BOOT_ARGS_A` or `BOOT_ARGS_B` depending on `boot_alternative`.
+* On HostOS, `guest_vm_runner` reads the same file and passes the string to QEMU
+  as the libvirt `<cmdline>` (direct boot; the `BOOT_ARGS_TEE_*` variant when the
+  TEE is enabled).
+
+The TEE command lines are part of the SEV-SNP launch measurement, so any change
+ships with a GuestOS release. `oops=panic panic=10` make a GuestOS that hits a
+kernel Oops or panic reboot (and be relaunched by HostOS) instead of hanging;
+see the comment in the template.
 
 == Mount +/boot+ filesystems
 

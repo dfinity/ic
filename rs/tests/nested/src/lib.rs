@@ -1,12 +1,12 @@
 use std::time::Duration;
 
-use anyhow::bail;
+use anyhow::{Context, Result, bail, ensure};
 use bare_metal_deployment::{BareMetalIpmiSession, LoginInfo};
 use ic_system_test_driver::driver::nested::NestedNode;
 use ic_system_test_driver::driver::test_env::SshKeyGen;
 use ic_system_test_driver::{
     driver::{
-        nested::{HasNestedVms, NestedNodes},
+        nested::{HasNestedVms, NestedNodes, NestedVm},
         test_env::TestEnv,
         test_env_api::*,
     },
@@ -14,7 +14,10 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use slog::info;
-use util::{NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, setup_ic_infrastructure};
+use util::{
+    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, setup_ic_infrastructure,
+    try_logging_guestos_diagnostics,
+};
 
 pub mod util;
 
@@ -130,4 +133,137 @@ pub fn registration_with_timeout(env: TestEnv, timeout: Duration) {
         }
     ).unwrap();
     info!(logger, "All {n} nodes successfully came up and registered.");
+}
+
+/// `guest_vm_runner` logs this line when it relaunches a GuestOS whose domain went away
+/// (rs/ic_os/os_tools/guest_vm_runner/src/main.rs, `run()`); the gates below count it.
+const GUEST_VM_RELAUNCH_LINE: &str = "Guest VM stopped, restarting";
+
+/// Crash the GuestOS kernel (sysrq 'c' panics it) and check that `panic=10` on its kernel
+/// command line reboots it and that HostOS (libvirt `on_reboot=destroy` plus `guest_vm_runner`)
+/// relaunches the VM exactly once. Runs after `registration`, so `boot_cycle` is already stable
+/// and the relaunch boots the same slot.
+pub fn guestos_panic_relaunch(env: TestEnv) {
+    let logger = env.logger();
+    let host = env
+        .get_nested_vm(HOST_VM_NAME)
+        .expect("Unable to find HostOS node.");
+    if let Err(e) = guestos_panic_relaunch_inner(&env, &host) {
+        try_logging_guestos_diagnostics(&host, &logger);
+        panic!("GuestOS panic-relaunch check failed: {e:?}");
+    }
+    info!(
+        logger,
+        "GuestOS panicked, rebooted after panic=10 and was relaunched by guest_vm_runner."
+    );
+}
+
+/// Number of GuestOS relaunches logged by `guest_vm_runner` since the HostOS booted.
+fn count_guest_vm_relaunches(host: &NestedVm) -> Result<usize> {
+    let out = host.block_on_bash_script(&format!(
+        "journalctl -q -b -o cat --no-pager | grep -c '{GUEST_VM_RELAUNCH_LINE}' || true"
+    ))?;
+    out.trim()
+        .parse()
+        .with_context(|| format!("Unexpected relaunch count output: {out:?}"))
+}
+
+fn guestos_panic_relaunch_inner(env: &TestEnv, host: &NestedVm) -> Result<()> {
+    let logger = env.logger();
+    let guest = host.get_guest_ssh()?;
+
+    // 1. The kernel took the parameters on the direct-boot path; remember the boot id.
+    let out = guest.block_on_bash_script(
+        "cat /proc/cmdline; \
+         cat /proc/sys/kernel/panic_on_oops /proc/sys/kernel/panic /proc/sys/kernel/random/boot_id",
+    )?;
+    info!(
+        logger,
+        "GuestOS kernel cmdline, panic sysctls and boot id:\n{out}"
+    );
+    let mut lines = out.lines();
+    let cmdline: Vec<&str> = lines
+        .next()
+        .context("Missing /proc/cmdline")?
+        .split_whitespace()
+        .collect();
+    ensure!(
+        cmdline.contains(&"oops=panic") && cmdline.contains(&"panic=10"),
+        "GuestOS did not boot with oops=panic panic=10: {out}"
+    );
+    ensure!(
+        lines.next() == Some("1") && lines.next() == Some("10"),
+        "Expected kernel.panic_on_oops=1 and kernel.panic=10: {out}"
+    );
+    let boot_id_before = lines.next().context("Missing boot id")?.to_string();
+    let relaunches_before = count_guest_vm_relaunches(host)?;
+
+    // 2. Trigger the panic detached, with all fds redirected, so the SSH channel closes before
+    // the kernel dies; a channel still open at the panic would block until the TCP timeout.
+    info!(logger, "Crashing the GuestOS kernel via sysrq");
+    let session = guest.block_on_ssh_session()?;
+    session.set_timeout(30_000);
+    guest.block_on_bash_script_from_session(
+        &session,
+        "nohup sudo sh -c 'sleep 5; echo c > /proc/sysrq-trigger' >/dev/null 2>&1 </dev/null &",
+    )?;
+
+    // 3. guest_vm_runner saw the domain go away and relaunched it (expected within ~30 s).
+    let relaunches_after = retry_with_msg!(
+        "Waiting for guest_vm_runner to relaunch the GuestOS",
+        logger.clone(),
+        Duration::from_secs(3 * 60),
+        Duration::from_secs(5),
+        || {
+            let n = count_guest_vm_relaunches(host)?;
+            if n > relaunches_before {
+                Ok(n)
+            } else {
+                bail!("No relaunch logged yet ({n} before the panic)")
+            }
+        }
+    )?;
+
+    // 4. The guest is up again on a new boot. Bound each SSH attempt so a failure here still
+    // leaves time for the diagnostics within the per-test timeout.
+    retry_with_msg!(
+        "Waiting for the GuestOS to boot again",
+        logger.clone(),
+        Duration::from_secs(5 * 60),
+        Duration::from_secs(10),
+        || {
+            let session = guest.block_on_ssh_session_with_timeout(Duration::from_secs(60))?;
+            let boot_id = guest.block_on_bash_script_from_session(
+                &session,
+                "cat /proc/sys/kernel/random/boot_id",
+            )?;
+            if boot_id.trim() != boot_id_before {
+                Ok(())
+            } else {
+                bail!("GuestOS still reports the pre-panic boot id")
+            }
+        }
+    )?;
+
+    // 5. The orchestrator serves its dashboard again (NestedVm's public address is the guest IP).
+    host.await_orchestrator_dashboard_accessible()?;
+
+    // 6. Exactly one relaunch: the guest did not end up in a panic/reboot loop.
+    let relaunches_final = count_guest_vm_relaunches(host)?;
+    ensure!(
+        relaunches_final == relaunches_after,
+        "GuestOS was relaunched again ({relaunches_after} -> {relaunches_final})"
+    );
+
+    // 7. Evidence only: the serial console is forwarded to the HostOS journal through a
+    // block-buffered pipe, so these lines may lag behind the relaunch.
+    let evidence = host.block_on_bash_script(
+        "journalctl -q -b -o cat --no-pager \
+         | grep -E 'Kernel panic - not syncing|Rebooting in 10 seconds|GuestOS boot succeeded' || true",
+    )?;
+    info!(
+        logger,
+        "HostOS journal evidence of the panic and relaunch:\n{evidence}"
+    );
+    Ok(())
 }

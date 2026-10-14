@@ -5,7 +5,16 @@
 # the system will use SELinux and keep track of operations that would
 # be prohibited, but will only log but not actually deny them. This is
 # useful for debug and policy development.
-BOOT_ARGS_A="root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A security=selinux selinux=1 enforcing=1 root_hash=ROOT_HASH"
-BOOT_ARGS_B="root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B security=selinux selinux=1 enforcing=1 root_hash=ROOT_HASH"
-BOOT_ARGS_TEE_A="root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=ROOT_HASH"
-BOOT_ARGS_TEE_B="root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=ROOT_HASH"
+#
+# oops=panic panic=10: turn any kernel Oops into a panic and reboot 10 s later. Ubuntu's kernel
+# config has CONFIG_PANIC_ON_OOPS unset and CONFIG_PANIC_TIMEOUT=0, so by default an Oops only kills
+# one task (a kworker dying with a lock held hangs the boot) and a panic spins forever while libvirt
+# still reports the VM running. The reboot ends the libvirt domain (on_reboot=destroy in
+# guest_vm_runner's guestos_vm_template.xml) and guest_vm_runner relaunches it; CI test VMs reset in
+# place. 10 s lets the console flush the trace. It must be on the cmdline rather than in sysctl.d to
+# cover the initramfs window; it also makes initramfs-tools' panic() reboot (e.g. on a verity
+# failure) instead of waiting at an unattended (initramfs) shell.
+BOOT_ARGS_A="root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset oops=panic panic=10 dfinity.system=A security=selinux selinux=1 enforcing=1 root_hash=ROOT_HASH"
+BOOT_ARGS_B="root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset oops=panic panic=10 dfinity.system=B security=selinux selinux=1 enforcing=1 root_hash=ROOT_HASH"
+BOOT_ARGS_TEE_A="root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7 console=ttyS0 nomodeset oops=panic panic=10 dfinity.system=A dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=ROOT_HASH"
+BOOT_ARGS_TEE_B="root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5 console=ttyS0 nomodeset oops=panic panic=10 dfinity.system=B dfinity.tee=1 security=selinux selinux=1 enforcing=1 root_hash=ROOT_HASH"
