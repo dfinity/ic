@@ -13147,6 +13147,7 @@ dependencies = [
  "ic-consensus-certification",
  "ic-consensus-cup-utils",
  "ic-consensus-dkg",
+ "ic-consensus-mocks",
  "ic-consensus-utils",
  "ic-crypto-for-verification-only",
  "ic-crypto-sha2",
