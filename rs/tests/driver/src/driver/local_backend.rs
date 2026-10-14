@@ -697,6 +697,13 @@ impl LocalBackend {
         // `ip -6 addr add {gateway}/64` auto-creates (`proto kernel metric 256`):
         // replacing it in place sets its source. A separate route would land at
         // metric 1024 and lose to the metric-256 kernel route.
+        //
+        // The `lo` addresses need `nodad`: the kernel flags every new IPv6
+        // address tentative and only clears that flag from a workqueue item
+        // (loopback skips DAD, but in that same deferred step), while `ip -6
+        // route ... src` rejects a tentative source with "Invalid source
+        // address". Without `nodad` the route command races the workqueue, which
+        // it loses on a loaded host. `nodad` skips the tentative state entirely.
         let create_script = format!(
             "ip link del {bridge} 2>/dev/null; \
              ip link add name {bridge} address {mac} type bridge && \
@@ -704,9 +711,9 @@ impl LocalBackend {
              ip -6 addr add {gateway}/64 dev {bridge} nodad && \
              ip addr add {ipv4_gateway}/24 dev {bridge} && \
              {name_server_addrs}\
-             ip -6 addr replace {mgmt}/128 dev lo && \
-             ip -6 addr replace {logs}/128 dev lo && \
-             ip -6 addr replace {files}/128 dev lo && \
+             ip -6 addr replace {mgmt}/128 dev lo nodad && \
+             ip -6 addr replace {logs}/128 dev lo nodad && \
+             ip -6 addr replace {files}/128 dev lo nodad && \
              ip -6 route replace {prefix}/64 dev {bridge} proto kernel metric 256 src {mgmt}"
         );
         Self::run_shell(&create_script, "create group bridge")?;
@@ -1055,13 +1062,13 @@ key-exchange-timeout-ms = 10000
     /// Stop the QEMU process recorded in `pid_path`, if running. Best-effort and
     /// idempotent.
     ///
-    /// Sends SIGTERM (QEMU powers the guest off and exits), waits briefly for a
-    /// graceful exit, then escalates to SIGKILL. Signalling via the pid-file
-    /// (rather than a `Child` handle) lets any process tear a VM down: QEMU is
-    /// daemonized and reparented to an init-like ancestor (PID 1 of the test
-    /// action's execution environment), so no process holds a handle on it. The
-    /// teardown of that environment (bazel's `linux-sandbox`) remains the final
-    /// safety net.
+    /// Sends SIGTERM (QEMU exits at once without shutting the guest down),
+    /// waits briefly for it to exit, then escalates to SIGKILL. Signalling via
+    /// the pid-file (rather than a `Child` handle) lets any process tear a VM
+    /// down: QEMU is daemonized and reparented to an init-like ancestor (PID 1
+    /// of the test action's execution environment), so no process holds a
+    /// handle on it. The teardown of that environment (bazel's `linux-sandbox`)
+    /// remains the final safety net.
     fn stop_qemu(&self, pid_path: &Path) {
         let Ok(contents) = std::fs::read_to_string(pid_path) else {
             return;

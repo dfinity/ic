@@ -42,10 +42,22 @@ pub(crate) async fn notify(
     }
 
     let message_output_count = std::cmp::min(notify_data.count, 10);
-    let message_clone = notify_data.message.clone();
+    let sanitized_message = notify_data
+        .message
+        .split('\n')
+        .flat_map(|line| {
+            // Wrap lines at 72 characters (prefix (7) + message (72) + newline (1) is 80)
+            line.escape_debug()
+                .collect::<Vec<_>>()
+                .chunks(72)
+                .map(|v| format!("Guest: {}", v.iter().collect::<String>()))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
 
     tracker.spawn(async move {
-        if let Err(e) = notify_task(message_clone, message_output_count).await {
+        if let Err(e) = notify_task(sanitized_message, message_output_count).await {
             println!("notify task failed: {e:#}")
         }
     });
