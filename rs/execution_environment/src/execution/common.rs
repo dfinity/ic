@@ -486,11 +486,11 @@ pub(crate) enum CanisterAccess {
 /// needs more than one access (e.g., to several canisters) must call it once
 /// per access, passing the corresponding `CanisterAccess`.
 ///
-/// The `subnet_admins` are only taken into account if the subnet can have
-/// subnet admins (see `can_have_subnet_admins`). On cloud engines on the free
-/// cost schedule, they are allowed every access except for `rename_canister`
-/// and the methods rejected for every sender (see below). On rented subnets,
-/// they are only allowed a few methods.
+/// On cloud engines, the `subnet_admins` are allowed every access except for
+/// `rename_canister` and the methods rejected for every sender (see below).
+/// On other subnets, they are only taken into account if the subnet can have
+/// subnet admins (see `can_have_subnet_admins`), i.e., on rented subnets,
+/// where they are only allowed a few methods.
 ///
 /// This function decides only *who* may call a method, not through which call
 /// path: whether a method may be called by an ingress message at all is
@@ -516,11 +516,10 @@ fn validate_sender(
     cost_schedule: CanisterCyclesCostSchedule,
     subnet_admins: &BTreeSet<PrincipalId>,
 ) -> Result<(), CanisterManagerError> {
-    // Subnet admins of cloud engines on the free cost schedule can access every
-    // canister in every way validated here, except for renaming it.
-    let is_cloud_engine_admin = subnet_type == SubnetType::CloudEngine
-        && cost_schedule == CanisterCyclesCostSchedule::Free
-        && subnet_admins.contains(sender);
+    // Subnet admins of cloud engines can access every canister in every way
+    // validated here, except for renaming it.
+    let is_cloud_engine_admin =
+        subnet_type == SubnetType::CloudEngine && subnet_admins.contains(sender);
     let subnet_admins = can_have_subnet_admins(subnet_type, cost_schedule).then_some(subnet_admins);
     let is_sender_the_canister = *sender == canister.canister_id().get();
     match access {
@@ -564,8 +563,8 @@ fn validate_sender(
             Ok(())
         }
 
-        // Subnet admins of cloud engines on the free cost schedule can access
-        // every canister in every other way.
+        // Subnet admins of cloud engines can access every canister in every
+        // other way.
         _ if is_cloud_engine_admin => Ok(()),
 
         // A canister can always read its own status and manage its own chunk
@@ -1298,8 +1297,9 @@ mod test {
     /// Checks which senders `validate_sender` accepts for every access it
     /// validates on every subnet type and cost schedule: subnet admins are
     /// only taken into account on rented subnets (application subnets on the
-    /// free cost schedule) and on cloud engines on the free cost schedule,
-    /// where they are allowed every access except for renaming a canister.
+    /// free cost schedule) and on cloud engines (regardless of the cost
+    /// schedule), where they are allowed every access except for renaming a
+    /// canister.
     #[test]
     fn validate_sender_accepts_expected_senders() {
         let canister_id = CanisterId::from_u64(42);
@@ -1316,7 +1316,7 @@ mod test {
             GOVERNANCE_CANISTER_ID.get(),
         ];
 
-        // Senders that are accepted on cloud engines on the free cost schedule,
+        // Senders that are accepted on cloud engines,
         // on rented subnets (application subnets on the free cost schedule),
         // and on subnets without subnet admins, respectively.
         type Case = (
@@ -1417,7 +1417,7 @@ mod test {
         ];
         // `validate_sender` does not define the access control of any other
         // method, so it must reject every sender for them, even the subnet
-        // admins of cloud engines on the free cost schedule. `rename_canister`
+        // admins of cloud engines. `rename_canister`
         // is among them: none of the senders here is the migration canister
         // (see the dedicated test below).
         let validated: Vec<CanisterAccess> = cases
@@ -1442,13 +1442,13 @@ mod test {
                 let is_free = cost_schedule == CanisterCyclesCostSchedule::Free;
                 for (
                     accesses,
-                    accepted_on_free_cloud_engine,
+                    accepted_on_cloud_engine,
                     accepted_on_rented_subnet,
                     accepted_without_subnet_admins,
                 ) in &cases
                 {
                     let accepted = match subnet_type {
-                        SubnetType::CloudEngine if is_free => accepted_on_free_cloud_engine,
+                        SubnetType::CloudEngine => accepted_on_cloud_engine,
                         SubnetType::Application if is_free => accepted_on_rented_subnet,
                         _ => accepted_without_subnet_admins,
                     };
