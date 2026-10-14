@@ -2060,15 +2060,17 @@ fn has_gpt_header(path: &Path) -> Result<bool> {
     }
 }
 
-/// Whether `/proc/<pid>/cmdline` has an argument equal to `pid_path`, i.e. the
-/// process is the QEMU that `start_vm` launched with `-pidfile <pid_path>`.
+/// Whether `/proc/<pid>/cmdline` has the argument pair `-pidfile <pid_path>`,
+/// i.e. the process is the QEMU that `start_vm` launched for this VM.
 fn qemu_cmdline_names_pidfile(pid: i32, pid_path: &Path) -> bool {
     let pid_path = pid_path.display().to_string();
     std::fs::read(format!("/proc/{pid}/cmdline"))
         .map(|cmdline| {
             cmdline
                 .split(|b| *b == 0)
-                .any(|arg| arg == pid_path.as_bytes())
+                .collect::<Vec<_>>()
+                .windows(2)
+                .any(|pair| pair[0] == b"-pidfile" && pair[1] == pid_path.as_bytes())
         })
         .unwrap_or(false)
 }
@@ -2078,20 +2080,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn qemu_cmdline_names_pidfile_requires_the_pidfile_argument() {
+    fn qemu_cmdline_names_pidfile_requires_the_pidfile_argument_pair() {
         let pid_path = Path::new("/nonexistent/vms/vm/qemu.pid");
+        let path = pid_path.to_str().unwrap();
         // Two commands keep `sh` from exec'ing `sleep` in its place, so the
-        // process keeps the shell's argv, whose `$0` is the pid-file path.
+        // process keeps the shell's argv, in which the positional arguments
+        // follow the `$0` given after the command.
         let spawn = |args: &[&str]| std::process::Command::new("sh").args(args).spawn().unwrap();
-        let mut with = spawn(&["-c", "sleep 60; :", pid_path.to_str().unwrap()]);
-        let mut without = spawn(&["-c", "sleep 60; :"]);
+        let mut with = spawn(&["-c", "sleep 60; :", "sh", "-pidfile", path]);
+        let mut without_flag = spawn(&["-c", "sleep 60; :", "sh", path]);
+        let mut other_path = spawn(&["-c", "sleep 60; :", "sh", "-pidfile", "/other/qemu.pid"]);
         assert!(qemu_cmdline_names_pidfile(with.id() as i32, pid_path));
         assert!(!qemu_cmdline_names_pidfile(
-            with.id() as i32,
-            Path::new("/other/qemu.pid")
+            without_flag.id() as i32,
+            pid_path
         ));
-        assert!(!qemu_cmdline_names_pidfile(without.id() as i32, pid_path));
-        for child in [&mut with, &mut without] {
+        assert!(!qemu_cmdline_names_pidfile(
+            other_path.id() as i32,
+            pid_path
+        ));
+        for child in [&mut with, &mut without_flag, &mut other_path] {
             child.kill().unwrap();
             child.wait().unwrap();
         }
