@@ -1351,8 +1351,10 @@ fn process_response_result(
             }
         }
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
+            // The Wasm execution ran with the message limit reduced by the
+            // instructions reserved for the cleanup callback.
             let instructions_used =
-                original.message_instruction_limit - output.num_instructions_left;
+                execution_parameters.instruction_limits.message() - output.num_instructions_left;
             if instructions_used >= execution_parameters.instruction_limits.slice() {
                 info!(
                     round.log,
