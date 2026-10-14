@@ -30,11 +30,9 @@ use ic_types::{
     Height, NodeId, PlatformVersion, PrincipalId, SubnetId,
     artifact::ConsensusMessageId,
     consensus::{
-        Block, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasBlockHash,
-        HasCommittee,
+        ConsensusMessageHash, ConsensusMessageHashable, HasCommittee,
         certification::{Certification, CertificationShare},
     },
-    crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
 };
 use serde::{Deserialize, Serialize};
@@ -46,40 +44,22 @@ const MAX_VALIDATION_THREADS: usize = 8;
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct InvalidArtifact {
     pub id: ConsensusMessageId,
-    pub block_hash: Option<CryptoHashOf<Block>>,
     pub message: String,
 }
 
 impl InvalidArtifact {
-    pub fn get_file_name(&self) -> Option<String> {
-        let mut name = match self.id.hash {
-            ConsensusMessageHash::RandomBeacon(_) => "random_beacon",
-            ConsensusMessageHash::Finalization(_) => "finalization",
-            ConsensusMessageHash::Notarization(_) => "notarization",
-            ConsensusMessageHash::BlockProposal(_) => "block_proposal",
-            ConsensusMessageHash::RandomTape(_) => "random_tape",
-            ConsensusMessageHash::CatchUpPackage(_) => "catch_up_package",
-            _ => return None,
+    /// Returns the name of the backup file of the artifact, as written by
+    /// `ic_artifact_pool::backup::BackupArtifact::file_location`.
+    pub fn get_file_name(&self) -> Option<&'static str> {
+        match self.id.hash {
+            ConsensusMessageHash::RandomBeacon(_) => Some("random_beacon.bin"),
+            ConsensusMessageHash::Finalization(_) => Some("finalization.bin"),
+            ConsensusMessageHash::Notarization(_) => Some("notarization.bin"),
+            ConsensusMessageHash::BlockProposal(_) => Some("block_proposal.bin"),
+            ConsensusMessageHash::RandomTape(_) => Some("random_tape.bin"),
+            ConsensusMessageHash::CatchUpPackage(_) => Some("catch_up_package.bin"),
+            _ => None,
         }
-        .to_string();
-
-        if let Some(hash) = &self.block_hash {
-            name.push_str(&format!(
-                "_{}_{}",
-                self.bytes_to_hex_string(&hash.get_ref().0),
-                self.bytes_to_hex_string(&self.id.hash.digest().0)
-            ));
-        }
-
-        name.push_str(".bin");
-        Some(name)
-    }
-
-    fn bytes_to_hex_string(&self, v: &[u8]) -> String {
-        v.iter().fold(String::new(), |mut hash, byte| {
-            hash.push_str(&format!("{byte:X}"));
-            hash
-        })
     }
 }
 
@@ -315,17 +295,10 @@ impl ReplayValidator {
 
             changes.iter().for_each(|action| match action {
                 ChangeAction::HandleInvalid(a, s) => {
-                    let block_hash = match a {
-                        ConsensusMessage::Finalization(f) => Some(f.block_hash().clone()),
-                        ConsensusMessage::Notarization(n) => Some(n.block_hash().clone()),
-                        ConsensusMessage::BlockProposal(b) => Some(b.block_hash().clone()),
-                        _ => None,
-                    };
                     self.push_dedup(
                         &mut invalid_artifacts,
                         InvalidArtifact {
                             id: a.get_id(),
-                            block_hash,
                             message: s.clone(),
                         },
                     );
@@ -370,5 +343,65 @@ impl ReplayValidator {
         let mut pool = self.get_new_unvalidated(consensus_pool, cup);
         let mut dkg = self.new_key_manager(&PoolReader::new(&pool));
         self.validate(&mut pool, &mut HashMap::new(), &mut dkg, target_height)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_artifact_pool::backup::BackupArtifact;
+    use ic_test_utilities_consensus::{
+        fake::{Fake, FakeContent, FakeContentSigner},
+        make_genesis,
+    };
+    use ic_test_utilities_types::ids::{node_test_id, test_replica_version};
+    use ic_types::{
+        consensus::{
+            BlockProposal, Finalization, FinalizationContent, Notarization, NotarizationContent,
+            RandomTape, RandomTapeContent, dkg::DkgSummary,
+        },
+        crypto::{CryptoHash, CryptoHashOf},
+    };
+    use std::path::Path;
+
+    #[test]
+    fn get_file_name_matches_backup_file_name() {
+        let cup = make_genesis(DkgSummary::fake());
+        let block = cup.content.block.as_ref().clone();
+        let height = block.height;
+        let block_hash = CryptoHashOf::from(CryptoHash(vec![1, 2, 3]));
+        let messages = [
+            BlockProposal::fake(block, node_test_id(0)).into_message(),
+            Notarization::fake(NotarizationContent::new(
+                height,
+                block_hash.clone(),
+                test_replica_version(),
+            ))
+            .into_message(),
+            Finalization::fake(FinalizationContent::new(
+                height,
+                block_hash,
+                test_replica_version(),
+            ))
+            .into_message(),
+            cup.content.random_beacon.as_ref().clone().into_message(),
+            RandomTape::fake(RandomTapeContent::new(height, test_replica_version())).into_message(),
+            cup.into_message(),
+        ];
+
+        for message in messages {
+            let (_, backup_file_name) = BackupArtifact::try_from(message.clone())
+                .expect("Artifact should be backed up")
+                .file_location(Path::new("backup"));
+            let invalid_artifact = InvalidArtifact {
+                id: message.get_id(),
+                message: String::new(),
+            };
+
+            assert_eq!(
+                invalid_artifact.get_file_name(),
+                Some(backup_file_name.as_str())
+            );
+        }
     }
 }
