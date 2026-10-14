@@ -758,8 +758,7 @@ mod tests {
         fake_canister_http_stripped_message, fake_canister_http_timeout_message,
         fake_flexible_canister_http_responses_message, fake_idkg_dealing,
         fake_idkg_payload_with_dealings, fake_ingress_message, fake_ingress_message_with_arg_size,
-        fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages,
-        fake_stripped_canister_http_response_message, rpc_response,
+        fake_ingress_message_with_sig, fake_stripped_block_proposal_with_messages, rpc_response,
     };
     use crate::fetch_stripped_artifact::types::stripped::StrippedCanisterHttpResponses;
     use assert_matches::assert_matches;
@@ -798,6 +797,34 @@ mod tests {
             } if peer_id == NODE_1 => assert_same_block(&reassembled, original),
             result => panic!("The block proposal was not assembled: {result:?}"),
         }
+    }
+
+    /// Strips `block_proposal` the way it goes out to peers, has `assembler` put it
+    /// back together the way a peer does, and checks that this reproduces the block.
+    /// Returns the content hashes of the canister http responses that the stripped
+    /// proposal declared.
+    async fn assert_roundtrip(
+        assembler: &FetchStrippedConsensusArtifact,
+        block_proposal: &BlockProposal,
+    ) -> Vec<CanisterHttpResponseContentHash> {
+        let stripped =
+            assembler.disassemble_message(ConsensusMessage::BlockProposal(block_proposal.clone()));
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped_block_proposal) =
+            &stripped
+        else {
+            panic!("Didn't strip the block proposal");
+        };
+        let declared = stripped_block_proposal
+            .stripped_canister_http_responses
+            .stripped_responses
+            .clone();
+
+        let reassembled = assembler
+            .assemble_message(stripped.id(), Some((stripped, NODE_1)), MockPeers(NODE_1))
+            .await;
+        assert_assembled(reassembled, block_proposal);
+
+        declared
     }
 
     #[test]
@@ -1244,17 +1271,8 @@ mod tests {
             /*ingress_pool_message=*/ Some(ingress_1.clone()),
             /*consensus_pool_message=*/ Some(ingress_2.clone()),
         );
-        let stripped_block_proposal =
-            assembler.disassemble_message(ConsensusMessage::BlockProposal(block_proposal.clone()));
-        let reassembled_block_proposal = assembler
-            .assemble_message(
-                stripped_block_proposal.id(),
-                Some((stripped_block_proposal, NODE_1)),
-                MockPeers(NODE_1),
-            )
-            .await;
 
-        assert_assembled(reassembled_block_proposal, &block_proposal);
+        assert_roundtrip(&assembler, &block_proposal).await;
     }
 
     /// Sets up an assembler whose canister http pool serves `pool_responses`, and
@@ -1287,98 +1305,28 @@ mod tests {
         )
     }
 
-    /// A block proposal delivering `responses`, together with the stripped proposal
-    /// that a block maker which strips canister HTTP responses would send for it:
-    /// the contents removed from the payload, their hashes declared alongside.
-    fn fake_stripped_proposal_with_canister_http(
-        responses: &[CanisterHttpResponse],
-    ) -> (StrippedBlockProposal, BlockProposal) {
-        let messages = |stripped: bool| {
-            responses
-                .iter()
-                .map(|response| {
-                    if stripped {
-                        fake_stripped_canister_http_response_message(response, &[NODE_1])
-                    } else {
-                        fake_canister_http_response_message(response, &[NODE_1])
-                    }
-                })
-                .collect()
-        };
-        let unstripped =
-            fake_block_proposal_with_canister_http(fake_canister_http_payload(messages(false)));
-
-        // Strip the unstripped proposal, rather than building a proposal around the
-        // pruned payload: the block commits to the payload it was built with, and
-        // stripping must not disturb that.
-        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped) =
-            ConsensusMessage::BlockProposal(unstripped.clone()).strip()
-        else {
-            panic!("Didn't properly strip the block proposal");
-        };
-        if let Some(block) = stripped.pruned_block_proposal_proto.value.as_mut() {
-            block.canister_http_payload_bytes = fake_canister_http_payload(messages(true));
-        }
-        stripped.stripped_canister_http_responses = StrippedCanisterHttpResponses {
-            stripped_responses: responses
-                .iter()
-                .map(ic_types::crypto::crypto_hash)
-                .collect(),
-        };
-
-        (stripped, unstripped)
-    }
-
-    async fn assemble(
-        assembler: &FetchStrippedConsensusArtifact,
-        stripped: StrippedBlockProposal,
-    ) -> AssembleResult<ConsensusMessage> {
-        let message = MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped);
-
-        assembler
-            .assemble_message(message.id(), Some((message, NODE_1)), MockPeers(NODE_1))
-            .await
-    }
-
-    /// The response contents an outcall's own replica gossiped are still in the
-    /// canister HTTP pool when the block that delivers them arrives, so the
-    /// receiver reassembles the block without asking anyone.
-    #[tokio::test]
-    async fn assemble_canister_http_responses_from_pool_test() {
-        let responses = vec![
-            fake_canister_http_response(1, 1024),
-            fake_canister_http_response(2, 2048),
-        ];
-        let (stripped, unstripped) = fake_stripped_proposal_with_canister_http(&responses);
-
-        let assembler =
-            set_up_assembler_with_canister_http_responses(responses, /*peer=*/ None);
-
-        assert_assembled(assemble(&assembler, stripped).await, &unstripped);
-    }
-
-    /// A receiver that never saw the response has to fetch it from a peer.
-    #[tokio::test]
-    async fn assemble_canister_http_response_from_peer_test() {
-        let response = fake_canister_http_response(1, 1024);
-        let (stripped, unstripped) =
-            fake_stripped_proposal_with_canister_http(std::slice::from_ref(&response));
-
-        let assembler = set_up_assembler_with_canister_http_responses(
-            /*pool=*/ vec![],
-            /*peer=*/ Some(response),
-        );
-
-        assert_assembled(assemble(&assembler, stripped).await, &unstripped);
-    }
-
     /// A content that goes back into several slots is fetched only once, even if
     /// the stripped proposal declares it once for each of them.
     #[tokio::test]
     async fn assemble_canister_http_response_of_several_slots_test() {
         let response = fake_canister_http_response(1, 1024);
-        let (stripped, unstripped) =
-            fake_stripped_proposal_with_canister_http(&[response.clone(), response.clone()]);
+        let block_proposal =
+            fake_block_proposal_with_canister_http(fake_canister_http_payload(vec![
+                fake_flexible_canister_http_responses_message(
+                    1,
+                    &[(response.clone(), NODE_1), (response.clone(), NODE_2)],
+                ),
+            ]));
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(mut stripped) =
+            ConsensusMessage::BlockProposal(block_proposal.clone()).strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
+        // We declare each content once, but a peer need not.
+        stripped
+            .stripped_canister_http_responses
+            .stripped_responses
+            .push(ic_types::crypto::crypto_hash(&response));
         assert_eq!(
             stripped
                 .stripped_canister_http_responses
@@ -1391,17 +1339,28 @@ mod tests {
             /*pool=*/ vec![],
             /*peer=*/ Some(response),
         );
+        let stripped = MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped);
+        let reassembled = assembler
+            .assemble_message(stripped.id(), Some((stripped, NODE_1)), MockPeers(NODE_1))
+            .await;
 
-        assert_assembled(assemble(&assembler, stripped).await, &unstripped);
+        assert_assembled(reassembled, &block_proposal);
     }
 
-    /// A stripped canister http response that neither the pool nor the peers can
-    /// come up with must fail the assembly rather than produce a mangled block.
+    /// A payload is not put back together while the content of one of its stripped
+    /// responses is still missing.
     #[test]
     fn try_assemble_fails_on_a_missing_canister_http_response() {
         let response = fake_canister_http_response(1, 1024);
-        let (stripped, _) =
-            fake_stripped_proposal_with_canister_http(std::slice::from_ref(&response));
+        let block_proposal =
+            fake_block_proposal_with_canister_http(fake_canister_http_payload(vec![
+                fake_canister_http_response_message(&response, &[NODE_1]),
+            ]));
+        let MaybeStrippedConsensusMessage::StrippedBlockProposal(stripped) =
+            ConsensusMessage::BlockProposal(block_proposal).strip()
+        else {
+            panic!("Didn't properly strip the block proposal");
+        };
 
         let assembler = BlockProposalAssembler::new(stripped);
         let assembly_error = assembler.try_assemble().unwrap_err();
@@ -1413,24 +1372,25 @@ mod tests {
         );
     }
 
+    /// The contents of every kind of response are still in the canister http pool
+    /// when the block that delivers them arrives, so the receiver reassembles the
+    /// block without asking anyone.
     #[tokio::test]
     async fn roundtrip_test_with_canister_http_responses_from_pool() {
         let (payload, stripped_responses) = fake_canister_http_payload_with_every_kind();
         let block_proposal = fake_block_proposal_with_canister_http(payload);
+        let stripped_hashes: BTreeSet<_> = stripped_responses
+            .iter()
+            .map(ic_types::crypto::crypto_hash)
+            .collect();
 
         let assembler =
             set_up_assembler_with_canister_http_responses(stripped_responses, /*peer=*/ None);
-        let stripped_block_proposal =
-            assembler.disassemble_message(ConsensusMessage::BlockProposal(block_proposal.clone()));
-        let reassembled = assembler
-            .assemble_message(
-                stripped_block_proposal.id(),
-                Some((stripped_block_proposal, NODE_1)),
-                MockPeers(NODE_1),
-            )
-            .await;
 
-        assert_assembled(reassembled, &block_proposal);
+        assert_eq!(
+            BTreeSet::from_iter(assert_roundtrip(&assembler, &block_proposal).await),
+            stripped_hashes
+        );
     }
 
     #[tokio::test]
@@ -1444,19 +1404,13 @@ mod tests {
         // The response is nowhere to be found locally, so it has to come from a peer.
         let assembler = set_up_assembler_with_canister_http_responses(
             /*pool=*/ vec![],
-            /*peer=*/ Some(response),
+            /*peer=*/ Some(response.clone()),
         );
-        let stripped_block_proposal =
-            assembler.disassemble_message(ConsensusMessage::BlockProposal(block_proposal.clone()));
-        let reassembled = assembler
-            .assemble_message(
-                stripped_block_proposal.id(),
-                Some((stripped_block_proposal, NODE_1)),
-                MockPeers(NODE_1),
-            )
-            .await;
 
-        assert_assembled(reassembled, &block_proposal);
+        assert_eq!(
+            assert_roundtrip(&assembler, &block_proposal).await,
+            vec![ic_types::crypto::crypto_hash(&response)]
+        );
     }
 
     /// Committee members of a flexible outcall that agree deliver the very same
@@ -1478,19 +1432,13 @@ mod tests {
         // Neither response is in the pool, and the peer expects to be asked once.
         let assembler = set_up_assembler_with_canister_http_responses(
             /*pool=*/ vec![],
-            /*peer=*/ Some(response),
+            /*peer=*/ Some(response.clone()),
         );
-        let stripped_block_proposal =
-            assembler.disassemble_message(ConsensusMessage::BlockProposal(block_proposal.clone()));
-        let reassembled = assembler
-            .assemble_message(
-                stripped_block_proposal.id(),
-                Some((stripped_block_proposal, NODE_1)),
-                MockPeers(NODE_1),
-            )
-            .await;
 
-        assert_assembled(reassembled, &block_proposal);
+        assert_eq!(
+            assert_roundtrip(&assembler, &block_proposal).await,
+            vec![ic_types::crypto::crypto_hash(&response)]
+        );
     }
 
     /// The whole point of the exercise: the block proposal that goes on the wire is

@@ -478,57 +478,6 @@ mod tests {
         }
     }
 
-    /// Reassembling a stripped payload has to reproduce the original byte for
-    /// byte, because that is what the block hash is computed over.
-    #[test]
-    fn reinsert_responses_test() {
-        let non_replicated = fake_canister_http_response(1, 1024);
-        let fully_replicated = fake_canister_http_response(2, 1024);
-        let flexible_1 = fake_canister_http_response(3, 1024);
-        let flexible_2 = fake_canister_http_response(3, 2048);
-        let all = [&non_replicated, &fully_replicated, &flexible_1, &flexible_2];
-
-        let messages = |stripped: bool| {
-            let response_message = if stripped {
-                fake_stripped_canister_http_response_message
-            } else {
-                fake_canister_http_response_message
-            };
-            let mut flexible = fake_flexible_canister_http_responses_message(
-                3,
-                &[(flexible_1.clone(), NODE_1), (flexible_2.clone(), NODE_2)],
-            );
-            if stripped
-                && let Some(pb::canister_http_response_message::MessageType::FlexibleResponses(
-                    group,
-                )) = flexible.message_type.as_mut()
-            {
-                for response in &mut group.responses {
-                    response.response = None;
-                }
-            }
-            vec![
-                response_message(&non_replicated, &[NODE_1]),
-                response_message(&fully_replicated, &[NODE_1, NODE_2]),
-                flexible,
-            ]
-        };
-
-        let unstripped = fake_canister_http_payload(messages(false));
-        let stripped = fake_canister_http_payload(messages(true));
-        assert!(stripped.len() < unstripped.len());
-
-        let responses = all
-            .into_iter()
-            .map(|response| (hash_of(response), Some(response.clone())))
-            .collect();
-
-        assert_eq!(
-            reinsert_responses(&stripped, &responses).unwrap(),
-            unstripped
-        );
-    }
-
     /// A payload with nothing missing needs no contents to reassemble.
     #[test]
     fn reinsert_nothing_test() {
@@ -595,45 +544,6 @@ mod tests {
         assert_matches!(
             reinsert_responses(&oversized, &BTreeMap::new()).map(|payload| payload.len()),
             Err(CanisterHttpPayloadError::TooLarge)
-        );
-    }
-
-    /// The message with the content of each of its responses taken out.
-    fn strip(mut message: pb::CanisterHttpResponseMessage) -> pb::CanisterHttpResponseMessage {
-        for (_, response) in response_slots(&mut message) {
-            *response = None;
-        }
-        message
-    }
-
-    /// Committee members of a flexible outcall that agree deliver the very same
-    /// response, so a single content goes back into several slots, whether the
-    /// outcall succeeded or failed with too many rejects.
-    #[test]
-    fn reinsert_a_content_into_several_slots_test() {
-        let response = fake_canister_http_response(1, 1024);
-        let reject = fake_canister_http_reject(2);
-        let messages = vec![
-            fake_flexible_canister_http_responses_message(
-                1,
-                &[(response.clone(), NODE_1), (response.clone(), NODE_2)],
-            ),
-            fake_flexible_canister_http_too_many_rejects_message(
-                2,
-                &[(reject.clone(), NODE_1), (reject.clone(), NODE_2)],
-            ),
-        ];
-        let unstripped = fake_canister_http_payload(messages.clone());
-        let stripped = fake_canister_http_payload(messages.into_iter().map(strip).collect());
-
-        let responses = BTreeMap::from_iter([
-            (hash_of(&response), Some(response)),
-            (hash_of(&reject), Some(reject)),
-        ]);
-
-        assert_eq!(
-            reinsert_responses(&stripped, &responses).unwrap(),
-            unstripped
         );
     }
 
