@@ -524,16 +524,6 @@ fn validate_sender(
     let subnet_admins = can_have_subnet_admins(subnet_type, cost_schedule).then_some(subnet_admins);
     let is_sender_the_canister = *sender == canister.canister_id().get();
     match access {
-        // The sender has to be a controller of the canister to be renamed and
-        // equal to the migration canister.
-        CanisterAccess::Method(Ic00Method::RenameCanister) => {
-            validate_controller(canister, sender, ControlledCanisterRole::Target)?;
-            if *sender != MIGRATION_CANISTER_ID.get() {
-                return Err(CanisterManagerError::CallerNotAuthorized);
-            }
-            Ok(())
-        }
-
         // `validate_sender` does not define the access control of these methods.
         CanisterAccess::Method(
             Ic00Method::CanisterMetadata
@@ -563,6 +553,16 @@ fn validate_sender(
             | Ic00Method::ProvisionalCreateCanisterWithCycles
             | Ic00Method::ProvisionalTopUpCanister,
         ) => Err(CanisterManagerError::CallerNotAuthorized),
+
+        // The sender has to be a controller of the canister to be renamed and
+        // equal to the migration canister.
+        CanisterAccess::Method(Ic00Method::RenameCanister) => {
+            validate_controller(canister, sender, ControlledCanisterRole::Target)?;
+            if *sender != MIGRATION_CANISTER_ID.get() {
+                return Err(CanisterManagerError::CallerNotAuthorized);
+            }
+            Ok(())
+        }
 
         // Subnet admins of cloud engines on the free cost schedule can access
         // every canister in every other way.
