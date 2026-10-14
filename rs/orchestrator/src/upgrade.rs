@@ -407,8 +407,8 @@ impl Upgrade {
         }
 
         // If we arrive here, we are on the newest replica version.
-
-        // This will start new child processes if any of them is not running
+        // This will start new child processes if any of them is not running, or restart them if
+        // needed.
         self.ensure_children_are_running(subnet_id, &latest_cup, latest_registry_version)?;
 
         // This will trigger an image download if one is already scheduled but we did
