@@ -717,6 +717,10 @@ const TABLE_STR: &str = "table";
 pub(crate) const INSTRUCTIONS_COUNTER_GLOBAL_NAME: &str = "canister counter_instructions";
 pub(crate) const DIRTY_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_dirty_pages";
 pub(crate) const ACCESSED_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_accessed_pages";
+/// The number of Wasm heap pages that may still be accessed before the heap
+/// accessed page limit is reached. Set by the embedder before execution and
+/// decremented by the memory tracker for every newly accessed page.
+pub(crate) const HEAP_PAGE_BUDGET_GLOBAL_NAME: &str = "canister heap_page_budget";
 const CANISTER_START_STR: &str = "canister_start";
 
 /// There is one byte for each OS page in the memory.
@@ -797,6 +801,11 @@ pub(super) struct InjectedCounters {
     pub instructions_counter: u32,
     pub dirty_pages_counter: u32,
     pub accessed_pages_counter: u32,
+    /// Remaining number of Wasm heap pages that may be accessed. Not read by
+    /// the instrumentation yet; it is maintained for the heap page limit
+    /// pre-checks of bulk memory operations.
+    #[allow(dead_code)]
+    pub heap_page_budget: u32,
     /// Function to decrement the instruction counter.
     pub decr_instruction_counter_fn: u32,
     /// Function to count clean pages.
@@ -948,6 +957,14 @@ fn export_additional_symbols<'a>(
 
     // push the accessed page counter
     let accessed_pages_counter = *module.add_global(
+        InitExpr::new(vec![InitInstr::Value(Value::I64(0))]),
+        DataType::I64,
+        true,
+        false,
+    );
+
+    // push the heap page budget
+    let heap_page_budget = *module.add_global(
         InitExpr::new(vec![InitInstr::Value(Value::I64(0))]),
         DataType::I64,
         true,
@@ -1125,6 +1142,11 @@ fn export_additional_symbols<'a>(
         accessed_pages_counter,
     );
 
+    debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&HEAP_PAGE_BUDGET_GLOBAL_NAME));
+    module
+        .exports
+        .add_export_global(HEAP_PAGE_BUDGET_GLOBAL_NAME.to_string(), heap_page_budget);
+
     if let Some(index) = module.start.map(|s| s.0) {
         // push canister_start
         debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&CANISTER_START_STR));
@@ -1138,6 +1160,7 @@ fn export_additional_symbols<'a>(
             instructions_counter,
             dirty_pages_counter,
             accessed_pages_counter,
+            heap_page_budget,
             decr_instruction_counter_fn: *decr_instruction_counter_fn_id,
             count_clean_pages_fn: *count_clean_pages_fn_id,
         },

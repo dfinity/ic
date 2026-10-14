@@ -410,6 +410,10 @@ pub struct DeterministicMemoryTracker {
     state: RefCell<DeterministicState>,
     page_overhead: u64,
     subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
+    /// Invoked once for every Wasm page that becomes accessed (mapped). Not
+    /// invoked when only the write protection of an accessed page is lifted
+    /// or when a page is refused because of the accessed page limit.
+    on_wasm_page_accessed: Arc<SignalMutex<dyn FnMut() + Send>>,
     /// Set once a page was refused because of the accessed page limit.
     page_limit_exceeded: Arc<AtomicBool>,
 }
@@ -434,6 +438,7 @@ impl DeterministicMemoryTracker {
 
         // Charge instructions.
         (self.subtract_instruction_counter.lock())(num_os_pages * self.page_overhead);
+        (self.on_wasm_page_accessed.lock())();
     }
 
     /// Marks a Wasm page as dirty.
@@ -576,6 +581,7 @@ impl DeterministicMemoryTracker {
         memory_limits: MemoryLimits,
         page_overhead: u64,
         subtract_instruction_counter: Arc<SignalMutex<dyn FnMut(u64) + Send>>,
+        on_wasm_page_accessed: Arc<SignalMutex<dyn FnMut() + Send>>,
     ) -> nix::Result<Self>
     where
         Self: Sized,
@@ -604,6 +610,7 @@ impl DeterministicMemoryTracker {
             state: RefCell::new(state),
             page_overhead,
             subtract_instruction_counter,
+            on_wasm_page_accessed,
             page_limit_exceeded: Arc::new(AtomicBool::new(false)),
         };
 
