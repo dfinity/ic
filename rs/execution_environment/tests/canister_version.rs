@@ -1,6 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment;
-use ic_config::subnet_config::{SchedulerConfig, SubnetConfig, SubnetSecurity};
+use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
@@ -74,7 +74,7 @@ fn execute_ingress_with_dts(
 fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bool) {
     let test_canister = wat::parse_str(wat).expect("invalid WAT");
 
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let subnet_config = SubnetConfig {
         scheduler_config: SchedulerConfig {
             max_instructions_per_install_code_slice: 100_000.into(),

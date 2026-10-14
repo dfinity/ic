@@ -21,6 +21,7 @@ fn empty_update_payload() -> UpdateSubnetPayload {
         subnet_type: None,
         is_halted: None,
         halt_at_cup_height: None,
+        cooling_down: None,
         features: None,
         resource_limits: None,
         chain_key_config: None,
@@ -102,12 +103,23 @@ fn ensure_only_allowed_fields_set_accepts_is_halted() {
 }
 
 #[test]
-fn ensure_only_allowed_fields_set_accepts_subnet_admins_and_is_halted() {
+fn ensure_only_allowed_fields_set_accepts_cooling_down() {
+    for cooling_down in [true, false] {
+        let mut payload = empty_update_payload();
+        payload.cooling_down = Some(cooling_down);
+        ensure_only_allowed_fields_set(&payload)
+            .unwrap_or_else(|e| panic!("cooling_down={cooling_down} payload must be allowed: {e}"));
+    }
+}
+
+#[test]
+fn ensure_only_allowed_fields_set_accepts_all_allowed_fields() {
     let mut payload = empty_update_payload();
     payload.subnet_admins = Some(vec![PrincipalId::new_user_test_id(42)]);
     payload.is_halted = Some(true);
+    payload.cooling_down = Some(true);
     ensure_only_allowed_fields_set(&payload)
-        .expect("subnet_admins + is_halted payload must be allowed");
+        .expect("subnet_admins + is_halted + cooling_down payload must be allowed");
 }
 
 #[test]
@@ -137,38 +149,4 @@ fn ensure_only_allowed_fields_set_rejects_non_default_gossip_flag() {
         err.contains("set_gossip_config_to_default"),
         "error must mention the non-default bool: {err}"
     );
-}
-
-#[test]
-fn normalize_subnet_admins_adds_super_admin_when_missing() {
-    let other = PrincipalId::new_user_test_id(7);
-    let normalized = normalize_subnet_admins(vec![other]);
-
-    let super_admin = PrincipalId(default_authorized_caller());
-    assert!(
-        normalized.contains(&super_admin),
-        "super admin must be present after normalization"
-    );
-    assert!(
-        normalized.contains(&other),
-        "other admins must be preserved"
-    );
-}
-
-#[test]
-fn normalize_subnet_admins_keeps_list_intact_when_super_admin_present() {
-    let super_admin = PrincipalId(default_authorized_caller());
-    let other = PrincipalId::new_user_test_id(8);
-    let input = vec![other, super_admin];
-    let normalized = normalize_subnet_admins(input.clone());
-    assert_eq!(
-        normalized, input,
-        "list must not be reordered or duplicated when super admin is already present"
-    );
-}
-
-#[test]
-fn normalize_subnet_admins_handles_empty_input() {
-    let normalized = normalize_subnet_admins(vec![]);
-    assert_eq!(normalized, vec![PrincipalId(default_authorized_caller())]);
 }

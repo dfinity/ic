@@ -7,7 +7,7 @@ use ic_nervous_system_integration_tests::{
         add_wasm_via_nns_proposal, nns, sns, upgrade_nns_canister_to_tip_of_master_or_panic,
     },
 };
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::sns_wasm::{
     build_governance_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm, build_root_sns_wasm,
     build_swap_sns_wasm, ensure_sns_wasm_gzipped,
@@ -37,7 +37,11 @@ use sns_upgrade_test_utils::test_sns_upgrade;
 #[tokio::test]
 async fn test_deployment_all_upgrades() {
     test_sns_deployment(
-        vec![GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID],
+        vec![
+            ROOT_CANISTER_ID,
+            GOVERNANCE_CANISTER_ID,
+            SNS_WASM_CANISTER_ID,
+        ],
         vec![
             SnsCanisterType::Governance,
             SnsCanisterType::Ledger,
@@ -51,7 +55,15 @@ async fn test_deployment_all_upgrades() {
 
 #[tokio::test]
 async fn test_deployment_with_only_nns_upgrades() {
-    test_sns_deployment(vec![GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID], vec![]).await;
+    test_sns_deployment(
+        vec![
+            ROOT_CANISTER_ID,
+            GOVERNANCE_CANISTER_ID,
+            SNS_WASM_CANISTER_ID,
+        ],
+        vec![],
+    )
+    .await;
 }
 
 #[tokio::test]

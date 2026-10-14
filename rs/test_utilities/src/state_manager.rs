@@ -125,7 +125,7 @@ impl FakeStateManager {
         height: Height,
     ) -> (Witness, CryptoHashOfPartialState) {
         let lazy_tree = replicated_state_as_lazy_tree(state, height);
-        let hash_tree = hash_lazy_tree(&lazy_tree).unwrap();
+        let hash_tree = hash_lazy_tree(&lazy_tree, None).unwrap();
         let height_witness = compute_state_height_witness(&lazy_tree, &hash_tree);
         let partial_hash =
             CryptoHashOfPartialState::from(CryptoHash(hash_tree.root_hash().0.to_vec()));
@@ -331,7 +331,6 @@ impl StateReader for FakeStateManager {
         }
     }
 
-    // No certification support in FakeStateManager
     fn latest_certified_height(&self) -> Height {
         let real = self
             .states
@@ -351,9 +350,8 @@ impl StateReader for FakeStateManager {
             .expect("latest state is always available in FakeStateManager")
     }
 
-    // No certification support in FakeStateManager
     fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>> {
-        None
+        self.get_state_at(self.latest_certified_height()).ok()
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {

@@ -10,12 +10,13 @@ mod webauthn;
 
 pub use self::http::{
     Authentication, Certificate, CertificateDelegation, CertificateDelegationFormat,
-    CertificateDelegationMetadata, Delegation, HasCanisterId, HttpCallContent, HttpCanisterUpdate,
-    HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
-    HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
-    HttpRequestEnvelope, HttpRequestError, HttpSignedQueryResponse, HttpStatusResponse,
-    HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, RawSignedSenderInfo,
-    ReplicaHealthStatus, SenderInfoContent, SignedDelegation, SignedSenderInfo,
+    CertificateDelegationMetadata, Delegation, DelegationPermissions, HasCanisterId,
+    HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse,
+    HttpQueryResponseReply, HttpReadState, HttpReadStateContent, HttpReadStateResponse, HttpReply,
+    HttpRequest, HttpRequestContent, HttpRequestEnvelope, HttpRequestError,
+    HttpSignedQueryResponse, HttpStatusResponse, HttpUserQuery, NodeSignature, QueryResponseHash,
+    RawHttpRequestVal, RawSignedSenderInfo, ReplicaHealthStatus, SenderInfoContent,
+    SignedDelegation, SignedSenderInfo,
 };
 use crate::methods::Callback;
 pub use crate::methods::SystemMethod;

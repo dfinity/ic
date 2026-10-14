@@ -29,6 +29,7 @@ rust_library(
         "@crate_index//:rand",
         "@crate_index//:rayon",
         "@crate_index//:slog",
+        "@crate_index//:thiserror",
     ],
 )
 
@@ -50,6 +51,7 @@ rust_test(
         "//rs/monitoring/metrics",
         "//rs/protobuf",
         "//rs/registry/helpers",
+        "//rs/registry/keys",
         "//rs/replicated_state",
         "//rs/test_utilities",
         "//rs/test_utilities/consensus",
@@ -57,12 +59,14 @@ rust_test(
         "//rs/test_utilities/state",
         "//rs/test_utilities/time",
         "//rs/test_utilities/types",
+        "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",
         "@crate_index//:prometheus",
         "@crate_index//:rand",
         "@crate_index//:rayon",
+        "@crate_index//:rstest",
         "@crate_index//:slog",
     ],
 )

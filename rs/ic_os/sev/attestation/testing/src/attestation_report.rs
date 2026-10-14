@@ -5,8 +5,9 @@ use p384::ecdsa::signature::Signer;
 use p384::pkcs8::EncodePublicKey;
 use rand::SeedableRng;
 use rsa::RsaPrivateKey;
+use sev::Generation;
 use sev::certs::snp::ecdsa::Signature as AttestationReportSignature;
-use sev::firmware::guest::AttestationReport;
+use sev::firmware::guest::{AttestationReport, GuestPolicy};
 use sev::firmware::host::TcbVersion;
 use sev::parser::Encoder;
 use sha2::Sha384;
@@ -18,6 +19,8 @@ use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
 use x509_cert::spki::SubjectPublicKeyInfo;
 use x509_cert::time::Validity;
+
+pub const DEFAULT_GENERATION: Generation = Generation::Milan;
 
 /// Builder for creating test attestation reports with customizable fields.
 pub struct AttestationReportBuilder {
@@ -61,6 +64,11 @@ impl AttestationReportBuilder {
 
     pub fn with_launch_tcb(mut self, launch_tcb: TcbVersion) -> Self {
         self.attestation_report.launch_tcb = launch_tcb;
+        self
+    }
+
+    pub fn with_guest_policy(mut self, guest_policy: GuestPolicy) -> Self {
+        self.attestation_report.policy = guest_policy;
         self
     }
 

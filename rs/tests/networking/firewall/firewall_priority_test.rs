@@ -37,11 +37,13 @@ use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
-        test_env::TestEnv,
+        local_backend::LocalBackend,
+        test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
             NnsInstallationBuilder, SshSession,
         },
+        test_setup::SystemTestBackend,
     },
     systest,
     util::{self, block_on},
@@ -136,9 +138,31 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     let firewall_config = util::get_config().firewall.unwrap();
 
     let deny_port = FirewallAction::Deny;
+    let mut deny_prefixes = firewall_config.default_rules[0].ipv6_prefixes.clone();
+    // On the Local backend the driver reaches the nodes from a per-group
+    // management address that lives *outside* the node `/64` (so the GuestOS
+    // firewall's built-in accept for the node's own prefix does not shadow the
+    // rules under test). Add the backend's own range
+    // (`LocalBackend::GROUP_PREFIX`) so the deny rule matches the driver at all;
+    // otherwise the port would stay reachable. Node-to-node traffic on 8080 is
+    // unaffected: it is allowed at higher priority by the orchestrator's
+    // automatic node whitelisting.
+    //
+    // `GROUP_PREFIX` is a real DC prefix that the `default_rules` above already
+    // list, so today this adds nothing and is kept only so the test still works
+    // if the backend moves to a prefix they do not cover. Appending blindly
+    // would be a bug: these render into an anonymous nftables set
+    // (`ip6 saddr { ... }`), and `nft` rejects a set with a repeated element,
+    // taking the whole ruleset down with it.
+    if SystemTestBackend::read_attribute(&env) == SystemTestBackend::Local {
+        let group_prefix = LocalBackend::GROUP_PREFIX.to_string();
+        if !deny_prefixes.contains(&group_prefix) {
+            deny_prefixes.push(group_prefix);
+        }
+    }
     let mut node_rules = vec![FirewallRule {
         ipv4_prefixes: vec![],
-        ipv6_prefixes: firewall_config.default_rules[0].ipv6_prefixes.clone(),
+        ipv6_prefixes: deny_prefixes,
         ports: vec![9090],
         action: deny_port.into(),
         comment: "Test rule".to_string(),

@@ -1,8 +1,5 @@
 use candid::Encode;
-use ic_config::{
-    execution_environment::Config as HypervisorConfig,
-    subnet_config::{SubnetConfig, SubnetSecurity},
-};
+use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, LogVisibilityV2};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig};
@@ -43,7 +40,7 @@ fn env_with_backtrace_canister_and_visibility(
 
     let env = StateMachineBuilder::new()
         .with_config(Some(StateMachineConfig::new(
-            SubnetConfig::new(subnet_type, SubnetSecurity::None),
+            SubnetConfig::new(subnet_type),
             hypervisor_config,
         )))
         .with_subnet_type(subnet_type)
@@ -84,8 +81,8 @@ fn assert_error(
         .execute_ingress_as(CONTROLLER, canister_id, method, Encode!(&()).unwrap())
         .unwrap_err();
     result.assert_matches(code, &format!("{message}.*{backtrace}.*"));
-    let logs = env.canister_log(canister_id);
-    let last_error = std::str::from_utf8(&logs.records().back().as_ref().unwrap().content).unwrap();
+    let logs = env.canister_log_records(canister_id);
+    let last_error = std::str::from_utf8(&logs.last().as_ref().unwrap().content).unwrap();
     let backtrace_regex = RegexBuilder::new(&format!(".*{backtrace}.*"))
         .dot_matches_new_line(true)
         .build()
@@ -132,8 +129,8 @@ fn no_backtrace_without_name_section() {
         "Result message: {} cointains unexpected 'Backtrace'",
         result.description(),
     );
-    let logs = env.canister_log(canister_id);
-    for log in logs.records() {
+    let logs = env.canister_log_records(canister_id);
+    for log in &logs {
         let log = std::str::from_utf8(&log.content).unwrap();
         assert!(
             !log.contains("Backtrace"),
@@ -239,9 +236,8 @@ mod visibility {
             );
         }
         // The backtrace should still be in the logs.
-        let logs = env.canister_log(canister_id);
-        let last_error =
-            std::str::from_utf8(&logs.records().back().as_ref().unwrap().content).unwrap();
+        let logs = env.canister_log_records(canister_id);
+        let last_error = std::str::from_utf8(&logs.last().as_ref().unwrap().content).unwrap();
         assert!(
             backtrace_regex.is_match(last_error),
             "Last log:\n----------\n{last_error}\n----------\ndoesn't contain backtrace: {backtrace}"

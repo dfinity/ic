@@ -10,12 +10,10 @@ name = "ic_neurons_fund"
 ic-cdk = { workspace = true }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 lazy_static = { workspace = true }
-rust_decimal = "1.36.0"
-rust_decimal_macros = "1.36.0"
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-proptest = { workspace = true }
-serde_bytes = { workspace = true }

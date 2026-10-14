@@ -6,6 +6,7 @@ set -e
 
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
+source /opt/ic/bin/config.sh
 
 SCRIPT="$(basename $0)[$$]"
 
@@ -29,27 +30,54 @@ Arguments:
 done
 
 function monitor_guestos() {
-    if [ ! "$(virsh list --all | grep 'guestos')" ]; then
-        write_log "ERROR: GuestOS virtual machine is not defined."
-        write_metric "hostos_guestos_state" \
-            "1" \
-            "GuestOS virtual machine state" \
-            "gauge"
-        exit 1
-    fi
+    node_reward_type=$(get_config_value '.icos_settings.node_reward_type')
 
-    if [ "$(virsh list --state-running | grep 'guestos')" ]; then
-        write_metric "hostos_guestos_state" \
-            "0" \
-            "GuestOS virtual machine state" \
-            "gauge"
-    else
-        write_log "GuestOS virtual machine is not running."
-        write_metric "hostos_guestos_state" \
-            "2" \
-            "GuestOS virtual machine state" \
-            "gauge"
-    fi
+    case "${node_reward_type}" in
+        type4.0) COUNT=32 ;;
+        type4.1) COUNT=60 ;;
+        type4.2) COUNT=8 ;;
+        type4.3) COUNT=4 ;;
+        type4.4) COUNT=2 ;;
+        *) COUNT=1 ;;
+    esac
+
+    for i in $(seq 0 "$((COUNT - 1))"); do
+        # A single GuestOS keeps the guestos name
+        if [ "$COUNT" -eq 1 ]; then
+            s=""
+        else
+            s=$i
+        fi
+
+        vm="guestos$s"
+
+        if ! virsh list --all --name | grep -Fxq "$vm"; then
+            write_log "ERROR: GuestOS virtual machine ${vm} is not defined."
+            write_metric_attr "hostos_guestos_state" \
+                "{vm=\"$vm\"}" \
+                "1" \
+                "GuestOS virtual machine state" \
+                "gauge"
+
+            # Avoid writing the "not running"  metric below
+            continue
+        fi
+
+        if virsh list --state-running --name | grep -Fxq "$vm"; then
+            write_metric_attr "hostos_guestos_state" \
+                "{vm=\"$vm\"}" \
+                "0" \
+                "GuestOS virtual machine state" \
+                "gauge"
+        else
+            write_log "GuestOS virtual machine ${vm} is not running."
+            write_metric_attr "hostos_guestos_state" \
+                "{vm=\"$vm\"}" \
+                "2" \
+                "GuestOS virtual machine state" \
+                "gauge"
+        fi
+    done
 }
 
 function main() {

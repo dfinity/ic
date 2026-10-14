@@ -1,8 +1,6 @@
 use crate::args::ReplicaArgs;
 use clap::Parser;
-use ic_config::{
-    Config, ConfigSource, SAMPLE_CONFIG, crypto::CryptoConfig, subnet_config::SubnetSecurity,
-};
+use ic_config::{Config, ConfigSource, SAMPLE_CONFIG, crypto::CryptoConfig};
 use ic_crypto::CryptoComponent;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, fatal, info, warn};
@@ -11,11 +9,8 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
-use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{
-    NodeId, RegistryVersion, ReplicaVersion, SubnetId, consensus::catchup::CatchUpPackage,
-};
+use ic_types::{NodeId, RegistryVersion, SubnetId, consensus::catchup::CatchUpPackage};
 use std::{env, path::PathBuf, sync::Arc};
 
 /// Parse command-line args into `ReplicaArgs`
@@ -28,24 +23,6 @@ pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {
             std::process::exit(0);
         }
     })
-}
-
-/// Set the Replica version passed in via command-line
-pub fn set_replica_version(args: &Result<ReplicaArgs, clap::Error>, logger: &ReplicaLogger) {
-    if let Ok(args) = args {
-        info!(
-            logger,
-            "Setting replica version to: {}",
-            args.replica_version.as_ref()
-        );
-        if ReplicaVersion::set_default_version(args.replica_version.clone()).is_err() {
-            warn!(
-                logger,
-                "Failed to set replica version, defaulting to: {}",
-                ReplicaVersion::default().as_ref()
-            );
-        }
-    }
 }
 
 /// Parse the catch-up package given via command-line args (if one was given)
@@ -124,17 +101,16 @@ pub fn get_subnet_id(
     }
 }
 
-/// Return the subnet type and security model of the given subnet.
+/// Return the subnet type of the given subnet.
 ///
-/// Both values are read from the same `SubnetRecord` so they are guaranteed to
-/// be consistent across replicas. Retries until the registry returns a record;
-/// crashes if the record is missing or malformed.
-pub fn get_subnet_type_and_security(
+/// Retries until the registry returns a record; crashes if the record is
+/// missing or malformed.
+pub fn get_subnet_type(
     logger: &ReplicaLogger,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     registry: &dyn RegistryClient,
-) -> (SubnetType, SubnetSecurity) {
+) -> SubnetType {
     loop {
         match registry.get_subnet_record(subnet_id, registry_version) {
             Ok(subnet_record) => {
@@ -147,12 +123,7 @@ pub fn get_subnet_type_and_security(
                                 record,
                                 subnet_id
                             );
-                            let sev_enabled = record
-                                .features
-                                .map(SubnetFeatures::from)
-                                .unwrap_or_default()
-                                .sev_enabled;
-                            (subnet_type, SubnetSecurity::from_sev_enabled(sev_enabled))
+                            subnet_type
                         }
                         Err(e) => fatal!(logger, "Could not parse SubnetType: {}", e),
                     },

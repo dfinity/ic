@@ -28,8 +28,9 @@ use ic_nns_test_utils::{
     registry::{INITIAL_MUTATION_ID, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
-    SubnetListRecord as SubnetListRecordPb, SubnetRecord as SubnetRecordPb,
+    CatchUpPackageContents, ChainKeyConfig as ChainKeyConfigPb, GenesisArgs,
+    KeyConfig as KeyConfigPb, SubnetListRecord as SubnetListRecordPb,
+    SubnetRecord as SubnetRecordPb, catch_up_package_contents::CupType,
 };
 use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_registry_keys::{
@@ -41,7 +42,8 @@ use ic_registry_subnet_features::{
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
-use ic_types::{NodeId, ReplicaVersion};
+use ic_test_utilities_types::ids::test_replica_version;
+use ic_types::NodeId;
 use pocket_ic::PocketIcBuilder;
 use prost::Message;
 use registry_canister::{
@@ -234,6 +236,10 @@ async fn create_subnet_succeeds_when_called_by(caller: PrincipalId) {
         cup_contents
             .initial_ni_dkg_transcript_high_threshold
             .is_some()
+    );
+    assert_eq!(
+        cup_contents.cup_type,
+        Some(CupType::Genesis(GenesisArgs {}))
     );
 }
 
@@ -435,7 +441,7 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
         initial_notary_delay_millis: 1500,
-        replica_version_id: ReplicaVersion::default().into(),
+        replica_version_id: test_replica_version().into(),
         dkg_interval_length: 0,
         dkg_dealings_per_block: 1,
         start_as_nns: false,

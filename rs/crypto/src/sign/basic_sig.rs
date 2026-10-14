@@ -65,11 +65,14 @@ impl BasicSigVerifierInternal {
         Self::verify_basic_sig_batch_internal(
             csprng,
             registry,
-            signatures
-                .signatures_map
-                .iter()
-                .map(|(signer, signature)| (*signer, signature, message_bytes.as_slice())),
-            registry_version,
+            signatures.signatures_map.iter().map(|(signer, signature)| {
+                (
+                    *signer,
+                    signature,
+                    message_bytes.as_slice(),
+                    registry_version,
+                )
+            }),
         )
     }
 
@@ -80,8 +83,7 @@ impl BasicSigVerifierInternal {
     pub fn verify_basic_sig_batch_multi_msg<H: Signable, R: CryptoComponentRng>(
         csprng: &CspRwLock<R>,
         registry: &dyn RegistryClient,
-        inputs: &[(NodeId, &BasicSigOf<H>, &H)],
-        registry_version: RegistryVersion,
+        inputs: &[BasicSigBatchEntry<'_, H>],
     ) -> CryptoResult<()> {
         if inputs.is_empty() {
             return Err(CryptoError::InvalidArgument {
@@ -92,17 +94,25 @@ impl BasicSigVerifierInternal {
         };
         // Serialize each message once and keep the owned buffers alive so we
         // can borrow them into the helper's input iterator.
-        let entries: Vec<(NodeId, &BasicSigOf<H>, Vec<u8>)> = inputs
+        let entries: Vec<(NodeId, &BasicSigOf<H>, Vec<u8>, RegistryVersion)> = inputs
             .iter()
-            .map(|(signer, signature, message)| (*signer, *signature, message.as_signed_bytes()))
+            .map(|entry| {
+                (
+                    entry.signer,
+                    entry.signature,
+                    entry.message.as_signed_bytes(),
+                    entry.registry_version,
+                )
+            })
             .collect();
         Self::verify_basic_sig_batch_internal(
             csprng,
             registry,
             entries
                 .iter()
-                .map(|(signer, signature, msg_bytes)| (*signer, *signature, msg_bytes.as_slice())),
-            registry_version,
+                .map(|(signer, signature, msg_bytes, registry_version)| {
+                    (*signer, *signature, msg_bytes.as_slice(), *registry_version)
+                }),
         )
     }
 
@@ -110,32 +120,46 @@ impl BasicSigVerifierInternal {
     fn verify_basic_sig_batch_internal<'a, H: 'a, R: CryptoComponentRng>(
         csprng: &CspRwLock<R>,
         registry: &dyn RegistryClient,
-        inputs: impl ExactSizeIterator<Item = (NodeId, &'a BasicSigOf<H>, &'a [u8])>,
-        registry_version: RegistryVersion,
+        inputs: impl ExactSizeIterator<Item = (NodeId, &'a BasicSigOf<H>, &'a [u8], RegistryVersion)>,
     ) -> CryptoResult<()> {
         let mut msgs = Vec::with_capacity(inputs.len());
         let mut sigs = Vec::with_capacity(inputs.len());
         let mut keys = Vec::with_capacity(inputs.len());
 
-        for (signer, signature, msg_bytes) in inputs {
-            let pk_proto =
-                key_from_registry(registry, signer, KeyPurpose::NodeSigning, registry_version)?;
+        // Resolve each signer's public key at most once.
+        let mut resolved_keys: BTreeMap<(NodeId, RegistryVersion), ic_ed25519::PublicKey> =
+            BTreeMap::new();
 
-            let pubkey_alg = AlgorithmId::from(pk_proto.algorithm);
-            if pubkey_alg != AlgorithmId::Ed25519 {
-                return Err(CryptoError::AlgorithmNotSupported {
-                    algorithm: pubkey_alg,
-                    reason: "Only Ed25519 is supported in batched basic sig verification."
-                        .to_string(),
-                });
-            }
-            let pk = ic_ed25519::PublicKey::deserialize_raw(&pk_proto.key_value).map_err(|e| {
-                CryptoError::MalformedPublicKey {
-                    algorithm: AlgorithmId::Ed25519,
-                    key_bytes: Some(pk_proto.key_value),
-                    internal_error: e.to_string(),
+        for (signer, signature, msg_bytes, registry_version) in inputs {
+            let pk = match resolved_keys.get(&(signer, registry_version)) {
+                Some(pk) => *pk,
+                None => {
+                    let pk_proto = key_from_registry(
+                        registry,
+                        signer,
+                        KeyPurpose::NodeSigning,
+                        registry_version,
+                    )?;
+
+                    let pubkey_alg = AlgorithmId::from(pk_proto.algorithm);
+                    if pubkey_alg != AlgorithmId::Ed25519 {
+                        return Err(CryptoError::AlgorithmNotSupported {
+                            algorithm: pubkey_alg,
+                            reason: "Only Ed25519 is supported in batched basic sig verification."
+                                .to_string(),
+                        });
+                    }
+                    let pk = ic_ed25519::PublicKey::deserialize_raw(&pk_proto.key_value).map_err(
+                        |e| CryptoError::MalformedPublicKey {
+                            algorithm: AlgorithmId::Ed25519,
+                            key_bytes: Some(pk_proto.key_value),
+                            internal_error: e.to_string(),
+                        },
+                    )?;
+                    resolved_keys.insert((signer, registry_version), pk);
+                    pk
                 }
-            })?;
+            };
 
             msgs.push(msg_bytes);
             sigs.push(signature.get_ref().0.as_slice());

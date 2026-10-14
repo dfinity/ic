@@ -67,7 +67,7 @@ pub(crate) fn check_endpoint_invariants(
                 return Err(InvariantCheckError {
                     msg: format!(
                         "{error_prefix}: Duplicate endpoint ({:?}, {:?}); previous endpoints: {new_valid_endpoints:?}",
-                        &endpoint.ip_addr, &endpoint.port
+                        endpoint.ip_addr, endpoint.port
                     ),
                     source: None,
                 });

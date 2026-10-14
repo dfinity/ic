@@ -66,7 +66,7 @@ fn test(env: TestEnv) {
 
     let target_version = get_guestos_update_img_version();
 
-    let upgrade_url = get_guestos_update_img_url();
+    let upgrade_url = get_guestos_update_img_url(&env);
     info!(logger, "Upgrade URL: {}", upgrade_url);
 
     // A list of URLs, among which only one is valid:

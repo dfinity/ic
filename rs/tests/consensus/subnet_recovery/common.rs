@@ -70,6 +70,7 @@ use slog::{Logger, info};
 use std::{
     collections::{BTreeMap, HashMap},
     convert::TryFrom,
+    str::FromStr,
 };
 use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
@@ -663,7 +664,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let subnet_args = AppSubnetRecoveryArgs {
         subnet_id: app_subnet_id,
         upgrade_version: maybe_upgrade_version.clone(),
-        upgrade_image_url: Some(get_guestos_update_img_url()),
+        upgrade_image_url: Some(get_guestos_update_img_url(&env)),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
         upgrade_image_launch_measurements_path: Some(env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH)),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
@@ -816,6 +817,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
             assert_node_is_unassigned_with_ssh_session(
                 &n,
                 admin_ssh_sessions.get(&n.node_id),
+                1, // expected_fstrim_count
                 &logger,
             );
         });
@@ -907,7 +909,7 @@ fn corrupt_latest_cup(
         CupCorruption::CorruptedWithValidNiDkgId => {
             info!(logger, "Modifying CUP replica version");
             cup.content.block.as_mut().version =
-                ReplicaVersion::try_from("invalid_version").unwrap();
+                ReplicaVersion::from_str("invalid_version").unwrap();
             pb::CatchUpPackage::from(cup)
         }
         CupCorruption::CorruptedIncludingInvalidNiDkgId => {

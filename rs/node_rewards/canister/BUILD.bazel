@@ -38,6 +38,7 @@ rust_library(
         "@crate_index//:chrono_canisters",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
@@ -45,6 +46,7 @@ rust_library(
         "@crate_index//:indexmap",
         "@crate_index//:itertools",
         "@crate_index//:prost",
+        "@crate_index//:rust_decimal",
     ],
 )
 
@@ -83,6 +85,7 @@ rust_library(
         "@crate_index//:chrono_canisters",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
@@ -90,6 +93,7 @@ rust_library(
         "@crate_index//:indexmap",
         "@crate_index//:itertools",
         "@crate_index//:prost",
+        "@crate_index//:rust_decimal",
     ],
 )
 
@@ -122,6 +126,7 @@ rust_canister(
         "@crate_index//:chrono_canisters",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
@@ -129,6 +134,7 @@ rust_canister(
         "@crate_index//:indexmap",
         "@crate_index//:itertools",
         "@crate_index//:prost",
+        "@crate_index//:rust_decimal",
     ],
 )
 
@@ -162,6 +168,7 @@ rust_canister(
         "@crate_index//:chrono_canisters",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
@@ -169,6 +176,7 @@ rust_canister(
         "@crate_index//:indexmap",
         "@crate_index//:itertools",
         "@crate_index//:prost",
+        "@crate_index//:rust_decimal",
     ],
 )
 
@@ -210,6 +218,7 @@ rust_test(
         "@crate_index//:futures",
         "@crate_index//:futures-util",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
@@ -220,6 +229,7 @@ rust_test(
         "@crate_index//:mockall",
         "@crate_index//:pretty_assertions",
         "@crate_index//:prost",
+        "@crate_index//:rust_decimal",
         "@crate_index//:serde_json",
         "@crate_index//:tokio",
     ],
@@ -260,6 +270,7 @@ rust_test(
         "@crate_index//:futures",
         "@crate_index//:futures-util",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
@@ -270,6 +281,7 @@ rust_test(
         "@crate_index//:mockall",
         "@crate_index//:pretty_assertions",
         "@crate_index//:prost",
+        "@crate_index//:rust_decimal",
         "@crate_index//:serde_json",
         "@crate_index//:tokio",
     ],
@@ -348,6 +360,7 @@ rust_ic_test_suite(
         "@crate_index//:futures",
         "@crate_index//:futures-util",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-management-canister",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-metrics-encoder",
@@ -358,6 +371,7 @@ rust_ic_test_suite(
         "@crate_index//:mockall",
         "@crate_index//:pretty_assertions",
         "@crate_index//:prost",
+        "@crate_index//:rust_decimal",
         "@crate_index//:serde_json",
         "@crate_index//:tokio",
     ],

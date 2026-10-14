@@ -14,9 +14,9 @@ use ic_management_canister_types_private::{
     NodeMetricsHistoryArgs, Payload, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
     ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, ReshareChainKeyArgs,
     SchnorrPublicKeyArgs, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
-    StoredChunksArgs, SubnetInfoArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
-    UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
+    StoredChunksArgs, SubnetInfoArgs, SubnetMetricsArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, VetKdDeriveKeyArgs, VetKdPublicKeyArgs,
 };
 use ic_replicated_state::NetworkTopology;
 use itertools::Itertools;
@@ -51,21 +51,21 @@ fn route_canister_id(
         .ok_or(ResolveDestinationError::SubnetNotFound(canister_id, method))
 }
 
-/// Inspect the method name and payload of a request to ic:00 to figure out to
-/// which subnet it should be sent to.
+/// Inspect the method name and payload of a request to the management canister
+/// to figure out to which subnet it should be sent to.
 pub(super) fn resolve_destination(
     network_topology: &NetworkTopology,
     method_name: &str,
     payload: &[u8],
     own_subnet: SubnetId,
     caller: CanisterId,
-    is_composite_query: bool,
     logger: &ReplicaLogger,
 ) -> Result<PrincipalId, ResolveDestinationError> {
     // Figure out the destination subnet based on the method and the payload.
     let method = Ic00Method::from_str(method_name);
     match method {
-        Ok(Ic00Method::CreateCanister)
+        Ok(Ic00Method::ListCanisters)
+        | Ok(Ic00Method::CreateCanister)
         | Ok(Ic00Method::RawRand)
         | Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
         | Ok(Ic00Method::HttpRequest)
@@ -201,20 +201,11 @@ pub(super) fn resolve_destination(
         Ok(Ic00Method::NodeMetricsHistory) => {
             Ok(NodeMetricsHistoryArgs::decode(payload)?.subnet_id)
         }
+        Ok(Ic00Method::SubnetMetrics) => Ok(SubnetMetricsArgs::decode(payload)?.subnet_id),
         Ok(Ic00Method::SubnetInfo) => Ok(SubnetInfoArgs::decode(payload)?.subnet_id),
         Ok(Ic00Method::FetchCanisterLogs) => {
-            if is_composite_query {
-                Err(ResolveDestinationError::UserError(UserError::new(
-                    ic_error_types::ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "{} API cannot be called from a composite query",
-                        Ic00Method::FetchCanisterLogs
-                    ),
-                )))
-            } else {
-                let canister_id = FetchCanisterLogsRequest::decode(payload)?.get_canister_id();
-                route_canister_id(canister_id, Ic00Method::FetchCanisterLogs, network_topology)
-            }
+            let canister_id = FetchCanisterLogsRequest::decode(payload)?.get_canister_id();
+            route_canister_id(canister_id, Ic00Method::FetchCanisterLogs, network_topology)
         }
         Ok(Ic00Method::ECDSAPublicKey) => {
             let key_id = ECDSAPublicKeyArgs::decode(payload)?.key_id;
@@ -678,7 +669,6 @@ mod tests {
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(1)),
                     subnet_test_id(2),
                     canister_test_id(1),
-                    false,
                     &logger,
                 )
                 .unwrap(),
@@ -698,7 +688,6 @@ mod tests {
                 &setup_initial_dkg_request(None),
                 own_subnet,
                 canister_test_id(1),
-                false,
                 &logger,
             )
             .unwrap(),
@@ -718,7 +707,6 @@ mod tests {
                 &setup_initial_dkg_request(Some(requested_subnet)),
                 own_subnet,
                 canister_test_id(1),
-                false,
                 &logger,
             )
             .unwrap(),
@@ -740,7 +728,6 @@ mod tests {
                 &setup_initial_dkg_request(None),
                 own_subnet,
                 canister_test_id(1),
-                false,
                 &logger,
             )
             .unwrap(),
@@ -763,7 +750,6 @@ mod tests {
                 &setup_initial_dkg_request(Some(requested_subnet)),
                 own_subnet,
                 canister_test_id(1),
-                false,
                 &logger,
             )
             .unwrap(),
@@ -786,7 +772,6 @@ mod tests {
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(2)),
                     subnet_test_id(2),
                     canister_test_id(1),
-                    false,
                     &logger,
                 )
                 .unwrap_err(),
@@ -817,7 +802,6 @@ mod tests {
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(3)),
                     subnet_test_id(2),
                     canister_test_id(1),
-                    false,
                     &logger,
                 )
                 .unwrap_err(),
@@ -849,7 +833,6 @@ mod tests {
                         &reshare_chain_key_request(key_id.clone(), subnet_test_id(2)),
                         subnet_test_id(2),
                         canister_test_id(1),
-                        false,
                         &logger,
                     )
                     .unwrap_err(),
@@ -881,7 +864,6 @@ mod tests {
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(3)),
                     subnet_test_id(2),
                     canister_test_id(1),
-                    false,
                     &logger,
                 )
                 .unwrap_err(),
@@ -924,7 +906,6 @@ mod tests {
                     &payload,
                     subnet_test_id(1),
                     canister_test_id(1),
-                    false,
                     &logger,
                 )
                 .unwrap(),
@@ -959,7 +940,6 @@ mod tests {
                 &payload,
                 subnet_test_id(1),
                 canister_test_id(1),
-                false,
                 &logger,
             )
             .unwrap_err(),
@@ -1001,7 +981,6 @@ mod tests {
                     &payload,
                     subnet_test_id(1),
                     canister_test_id(1),
-                    false,
                     &logger,
                 )
                 .unwrap(),
@@ -1025,7 +1004,6 @@ mod tests {
                     &reshare_chain_key_request(key_id, subnet_test_id(0)),
                     subnet_test_id(1),
                     canister_test_id(1),
-                    false,
                     &logger,
                 )
                 .unwrap(),

@@ -485,7 +485,7 @@ impl OverlayFile {
                 &storage_layout.overlay(height, Shard::new(shard)),
                 metrics,
                 LABEL_OP_FLUSH,
-            )?
+            )?;
         }
         Ok(())
     }
@@ -1255,15 +1255,36 @@ impl MergeCandidate {
         match &self.dst {
             MergeDestination::MultiShardOverlay { shard_paths, .. } => {
                 assert!(shard_paths.len() >= num_output_shards);
-                for (page_indices, page_data, path) in
-                    izip!(page_indices.into_iter(), page_data.into_iter(), shard_paths)
+                for (shard, (page_indices, page_data, path)) in
+                    izip!(page_indices.into_iter(), page_data.into_iter(), shard_paths).enumerate()
                 {
                     let (page_data, page_indices) = if self.is_full_merge() {
                         expand_with_zeroes(&page_data, &page_indices, ExpandBeforeStart::No)
                     } else {
                         (page_data, page_indices)
                     };
-                    write_overlay(&page_data, &page_indices, path, metrics, LABEL_OP_MERGE)?
+                    let overlay =
+                        write_overlay(&page_data, &page_indices, path, metrics, LABEL_OP_MERGE)?;
+
+                    // Validate that the pages in the merged overlay shard fall within the
+                    // `[shard * N, (shard + 1) * N)` range. This is the per-file equivalent of the
+                    // cross-shard non-overlap check in `StorageImpl::load`. Empty shards write no
+                    // file, hence `Some`.
+                    if let Some(overlay) = overlay {
+                        let shard = shard as u64;
+                        let start = overlay.index_iter().next().unwrap().start_page.get();
+                        let end = overlay.end_logical_pages() as u64;
+                        let range = shard * shard_num_pages..(shard + 1) * shard_num_pages;
+                        if start < range.start || end > range.end {
+                            return Err(PersistenceError::InvalidOverlay {
+                                path: path.display().to_string(),
+                                message: format!(
+                                    "Merged overlay covers pages [{}, {}), outside its shard range [{}, {})",
+                                    start, end, range.start, range.end
+                                ),
+                            });
+                        }
+                    }
                 }
                 Ok(())
             }
@@ -1273,7 +1294,7 @@ impl MergeCandidate {
                 } else {
                     (page_data[0].clone(), page_indices[0].clone())
                 };
-                write_overlay(&page_data, &page_indices, path, metrics, LABEL_OP_MERGE)
+                write_overlay(&page_data, &page_indices, path, metrics, LABEL_OP_MERGE).map(|_| ())
             }
             MergeDestination::BaseFile(path) => write_base(
                 &page_data[0],
@@ -1689,10 +1710,16 @@ fn write_base(
         context: format!("Failed to write base file {}", path.display()),
         internal_error: err.to_string(),
     })?;
+
+    // Validate the base we just wrote (see `write_overlay` for the rationale).
+    // `Checkpoint::open` reparses the base exactly like `StorageImpl::load` does.
+    Checkpoint::open(path)?;
+
     metrics
         .write_bytes
         .with_label_values(&[op_label, LABEL_TYPE_PAGE_DATA])
         .inc_by((pages.len() * PAGE_SIZE) as u64);
+
     Ok(())
 }
 
@@ -1710,16 +1737,18 @@ fn write_pages(file: &mut File, data: &Vec<&[u8]>) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Write an overlay file to `path`.
+/// Writes an overlay file to `path`.
+///
+/// On success, returns the `OverlayFile` that was just written, for validation.
 fn write_overlay(
     pages: &Vec<&[u8]>,
     indices: &[PageIndex],
     path: &Path,
     metrics: &StorageMetrics,
     op_label: &str, // `LABEL_OP_FLUSH` or `LABEL_OP_MERGE`
-) -> Result<(), PersistenceError> {
+) -> Result<Option<OverlayFile>, PersistenceError> {
     if pages.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
     let ranges_serialized = group_pages_into_ranges(indices)
         .into_iter()
@@ -1781,6 +1810,11 @@ fn write_overlay(
         })?;
     }
 
+    // Reload the overlay we just wrote to validate it (reparses the index/footer
+    // like `StorageImpl::load` does), so we don't have to do it at checkpoint time.
+    // Return the loaded overlay for callers that require further checks.
+    let overlay = OverlayFile::load(path)?;
+
     let data_size = pages.len() * PAGE_SIZE;
     let index_size = ranges_serialized.len() + 8;
 
@@ -1792,7 +1826,8 @@ fn write_overlay(
         .write_bytes
         .with_label_values(&[op_label, LABEL_TYPE_PAGE_DATA])
         .inc_by(data_size as u64);
-    Ok(())
+
+    Ok(Some(overlay))
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]

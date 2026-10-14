@@ -97,8 +97,17 @@ impl PrincipalId {
     pub const MAX_LENGTH_IN_BYTES: usize = 29;
     const HASH_LEN_IN_BYTES: usize = 28;
 
-    pub fn as_slice(&self) -> &[u8] {
+    pub const fn as_slice(&self) -> &[u8] {
         self.0.as_slice()
+    }
+
+    #[allow(clippy::len_without_is_empty)]
+    pub const fn len(&self) -> u8 {
+        self.0.len()
+    }
+
+    pub const fn as_fixed_bytes(&self) -> &[u8; Self::MAX_LENGTH_IN_BYTES] {
+        self.0.as_fixed_bytes()
     }
 
     pub fn to_vec(&self) -> Vec<u8> {

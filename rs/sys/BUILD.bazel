@@ -17,7 +17,6 @@ rust_library(
         "@crate_index//:nix",
         "@crate_index//:prost",
         "@crate_index//:tokio",
-        "@crate_index//:wsl",
     ] + select({
         "@rules_rust//rust/platform:unix": [
             "@crate_index//:rand",
@@ -25,7 +24,6 @@ rust_library(
         "//conditions:default": [],
     }) + select({
         "@rules_rust//rust/platform:linux": [
-            "@crate_index//:cvt",
             "@crate_index//:thiserror",
         ],
         "//conditions:default": [],
@@ -37,6 +35,7 @@ rust_test(
     crate = ":sys",
     deps = [
         # Keep sorted.
+        "//rs/test_utilities/privileges",
         "@crate_index//:assert_matches",
         "@crate_index//:tempfile",
     ],

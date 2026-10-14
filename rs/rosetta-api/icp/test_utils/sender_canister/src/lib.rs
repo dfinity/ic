@@ -11,9 +11,9 @@ pub struct SendArg {
 
 /// The reject code returned by `send`.
 ///
-/// Mirrors the variants exposed by the deprecated
-/// `ic_cdk::api::call::RejectionCode` so the public Candid interface of this
-/// test canister stays stable after the ic-cdk 0.18 upgrade.
+/// The variants and their ordering define the `variant` this canister exposes over
+/// Candid, so the numbering must stay in sync with the reject codes of the
+/// [IC interface specification](https://docs.internetcomputer.org/references/ic-interface-spec/https-interface/#reject-codes).
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub enum RejectionCode {
     NoError,
@@ -22,6 +22,9 @@ pub enum RejectionCode {
     DestinationInvalid,
     CanisterReject,
     CanisterError,
+    SysUnknown,
+    /// The reject code reported by the system is not one the interface
+    /// specification defines.
     Unknown,
 }
 
@@ -36,6 +39,7 @@ impl RejectionCode {
             3 => Self::DestinationInvalid,
             4 => Self::CanisterReject,
             5 => Self::CanisterError,
+            6 => Self::SysUnknown,
             _ => Self::Unknown,
         }
     }

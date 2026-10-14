@@ -1,5 +1,5 @@
 use ic_config::execution_environment::Config as ExecutionConfig;
-use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
+use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
@@ -20,7 +20,7 @@ fn reserved_cycles_memory_grow_to_full_capacity<F>(
 {
     // Create application subnet `StateMachine`.
     let subnet_type = SubnetType::Application;
-    let mut subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+    let mut subnet_config = SubnetConfig::new(subnet_type);
     // 2 cores, so we don't have to retry every allocation 4 times (due to the
     // memory being split 4 ways).
     subnet_config.scheduler_config.scheduler_cores = 2;

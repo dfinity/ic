@@ -11,7 +11,6 @@ anyhow = { workspace = true }
 assert_matches = { workspace = true }
 async-trait = { workspace = true }
 candid = { workspace = true }
-cddl = "0.9.4"
 futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }

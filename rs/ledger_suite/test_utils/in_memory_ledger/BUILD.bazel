@@ -11,9 +11,6 @@ package(default_visibility = ["//visibility:public"])
         ]),
         crate_features = features,
         crate_name = "ic_ledger_suite_in_memory_ledger",
-        data = [
-            "//rs/ledger_suite/icrc1/ledger:block.cddl",
-        ],
         version = "0.9.0",
         deps = [
             # Keep sorted.

@@ -86,9 +86,6 @@ pub(crate) const DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION: usize = (GIB as u
 /// Scheduling overhead for copying dirty pages, in instructions.
 pub(crate) const DIRTY_PAGE_COPY_OVERHEAD: NumInstructions = NumInstructions::new(3_000);
 
-/// The overhead for dirty pages in Wasm64.
-pub const WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER: u64 = 4;
-
 const KIB: u64 = 1024;
 const GIB: u64 = KIB * KIB * KIB;
 
@@ -125,15 +122,12 @@ pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
     pub rate_limiting_of_debug_prints: FlagStatus,
-    /// Use deterministic memory tracker.
-    pub deterministic_memory_tracker: FlagStatus,
 }
 
 impl FeatureFlags {
     const fn const_default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            deterministic_memory_tracker: FlagStatus::Enabled,
         }
     }
 }
@@ -228,11 +222,12 @@ pub struct Config {
     /// overridden at runtime by the registry's `maximum_state_delta`.
     pub default_subnet_heap_delta_capacity: NumBytes,
 
-    /// Dirty page overhead. The number of instructions to charge for each dirty
-    /// page created by a write to stable memory. The default value should be
+    /// The number of instructions to charge for every OS page of heap or stable
+    /// memory that a message touches: once when the page is first accessed and
+    /// once more when it is first written to. The default value should be
     /// replaced with the correct value at runtime when the hypervisor is
     /// created.
-    pub dirty_page_overhead: NumInstructions,
+    pub page_overhead: NumInstructions,
 
     /// If this flag is enabled, then execution of a slice will produce a log
     /// entry with the number of executed instructions and the duration.
@@ -244,9 +239,6 @@ pub struct Config {
 
     /// The dirty page copying overhead, in instructions.
     pub dirty_page_copy_overhead: NumInstructions,
-
-    /// The dirty page overhead factor for Wasm64.
-    pub wasm64_dirty_page_overhead_multiplier: u64,
 
     /// The maximum allowed size for an uncompressed canister Wasm module.
     pub wasm_max_size: NumBytes,
@@ -290,7 +282,7 @@ impl Config {
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
             default_subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            dirty_page_overhead: NumInstructions::new(0),
+            page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,
             max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,
             dirty_page_copy_overhead: DIRTY_PAGE_COPY_OVERHEAD,
@@ -298,7 +290,6 @@ impl Config {
             max_wasm_memory_size: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
             max_wasm64_memory_size: NumBytes::new(MAX_WASM64_MEMORY_IN_BYTES),
             max_stable_memory_size: NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES),
-            wasm64_dirty_page_overhead_multiplier: WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER,
         }
     }
 }

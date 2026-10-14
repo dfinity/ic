@@ -27,11 +27,19 @@ pub struct OrchestratorArgs {
     #[clap(long)]
     pub(crate) replica_config_file: PathBuf,
 
+    /// The path to the IC boundary environment file
+    #[clap(long)]
+    pub(crate) ic_boundary_env_file: PathBuf,
+
+    /// The path to the IC gateway environment file
+    #[clap(long)]
+    pub(crate) ic_gateway_env_file: PathBuf,
+
     /// The path to the Replica binary location containing the following in case
-    /// of guest OS deployment: version.txt, manageboot.sh, replica,
+    /// of guest OS deployment: replica, ic-boundary, ic-gateway, manageboot.sh,
     /// install-upgrade.sh
     #[clap(long)]
-    pub(crate) ic_binary_directory: Option<PathBuf>,
+    pub(crate) ic_binary_directory: PathBuf,
 
     /// If not set, the default listen addr (0.0.0.0:[`PROMETHEUS_HTTP_PORT`])
     /// will be used to export metrics.
@@ -43,9 +51,13 @@ pub struct OrchestratorArgs {
     #[clap(long)]
     pub(crate) enable_provisional_registration: bool,
 
-    /// The path to the version file.
+    /// The path to the replica version file.
     #[clap(long)]
-    pub(crate) version_file: PathBuf,
+    pub(crate) replica_version_file: PathBuf,
+
+    /// The path to the GuestOS version file.
+    #[clap(long)]
+    pub(crate) guestos_version_file: PathBuf,
 
     /// Print the replica's current node ID.
     #[clap(long)]

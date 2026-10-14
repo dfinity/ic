@@ -66,7 +66,8 @@ pub enum StepType {
     /// This step will also add ingress messages to the registry canister to: (optionally) add
     /// an upgrade version, and update the NNS subnet record to point to this new version.
     /// ic-replay will stop at the given height (+ the added heights for the ingress messages) and
-    /// create a checkpoint, which will then be used to create the recovery CUP.
+    /// create a checkpoint, which will then be used to propose the recovery CUP. This checkpoint
+    /// requires an additional batch and will thus be created one height above the added heights.
     ICReplay,
     /// Now we want to verify that the height of the locally obtained execution state matches the
     /// highest finalized height which was agreed upon by the subnet (+ the added heights for the
@@ -139,7 +140,8 @@ pub struct NNSRecoverySameNodesArgs {
     pub add_upgrade_version: Option<bool>,
 
     #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
+    /// The replay will stop at this height and create a checkpoint of the state sitting one height
+    /// above the last replayed height.
     pub replay_until_height: Option<u64>,
 
     /// IP address of the node to download the consensus pool from.
@@ -244,6 +246,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
         // Depending on the next step we might require some user interaction before we can execute
         // it.
         match step_type {
+            #[allow(clippy::collapsible_match)]
             StepType::StopReplica | StepType::DownloadState | StepType::UploadState => {
                 if self.params.admin_access_location.is_none() {
                     self.params.admin_access_location = Some(read_data_location(
@@ -255,6 +258,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             _ => {}
         }
         match step_type {
+            #[allow(clippy::collapsible_match)]
             StepType::DownloadConsensusPool => {
                 if self.params.download_pool_node.is_none() {
                     // We could pick a node with highest finalization and CUP height automatically,
@@ -310,6 +314,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::CreateArtifacts => {
                 if self.params.output_dir.is_none() {
                     self.params.output_dir = read_optional(
@@ -322,6 +327,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::UploadCUPAndRegistry => {
                 if self.params.wait_for_cup_node.is_none() {
                     self.params.wait_for_cup_node = if let Some(DataLocation::Remote(ip)) =
@@ -443,10 +449,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     )))
                 }
             }
-            StepType::ValidateReplayOutput => Ok(Box::new(self.recovery.get_validate_replay_step(
-                self.params.subnet_id,
-                u64::from(self.params.upgrade_version.is_some()),
-            ))),
+            StepType::ValidateReplayOutput => Ok(Box::new(
+                self.recovery
+                    .get_validate_replay_step(self.params.subnet_id),
+            )),
 
             StepType::UpdateRegistryLocalStore => {
                 if self.params.upgrade_version.is_none() {

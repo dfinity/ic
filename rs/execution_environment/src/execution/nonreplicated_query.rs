@@ -19,6 +19,7 @@ use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{NumInstructions, Time};
 use ic_types_cycles::Cycles;
 use prometheus::IntCounter;
+use std::sync::Arc;
 
 // Execute non replicated query.
 #[allow(clippy::too_many_arguments)]
@@ -30,7 +31,7 @@ pub fn execute_non_replicated_query(
     data_certificate: Option<Vec<u8>>,
     time: Time,
     execution_parameters: ExecutionParameters,
-    network_topology: &NetworkTopology,
+    network_topology: Arc<NetworkTopology>,
     hypervisor: &Hypervisor,
     round_limits: &mut RoundLimits,
     state_changes_error: &IntCounter,

@@ -3,6 +3,7 @@ use crate::server::ConnInfo;
 use attestation::attestation_package::{
     AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
+use attestation::attestation_report::AttestationReportExt;
 use config_types::TrustedExecutionEnvironmentConfig;
 use der::asn1::OctetStringRef;
 use guest_upgrade_shared::api::{
@@ -30,10 +31,6 @@ pub struct DiskEncryptionKeyExchangeServiceImpl {
     sev_root_certificate_verification: SevRootCertificateVerification,
     store_device_path: PathBuf,
     store_luks_header_path: PathBuf,
-    /// If true, the server will send the Store LUKS header to the client.
-    /// Only false in unit tests testing backwards compatibility.
-    // TODO: Remove when all deployed GuestOS versions support sending the Store LUKS header.
-    send_luks_header: bool,
 }
 
 impl DiskEncryptionKeyExchangeServiceImpl {
@@ -44,7 +41,6 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
         store_device_path: PathBuf,
         store_luks_header_path: PathBuf,
-        send_luks_header: bool,
         status_sender: Sender<Result<(), String>>,
         expected_measurements: Vec<Vec<u8>>,
     ) -> Self {
@@ -57,7 +53,6 @@ impl DiskEncryptionKeyExchangeServiceImpl {
             sev_root_certificate_verification,
             store_device_path,
             store_luks_header_path,
-            send_luks_header,
         }
     }
 
@@ -147,6 +142,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         .verify_measurement(&self.expected_measurements)
         .verify_custom_data(&custom_data)
         .verify_chip_id(&[my_attestation_report.chip_id])
+        .verify_guest_policy()
         .map_err(|e| {
             Status::invalid_argument(format!("Attestation report verification failed: {e:?}"))
         })?;
@@ -154,17 +150,9 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         let mut sev_firmware = self.sev_firmware_factory.deref()()
             .map_err(|e| Status::internal(format!("Failed to create SEV firmware: {e:?}")))?;
 
-        let luks_header = if self.send_luks_header {
-            Some(
-                tokio::fs::read(&self.store_luks_header_path)
-                    .await
-                    .map_err(|e| {
-                        Status::internal(format!("Failed to read Store LUKS header: {e:#}"))
-                    })?,
-            )
-        } else {
-            None
-        };
+        let luks_header = tokio::fs::read(&self.store_luks_header_path)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to read Store LUKS header: {e:#}")))?;
 
         Ok(Response::new(GetDiskEncryptionKeyResponse {
             key: Some(
@@ -173,12 +161,15 @@ impl DiskEncryptionKeyExchangeServiceImpl {
                     Key::DiskEncryptionKey {
                         device_path: &self.store_device_path,
                     },
+                    my_attestation_report.launch_tcb_as_u64().map_err(|e| {
+                        Status::internal(format!("Failed to read launch TCB from report: {e:#}"))
+                    })?,
                 )
                 .map_err(|e| Status::internal(format!("Failed to get disk encryption key: {e:?}")))?
                 .into_bytes(),
             ),
             sev_attestation_package: Some(my_attestation_package.into()),
-            luks_header,
+            luks_header: Some(luks_header),
         }))
     }
 

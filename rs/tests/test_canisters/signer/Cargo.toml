@@ -9,5 +9,6 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-cdk = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic_bls12_381 = { workspace = true }
 serde = { workspace = true }

@@ -63,6 +63,23 @@ pub enum SnapshotVisibility {
     AllowedViewers(Vec<Principal>),
 }
 
+/// # Status Visibility.
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
+)]
+pub enum StatusVisibility {
+    /// Controllers.
+    #[default]
+    #[serde(rename = "controllers")]
+    Controllers,
+    /// Public.
+    #[serde(rename = "public")]
+    Public,
+    /// Allowed viewers.
+    #[serde(rename = "allowed_viewers")]
+    AllowedViewers(Vec<Principal>),
+}
+
 /// # Environment Variable.
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
@@ -126,6 +143,16 @@ pub struct CanisterSettings {
     ///
     /// Default value: `5_000_000_000_000` (5 trillion cycles).
     pub reserved_cycles_limit: Option<Nat>,
+    /// Indicates the minimum number of cycles required for an incoming call
+    /// from a different canister. Calls from a different canister with fewer
+    /// cycles are rejected with a `CanisterError` at no cycles cost to the callee.
+    /// Self-calls (from the canister itself) and ingress messages are not affected
+    /// (`canister_inspect_message` hook can be used to filter ingress messages, albeit only via non-replicated execution).
+    ///
+    /// Must be a number between 0 and 2<sup>128</sup>-1, inclusively.
+    ///
+    /// Default value: `0` (i.e., no minimum enforced).
+    pub minimum_incoming_canister_call_cycles: Option<Nat>,
     /// Defines who is allowed to read the canister's logs.
     ///
     /// Default value: [`LogVisibility::Controllers`].
@@ -138,6 +165,10 @@ pub struct CanisterSettings {
     ///
     /// Default value: [`SnapshotVisibility::Controllers`].
     pub snapshot_visibility: Option<SnapshotVisibility>,
+    /// Defines who is allowed to read the canister's status.
+    ///
+    /// Default value: [`StatusVisibility::Controllers`].
+    pub status_visibility: Option<StatusVisibility>,
     /// Indicates the upper limit on the WASM heap memory (bytes) consumption of the canister.
     ///
     /// Must be a number between 0 and 2<sup>48</sup>-1 (i.e 256TB), inclusively.
@@ -148,7 +179,7 @@ pub struct CanisterSettings {
     ///
     /// If the remaining wasm memory size of the canister is below the threshold, execution of the "on low wasm memory" hook is scheduled.
     ///
-    /// Must be a number between 0 and 2<sup>64</sup>-1, inclusively.
+    /// Must be a number between 0 and 2<sup>48</sup> (i.e 256TB), inclusively.
     ///
     /// Default value: `0` (i.e., the "on low wasm memory" hook is never scheduled).
     pub wasm_memory_threshold: Option<Nat>,
@@ -182,12 +213,16 @@ pub struct DefiniteCanisterSettings {
     pub freezing_threshold: Nat,
     /// Upper limit on [`CanisterStatusResult::reserved_cycles`] of the canister.
     pub reserved_cycles_limit: Nat,
+    /// Minimum number of cycles required for an incoming call from a different canister.
+    pub minimum_incoming_canister_call_cycles: Nat,
     /// Visibility of canister logs.
     pub log_visibility: LogVisibility,
     /// Upper limit on the memory used for canister logs (bytes).
     pub log_memory_limit: Nat,
     /// Visibility of canister snapshots.
     pub snapshot_visibility: SnapshotVisibility,
+    /// Visibility of canister status.
+    pub status_visibility: StatusVisibility,
     /// Upper limit on the WASM heap memory (bytes) consumption of the canister.
     pub wasm_memory_limit: Nat,
     /// Threshold on the remaining wasm memory size of the canister in bytes.
@@ -857,6 +892,15 @@ pub struct HttpRequestArgs {
     pub transform: Option<TransformContext>,
     /// If `Some(false)`, the HTTP request will be made by single replica instead of all nodes in the subnet.
     pub is_replicated: Option<bool>,
+    /// The pricing mechanism to apply to this request: `1` ("legacy") or `2` ("pay-as-you-go").
+    ///
+    /// If None, `1` is used. Version `1` is deprecated: version `2` is to become the default,
+    /// after which version `1` will be removed. Version `2` prices the resources the call
+    /// actually consumes rather than `max_response_bytes`.
+    ///
+    /// The field is not validated. Any value other than `1` or `2` is priced with version `1`
+    /// and no error is returned.
+    pub pricing_version: Option<u32>,
 }
 
 /// # HTTP Request Result
@@ -986,6 +1030,190 @@ pub struct TransformArgs {
     pub context: Vec<u8>,
 }
 
+/// # Flexible HTTP Request Args
+///
+/// Argument type of [`flexible_http_request`](https://docs.internetcomputer.org/references/management-canister/#flexible_http_request).
+///
+/// As for [`HttpRequestArgs`], except that there is no `is_replicated` and no
+/// `pricing_version` (a flexible outcall is always priced with pricing version `2`),
+/// and the committee can be sized with [`Self::replication`].
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
+pub struct FlexibleHttpRequestArgs {
+    /// The requested URL.
+    pub url: String,
+    /// The maximal size of any single node's response in bytes.
+    ///
+    /// If None, 2MB will be the limit. This bounds the response but does not set the
+    /// price, since a flexible outcall is charged for the resources it consumes.
+    pub max_response_bytes: Option<u64>,
+    /// The method of HTTP request.
+    ///
+    /// `PUT`, `DELETE` and `PATCH` are accepted only when the replication counts are
+    /// deterministic, that is when `min_responses`, `max_responses` and `total_requests`
+    /// are all equal.
+    pub method: HttpMethod,
+    /// List of HTTP request headers and their corresponding values.
+    pub headers: Vec<HttpHeader>,
+    /// Optionally provide request body.
+    pub body: Option<Vec<u8>>,
+    /// Name of the transform function which is `func (transform_args) -> (http_response) query`.
+    ///
+    /// Each node runs it on its own response.
+    pub transform: Option<TransformContext>,
+    /// How many nodes issue the request, and how many responses the caller requires
+    /// and will accept.
+    ///
+    /// If None, the defaults of `floor(2 / 3 * N) + 1`, `N` and `N` are used for
+    /// `min_responses`, `max_responses` and `total_requests`, where `N` is the number
+    /// of nodes on the subnet.
+    pub replication: Option<ReplicationCounts>,
+}
+
+/// # Replication Counts.
+///
+/// How many nodes perform a flexible HTTP outcall and how many responses the caller
+/// requires and will accept.
+///
+/// The caller must ensure that `0 <= min_responses <= max_responses <= total_requests`
+/// and `1 <= total_requests <= N`, where `N` is the number of nodes on the subnet, as
+/// returned by [`ic_cdk::api::subnet_self_node_count`](https://docs.rs/ic-cdk/latest/ic_cdk/api/fn.subnet_self_node_count.html).
+///
+/// See [`FlexibleHttpRequestArgs::replication`].
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
+)]
+pub struct ReplicationCounts {
+    /// The fewest responses a successful outcall may carry.
+    ///
+    /// This determines when the outcall returns.
+    pub min_responses: u32,
+    /// The most responses the caller is willing to receive.
+    pub max_responses: u32,
+    /// How many nodes issue the HTTP request.
+    pub total_requests: u32,
+}
+
+/// # Flexible HTTP Request Result
+///
+/// Result type of [`flexible_http_request`](https://docs.internetcomputer.org/references/management-canister/#flexible_http_request).
+///
+/// Both arms are delivered as a reply rather than as a reject. Only failures detected
+/// before the requests are issued, such as invalid arguments or too few attached
+/// cycles, are delivered as a reject.
+#[derive(CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub enum FlexibleHttpRequestResult {
+    /// Between `min_responses` and `max_responses` individual responses.
+    ///
+    /// The responses do not identify the node that produced them and their order is
+    /// not specified.
+    #[serde(rename = "ok")]
+    Ok(Vec<HttpRequestResult>),
+    /// The outcall could not meet the requested replication.
+    #[serde(rename = "err")]
+    Err(FlexibleHttpRequestErr),
+}
+
+/// # Flexible HTTP Request Err
+///
+/// The error arm of [`FlexibleHttpRequestResult`].
+#[derive(CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
+pub struct FlexibleHttpRequestErr {
+    /// Why the outcall as a whole failed to meet the requested replication.
+    pub global_error: Option<FlexibleHttpGlobalError>,
+    /// What the individual nodes did.
+    ///
+    /// Which nodes appear depends on the error, and the vector is not guaranteed to
+    /// list every node the outcall was issued to.
+    pub node_details: Vec<FlexibleHttpNodeDetail>,
+    /// A textual error message.
+    pub message: String,
+}
+
+/// # Flexible HTTP Global Error.
+///
+/// See [`FlexibleHttpRequestErr::global_error`].
+#[derive(CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub enum FlexibleHttpGlobalError {
+    /// Fewer than `min_responses` responses were collected before a system-defined timeout.
+    #[serde(rename = "timeout")]
+    Timeout(Reserved),
+    /// What the nodes left unspent of the attached cycles no longer covers delivering
+    /// any result the outcall could still produce.
+    #[serde(rename = "out_of_cycles")]
+    OutOfCycles(Reserved),
+    /// No combination of at least `min_responses` available responses could fit into
+    /// the total result limit.
+    #[serde(rename = "responses_too_large")]
+    ResponsesTooLarge(Reserved),
+    /// More than `total_requests - min_responses` nodes returned reject responses, so
+    /// at least `min_responses` successful responses can never be collected.
+    #[serde(rename = "too_many_rejects")]
+    TooManyRejects(Reserved),
+}
+
+/// # Flexible HTTP Node Detail.
+///
+/// What one node did. See [`FlexibleHttpRequestErr::node_details`].
+#[derive(CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct FlexibleHttpNodeDetail {
+    /// The node this entry is about.
+    pub node_id: Principal,
+    /// The resources the node used.
+    pub report: HttpRequestResourceReport,
+    /// Diagnostic detail about what the node did.
+    pub error: Option<FlexibleHttpNodeError>,
+}
+
+/// # HTTP Request Resource Report.
+///
+/// An accounting of the resources one node used. See [`FlexibleHttpNodeDetail::report`].
+///
+/// Every field is optional: a field is absent when the corresponding resource is not
+/// reported. An implementation may leave the whole report empty, so do not rely on it
+/// to diagnose a failure.
+#[derive(CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
+pub struct HttpRequestResourceReport {
+    /// Bytes of the HTTP response, before transformation.
+    pub raw_response_bytes: Option<ResourceUsage<u64>>,
+    /// Time between sending the request and fully receiving the response.
+    pub http_roundtrip_time_ms: Option<ResourceUsage<u64>>,
+    /// Instructions the transform function used.
+    pub transform_instructions: Option<ResourceUsage<u64>>,
+    /// Bytes of the response after transformation.
+    pub transformed_response_bytes: Option<ResourceUsage<u64>>,
+    /// Cycles the node spent.
+    pub cycles: Option<ResourceUsage<Nat>>,
+}
+
+/// # Resource Usage.
+///
+/// Whether a resource was consumed, and how much, or whether it ran over its budget.
+///
+/// See [`HttpRequestResourceReport`].
+#[derive(CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub enum ResourceUsage<T> {
+    /// The amount consumed.
+    #[serde(rename = "used")]
+    Used(T),
+    /// The node failed because this resource ran over its budget.
+    #[serde(rename = "exceeded")]
+    Exceeded(Reserved),
+}
+
+/// # Flexible HTTP Node Error.
+///
+/// See [`FlexibleHttpNodeDetail::error`].
+///
+/// The `code` values are diagnostic strings and are not a fixed enumeration, so do not
+/// branch on them.
+#[derive(CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
+pub struct FlexibleHttpNodeError {
+    /// A short diagnostic code.
+    pub code: String,
+    /// A textual message.
+    pub message: String,
+}
+
 /// # ECDSA Key ID.
 ///
 /// See [`EcdsaPublicKeyArgs::key_id`] and [`SignWithEcdsaArgs::key_id`].
@@ -1019,12 +1247,16 @@ pub enum EcdsaCurve {
     #[default]
     #[serde(rename = "secp256k1")]
     Secp256k1,
+    /// secp256r1
+    #[serde(rename = "secp256r1")]
+    Secp256r1,
 }
 
 impl From<EcdsaCurve> for u32 {
     fn from(val: EcdsaCurve) -> Self {
         match val {
             EcdsaCurve::Secp256k1 => 0,
+            EcdsaCurve::Secp256r1 => 1,
         }
     }
 }
@@ -1358,6 +1590,74 @@ pub struct SubnetInfoResult {
     pub replica_version: String,
     /// Registry version of the subnet.
     pub registry_version: u64,
+}
+
+/// # Subnet Metrics Args.
+///
+/// Argument type of [`subnet_metrics`](https://docs.internetcomputer.org/references/management-canister/#subnet_metrics).
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct SubnetMetricsArgs {
+    /// Subnet ID.
+    pub subnet_id: Principal,
+}
+
+/// # Subnet Metrics Result.
+///
+/// Result type of [`subnet_metrics`](https://docs.internetcomputer.org/references/management-canister/#subnet_metrics).
+///
+/// This API is EXPERIMENTAL and may evolve in a non-backward-compatible way.
+///
+/// # Freshness
+///
+/// Only `block_height` is current as of the block in which the call is executed.
+/// The other five are read from the subnet's aggregated metrics, which the replica
+/// updates at the *end* of a round, so they describe the state as of an earlier
+/// block:
+///
+/// - `num_canisters`, `consumed_cycles_total`, `update_transactions_total` and
+///   `million_round_instructions_total` are as of the end of the previous round.
+/// - `canister_state_bytes` is recomputed only every 10 rounds, because summing it
+///   over every canister is expensive and it does not need to be exact. It can
+///   therefore be up to ten rounds stale, and reads as `0` for the first rounds
+///   after the subnet is created.
+///
+/// All but `million_round_instructions_total` are the same values, with the same
+/// staleness, that `read_state` returns for the `/subnet/<subnet_id>/metrics` path,
+/// so those agree; that field has no `read_state` counterpart.
+#[derive(
+    CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
+)]
+pub struct SubnetMetricsResult {
+    /// Height of the block in whose execution the call is processed.
+    /// Monotonically non-decreasing for a given subnet; the heights of different
+    /// subnets are unrelated.
+    pub block_height: Nat,
+    /// Number of canisters on the subnet, as of the end of the previous round.
+    pub num_canisters: Nat,
+    /// Total size in bytes of the state taken by the canisters on the subnet, as
+    /// of the end of the previous round.
+    ///
+    /// Recomputed only every 10 rounds, so this can be up to ten rounds stale
+    /// (and reads as `0` for the first rounds after the subnet is created). See
+    /// the type-level "Freshness" note.
+    pub canister_state_bytes: Nat,
+    /// Total cycles removed from circulation on the subnet by all current and
+    /// deleted canisters, as of the end of the previous round.
+    pub consumed_cycles_total: Nat,
+    /// Total number of transactions processed on the subnet, i.e. the total
+    /// number of messages executed in replicated mode, as of the end of the
+    /// previous round.
+    pub update_transactions_total: Nat,
+    /// Total instructions the subnet accounted for across the execution phases of
+    /// all rounds, as of the end of the previous round, counted in units of one
+    /// million and rounded up: a value of 42 means 42 million instructions.
+    ///
+    /// Covers both executed Wasm and the fixed per-execution and per-canister
+    /// scheduler overheads plus non-Wasm charges (compilation, chunk assembly,
+    /// snapshots), so this is not a Wasm instruction meter.
+    pub million_round_instructions_total: Nat,
 }
 
 /// # Canister ID Range.
@@ -1767,12 +2067,26 @@ pub enum SnapshotDataOffset {
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
 )]
 pub enum CanisterLogFilter {
-    /// Filter logs by index range (inclusive).
+    /// Filter logs by index range `[start, end)`.
     #[serde(rename = "by_idx")]
-    ByIdx { start: u64, end: u64 },
-    /// Filter logs by timestamp range (inclusive).
+    ByIdx {
+        /// Start of the range (inclusive).
+        start: u64,
+        /// End of the range (exclusive).
+        ///
+        /// If `end <= start`, the range is empty.
+        end: u64,
+    },
+    /// Filter logs by timestamp range `[start, end)`.
     #[serde(rename = "by_timestamp_nanos")]
-    ByTimestampNanos { start: u64, end: u64 },
+    ByTimestampNanos {
+        /// Start of the range (inclusive).
+        start: u64,
+        /// End of the range (exclusive).
+        ///
+        /// If `end <= start`, the range is empty.
+        end: u64,
+    },
 }
 
 /// # Fetch Canister Logs Args.
@@ -1819,6 +2133,10 @@ pub struct FetchCanisterLogsResult {
 ///
 /// Breakdown of cycles consumed by a canister.
 ///
+/// The amounts cover everything consumed since April 2023, as far back as any
+/// per-use-case record of a canister goes; [`Self::http_outcalls`] is the one
+/// exception (see there).
+///
 /// See [`CanisterMetricsResult::cycles_consumed`].
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
@@ -1844,6 +2162,9 @@ pub struct CyclesConsumed {
     /// Cycles consumed for canister creation.
     pub canister_creation: Nat,
     /// Cycles consumed for HTTP outcalls.
+    ///
+    /// Unlike the other fields, covers only the outcalls made since May 2026: no
+    /// per-canister total from before then is retained.
     pub http_outcalls: Nat,
     /// Cycles burned (i.e. not returned to the canister).
     pub burned_cycles: Nat,

@@ -17,10 +17,10 @@ from notification.notification_event import (
 from notification.notification_handler import NotificationHandler
 from scanner.scanner_job_type import ScannerJobType
 
-SLACK_CHANNEL_ID = "C04815E0T16"
-SLACK_CHANNEL = "#security-vulnerability-management"
+SLACK_CHANNEL_ID = "C05CYLM94KU"
+SLACK_CHANNEL = "#eng-node-psec"
 SLACK_LOG_TO_CONSOLE = False
-APP_OWNERS = "<@U03JGGJBM7V> <@U02EFHJA8D9>"  # Thomas, Venkkatesh
+APP_OWNERS = "<!subteam^S05FTRNRC5A>"  # @node-team
 
 SLACK_OAUTH_TOKEN = os.environ.get("SLACK_PSEC_BOT_OAUTH_TOKEN")
 if SLACK_OAUTH_TOKEN is None:

@@ -35,7 +35,7 @@ use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::upsert;
-use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::{subnet_test_id, test_replica_version};
 use ic_types::ReplicaVersion;
 use pocket_ic::nonblocking::PocketIc;
 use prost::Message;
@@ -61,12 +61,12 @@ pub async fn get_subnet_record(registry: &Canister<'_>, subnet_id: SubnetId) -> 
 pub fn get_subnet_holding_chain_keys(
     key_ids: Vec<MasterPublicKeyId>,
     node_ids: Vec<NodeId>,
+    replica_version_id: ReplicaVersion,
 ) -> SubnetRecord {
     let unit_delay_millis = 10;
-    let replica_version_id = String::from(ReplicaVersion::default());
     let mut subnet_record = SubnetRecord::from(CreateSubnetPayload {
         unit_delay_millis,
-        replica_version_id,
+        replica_version_id: replica_version_id.to_string(),
         node_ids,
         ..Default::default()
     });
@@ -231,34 +231,71 @@ pub fn prepare_registry_with_cloud_engine_subnet(
     };
     let (nodes_request, node_ids_and_pks) =
         prepare_registry_with_nodes_from_template(node_count, starting_mutation_id, node_template);
+
+    // CloudEngine subnets are not charged cycles, i.e. they use the `Free` cost
+    // schedule.
+    let subnet_record = SubnetRecord {
+        subnet_type: i32::from(SubnetType::CloudEngine),
+        canister_cycles_cost_schedule: i32::from(CanisterCyclesCostSchedule::Free),
+        replica_version_id: test_replica_version().to_string(),
+        unit_delay_millis: 600,
+        ..Default::default()
+    };
+
+    add_subnet_to_registry(nodes_request, &node_ids_and_pks, subnet_record)
+}
+
+/// Prepares mutations adding an Application subnet on top of the
+/// invariant-compliant base (which already contains a single system subnet),
+/// mirroring [`prepare_registry_with_cloud_engine_subnet`]. Returns the subnet's
+/// ID so tests can target it with `delete_subnet`.
+pub fn prepare_registry_with_application_subnet(
+    node_count: u64,
+    starting_mutation_id: u8,
+) -> (RegistryAtomicMutateRequest, SubnetId) {
+    let (nodes_request, node_ids_and_pks) =
+        prepare_registry_with_nodes_and_valid_pks(node_count, starting_mutation_id);
+
+    let subnet_record = SubnetRecord {
+        subnet_type: i32::from(SubnetType::Application),
+        replica_version_id: test_replica_version().to_string(),
+        unit_delay_millis: 600,
+        ..Default::default()
+    };
+
+    add_subnet_to_registry(nodes_request, &node_ids_and_pks, subnet_record)
+}
+
+/// Adds a new subnet (described by `subnet_record`, made up of the nodes in
+/// `node_ids_and_pks`) on top of the node-registration mutations in
+/// `nodes_request`. The subnet's `membership` is populated from
+/// `node_ids_and_pks`, so callers only need to set the fields that distinguish
+/// their subnet type. The new subnet is appended to the subnet list alongside
+/// the single system subnet (`TEST_ID`) of the invariant-compliant base, and the
+/// required threshold-signing public key and CUP mutations are added. Returns the
+/// completed request together with the new subnet's ID.
+fn add_subnet_to_registry(
+    nodes_request: RegistryAtomicMutateRequest,
+    node_ids_and_pks: &BTreeMap<NodeId, ValidNodePublicKeys>,
+    mut subnet_record: SubnetRecord,
+) -> (RegistryAtomicMutateRequest, SubnetId) {
     let mut mutations = nodes_request.mutations;
+
+    subnet_record.membership = node_ids_and_pks
+        .keys()
+        .map(|node_id| node_id.get().to_vec())
+        .collect();
 
     let node_ids_and_dkg_pks: BTreeMap<NodeId, PublicKey> = node_ids_and_pks
         .iter()
         .map(|(node_id, valid_pks)| (*node_id, valid_pks.dkg_dealing_encryption_key().clone()))
         .collect();
 
-    // CloudEngine subnets are not charged cycles, i.e. they use the `Free` cost
-    // schedule.
-    let subnet_record = SubnetRecord {
-        membership: node_ids_and_pks
-            .keys()
-            .map(|node_id| node_id.get().to_vec())
-            .collect(),
-        subnet_type: i32::from(SubnetType::CloudEngine),
-        canister_cycles_cost_schedule: i32::from(CanisterCyclesCostSchedule::Free),
-        replica_version_id: ReplicaVersion::default().to_string(),
-        unit_delay_millis: 600,
-        ..Default::default()
-    };
-
-    // The invariant-compliant base contains a single system subnet (`TEST_ID`);
-    // append the new CloudEngine subnet to the subnet list.
-    let cloud_engine_subnet_id = subnet_test_id(TEST_ID + 1);
+    let subnet_id = subnet_test_id(TEST_ID + 1);
     let subnet_list_record = SubnetListRecord {
         subnets: vec![
             subnet_test_id(TEST_ID).get().to_vec(),
-            cloud_engine_subnet_id.get().to_vec(),
+            subnet_id.get().to_vec(),
         ],
     };
 
@@ -267,12 +304,12 @@ pub fn prepare_registry_with_cloud_engine_subnet(
         subnet_list_record.encode_to_vec(),
     ));
     mutations.push(upsert(
-        make_subnet_record_key(cloud_engine_subnet_id).as_bytes(),
+        make_subnet_record_key(subnet_id).as_bytes(),
         subnet_record.encode_to_vec(),
     ));
     mutations.append(
         &mut create_subnet_threshold_signing_pubkey_and_cup_mutations(
-            cloud_engine_subnet_id,
+            subnet_id,
             &node_ids_and_dkg_pks,
         ),
     );
@@ -282,7 +319,7 @@ pub fn prepare_registry_with_cloud_engine_subnet(
             mutations,
             preconditions: vec![],
         },
-        cloud_engine_subnet_id,
+        subnet_id,
     )
 }
 

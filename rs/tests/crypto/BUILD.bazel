@@ -1,10 +1,11 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEFAULT_VCPUS_PER_VM", "MESSAGE_CANISTER_RUNTIME_DEPS", "MIN_LOCAL_CPUS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "canister_sig_verification_cache_test",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 3 IC Node VMs * 6 vCPUs.
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
         "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
     },
@@ -49,6 +50,7 @@ system_test(
 
 system_test(
     name = "request_signature_test",
+    cpus = MIN_LOCAL_CPUS + 3 * DEFAULT_VCPUS_PER_VM,  # 3 IC Node VMs * 6 vCPUs.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -91,6 +93,7 @@ system_test(
 
 system_test(
     name = "rpc_csp_vault_reconnection_test",
+    cpus = MIN_LOCAL_CPUS + DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -133,6 +136,7 @@ system_test(
 
 system_test(
     name = "ic_crypto_csp_metrics_test",
+    cpus = MIN_LOCAL_CPUS + DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     deps = [
         # Keep sorted.
         "//packages/ic-ed25519",
@@ -174,6 +178,7 @@ system_test(
 
 system_test(
     name = "ic_crypto_csp_socket_test",
+    cpus = MIN_LOCAL_CPUS + DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     deps = [
         # Keep sorted.
         "//packages/ic-ed25519",
@@ -215,6 +220,7 @@ system_test(
 
 system_test(
     name = "ic_crypto_csp_umask_test",
+    cpus = MIN_LOCAL_CPUS + DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     deps = [
         # Keep sorted.
         "//packages/ic-ed25519",
@@ -256,6 +262,7 @@ system_test(
 
 system_test(
     name = "ic_crypto_fstrim_tool_test",
+    cpus = MIN_LOCAL_CPUS + DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     deps = [
         # Keep sorted.
         "//packages/ic-ed25519",
@@ -297,6 +304,7 @@ system_test(
 
 system_test(
     name = "ingress_verification_test",
+    cpus = MIN_LOCAL_CPUS + 2 * DEFAULT_VCPUS_PER_VM,  # 2 IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",
     ],
@@ -342,6 +350,7 @@ system_test(
 
 system_test(
     name = "ic_crypto_csp_start_order_test",
+    cpus = MIN_LOCAL_CPUS + DEFAULT_VCPUS_PER_VM,  # 1 IC Node VM * 6 vCPUs.
     deps = [
         # Keep sorted.
         "//packages/ic-ed25519",
@@ -383,6 +392,7 @@ system_test(
 
 system_test(
     name = "cloud_engine_canister_sig_test",
+    cpus = MIN_LOCAL_CPUS + 4 * DEFAULT_VCPUS_PER_VM,  # 3 IC Node VMs + 1 API boundary node VM * 6 vCPUs.
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
         "II_BACKEND_WASM_PATH": "@mainnet_canisters//:internet_identity_backend.wasm.gz",
     },

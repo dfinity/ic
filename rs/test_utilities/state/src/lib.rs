@@ -23,7 +23,7 @@ use ic_replicated_state::{
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
         },
-        testing::NetworkTopologyTesting,
+        testing::{NetworkTopologyTesting, SystemMetadataTesting},
     },
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
@@ -148,25 +148,26 @@ impl ReplicatedStateBuilder {
             )
             .unwrap();
 
-        state
-            .metadata
-            .network_topology
-            .set_routing_table(routing_table);
-        state.metadata.network_topology.subnets_mut().insert(
-            self.subnet_id,
-            SubnetTopology {
-                public_key: vec![],
-                nodes: self.node_ids.into_iter().collect(),
-                subnet_type: self.subnet_type,
-                subnet_features: self.subnet_features,
-                chain_keys_held: BTreeSet::new(),
-                cost_schedule: CanisterCyclesCostSchedule::Normal,
-                subnet_admins: BTreeSet::new(),
-            },
-        );
+        state.metadata.modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table);
+            network_topology.subnets_mut().insert(
+                self.subnet_id,
+                SubnetTopology {
+                    public_key: vec![],
+                    nodes: self.node_ids.into_iter().collect(),
+                    subnet_type: self.subnet_type,
+                    subnet_features: self.subnet_features,
+                    chain_keys_held: BTreeSet::new(),
+                    cost_schedule: CanisterCyclesCostSchedule::Normal,
+                    subnet_admins: BTreeSet::new(),
+                    cooling_down: false,
+                },
+            );
+        });
 
         state.metadata.batch_time = self.batch_time;
-        state.metadata.own_subnet_features = self.subnet_features;
+        std::sync::Arc::make_mut(&mut state.metadata.own_subnet_info).subnet_features =
+            self.subnet_features;
 
         state.epoch_query_stats = self.query_stats;
 
@@ -609,6 +610,7 @@ impl Default for ExecutionStateBuilder {
         ExecutionStateBuilder {
             execution_state: ExecutionState::new(
                 WasmBinary::new(CanisterModule::new(vec![])),
+                None,
                 ExportedFunctions::new(BTreeSet::new()),
                 Memory::new_for_testing(),
                 Memory::new_for_testing(),
@@ -789,17 +791,19 @@ pub fn get_initial_state_with_balance(
 
         state.put_canister_state(canister_state_builder.build());
     }
-    state.metadata.network_topology.set_routing_table({
-        let mut rt = ic_registry_routing_table::RoutingTable::new();
-        rt.insert(
-            ic_registry_routing_table::CanisterIdRange {
-                start: CanisterId::from(0),
-                end: CanisterId::from(u64::MAX),
-            },
-            subnet_test_id(1),
-        )
-        .unwrap();
-        rt
+    state.metadata.modify_network_topology(|network_topology| {
+        network_topology.set_routing_table({
+            let mut rt = ic_registry_routing_table::RoutingTable::new();
+            rt.insert(
+                ic_registry_routing_table::CanisterIdRange {
+                    start: CanisterId::from(0),
+                    end: CanisterId::from(u64::MAX),
+                },
+                subnet_test_id(1),
+            )
+            .unwrap();
+            rt
+        });
     });
     state
 }
@@ -887,8 +891,9 @@ pub fn reject_reasons_encodable_at(
 prop_compose! {
     /// Produces a strategy that generates arbitrary stream signals.
     ///
-    /// Signals start at `signals_begin` from which there are `signal_count` signals.
-    /// Of these signals, `ceil(sqrt(signal_count))` are randomly distributed reject signals.
+    /// Signals start at the generated `signals_begin`, from which there are
+    /// `signal_count` signals. Of these signals, `ceil(sqrt(signal_count))` are
+    /// randomly distributed reject signals.
     ///
     /// `signals_end` comes after the signal range, i.e. `signals_begin + signal_count + 1`.
     pub fn arb_stream_signals(
@@ -909,13 +914,13 @@ prop_compose! {
                     ),
                 )
             })
-    ) -> (StreamIndex, StreamIndex, VecDeque<RejectSignal>) {
+    ) -> (StreamIndex, VecDeque<RejectSignal>) {
         let reject_signals = reject_signals_map
             .into_iter()
             .map(|(index, reason)| RejectSignal::new(reason, (index as u64 + signals_begin).into()))
             .collect::<VecDeque<RejectSignal>>();
         let signals_end = (signals_begin + signal_count as u64 + 1).into();
-        (signals_begin.into(), signals_end, reject_signals)
+        (signals_end, reject_signals)
     }
 }
 
@@ -936,7 +941,7 @@ prop_compose! {
             arbitrary::stream_message_with_config(true),
             size_range,
         ),
-        (signals_begin, signals_end, reject_signals) in arb_stream_signals(
+        (signals_end, reject_signals) in arb_stream_signals(
             signal_start_range,
             signal_count_range,
             with_reject_reasons,
@@ -948,7 +953,7 @@ prop_compose! {
             messages.push(m)
         }
 
-        let mut stream = Stream::with_signals(messages, signals_begin, signals_end, reject_signals);
+        let mut stream = Stream::with_signals(messages, signals_end, reject_signals);
         stream.set_reverse_stream_flags(StreamFlags {
             deprecated_responses_only: responses_only_flag,
         });
@@ -1012,7 +1017,7 @@ prop_compose! {
     )(
         msg_start in 0..10000_u64,
         msg_len in 0..10000_u64,
-        (_signals_begin, signals_end, reject_signals) in arb_stream_signals(
+        (signals_end, reject_signals) in arb_stream_signals(
             0..=10000,
             min_signal_count..=max_signal_count,
             with_reject_reasons,
@@ -1131,22 +1136,20 @@ prop_compose! {
     /// Returns an arbitrary [`SubnetMetrics`].
     pub fn arb_subnet_metrics()(
         consumed_cycles_by_deleted_canisters in arb_nominal_cycles(),
-        consumed_cycles_http_outcalls in arb_nominal_cycles(),
-        consumed_cycles_ecdsa_outcalls in arb_nominal_cycles(),
         num_canisters in any::<u64>(),
         canister_state_bytes in arb_num_bytes(),
         update_transactions_total in any::<u64>(),
+        round_instructions_total in any::<u64>(),
         consumed_cycles_by_use_case in proptest::collection::btree_map(arb_cycles_use_case(), arb_nominal_cycles(), 0..10),
         threshold_signature_agreements in proptest::collection::btree_map(arb_master_public_key_id(), any::<u64>(), 0..10),
     ) -> SubnetMetrics {
         let mut metrics = SubnetMetrics::default();
 
         metrics.observe_consumed_cycles_by_deleted_canisters(consumed_cycles_by_deleted_canisters);
-        metrics.observe_consumed_cycles_http_outcalls(consumed_cycles_http_outcalls);
-        metrics.observe_consumed_cycles_ecdsa_outcalls(consumed_cycles_ecdsa_outcalls);
         metrics.num_canisters = num_canisters;
         metrics.canister_state_bytes = canister_state_bytes;
         metrics.update_transactions_total = update_transactions_total;
+        metrics.round_instructions_total = round_instructions_total;
         metrics.threshold_signature_agreements = threshold_signature_agreements;
 
         for (use_case, cycles) in consumed_cycles_by_use_case {
@@ -1226,8 +1229,9 @@ fn new_replicated_state_with_output_queues(
         .unwrap();
     replicated_state
         .metadata
-        .network_topology
-        .set_routing_table(routing_table);
+        .modify_network_topology(|network_topology| {
+            network_topology.set_routing_table(routing_table);
+        });
 
     replicated_state.put_canister_states(CanisterStates::new(canister_states));
     if let Some(subnet_queues) = subnet_queues {

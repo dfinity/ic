@@ -1,8 +1,5 @@
 use ic_base_types::{EnvironmentVariables, PrincipalId};
-use ic_config::{
-    execution_environment::Config as HypervisorConfig,
-    subnet_config::{SubnetConfig, SubnetSecurity},
-};
+use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha2::Sha256;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
@@ -78,6 +75,27 @@ fn get_canister_info(
     }
 }
 
+/// Retrieves the canister info by sending a query call to the management
+/// canister on behalf of the given sender.
+fn query_canister_info(
+    env: &StateMachine,
+    sender: PrincipalId,
+    canister_id: CanisterId,
+    num_requested_changes: Option<u64>,
+) -> Result<CanisterInfoResponse, UserError> {
+    let wasm_result = env.query_as(
+        sender,
+        ic00::IC_00,
+        Method::CanisterInfo,
+        CanisterInfoRequest::new(canister_id, num_requested_changes).encode(),
+    )?;
+    match wasm_result {
+        WasmResult::Reply(bytes) => Ok(CanisterInfoResponse::decode(&bytes[..])
+            .expect("failed to decode canister_info response")),
+        WasmResult::Reject(reason) => panic!("canister_info query rejected: {reason}"),
+    }
+}
+
 fn canister_id_from_wasm_result(wasm_result: WasmResult) -> CanisterId {
     match wasm_result {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
@@ -99,7 +117,7 @@ fn test_setup(
     let test_canister_sha256 = hasher.finish();
 
     // set up StateMachine
-    let subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(subnet_type);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig::default(),
@@ -630,7 +648,7 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
     ));
 
     // drain cycle balance of test_canister to trigger code uninstall from system
-    let subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(subnet_type);
     let compute_percent_allocated_per_second_fee = subnet_config
         .cycles_account_manager_config
         .compute_percent_allocated_per_second_fee;
@@ -1047,6 +1065,21 @@ fn canister_info_retrieval() {
     assert_eq!(canister_info.changes(), reference_change_entries);
     assert_eq!(canister_info.module_hash(), None);
     assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
+
+    // while ingress messages are rejected, any principal can retrieve canister
+    // information via query calls (neither the anonymous user nor `user_id3`
+    // is a controller of the canister) and gets the same response as a canister
+    // calling `canister_info` in replicated mode
+    let user_id3 = user_test_id(9).get();
+    for num_requested_changes in [None, Some(2), Some(4), Some(666)] {
+        let expected = get_canister_info(&env, ucan, canister_id, num_requested_changes).unwrap();
+        for sender in [anonymous_user, user_id1, user_id3] {
+            assert_eq!(
+                query_canister_info(&env, sender, canister_id, num_requested_changes).unwrap(),
+                expected
+            );
+        }
+    }
 }
 
 #[test]
@@ -1204,7 +1237,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
 
 fn setup_with_application_subnet() -> StateMachine {
     StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::Application, SubnetSecurity::None),
+        SubnetConfig::new(SubnetType::Application),
         HypervisorConfig::default(),
     ))
 }

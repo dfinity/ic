@@ -27,7 +27,7 @@ use ic_types::crypto::{
     IndividualMultiSig, IndividualMultiSigOf, Signable, ThresholdSigShare, ThresholdSigShareOf,
     UserPublicKey,
 };
-use ic_types::signature::{BasicSignature, BasicSignatureBatch};
+use ic_types::signature::{BasicSigBatchEntry, BasicSignature, BasicSignatureBatch};
 use ic_types::*;
 use ic_types::{NodeId, RegistryVersion};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -86,8 +86,7 @@ impl<T: Signable> BasicSigVerifier<T> for CryptoReturningOk {
 
     fn verify_basic_sig_batch_multi_msg(
         &self,
-        _inputs: &[(NodeId, &BasicSigOf<T>, &T)],
-        _registry_version: RegistryVersion,
+        _inputs: &[BasicSigBatchEntry<'_, T>],
     ) -> CryptoResult<()> {
         Ok(())
     }

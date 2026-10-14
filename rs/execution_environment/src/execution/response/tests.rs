@@ -1,14 +1,20 @@
+use std::collections::BTreeMap;
+
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::MessageMemoryUsage;
+use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::canister_state::system_state::OutstandingPrepayments;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_execution_environment::{
     ExecutionResponse, ExecutionTest, ExecutionTestBuilder, check_ingress_status,
 };
+use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::messages::ResponseBuilder;
 use ic_types::NumInstructions;
@@ -19,9 +25,10 @@ use ic_types::{
     messages::{CallbackId, MessageId},
 };
 use ic_types::{ComputeAllocation, MemoryAllocation};
-use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_universal_canister::{call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_lt};
+use slog::Level;
 
 #[test]
 fn execute_response_when_stopping_status() {
@@ -134,7 +141,7 @@ fn execute_response_refunds_cycles() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
         let instructions_before = test.canister_executed_instructions(a_id);
@@ -154,7 +161,7 @@ fn execute_response_refunds_cycles() {
             .canister_state(a_id)
             .system_state
             .canister_metrics()
-            .consumed_cycles_by_use_cases_as_counters()
+            .consumed_cycles_by_use_cases_monotonic()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap();
 
@@ -204,6 +211,140 @@ fn execute_response_refunds_cycles() {
         );
         assert_eq!(consumed_cycles_after, consumed_cycles_after_counter);
     }
+}
+
+/// A callback created before April 2026 carries no `prepayment_for_call_transmission`,
+/// so `prepayment_for_response_transmission` stands in for it. The refund path and
+/// `SystemState::outstanding_prepayments()` fall back on it independently of each
+/// other, and the two must agree on the amount that executing the response settles.
+///
+/// Note that the fallback leaves the call fee out: the gauge holds the whole call
+/// transmission prepayment, of which the response transmission prepayment accounts
+/// for only a part, and nothing ever refunds the rest. The monotonic amounts thus
+/// stay short of the gauges by exactly that fee once the response is executed.
+///
+/// The call fee is a `RequestAndResponseTransmission` charge, so the by-use-case
+/// amounts are checked alongside the scalar ones throughout.
+#[test]
+fn execute_response_of_legacy_callback_settles_the_outstanding_prepayments() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    // Canister A calls canister B, which replies with the payload it received.
+    let b_callback = wasm().message_payload().append_and_reply().build();
+    let wasm_payload = wasm()
+        .call_simple(b_id, "update", call_args().other_side(b_callback.clone()))
+        .build();
+    test.ingress_raw(a_id, "update", wasm_payload);
+    test.execute_message(a_id);
+
+    // Turn the callback of that call into a legacy one, i.e. one whose prepayment for
+    // the call transmission was never stored.
+    let callback_id = *test
+        .canister_state(a_id)
+        .system_state
+        .call_context_manager()
+        .unwrap()
+        .callbacks()
+        .keys()
+        .next()
+        .unwrap();
+    test.canister_state_mut(a_id)
+        .system_state
+        .reset_prepayment_for_call_transmission(callback_id);
+
+    // Execute the message on B, so that it responds to A.
+    test.induct_messages();
+    test.execute_message(b_id);
+
+    // The `xnet_call_performed_fee` plus the fee for transmitting the request: the
+    // part of the call transmission prepayment that the response transmission
+    // prepayment cannot stand in for.
+    let call_fee = test.call_fee("update", &b_callback).nominal();
+    // Non-zero, or the offset it stands for below would be vacuous.
+    assert_ne!(call_fee, NominalCycles::zero());
+
+    let system_state = &test.canister_state(a_id).system_state;
+    let callback = system_state
+        .call_context_manager()
+        .unwrap()
+        .callback(callback_id)
+        .unwrap()
+        .clone();
+    assert!(callback.prepayment_for_call_transmission.is_zero());
+    // The prepayments that the refund path is expected to report, with the response
+    // transmission prepayment standing in for the missing call transmission one.
+    let outstanding_before = system_state.outstanding_prepayments().unwrap();
+    assert_eq!(
+        outstanding_before,
+        OutstandingPrepayments {
+            instructions: callback.prepayment_for_response_execution.nominal(),
+            transmission: callback.prepayment_for_response_transmission.nominal(),
+        }
+    );
+    let gauge_before = system_state.canister_metrics().consumed_cycles();
+    let monotonic_before = system_state.canister_metrics().consumed_cycles_monotonic();
+    assert_eq!(
+        gauge_before,
+        monotonic_before + outstanding_before.total() + call_fee
+    );
+    // The call fee sits in the `RequestAndResponseTransmission` amounts, so the same
+    // offset shows up there.
+    let transmission_gauge_before = transmission(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases(),
+    );
+    let transmission_monotonic_before = transmission(
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic(),
+    );
+    assert_eq!(
+        transmission_gauge_before,
+        transmission_monotonic_before + outstanding_before.transmission + call_fee
+    );
+
+    // Execute the response on A.
+    test.induct_messages();
+    test.execute_message(a_id);
+
+    // Nothing is outstanding any more, and the monotonic amounts are short of the
+    // gauges by just the call fee: the refund path reported the very prepayments
+    // predicted above.
+    let system_state = &test.canister_state(a_id).system_state;
+    assert_eq!(
+        system_state.outstanding_prepayments(),
+        Some(OutstandingPrepayments::default())
+    );
+    assert_eq!(
+        system_state.canister_metrics().consumed_cycles(),
+        system_state.canister_metrics().consumed_cycles_monotonic() + call_fee
+    );
+    let mut gauges = system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .clone();
+    *gauges
+        .get_mut(&CyclesUseCase::RequestAndResponseTransmission)
+        .unwrap() -= call_fee;
+    assert_eq!(
+        &gauges,
+        system_state
+            .canister_metrics()
+            .consumed_cycles_by_use_cases_monotonic()
+    );
+}
+
+/// The `RequestAndResponseTransmission` entry of one of the by-use-case consumed
+/// cycles maps.
+fn transmission(amounts: &BTreeMap<CyclesUseCase, NominalCycles>) -> NominalCycles {
+    *amounts
+        .get(&CyclesUseCase::RequestAndResponseTransmission)
+        .unwrap()
 }
 
 #[test]
@@ -457,7 +598,10 @@ fn cycles_correct_if_response_fails() {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
@@ -507,7 +651,10 @@ fn cycles_correct_if_cleanup_fails() {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
@@ -907,8 +1054,8 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
 #[test]
 fn dts_abort_works_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(100_000_000)
-        .with_slice_instruction_limit(100_000)
+        .with_instruction_limit(1_000_000_000)
+        .with_slice_instruction_limit(500_000)
         .with_manual_execution()
         .build();
 
@@ -1008,8 +1155,8 @@ fn dts_abort_works_in_response_callback() {
 #[test]
 fn dts_abort_works_in_cleanup_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(100_000_000)
-        .with_slice_instruction_limit(100_000)
+        .with_instruction_limit(1_000_000_000)
+        .with_slice_instruction_limit(500_000)
         .with_manual_execution()
         .build();
 
@@ -1188,7 +1335,10 @@ fn response_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
 
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
@@ -1237,7 +1387,10 @@ fn cleanup_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
 
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
@@ -1905,10 +2058,10 @@ fn cleanup_callback_cannot_make_calls() {
 
 #[test]
 fn dts_uninstall_with_aborted_response() {
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 50_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
+        .with_slice_instruction_limit(500_000)
         .with_manual_execution()
         .build();
 
@@ -1923,10 +2076,10 @@ fn dts_uninstall_with_aborted_response() {
                 .on_reply(
                     wasm()
                         .stable64_grow(1)
-                        .stable64_fill(0, 0, 10_000)
-                        .stable64_fill(0, 0, 10_000)
-                        .stable64_fill(0, 0, 10_000)
-                        .stable64_fill(0, 0, 10_000),
+                        .stable64_fill(0, 0, 65_000)
+                        .stable64_fill(0, 0, 65_000)
+                        .stable64_fill(0, 0, 65_000)
+                        .stable64_fill(0, 0, 65_000),
                 ),
         )
         .build();
@@ -2025,7 +2178,10 @@ fn reserve_instructions_for_cleanup_callback_scenario(
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert_gt!(execution_cost_after, execution_cost_before);
+    assert_gt!(
+        execution_cost_after.nominal(),
+        execution_cost_before.nominal()
+    );
 
     // Assert that the response failed with exceeding instructions limit.
     let ingress_status = test.ingress_status(&ingress_id);
@@ -2047,9 +2203,11 @@ fn reserve_instructions_for_cleanup_callback_scenario(
 
 #[test]
 fn reserve_instructions_for_cleanup_callback() {
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 500_000_000;
+    let slice_instruction_limit = 500_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(slice_instruction_limit)
         .with_manual_execution()
         .build();
 
@@ -2058,8 +2216,8 @@ fn reserve_instructions_for_cleanup_callback() {
 
 #[test]
 fn reserve_instructions_for_cleanup_callback_with_dts() {
-    let instruction_limit = 1_000_000;
-    let slice_instruction_limit = 10_000;
+    let instruction_limit = 500_000_000;
+    let slice_instruction_limit = 500_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
         .with_slice_instruction_limit(slice_instruction_limit)
@@ -3107,8 +3265,10 @@ fn test_call_context_performance_counter_correctly_reported_on_reply() {
 
     let counters = result
         .bytes()
-        .chunks_exact(std::mem::size_of::<u64>())
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<{ std::mem::size_of::<u64>() }>()
+        .0
+        .iter()
+        .map(|c| u64::from_le_bytes(*c))
         .collect::<Vec<_>>();
 
     assert_lt!(counters[0], counters[1]);
@@ -3157,8 +3317,10 @@ fn test_call_context_performance_counter_correctly_reported_on_reject() {
 
     let counters = result
         .bytes()
-        .chunks_exact(std::mem::size_of::<u64>())
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<{ std::mem::size_of::<u64>() }>()
+        .0
+        .iter()
+        .map(|c| u64::from_le_bytes(*c))
         .collect::<Vec<_>>();
 
     assert_lt!(counters[0], counters[1]);
@@ -3205,8 +3367,10 @@ fn test_call_context_performance_counter_correctly_reported_on_cleanup() {
     let stable_memory = &state.execution_state.as_ref().unwrap().stable_memory;
     let page = stable_memory.page_map.get_page(0.into());
     let counters = page[0..(std::mem::size_of::<u64>() * 3)]
-        .chunks_exact(std::mem::size_of::<u64>())
-        .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<{ std::mem::size_of::<u64>() }>()
+        .0
+        .iter()
+        .map(|c| u64::from_le_bytes(*c))
         .collect::<Vec<_>>();
 
     assert_lt!(counters[0], counters[1]);
@@ -3260,4 +3424,151 @@ fn test_ic0_msg_deadline_best_effort_responses() {
         result,
         Ok(WasmResult::Reply(no_deadline.to_le_bytes().into()))
     );
+}
+
+/// The outcome of `execute_callbacks_and_get_logs`.
+struct CallbacksExecution {
+    /// The replica logs.
+    logs: LogEntriesAssert,
+    /// The ID of the canister executing the callbacks.
+    canister_id: CanisterId,
+    /// The instructions executed in the last slice of the callbacks.
+    last_slice_instructions: NumInstructions,
+    /// The instructions executed in all slices of the callbacks.
+    total_instructions: NumInstructions,
+}
+
+/// Canister A calls canister B with the given callbacks and executes the
+/// response callback (in as many slices as needed) with a slice instruction
+/// limit of 1M.
+fn execute_callbacks_and_get_logs(
+    callbacks: ic_universal_canister::CallArgs,
+) -> CallbacksExecution {
+    let logger = InMemoryReplicaLogger::new();
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_manual_execution()
+        .with_replica_logger(ReplicaLogger::from(&logger))
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        .inter_update(b_id, callbacks.other_side(wasm().reply()))
+        .build();
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Execute the response callback until it finishes and keep track of the
+    // instructions executed in every slice.
+    let instructions_before = test.canister_executed_instructions(a_id);
+    let mut last_slice_instructions;
+    loop {
+        let slice_instructions_before = test.canister_executed_instructions(a_id);
+        test.execute_slice(a_id);
+        last_slice_instructions =
+            test.canister_executed_instructions(a_id) - slice_instructions_before;
+        if test.canister_state(a_id).next_execution() != NextExecution::ContinueLong {
+            break;
+        }
+    }
+    let total_instructions = test.canister_executed_instructions(a_id) - instructions_before;
+    assert_matches!(
+        test.ingress_state(&ingress_id),
+        IngressState::Completed(_) | IngressState::Failed(_)
+    );
+
+    drop(test);
+    let logs = logger.drain_logs();
+    CallbacksExecution {
+        logs: LogEntriesAssert::assert_that(logs),
+        canister_id: a_id,
+        last_slice_instructions,
+        total_instructions,
+    }
+}
+
+const DTS_FINISHED_RESPONSE_LOG: &str = "[DTS] Finished response callback";
+const DTS_FINISHED_CLEANUP_LOG: &str = "[DTS] Finished cleanup callback";
+
+#[test]
+fn dts_finished_log_not_emitted_for_short_response_callback() {
+    let execution = execute_callbacks_and_get_logs(call_args().on_reply(wasm().reply()));
+    execution
+        .logs
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_RESPONSE_LOG)
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_CLEANUP_LOG);
+}
+
+#[test]
+fn dts_finished_log_emitted_for_long_response_callback() {
+    let execution = execute_callbacks_and_get_logs(
+        call_args().on_reply(wasm().instruction_counter_is_at_least(1_000_000)),
+    );
+    execution
+        .logs
+        // Check the log prefix separately: the exact message check below
+        // would not catch an additional log with different instruction counts.
+        .has_only_one_message_containing(&Level::Info, DTS_FINISHED_RESPONSE_LOG)
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_CLEANUP_LOG)
+        // In particular, the total must not include the instructions reserved
+        // for the cleanup callback.
+        .has_only_one_message_containing(
+            &Level::Info,
+            &format!(
+                "{DTS_FINISHED_RESPONSE_LOG} {} of canister {} after {} / {} instructions.",
+                CallbackId::from(1),
+                execution.canister_id,
+                execution.last_slice_instructions.display(),
+                execution.total_instructions.display(),
+            ),
+        );
+}
+
+#[test]
+fn dts_finished_log_not_emitted_for_short_cleanup_callback() {
+    let execution = execute_callbacks_and_get_logs(
+        call_args()
+            .on_reply(wasm().trap())
+            .on_cleanup(wasm().build()),
+    );
+    execution
+        .logs
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_RESPONSE_LOG)
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_CLEANUP_LOG);
+}
+
+#[test]
+fn dts_finished_log_emitted_for_long_cleanup_callback() {
+    let execution = execute_callbacks_and_get_logs(
+        call_args()
+            .on_reply(wasm().trap())
+            .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000)),
+    );
+    execution
+        .logs
+        .has_exactly_n_messages_containing(0, &Level::Info, DTS_FINISHED_RESPONSE_LOG)
+        // Check the log prefix separately: the exact message check below
+        // would not catch an additional log with different instruction counts.
+        .has_only_one_message_containing(&Level::Info, DTS_FINISHED_CLEANUP_LOG)
+        // The total covers both the response callback and the cleanup callback.
+        .has_only_one_message_containing(
+            &Level::Info,
+            &format!(
+                "{DTS_FINISHED_CLEANUP_LOG} {:?} of canister {} after {} / {} instructions.",
+                CallbackId::from(1),
+                execution.canister_id,
+                execution.last_slice_instructions.display(),
+                execution.total_instructions.display(),
+            ),
+        );
 }

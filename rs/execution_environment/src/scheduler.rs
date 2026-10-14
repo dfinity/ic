@@ -26,15 +26,14 @@ use ic_interfaces::execution_environment::{
     IngressHistoryWriter, Scheduler, SubnetAvailableMemory,
 };
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, new_logger, warn};
-use ic_management_canister_types_private::{
-    CanisterLogRecord, CanisterStatusType, Method as Ic00Method,
-};
+use ic_management_canister_types_private::{CanisterStatusType, Method as Ic00Method};
 use ic_metrics::MetricsRegistry;
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SubnetSchedule;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
+use ic_replicated_state::metadata_state::UnflushedCheckpointOps;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     CanisterState, CanisterStates, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
@@ -43,14 +42,13 @@ use ic_types::batch::ChainKeyData;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{Ingress, MessageId, NO_DEADLINE, Response, SubnetMessage};
 use ic_types::{
-    CanisterId, CanisterLog, ComputeAllocation, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT, ExecutionRound,
-    MemoryAllocation, NumBytes, NumInstructions, NumMessages, NumSlices, Randomness,
-    ReplicaVersion, Time,
+    CanisterId, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes, NumInstructions,
+    NumMessages, NumSlices, Randomness, ReplicaVersion, Time,
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use std::cell::RefCell;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::BTreeSet;
 use std::str::FromStr;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
@@ -156,7 +154,6 @@ pub(crate) struct SchedulerImpl {
     thread_pool: RefCell<scoped_threadpool::Pool>,
     rate_limiting_of_heap_delta: FlagStatus,
     rate_limiting_of_instructions: FlagStatus,
-    log_memory_store_feature: FlagStatus,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
@@ -172,7 +169,6 @@ impl SchedulerImpl {
         log: ReplicaLogger,
         rate_limiting_of_heap_delta: FlagStatus,
         rate_limiting_of_instructions: FlagStatus,
-        log_memory_store_feature: FlagStatus,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
         let scheduler_cores = config.scheduler_cores as u32;
@@ -187,7 +183,6 @@ impl SchedulerImpl {
             log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
-            log_memory_store_feature,
             fd_factory,
         }
     }
@@ -429,7 +424,6 @@ impl SchedulerImpl {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
 
-        let mut ingress_execution_results = Vec::new();
         let mut is_first_iteration = true;
         let mut total_heap_delta = NumBytes::new(0);
         let mut heartbeat_and_timer_canisters = BTreeSet::new();
@@ -438,8 +432,21 @@ impl SchedulerImpl {
         //      - Execute subnet messages.
         //      - Execute heartbeat and global timer tasks.
         //      - Execute canisters input messages in parallel.
+        //      - Update the ingress history with the resulting ingress statuses.
         //      - Induct messages on the same subnet.
         let mut state = loop {
+            // In every iteration after the first, recompute the subnet available
+            // memory from the state.
+            //
+            // The memory consumed by the previous iteration's parallel execution
+            // threads is not subtracted from `scheduler_round_limits` (see
+            // `execute_canisters_in_inner_round()`), so this recomputation is what
+            // brings the subnet available memory back in sync with the state.
+            if !is_first_iteration {
+                scheduler_round_limits.subnet_available_memory =
+                    self.exec_env.scaled_subnet_available_memory(&state);
+            }
+
             // Execute subnet messages.
             // If new messages are inducted into the subnet input queues,
             // they are processed until the subnet messages' instruction limit is reached.
@@ -462,6 +469,22 @@ impl SchedulerImpl {
                     chain_key_data,
                 );
                 scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
+            }
+
+            // A cooling down subnet only drains its subnet queues: it executes no
+            // canister messages and no canister tasks, i.e. neither `Heartbeat` and
+            // `GlobalTimer` (which are not even enqueued, as they are enqueued right
+            // below) nor the on-low-wasm-memory hook (which, unlike the former two, is
+            // a persistent part of the canister's task queue and is thus simply left
+            // there until the subnet stops cooling down).
+            //
+            // It follows that a cooling down subnet also has no messages to induct on
+            // the same subnet.
+            if state.metadata.is_cooling_down() {
+                self.metrics
+                    .round_skipped_canister_execution_due_to_cooling_down
+                    .inc();
+                break state;
             }
 
             let mut round_limits = scheduler_round_limits.canister_round_limits();
@@ -499,14 +522,7 @@ impl SchedulerImpl {
             }
             drop(scheduling_timer);
 
-            // In every iteration after the first, recompute the subnet available memory,
-            // before taking out the canisters.
             let preparation_timer = self.metrics.round_inner_iteration_prep.start_timer();
-            if !is_first_iteration {
-                round_limits.subnet_available_memory =
-                    self.exec_env.scaled_subnet_available_memory(&state);
-            }
-
             let canisters = state.take_canister_states();
             let (active_canisters_partitioned_by_cores, inactive_canisters) =
                 iteration_schedule.partition_canisters_to_cores(canisters);
@@ -519,13 +535,13 @@ impl SchedulerImpl {
                 executed_canisters,
                 canisters_with_completed_messages,
                 canisters_with_zero_instruction_executions,
-                ingress_results: mut loop_ingress_execution_results,
+                ingress_results: iteration_ingress_execution_results,
                 heap_delta,
             } = self.execute_canisters_in_inner_round(
                 active_canisters_partitioned_by_cores,
                 current_round,
                 state.time(),
-                Arc::new(state.metadata.network_topology.clone()),
+                Arc::clone(&state.metadata.network_topology),
                 subnet_cycles_config,
                 &mut round_limits,
                 state.resource_limits(),
@@ -546,7 +562,20 @@ impl SchedulerImpl {
             }
             state.put_canister_states(canisters);
 
-            ingress_execution_results.append(&mut loop_ingress_execution_results);
+            // Write the ingress statuses produced by this iteration's canister
+            // executions to the ingress history right away, i.e., before the next
+            // iteration's subnet messages are executed. Subnet messages update the
+            // ingress history directly, so deferring these updates to
+            // the end of the round would apply them out of order.
+            for (message_id, status) in iteration_ingress_execution_results {
+                let old_status = self.ingress_history_writer.set_status(
+                    &mut state,
+                    message_id,
+                    status,
+                    current_round,
+                );
+                canister_ingress_latencies.on_ingress_status_changed(&old_status);
+            }
 
             round_schedule.end_iteration(
                 &mut state,
@@ -610,16 +639,6 @@ impl SchedulerImpl {
                     .task_queue
                     .remove_heartbeat_and_global_timer();
             }
-        }
-
-        for (message_id, status) in ingress_execution_results {
-            let old_status = self.ingress_history_writer.set_status(
-                &mut state,
-                message_id,
-                status,
-                current_round,
-            );
-            canister_ingress_latencies.on_ingress_status_changed(&old_status);
         }
 
         state
@@ -756,8 +775,9 @@ impl SchedulerImpl {
         // Deduct all created callbacks from the available callbacks limit. This is a
         // pessimistic estimate, as it ignores any closed callbacks.
         round_limits.subnet_available_callbacks -= callbacks_created;
-        // `subnet_available_memory` will be recomputed at the beginning of the next
-        // iteration.
+        // The memory consumed by the threads is not deducted from
+        // `subnet_available_memory`; it is recomputed from the state at the very
+        // beginning of the next iteration instead (see `inner_round()`).
 
         IterationResult {
             canisters,
@@ -843,6 +863,11 @@ impl SchedulerImpl {
                 .duration_between_allocation_charges(),
         );
         let mut all_rejects = Vec::new();
+        // The deletions of the snapshots of the canisters uninstalled below, recorded
+        // so that their directories are also deleted from the tip. Accumulated here
+        // because `state.metadata` is not accessible from within the closure; merged
+        // into the state's operations after the loop.
+        let mut unflushed_checkpoint_ops = UnflushedCheckpointOps::default();
         // TODO(DSM-103): Charge all canisters every N rounds / seconds (and otherwise
         // do nothing). Ensure that paused execution canisters are charged eventually.
         state.canisters_for_each_mut(|_id, canister| {
@@ -877,7 +902,6 @@ impl SchedulerImpl {
                 all_rejects.push(uninstall_canister(
                     &self.log,
                     canister,
-                    None, /* we're at the end of a round so no need to update round limits */
                     state_time,
                     Arc::clone(&self.fd_factory),
                 ));
@@ -889,7 +913,9 @@ impl SchedulerImpl {
                 canister
                     .system_state
                     .burn_remaining_balance_for_uninstall(cost_schedule);
-                canister.canister_snapshots.delete_snapshots();
+                canister
+                    .canister_snapshots
+                    .delete_snapshots(&mut unflushed_checkpoint_ops);
 
                 info!(
                     self.log,
@@ -899,6 +925,11 @@ impl SchedulerImpl {
                 self.metrics.num_canisters_uninstalled_out_of_cycles.inc();
             }
         });
+
+        state
+            .metadata
+            .unflushed_checkpoint_ops
+            .extend(unflushed_checkpoint_ops);
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
         for rejects in all_rejects.into_iter() {
@@ -1127,47 +1158,6 @@ impl Scheduler for SchedulerImpl {
         // The goal is to ensure that we can track the performance of `execute_round` and its individual components.
         let root_measurement_scope = MeasurementScope::root(&self.metrics.round);
 
-        if !state.metadata.logs_migrated {
-            let _timer = self
-                .metrics
-                .round_log_memory_store_migration_duration
-                .start_timer();
-            let log_memory_store_feature = self.log_memory_store_feature;
-            state.canisters_for_each_mut(|canister_id, canister| {
-                if log_memory_store_feature == FlagStatus::Enabled
-                    && !canister.system_state.log_memory_store.is_migrated()
-                {
-                    let system_state = &mut Arc::make_mut(canister).system_state;
-                    system_state.log_memory_store.resize(
-                        DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
-                        Arc::clone(&self.fd_factory),
-                    );
-                    let canister_log = &system_state.canister_log;
-                    let next_idx = canister_log.next_idx();
-                    let records = filter_canister_log_records(
-                        canister_log.records(),
-                        next_idx,
-                        *canister_id,
-                        &self.log,
-                    );
-                    let mut filtered_log = CanisterLog::new_aggregate(next_idx, records);
-                    system_state
-                        .log_memory_store
-                        .append_delta_log(&mut filtered_log);
-                    system_state.log_memory_store.set_migrated();
-                } else if log_memory_store_feature == FlagStatus::Disabled
-                    && canister.system_state.log_memory_store.is_migrated()
-                {
-                    let system_state = &mut Arc::make_mut(canister).system_state;
-                    system_state
-                        .log_memory_store
-                        .resize(0, Arc::clone(&self.fd_factory));
-                    system_state.log_memory_store.clear_migrated();
-                }
-            });
-            state.metadata.logs_migrated = true;
-        }
-
         let round_log;
         let mut csprng;
         let long_running_canisters: Vec<_>;
@@ -1363,6 +1353,11 @@ impl Scheduler for SchedulerImpl {
                 self.metrics
                     .round_skipped_due_to_current_heap_delta_above_limit
                     .inc();
+                // The nested scope propagates into the root only on drop, so the root
+                // total is short by whatever was drained above until it is gone — and
+                // would silently stay so if anything ever cloned it.
+                drop(measurement_scope);
+                accumulate_round_subnet_metrics(&mut state, &root_measurement_scope);
                 return state;
             }
         }
@@ -1445,6 +1440,11 @@ impl Scheduler for SchedulerImpl {
             &root_measurement_scope,
             &round_log,
         );
+
+        // Drop canisters that were deleted during the round (e.g. by a `delete_canister`
+        // subnet message) from the round schedule. Beyond this point it is safe to assume
+        // that the round schedule only refers to existing canisters.
+        round_schedule.retain_existing_canisters(&state);
 
         // Update [`SignWithThresholdContext`]s by assigning randomness and matching pre-signatures.
         {
@@ -1539,12 +1539,7 @@ impl Scheduler for SchedulerImpl {
                 );
             }
 
-            final_state
-                .metadata
-                .subnet_metrics
-                .update_transactions_total += root_measurement_scope.messages().get();
-            final_state.metadata.subnet_metrics.num_canisters =
-                final_state.canister_states().len() as u64;
+            accumulate_round_subnet_metrics(&mut final_state, &root_measurement_scope);
         }
 
         final_state
@@ -1553,6 +1548,21 @@ impl Scheduler for SchedulerImpl {
     fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
         self.finish_round(state, ExecutionRoundType::CheckpointRound);
     }
+}
+
+/// Accumulates the round's totals into the subnet metrics. Both exits of
+/// `execute_round` go through here, so a round's work cannot be missed.
+fn accumulate_round_subnet_metrics(
+    state: &mut ReplicatedState,
+    root_measurement_scope: &MeasurementScope,
+) {
+    let num_canisters = state.canister_states().len() as u64;
+    let subnet_metrics = &mut state.metadata.subnet_metrics;
+    subnet_metrics.update_transactions_total += root_measurement_scope.messages().get();
+    subnet_metrics.round_instructions_total = subnet_metrics
+        .round_instructions_total
+        .saturating_add(root_measurement_scope.instructions().get());
+    subnet_metrics.num_canisters = num_canisters;
 }
 
 fn observe_instructions_consumed_per_message(
@@ -1699,7 +1709,8 @@ fn execute_canisters_on_thread(
                 exec_env,
                 canister_arc,
                 instruction_limits.clone(),
-                config.max_instructions_per_query_message,
+                resource_limits
+                    .maximum_query_instructions_or(config.max_instructions_per_query_message),
                 Arc::clone(&network_topology),
                 time,
                 &mut round_limits,
@@ -1832,6 +1843,22 @@ fn can_execute_subnet_msg(
     canister_states: &CanisterStates,
     round_limits: &mut RoundLimits,
 ) -> bool {
+    let msg_method = match msg {
+        SubnetMessage::Ingress(ingress) => Ic00Method::from_str(ingress.method_name.as_str()).ok(),
+        SubnetMessage::Request(request) => Ic00Method::from_str(request.method_name.as_str()).ok(),
+        SubnetMessage::Response { .. } => None,
+    };
+
+    // Some heavy methods use round instructions.
+    let instructions_reached = round_limits.instructions_reached();
+
+    // `list_canisters` iterates over the subnet's canisters and thus consumes
+    // round instructions, even though it has no effective canister ID. Defer it
+    // to a later round if the round instruction limit has already been reached.
+    if let Some(Ic00Method::ListCanisters) = msg_method {
+        return !instructions_reached;
+    }
+
     let Some(effective_canister_id) = msg.effective_canister_id() else {
         // If there is no effective canister ID, execute the subnet message.
         return true;
@@ -1840,12 +1867,7 @@ fn can_execute_subnet_msg(
         // If there is no effective canister state, execute the subnet message.
         return true;
     };
-    let maybe_method = match msg {
-        SubnetMessage::Ingress(ingress) => Ic00Method::from_str(ingress.method_name.as_str()).ok(),
-        SubnetMessage::Request(request) => Ic00Method::from_str(request.method_name.as_str()).ok(),
-        SubnetMessage::Response { .. } => None,
-    };
-    let Some(method) = maybe_method else {
+    let Some(method) = msg_method else {
         // If this is a response or the method name is not valid, execute the message.
         return true;
     };
@@ -1870,9 +1892,6 @@ fn can_execute_subnet_msg(
                 return false;
             }
         };
-
-    // Some heavy methods use round instructions.
-    let instructions_reached = round_limits.instructions_reached();
 
     let permissions = Ic00MethodPermissions::new(method);
     permissions.can_be_executed(
@@ -1908,6 +1927,7 @@ fn get_instruction_limits_for_subnet_message(
             CanisterStatus
             | CanisterInfo
             | CanisterMetadata
+            | ListCanisters
             | CreateCanister
             | DeleteCanister
             | DepositCycles
@@ -1934,6 +1954,7 @@ fn get_instruction_limits_for_subnet_message(
             | BitcoinGetCurrentFeePercentiles
             | BitcoinGetSuccessors
             | NodeMetricsHistory
+            | SubnetMetrics
             | SubnetInfo
             | FetchCanisterLogs
             | ProvisionalCreateCanisterWithCycles
@@ -2122,71 +2143,8 @@ fn subnet_heap_delta_capacity(
 ) -> NumBytes {
     resource_limits
         .maximum_state_delta
-        .and_then(|maximum_state_delta| {
-            if maximum_state_delta.get() != 0 {
-                Some(maximum_state_delta)
-            } else {
-                None
-            }
-        })
+        .filter(|&maximum_state_delta| maximum_state_delta.get() != 0)
         .unwrap_or(config.subnet_heap_delta_capacity)
-}
-
-/// Filters `records` to the contiguous suffix ending at `next_idx - 1`,
-/// logging and discarding any records with invalid or gap-preceding indices.
-fn filter_canister_log_records(
-    records: &VecDeque<CanisterLogRecord>,
-    next_idx: u64,
-    canister_id: CanisterId,
-    log: &ReplicaLogger,
-) -> Vec<CanisterLogRecord> {
-    let warn_drop = |record: &CanisterLogRecord, reason: &str| {
-        warn!(
-            log,
-            "Canister {}: dropping log record with idx {} ({} next_idx {}), \
-             timestamp {}, content \"{}\"",
-            canister_id,
-            record.idx,
-            reason,
-            next_idx,
-            record.timestamp_nanos,
-            String::from_utf8_lossy(&record.content),
-        );
-    };
-    for record in records.iter().filter(|r| r.idx >= next_idx) {
-        warn_drop(record, ">=");
-    }
-    let mut filtered: Vec<_> = records.iter().cloned().collect();
-    filtered.retain(|r| r.idx < next_idx);
-    // Keep only the contiguous suffix ending at next_idx - 1,
-    // discarding any earlier records that precede a gap.
-    if next_idx > 0 {
-        if filtered.last().map(|r| r.idx) != Some(next_idx - 1) {
-            for record in &filtered {
-                warn_drop(record, "gap before");
-            }
-            filtered.clear();
-        } else {
-            let mut expected = next_idx - 1;
-            let mut contiguous_start = filtered.len() - 1;
-            for i in (0..filtered.len() - 1).rev() {
-                if expected == 0 {
-                    break;
-                }
-                if filtered[i].idx == expected - 1 {
-                    expected -= 1;
-                    contiguous_start = i;
-                } else {
-                    break;
-                }
-            }
-            for record in filtered.iter().take(contiguous_start) {
-                warn_drop(record, "gap before");
-            }
-            filtered.drain(..contiguous_start);
-        }
-    }
-    filtered
 }
 
 /// Aborts the paused execution, if any, of the given canister.
@@ -2221,106 +2179,5 @@ pub fn abort_all_paused_executions(
     let (canister_states, subnet_schedule) = state.canisters_and_schedule_mut();
     for canister in canister_states.hot_values_mut() {
         abort_canister(canister, subnet_schedule, exec_env, cost_schedule, log);
-    }
-}
-
-#[cfg(test)]
-mod canister_log_filter_tests {
-    use super::filter_canister_log_records;
-    use ic_logger::no_op_logger;
-    use ic_management_canister_types_private::CanisterLogRecord;
-    use ic_types_test_utils::ids::canister_test_id;
-    use std::collections::VecDeque;
-
-    fn make_records(idxs: &[u64]) -> VecDeque<CanisterLogRecord> {
-        idxs.iter()
-            .map(|&idx| CanisterLogRecord {
-                idx,
-                timestamp_nanos: idx * 1_000,
-                content: format!("record {idx}").into_bytes(),
-            })
-            .collect()
-    }
-
-    fn filtered_idxs(records: &VecDeque<CanisterLogRecord>, next_idx: u64) -> Vec<u64> {
-        filter_canister_log_records(records, next_idx, canister_test_id(0), &no_op_logger())
-            .into_iter()
-            .map(|r| r.idx)
-            .collect()
-    }
-
-    #[test]
-    fn test_filter_single_record_from_zero() {
-        let records = make_records(&[0]);
-        assert_eq!(filtered_idxs(&records, 1), vec![0]);
-    }
-
-    #[test]
-    fn test_filter_single_record_nonzero() {
-        let records = make_records(&[42]);
-        assert_eq!(filtered_idxs(&records, 43), vec![42]);
-    }
-
-    #[test]
-    fn test_filter_duplicate_zero() {
-        // Two records at idx=0: walk breaks immediately (expected==0), first is dropped.
-        let records = make_records(&[0, 0]);
-        assert_eq!(filtered_idxs(&records, 1), vec![0]);
-    }
-
-    #[test]
-    fn test_filter_duplicate_nonzero() {
-        // Two records at idx=42: 42 != expected-1=41, breaks, first is dropped.
-        let records = make_records(&[42, 42]);
-        assert_eq!(filtered_idxs(&records, 43), vec![42]);
-    }
-
-    #[test]
-    fn test_filter_leading_duplicate_then_consecutive() {
-        // Walk reaches the second 0 (0==expected-1=0), then expected==0 breaks; first 0 dropped.
-        let records = make_records(&[0, 0, 1, 2]);
-        assert_eq!(filtered_idxs(&records, 3), vec![0, 1, 2]);
-    }
-
-    #[test]
-    fn test_filter_duplicate_in_middle() {
-        // Walk: 3←2←1 (second 1), then first 1 != expected-1=0; first two records dropped.
-        let records = make_records(&[0, 1, 1, 2, 3]);
-        assert_eq!(filtered_idxs(&records, 4), vec![1, 2, 3]);
-    }
-
-    #[test]
-    fn test_filter_consecutive_from_zero() {
-        let records = make_records(&[0, 1, 2]);
-        assert_eq!(filtered_idxs(&records, 3), vec![0, 1, 2]);
-    }
-
-    #[test]
-    fn test_filter_consecutive_nonzero() {
-        let records = make_records(&[10, 11, 12]);
-        assert_eq!(filtered_idxs(&records, 13), vec![10, 11, 12]);
-    }
-
-    #[test]
-    fn test_filter_leading_duplicates_before_gap() {
-        // Walk: 12←11←10, then idx=0 != expected-1=9; first two records dropped.
-        let records = make_records(&[0, 0, 10, 11, 12]);
-        assert_eq!(filtered_idxs(&records, 13), vec![10, 11, 12]);
-    }
-
-    #[test]
-    fn test_filter_gap_suffix() {
-        // records [10, 11, 20, 21, 22], next_idx=23
-        // → [10, 11] precede a gap at [12..19]; only contiguous suffix [20, 21, 22] survives
-        let records = make_records(&[10, 11, 20, 21, 22]);
-        assert_eq!(filtered_idxs(&records, 23), vec![20, 21, 22]);
-    }
-
-    #[test]
-    fn test_filter_gap_end() {
-        // records [10, 11, 20, 21, 22], next_idx=24
-        // → last record (idx=22) != next_idx-1 (23), so all records are discarded
-        let records = make_records(&[10, 11, 20, 21, 22]);
-        assert_eq!(filtered_idxs(&records, 24), Vec::<u64>::new());
     }
 }

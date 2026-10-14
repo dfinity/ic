@@ -1,7 +1,11 @@
 use candid::{Principal, Reserved};
-use ic_management_canister_types_private::{ReadCanisterSnapshotMetadataResponse, SnapshotSource};
+use ic_management_canister_types_private::{
+    ChunkHash, Global, GlobalTimer, OnLowWasmMemoryHookStatus,
+    ReadCanisterSnapshotMetadataResponse, SnapshotSource,
+};
 use pocket_ic::{PocketIc, PocketIcBuilder, update_candid};
-use std::process::Command;
+use std::collections::BTreeMap;
+use std::path::Path;
 
 const T: u128 = 1_000_000_000_000;
 
@@ -10,15 +14,102 @@ fn test_canister_wasm() -> Vec<u8> {
     std::fs::read(wasm_path).unwrap()
 }
 
-fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Principal) {
+/// Returns the paths of all files in the directory `dir` (recursively)
+/// relative to `dir` (using `/` as the path separator) in sorted order.
+fn list_files(dir: &Path) -> Vec<String> {
+    fn visit(dir: &Path, prefix: &str, files: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = format!("{}{}", prefix, entry.file_name().to_string_lossy());
+            if entry.file_type().unwrap().is_dir() {
+                visit(&entry.path(), &format!("{path}/"), files);
+            } else {
+                files.push(path);
+            }
+        }
+    }
+
+    let mut files = vec![];
+    visit(dir, "", &mut files);
+    files.sort();
+    files
+}
+
+/// Returns the size of the file at `path` or `None` if the file does not exist.
+fn file_size(path: &Path) -> Option<u64> {
+    path.try_exists()
+        .unwrap()
+        .then(|| std::fs::metadata(path).unwrap().len())
+}
+
+/// Returns whether the snapshot directory `dir` contains the WASM chunk store directory.
+fn has_chunk_store_dir(dir: &Path) -> bool {
+    dir.join("wasm_chunk_store").try_exists().unwrap()
+}
+
+/// Asserts that the contents of the file `path` are equal to the expected contents.
+fn assert_contents_eq(path: &str, contents: &[u8], expected_contents: &[u8]) {
+    // We do not use `assert_eq!` on the contents
+    // to avoid dumping the (potentially large) contents.
+    assert_eq!(
+        contents.len(),
+        expected_contents.len(),
+        "Unexpected size of {}",
+        path
+    );
+    if let Some(offset) = contents
+        .iter()
+        .zip(expected_contents)
+        .position(|(byte, expected_byte)| byte != expected_byte)
+    {
+        panic!(
+            "Unexpected contents of {} at offset {}: {} instead of the expected {}",
+            path, offset, contents[offset], expected_contents[offset]
+        );
+    }
+}
+
+/// Returns the size of the expected contents of the file `path`
+/// or `None` if the file is not expected to be present.
+fn expected_file_size(
+    expected_files: &BTreeMap<String, Option<Vec<u8>>>,
+    path: &str,
+) -> Option<u64> {
+    let expected_contents = expected_files.get(path)?;
+    Some(expected_contents.as_ref().unwrap().len() as u64)
+}
+
+/// Returns the hashes of the WASM chunks expected in the WASM chunk store
+/// derived from the names of the expected WASM chunk store files.
+fn expected_chunk_hashes(expected_files: &BTreeMap<String, Option<Vec<u8>>>) -> Vec<ChunkHash> {
+    expected_files
+        .keys()
+        .filter_map(|path| path.strip_prefix("wasm_chunk_store/"))
+        .map(|file_name| ChunkHash {
+            hash: hex::decode(file_name.strip_suffix(".bin").unwrap()).unwrap(),
+        })
+        .collect()
+}
+
+/// Downloads a snapshot of the canister `canister_id` using PocketIC and checks that
+/// the downloaded snapshot consists of exactly the files `expected_files` (paths relative
+/// to the snapshot directory) with the expected contents (files mapped to `None` are
+/// checked separately). Then the downloaded snapshot is uploaded again and downloaded
+/// once more to check that the round trip does not change the snapshot.
+fn test_canister_snapshot_download_upload(
+    pic: &PocketIc,
+    canister_id: Principal,
+    expected_files: BTreeMap<String, Option<Vec<u8>>>,
+) {
     // Take a snapshot to download later.
-    // The canister should be stopped before taking a snapshot
-    // (checked by dfx).
+    // The canister should be stopped before taking a snapshot.
     pic.stop_canister(canister_id, None).unwrap();
+    let time_before_snapshot = pic.get_time().as_nanos_since_unix_epoch();
     let snapshot_id = pic
         .take_canister_snapshot(canister_id, None, None)
         .unwrap()
         .id;
+    let time_after_snapshot = pic.get_time().as_nanos_since_unix_epoch();
 
     // Download the canister snapshot using PocketIC.
     let downloaded_snapshot_temp_dir = tempfile::tempdir().unwrap();
@@ -29,6 +120,28 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
         snapshot_id.clone(),
         downloaded_snapshot_dir.clone(),
     );
+
+    // Check that the downloaded snapshot consists of exactly the expected files.
+    assert_eq!(
+        list_files(&downloaded_snapshot_dir),
+        expected_files.keys().cloned().collect::<Vec<_>>()
+    );
+    // The WASM chunk store directory is missing if and only if the WASM chunk store is empty.
+    // We check this explicitly because `list_files` does not detect an empty directory.
+    assert_eq!(
+        has_chunk_store_dir(&downloaded_snapshot_dir),
+        !expected_chunk_hashes(&expected_files).is_empty()
+    );
+
+    // Check the contents of the downloaded files
+    // (the files mapped to `None` are checked separately).
+    for (path, expected_contents) in &expected_files {
+        let Some(expected_contents) = expected_contents else {
+            continue;
+        };
+        let contents = std::fs::read(downloaded_snapshot_dir.join(path)).unwrap();
+        assert_contents_eq(path, &contents, expected_contents);
+    }
 
     // Upload the canister snapshot downloaded before.
     let uploaded_snapshot_id = pic.canister_snapshot_upload(
@@ -50,22 +163,24 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
 
     // Check that the uploaded snapshot is equal to the originally downloaded snapshot.
     // We compare snapshot metadata separately because it is expected that some fields differ.
-    let diff = Command::new("diff")
-        .arg("-r")
-        .arg("--exclude")
-        .arg("metadata.json")
-        .arg(downloaded_snapshot_dir.clone())
-        .arg(uploaded_snapshot_dir.clone())
-        .output()
-        .expect("Failed to execute diff");
-    match diff.status.code() {
-        Some(0) => (),
-        _ => panic!(
-            "Snapshots differ (uploaded snapshot: {}): {}",
-            uploaded_snapshot_dir.display(),
-            String::from_utf8(diff.stdout).unwrap()
-        ),
-    };
+    let uploaded_files = list_files(&uploaded_snapshot_dir);
+    assert_eq!(uploaded_files, list_files(&downloaded_snapshot_dir));
+    assert_eq!(
+        has_chunk_store_dir(&uploaded_snapshot_dir),
+        has_chunk_store_dir(&downloaded_snapshot_dir)
+    );
+    for path in &uploaded_files {
+        if path == "metadata.json" {
+            continue;
+        }
+        let contents = std::fs::read(uploaded_snapshot_dir.join(path)).unwrap();
+        let expected_contents = std::fs::read(downloaded_snapshot_dir.join(path)).unwrap();
+        assert_contents_eq(
+            &format!("{path} of the uploaded snapshot"),
+            &contents,
+            &expected_contents,
+        );
+    }
 
     // Compare snapshot metadata.
     // The source and timestamps are expected to differ and
@@ -93,75 +208,63 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
     uploaded_metadata.taken_at_timestamp = downloaded_metadata.taken_at_timestamp;
     assert_eq!(downloaded_metadata, uploaded_metadata);
 
-    // We skip the rest of the test on Windows
-    // since there's no Windows build of dfx
-    // and we don't want to use WSL here
-    // for the sake of simplicity.
-    if cfg!(target_os = "windows") {
-        return;
-    }
+    // The snapshot must have been taken at the current time of the IC.
+    assert!(downloaded_metadata.taken_at_timestamp >= time_before_snapshot);
+    assert!(downloaded_metadata.taken_at_timestamp <= time_after_snapshot);
 
-    // We need to make the PocketIC instance live for dfx to work.
-    let url = pic.make_live(None);
+    // The values of the globals depend on how the test canister WASM is compiled
+    // and thus we only check that there is a single global of type `i32`.
+    assert_eq!(downloaded_metadata.globals.len(), 1);
+    assert!(matches!(downloaded_metadata.globals[0], Global::I32(_)));
 
-    // Create a home directory for dfx (that contains a configuration file)
-    // and a snapshot directory for the snapshot downloaded using dfx.
-    let dfx_temp_dir = tempfile::tempdir().unwrap();
-    let dfx_home_dir = dfx_temp_dir.path().to_path_buf();
-    let dfx_snapshot_dir = dfx_home_dir.join("snapshot");
-
-    // We need to turn off telemetry explicitly,
-    // otherwise dfx panics.
-    std::fs::create_dir_all(dfx_home_dir.join(".config/dfx")).unwrap();
-    std::fs::write(
-        dfx_home_dir.join(".config/dfx/config.json"),
-        "{\"telemetry\": \"off\"}",
-    )
-    .unwrap();
-
-    // dfx expects the snapshot directory to exist.
-    std::fs::create_dir_all(dfx_snapshot_dir.clone()).unwrap();
-
-    // Download canister snapshot using dfx.
-    let relative_dfx_path = std::env::var_os("DFX").expect("Missing dfx binary");
-    let absolute_dfx_path = std::env::current_dir().unwrap().join(relative_dfx_path);
-    Command::new(absolute_dfx_path)
-        .arg("canister")
-        .arg("snapshot")
-        .arg("download")
-        .arg(canister_id.to_string())
-        .arg(hex::encode(snapshot_id))
-        .arg("--dir")
-        .arg(dfx_snapshot_dir.clone())
-        .arg("--network")
-        .arg(url.to_string())
-        .arg("--identity")
-        .arg("anonymous")
-        .current_dir(dfx_home_dir.clone())
-        .env("HOME", dfx_home_dir.clone())
-        .output()
-        .unwrap();
-
-    // Check that the snapshots downloaded using PocketIC and dfx are equal.
-    let diff = Command::new("diff")
-        .arg("-r")
-        .arg(downloaded_snapshot_dir.clone())
-        .arg(dfx_snapshot_dir.clone())
-        .output()
-        .expect("Failed to execute diff");
-    match diff.status.code() {
-        Some(0) => (),
-        _ => panic!(
-            "Snapshots differ (dfx snapshot: {}): {}",
-            dfx_snapshot_dir.display(),
-            String::from_utf8(diff.stdout).unwrap()
-        ),
+    // Check the contents of the metadata file of the originally downloaded snapshot
+    // by comparing them against the pretty-printed expected metadata
+    // (the timestamp and globals checked above are copied over).
+    let expected_metadata = ReadCanisterSnapshotMetadataResponse {
+        source: SnapshotSource::TakenFromCanister(Reserved),
+        taken_at_timestamp: downloaded_metadata.taken_at_timestamp,
+        wasm_module_size: test_canister_wasm().len() as u64,
+        globals: downloaded_metadata.globals.clone(),
+        // The contents of the WASM memory are hard to reproduce and thus we only check
+        // the WASM memory size against the size of the downloaded WASM memory file.
+        wasm_memory_size: file_size(&downloaded_snapshot_dir.join("wasm_memory.bin")).unwrap(),
+        // The stable memory file is missing if and only if the stable memory is empty.
+        stable_memory_size: expected_file_size(&expected_files, "stable_memory.bin").unwrap_or(0),
+        // Every WASM chunk is stored in a file named after its hash
+        // in the WASM chunk store directory (which is missing
+        // if and only if the WASM chunk store is empty).
+        wasm_chunk_store: expected_chunk_hashes(&expected_files),
+        // The canister version after creating, installing, and stopping the canister.
+        canister_version: 4,
+        certified_data: vec![],
+        global_timer: Some(GlobalTimer::Inactive),
+        on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
     };
+    let downloaded_metadata_json = String::from_utf8(downloaded_metadata_bytes).unwrap();
+    let expected_metadata_json = serde_json::to_string_pretty(&expected_metadata).unwrap();
+    // We compare the JSON line by line to get a readable error message
+    // (`assert_eq!` on the whole JSON would escape all newlines).
+    for (line, (json_line, expected_json_line)) in downloaded_metadata_json
+        .lines()
+        .zip(expected_metadata_json.lines())
+        .enumerate()
+    {
+        assert_eq!(
+            json_line,
+            expected_json_line,
+            "Unexpected metadata in line {}",
+            line + 1
+        );
+    }
+    assert_eq!(
+        downloaded_metadata_json.lines().count(),
+        expected_metadata_json.lines().count()
+    );
 }
 
 #[test]
 fn test_canister_snapshot_download_empty_stable_memory_and_chunk_store() {
-    let mut pic = PocketIcBuilder::new().with_application_subnet().build();
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
 
     // Create and install a test canister.
     let canister_id = pic.create_canister();
@@ -174,16 +277,26 @@ fn test_canister_snapshot_download_empty_stable_memory_and_chunk_store() {
         .0;
     assert_eq!(stable_size, 0);
 
-    // Ensure that the canister has non-empty WASM chunk store.
+    // Ensure that the canister has empty WASM chunk store.
     let chunks = pic.stored_chunks(canister_id, None).unwrap();
     assert!(chunks.is_empty());
 
-    test_canister_snapshot_download_upload(&mut pic, canister_id);
+    // Neither a file for the (empty) stable memory nor a directory
+    // for the (empty) WASM chunk store is expected.
+    let expected_files = BTreeMap::from([
+        // The metadata is checked separately.
+        ("metadata.json".to_string(), None),
+        // The contents of the WASM memory are hard to reproduce.
+        ("wasm_memory.bin".to_string(), None),
+        ("wasm_module.bin".to_string(), Some(test_canister_wasm())),
+    ]);
+
+    test_canister_snapshot_download_upload(&pic, canister_id, expected_files);
 }
 
 #[test]
 fn test_canister_snapshot_download_nonempty_stable_memory_and_chunk_store() {
-    let mut pic = PocketIcBuilder::new().with_application_subnet().build();
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
 
     // Create and install a test canister.
     let canister_id = pic.create_canister();
@@ -196,12 +309,36 @@ fn test_canister_snapshot_download_nonempty_stable_memory_and_chunk_store() {
     let stable_memory_bytes = stable_memory_pages << 16;
     assert!(stable_memory_bytes > 2_000_000); // snapshot data chunks have size 2MB
     update_candid::<_, ()>(&pic, canister_id, "stable_grow_and_fill", (42_u64,)).unwrap();
+    // The test canister fills the stable memory with the bytes 0, 1, ..., 255 repeated
+    // (the stable memory page size is a multiple of 256).
+    let expected_stable_memory: Vec<u8> = (0..stable_memory_bytes)
+        .map(|byte| (byte % 256) as u8)
+        .collect();
 
     // Ensure that the canister has non-empty WASM chunk store.
-    pic.upload_chunk(canister_id, None, vec![0; 1 << 20])
-        .unwrap();
-    pic.upload_chunk(canister_id, None, vec![1; 1 << 19])
-        .unwrap();
+    let mut expected_chunk_files = vec![];
+    for chunk in [vec![0_u8; 1 << 20], vec![1_u8; 1 << 19]] {
+        let chunk_hash = pic.upload_chunk(canister_id, None, chunk.clone()).unwrap();
+        expected_chunk_files.push((
+            format!("wasm_chunk_store/{}.bin", hex::encode(chunk_hash)),
+            Some(chunk),
+        ));
+    }
 
-    test_canister_snapshot_download_upload(&mut pic, canister_id);
+    // A file for the stable memory and one file per WASM chunk
+    // in the WASM chunk store directory are expected in addition.
+    let mut expected_files = BTreeMap::from([
+        // The metadata is checked separately.
+        ("metadata.json".to_string(), None),
+        (
+            "stable_memory.bin".to_string(),
+            Some(expected_stable_memory),
+        ),
+        // The contents of the WASM memory are hard to reproduce.
+        ("wasm_memory.bin".to_string(), None),
+        ("wasm_module.bin".to_string(), Some(test_canister_wasm())),
+    ]);
+    expected_files.extend(expected_chunk_files);
+
+    test_canister_snapshot_download_upload(&pic, canister_id, expected_files);
 }

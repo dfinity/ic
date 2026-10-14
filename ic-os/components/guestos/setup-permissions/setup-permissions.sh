@@ -24,9 +24,9 @@ function make_group_owned_and_sticky() {
     local GROUP="$3"
 
     mkdir -p "${TARGET_DIR}"
-    find "${TARGET_DIR}" -print0 | xargs -0 -P 0 chown "${USER}:${GROUP}"
-    find "${TARGET_DIR}" -print0 | xargs -0 -P 0 chmod u=rwX,g=rX,o=
-    find "${TARGET_DIR}" -type d | xargs chmod g+s
+    find "${TARGET_DIR}" -print0 | xargs -0 -P 0 chown -h "${USER}:${GROUP}"
+    find "${TARGET_DIR}" ! -type l -print0 | xargs -0 -P 0 chmod u=rwX,g=rX,o=
+    find "${TARGET_DIR}" -type d -print0 | xargs -0 -P 0 chmod g+s
 }
 
 make_group_owned_and_sticky /var/lib/ic/backup ic-replica backup

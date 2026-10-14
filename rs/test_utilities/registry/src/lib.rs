@@ -1,10 +1,14 @@
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_management_canister_types_private::VetKdKeyId;
+use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
 use ic_protobuf::registry::crypto::v1::AlgorithmId;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_protobuf::registry::replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord};
+use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
+use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::ChainKeyInitialization;
+use ic_protobuf::registry::subnet::v1::GenesisArgs;
+use ic_protobuf::registry::subnet::v1::catch_up_package_contents::CupType;
 use ic_protobuf::registry::subnet::v1::chain_key_initialization::Initialization;
 use ic_protobuf::registry::subnet::v1::{
     CanisterCyclesCostSchedule as CanisterCyclesCostSchedulePb, CatchUpPackageContents,
@@ -14,8 +18,8 @@ use ic_protobuf::registry::subnet::v1::{
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdPb, master_public_key_id::KeyId};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_catch_up_package_contents_key,
-    make_crypto_threshold_signing_pubkey_key, make_replica_version_key,
+    make_api_boundary_node_record_key, make_catch_up_package_contents_key,
+    make_crypto_threshold_signing_pubkey_key, make_node_record_key, make_replica_version_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_local_store::{LocalStoreImpl, compact_delta_to_changelog};
@@ -24,13 +28,16 @@ use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_test_utilities_types::ids::{node_test_id, test_replica_version};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId;
 use ic_types::{
-    NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
+    NodeId, PrincipalId, RegistryVersion, SubnetId,
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
 };
 use ic_types_cycles::CanisterCyclesCostSchedule;
+use std::collections::BTreeMap;
+use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -85,25 +92,6 @@ pub fn setup_registry_non_final(
     (registry_data_provider, registry)
 }
 
-/// Add blessed replica versions to the registry.
-pub fn add_blessed_replica_versions(
-    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
-    version: u64,
-    blessed_version_ids: &[&str],
-) {
-    let registry_version = RegistryVersion::from(version);
-    let blessed_versions = BlessedReplicaVersions {
-        blessed_version_ids: blessed_version_ids.iter().map(|x| x.to_string()).collect(),
-    };
-    registry_data_provider
-        .add(
-            &make_blessed_replica_versions_key(),
-            registry_version,
-            Some(blessed_versions),
-        )
-        .expect("Failed to add blessed replica versions.");
-}
-
 /// Add a replica version record to the registry.
 pub fn add_replica_version_record(
     registry_data_provider: &Arc<ProtoRegistryDataProvider>,
@@ -119,6 +107,65 @@ pub fn add_replica_version_record(
             Some(record),
         )
         .expect("Failed to add replica version record.");
+}
+
+/// Registers one API boundary node per id in `ids`, each with a node record
+/// whose HTTP endpoint carries a distinct IPv6 address. Returns each id with
+/// that address.
+pub fn add_api_boundary_node_records(
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    ids: RangeInclusive<u64>,
+    version: u64,
+) -> BTreeMap<NodeId, String> {
+    add_api_boundary_node_records_impl(registry_data_provider, ids, version, |_| true)
+}
+
+/// As [`add_api_boundary_node_records`], except that the nodes are registered
+/// without an endpoint, and so cannot be resolved.
+pub fn add_unresolvable_api_boundary_node_records(
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    ids: RangeInclusive<u64>,
+    version: u64,
+) -> BTreeMap<NodeId, String> {
+    add_api_boundary_node_records_impl(registry_data_provider, ids, version, |_| false)
+}
+
+/// As [`add_api_boundary_node_records`], except that a node `with_http` denies
+/// an endpoint is registered without one, and so cannot be resolved.
+pub fn add_api_boundary_node_records_impl(
+    registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+    ids: RangeInclusive<u64>,
+    version: u64,
+    with_http: impl Fn(NodeId) -> bool,
+) -> BTreeMap<NodeId, String> {
+    let registry_version = RegistryVersion::from(version);
+    let nodes: BTreeMap<NodeId, String> = ids
+        .map(|i| (node_test_id(i), format!("2001:db8::{i}")))
+        .collect();
+
+    for (node_id, ip_addr) in &nodes {
+        registry_data_provider
+            .add(
+                &make_api_boundary_node_record_key(*node_id),
+                registry_version,
+                Some(ApiBoundaryNodeRecord::default()),
+            )
+            .expect("Failed to add API boundary node record.");
+        registry_data_provider
+            .add(
+                &make_node_record_key(*node_id),
+                registry_version,
+                Some(NodeRecord {
+                    http: with_http(*node_id).then(|| ConnectionEndpoint {
+                        ip_addr: ip_addr.clone(),
+                        port: 8080,
+                    }),
+                    ..Default::default()
+                }),
+            )
+            .expect("Failed to add node record.");
+    }
+    nodes
 }
 
 pub fn insert_initial_dkg_transcript(
@@ -170,6 +217,7 @@ pub fn insert_initial_dkg_transcript(
         initial_ni_dkg_transcript_high_threshold: Some(high_threshold_transcript),
         initial_ni_dkg_transcript_low_threshold: Some(low_threshold_transcript),
         chain_key_initializations,
+        cup_type: Some(CupType::Genesis(GenesisArgs {})),
         ..Default::default()
     };
 
@@ -263,13 +311,14 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
         initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
-        replica_version_id: ReplicaVersion::default().into(),
+        replica_version_id: test_replica_version().to_string(),
         dkg_interval_length: 59,
         dkg_dealings_per_block: 1,
         start_as_nns: false,
         subnet_type: SubnetType::Application.into(),
         is_halted: false,
         halt_at_cup_height: false,
+        cooling_down: false,
         features: Some(Default::default()),
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],

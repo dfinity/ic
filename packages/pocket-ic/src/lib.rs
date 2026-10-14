@@ -57,8 +57,9 @@ use crate::{
     common::rest::{
         AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
         HttpsConfig, IcpConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
-        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawSenderInfo,
-        RawSubnetBlockmakers, RawTickConfigs, RawTime, SubnetId, SubnetKind, SubnetSpec, Topology,
+        MockCanisterHttpResponse, MockFlexibleCanisterHttpResponse, RawEffectivePrincipal,
+        RawMessageId, RawSenderInfo, RawSubnetBlockmakers, RawTickConfigs, RawTime, SubnetId,
+        SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -96,19 +97,17 @@ use tempfile::{NamedTempFile, TempDir};
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use tracing::{instrument, warn};
-#[cfg(windows)]
-use wslpath::windows_to_wsl;
 
 pub mod common;
 pub mod nonblocking;
 
 const POCKET_IC_SERVER_NAME: &str = "pocket-ic-server";
 
-const MIN_SERVER_VERSION: &str = "14.0.0";
-const MAX_SERVER_VERSION: &str = "15";
+const MIN_SERVER_VERSION: &str = "16.0.0";
+const MAX_SERVER_VERSION: &str = "17";
 
 /// Public to facilitate downloading the PocketIC server.
-pub const LATEST_SERVER_VERSION: &str = "14.0.0";
+pub const LATEST_SERVER_VERSION: &str = "16.1.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -491,6 +490,8 @@ impl PocketIcBuilder {
     /// Configures the new instance to make progress automatically,
     /// i.e., periodically update the time of the IC instance
     /// to the real time and execute rounds on the subnets.
+    /// Building the instance only returns after the certified time
+    /// of the IC instance has been updated for the first time.
     pub fn with_auto_progress(mut self) -> Self {
         let config = AutoProgressConfig {
             artificial_delay_ms: None,
@@ -805,6 +806,8 @@ impl PocketIc {
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
+    /// Only returns after the certified time of the IC
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
@@ -840,6 +843,8 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
+    /// Only returns after the certified time of the PocketIC instance
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
@@ -856,6 +861,8 @@ impl PocketIc {
     /// and configures the PocketIC instance to make progress automatically, i.e.,
     /// periodically update the time of the PocketIC instance to the real time
     /// and process messages on the PocketIC instance.
+    /// Only returns after the certified time of the PocketIC instance
+    /// has been updated for the first time.
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
@@ -1640,7 +1647,9 @@ impl PocketIc {
     /// Note that, unless a PocketIC instance is in auto progress mode,
     /// a response to the pending canister HTTP outcalls
     /// must be produced by the test driver and passed on to the PocketIC instace
-    /// using `PocketIc::mock_canister_http_response`.
+    /// using `PocketIc::mock_canister_http_response`, or, for a *flexible* outcall
+    /// (`CanisterHttpReplication::Flexible`), using
+    /// `PocketIc::mock_flexible_canister_http_response`.
     /// In auto progress mode, the PocketIC server produces a response for every
     /// pending canister HTTP outcall by actually making an HTTP request
     /// to the specified URL.
@@ -1650,7 +1659,11 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.get_canister_http().await })
     }
 
-    /// Mock a response to a pending canister HTTP outcall.
+    /// Mock a response to a pending canister HTTP outcall: the same response for
+    /// every node of the subnet, or one response per node if
+    /// `MockCanisterHttpResponse::additional_responses` is non-empty. For a
+    /// *flexible* outcall, whose committee nodes are answered individually, see
+    /// `PocketIc::mock_flexible_canister_http_response`.
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn mock_canister_http_response(
         &self,
@@ -1660,6 +1673,34 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .mock_canister_http_response(mock_canister_http_response)
+                .await
+        })
+    }
+
+    /// Mock the responses of the committee nodes of a pending *flexible* canister
+    /// HTTP outcall, i.e. one made through the `flexible_http_request` management
+    /// canister endpoint.
+    ///
+    /// This takes at most one response per node of the outcall's committee (whose
+    /// size is the `total_requests` of the outcall's `CanisterHttpReplication::Flexible`
+    /// replication). Providing fewer responses than the committee size
+    /// models the remaining committee nodes never responding: with at least
+    /// `min_responses` successful ones among them the outcall still succeeds, and
+    /// with fewer it stays pending until the time is advanced past its 60 second
+    /// timeout, at which point it fails with a timeout error.
+    ///
+    /// All responses to an outcall must be provided in a single call: once any
+    /// response to it has been mocked, the outcall no longer shows up in
+    /// `PocketIc::get_canister_http` and further responses to it cannot be mocked.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn mock_flexible_canister_http_response(
+        &self,
+        mock_flexible_canister_http_response: MockFlexibleCanisterHttpResponse,
+    ) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .mock_flexible_canister_http_response(mock_flexible_canister_http_response)
                 .await
         })
     }
@@ -1898,6 +1939,7 @@ pub enum ErrorCode {
     CertifiedStateUnavailable = 208,
     CanisterInstallCodeRateLimited = 209,
     CanisterHeapDeltaRateLimited = 210,
+    SubnetCoolingDown = 211,
     // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
     CanisterSnapshotNotFound = 305,
@@ -1947,6 +1989,7 @@ pub enum ErrorCode {
     CanisterWasmMemoryLimitExceeded = 539,
     ReservedCyclesLimitIsTooLow = 540,
     CanisterInvalidControllerOrSubnetAdmin = 541,
+    CanisterStatusAccessDenied = 542,
     // 6xx -- `RejectCode::SysUnknown`
     DeadlineExpired = 601,
     ResponseDropped = 602,
@@ -1970,6 +2013,7 @@ impl TryFrom<u64> for ErrorCode {
             208 => Ok(ErrorCode::CertifiedStateUnavailable),
             209 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
             210 => Ok(ErrorCode::CanisterHeapDeltaRateLimited),
+            211 => Ok(ErrorCode::SubnetCoolingDown),
             // 3xx -- `RejectCode::DestinationInvalid`
             301 => Ok(ErrorCode::CanisterNotFound),
             305 => Ok(ErrorCode::CanisterSnapshotNotFound),
@@ -2019,6 +2063,7 @@ impl TryFrom<u64> for ErrorCode {
             539 => Ok(ErrorCode::CanisterWasmMemoryLimitExceeded),
             540 => Ok(ErrorCode::ReservedCyclesLimitIsTooLow),
             541 => Ok(ErrorCode::CanisterInvalidControllerOrSubnetAdmin),
+            542 => Ok(ErrorCode::CanisterStatusAccessDenied),
             // 6xx -- `RejectCode::SysUnknown`
             601 => Ok(ErrorCode::DeadlineExpired),
             602 => Ok(ErrorCode::ResponseDropped),
@@ -2145,6 +2190,32 @@ impl From<SubnetBlockmakers> for RawSubnetBlockmakers {
                 .collect(),
         }
     }
+}
+
+/// Converts an absolute Windows path with a drive prefix (e.g. `C:\Users\x\y`)
+/// to the path under which WSL mounts it (e.g. `/mnt/c/Users/x/y`).
+///
+/// The drive letter is lower-cased and backslashes are replaced by forward slashes.
+/// A verbatim prefix (`\\?\`), as produced by `std::fs::canonicalize` on Windows,
+/// is stripped. Paths without a drive prefix (UNC paths, relative paths, ...) are
+/// rejected.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn windows_to_wsl(path: &str) -> Result<String, String> {
+    let path = path.strip_prefix(r"\\?\").unwrap_or(path);
+    let mut chars = path.chars();
+    let drive = match (chars.next(), chars.next()) {
+        (Some(drive), Some(':')) if drive.is_ascii_alphabetic() => drive.to_ascii_lowercase(),
+        _ => {
+            return Err(format!(
+                "`{path}` does not start with a drive prefix such as `C:`"
+            ));
+        }
+    };
+    let rest = chars.as_str();
+    if !rest.is_empty() && !rest.starts_with(['\\', '/']) {
+        return Err(format!("`{path}` is a drive-relative path"));
+    }
+    Ok(format!("/mnt/{drive}{}", rest.replace('\\', "/")))
 }
 
 #[cfg(windows)]
@@ -2517,27 +2588,59 @@ mod test {
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic 14.0.0")
+            check_pocketic_server_version("pocket-ic 16.0.0")
                 .unwrap_err()
                 .contains("Unexpected PocketIC server version")
         );
         assert!(
-            check_pocketic_server_version("pocket-ic-server 14 0 0")
+            check_pocketic_server_version("pocket-ic-server 16 0 0")
                 .unwrap_err()
                 .contains("Failed to parse PocketIC server version")
         );
-        assert!(
-            check_pocketic_server_version("pocket-ic-server 13.0.0")
-                .unwrap_err()
-                .contains("Incompatible PocketIC server version")
-        );
-        check_pocketic_server_version("pocket-ic-server 14.0.0").unwrap();
-        check_pocketic_server_version("pocket-ic-server 14.0.1").unwrap();
-        check_pocketic_server_version("pocket-ic-server 14.1.0").unwrap();
         assert!(
             check_pocketic_server_version("pocket-ic-server 15.0.0")
                 .unwrap_err()
                 .contains("Incompatible PocketIC server version")
         );
+        check_pocketic_server_version("pocket-ic-server 16.0.0").unwrap();
+        check_pocketic_server_version("pocket-ic-server 16.0.1").unwrap();
+        check_pocketic_server_version("pocket-ic-server 16.1.0").unwrap();
+        assert!(
+            check_pocketic_server_version("pocket-ic-server 17.0.0")
+                .unwrap_err()
+                .contains("Incompatible PocketIC server version")
+        );
+    }
+}
+
+#[cfg(test)]
+mod windows_to_wsl_tests {
+    use super::windows_to_wsl;
+
+    #[test]
+    fn converts_absolute_windows_paths() {
+        assert_eq!(windows_to_wsl(r"C:\Users\x\y").unwrap(), "/mnt/c/Users/x/y");
+        assert_eq!(
+            windows_to_wsl(r"d:\pocket-ic\pocket-ic.exe").unwrap(),
+            "/mnt/d/pocket-ic/pocket-ic.exe"
+        );
+        assert_eq!(windows_to_wsl("C:/Users/x/y").unwrap(), "/mnt/c/Users/x/y");
+        assert_eq!(windows_to_wsl(r"C:\").unwrap(), "/mnt/c/");
+        assert_eq!(windows_to_wsl("C:").unwrap(), "/mnt/c");
+        assert_eq!(
+            windows_to_wsl(r"\\?\C:\Users\x\y").unwrap(),
+            "/mnt/c/Users/x/y"
+        );
+    }
+
+    #[test]
+    fn rejects_paths_without_drive_prefix() {
+        assert!(windows_to_wsl("").is_err());
+        assert!(windows_to_wsl(r"Users\x\y").is_err());
+        assert!(windows_to_wsl(r"\Users\x\y").is_err());
+        assert!(windows_to_wsl("/mnt/c/Users/x/y").is_err());
+        assert!(windows_to_wsl(r"\\server\share\x").is_err());
+        assert!(windows_to_wsl(r"1:\x").is_err());
+        assert!(windows_to_wsl(r"C:Users\x").is_err());
     }
 }

@@ -123,27 +123,36 @@ fn split_manifest_unassigned_canister() {
     );
 }
 
+/// `SystemMetadata::split()` requires the absence of both the split and the
+/// "subnet was merged" markers, so a manifest containing either marker file
+/// cannot be the input of a split.
 #[test]
-fn split_manifest_state_already_splitting() {
-    let manifest = Manifest::new(
-        CURRENT_STATE_SYNC_VERSION,
-        vec![empty_file_info(SPLIT_MARKER_FILE)],
-        vec![],
-    );
+fn split_manifest_marked_state() {
+    for (marker_file, reason) in [
+        (SPLIT_MARKER_FILE, "state is already undergoing a split"),
+        (SUBNET_MERGED_FILE, "state was just merged"),
+    ] {
+        let manifest = Manifest::new(
+            CURRENT_STATE_SYNC_VERSION,
+            vec![empty_file_info(marker_file)],
+            vec![],
+        );
 
-    assert_eq!(
-        Err(ManifestValidationError::InconsistentManifest {
-            reason: "state is already undergoing a split".into()
-        }),
-        split_manifest(
-            &manifest,
-            SUBNET_0,
-            SUBNET_1,
-            SubnetType::Application,
-            BATCH_TIME,
-            &RoutingTable::default(),
-        )
-    );
+        assert_eq!(
+            Err(ManifestValidationError::InconsistentManifest {
+                reason: reason.into()
+            }),
+            split_manifest(
+                &manifest,
+                SUBNET_0,
+                SUBNET_1,
+                SubnetType::Application,
+                BATCH_TIME,
+                &RoutingTable::default(),
+            ),
+            "unexpected result for {marker_file}"
+        );
+    }
 }
 
 #[test]
@@ -402,19 +411,19 @@ fn expected_subnet_1_system_metadata() -> (FileInfo, ChunkInfo) {
     (
         FileInfo {
             relative_path: PathBuf::from(SYSTEM_METADATA_FILE),
-            size_bytes: 68,
+            size_bytes: 75,
             hash: [
-                195, 210, 241, 123, 208, 102, 116, 76, 5, 37, 206, 2, 12, 165, 100, 203, 102, 29,
-                116, 197, 87, 40, 47, 99, 12, 84, 161, 179, 185, 194, 63, 74,
+                194, 83, 200, 57, 217, 183, 169, 187, 250, 143, 136, 63, 29, 178, 192, 181, 103,
+                21, 15, 254, 247, 189, 92, 159, 131, 122, 223, 52, 98, 224, 108, 231,
             ],
         },
         ChunkInfo {
             file_index: 13,
-            size_bytes: 68,
+            size_bytes: 75,
             offset: 0,
             hash: [
-                128, 201, 178, 122, 10, 194, 151, 140, 164, 115, 42, 25, 7, 77, 218, 128, 51, 92,
-                125, 81, 59, 77, 180, 131, 203, 16, 247, 14, 137, 224, 107, 216,
+                203, 169, 46, 166, 172, 233, 190, 236, 179, 235, 42, 202, 83, 2, 245, 174, 34, 175,
+                232, 194, 197, 126, 196, 7, 126, 215, 241, 113, 231, 123, 16, 182,
             ],
         },
     )

@@ -1,6 +1,5 @@
 """
-mtools, built from source. Provides the `mtools` multi-call binary; IC-OS uses
-it as `mtools -c mcopy ...` and `mtools -c mmd ...` to populate FAT/VFAT images.
+mtools, built from source.
 
 Built without iconv (see ac_cv_header_iconv_h below) so mtools uses its
 compiled-in codepage tables (default CP850) rather than glibc's gconv modules:
@@ -39,7 +38,11 @@ configure_make(
     # mtools compiles in its built-in codepage tables instead of calling iconv.
     env = {"ac_cv_header_iconv_h": "no"},
     lib_source = ":all_srcs",
-    out_binaries = ["mtools"],
+    out_binaries = [
+        "mtools",
+        "mcopy",
+        "mlabel",
+    ],
     # We don't ship any libs out of this build.
     out_shared_libs = [],
     out_static_libs = [],
@@ -50,5 +53,26 @@ configure_make(
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "mtools",
+    srcs = [":mtools_build"],
+    output_group = "mtools",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "mcopy",
+    srcs = [":mtools_build"],
+    output_group = "mcopy",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "mlabel",
+    srcs = [":mtools_build"],
+    output_group = "mlabel",
     visibility = ["//visibility:public"],
 )

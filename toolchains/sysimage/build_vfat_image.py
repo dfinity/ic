@@ -17,14 +17,6 @@ import tempfile
 from toolchains.sysimage.utils import parse_size
 
 
-def mtools_cmd(mtools, subcommand, *extra_args):
-    # mtools is a multi-call binary; invoke a subcommand (mmd, mcopy, ...) via
-    # `mtools -c <subcommand>`. Wrapped in faketime for deterministic timestamps;
-    # the binary path is made absolute so faketime (which execs it) treats it as
-    # a path rather than searching PATH.
-    return ["faketime", "-f", "1970-1-1 0:0:0", os.path.abspath(mtools), "-c", subcommand, *extra_args]
-
-
 def untar_to_vfat(tf, fs_basedir, out_file, path_transform, mtools):
     """
     Put contents of tarfile into vfat image.
@@ -47,12 +39,37 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform, mtools):
             if path == "":
                 continue
             os.mkdir(os.path.join(fs_basedir, path))
-            subprocess.run(mtools_cmd(mtools, "mmd", "-i", out_file, "::/" + path), check=True)
+            subprocess.run(
+                [
+                    "faketime",
+                    "-f",
+                    "1970-1-1 0:0:0",
+                    os.path.abspath(mtools),
+                    "-c",
+                    "mmd",
+                    "-i",
+                    out_file,
+                    "::/" + path,
+                ],
+                check=True,
+            )
         elif member.type == tarfile.REGTYPE or member.type == tarfile.AREGTYPE:
             with open(os.path.join(fs_basedir, path), "wb") as f:
                 f.write(tf.extractfile(member).read())
             subprocess.run(
-                mtools_cmd(mtools, "mcopy", "-o", "-i", out_file, os.path.join(fs_basedir, path), "::/" + path),
+                [
+                    "faketime",
+                    "-f",
+                    "1970-1-1 0:0:0",
+                    os.path.abspath(mtools),
+                    "-c",
+                    "mcopy",
+                    "-o",
+                    "-i",
+                    out_file,
+                    os.path.join(fs_basedir, path),
+                    "::/" + path,
+                ],
                 check=True,
             )
         else:
@@ -65,7 +82,19 @@ def install_extra_files(out_file, extra_files, path_transform, mtools):
         if install_target[0] == "/":
             install_target = install_target[1:]
         subprocess.run(
-            mtools_cmd(mtools, "mcopy", "-o", "-i", out_file, source_file, "::/" + path_transform(install_target)),
+            [
+                "faketime",
+                "-f",
+                "1970-1-1 0:0:0",
+                os.path.abspath(mtools),
+                "-c",
+                "mcopy",
+                "-o",
+                "-i",
+                out_file,
+                source_file,
+                "::/" + path_transform(install_target),
+            ],
             check=True,
         )
 
@@ -94,9 +123,7 @@ def main():
     )
     parser.add_argument("--dflate", help="Path to our dflate tool", type=str)
     parser.add_argument("--zstd", help="Path to the zstd tool", type=str)
-    # mkfs.fat is the same binary as mkfs.vfat (upstream ships the latter as a
-    # symlink); behaviour does not depend on the name it is invoked under.
-    parser.add_argument("--mkfs-fat", help="Path to the mkfs.fat (mkfs.vfat) tool", type=str, required=True)
+    parser.add_argument("--mkfs-fat", help="Path to the mkfs.fat tool", type=str, required=True)
     parser.add_argument("--mtools", help="Path to the mtools tool", type=str, required=True)
 
     args = parser.parse_args(sys.argv[1:])

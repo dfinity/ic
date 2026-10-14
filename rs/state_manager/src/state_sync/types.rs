@@ -515,12 +515,9 @@ impl StateSyncMessage {
                     }
                 }
                 StateSyncChunk::FileGroupChunk(index) => {
-                    if let Some(chunk_table_indices) = self.state_sync_file_group.get(&index) {
-                        for chunk_table_index in chunk_table_indices {
-                            payload.extend(get_single_chunk(*chunk_table_index as usize)?);
-                        }
-                    } else {
-                        return None;
+                    let chunk_table_indices = self.state_sync_file_group.get(&index)?;
+                    for chunk_table_index in chunk_table_indices {
+                        payload.extend(get_single_chunk(*chunk_table_index as usize)?);
                     }
                 }
                 StateSyncChunk::FileChunk(index) => {

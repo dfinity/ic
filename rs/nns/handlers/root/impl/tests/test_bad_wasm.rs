@@ -3,7 +3,7 @@
 use candid::Encode;
 use canister_test::Runtime;
 use dfn_candid::candid;
-use ic_management_canister_types_private::CanisterInstallMode::{self, Reinstall, Upgrade};
+use ic_management_canister_types_private::CanisterInstallModeV2::{self, Reinstall, Upgrade};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
@@ -36,7 +36,7 @@ fn assert_is_running_universal_canister(status: &CanisterStatusResult) {
 /// unchanged, still running.
 async fn install_invalid_wasm(
     runtime: &'_ Runtime,
-    mode: CanisterInstallMode,
+    mode: CanisterInstallModeV2,
     stop_before_installing: bool,
 ) {
     let root = set_up_root_canister(runtime, RootCanisterInitPayloadBuilder::new().build()).await;
@@ -100,7 +100,7 @@ fn test_try_to_upgrade_to_invalid_does_nothing_reinstall_dont_stop() {
 #[test]
 fn test_try_to_upgrade_to_invalid_does_nothing_upgrade_dont_stop() {
     state_machine_test_on_nns_subnet(|runtime| async move {
-        install_invalid_wasm(&runtime, Upgrade, false).await;
+        install_invalid_wasm(&runtime, Upgrade(None), false).await;
         Ok(())
     });
 }
@@ -116,7 +116,7 @@ fn test_try_to_upgrade_to_invalid_does_nothing_reinstall_stop() {
 #[test]
 fn test_try_to_upgrade_to_invalid_does_nothing_upgrade_stop() {
     state_machine_test_on_nns_subnet(|runtime| async move {
-        install_invalid_wasm(&runtime, Upgrade, true).await;
+        install_invalid_wasm(&runtime, Upgrade(None), true).await;
         Ok(())
     });
 }

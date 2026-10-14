@@ -6,7 +6,7 @@ use crate::{
     eth_rpc::{Topic, is_response_too_large},
     eth_rpc_client::{
         ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE, HEADER_SIZE_LIMIT, MIN_ATTACHED_CYCLES,
-        MultiCallError, NoReduction, ToReducedWithStrategy, rpc_client,
+        MinByKey, MultiCallError, NoReduction, ToReducedWithStrategy, rpc_client,
     },
     guard::TimerGuard,
     logs::{DEBUG, INFO},
@@ -15,9 +15,10 @@ use crate::{
         State, TaskType, audit::process_event, eth_logs_scraping::LogScrapingId, event::EventType,
         mutate_state, read_state,
     },
+    time::TimeProvider,
 };
 use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
-use evm_rpc_types::{Hex32, LogEntry};
+use evm_rpc_types::{BlockTag, Hex32, LogEntry};
 use ic_canister_log::log;
 use ic_canister_runtime::IcRuntime;
 use ic_ethereum_types::Address;
@@ -25,7 +26,7 @@ use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
 use std::{collections::VecDeque, time::Duration};
 
-async fn mint() {
+async fn mint<T: TimeProvider>(time_provider: &T) {
     use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
     use icrc_ledger_types::icrc1::transfer::TransferArg;
 
@@ -47,6 +48,7 @@ async fn mint() {
                     EventType::QuarantinedDeposit {
                         event_source: event.source(),
                     },
+                    time_provider,
                 )
             });
         });
@@ -116,6 +118,7 @@ async fn mint() {
                         ckerc20_token_symbol: token_symbol.clone(),
                     },
                 },
+                time_provider,
             )
         });
         log!(
@@ -133,11 +136,14 @@ async fn mint() {
             INFO,
             "Failed to mint {error_count} events, rescheduling the minting"
         );
-        ic_cdk_timers::set_timer(crate::MINT_RETRY_DELAY, async { mint().await });
+        let time_provider = time_provider.clone();
+        ic_cdk_timers::set_timer(crate::MINT_RETRY_DELAY, async move {
+            mint(&time_provider).await
+        });
     }
 }
 
-pub async fn scrape_logs() {
+pub async fn scrape_logs<T: TimeProvider>(time_provider: &T) {
     let _guard = match TimerGuard::new(TaskType::ScrapEthLogs) {
         Ok(guard) => guard,
         Err(_) => return,
@@ -153,9 +159,24 @@ pub async fn scrape_logs() {
         }
     };
     let max_block_spread = read_state(|s| s.max_block_spread_for_logs_scraping());
-    scrape_until_block::<ReceivedEthLogScraping>(last_block_number, max_block_spread).await;
-    scrape_until_block::<ReceivedErc20LogScraping>(last_block_number, max_block_spread).await;
-    scrape_until_block::<ReceivedEthOrErc20LogScraping>(last_block_number, max_block_spread).await;
+    scrape_until_block::<ReceivedEthLogScraping, T>(
+        last_block_number,
+        max_block_spread,
+        time_provider,
+    )
+    .await;
+    scrape_until_block::<ReceivedErc20LogScraping, T>(
+        last_block_number,
+        max_block_spread,
+        time_provider,
+    )
+    .await;
+    scrape_until_block::<ReceivedEthOrErc20LogScraping, T>(
+        last_block_number,
+        max_block_spread,
+        time_provider,
+    )
+    .await;
 }
 
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
@@ -182,9 +203,54 @@ pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
     }
 }
 
-async fn scrape_until_block<S>(last_block_number: BlockNumber, max_block_spread: u16)
-where
+pub async fn refresh_latest_block_height() -> Option<BlockNumber> {
+    let _guard = match TimerGuard::new(TaskType::RefreshLatestBlockHeight) {
+        Ok(guard) => guard,
+        Err(_) => return read_state(|s| s.latest_block_height),
+    };
+    let previous_latest_block_number = read_state(|s| s.latest_block_height);
+    match read_state(rpc_client)
+        .get_block_by_number(BlockTag::Latest)
+        .with_cycles(MIN_ATTACHED_CYCLES)
+        .try_send()
+        .await
+        .reduce_with_strategy(MinByKey::new(|block: &evm_rpc_types::Block| {
+            BlockNumber::from(block.number.clone())
+        })) {
+        Ok(latest_block) => {
+            let block_number = Some(BlockNumber::from(latest_block.number));
+            match previous_latest_block_number.cmp(&block_number) {
+                std::cmp::Ordering::Less => {
+                    mutate_state(|s| s.latest_block_height = block_number);
+                    block_number
+                }
+                std::cmp::Ordering::Equal => {
+                    // no progress, tracked by metric
+                    None
+                }
+                std::cmp::Ordering::Greater => {
+                    log!(
+                        INFO,
+                        "[refresh_latest_block_height] Latest block number {block_number:?} is smaller than last latest block number {previous_latest_block_number:?}"
+                    );
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            log!(INFO, "Failed to get the latest block number: {e:?}");
+            read_state(|s| s.latest_block_height)
+        }
+    }
+}
+
+async fn scrape_until_block<S, T>(
+    last_block_number: BlockNumber,
+    max_block_spread: u16,
+    time_provider: &T,
+) where
     S: LogScraping,
+    T: TimeProvider,
 {
     let scrape = match read_state(S::next_scrape) {
         Some(s) => s,
@@ -211,11 +277,12 @@ where
     );
     let rpc_client = read_state(rpc_client);
     for block_range in block_range.into_chunks(max_block_spread) {
-        match scrape_block_range::<S>(
+        match scrape_block_range::<S, T>(
             &rpc_client,
             scrape.contract_address,
             scrape.topics.clone(),
             block_range.clone(),
+            time_provider,
         )
         .await
         {
@@ -232,14 +299,16 @@ where
     }
 }
 
-async fn scrape_block_range<S>(
+async fn scrape_block_range<S, T>(
     rpc_client: &EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles>,
     contract_address: Address,
     topics: Vec<Topic>,
     block_range: BlockRangeInclusive,
+    time_provider: &T,
 ) -> Result<(), MultiCallError<Vec<LogEntry>>>
 where
     S: LogScraping,
+    T: TimeProvider,
 {
     let mut subranges = VecDeque::new();
     subranges.push_back(block_range);
@@ -264,7 +333,7 @@ where
 
         match result {
             Ok((events, errors)) => {
-                register_deposit_events(S::ID, events, errors);
+                register_deposit_events(S::ID, events, errors, time_provider);
                 mutate_state(|s| S::update_last_scraped_block_number(s, to_block));
             }
             Err(e) => {
@@ -278,6 +347,7 @@ where
                                     contract_address,
                                     block_number: to_block,
                                 },
+                                time_provider,
                             );
                         });
                         mutate_state(|s| S::update_last_scraped_block_number(s, to_block));
@@ -308,10 +378,11 @@ where
     Ok(())
 }
 
-pub fn register_deposit_events(
+pub fn register_deposit_events<T: TimeProvider>(
     scraping_id: LogScrapingId,
     transaction_events: Vec<ReceivedEvent>,
     errors: Vec<ReceivedEventError>,
+    time_provider: &T,
 ) {
     for event in transaction_events {
         log!(
@@ -334,14 +405,19 @@ pub fn register_deposit_events(
                         event_source: event.source(),
                         reason: format!("blocked address {}", event.from_address()),
                     },
+                    time_provider,
                 )
             });
         } else {
-            mutate_state(|s| process_event(s, event.into_deposit()));
+            mutate_state(|s| process_event(s, event.into_deposit(), time_provider));
         }
     }
     if read_state(State::has_events_to_mint) {
-        ic_cdk_timers::set_timer(Duration::from_secs(0), async { mint().await });
+        let time_provider = time_provider.clone();
+        ic_cdk_timers::set_timer(
+            Duration::from_secs(0),
+            async move { mint(&time_provider).await },
+        );
     }
     for error in errors {
         if let ReceivedEventError::InvalidEventSource { source, error } = &error {
@@ -352,6 +428,7 @@ pub fn register_deposit_events(
                         event_source: *source,
                         reason: error.to_string(),
                     },
+                    time_provider,
                 )
             });
         }

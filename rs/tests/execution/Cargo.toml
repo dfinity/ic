@@ -15,6 +15,7 @@ futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
+ic-cdk-management-canister = { workspace = true }
 ic-config = { path = "../../config" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }
@@ -89,3 +90,7 @@ path = "cycles_cost_schedule_test.rs"
 [[bin]]
 name = "canister_migration_test"
 path = "canister_migration_test.rs"
+
+[[bin]]
+name = "subnet_metrics_test"
+path = "subnet_metrics_test.rs"

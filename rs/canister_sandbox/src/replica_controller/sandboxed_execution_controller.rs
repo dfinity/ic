@@ -10,8 +10,9 @@ use crate::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{
-    CanisterStateChanges, ExecutionStateChanges, PausedWasmExecution, SliceExecutionOutput,
-    WasmExecutionResult, WasmExecutor, get_wasm_reserved_pages, wasm_execution_error,
+    CanisterStateChanges, CreatedExecutionState, ExecutionStateChanges, PausedWasmExecution,
+    SliceExecutionOutput, WasmExecutionResult, WasmExecutor, get_wasm_reserved_pages,
+    wasm_execution_error,
 };
 use ic_embedders::{
     CompilationCache, CompilationResult, WasmExecutionInput, wasm_utils::WasmImportsDetails,
@@ -147,8 +148,6 @@ struct SandboxedExecutionMetrics {
     accessed_wasm_pages: HistogramVec,
     dirty_pages: HistogramVec,
     dirty_wasm_pages: HistogramVec,
-    read_before_write_count: HistogramVec,
-    direct_write_count: HistogramVec,
     allocated_pages: IntGauge,
     sigsegv_count: HistogramVec,
     mmap_count: HistogramVec,
@@ -356,20 +355,6 @@ impl SandboxedExecutionMetrics {
                 exponential_buckets(1.0, 2.0, 22),
                 &["api_type", "memory_type"],
             ),
-            read_before_write_count: metrics_registry.histogram_vec(
-                "sandboxed_execution_read_before_write_count",
-                "Number of write accesses handled where the page had already been read \
-                    by type of memory (wasm, stable) and api type.",
-                exponential_buckets(1.0, 2.0, 22),
-                &["api_type", "memory_type"],
-            ),
-            direct_write_count: metrics_registry.histogram_vec(
-                "sandboxed_execution_direct_write_count",
-                "Number of write accesses handled where the page had not yet been read \
-                    by type of memory (wasm, stable) and api type.",
-                exponential_buckets(1.0, 2.0, 22),
-                &["api_type", "memory_type"],
-            ),
             allocated_pages: metrics_registry.int_gauge(
                 "sandboxed_execution_allocated_pages",
                 "Total number of currently allocated pages.",
@@ -442,12 +427,6 @@ impl SandboxedExecutionMetrics {
         self.dirty_wasm_pages
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_dirty_wasm_pages_count as f64);
-        self.read_before_write_count
-            .with_label_values(&[api_type_label, "wasm"])
-            .observe(instance_stats.wasm_read_before_write_count as f64);
-        self.direct_write_count
-            .with_label_values(&[api_type_label, "wasm"])
-            .observe(instance_stats.wasm_direct_write_count as f64);
         self.sigsegv_count
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_sigsegv_count as f64);
@@ -471,12 +450,6 @@ impl SandboxedExecutionMetrics {
         self.dirty_pages
             .with_label_values(&[api_type_label, "stable"])
             .observe(instance_stats.stable_dirty_pages as f64);
-        self.read_before_write_count
-            .with_label_values(&[api_type_label, "stable"])
-            .observe(instance_stats.stable_read_before_write_count as f64);
-        self.direct_write_count
-            .with_label_values(&[api_type_label, "stable"])
-            .observe(instance_stats.stable_direct_write_count as f64);
         self.sigsegv_count
             .with_label_values(&[api_type_label, "stable"])
             .observe(instance_stats.stable_sigsegv_count as f64);
@@ -1057,7 +1030,7 @@ impl WasmExecutor for SandboxedExecutionController {
         canister_module: CanisterModule,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
-    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
+    ) -> HypervisorResult<CreatedExecutionState> {
         let _create_exe_state_timer = self
             .metrics
             .sandboxed_execution_replica_create_exe_state_duration
@@ -1237,6 +1210,9 @@ impl WasmExecutor for SandboxedExecutionController {
         let initial_state_data = serialized_module.initial_state_data();
         let execution_state = ExecutionState {
             wasm_binary,
+            // The install timestamp is a deployment-round value that the embedder
+            // does not know; it is stamped by `Hypervisor::create_execution_state`.
+            last_install_timestamp: None,
             exports: ExportedFunctions::new(initial_state_data.exported_functions),
             wasm_memory,
             stable_memory,
@@ -1247,11 +1223,12 @@ impl WasmExecutor for SandboxedExecutionController {
             wasm_execution_mode: WasmExecutionMode::from_is_wasm64(serialized_module.is_wasm64),
         };
 
-        Ok((
+        Ok(CreatedExecutionState {
             execution_state,
-            serialized_module.compilation_cost,
+            compilation_cost: serialized_module.compilation_cost,
             compilation_result,
-        ))
+            declares_wasm_memory: serialized_module.declares_wasm_memory,
+        })
     }
 }
 
@@ -1507,7 +1484,7 @@ impl SandboxedExecutionController {
             .get_ref()
             .resource_limits()
             .maximum_state_delta
-            .and_then(|d| if d.get() != 0 { Some(d) } else { None })
+            .filter(|&d| d.get() != 0)
             .unwrap_or(self.default_subnet_heap_delta_capacity);
         heap_delta_capacity / MAX_SANDBOXES_RSS_TO_HEAP_DELTA_RATIO
     }

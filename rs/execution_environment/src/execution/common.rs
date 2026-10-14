@@ -1,11 +1,14 @@
 // This module defines common helper functions.
 // TODO(RUN-60): Move helper functions here.
 
+use crate::canister_logs::check_log_visibility_permission;
 use crate::execution_environment::ExecutionResponse;
+use crate::util::{GOVERNANCE_CANISTER_ID, MIGRATION_CANISTER_ID};
 use crate::{
     ExecuteMessageResult, HypervisorMetrics, RoundLimits, as_round_instructions,
     canister_manager::types::CanisterManagerError, metrics::CallTreeMetrics,
 };
+use candid::Encode;
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
@@ -18,11 +21,15 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
 use ic_logger::{ReplicaLogger, error, fatal, info, warn};
-use ic_management_canister_types_private::CanisterStatusType;
+use ic_management_canister_types_private::{
+    CanisterIdRange, CanisterInfoResponse, CanisterStatusType, EmptyBlob, ListCanistersResponse,
+    Method as Ic00Method, Payload as _,
+};
+use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
-    SystemState,
+    ReplicatedState, SystemState, metadata_state::can_have_subnet_admins,
 };
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{
@@ -31,8 +38,8 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmMethod};
 use ic_types::time::CoarseTime;
-use ic_types::{NumInstructions, PrincipalId, Time, UserId};
-use ic_types_cycles::Cycles;
+use ic_types::{NumInstructions, PrincipalId, SnapshotId, Time, UserId};
+use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles};
 use lazy_static::lazy_static;
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
@@ -342,7 +349,7 @@ pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserErro
     Ok(())
 }
 
-pub(crate) fn validate_controller(
+fn validate_controller(
     canister: &CanisterState,
     controller: &PrincipalId,
 ) -> Result<(), CanisterManagerError> {
@@ -356,20 +363,46 @@ pub(crate) fn validate_controller(
     Ok(())
 }
 
-pub(crate) fn validate_snapshot_visibility(
+fn validate_snapshot_visibility(
     canister: &CanisterState,
     caller: &PrincipalId,
-    method_name: &str,
+    method: Ic00Method,
 ) -> Result<(), CanisterManagerError> {
     if !crate::canister_settings::VisibilitySettings::from(canister.snapshot_visibility())
         .has_access(caller, canister.controllers())
     {
         return Err(CanisterManagerError::CanisterSnapshotAccessDenied {
             caller: *caller,
-            method_name: method_name.to_string(),
+            method_name: method.to_string(),
         });
     }
     Ok(())
+}
+
+/// Validates that the `caller` is allowed to read the status of the `canister`
+/// according to its canister status visibility settings.
+///
+/// Subnet admins always retain access; otherwise access is governed by the
+/// status visibility setting, which grants access to the controllers plus any
+/// additional allowed viewers (or everyone, if the status is public).
+fn validate_status_visibility(
+    canister: &CanisterState,
+    subnet_admins: Option<&BTreeSet<PrincipalId>>,
+    caller: &PrincipalId,
+) -> Result<(), CanisterManagerError> {
+    // Subnet admins always retain access to the canister status.
+    if let Some(subnet_admins) = subnet_admins
+        && subnet_admins.contains(caller)
+    {
+        return Ok(());
+    }
+    // Otherwise, access is governed by the status visibility setting.
+    if crate::canister_settings::VisibilitySettings::from(canister.status_visibility())
+        .has_access(caller, canister.controllers())
+    {
+        return Ok(());
+    }
+    Err(CanisterManagerError::CanisterStatusAccessDenied { caller: *caller })
 }
 
 pub(crate) fn validate_subnet_admin(
@@ -386,9 +419,9 @@ pub(crate) fn validate_subnet_admin(
     }
 }
 
-pub(crate) fn validate_controller_or_subnet_admin(
+fn validate_controller_or_subnet_admin(
     canister: &CanisterState,
-    subnet_admins: Option<BTreeSet<PrincipalId>>,
+    subnet_admins: Option<&BTreeSet<PrincipalId>>,
     sender: &PrincipalId,
 ) -> Result<(), CanisterManagerError> {
     if canister.controllers().contains(sender) {
@@ -401,7 +434,7 @@ pub(crate) fn validate_controller_or_subnet_admin(
                 CanisterManagerError::CanisterInvalidControllerOrSubnetAdmin {
                     canister_id: canister.canister_id(),
                     controllers_expected: canister.system_state.controllers.clone(),
-                    subnet_admins_expected: subnet_admins,
+                    subnet_admins_expected: subnet_admins.clone(),
                     caller: *sender,
                 },
             )
@@ -415,6 +448,338 @@ pub(crate) fn validate_controller_or_subnet_admin(
             controller_provided: *sender,
         })
     }
+}
+
+/// The access to a canister that `validate_sender` validates.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum CanisterAccess {
+    /// Calling the management canister method targeting the canister.
+    Method(Ic00Method),
+    /// Using the chunks in the wasm chunk store of the canister as the store
+    /// canister of `install_chunked_code`.
+    InstallChunkedCodeStore,
+    /// Reading the private custom section `section_name` of the canister via
+    /// `canister_metadata`.
+    ReadPrivateCustomSection { section_name: String },
+    /// Loading the snapshot `snapshot_id` of the canister into the different
+    /// canister `target_canister_id` via `load_canister_snapshot`.
+    LoadSnapshotIntoOtherCanister {
+        target_canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
+}
+
+/// Validates that `sender` is allowed the access `access` to `canister` on a
+/// subnet of type `subnet_type` with cost schedule `cost_schedule` and subnet
+/// admins `subnet_admins`.
+///
+/// This is the single place defining which senders can call which management
+/// canister methods targeting a canister. It must be called after the method's
+/// payload has been decoded and `canister` has been looked up. A method that
+/// needs more than one access (e.g., to several canisters) must call it once
+/// per access, passing the corresponding `CanisterAccess`.
+///
+/// The `subnet_admins` are only taken into account if the subnet can have
+/// subnet admins (see `can_have_subnet_admins`).
+///
+/// This function decides only *who* may call a method, not through which call
+/// path: whether a method may be called by an ingress message at all is
+/// decided by `CanisterManager::should_accept_ingress_message` (backed by the
+/// `reject_unexpected_ingress` arms of
+/// `ExecutionEnvironment::execute_subnet_message`), and which subnet an
+/// inter-canister caller may be on by
+/// `crate::ic00_permissions::Ic00MethodPermissions`.
+///
+/// Methods whose access control does not depend on the targeted canister are
+/// rejected: calling this function for them is a bug. Those are the methods
+/// that are not gated on the targeted canister at all (e.g., `create_canister`,
+/// `list_canisters`, or the provisional methods, which are gated on the subnet
+/// admins and the provisional whitelist, respectively) and `canister_metadata`,
+/// whose access control depends on the requested custom section. In contrast,
+/// `canister_info` and `deposit_cycles` are accepted for every sender: they
+/// target a canister but are subject to no access control.
+fn validate_sender(
+    sender: &PrincipalId,
+    access: CanisterAccess,
+    canister: &CanisterState,
+    subnet_type: SubnetType,
+    cost_schedule: CanisterCyclesCostSchedule,
+    subnet_admins: &BTreeSet<PrincipalId>,
+) -> Result<(), CanisterManagerError> {
+    let subnet_admins = can_have_subnet_admins(subnet_type, cost_schedule).then_some(subnet_admins);
+    let is_sender_the_canister = *sender == canister.canister_id().get();
+    match access {
+        // A canister can always read its own status and manage its own chunk
+        // store (including having its chunks used by `install_chunked_code`),
+        // as the canister is considered in the same trust domain.
+        CanisterAccess::Method(
+            Ic00Method::CanisterStatus
+            | Ic00Method::UploadChunk
+            | Ic00Method::StoredChunks
+            | Ic00Method::ClearChunkStore,
+        )
+        | CanisterAccess::InstallChunkedCodeStore
+            if is_sender_the_canister =>
+        {
+            Ok(())
+        }
+
+        CanisterAccess::Method(
+            Ic00Method::StartCanister
+            | Ic00Method::StopCanister
+            | Ic00Method::DeleteCanister
+            | Ic00Method::CanisterMetrics,
+        ) => validate_controller_or_subnet_admin(canister, subnet_admins, sender),
+
+        // The governance canister can forcefully uninstall the code of any canister.
+        CanisterAccess::Method(Ic00Method::UninstallCode) => {
+            if *sender == GOVERNANCE_CANISTER_ID.get() {
+                Ok(())
+            } else {
+                validate_controller_or_subnet_admin(canister, subnet_admins, sender)
+            }
+        }
+
+        CanisterAccess::Method(Ic00Method::CanisterStatus) => {
+            validate_status_visibility(canister, subnet_admins, sender)
+        }
+
+        CanisterAccess::Method(
+            Ic00Method::UpdateSettings
+            | Ic00Method::InstallCode
+            | Ic00Method::InstallChunkedCode
+            | Ic00Method::UploadChunk
+            | Ic00Method::StoredChunks
+            | Ic00Method::ClearChunkStore
+            | Ic00Method::TakeCanisterSnapshot
+            | Ic00Method::LoadCanisterSnapshot
+            | Ic00Method::DeleteCanisterSnapshot
+            | Ic00Method::UploadCanisterSnapshotMetadata
+            | Ic00Method::UploadCanisterSnapshotData,
+        )
+        | CanisterAccess::InstallChunkedCodeStore => validate_controller(canister, sender),
+
+        // Reading a private custom section requires being a controller of the
+        // canister. Other senders get the same error as for a missing custom
+        // section.
+        CanisterAccess::ReadPrivateCustomSection { section_name } => {
+            if canister.controllers().contains(sender) {
+                Ok(())
+            } else {
+                Err(CanisterManagerError::CanisterMetadataSectionNotFound {
+                    canister_id: canister.canister_id(),
+                    section_name,
+                })
+            }
+        }
+
+        // Loading the snapshot of a canister into a different canister
+        // requires being a controller of the canister owning the snapshot.
+        CanisterAccess::LoadSnapshotIntoOtherCanister {
+            target_canister_id,
+            snapshot_id,
+        } => {
+            if canister.controllers().contains(sender) {
+                Ok(())
+            } else {
+                Err(CanisterManagerError::CanisterSnapshotNotController {
+                    sender: *sender,
+                    canister_id: target_canister_id,
+                    snapshot_id,
+                })
+            }
+        }
+
+        // The sender has to be a controller of the canister to be renamed and
+        // equal to the migration canister.
+        CanisterAccess::Method(Ic00Method::RenameCanister) => {
+            validate_controller(canister, sender)?;
+            if *sender != MIGRATION_CANISTER_ID.get() {
+                return Err(CanisterManagerError::CallerNotAuthorized);
+            }
+            Ok(())
+        }
+
+        CanisterAccess::Method(
+            method @ (Ic00Method::ListCanisterSnapshots
+            | Ic00Method::ReadCanisterSnapshotMetadata
+            | Ic00Method::ReadCanisterSnapshotData),
+        ) => validate_snapshot_visibility(canister, sender, method),
+
+        CanisterAccess::Method(Ic00Method::FetchCanisterLogs) => check_log_visibility_permission(
+            sender,
+            canister.log_visibility(),
+            canister.controllers(),
+        ),
+
+        // Anyone can call these methods.
+        CanisterAccess::Method(Ic00Method::CanisterInfo | Ic00Method::DepositCycles) => Ok(()),
+
+        CanisterAccess::Method(
+            Ic00Method::CanisterMetadata
+            | Ic00Method::ListCanisters
+            | Ic00Method::CreateCanister
+            | Ic00Method::HttpRequest
+            | Ic00Method::FlexibleHttpRequest
+            | Ic00Method::ECDSAPublicKey
+            | Ic00Method::RawRand
+            | Ic00Method::SetupInitialDKG
+            | Ic00Method::SignWithECDSA
+            | Ic00Method::ReshareChainKey
+            | Ic00Method::SchnorrPublicKey
+            | Ic00Method::SignWithSchnorr
+            | Ic00Method::VetKdPublicKey
+            | Ic00Method::VetKdDeriveKey
+            | Ic00Method::BitcoinGetBalance
+            | Ic00Method::BitcoinGetUtxos
+            | Ic00Method::BitcoinGetBlockHeaders
+            | Ic00Method::BitcoinSendTransaction
+            | Ic00Method::BitcoinGetCurrentFeePercentiles
+            | Ic00Method::BitcoinSendTransactionInternal
+            | Ic00Method::BitcoinGetSuccessors
+            | Ic00Method::NodeMetricsHistory
+            | Ic00Method::SubnetMetrics
+            | Ic00Method::SubnetInfo
+            | Ic00Method::ProvisionalCreateCanisterWithCycles
+            | Ic00Method::ProvisionalTopUpCanister,
+        ) => Err(CanisterManagerError::CallerNotAuthorized),
+    }
+}
+
+/// Calls `validate_sender` with the subnet type, cost schedule, and subnet
+/// admins of the subnet `subnet_id` in `network_topology`.
+///
+/// If `network_topology` does not contain the subnet `subnet_id`, then safe
+/// defaults are used: an application subnet on the normal cost schedule
+/// without subnet admins, i.e., a subnet on which subnet admins are not taken
+/// into account (consistently with `ReplicatedState::get_own_subnet_admins`).
+///
+/// `subnet_id` must be the id of this subnet, i.e., it must agree with the
+/// `own_subnet_id` of the state that `network_topology` was taken from. Both
+/// `CanisterMgrConfig::own_subnet_id` and `SystemMetadata::own_subnet_id` hold
+/// it, and callers pass whichever of the two is at hand.
+pub(crate) fn validate_sender_on_subnet(
+    sender: &PrincipalId,
+    access: CanisterAccess,
+    canister: &CanisterState,
+    network_topology: &NetworkTopology,
+    subnet_id: SubnetId,
+) -> Result<(), CanisterManagerError> {
+    static NO_SUBNET_ADMINS: BTreeSet<PrincipalId> = BTreeSet::new();
+    let (subnet_type, cost_schedule, subnet_admins) =
+        match network_topology.subnets().get(&subnet_id) {
+            Some(subnet_topology) => (
+                subnet_topology.subnet_type,
+                subnet_topology.cost_schedule,
+                &subnet_topology.subnet_admins,
+            ),
+            None => (
+                SubnetType::Application,
+                CanisterCyclesCostSchedule::Normal,
+                &NO_SUBNET_ADMINS,
+            ),
+        };
+    validate_sender(
+        sender,
+        access,
+        canister,
+        subnet_type,
+        cost_schedule,
+        subnet_admins,
+    )
+}
+
+/// Computes the response to the `canister_info` management canister method.
+///
+/// The method is not subject to any access control: the canister history is
+/// public information that any principal is allowed to retrieve. The size of
+/// the response is bounded by `MAX_CANISTER_HISTORY_CHANGES`, so producing it
+/// consumes no round instructions.
+///
+/// This is shared by the replicated path (an inter-canister call to
+/// `canister_info`) and the non-replicated path (see
+/// `crate::query_handler::subnet_query`) so that both return the same response.
+pub(crate) fn canister_info(
+    canister: &CanisterState,
+    num_requested_changes: Option<u64>,
+) -> CanisterInfoResponse {
+    let canister_history = canister.system_state.get_canister_history();
+    let total_num_changes = canister_history.get_total_num_changes();
+    let changes = canister_history
+        .get_changes(num_requested_changes.unwrap_or(0) as usize)
+        .map(|e| (*e.clone()).clone())
+        .collect();
+    let module_hash = canister
+        .execution_state
+        .as_ref()
+        .map(|es| es.wasm_binary.binary.module_hash().to_vec());
+    let controllers = canister
+        .controllers()
+        .iter()
+        .copied()
+        .collect::<Vec<PrincipalId>>();
+    CanisterInfoResponse::new(total_num_changes, changes, module_hash, controllers)
+}
+
+/// Computes the response to the `list_canisters` management canister method.
+///
+/// The method takes no arguments and is only available on subnets with subnet
+/// admins configured, in which case the caller must be a subnet admin. On
+/// success, it returns the Candid-encoded `ListCanistersResponse` listing the
+/// ranges of canister IDs hosted on this subnet, together with the number of
+/// round instructions the caller must deduct for computing it.
+pub(crate) fn list_canisters(
+    state: &ReplicatedState,
+    caller: &PrincipalId,
+    payload: &[u8],
+) -> Result<(Vec<u8>, NumInstructions), UserError> {
+    EmptyBlob::decode(payload)?;
+    match state.get_own_subnet_admins() {
+        Some(ref admins) => validate_subnet_admin(admins, caller).map_err(UserError::from)?,
+        None => {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "list_canisters is only available on subnets with subnet admins",
+            ));
+        }
+    }
+    let mut canisters: Vec<CanisterIdRange> = Vec::new();
+    for id in state.canister_states().all_keys() {
+        let id_u64 = canister_id_into_u64(*id);
+        match canisters.last_mut() {
+            Some(last) if canister_id_into_u64(last.end).checked_add(1) == Some(id_u64) => {
+                last.end = *id;
+            }
+            _ => canisters.push(CanisterIdRange {
+                start: *id,
+                end: *id,
+            }),
+        }
+    }
+    let response = ListCanistersResponse { canisters };
+    Ok((
+        Encode!(&response).unwrap(),
+        list_canisters_instructions(state),
+    ))
+}
+
+/// Computes the number of round instructions consumed by executing the
+/// `list_canisters` management method against the given state.
+///
+/// The cost model was derived from the `list_canisters` benchmark using the
+/// conversion `2B instructions = 1 second` (i.e. `2M instructions = 1 ms`):
+///   - a base cost of 20M instructions (≈10ms), and
+///   - a variable cost of 16K instructions per canister hosted on the subnet
+///     (`list_canisters` iterates over all of them to build the ID ranges).
+///     The variable cost reflects the worst case where the canister IDs form
+///     gaps so that each canister becomes its own ID range.
+// Keep in sync with `list_canisters_respects_round_instruction_limit` in
+// `execution_test.rs`.
+fn list_canisters_instructions(state: &ReplicatedState) -> NumInstructions {
+    const BASE_INSTRUCTIONS: u64 = 20_000_000;
+    const INSTRUCTIONS_PER_CANISTER: u64 = 16_000;
+    let num_canisters = state.num_canisters() as u64;
+    NumInstructions::new(BASE_INSTRUCTIONS + INSTRUCTIONS_PER_CANISTER * num_canisters)
 }
 
 /// Unregisters the callback corresponding to the given response.
@@ -714,7 +1079,9 @@ mod test {
 
     use crate::metrics::CallTreeMetricsNoOp;
     use ic_base_types::NumSeconds;
-    use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
+    use ic_management_canister_types_private::{
+        LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotVisibility, StatusVisibility,
+    };
     use ic_metrics::MetricsRegistry;
     use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
     use ic_replicated_state::canister_state::canister_snapshots::CanisterSnapshots;
@@ -724,6 +1091,7 @@ mod test {
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::messages::NO_DEADLINE;
     use ic_types::time::UNIX_EPOCH;
+    use strum::IntoEnumIterator;
 
     #[test]
     fn test_wasm_result_to_query_response_refunds_correctly() {
@@ -901,5 +1269,290 @@ mod test {
             ),
             Ready,
         );
+    }
+
+    /// Checks which senders `validate_sender` accepts for every method it
+    /// validates on every subnet type and cost schedule: subnet admins are
+    /// only taken into account on rented subnets (application subnets on the
+    /// free cost schedule) and on cloud engines on the free cost schedule.
+    #[test]
+    fn validate_sender_accepts_expected_senders() {
+        let canister_id = CanisterId::from_u64(42);
+        let controller = PrincipalId::new_user_test_id(1);
+        let subnet_admin = PrincipalId::new_user_test_id(2);
+        let stranger = PrincipalId::new_user_test_id(3);
+        let canister = new_canister_for_validate_sender(canister_id, controller);
+        let subnet_admins = BTreeSet::from([subnet_admin]);
+        let senders = [
+            controller,
+            subnet_admin,
+            stranger,
+            canister_id.get(),
+            GOVERNANCE_CANISTER_ID.get(),
+        ];
+
+        // Senders that are accepted on subnets with and without subnet admins,
+        // respectively.
+        let mut cases: Vec<(Vec<Ic00Method>, Vec<PrincipalId>, Vec<PrincipalId>)> = vec![
+            (
+                vec![
+                    Ic00Method::StartCanister,
+                    Ic00Method::StopCanister,
+                    Ic00Method::DeleteCanister,
+                    Ic00Method::CanisterMetrics,
+                ],
+                vec![controller, subnet_admin],
+                vec![controller],
+            ),
+            (
+                vec![Ic00Method::UninstallCode],
+                vec![controller, subnet_admin, GOVERNANCE_CANISTER_ID.get()],
+                vec![controller, GOVERNANCE_CANISTER_ID.get()],
+            ),
+            (
+                vec![Ic00Method::CanisterStatus],
+                vec![controller, subnet_admin, canister_id.get()],
+                vec![controller, canister_id.get()],
+            ),
+            (
+                vec![
+                    Ic00Method::UploadChunk,
+                    Ic00Method::StoredChunks,
+                    Ic00Method::ClearChunkStore,
+                ],
+                vec![controller, canister_id.get()],
+                vec![controller, canister_id.get()],
+            ),
+            (
+                vec![
+                    Ic00Method::UpdateSettings,
+                    Ic00Method::InstallCode,
+                    Ic00Method::InstallChunkedCode,
+                    Ic00Method::TakeCanisterSnapshot,
+                    Ic00Method::LoadCanisterSnapshot,
+                    Ic00Method::DeleteCanisterSnapshot,
+                    Ic00Method::UploadCanisterSnapshotMetadata,
+                    Ic00Method::UploadCanisterSnapshotData,
+                    Ic00Method::ListCanisterSnapshots,
+                    Ic00Method::ReadCanisterSnapshotMetadata,
+                    Ic00Method::ReadCanisterSnapshotData,
+                    Ic00Method::FetchCanisterLogs,
+                ],
+                vec![controller],
+                vec![controller],
+            ),
+            // These methods are not subject to any access control.
+            (
+                vec![Ic00Method::CanisterInfo, Ic00Method::DepositCycles],
+                senders.to_vec(),
+                senders.to_vec(),
+            ),
+        ];
+        // `validate_sender` does not define the access control of any other
+        // method, so it must reject every sender for them. `rename_canister` is
+        // among them: none of the senders here is the migration canister (see
+        // the dedicated test below).
+        let validated: Vec<Ic00Method> = cases
+            .iter()
+            .flat_map(|(methods, _, _)| methods.iter().copied())
+            .collect();
+        cases.push((
+            Ic00Method::iter()
+                .filter(|method| !validated.contains(method))
+                .collect(),
+            vec![],
+            vec![],
+        ));
+        let mut cases: Vec<(Vec<CanisterAccess>, Vec<PrincipalId>, Vec<PrincipalId>)> = cases
+            .into_iter()
+            .map(|(methods, with_subnet_admins, without_subnet_admins)| {
+                (
+                    methods.into_iter().map(CanisterAccess::Method).collect(),
+                    with_subnet_admins,
+                    without_subnet_admins,
+                )
+            })
+            .collect();
+        cases.push((
+            vec![CanisterAccess::InstallChunkedCodeStore],
+            vec![controller, canister_id.get()],
+            vec![controller, canister_id.get()],
+        ));
+        cases.push((
+            vec![
+                CanisterAccess::ReadPrivateCustomSection {
+                    section_name: "section".to_string(),
+                },
+                CanisterAccess::LoadSnapshotIntoOtherCanister {
+                    target_canister_id: CanisterId::from_u64(43),
+                    snapshot_id: SnapshotId::from((canister_id, 0)),
+                },
+            ],
+            vec![controller],
+            vec![controller],
+        ));
+
+        for subnet_type in SubnetType::iter() {
+            for cost_schedule in [
+                CanisterCyclesCostSchedule::Normal,
+                CanisterCyclesCostSchedule::Free,
+            ] {
+                let has_subnet_admins =
+                    matches!(
+                        subnet_type,
+                        SubnetType::Application | SubnetType::CloudEngine
+                    ) && matches!(cost_schedule, CanisterCyclesCostSchedule::Free);
+                for (accesses, accepted_with_subnet_admins, accepted_without_subnet_admins) in
+                    &cases
+                {
+                    let accepted = if has_subnet_admins {
+                        accepted_with_subnet_admins
+                    } else {
+                        accepted_without_subnet_admins
+                    };
+                    for access in accesses {
+                        for sender in senders {
+                            let result = validate_sender(
+                                &sender,
+                                access.clone(),
+                                &canister,
+                                subnet_type,
+                                cost_schedule,
+                                &subnet_admins,
+                            );
+                            assert_eq!(
+                                result.is_ok(),
+                                accepted.contains(&sender),
+                                "access: {access:?}, sender: {sender}, subnet type: {subnet_type:?}, cost schedule: {cost_schedule:?}, result: {result:?}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn validate_sender_consults_the_right_visibility_setting() {
+        let canister_id = CanisterId::from_u64(42);
+        let controller = PrincipalId::new_user_test_id(1);
+        let stranger = PrincipalId::new_user_test_id(2);
+
+        // These methods are accepted for every sender regardless of the
+        // visibility settings.
+        let always_accepted = [Ic00Method::CanisterInfo, Ic00Method::DepositCycles];
+
+        let status_public = {
+            let mut canister = new_canister_for_validate_sender(canister_id, controller);
+            canister.system_state.status_visibility = StatusVisibility::Public;
+            canister
+        };
+        let snapshot_public = {
+            let mut canister = new_canister_for_validate_sender(canister_id, controller);
+            canister.system_state.snapshot_visibility = SnapshotVisibility::Public;
+            canister
+        };
+        let log_public = {
+            let mut canister = new_canister_for_validate_sender(canister_id, controller);
+            canister.system_state.log_visibility = LogVisibilityV2::Public;
+            canister
+        };
+        let cases = [
+            (status_public, vec![Ic00Method::CanisterStatus]),
+            (
+                snapshot_public,
+                vec![
+                    Ic00Method::ListCanisterSnapshots,
+                    Ic00Method::ReadCanisterSnapshotMetadata,
+                    Ic00Method::ReadCanisterSnapshotData,
+                ],
+            ),
+            (log_public, vec![Ic00Method::FetchCanisterLogs]),
+        ];
+
+        for (canister, public_methods) in &cases {
+            for method in Ic00Method::iter() {
+                let result = validate_sender(
+                    &stranger,
+                    CanisterAccess::Method(method),
+                    canister,
+                    SubnetType::Application,
+                    CanisterCyclesCostSchedule::Normal,
+                    &BTreeSet::new(),
+                );
+                let is_accepted =
+                    public_methods.contains(&method) || always_accepted.contains(&method);
+                assert_eq!(
+                    result.is_ok(),
+                    is_accepted,
+                    "method: {method}, public methods: {public_methods:?}, result: {result:?}"
+                );
+            }
+        }
+    }
+
+    fn new_canister_for_validate_sender(
+        canister_id: CanisterId,
+        controller: PrincipalId,
+    ) -> CanisterState {
+        CanisterState::new(
+            SystemState::new_running_for_testing(
+                canister_id,
+                controller,
+                Cycles::new(1 << 36),
+                NumSeconds::new(100_000),
+            ),
+            None,
+            SchedulerState::default(),
+            CanisterSnapshots::default(),
+        )
+    }
+
+    #[test]
+    fn validate_sender_rename_canister_requires_controller_and_migration_canister() {
+        let canister_id = CanisterId::from_u64(42);
+        let other = PrincipalId::new_user_test_id(1);
+        for sender in [MIGRATION_CANISTER_ID.get(), other] {
+            for is_sender_controller in [true, false] {
+                let controller = if is_sender_controller {
+                    sender
+                } else {
+                    PrincipalId::new_user_test_id(2)
+                };
+                let canister = CanisterState::new(
+                    SystemState::new_running_for_testing(
+                        canister_id,
+                        controller,
+                        Cycles::new(1 << 36),
+                        NumSeconds::new(100_000),
+                    ),
+                    None,
+                    SchedulerState::default(),
+                    CanisterSnapshots::default(),
+                );
+                let result = validate_sender(
+                    &sender,
+                    CanisterAccess::Method(Ic00Method::RenameCanister),
+                    &canister,
+                    SubnetType::System,
+                    CanisterCyclesCostSchedule::Normal,
+                    &BTreeSet::new(),
+                );
+                let is_sender_migration_canister = sender == MIGRATION_CANISTER_ID.get();
+                match (is_sender_controller, is_sender_migration_canister) {
+                    (true, true) => assert_eq!(result, Ok(())),
+                    (true, false) => {
+                        assert_eq!(result, Err(CanisterManagerError::CallerNotAuthorized))
+                    }
+                    (false, _) => assert!(
+                        matches!(
+                            result,
+                            Err(CanisterManagerError::CanisterInvalidController { .. })
+                        ),
+                        "sender: {sender}, result: {result:?}"
+                    ),
+                }
+            }
+        }
     }
 }

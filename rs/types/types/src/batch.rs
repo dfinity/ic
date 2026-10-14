@@ -6,12 +6,14 @@ mod chain_key;
 mod execution_environment;
 mod ingress;
 mod self_validating;
+mod upgrade;
 mod xnet;
 
 pub use self::{
     canister_http::{
-        CanisterHttpPayload, FlexibleCanisterHttpError, FlexibleCanisterHttpResponseWithProof,
-        FlexibleCanisterHttpResponses, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+        CanisterHttpOutOfCycles, CanisterHttpPayload, FlexibleCanisterHttpError,
+        FlexibleCanisterHttpResponseWithProof, FlexibleCanisterHttpResponses,
+        MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
     chain_key::{
         ChainKeyAgreement, ChainKeyErrorCode, ChainKeyPayload, bytes_to_chain_key_payload,
@@ -23,6 +25,7 @@ pub use self::{
     },
     ingress::{IngressPayload, IngressPayloadError},
     self_validating::{MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload},
+    upgrade::UpgradePayload,
     xnet::XNetPayload,
 };
 use crate::{
@@ -41,10 +44,13 @@ use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
+use ic_types_cycles::Cycles;
 use prost::{DecodeError, Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum BatchContent {
     /// The payload messages to be processed.
@@ -52,6 +58,8 @@ pub enum BatchContent {
         batch_messages: BatchMessages,
         /// Responses to subnet calls that require consensus' involvement.
         consensus_responses: Vec<ConsensusResponse>,
+        /// The amount of cycles spent on HTTP outcalls.
+        canister_http_spent: CanisterHttpSpent,
         /// Data required by the chain key service
         chain_key_data: ChainKeyData,
         /// Whether the state obtained by executing this batch needs to be fully
@@ -67,6 +75,23 @@ pub enum BatchContent {
         // Used for sanity checks
         other_subnet_id: SubnetId,
     },
+    /// Persists the state produced by the preceding rounds into a checkpoint,
+    /// without inducting, executing or routing any messages.
+    ///
+    /// Unlike `Data { requires_full_state_hash: true, .. }`, no round is executed:
+    /// no messages are inducted or executed and no canister is charged for its
+    /// resource allocation. All the state machine does is what creating a
+    /// checkpoint requires, namely aborting paused executions and wiping
+    /// `SystemMetadata` caches.
+    ///
+    /// The per-round bookkeeping that message routing applies around the state
+    /// machine is not skipped, though: the batch time advances, the state is
+    /// canonicalized and the subnet metrics are refreshed as they are for any
+    /// other checkpoint round. The result is therefore a checkpoint of the state
+    /// the preceding rounds produced, not a byte-for-byte copy of it.
+    ///
+    /// Checkpointing rounds are always checkpoint ("full state hash") rounds.
+    CheckpointingWithoutExecution,
 }
 
 /// The `Batch` provided to Message Routing for deterministic processing.
@@ -85,8 +110,9 @@ pub struct Batch {
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
     pub time: Time,
-    /// Information about block makers
-    pub blockmaker_metrics: BlockmakerMetrics,
+    /// Information about block makers. `None` for batches that do not correspond
+    /// to a finalized block, so that no blockmaker is credited for them.
+    pub blockmaker_metrics: Option<BlockmakerMetrics>,
     /// The current replica version.
     pub replica_version: ReplicaVersion,
 }
@@ -101,8 +127,8 @@ impl Batch {
                 ..
             } => *requires_full_state_hash,
 
-            // Subnet splitting always requires a checkpoint.
-            BatchContent::Splitting { .. } => true,
+            // Subnet splitting and checkpointing always require a checkpoint.
+            BatchContent::Splitting { .. } | BatchContent::CheckpointingWithoutExecution => true,
         }
     }
 }
@@ -171,6 +197,7 @@ pub struct BatchPayload {
     pub canister_http: Vec<u8>,
     pub query_stats: Vec<u8>,
     pub chain_key: Vec<u8>,
+    pub upgrade: Vec<u8>,
 }
 
 /// Batch properties collected form the last DKG summary block.
@@ -231,6 +258,7 @@ impl BatchPayload {
             canister_http,
             query_stats,
             chain_key,
+            upgrade,
         } = &self;
 
         ingress.is_empty()
@@ -239,6 +267,7 @@ impl BatchPayload {
             && canister_http.is_empty()
             && query_stats.is_empty()
             && chain_key.is_empty()
+            && upgrade.is_empty()
     }
 }
 
@@ -257,7 +286,7 @@ impl BlockmakerMetrics {
     }
 }
 
-/// Given an iterator of [`Message`]s, this function will deserialize the messages
+/// Given an iterator of [`Message`]s, this function will serialize the messages
 /// into a byte vector.
 ///
 /// The function is given a `max_size` limit, and guarantees that the buffer will be
@@ -281,18 +310,34 @@ where
 }
 
 /// Parse a slice filled with protobuf encoded [`Message`]s into a vector
-pub fn slice_to_messages<M>(mut data: &[u8]) -> Result<Vec<M>, DecodeError>
+pub fn slice_to_messages<M>(data: &[u8]) -> Result<Vec<M>, DecodeError>
 where
     M: Message + Default,
 {
-    let mut msgs = vec![];
+    slice_to_messages_iter(data).collect()
+}
 
-    while !data.is_empty() {
-        let msg = M::decode_length_delimited(&mut data)?;
-        msgs.push(msg)
-    }
-
-    Ok(msgs)
+/// Lazily parses a slice filled with protobuf encoded [`Message`]s, as
+/// [`slice_to_messages`] does, but decoding one message per step, so that a caller
+/// looking for a particular message decodes no further than that.
+///
+/// Ends after the first message that cannot be decoded, as the messages after it
+/// can no longer be told apart.
+pub fn slice_to_messages_iter<M>(
+    mut data: &[u8],
+) -> impl Iterator<Item = Result<M, DecodeError>> + '_
+where
+    M: Message + Default,
+{
+    let mut failed = false;
+    std::iter::from_fn(move || {
+        if failed || data.is_empty() {
+            return None;
+        }
+        let msg = M::decode_length_delimited(&mut data);
+        failed = msg.is_err();
+        Some(msg)
+    })
 }
 
 /// Response to a subnet call that requires Consensus' involvement.
@@ -344,10 +389,80 @@ impl TryFrom<pb::ConsensusResponse> for ConsensusResponse {
     }
 }
 
+/// The amount of cycles spent on HTTP outcalls, delivered to the DSM
+/// as part of the batch.
+///
+/// There are two kinds of reports:
+///  - an *initial* report, where the set of nodes that produced a response
+///    collectively spent one specific amount of cycles (see
+///    [`CanisterHttpInitialSpent`]);
+///  - an *asynchronous* report, where individual nodes each spent some cycles,
+///    possibly in a later block than the response (see
+///    [`CanisterHttpAsyncSpent`]).
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpSpent {
+    pub initial: Vec<CanisterHttpInitialSpent>,
+    pub asynchronous: Vec<CanisterHttpAsyncSpent>,
+}
+
+/// The initial spent report for an HTTP outcall: the set of `nodes` that
+/// produced the response collectively spent one specific `amount` of cycles
+/// (the sum of their per-replica spends plus the consensus cost).
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpInitialSpent {
+    pub callback: CallbackId,
+    pub amount: Cycles,
+    pub nodes: BTreeSet<NodeId>,
+}
+
+/// An asynchronous spent report for an HTTP outcall.
+///
+/// `shares` maps each participating node to the per-replica cycles it signed
+/// over as part of the aggregated response proof.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CanisterHttpAsyncSpent {
+    pub callback: CallbackId,
+    pub shares: BTreeMap<NodeId, Cycles>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::CountBytes;
+
+    #[test]
+    fn slice_to_messages_iter_test() {
+        let bytes = iterator_to_bytes([1_u64, 2, 3].into_iter(), NumBytes::new(1024));
+
+        assert_eq!(
+            slice_to_messages_iter::<u64>(&bytes)
+                .map(Result::ok)
+                .collect::<Vec<_>>(),
+            vec![Some(1), Some(2), Some(3)]
+        );
+        assert_eq!(slice_to_messages::<u64>(&bytes).unwrap(), vec![1, 2, 3]);
+    }
+
+    /// The messages after one that cannot be decoded are never returned, even if
+    /// they happen to decode.
+    #[test]
+    fn slice_to_messages_iter_ends_after_the_first_error_test() {
+        let mut bytes = iterator_to_bytes([1_u64].into_iter(), NumBytes::new(1024));
+        // A message of two bytes that are not a valid varint.
+        bytes.extend_from_slice(&[2, 0xff, 0xff]);
+        bytes.extend(iterator_to_bytes([2_u64].into_iter(), NumBytes::new(1024)));
+
+        assert_eq!(
+            slice_to_messages_iter::<u64>(&bytes)
+                .map(Result::ok)
+                .collect::<Vec<_>>(),
+            vec![Some(1), None]
+        );
+        assert!(slice_to_messages::<u64>(&bytes).is_err());
+    }
 
     /// This is a quick test to check the invariant, that the [`Default`] implementation
     /// of a payload section actually produces the empty payload,
@@ -360,6 +475,7 @@ mod tests {
             canister_http,
             query_stats,
             chain_key,
+            upgrade,
         } = BatchPayload::default();
 
         assert_eq!(ingress.total_ids_size_estimate(), NumBytes::new(0));
@@ -368,6 +484,7 @@ mod tests {
         assert_eq!(canister_http.len(), 0);
         assert_eq!(query_stats.len(), 0);
         assert_eq!(chain_key.len(), 0);
+        assert_eq!(upgrade.len(), 0);
     }
 
     /// This is a quick test to check the invariant, that the [`Default`] implementation
@@ -384,6 +501,7 @@ mod tests {
             canister_http,
             query_stats,
             chain_key,
+            upgrade,
         } = &payload;
 
         assert!(ingress.is_empty());
@@ -392,6 +510,7 @@ mod tests {
         assert!(canister_http.is_empty());
         assert!(query_stats.is_empty());
         assert!(chain_key.is_empty());
+        assert!(upgrade.is_empty());
     }
 
     #[test]

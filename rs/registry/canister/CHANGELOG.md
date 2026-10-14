@@ -11,6 +11,220 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-10-09: Proposal 144310
+
+http://dashboard.internetcomputer.org/proposal/144310
+
+No new features or fixes. Just a maintenance release. New feature code (for
+subnet splitting) is present, but dormant, not active, per feature flag.
+
+
+# 2026-10-02: Proposal 144199
+
+http://dashboard.internetcomputer.org/proposal/144199
+
+## Added
+
+* A subnet-split request will now fail if a concurrent call modified the `StandardEngineReplicaVersionRecord`
+  while the fresh key material was being generated for the splitting subnet.
+
+* A subnet-split request whose source subnet is a cloud engine that derives its replica version from the
+  `StandardEngineReplicaVersionRecord` will now be rejected while a deployment of a new replica version is
+  in progress. This guarantees that both subnets run the same replica version after the split.
+
+* Invariant requiring that every elected GuestOS and HostOS version ID is well-formed, i.e. that it consists
+  only of alphanumeric characters, dots, dashes and underscores.  Such IDs are what `ReplicaVersion` and
+  `HostosVersion` accept, so until now, it was possible to elect a version that consumers could not read
+  back out of the Registry.
+
+* `secp256r1` as a variant of `EcdsaCurve`, so a chain key config may now name a NIST P-256
+  ECDSA key. It is reachable through `create_subnet` and `update_subnet`, and a subnet accepting
+  it still needs the key itself to be generated and enabled by separate proposals.
+
+* `merge_subnets` endpoint, callable through a `MergeSubnets` proposal. It merges a subnet into
+  another subnet: in the routing table, reassigns all canister ranges hosted by the source subnet
+  to the destination subnet. Only the routing table is updated: neither subnet record is modified
+  and the source subnet is not deleted.
+
+* Newly created `CatchUpPackageContents` records with CUP type `CupType::Genesis` will not contain a `height`
+  field anymore. You can (and should) assume that the height for `Genesis` CUPs is always 0.
+
+* Invariant requiring that every subnet's `CatchUpPackageContents` record has a `cup_type` set.
+
+* One-time post-upgrade migration backfilling `cup_type` on every `CatchUpPackageContents` record
+  that has none. A record whose legacy `height`, `time` and `state_hash` fields are all unset is
+  stamped as `CupType::Genesis`. Any other record is stamped as `CupType::Recovery`, which keeps those
+  legacy values.
+
+## Changed
+
+* The maximum size of a single atomic registry mutation (`MAX_CHUNKABLE_ATOMIC_MUTATION_LEN`) is raised from
+  10 MiB to 13 MiB. Many Registry data migrations (one-time mutations during `post_upgrade`) piled up, due to a
+  slower than usual upgrade cadence, and together they amount to a single mutation of about 12 MB on mainnet state.
+
+* `update_subnet` now also lets the engine controller canister set `cooling_down` on a cloud engine
+  subnet. The engine controller's scope is thus `subnet_admins`, `is_halted` and `cooling_down`;
+  every other field remains rejected for that caller.
+
+* `UpdateStandardEngineReplicaVersion` can now start a new deployment after the previous one has been
+  fully rolled back (`deployment_progress == 0.0`), not just after it has been fully rolled forward
+  (`deployment_progress == 1.0`).
+
+
+# 2026-08-28: Proposal 143737
+
+http://dashboard.internetcomputer.org/proposal/143737
+
+## Added
+
+* `cooling_down` field in `SubnetRecord`, settable via `UpdateSubnetRecord` proposals. See
+  `ic_replicated_state::SubnetTopology::cooling_down` for the exact semantics. The field must not
+  be set on mainnet before the replica version rejecting ingress messages to cooling down subnets
+  has been rolled out to all subnets.
+
+
+# 2026-08-21: Proposal 143659
+
+http://dashboard.internetcomputer.org/proposal/143659
+
+## Added
+
+* Invariant requiring that SEV-enabled subnets may only run a GuestOS version that has
+  `guest_launch_measurements`.
+
+## Changed
+
+* `deploy_guestos_to_all_subnet_nodes` now accepts a blank `replica_version_id`
+  for Cloud Engines, provided a `StandardEngineReplicaVersionRecord` exists.
+  This is how a Cloud Engine that pins a version goes back to following the
+  standard engine version. Previously, only engine *creation* could leave
+  `replica_version_id` blank, because this endpoint required the version to be
+  elected, and a blank version never is.
+
+
+# 2026-08-14: Proposal 143579
+
+http://dashboard.internetcomputer.org/proposal/143579
+
+## Added
+
+Add a `replica_version_id` to `ReplicaVersionRecord`s, and backfill with a data migration.
+
+## Changed
+
+* Guest launch measurements are now required (when electing a new GuestOS version).
+
+## Removed
+
+The `blessed_replica_versions` record has been removed.
+
+
+# 2026-08-07: Proposal 143409
+
+http://dashboard.internetcomputer.org/proposal/143409
+
+## Added
+
+* Added `maximum_query_instructions` and `maximum_query_walltime_seconds` fields to the
+  subnet record's `ResourceLimits`, allowing the query instruction limit and the maximum query
+  wall-clock time to be configured per subnet via `create_subnet` and `update_subnet`.
+  `maximum_query_instructions` applies both to a single (non-composite) query method execution
+  and to the total across a composite query call graph; `maximum_query_walltime_seconds`
+  bounds the wall-clock time a query (including a composite query call graph) may run. For each,
+  a value of `0` (or unset) means the replica's default is used.
+
+## Changed
+
+* Cloud Engines are now allowed to have blank `replica_version_id` (in their
+  `SubnetRecord`). In this case, `StandardEngineReplicaVersionRecord` is used to
+  determine the Cloud Engine's replica version.
+
+
+# 2026-07-31: Proposal 143259
+
+http://dashboard.internetcomputer.org/proposal/143259
+
+## Fixed
+
+* `do_split_subnet` - don't assume that all the registry entries exist when checking whether the
+  entries changed across await point
+
+
+# 2026-07-24: Proposal 143074
+
+http://dashboard.internetcomputer.org/proposal/143074
+
+New code for blank replica_version_id is not active yet. Therefore, this is
+"just a maintenance" release.
+
+
+# 2026-07-17: Proposal 142937
+
+http://dashboard.internetcomputer.org/proposal/142937
+
+## Added
+
+* A new method: update_standard_engine_replica_version. As usual, only callable
+  by Governance, and so far, Governance does not call this, so this code is for
+  all practical purposes not active yet, but the entry point is visible in
+  registry.did now.
+
+
+# 2026-07-10: Proposal 142805
+
+http://dashboard.internetcomputer.org/proposal/142805
+
+## Changed
+
+* `delete_subnet` may now delete any non-System subnet, lifting the previous
+  restriction to `CloudEngine` subnets. Authorization by subnet type:
+  System subnets (e.g. the NNS) may never be deleted; the engine controller
+  canister may only delete `CloudEngine` subnets; governance may delete any
+  non-System subnet.
+
+
+# 2026-07-03: Proposal 142680
+
+http://dashboard.internetcomputer.org/proposal/142680
+
+## Changed
+
+* A hardcoded allowlist of trusted node providers is now granted elevated
+  (10x) node operator and node provider rate limits. The elevated limits apply
+  to all node operator operations (node add/remove and the direct node config
+  updates), mirroring the scope of the standard node operator rate limiter.
+  This is a temporary measure to allow these providers to onboard nodes in bulk
+  (e.g. on-demand cloud provisioning). All other node providers remain subject
+  to the standard limits, and the per-IP `add_node` rate limit continues to
+  apply to everyone.
+* `change_subnet_membership` may now be called by the engine controller canister
+  in addition to the governance canister. When invoked by the engine controller,
+  the target subnet must be of type `CloudEngine`; governance retains
+  unrestricted access to any subnet.
+
+
+# 2026-06-26: Proposal 142586
+
+http://dashboard.internetcomputer.org/proposal/142586
+
+## Added
+
+* The firewall rule endpoints (`add_firewall_rules`, `remove_firewall_rules`, and
+  `update_firewall_rules`) now accept a new `cloud_engines` scope
+  (`FirewallRulesScope::CloudEngines`). Firewall rules registered under this scope are
+  applied by assigned cloud engine nodes.
+
+## Changed
+* Tightened chain-key config validation and invariants:
+  `pre_signatures_to_create_in_advance` must be non-zero for keys that require pre-signatures,
+  and must be `None` for keys that do not.
+
+## Removed
+* Removed the completed `fix_vetkd_pre_signatures_field` post-upgrade data migration and its
+  migration-specific unit test.
+* The `BlessedReplicaVersions` list is no longer updated with changes to elected versions.
+
+
 # 2026-06-19: Proposal 142453
 
 http://dashboard.internetcomputer.org/proposal/142453
@@ -35,7 +249,7 @@ http://dashboard.internetcomputer.org/proposal/142453
 
 # 2026-06-12 : Proposal 142265
 
-https://dashboard.internetcomputer.org/proposal/142265
+http://dashboard.internetcomputer.org/proposal/142265
 
 ## Changed
 
@@ -50,7 +264,7 @@ https://dashboard.internetcomputer.org/proposal/142265
 
 # 2026-06-05: Proposal 142129
 
-https://dashboard.internetcomputer.org/proposal/142129
+http://dashboard.internetcomputer.org/proposal/142129
 
 ## Added
 
@@ -347,7 +561,7 @@ http://dashboard.internetcomputer.org/proposal/139085
 
 # 2025-10-17: Proposal 138992
 
-https://dashboard.internetcomputer.org/proposal/138992
+http://dashboard.internetcomputer.org/proposal/138992
 
 ## Changed
 
@@ -415,7 +629,7 @@ http://dashboard.internetcomputer.org/proposal/137917
 
 # 2025-07-18: Proposal 137500
 
-https://dashboard.internetcomputer.org/proposal/137500
+http://dashboard.internetcomputer.org/proposal/137500
 
 Back fill some node records with reward type.
 
@@ -441,7 +655,7 @@ http://dashboard.internetcomputer.org/proposal/137254
 
 # 2025-06-20: Proposal 137081
 
-https://dashboard.internetcomputer.org/proposal/137081
+http://dashboard.internetcomputer.org/proposal/137081
 
 ### Changed
 
@@ -513,7 +727,7 @@ http://dashboard.internetcomputer.org/proposal/136581
 
 # 2025-05-02: Proposal 136428
 
-https://dashboard.internetcomputer.org/proposal/136428
+http://dashboard.internetcomputer.org/proposal/136428
 
 No behavior changes. When there are large registry records, then, the new code
 here will behave differently (per [this forum post]), but there is currently no
@@ -532,13 +746,13 @@ http://dashboard.internetcomputer.org/proposal/136371
 
 # 2025-03-28: Proposal 136007
 
-https://dashboard.internetcomputer.org/proposal/136007
+http://dashboard.internetcomputer.org/proposal/136007
 
 This is a maintenance upgrade.
 
 # 2025-03-21: Proposal 135934
 
-https://dashboard.internetcomputer.org/proposal/135934
+http://dashboard.internetcomputer.org/proposal/135934
 
 No "real" behavior changes. This is just a maintenance upgrade.
 
@@ -546,7 +760,7 @@ Technically, there is a new get_chunk method, but it does not actually do anythi
 
 # 2025-02-13: Proposal 135300
 
-https://dashboard.internetcomputer.org/proposal/135300
+http://dashboard.internetcomputer.org/proposal/135300
 
 ## Fixed
 

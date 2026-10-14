@@ -1,13 +1,15 @@
 ---
 name: run-in-dev-container
-description: Use when you need to run a command (build, test, tool) inside the IC dev container via ./ci/container/container-run.sh — including on a host that has Docker but not podman (set CONTAINER_RUNTIME=docker).
+description: Use when you need to run a command (build, test, tool) inside the IC dev container via ./ci/container/container-run.sh — including on a host that has Docker but not podman (set CONTAINER_RUNTIME=docker) — or when you need to keep a namespace.so devbox awake during long-running work.
 ---
 
 # Running commands in the IC dev container
 
 `./ci/container/container-run.sh` runs a command inside the pinned IC dev
 container (the `ghcr.io/dfinity/ic-dev` image), bind-mounting the repo checkout
-at `/ic` and reusing `~/.cache` for the Bazel/cargo/zig caches.
+at the same canonical (symlink-resolved) absolute path it has on the host,
+which is also the working directory, and reusing `~/.cache` for the Bazel/cargo
+caches.
 
 Prefer running builds and build tooling through it: it gives you the exact,
 pinned toolchain environment, and standardizing on the container — regardless of
@@ -44,10 +46,35 @@ runtime's daemon isn't reachable it prints which command it tried.
 
 ## Notes
 
-- The repo is mounted at `/ic` and that's the working directory, so invoke
-  repo-local scripts with a relative path, e.g.
+- The repo is mounted at its canonical host path (`git rev-parse
+  --show-toplevel`, i.e. with symlinks resolved) and that's the working
+  directory, so both repo-relative paths and canonical absolute host paths of
+  files in the checkout work inside the container, e.g.
   `CONTAINER_RUNTIME=docker ./ci/container/container-run.sh ./path/to/script.sh`.
+  Linked git worktrees work too: run the script from the worktree directory.
 - The image is pulled from `ghcr.io` on first use (large, one-time).
-- Anything the command writes under `/ic` (or `~/.cache`) persists on the host,
-  since those are bind-mounted.
+- Anything the command writes into the checkout (or `~/.cache`) persists on the
+  host, since those are bind-mounted. Each checkout gets its own bazel output
+  base; the install base and repository cache are shared.
 - Don't nest: the script refuses to run inside an existing container.
+
+## Keeping a namespace.so devbox awake for long-running work
+
+On a namespace.so devbox (`test -d /.namespace`), the machine can go to sleep
+during a long unattended operation — a multi-minute `bazel build`/`bazel
+test`, a container image build/pull, etc. — killing it partway through.
+
+Before starting long-running work, create the marker file:
+
+```sh
+mkdir -p /.namespace/tasks && touch /.namespace/tasks/stay-live
+```
+
+and remove it once the work is done, so the devbox is allowed to sleep again:
+
+```sh
+rm -f /.namespace/tasks/stay-live
+```
+
+This is independent of whether the work itself runs inside the dev container
+or directly on the host.

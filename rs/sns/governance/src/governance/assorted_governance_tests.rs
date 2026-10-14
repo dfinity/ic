@@ -2,17 +2,15 @@
 //! here, so that Bazel does not recompile the whole production crate each time the tests are run.
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
+use super::*;
 use crate::{
     extensions::{ExtensionSpec, ExtensionType, ExtensionVersion},
-    governance::{
-        test_helpers::{
-            A_MOTION_PROPOSAL, A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, DoNothingLedger,
-            TEST_ARCHIVES_CANISTER_IDS, TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID,
-            TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
-            TEST_SWAP_CANISTER_ID, basic_governance_proto, canister_status_for_test,
-            canister_status_from_management_canister_for_test,
-        },
-        *,
+    governance::test_helpers::{
+        A_MOTION_PROPOSAL, A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, DoNothingLedger,
+        TEST_ARCHIVES_CANISTER_IDS, TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID,
+        TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
+        TEST_SWAP_CANISTER_ID, basic_governance_proto, canister_status_for_test,
+        canister_status_from_management_canister_for_test, execute_proposal,
     },
     pb::v1::{
         Account as AccountProto, Motion, NervousSystemFunction, NeuronPermissionType, ProposalData,
@@ -53,12 +51,14 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_token_valuation::{Token, ValuationFactors};
 use ic_sns_test_utils::itest_helpers::UserInfo;
 use ic_test_utilities_types::ids::canister_test_id;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use maplit::btreemap;
+use num_bigint::BigUint;
 use pretty_assertions::assert_eq;
 use proptest::prelude::{prop_assert, proptest};
 use std::{
@@ -741,47 +741,6 @@ proptest! {
             .current_deadline_timestamp_seconds;
         dbg!(new_deadline , initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + now_seconds.div_ceil(2));
         prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + now_seconds.div_ceil(2));
-    }
-}
-
-// A helper function to execute each proposal.
-fn execute_proposal(governance: &mut Governance, proposal_id: u64) -> ProposalData {
-    governance.process_proposal(proposal_id);
-
-    let now = std::time::Instant::now;
-
-    let start = now();
-    // In practice, the exit condition of the following loop occurs in much
-    // less than 1 s (on my Macbook Pro 2019 Intel). The reason for this
-    // generous limit is twofold: 1. avoid flakes in CI, while at the same
-    // time 2. do not run forever if something goes wrong.
-    let give_up = || now() < start + std::time::Duration::from_secs(30);
-
-    loop {
-        let result = governance
-            .get_proposal(&GetProposal {
-                proposal_id: Some(ProposalId { id: proposal_id }),
-            })
-            .result
-            .unwrap();
-        let proposal_data = match result {
-            get_proposal_response::Result::Proposal(p) => p,
-            _ => panic!("get_proposal result: {result:#?}"),
-        };
-
-        let upgrade_sns_action_id = 7;
-
-        // If the proposal is an SNS upgrade action, it won't move to the "executed" state in
-        // this env (non-canister env), hence return.
-        if proposal_data.status().is_final() || proposal_data.action == upgrade_sns_action_id {
-            break proposal_data;
-        }
-
-        if give_up() {
-            panic!("Proposal took too long to terminate (in the failed state).")
-        }
-
-        std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
 
@@ -1525,9 +1484,13 @@ fn setup_env_for_sns_upgrade_to_next_version_test(
                 root_canister_id,
                 "change_canister",
                 Encode!(
-                    &ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, canister_id)
-                        .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
-                        .with_arg(Encode!().unwrap())
+                    &ChangeCanisterRequest::new(
+                        true, // Stop before installing.
+                        CanisterInstallModeV2::Upgrade(None),
+                        canister_id
+                    )
+                    .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
+                    .with_arg(Encode!().unwrap())
                 )
                 .unwrap(),
                 // We don't actually look at the response from this call anywhere
@@ -3045,6 +3008,7 @@ fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
             chunked_canister_wasm: None,
+            canister_upgrade_options: None,
         });
 
         // Upgrade Proposal
@@ -3156,6 +3120,95 @@ fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
     assert_proposal_failed(
         execute_proposal(&mut governance, 7),
         "Unknown canister upgrade",
+    );
+}
+
+#[test]
+fn test_canister_upgrade_options_rejected_when_mode_is_not_upgrade() {
+    // Step 1: Prepare the world.
+    let install = CanisterInstallMode::Install;
+    let canister_upgrade_options = Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Keep as i32),
+        skip_pre_upgrade: None,
+    });
+
+    // Step 2: Run the code under test.
+    let result = valid_canister_upgrade_options(install, canister_upgrade_options);
+
+    // Step 3: Inspect result(s).
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("canister_upgrade_options") && err.contains("mode is upgrade"),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn test_canister_upgrade_options_rejected_when_wasm_memory_persistence_unspecified() {
+    // Step 1: Prepare the world.
+    let upgrade = CanisterInstallMode::Upgrade;
+    let canister_upgrade_options = Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        // 0/Unspecified is not allowed here.
+        wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Unspecified as i32),
+        skip_pre_upgrade: None,
+    });
+
+    // Step 2: Run the code under test.
+    let result = valid_canister_upgrade_options(upgrade, canister_upgrade_options);
+
+    // Step 3: Inspect result(s).
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("Unrecognized") && err.contains("wasm_memory_persistence"),
+        "{err:?}"
+    );
+}
+
+#[test]
+fn test_canister_upgrade_options_accepted_when_mode_is_upgrade() {
+    // Step 1: Prepare the world.
+    let upgrade = CanisterInstallMode::Upgrade;
+    let canister_upgrade_options = Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Keep as i32),
+        skip_pre_upgrade: Some(true),
+    });
+
+    // Step 2: Run the code under test.
+    let canister_upgrade_options =
+        valid_canister_upgrade_options(upgrade, canister_upgrade_options).unwrap();
+    let root_mode = assemble_mode(upgrade, canister_upgrade_options);
+
+    // Step 3: Inspect result(s).
+    assert_eq!(
+        root_mode,
+        CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            skip_pre_upgrade: Some(true),
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        })),
+    );
+}
+
+#[test]
+fn test_canister_upgrade_options_accepted_when_wasm_memory_persistence_is_replace() {
+    // Step 1: Prepare the world.
+    let upgrade = CanisterInstallMode::Upgrade;
+    let canister_upgrade_options = Some(upgrade_sns_controlled_canister::CanisterUpgradeOptions {
+        wasm_memory_persistence: Some(WasmMemoryPersistenceProto::Replace as i32),
+        skip_pre_upgrade: Some(false),
+    });
+
+    // Step 2: Run the code under test.
+    let canister_upgrade_options =
+        valid_canister_upgrade_options(upgrade, canister_upgrade_options).unwrap();
+    let root_mode = assemble_mode(upgrade, canister_upgrade_options);
+
+    // Step 3: Inspect result(s).
+    assert_eq!(
+        root_mode,
+        CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            skip_pre_upgrade: Some(false),
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
+        })),
     );
 }
 
@@ -4325,12 +4378,23 @@ async fn test_split_neuron_succeeds() {
     let split_amount_e8s = stake_e8s / 3;
     let maturity_e8s = 123_456_789;
     let mut setup = prepare_setup_for_split_neuron_tests(stake_e8s, maturity_e8s);
+    let original_participation = neuron::RewardEventParticipation {
+        reward_event_end_timestamp_seconds: 123,
+        reward_shares: BigUint::from(99_u128).to_bytes_be(),
+    };
+    setup
+        .governance
+        .proto
+        .neurons
+        .get_mut(&setup.neuron_id.to_string())
+        .unwrap()
+        .latest_reward_event_participation = Some(original_participation.clone());
     let orig_neuron = setup
         .governance
         .proto
         .neurons
         .get(&setup.neuron_id.to_string())
-        .expect("Missing orig neuron!")
+        .unwrap()
         .clone();
     let split = manage_neuron::Split {
         amount_e8s: split_amount_e8s,
@@ -4357,6 +4421,10 @@ async fn test_split_neuron_succeeds() {
     );
     assert_eq!(parent_neuron.maturity_e8s_equivalent, maturity_e8s);
     assert_eq!(parent_neuron.neuron_fees_e8s, orig_neuron.neuron_fees_e8s);
+    assert_eq!(
+        parent_neuron.latest_reward_event_participation,
+        Some(original_participation),
+    );
     let child_neuron = setup
         .governance
         .proto
@@ -4370,6 +4438,7 @@ async fn test_split_neuron_succeeds() {
     assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
     assert!(child_neuron.disburse_maturity_in_progress.is_empty());
     assert_eq!(child_neuron.neuron_fees_e8s, 0);
+    assert_eq!(child_neuron.latest_reward_event_participation, None);
 
     let p = parent_neuron;
     let c = child_neuron;

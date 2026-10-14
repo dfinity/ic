@@ -11,7 +11,7 @@ use ic_btc_checker::{
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
 use ic_cdk::call::Error;
-use ic_cdk::management_canister::TransformArgs;
+use ic_cdk_management_canister::TransformArgs;
 use ic_http_types as http;
 use ic_management_canister_types::HttpRequestResult;
 use logs::{DEBUG, Log, LogEntry, Priority, WARN};
@@ -397,7 +397,7 @@ impl FetchEnv for BtcCheckerCanisterEnv {
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
-        use ic_cdk::management_canister::http_request;
+        use ic_cdk_management_canister::http_request;
         let request = provider
             .create_request(txid, max_response_bytes)
             .map_err(|err| HttpGetTxError::Rejected {

@@ -84,6 +84,8 @@ type CompleteCanisterMigrationPayload = record {
 type ResourceLimits = record {
   maximum_state_size : opt nat64;
   maximum_state_delta : opt nat64;
+  maximum_query_instructions : opt nat64;
+  maximum_query_walltime_seconds : opt nat64;
 };
 
 type CreateSubnetPayload = record {
@@ -192,7 +194,7 @@ type VetKdKeyId = record { curve: VetKdCurve; name: text };
 
 type VetKdCurve = variant { bls12_381_g2 };
 
-type EcdsaCurve = variant { secp256k1 };
+type EcdsaCurve = variant { secp256k1; secp256r1 };
 
 type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
 
@@ -209,6 +211,7 @@ type FirewallRule = record {
 type FirewallRulesScope = variant {
   Node : principal;
   ReplicaNodes;
+  CloudEngines;
   ApiBoundaryNodes;
   Subnet : principal;
   Global;
@@ -273,6 +276,7 @@ type SubnetRecord = record {
   ssh_readonly_access : vec text;
   ssh_backup_access : vec text;
   halt_at_cup_height : bool;
+  cooling_down : bool;
   chain_key_config : opt ChainKeyConfig;
   canister_cycles_cost_schedule : CanisterCyclesCostSchedule;
   subnet_admins : vec principal;
@@ -302,6 +306,11 @@ type IPv4Config = record {
   prefix_length : nat32;
   gateway_ip_addr : text;
   ip_addr : text;
+};
+
+type MergeSubnetsPayload = record {
+  source_subnet : principal;
+  destination_subnet : principal;
 };
 
 type MigrateCanistersPayload = record {
@@ -508,6 +517,7 @@ type UpdateSubnetPayload = record {
   max_block_payload_size : opt nat64;
   start_as_nns : opt bool;
   is_halted : opt bool;
+  cooling_down : opt bool;
   max_ingress_messages_per_block : opt nat64;
   max_number_of_canisters : opt nat64;
   retransmission_request_ms : opt nat32;
@@ -537,6 +547,12 @@ type ChainKeyConfig = record {
 type UpdateUnassignedNodesConfigPayload = record {
   replica_version : opt text;
   ssh_readonly_access : opt vec text;
+};
+
+type UpdateStandardEngineReplicaVersionPayload = record {
+  new_replica_version_id : text;
+  old_replica_version_id : text;
+  deployment_progress : float64;
 };
 
 type MigrateNodeOperatorPayload = record {
@@ -635,6 +651,7 @@ service : {
   get_node_providers_monthly_xdr_rewards : (opt GetNodeProvidersMonthlyXdrRewardsRequest) -> (GetNodeProvidersMonthlyXdrRewardsResponse) query;
   get_subnet : (GetSubnetRequest) -> (GetSubnetResponse) query;
   get_subnet_for_canister : (GetSubnetForCanisterRequest) -> (GetSubnetForCanisterResponse) query;
+  merge_subnets : (MergeSubnetsPayload) -> ();
   migrate_canisters: (MigrateCanistersPayload) -> (MigrateCanistersResponse);
   migrate_node_operator_directly : (MigrateNodeOperatorPayload) -> ();
   prepare_canister_migration : (PrepareCanisterMigrationPayload) -> ();
@@ -668,6 +685,9 @@ service : {
   update_nodes_hostos_version : (UpdateNodesHostosVersionPayload) -> ();
   update_ssh_readonly_access_for_all_unassigned_nodes : (
     UpdateSshReadOnlyAccessForAllUnassignedNodesPayload
+  ) -> ();
+  update_standard_engine_replica_version : (
+    UpdateStandardEngineReplicaVersionPayload
   ) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
   update_subnet_admins : (UpdateSubnetAdminsPayload) -> ();

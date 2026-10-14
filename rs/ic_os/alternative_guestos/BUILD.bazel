@@ -1,0 +1,18 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "alternative_guestos",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "alternative_guestos",
+    deps = [
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-certificate-verification",
+        "@crate_index//:ic-certification",
+        "@crate_index//:serde_cbor",
+    ],
+)

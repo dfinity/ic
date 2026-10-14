@@ -66,10 +66,17 @@ pub const PRICING_VERSION_PAY_AS_YOU_GO: u32 = 2;
 /// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
 pub const DEFAULT_HTTP_OUTCALLS_PRICING_VERSION: u32 = PRICING_VERSION_LEGACY;
 
-/// A set of all allowed pricing versions for HTTP outcalls.
+/// The pricing versions an HTTP outcall may select on a subnet where the
+/// pay-as-you-go pricing model is *not* enabled.
 ///
 /// If the pricing version provided in the request is not in this set, the request will use the default pricing version.
 pub const ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS: &[u32] = &[PRICING_VERSION_LEGACY];
+
+/// The pricing versions an HTTP outcall may select on a subnet where the
+/// pay-as-you-go pricing model *is* enabled, i.e. one whose
+/// `flexible_http_requests` feature flag is on.
+pub const ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS_WITH_PAY_AS_YOU_GO: &[u32] =
+    &[PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO];
 
 /// HTTP headers bounded by total size.
 pub type BoundedHttpHeaders = BoundedVec<
@@ -124,6 +131,7 @@ impl CanisterHttpRequestArgs {
 /// ```text
 /// record {
 ///   url : text;
+///   max_response_bytes : opt nat64;
 ///   headers : vec http_header;
 ///   method : variant { get; head; post };
 ///   body : opt blob;
@@ -141,6 +149,7 @@ impl CanisterHttpRequestArgs {
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct FlexibleCanisterHttpRequestArgs {
     pub url: String,
+    pub max_response_bytes: Option<u64>,
     pub headers: BoundedHttpHeaders,
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub body: Option<Vec<u8>>,
@@ -429,8 +438,6 @@ pub struct FlexibleHttpRequestErr {
 /// Why the flexible HTTP outcall failed globally.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub enum FlexibleHttpGlobalError {
-    #[serde(rename = "invalid_parameters")]
-    InvalidParameters(candid::Reserved),
     #[serde(rename = "timeout")]
     Timeout(candid::Reserved),
     #[serde(rename = "out_of_cycles")]

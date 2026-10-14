@@ -42,7 +42,7 @@ pub struct DisplayOutpoint<'a>(pub &'a OutPoint);
 
 impl fmt::Display for DisplayOutpoint<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, "{}:{}", &self.0.txid, self.0.vout)
+        write!(fmt, "{}:{}", self.0.txid, self.0.vout)
     }
 }
 

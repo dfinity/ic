@@ -6,13 +6,28 @@ use ic_management_canister_types_private::{
     DefiniteCanisterSettingsArgs, IC_00, Method, Payload, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::NextExecution;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_test_utilities::universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
-use ic_test_utilities_execution_environment::get_reply;
+use ic_test_utilities::universal_canister::{
+    CallArgs, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, wasm,
+};
+use ic_test_utilities_execution_environment::{
+    ExecutionTestBuilder, check_ingress_status, get_reply,
+};
 use ic_types::CanisterId;
 use ic_types::NumBytes;
 use ic_types::ingress::WasmResult;
 use ic_types_cycles::Cycles;
+
+fn update_settings(env: &StateMachine, canister_id: CanisterId, settings: CanisterSettingsArgs) {
+    let update_settings_args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings,
+        sender_canister_version: None,
+    };
+    env.execute_ingress(IC_00, Method::UpdateSettings, update_settings_args.encode())
+        .unwrap();
+}
 
 // The following test uses `StateMachine` instead of `ExecutionTest`
 // because the compute capacity of the subnet is not initialized
@@ -125,6 +140,19 @@ fn canister_settings_ranges() {
             assert_eq!(settings.freezing_threshold(), valid_freezing_threshold);
         });
 
+    let valid_minimum_incoming_canister_call_cycles = u128::MAX;
+    let valid_minimum_incoming_canister_call_cycles_settings = CanisterSettingsArgsBuilder::new()
+        .with_minimum_incoming_canister_call_cycles(valid_minimum_incoming_canister_call_cycles)
+        .build();
+    let test_minimum_incoming_canister_call_cycles_settings: Box<
+        dyn Fn(DefiniteCanisterSettingsArgs),
+    > = Box::new(|settings: DefiniteCanisterSettingsArgs| {
+        assert_eq!(
+            settings.minimum_incoming_canister_call_cycles(),
+            valid_minimum_incoming_canister_call_cycles
+        );
+    });
+
     for (valid_settings, test_settings_after) in [
         (
             valid_compute_allocation_settings,
@@ -137,6 +165,10 @@ fn canister_settings_ranges() {
         (
             valid_freezing_threshold_settings,
             test_freezing_threshold_settings,
+        ),
+        (
+            valid_minimum_incoming_canister_call_cycles_settings,
+            test_minimum_incoming_canister_call_cycles_settings,
         ),
     ] {
         let settings_after = via_update_settings(valid_settings.clone()).unwrap();
@@ -177,6 +209,20 @@ fn canister_settings_ranges() {
         Nat::from(invalid_freezing_threshold)
     );
 
+    let invalid_minimum_incoming_canister_call_cycles = Nat::from(u128::MAX) + Nat::from(1_u8);
+    let invalid_minimum_incoming_canister_call_cycles_settings = {
+        let mut s = CanisterSettingsArgsBuilder::new().build();
+        s.minimum_incoming_canister_call_cycles =
+            Some(invalid_minimum_incoming_canister_call_cycles.clone());
+        s
+    };
+    let expected_invalid_minimum_incoming_canister_call_cycles_err_code =
+        ErrorCode::CanisterContractViolation;
+    let expected_invalid_minimum_incoming_canister_call_cycles_err = format!(
+        "Minimum incoming canister call cycles expected to be in the range of [0..2^128-1], got {}",
+        invalid_minimum_incoming_canister_call_cycles
+    );
+
     for (invalid_settings, expected_err_code, expected_err) in [
         (
             invalid_compute_allocation_settings,
@@ -192,6 +238,11 @@ fn canister_settings_ranges() {
             invalid_freezing_threshold_settings,
             expected_invalid_freezing_threshold_err_code,
             expected_invalid_freezing_threshold_err,
+        ),
+        (
+            invalid_minimum_incoming_canister_call_cycles_settings,
+            expected_invalid_minimum_incoming_canister_call_cycles_err_code,
+            expected_invalid_minimum_incoming_canister_call_cycles_err,
         ),
     ] {
         let err = via_update_settings(invalid_settings.clone()).unwrap_err();
@@ -276,4 +327,302 @@ fn failed_create_canister_does_not_reuse_canister_id() {
         WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
     };
     assert_eq!(canister_id, CanisterId::from_u64(1));
+}
+
+#[test]
+fn minimum_incoming_canister_call_cycles_in_canister_status() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+
+    // Default value is 0 when no setting is provided.
+    let canister_id = env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_000), None);
+    let settings = env
+        .canister_status(canister_id)
+        .unwrap()
+        .unwrap()
+        .settings();
+    assert_eq!(settings.minimum_incoming_canister_call_cycles(), 0_u128);
+
+    // create_canister with the setting applied.
+    let min_cycles: u128 = 1_000_000;
+    let bytes = get_reply(
+        env.create_canister_with_cycles_impl(
+            None,
+            Cycles::new(100_000_000_000_000),
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_minimum_incoming_canister_call_cycles(min_cycles)
+                    .build(),
+            ),
+        ),
+    );
+    let created_canister_id = CanisterIdRecord::decode(&bytes).unwrap().get_canister_id();
+    let settings = env
+        .canister_status(created_canister_id)
+        .unwrap()
+        .unwrap()
+        .settings();
+    assert_eq!(settings.minimum_incoming_canister_call_cycles(), min_cycles);
+
+    // update_settings changes the value.
+    let new_min_cycles: u128 = 2_000_000;
+    update_settings(
+        &env,
+        canister_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_minimum_incoming_canister_call_cycles(new_min_cycles)
+            .build(),
+    );
+    let settings = env
+        .canister_status(canister_id)
+        .unwrap()
+        .unwrap()
+        .settings();
+    assert_eq!(
+        settings.minimum_incoming_canister_call_cycles(),
+        new_min_cycles
+    );
+}
+
+fn setup_two_canisters(min_cycles: u128) -> (StateMachine, CanisterId, CanisterId) {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    // Use no-heartbeat WASM for the callee so that heartbeat charges don't
+    // interfere with assertions on cycles balance in tests.
+    let callee_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM.to_vec(),
+            vec![],
+            None,
+            Cycles::new(100_000_000_000_000),
+        )
+        .unwrap();
+    let caller_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            Cycles::new(100_000_000_000_000),
+        )
+        .unwrap();
+    update_settings(
+        &env,
+        callee_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_minimum_incoming_canister_call_cycles(min_cycles)
+            .build(),
+    );
+    (env, callee_id, caller_id)
+}
+
+// Ingress messages must be accepted regardless of minimum_incoming_canister_call_cycles.
+#[test]
+fn minimum_incoming_canister_call_cycles_does_not_affect_ingress() {
+    let (env, callee_id, _caller_id) = setup_two_canisters(1_000_000);
+
+    let res = env
+        .execute_ingress(callee_id, "update", wasm().reply_data(b"ok").build())
+        .unwrap();
+    assert_matches!(res, WasmResult::Reply(_));
+}
+
+// Inter-canister calls with at least minimum_incoming_canister_call_cycles cycles must succeed.
+#[test]
+fn inter_canister_call_accepted_when_cycles_sufficient() {
+    let min_cycles: u128 = 1_000_000;
+    let (env, callee_id, caller_id) = setup_two_canisters(min_cycles);
+
+    let call_args = CallArgs::default()
+        .other_side(wasm().reply_data(b"ok").build())
+        .on_reply(wasm().reply_data(b"got reply").build())
+        .on_reject(wasm().reject_message().reject().build());
+    let res = env
+        .execute_ingress(
+            caller_id,
+            "update",
+            wasm()
+                .call_with_cycles(callee_id, "update", call_args, min_cycles)
+                .build(),
+        )
+        .unwrap();
+    assert_matches!(res, WasmResult::Reply(_));
+}
+
+// Inter-canister calls with fewer than minimum_incoming_canister_call_cycles cycles must be
+// rejected with CanisterError (the callee is not charged for this rejection).
+#[test]
+fn inter_canister_call_rejected_when_cycles_insufficient() {
+    let min_cycles: u128 = 1_000_000;
+    let (env, callee_id, caller_id) = setup_two_canisters(min_cycles);
+
+    let callee_balance_before = env.cycle_balance(callee_id);
+
+    let call_args = CallArgs::default()
+        .other_side(wasm().reply_data(b"ok").build())
+        .on_reply(wasm().reply_data(b"got reply").build())
+        .on_reject(wasm().reject_message().reject().build());
+    let res = env
+        .execute_ingress(
+            caller_id,
+            "update",
+            wasm()
+                .call_with_cycles(callee_id, "update", call_args, min_cycles - 1)
+                .build(),
+        )
+        .unwrap();
+    let reject_msg = match res {
+        WasmResult::Reject(msg) => msg,
+        other => panic!("Expected reject, got {:?}", other),
+    };
+    assert!(
+        reject_msg.contains("requires at least"),
+        "Unexpected reject message: {reject_msg}"
+    );
+    assert_eq!(env.cycle_balance(callee_id), callee_balance_before);
+}
+
+// Self-calls (same canister calling itself) must bypass minimum_incoming_canister_call_cycles,
+// even when the attached cycles are below the minimum.
+#[test]
+fn self_call_bypasses_minimum_incoming_canister_call_cycles() {
+    let min_cycles: u128 = 1_000_000;
+    let (env, callee_id, _caller_id) = setup_two_canisters(min_cycles);
+
+    // The callee calls itself with 0 cycles (below min_cycles); should succeed.
+    let call_args = CallArgs::default()
+        .other_side(wasm().reply_data(b"ok").build())
+        .on_reply(wasm().reply_data(b"got reply").build())
+        .on_reject(wasm().reject_message().reject().build());
+    let res = env
+        .execute_ingress(
+            callee_id,
+            "update",
+            wasm()
+                .call_with_cycles(callee_id, "update", call_args, 0_u128)
+                .build(),
+        )
+        .unwrap();
+    assert_matches!(res, WasmResult::Reply(_));
+}
+
+// Verifies that attached cycles can be partially consumed before a downstream call
+// and the rest consumed in the reply callback, even though the remaining amount is
+// below minimum_incoming_canister_call_cycles (which only gates incoming call admission).
+// DTS is triggered after each accept_cycles (via instruction_counter_is_at_least)
+// to ensure that minimum_incoming_canister_call_cycles is not re-enforced at slice boundaries.
+#[test]
+fn attached_cycles_consumed_in_update_and_reply_below_minimum_incoming_canister_call_cycles() {
+    const SLICE_INSTRUCTIONS: u64 = 1_000_000;
+    const T: u128 = 1_000_000_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(SLICE_INSTRUCTIONS)
+        .with_manual_execution()
+        .build();
+
+    let min_cycles: u128 = T;
+    let half_cycles: u128 = min_cycles / 2;
+
+    let callee_id = test
+        .universal_canister_with_cycles(Cycles::new(100_000 * T))
+        .unwrap();
+    let caller_id = test
+        .universal_canister_with_cycles(Cycles::new(100_000 * T))
+        .unwrap();
+    test.update_settings(
+        callee_id,
+        CanisterSettingsArgsBuilder::new()
+            .with_minimum_incoming_canister_call_cycles(min_cycles)
+            .build(),
+    )
+    .unwrap();
+    let initial_callee_balance = test.canister_state(callee_id).system_state.balance();
+
+    // Callee accepts half_cycles in the update handler, then makes a downstream
+    // call to caller_id. In the reply callback, the callee accepts the remaining
+    // min_cycles - half_cycles, which is below minimum_incoming_canister_call_cycles —
+    // reply callbacks are not subject to the minimum check.
+    // instruction_counter_is_at_least after each accept_cycles forces a DTS slice
+    // boundary to verify minimum_incoming_canister_call_cycles is not re-enforced on resume.
+    let callee_args = wasm()
+        .accept_cycles(half_cycles)
+        .instruction_counter_is_at_least(SLICE_INSTRUCTIONS)
+        .call_simple(
+            caller_id,
+            "update",
+            CallArgs::default()
+                .other_side(wasm().reply_data(b"ok").build())
+                .on_reply(
+                    wasm()
+                        .accept_cycles(min_cycles - half_cycles)
+                        .instruction_counter_is_at_least(SLICE_INSTRUCTIONS)
+                        .message_payload()
+                        .append_and_reply()
+                        .build(),
+                )
+                .on_reject(wasm().reject_message().reject().build()),
+        )
+        .build();
+    let call_args = CallArgs::default()
+        .other_side(callee_args)
+        .on_reply(wasm().message_payload().append_and_reply().build())
+        .on_reject(wasm().reject_message().reject().build());
+
+    let (ingress_id, _) = test.ingress_raw(
+        caller_id,
+        "update",
+        wasm()
+            .call_with_cycles(callee_id, "update", call_args, min_cycles)
+            .build(),
+    );
+
+    // Execute caller: sends call to callee with min_cycles attached.
+    test.execute_message(caller_id);
+    test.induct_messages();
+
+    // Execute callee update slice 1: accepts half_cycles, then
+    // instruction_counter_is_at_least exhausts the slice → DTS pause.
+    test.execute_slice(callee_id);
+    assert_eq!(
+        test.canister_state(callee_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Execute callee update slice 2: loop exits, sends downstream call to caller.
+    test.execute_slice(callee_id);
+    test.induct_messages();
+
+    // Execute caller: replies "ok" to callee.
+    test.execute_message(caller_id);
+    test.induct_messages();
+
+    // Execute callee reply callback slice 1: accepts remaining half_cycles, then
+    // instruction_counter_is_at_least exhausts the slice → DTS pause.
+    test.execute_slice(callee_id);
+    assert_eq!(
+        test.canister_state(callee_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Execute callee reply callback slice 2: loop exits, proxies response to caller.
+    test.execute_slice(callee_id);
+    test.induct_messages();
+
+    // Execute caller: proxies response to the ingress.
+    test.execute_message(caller_id);
+
+    assert_eq!(
+        get_reply(check_ingress_status(test.ingress_status(&ingress_id))),
+        b"ok"
+    );
+    // Fees (call/reply transmission, instructions) are small relative to min_cycles; assert
+    // the callee gained at least 99% of the transferred cycles.
+    let expected = (initial_callee_balance + Cycles::new(min_cycles)).get();
+    let actual = test.canister_state(callee_id).system_state.balance().get();
+    assert!(
+        actual <= expected && expected.saturating_sub(actual) <= expected / 100,
+        "cycle balance mismatch: got {actual}, expected ~{expected}"
+    );
 }

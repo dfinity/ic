@@ -1,4 +1,5 @@
 mod assembler;
+mod canister_http;
 mod download;
 mod metrics;
 mod stripper;

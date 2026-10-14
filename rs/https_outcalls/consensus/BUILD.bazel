@@ -19,6 +19,8 @@ rust_library(
         # Keep sorted.
         "//packages/ic-error-types",
         "//rs/consensus/utils",
+        "//rs/https_outcalls/pricing",
+        "//rs/https_outcalls/socks_proxy",
         "//rs/interfaces",
         "//rs/interfaces/adapter_client",
         "//rs/interfaces/registry",
@@ -32,12 +34,12 @@ rust_library(
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
-        "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:hex",
         "@crate_index//:prometheus",
+        "@crate_index//:prost",
         "@crate_index//:rand",
-        "@crate_index//:slog",
+        "@crate_index//:rayon",
     ],
 )
 
@@ -57,6 +59,8 @@ rust_test(
         "//rs/artifact_pool",
         "//rs/consensus/mocks",
         "//rs/consensus/utils",
+        "//rs/https_outcalls/pricing",
+        "//rs/https_outcalls/socks_proxy",
         "//rs/interfaces",
         "//rs/interfaces/adapter_client",
         "//rs/interfaces/mocks",
@@ -72,14 +76,13 @@ rust_test(
         "//rs/test_utilities",
         "//rs/test_utilities/consensus",
         "//rs/test_utilities/logger",
+        "//rs/test_utilities/metrics",
         "//rs/test_utilities/registry",
         "//rs/test_utilities/state",
-        "//rs/test_utilities/time",
         "//rs/test_utilities/types",
         "//rs/types/cycles",
         "//rs/types/management_canister_types",
         "//rs/types/types",
-        "//rs/utils",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:hex",
@@ -88,7 +91,6 @@ rust_test(
         "@crate_index//:proptest",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
-        "@crate_index//:slog",
     ],
 )
 
@@ -96,13 +98,18 @@ rust_bench(
     name = "payload_validation_bench",
     testonly = True,
     srcs = ["benches/payload_validation.rs"],
-    pin_cpu = True,
+    # The benchmark asserts that the payload it builds actually validates, so
+    # running it once (criterion's test mode) guards against the payload drifting
+    # out of sync with the validation rules.
+    test_name = "payload_validation_bench_test",
     deps = [
         # Keep sorted.
         ":consensus",
         "//rs/config",
         "//rs/consensus/mocks",
+        "//rs/consensus/utils",
         "//rs/crypto/temp_crypto",
+        "//rs/https_outcalls/pricing",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
@@ -113,6 +120,7 @@ rust_bench(
         "//rs/test_utilities/registry",
         "//rs/test_utilities/state",
         "//rs/test_utilities/types",
+        "//rs/types/cycles",
         "//rs/types/types",
         "@crate_index//:criterion",
     ],

@@ -12,19 +12,9 @@ use std::{collections::BTreeMap, convert::TryFrom};
 pub const CANISTER_IDS_PER_SUBNET: u64 = 1 << 20;
 
 pub fn canister_id_into_u64(canister_id: CanisterId) -> u64 {
-    const LENGTH: usize = std::mem::size_of::<u64>();
-    let principal_id = canister_id.get();
-    let bytes = principal_id.as_slice();
-    // the +2 accounts for the two sentinel bytes that are added to the end of
-    // the array
-    assert_eq!(
-        bytes.len(),
-        LENGTH + 2,
-        "canister_id: {canister_id}; raw {canister_id:?}"
-    );
-    let mut array = [0; LENGTH];
-    array[..LENGTH].copy_from_slice(&bytes[..LENGTH]);
-    u64::from_be_bytes(array)
+    canister_id
+        .as_u64()
+        .unwrap_or_else(|| panic!("canister_id: {canister_id}; raw {canister_id:?}"))
 }
 
 fn canister_id_into_u128(canister_id: CanisterId) -> u128 {
@@ -319,11 +309,25 @@ impl RoutingTable {
     }
 
     pub fn assign_canister(&mut self, canister_id: CanisterId, destination: SubnetId) {
-        let range = CanisterIdRange {
+        self.unassign_canister(canister_id);
+        self.0.insert(
+            CanisterIdRange {
+                start: canister_id,
+                end: canister_id,
+            },
+            destination,
+        );
+    }
+
+    /// Removes the assignment of `canister_id` to any subnet, splitting the
+    /// enclosing range if necessary.
+    ///
+    /// Complexity: O(log N)
+    pub fn unassign_canister(&mut self, canister_id: CanisterId) {
+        self.unassign_range(CanisterIdRange {
             start: canister_id,
             end: canister_id,
-        };
-        self.assign_range(range, destination);
+        });
     }
 
     /// Assigns a canister ID range to the destination subnet.
@@ -336,6 +340,15 @@ impl RoutingTable {
     ///
     /// Complexity: O(log N)
     fn assign_range(&mut self, range: CanisterIdRange, destination: SubnetId) {
+        self.unassign_range(range);
+        self.0.insert(range, destination);
+    }
+
+    /// Removes the assignment of a canister ID range from any subnet, splitting
+    /// ranges at the boundaries if necessary.
+    ///
+    /// Complexity: O(log N)
+    fn unassign_range(&mut self, range: CanisterIdRange) {
         fn make_range(start: u64, end: u64) -> CanisterIdRange {
             CanisterIdRange {
                 start: CanisterId::from(start),
@@ -413,7 +426,6 @@ impl RoutingTable {
         for (k, v) in to_add {
             self.0.insert(k, v);
         }
-        self.0.insert(range, destination);
     }
 
     /// Assigns canister ID ranges to the destination subnet.

@@ -13,7 +13,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-nervous-system-runtime = { path = "../runtime" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }
-num-bigint = "0.4"
+num-bigint = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

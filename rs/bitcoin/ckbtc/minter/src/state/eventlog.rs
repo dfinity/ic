@@ -496,7 +496,7 @@ impl EventLogger for CkBtcEventLogger {
                         None => {
                             return Err(ReplayLogError::InconsistentLog(format!(
                                 "Cannot replace a non-existent transaction {}",
-                                &old_txid
+                                old_txid
                             )));
                         }
                     };

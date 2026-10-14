@@ -77,6 +77,7 @@ pub fn get_some_proposal() -> MakeProposalRequest {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![]),
             skip_stopping_before_installing: None,
+            canister_upgrade_options: None,
         })),
     }
 }

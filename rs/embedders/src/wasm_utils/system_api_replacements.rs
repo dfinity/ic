@@ -18,7 +18,6 @@ use crate::{
 };
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_sys::PAGE_SIZE;
-use ic_types::NumInstructions;
 use wirm::{DataType, ir::types::Instructions, wasmparser::BlockType};
 
 use ic_types::NumBytes;
@@ -54,7 +53,6 @@ pub(super) fn replacement_functions(
     injected_functions: &InjectedFunctions,
     injected_counters: &InjectedCounters,
     stable_memory_index: u32,
-    dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
     max_wasm_memory_size: NumBytes,
 ) -> Vec<(SystemApiFunc, ReplacementFunction)> {
@@ -505,17 +503,6 @@ pub(super) fn replacement_functions(
                 make_body(
                     vec![(5, DataType::I32)], // src on bytemap, src + len on bytemap, accessed page cnt, mark bytemap iterator, should call first read api
                     vec![
-                        // Decrement instruction counter by the size of the copy
-                        // and fixed overhead.
-                        LocalGet { local_index: LEN },
-                        I64Const {
-                            value: overhead_native::STABLE64_READ.get() as i64,
-                        },
-                        I64Add,
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
                         // if size is 0 we return
                         // (correctness of the code that follows depends on the size being > 0)
                         // note that we won't return errors if addresses are out of bounds
@@ -599,6 +586,20 @@ pub(super) fn replacement_functions(
                             function_index: injected_functions.internal_trap,
                         },
                         End,
+                        // Decrement instruction counter by the size of the copy
+                        // and fixed overhead. This is done after the bounds
+                        // checks above so that `len` is known to fit in a heap
+                        // address, which guarantees `len + overhead` cannot
+                        // overflow or wrap to a negative i64.
+                        LocalGet { local_index: LEN },
+                        I64Const {
+                            value: overhead_native::STABLE64_READ.get() as i64,
+                        },
+                        I64Add,
+                        Call {
+                            function_index: decr_instruction_counter_fn,
+                        },
+                        Drop,
                         // src
                         LocalGet { local_index: SRC },
                         I64Const {
@@ -912,21 +913,6 @@ pub(super) fn replacement_functions(
                             function_index: injected_functions.internal_trap,
                         },
                         End,
-                        // Decrement instruction counter to charge for dirty pages
-                        LocalGet {
-                            local_index: DIRTY_PAGE_COUNT,
-                        },
-                        I64ExtendI32U,
-                        I64Const {
-                            value: dirty_page_overhead.get().try_into().unwrap(),
-                        },
-                        I64Mul,
-                        // Bounds check above should guarantee that we don't
-                        // overflow as the over head is a small constant.
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
                         // perform memory fill
                         LocalGet {
                             local_index: BYTEMAP_START,
@@ -995,17 +981,6 @@ pub(super) fn replacement_functions(
                 make_body(
                     vec![(4, DataType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt, accessed page cnt
                     vec![
-                        // Decrement instruction counter by the size of the copy
-                        // and fixed overhead.
-                        LocalGet { local_index: LEN },
-                        I64Const {
-                            value: overhead_native::STABLE64_WRITE.get() as i64,
-                        },
-                        I64Add,
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
                         // if size is 0 we return
                         // (correctness of the code that follows depends on the size being > 0)
                         // note that we won't return errors if addresses are out of bounds
@@ -1089,6 +1064,20 @@ pub(super) fn replacement_functions(
                             function_index: injected_functions.internal_trap,
                         },
                         End,
+                        // Decrement instruction counter by the size of the copy
+                        // and fixed overhead. This is done after the bounds
+                        // checks above so that `len` is known to fit in a heap
+                        // address, which guarantees `len + overhead` cannot
+                        // overflow or wrap to a negative i64.
+                        LocalGet { local_index: LEN },
+                        I64Const {
+                            value: overhead_native::STABLE64_WRITE.get() as i64,
+                        },
+                        I64Add,
+                        Call {
+                            function_index: decr_instruction_counter_fn,
+                        },
+                        Drop,
                         LocalGet { local_index: DST },
                         I64Const {
                             value: page_size_shift as i64,
@@ -1155,21 +1144,6 @@ pub(super) fn replacement_functions(
                             function_index: injected_functions.internal_trap,
                         },
                         End,
-                        // Decrement instruction counter to charge for dirty pages
-                        LocalGet {
-                            local_index: DIRTY_PAGE_COUNT,
-                        },
-                        I64ExtendI32U,
-                        I64Const {
-                            value: dirty_page_overhead.get().try_into().unwrap(),
-                        },
-                        I64Mul,
-                        // Bounds check above should guarantee that we don't
-                        // overflow as the over head is a small constant.
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
                         // perform memory fill
                         LocalGet {
                             local_index: BYTEMAP_START,

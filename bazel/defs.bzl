@@ -44,7 +44,9 @@ def _zstd_compress(ctx):
 
     ctx.actions.run(
         executable = ctx.file._zstd,
-        arguments = ["-q", "--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
+        # Higher --long setting produces compressed files that most zstd decompressors (e.g. zstd, tar or mc) won't
+        # decompress unless additional args are specified.
+        arguments = ["-q", "--threads=0", "--long=27", "-8", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
         inputs = ctx.files.srcs,
         outputs = [out],
         env = {"ZSTDMT_NBWORKERS_MAX": str(_COMPRESS_CONCURRENCY)},
@@ -86,16 +88,6 @@ def _mcopy(ctx):
     """
     out = ctx.actions.declare_file(ctx.label.name)
 
-    # //:mtools resolves to the mtools bundle (the mtools binary + an include
-    # dir); pick out the binary, which we drive as `mtools -c mcopy ...`.
-    mtools = None
-    for f in ctx.files._mtools:
-        if f.basename == "mtools":
-            mtools = f
-            break
-    if not mtools:
-        fail("could not locate mtools binary among //:mtools outputs")
-
     command = "cp -p {fs} {output} && chmod +w {output} ".format(fs = ctx.file.fs.path, output = out.path)
     inputs = []
     for srcs, dest in ctx.attr.srcmap.items():
@@ -106,8 +98,8 @@ def _mcopy(ctx):
                 dest_path = dest + src_file.basename
             else:
                 dest_path = dest
-            command += "&& {mtools} -c mcopy -mi {output} -sQ {src_path} ::/{dest} ".format(
-                mtools = mtools.path,
+            command += "&& {mcopy} -mi {output} -sQ {src_path} ::/{dest} ".format(
+                mcopy = ctx.file._mcopy.path,
                 output = out.path,
                 src_path = src_file.path,
                 dest = dest_path.removeprefix("/"),
@@ -115,7 +107,7 @@ def _mcopy(ctx):
 
     ctx.actions.run_shell(
         command = command,
-        inputs = inputs + [ctx.file.fs] + ctx.files._mtools,
+        inputs = inputs + [ctx.file.fs, ctx.file._mcopy],
         outputs = [out],
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
@@ -125,7 +117,7 @@ mcopy = rule(
     attrs = {
         "srcmap": attr.label_keyed_string_dict(allow_files = True),
         "fs": attr.label(allow_single_file = True),
-        "_mtools": attr.label(default = "//:mtools", cfg = "exec", allow_files = True),
+        "_mcopy": attr.label(default = "@mtools//:mcopy", cfg = "exec", allow_single_file = True),
     },
 )
 

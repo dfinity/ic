@@ -6,14 +6,18 @@ Goal:: Ensure that a node restarts and catches up after realizing a divergence o
 Runbook::
 . Set up one subnet
 . Make a node diverge
-. Wait until we see the newly started node's PID finalizing a block.
+. Wait until the restarted node reports healthy and its certified height has caught up with an honest node
+. Send update and query calls through the restarted node
 
-Success:: The restarted node reports block finalizations.
+Success:: The restarted node catches up and correctly serves update and query calls.
 
 
 end::catalog[] */
 
 use ic_agent::AgentError;
+use ic_consensus_system_test_utils::node::{
+    await_node_certified_height_async, get_node_certified_height_async,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
@@ -70,6 +74,11 @@ fn test(env: TestEnv) {
         .nodes()
         .find(|n| n.is_malicious())
         .expect("No malicious node found in the subnet.");
+    let honest_node = topology
+        .root_subnet()
+        .nodes()
+        .find(|n| !n.is_malicious())
+        .expect("No honest node found in the subnet.");
 
     let rt = tokio::runtime::Runtime::new().expect("could not create tokio runtime");
     rt.block_on({
@@ -135,6 +144,19 @@ fn test(env: TestEnv) {
                 .await
                 .expect("Node didn't report healthy");
 
+            // The faulty height could have landed between the canister creation and the code
+            // installation. In that case, the malicious node would restart on that CUP and reject
+            // calls with "Requested canister has no wasm module". By waiting for it to catch up
+            // with an honest node, we ensure the code is installed before issuing calls.
+            let target_height = get_node_certified_height_async(&honest_node, &log).await;
+            info!(
+                log,
+                "Waiting until the certified height of the restarted node {} exceeds {}...",
+                malicious_node.node_id,
+                target_height
+            );
+            await_node_certified_height_async(&malicious_node, target_height, &log).await;
+
             // For the same reason as before, if N = DKG_INTERVAL + 1, it's guaranteed
             // that a catch up package is proposed by the faulty node.
             for n in 0..(DKG_INTERVAL + 1) {
@@ -176,10 +198,7 @@ fn main() -> Result<()> {
         //  TODO(DSM-118): The replica may occasionally be started 3 times (instead of the usual 2) if
         // it crashes again briefly during the catch-up process after the divergence. Consider reducing
         // this number if the underlying issue has been resolved.
-        .update_orchestrator_metrics_to_check(
-            "orchestrator_replica_process_start_attempts_total",
-            3,
-        )
+        .update_orchestrator_metrics_to_check("orchestrator_processes_start_attempts_total", 3)
         // One of the nodes has a corrupted state which could cause a panic in the replica like:
         //   thread 'MR Batch Processor' (1588) panicked at rs/state_manager/src/lib.rs:1036:17:
         //   Unexpected sandbox state for canister ...

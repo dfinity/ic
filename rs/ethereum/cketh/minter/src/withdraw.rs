@@ -1,4 +1,9 @@
+#[cfg(test)]
+mod tests;
+
+use crate::eth_rpc::Hash;
 use crate::{
+    MAIN_DERIVATION_PATH,
     eth_logs::LedgerSubaccount,
     eth_rpc_client::{
         AnyOf, MIN_ATTACHED_CYCLES, MinByKey, MultiCallError, NoReduction, ToReducedWithStrategy,
@@ -6,17 +11,20 @@ use crate::{
     },
     guard::TimerGuard,
     logs::{DEBUG, INFO},
-    numeric::{GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount},
+    numeric::{GasAmount, LedgerMintIndex, TransactionCount},
+    runtime::CanisterRuntime,
     state::{
         State, TaskType,
         audit::{EventType, process_event},
         minter_address, mutate_state, read_state,
+        receipt_fetch::RoundOutcome,
         transactions::{
-            CreateTransactionError, Reimbursed, ReimbursementIndex, ReimbursementRequest,
-            WithdrawalRequest, create_transaction,
+            CreateTransactionError, PipelineRequest, Reimbursed, ReimbursementIndex,
+            ReimbursementRequest, SweepRequest, TransactionPipeline, WithdrawalRequest,
         },
     },
-    tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate},
+    time::TimeProvider,
+    tx::{GasFeeEstimate, SignableTransaction, Signed, lazy_refresh_gas_fee_estimate},
 };
 use candid::Nat;
 use evm_rpc_types::{
@@ -24,6 +32,7 @@ use evm_rpc_types::{
 };
 use futures::future::join_all;
 use ic_canister_log::log;
+use ic_ethereum_types::Address;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -43,7 +52,7 @@ const TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
 pub const CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
 pub const CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(65_000);
 
-pub async fn process_reimbursement() {
+pub async fn process_reimbursement<T: TimeProvider>(time_provider: &T) {
     let _guard = match TimerGuard::new(TaskType::Reimbursement) {
         Ok(guard) => guard,
         Err(e) => {
@@ -53,7 +62,7 @@ pub async fn process_reimbursement() {
     };
 
     let reimbursements: Vec<(ReimbursementIndex, ReimbursementRequest)> = read_state(|s| {
-        s.eth_transactions
+        s.withdrawal_transactions
             .reimbursement_requests_iter()
             .map(|(index, request)| (index.clone(), request.clone()))
             .collect()
@@ -68,7 +77,13 @@ pub async fn process_reimbursement() {
         // Ensure that even if we were to panic in the callback, after having contacted the ledger to mint the tokens,
         // this reimbursement request will not be processed again.
         let prevent_double_minting_guard = scopeguard::guard(index.clone(), |index| {
-            mutate_state(|s| process_event(s, EventType::QuarantinedReimbursement { index }));
+            mutate_state(|s| {
+                process_event(
+                    s,
+                    EventType::QuarantinedReimbursement { index },
+                    time_provider,
+                )
+            });
         });
         let ledger_canister_id = match index {
             ReimbursementIndex::CkEth { .. } => read_state(|s| s.cketh_ledger_id),
@@ -135,7 +150,7 @@ pub async fn process_reimbursement() {
                 reimbursed,
             },
         };
-        mutate_state(|s| process_event(s, event));
+        mutate_state(|s| process_event(s, event, time_provider));
         // minting succeeded, defuse guard
         ScopeGuard::into_inner(prevent_double_minting_guard);
     }
@@ -147,7 +162,7 @@ pub async fn process_reimbursement() {
     }
 }
 
-pub async fn process_retrieve_eth_requests() {
+pub async fn process_retrieve_eth_requests<R: CanisterRuntime>(runtime: R) {
     let _guard = match TimerGuard::new(TaskType::RetrieveEth) {
         Ok(guard) => guard,
         Err(e) => {
@@ -159,11 +174,11 @@ pub async fn process_retrieve_eth_requests() {
         }
     };
 
-    if read_state(|s| !s.eth_transactions.has_pending_requests()) {
+    if read_state(|s| !s.withdrawal_transactions.has_pending_requests()) {
         return;
     }
 
-    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate().await {
+    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate(&runtime).await {
         Some(gas_fee_estimate) => gas_fee_estimate,
         None => {
             log!(
@@ -174,24 +189,27 @@ pub async fn process_retrieve_eth_requests() {
         }
     };
 
-    let latest_transaction_count = latest_transaction_count().await;
-    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate).await;
-    create_transactions_batch(gas_fee_estimate);
-    sign_transactions_batch().await;
-    send_transactions_batch(latest_transaction_count).await;
-    finalize_transactions_batch().await;
+    let sender = minter_address(&runtime).await;
+    let latest_transaction_count = latest_transaction_count(sender).await;
+    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate, &runtime).await;
+    create_transactions_batch(gas_fee_estimate, &runtime);
+    sign_transactions_batch(&runtime).await;
+    send_transactions_batch(sender, latest_transaction_count).await;
+    finalize_transactions_batch(sender, &runtime).await;
 
-    if read_state(|s| s.eth_transactions.has_pending_requests()) {
+    if read_state(|s| s.withdrawal_transactions.has_pending_requests()) {
         ic_cdk_timers::set_timer(
             crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
-            async { process_retrieve_eth_requests().await },
+            async move { process_retrieve_eth_requests(runtime).await },
         );
     }
 }
 
-async fn latest_transaction_count() -> Option<TransactionCount> {
+/// The latest (unconfirmed) transaction count of `sender` on chain, used to gate resubmission and
+/// sending.
+pub(crate) async fn latest_transaction_count(sender: Address) -> Option<TransactionCount> {
     match read_state(rpc_client)
-        .get_transaction_count((minter_address().await.into_bytes(), BlockTag::Latest))
+        .get_transaction_count((sender.into_bytes(), BlockTag::Latest))
         .with_cycles(MIN_ATTACHED_CYCLES)
         .try_send()
         .await
@@ -200,16 +218,20 @@ async fn latest_transaction_count() -> Option<TransactionCount> {
     {
         Ok(transaction_count) => Some(transaction_count),
         Err(e) => {
-            log!(INFO, "Failed to get the latest transaction count: {e:?}");
+            log!(
+                INFO,
+                "Failed to get the latest transaction count of {sender}: {e:?}"
+            );
             None
         }
     }
 }
-async fn resubmit_transactions_batch(
+async fn resubmit_transactions_batch<T: TimeProvider>(
     latest_transaction_count: Option<TransactionCount>,
     gas_fee_estimate: &GasFeeEstimate,
+    time_provider: &T,
 ) {
-    if read_state(|s| s.eth_transactions.is_sent_tx_empty()) {
+    if read_state(|s| s.withdrawal_transactions.is_sent_tx_empty()) {
         return;
     }
     let latest_transaction_count = match latest_transaction_count {
@@ -219,7 +241,7 @@ async fn resubmit_transactions_batch(
         }
     };
     let transactions_to_resubmit = read_state(|s| {
-        s.eth_transactions
+        s.withdrawal_transactions
             .create_resubmit_transactions(latest_transaction_count, gas_fee_estimate.clone())
     });
     for result in transactions_to_resubmit {
@@ -236,6 +258,7 @@ async fn resubmit_transactions_batch(
                             withdrawal_id,
                             transaction,
                         },
+                        time_provider,
                     )
                 });
             }
@@ -246,17 +269,16 @@ async fn resubmit_transactions_batch(
     }
 }
 
-fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
+fn create_transactions_batch<T: TimeProvider>(gas_fee_estimate: GasFeeEstimate, time_provider: &T) {
     for request in read_state(|s| {
-        s.eth_transactions
-            .withdrawal_requests_batch(WITHDRAWAL_REQUESTS_BATCH_SIZE)
+        s.withdrawal_transactions
+            .requests_batch(WITHDRAWAL_REQUESTS_BATCH_SIZE)
     }) {
         log!(DEBUG, "[create_transactions_batch]: processing {request:?}",);
         let ethereum_network = read_state(State::ethereum_network);
-        let nonce = read_state(|s| s.eth_transactions.next_transaction_nonce());
+        let nonce = read_state(|s| s.withdrawal_transactions.next_transaction_nonce());
         let gas_limit = estimate_gas_limit(&request);
-        match create_transaction(
-            &request,
+        match request.create_transaction(
             nonce,
             gas_fee_estimate.clone(),
             gas_limit,
@@ -275,6 +297,7 @@ fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
                             withdrawal_id: request.cketh_ledger_burn_index(),
                             transaction,
                         },
+                        time_provider,
                     );
                 });
             }
@@ -287,7 +310,10 @@ fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
                     INFO,
                     "[create_transactions_batch]: Withdrawal request with burn index {ledger_burn_index} has insufficient amount {withdrawal_amount:?} to cover transaction fees: {max_transaction_fee:?}. Request moved back to end of queue."
                 );
-                mutate_state(|s| s.eth_transactions.reschedule_withdrawal_request(request));
+                mutate_state(|s| {
+                    s.withdrawal_transactions
+                        .reschedule_request(ledger_burn_index)
+                });
             }
         };
     }
@@ -295,21 +321,28 @@ fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
 
 pub fn estimate_gas_limit(withdrawal_request: &WithdrawalRequest) -> GasAmount {
     match withdrawal_request {
-        WithdrawalRequest::CkEth(_) => CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+        WithdrawalRequest::CkEth(_) | WithdrawalRequest::SweeperFunding(_) => {
+            CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT
+        }
         WithdrawalRequest::CkErc20(_) => CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
     }
 }
 
-async fn sign_transactions_batch() {
+async fn sign_transactions_batch<R: CanisterRuntime>(runtime: &R) {
     let transactions_batch: Vec<_> = read_state(|s| {
-        s.eth_transactions
+        s.withdrawal_transactions
             .transactions_to_sign_batch(TRANSACTIONS_TO_SIGN_BATCH_SIZE)
     });
     log!(DEBUG, "Signing transactions {transactions_batch:?}");
     let results = join_all(
         transactions_batch
             .into_iter()
-            .map(|(withdrawal_id, tx)| async move { (withdrawal_id, tx.sign().await) }),
+            .map(|(withdrawal_id, tx)| async move {
+                (
+                    withdrawal_id,
+                    crate::tx::sign(tx, MAIN_DERIVATION_PATH, runtime).await,
+                )
+            }),
     )
     .await;
     let mut errors = Vec::new();
@@ -322,6 +355,7 @@ async fn sign_transactions_batch() {
                         withdrawal_id,
                         transaction,
                     },
+                    runtime,
                 )
             }),
             Err(e) => errors.push(e),
@@ -337,7 +371,10 @@ async fn sign_transactions_batch() {
         log!(INFO, "Errors encountered during signing: {errors:?}");
     }
 }
-async fn send_transactions_batch(latest_transaction_count: Option<TransactionCount>) {
+async fn send_transactions_batch(
+    sender: Address,
+    latest_transaction_count: Option<TransactionCount>,
+) {
     let latest_transaction_count = match latest_transaction_count {
         Some(latest_transaction_count) => latest_transaction_count,
         None => {
@@ -345,14 +382,23 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
         }
     };
     let transactions_to_send: Vec<_> = read_state(|s| {
-        s.eth_transactions
+        s.withdrawal_transactions
             .transactions_to_send_batch(latest_transaction_count, TRANSACTIONS_TO_SEND_BATCH_SIZE)
     });
+    send_signed_transactions(sender, &transactions_to_send).await;
+}
 
+/// Broadcast already-signed transactions via the EVM RPC canister. Sender- and
+/// transaction-type-agnostic, so both the main-address withdrawal pipeline (type `0x02`) and the
+/// sweeper-address pipeline (type `0x02` or `0x04`) reuse it.
+pub(crate) async fn send_signed_transactions<T: SignableTransaction + std::fmt::Debug>(
+    sender: Address,
+    transactions_to_send: &[Signed<T>],
+) {
     let rpc_client = read_state(rpc_client);
     let results = join_all(transactions_to_send.iter().map(async |tx| {
         rpc_client
-            .send_raw_transaction(tx.raw_transaction_hex())
+            .send_raw_transaction(tx.raw_transaction_bytes())
             .with_cycles(MIN_ATTACHED_CYCLES)
             .try_send()
             .await
@@ -361,7 +407,10 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
     .await;
 
     for (signed_tx, result) in zip(transactions_to_send, results) {
-        log!(DEBUG, "Sent transaction {signed_tx:?}: {result:?}");
+        log!(
+            DEBUG,
+            "Sent transaction from {sender} {signed_tx:?}: {result:?}"
+        );
         match result {
             Ok(SendRawTransactionStatus::Ok(_)) | Ok(SendRawTransactionStatus::NonceTooLow) => {
                 // In case of resubmission we may hit the case of SendRawTransactionStatus::NonceTooLow
@@ -371,106 +420,230 @@ async fn send_transactions_batch(latest_transaction_count: Option<TransactionCou
             Ok(SendRawTransactionStatus::InsufficientFunds)
             | Ok(SendRawTransactionStatus::NonceTooHigh) => log!(
                 INFO,
-                "Failed to send transaction {signed_tx:?}: {result:?}. Will retry later.",
+                "Failed to send transaction from {sender} {signed_tx:?}: {result:?}. Will retry later.",
             ),
             Err(e) => {
                 log!(
                     INFO,
-                    "Failed to send transaction {signed_tx:?}: {e:?}. Will retry later."
+                    "Failed to send transaction from {sender} {signed_tx:?}: {e:?}. Will retry later."
                 )
             }
         };
     }
 }
 
-async fn finalize_transactions_batch() {
-    if read_state(|s| s.eth_transactions.is_sent_tx_empty()) {
+async fn finalize_transactions_batch<R: CanisterRuntime>(sender: Address, runtime: &R) {
+    if read_state(|s| s.withdrawal_transactions.is_sent_tx_empty()) {
         return;
     }
 
-    match finalized_transaction_count().await {
-        Ok(finalized_tx_count) => {
-            let txs_to_finalize = read_state(|s| {
-                s.eth_transactions
-                    .sent_transactions_to_finalize(&finalized_tx_count)
-            });
-            let expected_finalized_withdrawal_ids: BTreeSet<_> =
-                txs_to_finalize.values().cloned().collect();
-            let rpc_client = read_state(rpc_client);
-            let results = join_all(txs_to_finalize.keys().map(async |hash| {
-                rpc_client
-                    .get_transaction_receipt(*hash)
-                    .with_cycles(MIN_ATTACHED_CYCLES)
-                    .try_send()
-                    .await
-                    .reduce_with_strategy(NoReduction)
-            }))
-            .await;
-            let mut receipts: BTreeMap<LedgerBurnIndex, EvmTransactionReceipt> = BTreeMap::new();
-            for ((hash, withdrawal_id), result) in zip(txs_to_finalize, results) {
-                match result {
-                    Ok(Some(receipt)) => {
-                        log!(
-                            DEBUG,
-                            "Received transaction receipt {receipt:?} for transaction {hash} and withdrawal ID {withdrawal_id}"
-                        );
-                        match receipts.get(&withdrawal_id) {
-                            // by construction we never query twice the same transaction hash, which is a field in TransactionReceipt.
-                            Some(existing_receipt) => {
-                                log!(
-                                    INFO,
-                                    "ERROR: received different receipts for transaction {hash} with withdrawal ID {withdrawal_id}: {existing_receipt:?} and {receipt:?}. Will retry later"
-                                );
-                                return;
-                            }
-                            None => {
-                                receipts.insert(withdrawal_id, receipt);
-                            }
-                        }
-                    }
-                    Ok(None) => {
-                        log!(
-                            DEBUG,
-                            "Transaction {hash} for withdrawal ID {withdrawal_id} was not mined, it's probably a resubmitted transaction",
-                        )
-                    }
-                    Err(e) => {
-                        log!(
-                            INFO,
-                            "Failed to get transaction receipt for {hash} and withdrawal ID {withdrawal_id}: {e:?}. Will retry later",
-                        );
-                        return;
-                    }
-                }
-            }
-            let actual_finalized_withdrawal_ids: BTreeSet<_> = receipts.keys().cloned().collect();
-            assert_eq!(
-                expected_finalized_withdrawal_ids, actual_finalized_withdrawal_ids,
-                "ERROR: unexpected transaction receipts for some withdrawal IDs"
-            );
-            for (withdrawal_id, transaction_receipt) in receipts {
-                mutate_state(|s| {
-                    process_event(
-                        s,
-                        EventType::FinalizedTransaction {
-                            withdrawal_id,
-                            transaction_receipt: transaction_receipt.into(),
-                        },
-                    );
-                });
-            }
-        }
+    let receipts = fetch_receipts_for_round::<WithdrawalRequest, _>(sender, runtime).await;
 
-        Err(e) => {
-            log!(INFO, "Failed to get finalized transaction count: {e:?}");
-        }
+    for (withdrawal_id, transaction_receipt) in receipts {
+        mutate_state(|s| {
+            process_event(
+                s,
+                EventType::FinalizedTransaction {
+                    withdrawal_id,
+                    transaction_receipt: transaction_receipt.into(),
+                },
+                runtime,
+            );
+        });
     }
 }
 
-async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallError<TransactionCount>>
+/// A pipeline the finalization round can drive: it says where in [`State`] the pipeline lives and
+/// which task's logs the round writes under.
+pub(crate) trait RoundPipeline: PipelineRequest + Sized {
+    /// The log prefix of the task driving this pipeline.
+    const TASK_NAME: &'static str;
+
+    fn pipeline(state: &mut State) -> &mut TransactionPipeline<Self>;
+}
+
+impl RoundPipeline for WithdrawalRequest {
+    const TASK_NAME: &'static str = "finalize_transactions_batch";
+
+    fn pipeline(state: &mut State) -> &mut TransactionPipeline<Self> {
+        state.withdrawal_transactions.pipeline_mut()
+    }
+}
+
+impl RoundPipeline for SweepRequest {
+    const TASK_NAME: &'static str = "process_sweeper_transactions";
+
+    fn pipeline(state: &mut State) -> &mut TransactionPipeline<Self> {
+        state.automatic_deposits.sweeper_pipeline_mut()
+    }
+}
+
+/// One round of a pipeline's receipt fetch, bounded by that pipeline's window. Both pipelines
+/// reuse it: naming one of them picks its ids, so a round can never pair them up.
+pub(crate) async fn fetch_receipts_for_round<Req, R>(
+    sender: Address,
+    runtime: &R,
+) -> BTreeMap<Req::Id, EvmTransactionReceipt>
+where
+    Req: RoundPipeline + Clone + Eq + std::fmt::Debug,
+    Req::Transaction: Clone + Eq + std::fmt::Debug,
+    R: CanisterRuntime,
 {
-    read_state(rpc_client)
-        .get_transaction_count((minter_address().await.into_bytes(), BlockTag::Finalized))
+    let context = Req::TASK_NAME;
+    let skipped = mutate_state(|s| {
+        let window = Req::pipeline(s).receipt_fetch_mut();
+        if !window.should_skip_round() {
+            return None;
+        }
+        window.record_round_without_chain_read();
+        Some(window.rounds_since_chain_read())
+    });
+    if let Some(rounds_since_chain_read) = skipped {
+        log!(
+            INFO,
+            "[{context}]: SKIPPING: the last {rounds_since_chain_read} rounds could not read the \
+             chain to fetch a single receipt"
+        );
+        return BTreeMap::new();
+    }
+
+    let finalized_tx_count = match finalized_transaction_count(sender, runtime).await {
+        Ok(finalized_tx_count) => finalized_tx_count,
+        Err(e) => {
+            log!(
+                INFO,
+                "[{context}]: failed to get the finalized transaction count of {sender}: {e:?}"
+            );
+            mutate_state(|s| {
+                Req::pipeline(s)
+                    .receipt_fetch_mut()
+                    .record_round_without_chain_read()
+            });
+            return BTreeMap::new();
+        }
+    };
+
+    let txs_to_finalize =
+        mutate_state(|s| Req::pipeline(s).select_receipt_fetch_round(&finalized_tx_count));
+    if txs_to_finalize.is_empty() {
+        mutate_state(|s| {
+            Req::pipeline(s)
+                .receipt_fetch_mut()
+                .record_round(RoundOutcome::default())
+        });
+        return BTreeMap::new();
+    }
+
+    let (receipts, outcome) = fetch_finalized_receipts(txs_to_finalize, runtime).await;
+    mutate_state(|s| Req::pipeline(s).receipt_fetch_mut().record_round(outcome));
+    receipts
+}
+
+type ReceiptResult =
+    Result<Option<EvmTransactionReceipt>, MultiCallError<Option<EvmTransactionReceipt>>>;
+
+/// What one receipt lookup of a round asked and what it answered, so the id a result belongs to
+/// travels with it rather than being recovered by position afterwards.
+struct ReceiptLookup<Id> {
+    hash: Hash,
+    id: Id,
+    result: ReceiptResult,
+}
+
+async fn fetch_finalized_receipts<Id: Copy + Ord + std::fmt::Debug, R: CanisterRuntime>(
+    txs_to_finalize: BTreeMap<Hash, Id>,
+    runtime: &R,
+) -> (BTreeMap<Id, EvmTransactionReceipt>, RoundOutcome) {
+    let rpc_client = runtime.evm_rpc_client();
+    let lookups = join_all(txs_to_finalize.into_iter().map(|(hash, id)| {
+        let rpc_client = &rpc_client;
+        async move {
+            let result = rpc_client
+                .get_transaction_receipt(hash)
+                .with_cycles(MIN_ATTACHED_CYCLES)
+                .try_send()
+                .await
+                .reduce_with_strategy(NoReduction);
+            ReceiptLookup { hash, id, result }
+        }
+    }))
+    .await;
+    collect_finalized_receipts(lookups)
+}
+
+fn collect_finalized_receipts<Id: Copy + Ord + std::fmt::Debug>(
+    lookups: Vec<ReceiptLookup<Id>>,
+) -> (BTreeMap<Id, EvmTransactionReceipt>, RoundOutcome) {
+    let expected_finalized_ids: BTreeSet<Id> = lookups.iter().map(|lookup| lookup.id).collect();
+    let mut outcome = RoundOutcome::default();
+    let mut receipts: BTreeMap<Id, EvmTransactionReceipt> = BTreeMap::new();
+    let mut unanswered: BTreeSet<Id> = BTreeSet::new();
+    for ReceiptLookup { hash, id, result } in lookups {
+        match result {
+            Ok(Some(receipt)) => {
+                log!(
+                    DEBUG,
+                    "Received transaction receipt {receipt:?} for transaction {hash} and id {id:?}"
+                );
+                outcome.record_receipt();
+                match receipts.get(&id) {
+                    // by construction we never query twice the same transaction hash, which is a field in TransactionReceipt.
+                    Some(existing_receipt) => {
+                        log!(
+                            INFO,
+                            "ERROR: received different receipts for transaction {hash} with id {id:?}: {existing_receipt:?} and {receipt:?}. Will retry later"
+                        );
+                        outcome.abandon();
+                    }
+                    None => {
+                        receipts.insert(id, receipt);
+                    }
+                }
+            }
+            Ok(None) => {
+                outcome.record_not_mined();
+                log!(
+                    DEBUG,
+                    "Transaction {hash} for id {id:?} was not mined, it's probably a resubmitted transaction",
+                )
+            }
+            Err(e) => {
+                outcome.record_failure();
+                unanswered.insert(id);
+                log!(
+                    INFO,
+                    "Failed to get transaction receipt for {hash} and id {id:?}: {e:?}. Will retry later",
+                );
+            }
+        }
+    }
+    // The ids of an abandoned round were answered and thrown away, not left unanswered.
+    if outcome.is_abandoned() {
+        return (BTreeMap::new(), outcome);
+    }
+    // A selected id's nonce is below the finalized transaction count, so one of its transactions
+    // must have a receipt: none having one means the chain, the providers or our own bookkeeping is
+    // wrong. Logged and left pending rather than trapped, which would take the whole minter down.
+    // An id a provider failed to answer is not one of these: it was logged as a failure above.
+    for id in expected_finalized_ids
+        .iter()
+        .filter(|id| !receipts.contains_key(id) && !unanswered.contains(id))
+    {
+        log!(
+            INFO,
+            "No transaction receipt for any of the transactions of id {id:?}: leaving it pending",
+        );
+    }
+    (receipts, outcome)
+}
+
+pub(crate) async fn finalized_transaction_count<R: CanisterRuntime>(
+    sender: Address,
+    runtime: &R,
+) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
+    runtime
+        .evm_rpc_client()
+        .get_transaction_count((sender.into_bytes(), BlockTag::Finalized))
         .with_cycles(MIN_ATTACHED_CYCLES)
         .try_send()
         .await

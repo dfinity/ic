@@ -13,7 +13,7 @@ pub struct QueryStats {
     #[prost(message, repeated, tag = "3")]
     pub empty_epochs: ::prost::alloc::vec::Vec<EmptyEpochEntry>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct QueryStatsInner {
     #[prost(message, optional, tag = "1")]
     pub proposer: ::core::option::Option<super::super::super::types::v1::NodeId>,
@@ -30,7 +30,7 @@ pub struct QueryStatsInner {
     #[prost(uint64, tag = "6")]
     pub egress_payload_size: u64,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct EmptyEpochEntry {
     #[prost(message, optional, tag = "1")]
     pub proposer: ::core::option::Option<super::super::super::types::v1::NodeId>,

@@ -7,11 +7,11 @@ mod tests {
     mod computation;
 }
 
-use super::CheckpointError;
 use crate::{
     BundledManifest, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-    CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED, LABEL_VALUE_HASHED_AND_COMPARED,
-    LABEL_VALUE_REUSED, ManifestMetrics, NUMBER_OF_CHECKPOINT_THREADS,
+    CRITICAL_ERROR_REUSED_CHUNK_HASH, CheckpointError, LABEL_VALUE_HASHED,
+    LABEL_VALUE_HASHED_AND_COMPARED, LABEL_VALUE_REUSED, ManifestMetrics,
+    NUMBER_OF_CHECKPOINT_THREADS,
     manifest::hash::{meta_manifest_hasher, sub_manifest_hasher},
     state_sync::types::{
         ChunkInfo, DEFAULT_CHUNK_SIZE, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
@@ -33,6 +33,7 @@ use ic_utils::thread::parallel_map;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::ffi::OsStr;
 use std::fmt;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -630,24 +631,31 @@ fn file_with_size_or_dir(
             "Checkpoints must not contain special files, found one at {}",
             absolute_path.display()
         );
-        Ok(FileWithSizeOrDir::Dir(
-            absolute_path
-                .read_dir()
-                .map_err(|io_err| CheckpointError::IoError {
-                    path: absolute_path.clone(),
-                    message: "failed to read dir".to_string(),
-                    io_err: io_err.to_string(),
-                })?
-                .map(|entry_result| {
-                    let entry = entry_result.map_err(|io_err| CheckpointError::IoError {
-                        path: absolute_path.clone(),
-                        message: "failed to read dir entry".to_string(),
-                        io_err: io_err.to_string(),
-                    })?;
-                    Ok(relative_path.join(entry.file_name()))
-                })
-                .collect::<Result<Vec<_>, CheckpointError>>()?,
-        ))
+        let unverified_checkpoint_marker = OsStr::new(UNVERIFIED_CHECKPOINT_MARKER);
+        let state_sync_checkpoint_marker = OsStr::new(STATE_SYNC_CHECKPOINT_MARKER);
+        let mut children = Vec::new();
+        for entry_result in absolute_path
+            .read_dir()
+            .map_err(|io_err| CheckpointError::IoError {
+                path: absolute_path.clone(),
+                message: "failed to read dir".to_string(),
+                io_err: io_err.to_string(),
+            })?
+        {
+            let entry = entry_result.map_err(|io_err| CheckpointError::IoError {
+                path: absolute_path.clone(),
+                message: "failed to read dir entry".to_string(),
+                io_err: io_err.to_string(),
+            })?;
+            let name = entry.file_name();
+            // Skip checkpoint marker files, they are never part of a manifest. Skipping
+            // them by name avoids both including them and racing their removal.
+            if name == unverified_checkpoint_marker || name == state_sync_checkpoint_marker {
+                continue;
+            }
+            children.push(relative_path.join(name));
+        }
+        Ok(FileWithSizeOrDir::Dir(children))
     }
 }
 
@@ -866,36 +874,21 @@ pub fn compute_manifest(
     opt_base_manifest_info: Option<&BaseManifestInfo>,
     rehash: RehashManifest,
 ) -> Result<Manifest, CheckpointError> {
-    let mut markers_to_exclude = HashSet::new();
-    if !checkpoint.is_checkpoint_verified() {
-        markers_to_exclude.insert(checkpoint.unverified_checkpoint_marker());
-    }
-    if checkpoint.is_unverified_state_sync_checkpoint() {
-        markers_to_exclude.insert(checkpoint.state_sync_checkpoint_marker());
-    }
-
-    let mut files = {
+    let files = {
         let mut files = files_with_sizes(checkpoint.raw_path(), "".into(), thread_pool)?;
         // We sort the table to make sure that the table is the same on all replicas
         files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
         files
     };
 
-    // Normally `markers_to_exclude` should be empty:
-    // - Unverified markers should be removed before manifest computation
-    // - State sync checkpoints should already have manifests
-    //
-    // However, tests and external tools may compute manifests for unverified checkpoints.
-    // In that case, we exclude marker files from the manifest computation to avoid including them.
-    if !markers_to_exclude.is_empty() {
-        files.retain(|FileWithSize(p, _)| {
-            !markers_to_exclude.contains(&checkpoint.raw_path().join(p))
-        });
-        assert!(!files.iter().any(
-            |FileWithSize(p, _)| p.ends_with(UNVERIFIED_CHECKPOINT_MARKER)
-                || p.ends_with(STATE_SYNC_CHECKPOINT_MARKER)
-        ));
-    }
+    // Marker files are never part of a manifest. `files_with_sizes` skips them
+    // during the directory walk, which — since manifest computation may run
+    // concurrently with checkpoint finalization (which removes the unverified
+    // marker) — also avoids racing their removal. Both verified and unverified
+    // checkpoints are handled uniformly.
+    debug_assert!(!files.iter().any(|FileWithSize(p, _)| {
+        p.ends_with(UNVERIFIED_CHECKPOINT_MARKER) || p.ends_with(STATE_SYNC_CHECKPOINT_MARKER)
+    }));
 
     let chunk_actions = match opt_base_manifest_info {
         Some(base_manifest_info) => {

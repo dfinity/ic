@@ -46,6 +46,8 @@ pub use internal::TimeProvider;
 /// * [`RequestValidationError::CanisterNotInDelegationTargets`]: if the request targets a canister
 ///   that is not authorized in one of the delegations.
 /// * [`RequestValidationError::InvalidSenderInfo`]: if sender info is provided but invalid.
+/// * [`RequestValidationError::UpdateCallNotPermittedByDelegation`]: if the request is submitted
+///   to `/call` (an update call or replicated query) but a delegation restricts the sender to query calls.
 pub trait HttpRequestVerifier<C> {
     fn validate_request(&self, request: &HttpRequest<C>) -> Result<(), RequestValidationError>;
 }
@@ -65,6 +67,7 @@ pub enum RequestValidationError {
     PathTooLongError { length: usize, maximum: usize },
     NonceTooBigError { num_bytes: usize, maximum: usize },
     InvalidSenderInfo(String),
+    UpdateCallNotPermittedByDelegation,
 }
 
 impl Display for RequestValidationError {
@@ -111,6 +114,13 @@ impl Display for RequestValidationError {
             ),
             RequestValidationError::InvalidSenderInfo(msg) => {
                 write!(f, "Invalid sender info: {msg}")
+            }
+            RequestValidationError::UpdateCallNotPermittedByDelegation => {
+                write!(
+                    f,
+                    "Update calls are not permitted: a delegation restricts \
+                     the sender to query calls (permissions = \"queries\")"
+                )
             }
         }
     }

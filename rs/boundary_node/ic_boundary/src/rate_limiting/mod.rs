@@ -4,7 +4,7 @@ use anyhow::bail;
 use axum::Router;
 use candid::Principal;
 use http::request::Request;
-use ic_bn_lib_common::types::http::ConnInfo;
+use ic_bn_lib::http::server::conn::ConnInfo;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
 use tower::ServiceBuilder;
@@ -76,9 +76,7 @@ impl RateLimit {
             .finish()
             .unwrap();
 
-        router.layer(ServiceBuilder::new().layer(GovernorLayer {
-            config: Arc::new(governor_conf),
-        }))
+        router.layer(ServiceBuilder::new().layer(GovernorLayer::new(Arc::new(governor_conf))))
     }
 
     /// Allow requests_per_second requests per subnet
@@ -94,9 +92,7 @@ impl RateLimit {
             .finish()
             .unwrap();
 
-        router.layer(ServiceBuilder::new().layer(GovernorLayer {
-            config: Arc::new(governor_conf),
-        }))
+        router.layer(ServiceBuilder::new().layer(GovernorLayer::new(Arc::new(governor_conf))))
     }
 }
 
@@ -119,7 +115,7 @@ mod test {
         routing::method_routing::post,
     };
     use http::StatusCode;
-    use ic_bn_lib_common::{principal, types::http::ConnInfo};
+    use ic_bn_lib::{http::server::conn::ConnInfo, principal};
     use ic_types::{
         CanisterId,
         messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},

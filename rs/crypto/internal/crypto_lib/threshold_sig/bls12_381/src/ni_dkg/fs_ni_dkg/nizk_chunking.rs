@@ -295,9 +295,8 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     let xpowers = Scalar::xpowers(&second_challenge, NUM_ZK_REPETITIONS);
 
     let mut z_r = Vec::with_capacity(first_challenge.len());
-    let mut delta_idx = 1;
 
-    for e_i in first_challenge.iter() {
+    for (delta_idx, e_i) in (1_usize..).zip(first_challenge.iter()) {
         let mut xpow_e_ij = Vec::with_capacity(e_i.len());
         for j in 0..e_i.len() {
             xpow_e_ij.push(Scalar::muln_usize_vartime(&xpowers, &e_i[j]));
@@ -306,8 +305,6 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
         let z_rk = Scalar::muln_vartime(&witness.scalars_r, &xpow_e_ij) + &delta[delta_idx];
 
         z_r.push(z_rk);
-
-        delta_idx += 1;
     }
 
     let z_beta = Scalar::muln_vartime(&beta, &xpowers) + &delta[0];

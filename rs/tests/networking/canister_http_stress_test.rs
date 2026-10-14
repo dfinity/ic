@@ -3,7 +3,7 @@ Title:: Stress test for the http_requests feature
 
 Goal:: Measure the qps of http_requests originating from one canister. The test should be run with the following command:
 ```
-ict test //rs/tests/networking:canister_http_stress_test -- --test_tmpdir=./canister_http_stress_test
+bazel test //rs/tests/networking:canister_http_stress_test_farm --test_tmpdir=./canister_http_stress_test
 ```
 
 Runbook::
@@ -21,7 +21,6 @@ Success::
 2. The results are written to a json file (in benchmark/benchmark.json).
 
 end::catalog[] */
-#![allow(deprecated)]
 
 use std::time::Duration;
 
@@ -31,7 +30,6 @@ use anyhow::bail;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
-use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::IcNodeContainer;
@@ -43,7 +41,9 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_types_cycles::Cycles;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
-use proxy_canister::{RemoteHttpRequest, RemoteHttpStressRequest, RemoteHttpStressResponse};
+use proxy_canister::{
+    RejectionCode, RemoteHttpRequest, RemoteHttpStressRequest, RemoteHttpStressResponse,
+};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 
@@ -64,6 +64,8 @@ fn main() -> Result<()> {
         .add_test(systest!(test))
         // This test takes consistently around 20 mintues, so setting 30 minutes to be safe.
         .with_timeout_per_test(Duration::from_secs(30 * 60))
+        // Floods the adapter on purpose, so a full adapter queue is expected here.
+        .remove_metrics_to_check("canister_http_pool_manager_errors")
         .execute_from_args()?;
 
     Ok(())

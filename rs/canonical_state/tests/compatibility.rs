@@ -477,7 +477,7 @@ lazy_static! {
         VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "SubnetMetricsV15",
-            |v| SubnetMetricsV21::proxy_encode(v),
+            |(metrics, version)| SubnetMetricsV21::proxy_encode((metrics, version)),
             |_v| unimplemented!(),
         ),
     ];

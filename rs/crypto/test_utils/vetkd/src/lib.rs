@@ -3,6 +3,7 @@ use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_bls12_381_vetkd::{
     DerivationContext, EncryptedKey, EncryptedKeyShare, TransportPublicKey,
 };
+use ic_types::consensus::idkg::common::RequestId;
 use ic_types::crypto::vetkd::VetKdArgs;
 use ic_types::crypto::{threshold_sig::ni_dkg::NiDkgId, vetkd::VetKdDerivationContextRef};
 use rand_chacha::rand_core::SeedableRng;
@@ -74,6 +75,7 @@ impl PrivateKey {
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct VetKdArgsOwned {
     pub ni_dkg_id: NiDkgId,
+    pub request_id: RequestId,
     pub input: Vec<u8>,
     pub caller: PrincipalId,
     pub context: Vec<u8>,
@@ -84,6 +86,7 @@ impl VetKdArgsOwned {
     pub fn as_ref<'a>(&'a self) -> VetKdArgs<'a> {
         VetKdArgs {
             ni_dkg_id: &self.ni_dkg_id,
+            request_id: self.request_id,
             input: &self.input,
             context: VetKdDerivationContextRef {
                 caller: &self.caller,

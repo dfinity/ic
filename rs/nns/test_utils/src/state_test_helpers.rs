@@ -1292,6 +1292,7 @@ pub fn nns_propose_upgrade_nns_canister(
             wasm_module: Some(wasm_module),
             arg: Some(module_arg),
             skip_stopping_before_installing: None,
+            canister_upgrade_options: None,
         })),
         ..Default::default()
     };
@@ -1810,9 +1811,7 @@ pub fn list_all_neurons_and_combine_responses(
         new_request.page_number = Some(page);
         let mut new_response = list_neurons(state_machine, sender, new_request);
         response.full_neurons.append(&mut new_response.full_neurons);
-        response
-            .neuron_infos
-            .extend(new_response.neuron_infos.into_iter());
+        response.neuron_infos.extend(new_response.neuron_infos);
     }
 
     response

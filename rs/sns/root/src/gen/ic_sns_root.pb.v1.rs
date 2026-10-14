@@ -3,7 +3,7 @@
 ///
 /// When canister_init is called in the SNS root canister, it is expected that a
 /// serialized version of this was passed via ic_management_canister_types_private::InstallCodeArgs::args,
-/// which can be retrieved by the canister via ic_cdk::api::call::arg_data().
+/// which can be retrieved by the canister via ic_cdk::api::msg_arg_data().
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -58,6 +58,8 @@ pub struct SnsRootCanister {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct RegisterExtensionRequest {
@@ -70,6 +72,8 @@ pub struct RegisterExtensionRequest {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct RegisterExtensionResponse {
@@ -85,6 +89,8 @@ pub mod register_extension_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Ok {}
@@ -94,6 +100,8 @@ pub mod register_extension_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Result {
@@ -109,6 +117,8 @@ pub mod register_extension_response {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct CleanUpFailedRegisterExtensionRequest {
@@ -121,6 +131,8 @@ pub struct CleanUpFailedRegisterExtensionRequest {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct CleanUpFailedRegisterExtensionResponse {
@@ -139,6 +151,8 @@ pub mod clean_up_failed_register_extension_response {
         Clone,
         Copy,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct Ok {}
@@ -148,6 +162,8 @@ pub mod clean_up_failed_register_extension_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Oneof,
     )]
     pub enum Result {
@@ -163,6 +179,8 @@ pub mod clean_up_failed_register_extension_response {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct RegisterDappCanisterRequest {
@@ -176,6 +194,8 @@ pub struct RegisterDappCanisterRequest {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct RegisterDappCanisterResponse {}
@@ -200,6 +220,8 @@ pub struct RegisterDappCanistersRequest {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct RegisterDappCanistersResponse {}
@@ -254,6 +276,8 @@ pub mod set_dapp_controllers_response {
         comparable::Comparable,
         Clone,
         PartialEq,
+        Eq,
+        Hash,
         ::prost::Message,
     )]
     pub struct FailedUpdate {
@@ -269,6 +293,8 @@ pub mod set_dapp_controllers_response {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct CanisterCallError {
@@ -289,6 +315,8 @@ pub struct CanisterCallError {
     Clone,
     Copy,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ListSnsCanistersRequest {}
@@ -367,6 +395,8 @@ pub struct ManageDappCanisterSettingsRequest {
     comparable::Comparable,
     Clone,
     PartialEq,
+    Eq,
+    Hash,
     ::prost::Message,
 )]
 pub struct ManageDappCanisterSettingsResponse {

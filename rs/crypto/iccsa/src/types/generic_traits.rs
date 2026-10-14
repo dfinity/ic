@@ -1,6 +1,7 @@
 //! Generic traits for basic_sig iccsa types.
 
 use super::*;
+use base64::prelude::*;
 
 use std::fmt;
 
@@ -9,13 +10,21 @@ mod tests;
 
 impl fmt::Debug for SignatureBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SignatureBytes({:?})", base64::encode(&self.0[..]))
+        write!(
+            f,
+            "SignatureBytes({:?})",
+            BASE64_STANDARD.encode(&self.0[..])
+        )
     }
 }
 
 impl fmt::Debug for PublicKeyBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "PublicKeyBytes({:?})", base64::encode(&self.0[..]))
+        write!(
+            f,
+            "PublicKeyBytes({:?})",
+            BASE64_STANDARD.encode(&self.0[..])
+        )
     }
 }
 
@@ -25,7 +34,7 @@ impl fmt::Debug for PublicKey {
             f,
             "PublicKey{{ signing_canister_id: {:?}, seed: {} }}",
             self.signing_canister_id,
-            base64::encode(&self.seed[..])
+            BASE64_STANDARD.encode(&self.seed[..])
         )
     }
 }

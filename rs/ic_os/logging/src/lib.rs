@@ -5,7 +5,7 @@ use std::path::Path;
 use tracing::{Event, Level, Subscriber};
 use tracing_subscriber::{
     Layer,
-    filter::LevelFilter,
+    filter::EnvFilter,
     fmt::{
         FmtContext,
         format::{FormatEvent, FormatFields, Writer},
@@ -73,20 +73,21 @@ pub fn init_logging() {
 
 /// Initialize tracing, using journald+stderr if journald is available and falling back to just stderr.
 pub fn init_logging_with_level(max_level: Level) {
-    let level_filter = LevelFilter::from_level(max_level);
+    // `per_thread_mutex` (pulled in by libcryptsetup-rs) logs on every libcryptsetup call.
+    let filter = EnvFilter::new(format!("{max_level},per_thread_mutex=off"));
 
     match tracing_journald::layer() {
         Ok(layer) => tracing_subscriber::registry()
-            .with(layer.with_filter(level_filter))
+            .with(layer.with_filter(filter.clone()))
             .with(
                 tracing_subscriber::fmt::layer()
                     .with_writer(std::io::stderr)
-                    .with_filter(level_filter),
+                    .with_filter(filter),
             )
             .init(),
         Err(_) => tracing_subscriber::fmt()
             .with_writer(std::io::stderr)
-            .with_max_level(level_filter)
+            .with_env_filter(filter)
             .init(),
     }
 }

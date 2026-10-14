@@ -72,7 +72,7 @@ fn test(env: TestEnv) {
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
-                    "{} request sent with {} cycles, but {} cycles are required.",
+                    "call rejected: 4 - {} request sent with {} cycles, but {} cycles are required.",
                     method_name,
                     scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1_u64),
                     scale_cycles(ECDSA_SIGNATURE_FEE),

@@ -21,7 +21,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail, ensure};
 use async_trait::async_trait;
-use config_types::DeploymentEnvironment;
+use config_types::{DeploymentEnvironment, VmSlot};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{MacAddr6Ext, calculate_deterministic_mac};
 use macaddr::MacAddr6;
@@ -31,7 +31,7 @@ use url::Url;
 
 pub const NESTED_VMS_DIR: &str = "nested_vms";
 pub const NESTED_VM_PATH: &str = "vm.json";
-pub const NESTED_CONFIG_IMAGE_PATH: &str = "config.img.zst";
+pub const NESTED_CONFIG_IMAGE_PATH: &str = "config.img";
 pub const NESTED_NETWORK_PATH: &str = "ips.json";
 pub const NESTED_VM_CONFIG: &str = "nested_vm_config.json";
 
@@ -110,7 +110,7 @@ impl NestedNodes {
         if !virtual_nodes.is_empty() {
             let res_request =
                 get_resource_request_for_nested_nodes(&virtual_nodes[..], env, &group_name)?;
-            let res_group = allocate_resources(&farm, &res_request, env)?;
+            let res_group = allocate_resources(&res_request, env)?;
 
             for (node, vm_spec) in self.nodes.iter().zip(&res_request.vm_configs) {
                 env.write_nested_vm(
@@ -420,11 +420,13 @@ impl HasNestedVms for TestEnv {
             &seed_mac,
             DeploymentEnvironment::Testnet,
             NodeType::HostOS,
+            VmSlot::Plain,
         );
         let guest_mac = calculate_deterministic_mac(
             &seed_mac,
             DeploymentEnvironment::Testnet,
             NodeType::GuestOS,
+            VmSlot::Plain,
         );
 
         let host_ip = host_mac.calculate_slaac(&prefix).unwrap();

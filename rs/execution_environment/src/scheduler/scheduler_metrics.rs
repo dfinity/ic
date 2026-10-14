@@ -26,12 +26,12 @@ pub struct SchedulerMetrics {
     pub(super) executed_canisters_per_round: Histogram,
     pub(super) expired_ingress_messages_count: IntCounter,
     pub(super) round_skipped_due_to_current_heap_delta_above_limit: IntCounter,
+    pub(super) round_skipped_canister_execution_due_to_cooling_down: IntCounter,
     pub(super) execute_round_called: IntCounter,
     pub(super) inner_loop_processed_non_zero_inputs_count: IntCounter,
     pub(super) inner_round_loop_consumed_max_instructions: IntCounter,
     pub(super) num_canisters_uninstalled_out_of_cycles: IntCounter,
     pub(super) round: ScopedMetrics,
-    pub(super) round_log_memory_store_migration_duration: Histogram,
     pub(super) round_preparation_duration: Histogram,
     pub(super) round_preparation_ingress: Histogram,
     pub(super) round_consensus_queue: ScopedMetrics,
@@ -136,6 +136,11 @@ impl SchedulerMetrics {
                 "The number of rounds that were skipped because the current \
                       heap delta size exceeded the allowed max",
             ),
+            round_skipped_canister_execution_due_to_cooling_down: metrics_registry.int_counter(
+                "round_skipped_canister_execution_due_to_cooling_down",
+                "The number of rounds in which no canister messages were executed \
+                      because the subnet was cooling down",
+            ),
             execute_round_called: metrics_registry.int_counter(
                 "execute_round_called",
                 "The number of times execute_round has been called.",
@@ -180,7 +185,6 @@ impl SchedulerMetrics {
                     metrics_registry,
                 ),
             },
-            round_log_memory_store_migration_duration: round_phase_duration_histogram("log_memory_store_migration", metrics_registry),
             round_preparation_duration: round_phase_duration_histogram("preparation", metrics_registry),
             // Expiration of messages in the ingress queue.
             round_preparation_ingress: round_preparation_phase_duration_histogram("expire ingress", metrics_registry),

@@ -13,8 +13,8 @@ documentation.workspace = true
 [dependencies]
 curve25519-dalek = { workspace = true }
 ed25519-dalek = { workspace = true }
-hex-literal = "0.4"
-hkdf = "0.12"
+hex-literal = { workspace = true }
+hkdf = { workspace = true }
 ic_principal = { version = "0.1.1", default-features = false }
 pem = { workspace = true }
 rand = { workspace = true, optional = true }
@@ -32,7 +32,7 @@ hex = { workspace = true }
 ic_principal = { version = "0.1.1", default-features = false, features = ["convert"] }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-wycheproof = { version = "0.6", default-features = false, features = ["eddsa"] }
+wycheproof = { workspace = true, features = ["eddsa"] }
 
 [[bench]]
 name = "ed25519"

@@ -3,5 +3,5 @@
 /// from the root canister.
 ///
 /// This proto is devoid of data, and is not even used in code.
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RootCanisterStableStorage {}

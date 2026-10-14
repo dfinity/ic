@@ -1,6 +1,6 @@
 """
-dosfstools, built from source. Provides mkfs.fat (used to create FAT/VFAT
-filesystem images for IC-OS) and fatlabel (used to set their volume label).
+dosfstools, built from source. Provides mkfs.fat (used to create FAT filesystem
+images for IC-OS) and fatlabel (used to set their volume label).
 """
 
 load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
@@ -41,5 +41,19 @@ configure_make(
         "@platforms//cpu:x86_64",
         "@platforms//os:linux",
     ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "fatlabel",
+    srcs = [":dosfstools"],
+    output_group = "fatlabel",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "mkfs.fat",
+    srcs = [":dosfstools"],
+    output_group = "mkfs.fat",
     visibility = ["//visibility:public"],
 )

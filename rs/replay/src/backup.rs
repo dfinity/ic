@@ -431,7 +431,7 @@ pub(crate) fn deserialize_consensus_artifacts(
                         artifact_path.exists(),
                         "Path to invalid artifact doesn't exist."
                     );
-                    println!("Invalid artifact detected: {:?}", &artifact_path);
+                    println!("Invalid artifact detected: {:?}", artifact_path);
                     rename_file(&artifact_path);
                     return Err(ExitPoint::ValidationIncomplete(height));
                 }

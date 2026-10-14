@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use canister_test::{Project, Runtime};
 use dfn_candid::{candid, candid_one};
-use ic_management_canister_types_private::CanisterInstallMode::{
+use ic_management_canister_types_private::CanisterInstallModeV2::{
     self, Install, Reinstall, Upgrade,
 };
 use ic_nervous_system_clients::{
@@ -31,7 +31,7 @@ const MSG: &[u8] = b"Oh my, what a beautiful test";
 /// stable memory if it was an upgrade.
 async fn install_stable_memory_reader(
     runtime: &'_ Runtime,
-    mode: CanisterInstallMode,
+    mode: CanisterInstallModeV2,
     stop_before_installing: bool,
 ) {
     let root = set_up_root_canister(runtime, RootCanisterInitPayload {}).await;
@@ -98,7 +98,7 @@ async fn install_stable_memory_reader(
 
     match mode {
         Install => panic!("There should be a test for Install"),
-        Upgrade =>
+        Upgrade(_) =>
         // The stable memory should have ben preserved
         {
             assert_eq!(
@@ -122,7 +122,7 @@ async fn install_stable_memory_reader(
 #[test]
 fn test_upgrade_preserves_stable_memory_dont_stop() {
     state_machine_test_on_nns_subnet(|runtime| async move {
-        install_stable_memory_reader(&runtime, Upgrade, false).await;
+        install_stable_memory_reader(&runtime, Upgrade(None), false).await;
         Ok(())
     });
 }
@@ -130,7 +130,7 @@ fn test_upgrade_preserves_stable_memory_dont_stop() {
 #[test]
 fn test_upgrade_preserves_stable_memory_stop() {
     state_machine_test_on_nns_subnet(|runtime| async move {
-        install_stable_memory_reader(&runtime, Upgrade, true).await;
+        install_stable_memory_reader(&runtime, Upgrade(None), true).await;
         Ok(())
     });
 }
@@ -178,7 +178,7 @@ fn test_init_payload_is_passed_through_upgrades() {
             .unwrap();
 
         let change_canister_request =
-            ChangeCanisterRequest::new(false, Upgrade, universal.canister_id())
+            ChangeCanisterRequest::new(false, Upgrade(None), universal.canister_id())
                 .with_wasm(test_wasm)
                 .with_arg(test_byte_array.to_vec());
 

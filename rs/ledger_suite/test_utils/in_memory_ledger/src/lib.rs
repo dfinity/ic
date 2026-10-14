@@ -771,8 +771,8 @@ where
             assert!(
                 !allowance.amount.is_zero(),
                 "Expected allowance is zero! Should not happen... from: {:?}, spender: {:?}",
-                &from,
-                &spender
+                from,
+                spender
             );
             let actual_allowance = AccountId::get_allowance(env, ledger_id, from, spender);
             if let Some(in_memory_expires_at) = allowance.expires_at
@@ -782,12 +782,12 @@ where
                     Tokens::zero(),
                     Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
                     "Expected amount of expired actual allowance to be zero, but it is not: {:?}",
-                    &actual_allowance
+                    actual_allowance
                 );
                 assert!(
                     actual_allowance.expires_at.is_none(),
                     "Expected expired actual allowance to have no expires_at, but it has one: {:?}",
-                    &actual_allowance
+                    actual_allowance
                 );
                 allowances_checked += 1;
                 continue;
@@ -810,8 +810,8 @@ where
                 allowance.amount,
                 Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
                 "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?}) at {:?}",
-                &from,
-                &spender,
+                from,
+                spender,
                 approval,
                 allowance,
                 actual_allowance,
@@ -821,8 +821,8 @@ where
                 allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
                 actual_allowance.expires_at,
                 "Mismatch in allowance expiration for approval from {:?} spender {:?}: {:?} ({:?} vs {:?}) at {:?}",
-                &from,
-                &spender,
+                from,
+                spender,
                 approval,
                 allowance,
                 actual_allowance,

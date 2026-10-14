@@ -37,6 +37,13 @@ impl Ic00MethodPermissions {
             Ic00Method::CanisterStatus
             | Ic00Method::CanisterInfo
             | Ic00Method::CanisterMetadata
+            // NOTE: `ListCanisters` does consume round instructions, but it has
+            // no effective canister ID and therefore never reaches
+            // `can_be_executed` (see `can_execute_subnet_msg` in `scheduler.rs`),
+            // so `counts_toward_round_limit` is not consulted for it. Its
+            // round-instruction deferral is handled by a dedicated special case
+            // in `can_execute_subnet_msg` instead.
+            | Ic00Method::ListCanisters
             | Ic00Method::DepositCycles
             | Ic00Method::ECDSAPublicKey
             | Ic00Method::SignWithECDSA
@@ -53,6 +60,7 @@ impl Ic00MethodPermissions {
             | Ic00Method::BitcoinGetSuccessors
             | Ic00Method::NodeMetricsHistory
             | Ic00Method::SubnetInfo
+            | Ic00Method::SubnetMetrics
             | Ic00Method::ProvisionalCreateCanisterWithCycles
             | Ic00Method::ProvisionalTopUpCanister
             | Ic00Method::StoredChunks

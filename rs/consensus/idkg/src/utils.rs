@@ -32,7 +32,6 @@ use ic_types::{
     },
     registry::RegistryClientError,
 };
-use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -342,13 +341,6 @@ pub fn get_idkg_chain_key_config_if_enabled(
             .iter()
             // Skip keys that don't need to run IDKG protocol
             .filter(|key_config| key_config.key_id.is_idkg_key())
-            // A key that has `presignatures_to_create_in_advance` set to 0 is not active
-            .filter(|key_config| {
-                key_config
-                    .pre_signatures_to_create_in_advance
-                    .unwrap_or_default()
-                    != 0
-            })
             .count();
 
         if num_active_key_ids == 0 {
@@ -507,16 +499,6 @@ impl<T: Ord + Copy> IDkgSchedule<T> {
     }
 }
 
-/// Builds a rayon thread pool with the given number of threads.
-pub(crate) fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
-    Arc::new(
-        ThreadPoolBuilder::new()
-            .num_threads(num_threads)
-            .build()
-            .expect("Failed to create thread pool"),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -526,7 +508,7 @@ mod tests {
     };
     use assert_matches::assert_matches;
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
     use ic_crypto_test_utils_canister_threshold_sigs::{
         IDkgParticipants, dummy_values::dummy_initial_idkg_dealing_for_tests,
         generate_key_transcript,
@@ -539,7 +521,7 @@ mod tests {
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_consensus::{fake::Fake, idkg::*};
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::{
         batch::ValidationContext,
         consensus::{
@@ -694,7 +676,7 @@ mod tests {
             registry,
             registry_data_provider,
             ..
-        } = dependencies(pool_config, 1);
+        } = DependenciesBuilder::new(pool_config, 1).build();
         let subnet_id = subnet_test_id(1);
         let registry_version = RegistryVersion::from(10);
 
@@ -807,11 +789,11 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
 
-            let config =
-                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref())
-                    .expect("Should successfully get the config");
-
-            assert!(config.is_none());
+            let result =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
+            assert_matches!(result, Err(RegistryClientError::DecodeError { error })
+                if error.contains("KeyConfig::pre_signatures_to_create_in_advance")
+                    && error.contains("should be non-zero"));
         })
     }
 
@@ -836,10 +818,8 @@ mod tests {
                 get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
 
             assert_matches!(result, Err(RegistryClientError::DecodeError{ error })
-              if error.contains("\
-                   failed with Missing required struct field: \
-                   KeyConfig::pre_signatures_to_create_in_advance\
-              ")
+              if error.contains("KeyConfig::pre_signatures_to_create_in_advance")
+              && error.contains("should be non-zero")
             );
         })
     }
@@ -861,10 +841,12 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
 
-            let config =
+            let result =
                 get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
 
-            assert_matches!(config, Ok(None));
+            assert_matches!(result, Err(RegistryClientError::DecodeError { error })
+                if error.contains("KeyConfig::pre_signatures_to_create_in_advance")
+                    && error.contains("should be None"));
         })
     }
 
@@ -885,10 +867,12 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
 
-            let config =
+            let result =
                 get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
 
-            assert_matches!(config, Ok(None));
+            assert_matches!(result, Err(RegistryClientError::DecodeError { error })
+                if error.contains("KeyConfig::pre_signatures_to_create_in_advance")
+                    && error.contains("should be None"));
         })
     }
 
@@ -929,6 +913,7 @@ mod tests {
                 certified_height: Height::from(42),
                 time: UNIX_EPOCH,
             },
+            test_replica_version(),
         )
     }
 
@@ -1000,7 +985,7 @@ mod tests {
         let block = make_block(Some(idkg_payload), height);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
             let mut stats = IDkgPayloadStats::default();
@@ -1065,7 +1050,7 @@ mod tests {
         let block = make_block(Some(idkg_payload), block_height);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
             let mut stats = IDkgPayloadStats::default();
@@ -1085,7 +1070,7 @@ mod tests {
     #[test]
     fn test_block_without_idkg_should_not_deliver_data() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
             let block = make_block(None, Height::from(100));
@@ -1145,7 +1130,7 @@ mod tests {
         let block = make_block(Some(idkg_payload), height);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let Dependencies { pool, .. } = dependencies(pool_config, 1);
+            let Dependencies { pool, .. } = DependenciesBuilder::new(pool_config, 1).build();
             let log = no_op_logger();
             let pool_reader = PoolReader::new(&pool);
             let mut stats = IDkgPayloadStats::default();

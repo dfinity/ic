@@ -23,7 +23,7 @@ use tokio_rustls::{
 };
 use tokio_util::sync::CancellationToken;
 use tonic::Status;
-use tonic::body::BoxBody;
+use tonic::body::Body as TonicBody;
 use tower::ServiceExt;
 use tower_http::ServiceBuilderExt;
 
@@ -143,7 +143,9 @@ impl DiskEncryptionKeyExchangeServer {
                 .add_extension(ConnInfo { certificates })
                 .service(DiskEncryptionKeyExchangeServiceServer::from_arc(service))
                 .map_request(|req: hyper::Request<hyper::body::Incoming>| {
-                    req.map(|body| BoxBody::new(body.map_err(|e| Status::from_error(Box::new(e)))))
+                    req.map(|body| {
+                        TonicBody::new(body.map_err(|e| Status::from_error(Box::new(e))))
+                    })
                 });
 
             if let Err(e) = http

@@ -4,4 +4,3 @@ version = "0.0.1"
 edition = { workspace = true }
 
 [dev-dependencies]
-rand = { workspace = true }

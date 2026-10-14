@@ -28,6 +28,10 @@ Success::
     . module_hash is absent for empty canisters;
     . module_hash is a blob for non-empty canisters;
     . controllers are always present for existing canisters and consist of a list of principals
+. /api/{v2,v3}/canister/.../read_state requests for the path /canister/C/last_install_timestamp succeed and
+  return the time of the last code deployment for non-empty canisters, while the path is absent for empty canisters
+. /api/{v2,v3}/canister/.../read_state requests for the path /canister/C/canister_creation_timestamp succeed and
+  return the time the canister was created, for both empty and non-empty canisters
 . /api/{v2,v3}/canister/.../read_state and /api/v3/subnet/.../read_state requests for the full paths
   /request_status/R/status and /request_status/R/reply succeed
 . /api/{v2,v3}/canister/.../read_state and /api/v3/subnet/.../read_state requests for the path /request_status/R
@@ -610,6 +614,31 @@ fn test_canister_path(env: TestEnv, version: read_state::Version) {
     let expected_module_hash = wasm.sha256_hash();
     block_on(wasm.install_with_retries_onto_canister(&mut installed_canister, None, None)).unwrap();
 
+    // The empty canister has no installed code, hence no last install timestamp.
+    assert_matches!(
+        read_canister_leaf(&env, endpoint, &empty_canister, "last_install_timestamp"),
+        Err(AgentError::LookupPathAbsent(_))
+    );
+    let value = read_canister_leaf(
+        &env,
+        endpoint,
+        &installed_canister,
+        "last_install_timestamp",
+    )
+    .expect("Installed canister should have a last install timestamp");
+    let last_install_timestamp = leb128::read::unsigned(&mut value.as_slice()).unwrap();
+    assert!(last_install_timestamp > 0);
+
+    // Unlike the last install timestamp, the creation timestamp is recorded for
+    // every canister, with or without installed code.
+    for canister in [&empty_canister, &installed_canister] {
+        let value = read_canister_leaf(&env, endpoint, canister, "canister_creation_timestamp")
+            .expect("Canister should have a creation timestamp");
+        let creation_timestamp = leb128::read::unsigned(&mut value.as_slice()).unwrap();
+        assert!(creation_timestamp > 0);
+        assert!(creation_timestamp <= last_install_timestamp);
+    }
+
     // Test /module_hash and /controllers paths by setting canister controllers to:
     // 1. [default_identity, random_identity]
     // 2. [default_identity]
@@ -635,6 +664,32 @@ fn test_canister_path(env: TestEnv, version: read_state::Version) {
             res.unwrap() == expected_module_hash
         });
     }
+}
+
+/// Reads the `/canister/<canister_id>/<leaf>` path of the given canister and
+/// returns the looked up value, if present.
+fn read_canister_leaf(
+    env: &TestEnv,
+    endpoint: Endpoint,
+    canister: &Canister<'_>,
+    leaf: &str,
+) -> Result<Vec<u8>, AgentError> {
+    let canister_id = canister.canister_id();
+    let path = vec![
+        "canister".into(),
+        canister_id.get_ref().as_slice().into(),
+        leaf.into(),
+    ];
+    let cert = read_state_with_identity_and_principal_id(
+        env,
+        vec![path.clone()],
+        endpoint,
+        get_identity(),
+        canister_id.get(),
+    )
+    .unwrap();
+
+    lookup_value(&cert, path).map(|value| value.to_vec())
 }
 
 fn test_module_hash_and_controllers<F>(

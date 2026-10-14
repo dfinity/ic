@@ -65,7 +65,7 @@ fn test(env: TestEnv) {
             .unwrap_err();
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,
-                reject_message: "Chain key request expired".to_string(),
+                reject_message: "call rejected: 2 - Chain key request expired".to_string(),
                 error_code: Some("IC0406".to_string()),
             };
             match error {

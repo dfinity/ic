@@ -1,11 +1,6 @@
 use super::{CRITICAL_ERROR_EXECUTION_CYCLES_REFUND, CRITICAL_ERROR_RESPONSE_CYCLES_REFUND};
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::{
-    CyclesAccountManagerConfig, HTTP_REQUEST_BASE_FEE, HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE,
-    HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE,
-    HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE, HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE,
-    HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE, HTTP_REQUEST_PER_BYTE_FEE,
-};
+use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, MessageMemoryUsage};
 use ic_logger::{ReplicaLogger, error, info};
 use ic_management_canister_types_private::Method;
@@ -15,17 +10,16 @@ use ic_replicated_state::{
     CanisterState, SystemState, canister_state::execution_state::WasmExecutionMode,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
-    SubnetId,
-    canister_http::{MAX_CANISTER_HTTP_RESPONSE_BYTES, Replication},
-    canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
+    CanisterId, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions, NumberOfNodes,
+    PrincipalId, SubnetId,
+    canister_http::{MAX_CANISTER_HTTP_RESPONSE_BYTES, Replication, ReplicationKind},
     messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, SignedIngress},
 };
 use ic_types_cycles::{
     CanisterCreation, CanisterCyclesCostSchedule, CompoundCycles, Cycles,
-    CyclesAccountManagerSubnetConfig, CyclesUseCase, CyclesUseCaseKind, DeletedCanisters,
-    ECDSAOutcalls, HTTPOutcalls, IngressInduction, Instructions, Memory,
-    RequestAndResponseTransmission, SchnorrOutcalls, VetKd,
+    CyclesAccountManagerSubnetConfig, CyclesUseCase, CyclesUseCaseKind,
+    CyclesUseCaseNonRefundableKind, DeletedCanisters, ECDSAOutcalls, HTTPOutcalls,
+    IngressInduction, Instructions, Memory, RequestAndResponseTransmission, SchnorrOutcalls, VetKd,
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -42,7 +36,7 @@ const DAY: Duration = Duration::from_secs(SECONDS_PER_DAY as u64);
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
-const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 338;
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 366;
 
 struct CyclesBurnedRate {
     memory: CompoundCycles<Memory>,
@@ -109,11 +103,11 @@ impl CyclesAccountManager {
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> CompoundCycles<T> {
         debug_assert_ne!(
-            self.config.reference_subnet_size, 0,
+            subnet_cycles_config.reference_subnet_size, 0,
             "prevent divide by zero panic"
         );
-        let real =
-            (cycles * subnet_cycles_config.subnet_size) / self.config.reference_subnet_size.max(1);
+        let real = (cycles * subnet_cycles_config.subnet_size)
+            / subnet_cycles_config.reference_subnet_size.max(1);
         CompoundCycles::<T>::new(real, subnet_cycles_config.cost_schedule)
     }
 
@@ -362,11 +356,37 @@ impl CyclesAccountManager {
     ///       For withdrawals where cycles are not consumed, such as the case
     ///       for inter-canister transfers, use `withdraw_cycles_for_transfer`.
     ///
+    /// Only non-refundable use cases can be consumed this way: refundable ones
+    /// are prepaid and must go through a dedicated method (e.g.
+    /// `prepay_execution_cycles` or `consume_cycles_for_final_instructions`).
+    ///
     /// # Errors
     ///
     /// Returns a `CanisterOutOfCyclesError` if the
     /// requested amount is greater than the currently available.
-    pub fn consume_cycles<T: CyclesUseCaseKind>(
+    pub fn consume_cycles<T: CyclesUseCaseNonRefundableKind>(
+        &self,
+        system_state: &mut SystemState,
+        canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
+        cycles: CompoundCycles<T>,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+        reveal_top_up: bool,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        self.consume_cycles_impl(
+            system_state,
+            canister_current_memory_usage,
+            canister_current_message_memory_usage,
+            cycles,
+            subnet_cycles_config,
+            reveal_top_up,
+        )
+    }
+
+    /// Same as `consume_cycles` but without the restriction to non-refundable
+    /// use cases, so that this crate can also consume prepayments for
+    /// refundable use cases.
+    fn consume_cycles_impl<T: CyclesUseCaseKind>(
         &self,
         system_state: &mut SystemState,
         canister_current_memory_usage: NumBytes,
@@ -384,47 +404,56 @@ impl CyclesAccountManager {
             subnet_cycles_config,
             system_state.reserved_balance(),
         );
-        self.consume_with_threshold(system_state, cycles, threshold, reveal_top_up)
+        self.consume_with_threshold_impl(system_state, cycles, threshold, reveal_top_up)
     }
 
-    /// Withdraws and consumes the cost of executing the given number of
-    /// instructions.
-    pub fn consume_cycles_for_instructions(
+    /// Consumes a direct, final `Instructions` charge (e.g. the cost of
+    /// management-canister instructions) that — unlike execution instructions,
+    /// which are prepaid for the full instruction limit and then refunded — has
+    /// no subsequent refund.
+    ///
+    /// In addition to deducting the cycles, this observes a zero refund so that
+    /// the full amount is recorded on the monotonic per-use-case counter, which
+    /// (unlike the gauge) only accounts for `Instructions` at refund time.
+    pub fn consume_cycles_for_final_instructions(
         &self,
-        sender: &PrincipalId,
-        canister: &mut CanisterState,
-        amount: NumInstructions,
+        system_state: &mut SystemState,
+        canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: MessageMemoryUsage,
+        cycles: CompoundCycles<Instructions>,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-        execution_mode: WasmExecutionMode,
+        reveal_top_up: bool,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let memory_usage = canister.memory_usage();
-        let message_memory = canister.message_memory_usage();
-        let cycles = self.execution_cost(amount, subnet_cycles_config, execution_mode);
-        let reveal_top_up = canister.controllers().contains(sender);
-        self.consume_cycles(
-            &mut canister.system_state,
-            memory_usage,
-            message_memory,
+        self.consume_cycles_impl(
+            system_state,
+            canister_current_memory_usage,
+            canister_current_message_memory_usage,
             cycles,
             subnet_cycles_config,
             reveal_top_up,
-        )
+        )?;
+        let zero_refund =
+            CompoundCycles::<Instructions>::new(Cycles::zero(), subnet_cycles_config.cost_schedule);
+        system_state.refund_cycles(cycles, zero_refund);
+        Ok(())
     }
 
     /// Withdraws and consumes the cost of executing the given number of
     /// instructions in the management canister.
+    ///
+    /// Returns the consumed cycles.
     pub fn consume_cycles_for_management_canister_instructions(
         &self,
         sender: &PrincipalId,
         canister: &mut CanisterState,
         amount: NumInstructions,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-    ) -> Result<(), CanisterOutOfCyclesError> {
+    ) -> Result<CompoundCycles<Instructions>, CanisterOutOfCyclesError> {
         let memory_usage = canister.memory_usage();
         let message_memory = canister.message_memory_usage();
         let cycles = self.management_canister_cost(amount, subnet_cycles_config);
         let reveal_top_up = canister.controllers().contains(sender);
-        self.consume_cycles(
+        self.consume_cycles_for_final_instructions(
             &mut canister.system_state,
             memory_usage,
             message_memory,
@@ -432,6 +461,7 @@ impl CyclesAccountManager {
             subnet_cycles_config,
             reveal_top_up,
         )
+        .map(|_| cycles)
     }
 
     /// Prepays the cost of executing a message with the given number of
@@ -456,7 +486,7 @@ impl CyclesAccountManager {
         execution_mode: WasmExecutionMode,
     ) -> Result<CompoundCycles<Instructions>, CanisterOutOfCyclesError> {
         let cost = self.execution_cost(num_instructions, subnet_cycles_config, execution_mode);
-        self.consume_with_threshold(
+        self.consume_with_threshold_impl(
             system_state,
             cost,
             self.freeze_threshold_cycles(
@@ -528,12 +558,13 @@ impl CyclesAccountManager {
         }
         let num_instructions_to_refund =
             std::cmp::min(num_instructions, num_instructions_initially_charged);
+        // Never refund more than was prepaid, in either the real or the nominal part.
         let cycles_to_refund = self
             .scale_cost(
                 self.convert_instructions_to_cycles(num_instructions_to_refund, execution_mode),
                 subnet_cycles_config,
             )
-            .min(prepaid_execution_cycles);
+            .component_wise_min(prepaid_execution_cycles);
         system_state.refund_cycles(prepaid_execution_cycles, cycles_to_refund);
     }
 
@@ -822,6 +853,108 @@ impl CyclesAccountManager {
         )
     }
 
+    /// Adjusts the cycles prepaid for the execution of a response so that they match
+    /// exactly the cycles required for executing the response in the given Wasm
+    /// execution mode.
+    ///
+    /// The cycles for a response execution are prepaid when the corresponding call
+    /// is performed, i.e., using the instruction costs of the Wasm execution mode
+    /// of the calling canister and the cost schedule of its subnet at that time. The
+    /// canister might have been upgraded to a different Wasm execution mode, or the
+    /// cost schedule of its subnet might have changed, before the response arrives:
+    ///
+    /// - if the prepayment falls short of the requirement (e.g., the canister was
+    ///   upgraded to a more expensive Wasm execution mode), then the missing cycles
+    ///   are withdrawn from the canister's balance. No freezing threshold is applied:
+    ///   the canister already committed to executing the response when it performed
+    ///   the corresponding call;
+    /// - if the prepayment exceeds the requirement (e.g., the canister was upgraded
+    ///   to a cheaper Wasm execution mode), then the excess is refunded immediately.
+    ///
+    /// Matching the prepayment to the requirement lets the canister pay exactly for
+    /// the instructions it executed, at the instruction costs of the Wasm execution
+    /// mode it executed them in.
+    ///
+    /// Both directions are applied unconditionally instead of picking one of them by
+    /// comparing the prepayment against the requirement: subtracting two
+    /// `CompoundCycles` saturates part by part, so `required - prepaid` is the
+    /// shortfall and `prepaid - required` the excess of the real and of the nominal
+    /// part on its own, and for either part at most one of the two is non-zero.
+    /// Hence the adjustment does not rely on the prepayment and the requirement
+    /// carrying the same cost schedule, which a comparison of the two would (see the
+    /// `No ordering` section of the `CompoundCycles` documentation): the canister
+    /// ends up with exactly the prepayment that the cost schedule in effect when the
+    /// response is executed requires, whatever cost schedule the prepayment recorded
+    /// in the callback carries.
+    ///
+    /// A failing adjustment must leave the canister state unchanged: neither the
+    /// balance nor the consumed cycles metrics may move. The withdrawal is therefore
+    /// performed before the refund, which cannot fail.
+    ///
+    /// Returns the prepayment matching the cycles required for executing the response
+    /// in the given Wasm execution mode, or a `CanisterOutOfCyclesError` if the
+    /// canister's balance does not cover the additional prepayment, in which case
+    /// the canister state is left unchanged.
+    pub fn adjust_prepayment_for_response_execution(
+        &self,
+        system_state: &mut SystemState,
+        prepayment_for_response_execution: CompoundCycles<Instructions>,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+        execution_mode: WasmExecutionMode,
+        reveal_top_up: bool,
+    ) -> Result<CompoundCycles<Instructions>, CanisterOutOfCyclesError> {
+        let required = self.prepayment_for_response_execution(subnet_cycles_config, execution_mode);
+        let prepaid = prepayment_for_response_execution;
+        // No freezing threshold is applied, i.e., the threshold is zero.
+        self.consume_with_threshold_impl(
+            system_state,
+            required - prepaid,
+            Cycles::zero(),
+            reveal_top_up,
+        )?;
+        // The excess part of the prepayment is refunded in full and hence it does not
+        // contribute to the consumed cycles of the canister.
+        let excess = prepaid - required;
+        system_state.refund_cycles(excess, excess);
+        Ok(required)
+    }
+
+    /// Settles the cycles prepaid for the execution of a response whose callback is
+    /// not executed at all: the canister is charged the fixed per-message execution
+    /// fee and the rest of the prepayment is refunded to it.
+    ///
+    /// Since no instructions are executed, the fixed per-message execution fee is all
+    /// that is due, no matter which Wasm execution mode the cycles were prepaid for
+    /// and which one the canister has now. In particular, the canister keeps the rest
+    /// of its prepayment even if the prepayment falls short of the cycles that
+    /// executing the response in its current Wasm execution mode would require.
+    ///
+    /// Note that the prepayment is never topped up for such a response: the additional
+    /// cycles would be refunded right away and, unlike this refund, the withdrawal
+    /// could fail. The subtraction below saturates in both the real and the nominal
+    /// part, so the canister is charged at most what it prepaid in each of them.
+    pub fn settle_prepayment_for_unexecuted_response(
+        &self,
+        system_state: &mut SystemState,
+        prepayment_for_response_execution: CompoundCycles<Instructions>,
+        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+        execution_mode: WasmExecutionMode,
+    ) {
+        // Executing no instructions costs the fixed per-message execution fee only.
+        let base_fee = self.execution_cost(
+            NumInstructions::from(0),
+            subnet_cycles_config,
+            execution_mode,
+        );
+        // The prepayment covers the fixed per-message execution fee. The subtraction
+        // saturates in both the real and the nominal part, so no more than the
+        // prepayment is ever charged.
+        system_state.refund_cycles(
+            prepayment_for_response_execution,
+            prepayment_for_response_execution - base_fee,
+        );
+    }
+
     /// Returns the amount of cycles required for transmitting the largest
     /// response message.
     pub fn prepayment_for_response_transmission(
@@ -861,8 +994,9 @@ impl CyclesAccountManager {
             self.config.xnet_byte_transmission_fee * transmitted_bytes,
             subnet_cycles_config,
         );
-        prepayment_for_response_transmission
-            - transmission_cost.min(prepayment_for_response_transmission)
+        // The subtraction saturates in both the real and the nominal part, so a
+        // transmission cost exceeding the prepayment leaves nothing to refund.
+        prepayment_for_response_transmission - transmission_cost
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -915,7 +1049,24 @@ impl CyclesAccountManager {
 
     /// Subtracts and consumes the cycles. This call should be used when the
     /// cycles are not being sent somewhere else.
-    pub fn consume_with_threshold<T: CyclesUseCaseKind>(
+    ///
+    /// Only non-refundable use cases can be consumed this way: refundable ones
+    /// are prepaid and must go through a dedicated method (e.g.
+    /// `prepay_execution_cycles` or `consume_cycles_for_final_instructions`).
+    pub fn consume_with_threshold<T: CyclesUseCaseNonRefundableKind>(
+        &self,
+        system_state: &mut SystemState,
+        cycles: CompoundCycles<T>,
+        threshold: Cycles,
+        reveal_top_up: bool,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        self.consume_with_threshold_impl(system_state, cycles, threshold, reveal_top_up)
+    }
+
+    /// Same as `consume_with_threshold` but without the restriction to
+    /// non-refundable use cases, so that this crate can also consume
+    /// prepayments for refundable use cases.
+    fn consume_with_threshold_impl<T: CyclesUseCaseKind>(
         &self,
         system_state: &mut SystemState,
         cycles: CompoundCycles<T>,
@@ -1147,7 +1298,7 @@ impl CyclesAccountManager {
         )
     }
 
-    fn charge_canister_for_single_resource<T: CyclesUseCaseKind>(
+    fn charge_canister_for_single_resource<T: CyclesUseCaseNonRefundableKind>(
         &self,
         rate: CompoundCycles<T>,
         log: &ReplicaLogger,
@@ -1241,47 +1392,32 @@ impl CyclesAccountManager {
         CompoundCycles::new(amount, subnet_cycles_config.cost_schedule)
     }
 
+    /// Returns the base fee for an HTTP outcall, which is charged for every
+    /// request upfront.
     pub fn http_request_base_fee(
         &self,
         request_size: NumBytes,
         replication: &Replication,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> CompoundCycles<HTTPOutcalls> {
-        let n = subnet_cycles_config.subnet_size as u128;
-        let request_bytes = request_size.get() as u128;
-        let per_replica = match replication {
-            Replication::FullyReplicated => {
-                HTTP_REQUEST_BASE_FEE
-                    + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
-                    + HTTP_REQUEST_FULLY_REPLICATED_PER_NODE_FEE * n
-                    + HTTP_REQUEST_FULLY_REPLICATED_QUADRATIC_NODE_FEE * n * n
-            }
-            Replication::Flexible {
-                min_responses: min, ..
-            } => {
-                let min = *min as u128;
-                HTTP_REQUEST_BASE_FEE
-                    + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
-                    + HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE * n
-                    + HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n * min
-                    + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE * min
-            }
-            Replication::NonReplicated(_) => {
-                // Non-replicated is equivalent to flexible replication with min_responses = 1.
-                HTTP_REQUEST_BASE_FEE
-                    + HTTP_REQUEST_PER_BYTE_FEE * request_bytes
-                    + HTTP_REQUEST_FLEXIBLE_PER_NODE_FEE * n
-                    + HTTP_REQUEST_FLEXIBLE_PER_NODE_RESPONSE_CONSENSUS_FEE * n
-                    + HTTP_REQUEST_FLEXIBLE_PER_RESPONSE_CONSENSUS_FEE
-            }
-        };
-
-        CompoundCycles::new(
-            Cycles::new(n * per_replica),
-            subnet_cycles_config.cost_schedule,
-        )
+        ic_https_outcalls_pricing::fees::base_fee(request_size, replication, subnet_cycles_config)
     }
 
+    /// Returns the maximum amount of cycles an HTTP outcall with the given
+    /// `replication` and `max_response_bytes` can ever spend, i.e. its worst-case
+    /// cost beyond the base fee, including the consensus cost of delivering the
+    /// response.
+    pub fn max_http_request_usage_fee(
+        &self,
+        replication: &Replication,
+        max_response_bytes: Option<NumBytes>,
+        subnet_size: NumberOfNodes,
+    ) -> Cycles {
+        ic_https_outcalls_pricing::fees::max_usage_fee(replication, max_response_bytes, subnet_size)
+    }
+
+    /// Returns the estimated total fee for an HTTP outcall with the given parameters,
+    /// including both the base fee and the usage fee.
     pub fn http_request_fee_v2(
         &self,
         request_size: NumBytes,
@@ -1289,20 +1425,18 @@ impl CyclesAccountManager {
         raw_response_size: NumBytes,
         transform: NumInstructions,
         transformed_response_size: NumBytes,
+        replication_kind: ReplicationKind,
         subnet_cycles_config: CyclesAccountManagerSubnetConfig,
     ) -> CompoundCycles<HTTPOutcalls> {
-        let n = subnet_cycles_config.subnet_size as u64;
-        let amount = (Cycles::new(1_000_000)
-            + Cycles::new(50) * request_size.get()
-            + Cycles::new(140_000) * n
-            + Cycles::new(800) * n * n
-            + Cycles::new(50) * raw_response_size.get()
-            + Cycles::new(300) * http_roundtrip_time.as_millis() as u64
-            + Cycles::new(transform.get() as u128 / 13)
-            + (Cycles::new(10) * n + Cycles::new(650)) * transformed_response_size.get())
-            * n;
-
-        CompoundCycles::new(amount, subnet_cycles_config.cost_schedule)
+        ic_https_outcalls_pricing::fees::total_fee(
+            request_size,
+            http_roundtrip_time,
+            raw_response_size,
+            transform,
+            transformed_response_size,
+            replication_kind,
+            subnet_cycles_config,
+        )
     }
 
     pub fn http_request_fee_beta(
@@ -1332,31 +1466,6 @@ impl CyclesAccountManager {
     /// when the canister doesn't have it set in the settings.
     pub fn default_reserved_balance_limit(&self) -> Cycles {
         self.config.default_reserved_balance_limit
-    }
-
-    pub fn fetch_canister_logs_fee(
-        &self,
-        response_size: NumBytes,
-        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-    ) -> Cycles {
-        match subnet_cycles_config.cost_schedule {
-            CanisterCyclesCostSchedule::Free => Cycles::new(0),
-            CanisterCyclesCostSchedule::Normal => {
-                (self.config.fetch_canister_logs_base_fee
-                    + self.config.fetch_canister_logs_per_byte_fee * response_size.get())
-                    * subnet_cycles_config.subnet_size
-            }
-        }
-    }
-
-    pub fn max_fetch_canister_logs_fee(
-        &self,
-        subnet_cycles_config: CyclesAccountManagerSubnetConfig,
-    ) -> Cycles {
-        self.fetch_canister_logs_fee(
-            NumBytes::new(MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES as u64),
-            subnet_cycles_config,
-        )
     }
 
     /// Returns the amount of cycles that are leftover and would be discarded when

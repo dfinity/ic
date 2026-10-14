@@ -10,9 +10,9 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 gpt = { workspace = true }
 tar = { workspace = true }
-indoc = "1.0.9"
+indoc = { workspace = true }
 itertools = { workspace = true }
-pcre2 = "0.2.6"
+regex = { workspace = true }
 tempfile = { workspace = true }
 zstd = { workspace = true }
 

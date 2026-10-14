@@ -259,3 +259,100 @@ mod current_node_public_keys {
         }
     }
 }
+
+mod error_messages {
+    use crate::crypto::error::{MalformedDataError, MalformedPublicKeyError};
+    use crate::crypto::{AlgorithmId, CryptoError, MAX_ELLIPSIZED_HEX_BYTES, ellipsized_hex};
+
+    #[test]
+    fn should_hex_encode_short_byte_strings_in_full() {
+        let bytes = vec![0xab_u8; MAX_ELLIPSIZED_HEX_BYTES];
+
+        assert_eq!(ellipsized_hex(&bytes), hex::encode(&bytes));
+    }
+
+    #[test]
+    fn should_ellipsize_long_byte_strings() {
+        let bytes = vec![0xab_u8; MAX_ELLIPSIZED_HEX_BYTES + 1];
+
+        let hex = ellipsized_hex(&bytes);
+
+        assert_eq!(
+            hex,
+            format!(
+                "{}... ({} bytes)",
+                hex::encode(&bytes[..MAX_ELLIPSIZED_HEX_BYTES]),
+                bytes.len()
+            )
+        );
+    }
+
+    #[test]
+    fn should_bound_the_length_of_error_messages_for_large_byte_strings() {
+        let bytes = vec![0xab_u8; 5 * 1024 * 1024];
+
+        let errors = [
+            CryptoError::MalformedPublicKey {
+                algorithm: AlgorithmId::Ed25519,
+                key_bytes: Some(bytes.clone()),
+                internal_error: "some error".to_string(),
+            },
+            CryptoError::MalformedSignature {
+                algorithm: AlgorithmId::Ed25519,
+                sig_bytes: bytes.clone(),
+                internal_error: "some error".to_string(),
+            },
+            CryptoError::SignatureVerification {
+                algorithm: AlgorithmId::Ed25519,
+                public_key_bytes: bytes.clone(),
+                sig_bytes: bytes.clone(),
+                internal_error: "some error".to_string(),
+            },
+        ];
+
+        for error in errors {
+            assert!(
+                error.to_string().len() < 1024,
+                "error message not bounded: {}",
+                &error.to_string()[..256]
+            );
+        }
+    }
+
+    #[test]
+    fn should_render_absent_byte_strings_without_hex_prefix() {
+        let public_key_error = MalformedPublicKeyError {
+            algorithm: AlgorithmId::Unspecified,
+            key_bytes: None,
+            internal_error: "some error".to_string(),
+        };
+        let data_error = MalformedDataError {
+            algorithm: AlgorithmId::Unspecified,
+            internal_error: "some error".to_string(),
+            data: None,
+        };
+
+        assert_eq!(
+            public_key_error.to_string(),
+            "Malformed Unspecified public key: <none>. Internal error: some error"
+        );
+        assert_eq!(
+            data_error.to_string(),
+            "Malformed Unspecified data: <none>. Internal error: some error"
+        );
+    }
+
+    #[test]
+    fn should_hex_encode_present_byte_strings() {
+        let error = MalformedPublicKeyError {
+            algorithm: AlgorithmId::Ed25519,
+            key_bytes: Some(vec![0x01, 0x02, 0x03]),
+            internal_error: "some error".to_string(),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "Malformed Ed25519 public key: 0x010203. Internal error: some error"
+        );
+    }
+}

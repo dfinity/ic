@@ -315,14 +315,21 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             println!("Creating proposal text for NNS canister: {canister}");
             let script =
                 ic.join("rs/nervous_system/tools/release/prepare-nns-upgrade-proposal-text.sh");
-            // cycles minting requires an upgrade arg, usually '()'
-            let output = if canister != "cycles-minting" {
-                run_script(script, &[canister, &commit], &ic)
-                    .expect("Failed to run NNS proposal text script")
-            } else {
-                let upgrade_arg = input_with_default("Upgrade arg for CMC?", "()")?;
-                run_script(script, &[canister, &commit, &upgrade_arg], &ic)
-                    .expect("Failed to run NNS proposal text script")
+            // Some canisters require an explicit upgrade arg. cycles-minting
+            // needs a hand-provided one (usually '()'). engine-controller's
+            // post_upgrade traps when decoding an empty arg, so it must be
+            // given at least '()'; otherwise the upgrade silently rolls back
+            // while the proposal still reports as executed.
+            let output = match canister.as_str() {
+                "cycles-minting" => {
+                    let upgrade_arg = input_with_default("Upgrade arg for CMC?", "()")?;
+                    run_script(script, &[canister, &commit, &upgrade_arg], &ic)
+                        .expect("Failed to run NNS proposal text script")
+                }
+                "engine-controller" => run_script(script, &[canister, &commit, "()"], &ic)
+                    .expect("Failed to run NNS proposal text script"),
+                _ => run_script(script, &[canister, &commit], &ic)
+                    .expect("Failed to run NNS proposal text script"),
             };
             if !output.status.success() {
                 bail!(

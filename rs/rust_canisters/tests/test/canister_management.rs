@@ -45,7 +45,7 @@ fn test_set_controller() {
             )
             .await;
 
-        assert_matches!(res, Err(msg) if msg.contains(&ErrorCode::CanisterInvalidController.to_string()));
+        assert_matches!(res, Err(msg) if msg.contains(&ErrorCode::CanisterStatusAccessDenied.to_string()));
 
         // Now call canister_status from the controller
         let arg = universal_canister_argument_builder()

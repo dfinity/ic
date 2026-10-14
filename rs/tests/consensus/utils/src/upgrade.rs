@@ -56,7 +56,8 @@ pub fn assert_assigned_replica_version_with_time(
 ) {
     info!(
         logger,
-        "Waiting until the node {} is healthy and running replica version {}",
+        "Waiting until the node {} with IP {} is healthy and running replica version {}",
+        node.node_id,
         node.get_ip_addr(),
         expected_version
     );
@@ -72,7 +73,8 @@ pub fn assert_assigned_replica_version_with_time(
     let mut state = State::Uninitialized;
     let result = ic_system_test_driver::retry_with_msg!(
         format!(
-            "Check if node {} is healthy and running replica version {}",
+            "Check if node {} with IP {} is healthy and running replica version {}",
+            node.node_id,
             node.get_ip_addr(),
             expected_version
         ),

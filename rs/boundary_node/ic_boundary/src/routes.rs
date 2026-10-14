@@ -12,8 +12,8 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use candid::{CandidType, Principal};
+use ic_bn_lib::http::client::Client as HttpClient;
 use ic_bn_lib::http::proxy;
-use ic_bn_lib_common::traits::http::Client as HttpClient;
 use ic_types::{
     CanisterId, SubnetId,
     messages::{Blob, ReplicaHealthStatus},
@@ -297,7 +297,7 @@ pub(crate) mod test {
         X_IC_CANISTER_ID, X_IC_METHOD_NAME, X_IC_NODE_ID, X_IC_REQUEST_TYPE, X_IC_SENDER,
         X_IC_SUBNET_ID, X_IC_SUBNET_TYPE,
     };
-    use ic_bn_lib_common::principal;
+    use ic_bn_lib::principal;
     use ic_types::{
         PrincipalId,
         messages::{

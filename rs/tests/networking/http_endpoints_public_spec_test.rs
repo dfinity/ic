@@ -301,7 +301,7 @@ fn malformed_http_request(env: TestEnv) {
                     Value::Text("request_type".to_string()) => Value::Text(request_type.to_string()),
                     Value::Text("sender".to_string()) => Value::Bytes(Principal::anonymous().as_slice().to_vec()),
                 };
-                valid_content.extend(content.into_iter());
+                valid_content.extend(content);
                 let envelope = |mut content: BTreeMap<Value, Value>| {
                     let ingress_expiry = SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
                         + Duration::from_secs(3 * 60);

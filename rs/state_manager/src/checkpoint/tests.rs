@@ -181,7 +181,11 @@ fn can_make_a_checkpoint() {
     });
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, drop that capability for the duration
+// of the test (test actions run as root under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::enforce_file_permissions]
 fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("checkpoint");
@@ -244,6 +248,7 @@ fn can_recover_from_a_checkpoint() {
         let stable_memory = Memory::new(page_map, NumWasmPages::new(1));
         let execution_state = ExecutionState::new(
             WasmBinary::new(wasm.clone()),
+            None,
             ExportedFunctions::new(BTreeSet::new()),
             wasm_memory.clone(),
             stable_memory,
@@ -366,7 +371,11 @@ fn returns_not_found_for_missing_checkpoints() {
     });
 }
 
+// Root bypasses file permission bits (CAP_DAC_OVERRIDE), so to get the
+// permission denial this test expects, drop that capability for the duration
+// of the test (test actions run as root under Bazel remote execution).
 #[test]
+#[ic_test_utilities_privileges::enforce_file_permissions]
 fn reports_an_error_on_misconfiguration() {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("checkpoint_reports_an_error_on_misconfiguration");
@@ -607,6 +616,53 @@ fn can_recover_refunds() {
     });
 }
 
+/// Checkpoints a state with the given `SystemMetadata::subnet_merged` value and
+/// asserts that the `subnet_merged.pbuf` marker file is present iff
+/// `subnet_merged`; and that the value is derived from the checkpoint.
+fn test_can_derive_subnet_merged(subnet_merged: bool) {
+    with_test_replica_logger(|log| {
+        let tmp = tmpdir("checkpoint");
+        let root = tmp.path().to_path_buf();
+        let (_tip_handler, tip_channel, layout, state_manager_metrics) = init(&root, &log);
+
+        const HEIGHT: Height = Height::new(42);
+
+        let own_subnet_type = SubnetType::Application;
+        let subnet_id = subnet_test_id(1);
+        let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
+        state.metadata.subnet_merged = subnet_merged;
+
+        let _state = make_checkpoint_and_get_state(&mut state, HEIGHT, &tip_channel, &log);
+
+        let checkpoint_layout = layout.checkpoint_verified(HEIGHT).unwrap();
+        let marker = checkpoint_layout.subnet_merged_marker();
+        // A `false` flag encodes to an empty message, i.e. to no file at all.
+        assert_eq!(subnet_merged, marker.raw_path().exists());
+        assert_eq!(subnet_merged, marker.deserialize().unwrap().merged);
+
+        let derived_state = load_checkpoint(
+            &checkpoint_layout,
+            own_subnet_type,
+            &state_manager_metrics.checkpoint_metrics,
+            Some(&mut thread_pool()),
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        )
+        .unwrap();
+
+        assert_eq!(subnet_merged, derived_state.metadata.subnet_merged);
+    });
+}
+
+#[test]
+fn can_derive_subnet_merged() {
+    test_can_derive_subnet_merged(true);
+}
+
+#[test]
+fn can_derive_not_subnet_merged() {
+    test_can_derive_subnet_merged(false);
+}
+
 #[test]
 fn empty_protobufs_are_loaded_correctly() {
     with_test_replica_logger(|log| {
@@ -646,6 +702,11 @@ fn empty_protobufs_are_loaded_correctly() {
             checkpoint_layout.subnet_queues().raw_path().to_owned(),
             checkpoint_layout.ingress_history().raw_path().to_owned(),
             checkpoint_layout.refunds().raw_path().to_owned(),
+            checkpoint_layout.split_marker().raw_path().to_owned(),
+            checkpoint_layout
+                .subnet_merged_marker()
+                .raw_path()
+                .to_owned(),
             canister_layout.queues().raw_path().to_owned(),
         ];
 
@@ -730,6 +791,7 @@ fn make_test_snapshot(
         chunk_store,
         execution_snapshot,
         NumBytes::from(0),
+        false,
     )
 }
 
@@ -821,6 +883,7 @@ fn flush_checkpoint_ops_and_page_maps_strips_execution_state_memories() {
     let stable_memory = one_page_of(2);
     let execution_state = ExecutionState::new(
         WasmBinary::new(empty_wasm()),
+        None,
         ExportedFunctions::new(BTreeSet::new()),
         wasm_memory,
         stable_memory,

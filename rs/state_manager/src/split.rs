@@ -201,6 +201,10 @@ fn write_checkpoint(
 
     let new_height = old_height.increment();
 
+    // Tip was reset to the pre-split checkpoint above, so it still holds the directories
+    // of the canisters dropped by the split. They are removed by the flush of the
+    // `DeleteCanister` operations recorded by `ReplicatedState::split()`, which is the
+    // first thing `make_unvalidated_checkpoint()` does, before creating the checkpoint.
     let (_state, cp_layout) = make_unvalidated_checkpoint(
         state,
         new_height,

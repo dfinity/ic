@@ -1,12 +1,11 @@
 use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::RequestMetadataStats;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::UserError;
 use ic_management_canister_types_private::QueryMethod;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_replicated_state::metrics::{
     duration_histogram, instructions_histogram, messages_histogram, slices_histogram,
 };
-use ic_types::ingress::WasmResult;
 use ic_types::{NumInstructions, NumMessages, NumSlices, Time};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::{cell::RefCell, rc::Rc, time::Instant};
@@ -173,6 +172,7 @@ impl CallTreeMetrics for CallTreeMetricsImpl {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
     pub query_initial_call: ScopedMetrics,
@@ -300,16 +300,18 @@ impl QueryHandlerMetrics {
         }
     }
 
+    /// Observes the execution of a management canister query method served
+    /// in the non-replicated mode. The result is either the encoded reply
+    /// or the error the execution failed with.
     pub fn observe_subnet_query_message(
         &self,
         query_method: QueryMethod,
         duration: f64,
-        result: &Result<WasmResult, UserError>,
+        result: &Result<Vec<u8>, UserError>,
     ) {
         let method_name_label = &format!("query_ic00_{query_method}");
         let status_label = match result {
-            Ok(WasmResult::Reply(_)) => SUCCESS_STATUS_LABEL,
-            Ok(WasmResult::Reject(_)) => &format!("{:?}", ErrorCode::CanisterRejectedMessage),
+            Ok(_) => SUCCESS_STATUS_LABEL,
             Err(user_error) => &format!("{:?}", user_error.code()),
         };
 
@@ -317,7 +319,7 @@ impl QueryHandlerMetrics {
             .with_label_values(&[method_name_label.as_str(), status_label])
             .observe(duration);
 
-        if let Ok(WasmResult::Reply(bytes)) = result {
+        if let Ok(bytes) = result {
             self.subnet_query_message_response_bytes
                 .with_label_values(&[method_name_label.as_str()])
                 .observe(bytes.len() as f64);
@@ -334,7 +336,7 @@ impl QueryHandlerMetrics {
 /// - the number of messages executed in the phase.
 ///
 /// Use `MeasurementScope` instead of observing the metrics manually.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct ScopedMetrics {
     pub duration: Histogram,
     pub instructions: Histogram,
@@ -420,6 +422,11 @@ impl<'a> MeasurementScope<'a> {
     /// Returns the number of messages associated with this measurement scope.
     pub fn messages(&self) -> NumMessages {
         self.core.borrow().messages
+    }
+
+    /// Returns the number of instructions associated with this measurement scope.
+    pub fn instructions(&self) -> NumInstructions {
+        self.core.borrow().instructions
     }
 }
 

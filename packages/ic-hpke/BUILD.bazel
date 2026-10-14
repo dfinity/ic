@@ -26,8 +26,8 @@ rust_doc_test(
         ":ic-hpke",
         "@crate_index//:hex",
         "@crate_index//:hpke",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
+        "@crate_index//:rand_0_9",
+        "@crate_index//:rand_chacha_0_9",
     ],
 )
 
@@ -38,8 +38,8 @@ rust_test(
         # Keep sorted.
         "@crate_index//:hex",
         "@crate_index//:hpke",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
+        "@crate_index//:rand_0_9",
+        "@crate_index//:rand_chacha_0_9",
     ],
 )
 
@@ -51,7 +51,7 @@ rust_test_suite(
         ":ic-hpke",
         "@crate_index//:hex",
         "@crate_index//:hpke",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
+        "@crate_index//:rand_0_9",
+        "@crate_index//:rand_chacha_0_9",
     ],
 )

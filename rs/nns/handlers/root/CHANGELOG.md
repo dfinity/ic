@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-08-07: Proposal 143408
+
+http://dashboard.internetcomputer.org/proposal/143408
+
+## Added
+
+* Support for upgrade options. We are mostly interested in
+  wasm_memory_persistence, since that is needed to upgrade modern Motoko
+  canisters that use Enhanced Orthogonal Persistence.
+
+
 # 2026-04-25: Proposal 141567
 
 http://dashboard.internetcomputer.org/proposal/141567

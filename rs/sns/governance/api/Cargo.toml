@@ -14,7 +14,7 @@ path = "src/lib.rs"
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
-comparable = { version = "0.5", features = ["derive"] }
+comparable = { workspace = true, features = ["derive"] }
 ic-base-types = { path = "../../../types/base_types" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 ic-nns-common = { path = "../../../nns/common" }

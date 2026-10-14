@@ -1,7 +1,4 @@
-use ic_config::{
-    Config,
-    subnet_config::{SubnetConfig, SubnetSecurity},
-};
+use ic_config::{Config, subnet_config::SubnetConfig};
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::execution_environment::IngressHistoryReader;
 use ic_messaging::MessageRoutingImpl;
@@ -25,7 +22,7 @@ use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
     SubnetRecordBuilder, add_subnet_record, insert_initial_dkg_transcript,
 };
-use ic_test_utilities_types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::{subnet_test_id, test_platform_version};
 use ic_types::{
     CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId, malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
@@ -100,10 +97,11 @@ pub(crate) fn setup() -> (
     let subnet_id = subnet_test_id(1);
     let root_subnet_id = subnet_test_id(2);
     let (config, _) = Config::temp_config();
-    let subnet_config = SubnetConfig::new(subnet_type, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(subnet_type);
     let replica_config = ReplicaConfig {
         node_id: NodeId::from(PrincipalId::new_node_test_id(27)),
         subnet_id,
+        platform_version: test_platform_version(),
     };
 
     let metrics_registry = MetricsRegistry::new();

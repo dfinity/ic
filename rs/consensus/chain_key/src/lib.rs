@@ -347,7 +347,7 @@ impl ChainKeyPayloadBuilderImpl {
                 .take_any_while(|(callback_id, candidate)| {
                     let candidate_size = callback_id.count_bytes() + candidate.count_bytes();
                     accumulated_size_estimate
-                        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current_size| {
+                        .try_update(Ordering::Relaxed, Ordering::Relaxed, |current_size| {
                             let new_size = current_size + candidate_size;
                             if new_size > max_payload_size.get() as usize {
                                 return None;
@@ -657,9 +657,8 @@ fn reject_if_invalid(
 mod tests {
     use assert_matches::assert_matches;
     use core::{convert::From, iter::Iterator, time::Duration};
-    use ic_consensus_mocks::{
-        Dependencies, dependencies_with_subnet_records_with_raw_state_manager,
-    };
+    use ic_consensus_mocks::{Dependencies, DependenciesBuilder};
+    use ic_consensus_utils::build_thread_pool;
     use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationFailure};
     use ic_interfaces::idkg::IDkgChangeAction;
@@ -678,7 +677,6 @@ mod tests {
     use ic_types::time::UNIX_EPOCH;
     use ic_types::time::current_time;
     use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
-    use rayon::ThreadPoolBuilder;
     use std::str::FromStr;
 
     use super::*;
@@ -804,11 +802,13 @@ mod tests {
                 registry,
                 registry_data_provider,
                 ..
-            } = dependencies_with_subnet_records_with_raw_state_manager(
+            } = DependenciesBuilder::single_subnet(
                 pool_config,
                 subnet_id,
                 vec![(1, subnet_record_builder.build())],
-            );
+            )
+            .without_state_manager_expectations()
+            .build();
 
             // Enable the configured keys
             if let Some(config) = config
@@ -873,12 +873,7 @@ mod tests {
                 pool.get_cache(),
                 crypto,
                 state_manager,
-                Arc::new(
-                    ThreadPoolBuilder::new()
-                        .num_threads(num_threads)
-                        .build()
-                        .unwrap(),
-                ),
+                build_thread_pool(num_threads),
                 subnet_id,
                 registry,
                 &MetricsRegistry::new(),

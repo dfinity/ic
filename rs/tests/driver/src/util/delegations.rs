@@ -49,6 +49,7 @@ fn to_agent_signed_delegation(d: CandidSignedDelegation) -> ic_agent::identity::
             pubkey: d.delegation.pubkey.into_vec(),
             expiration: d.delegation.expiration,
             targets: d.delegation.targets,
+            permissions: None,
         },
         signature: d.signature.into_vec(),
     }

@@ -28,11 +28,6 @@ produced as follows:
 $ ic-regedit snapshot /path/to/ic_registry_local_store
 {
   "__version": 2,
-  "blessed_replica_versions": {
-    "blessed_version_ids": [
-      "0.8.0"
-    ]
-  },
   "catch_up_package_contents_bi6cn-uevgq-pnqwc-6bmx7-plgau-qezww-kqnwd-h7eqk-xejb5-fq2t4-eae": {
     "height": 0,
     "initial_ni_dkg_transcript_high_threshold": {
@@ -116,16 +111,17 @@ $ vim snapshot.json # or jq, etc.
 Before you apply the update, you might want to make sure you know what will
 change. You can do this by calling the `show-diff` command. Let's say e.g. we
 took the example registry from above and the only change that we applied is that
-we added a version `0.9.0` to the list of blessed replica versions. The output
-should look like this:
+we updated the subnet list. The output should look like this:
 
 ----
 $ ic-regedit show-diff /path/to/ic_registry_local_store snapshot.json
 {
   "__version": 3,
-  "blessed_replica_versions": {
-    "blessed_version_ids": [
-      "0.8.0", "0.9.0"
+  "subnet_list": {
+    "subnets": [
+      "(principal-id)ctkw5-pjdpp-oliv3-h7q4x-vd542-t6ezo-kbolh-yynez-7yewq-gq4bj-nqe",
+      "(principal-id)i5ubr-s2mcz-ghnc4-jxodo-uvrtp-rrx6m-pcv3n-xf7fe-oqxbp-efsg5-2qe",
+      "(principal-id)th2o5-oflhf-ixact-nhmok-hupll-gf67c-5hn6k-7hh5a-hcwhs-rvcdb-5ae"
     ]
   }
 }
@@ -201,10 +197,11 @@ $ ic-regedit snapshot /path/to/ic_registry_local_store > latest.json
 $ ic-regedit show-diff --version -1 /path/to/ic_registry_local_store latest.json
 {
   "__version": 3,
-  "blessed_replica_versions": {
-    "blessed_version_ids": [
-      "0.8.0",
-      "0.9.0"
+  "subnet_list": {
+    "subnets": [
+      "(principal-id)ctkw5-pjdpp-oliv3-h7q4x-vd542-t6ezo-kbolh-yynez-7yewq-gq4bj-nqe",
+      "(principal-id)i5ubr-s2mcz-ghnc4-jxodo-uvrtp-rrx6m-pcv3n-xf7fe-oqxbp-efsg5-2qe",
+      "(principal-id)th2o5-oflhf-ixact-nhmok-hupll-gf67c-5hn6k-7hh5a-hcwhs-rvcdb-5ae"
     ]
   }
 }

@@ -179,6 +179,7 @@ rust_test(
         "//rs/registry/subnet_type",
         "//rs/registry/transport",
         "//rs/state_manager",
+        "//rs/test_utilities/types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:anyhow",

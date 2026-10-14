@@ -3,7 +3,10 @@ use crate::logs::INFO;
 use crate::state::STATE;
 use crate::state::audit::{EventType, process_event, replay_events};
 use crate::state::mutate_state;
+use crate::state::sweep_observations::SweepObservations;
 use crate::storage::total_event_count;
+use crate::time::TimeProvider;
+use crate::timed_sized_map::Timestamp;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_canister_log::log;
 use minicbor::{Decode, Encode};
@@ -30,16 +33,26 @@ pub struct UpgradeArg {
     pub deposit_with_subaccount_helper_contract_address: Option<String>,
     #[cbor(n(9), with = "icrc_cbor::nat::option")]
     pub last_deposit_with_subaccount_scraped_block_number: Option<Nat>,
+    #[n(10)]
+    pub ethereum_sweeper_contract_address: Option<String>,
+    /// Next transaction nonce of the dedicated sweeper address, on its own nonce sequence.
+    /// Mirrors `next_transaction_nonce` for the main address.
+    #[cbor(n(11), with = "icrc_cbor::nat::option")]
+    pub next_sweeper_transaction_nonce: Option<Nat>,
 }
 
-pub fn post_upgrade(upgrade_args: Option<UpgradeArg>) {
+pub fn post_upgrade<T: TimeProvider>(upgrade_args: Option<UpgradeArg>, time_provider: &T) {
     let start = ic_cdk::api::instruction_counter();
 
     STATE.with(|cell| {
         *cell.borrow_mut() = Some(replay_events());
     });
+    mutate_state(|s| {
+        s.sweep_observations =
+            SweepObservations::started_at(Timestamp::from_nanos(time_provider.time()))
+    });
     if let Some(args) = upgrade_args {
-        mutate_state(|s| process_event(s, EventType::Upgrade(args)))
+        mutate_state(|s| process_event(s, EventType::Upgrade(args), time_provider))
     }
 
     let end = ic_cdk::api::instruction_counter();

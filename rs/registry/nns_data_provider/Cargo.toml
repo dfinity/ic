@@ -33,7 +33,7 @@ ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-chunks = { path = "../../nervous_system/chunks" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
-leb128 = "0.2.4"
+leb128 = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 pretty_assertions = { workspace = true }
 tokio = { workspace = true }

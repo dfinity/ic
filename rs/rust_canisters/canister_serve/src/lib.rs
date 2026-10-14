@@ -1,14 +1,8 @@
-#![allow(deprecated)]
-use by_address::ByAddress;
 use ic_canister_log::{GlobalBuffer, LogBuffer, LogEntry};
-use ic_cdk::api::management_canister::http_request::{
-    CanisterHttpRequestArgument, HttpHeader, HttpResponse,
-};
+use ic_cdk_management_canister::{HttpHeader, HttpRequestArgs, HttpRequestResult};
 use ic_metrics_encoder::MetricsEncoder;
 use maplit::hashmap;
-use priority_queue::PriorityQueue;
 use std::{
-    cmp::Reverse,
     collections::HashMap,
     fmt,
     fmt::{Debug, Display, Formatter},
@@ -19,12 +13,12 @@ use std::{
 // 1 Mi. Approximately 10^6, 1 million (slightly more).
 const MAX_LOGS_RESPONSE_SIZE: usize = 1 << 20;
 
-/// Transforms an `ic_metrics_encoder::MetricsEncoder` into an HttpResponse that can be
+/// Transforms an `ic_metrics_encoder::MetricsEncoder` into an HttpRequestResult that can be
 /// served via a Canister's `http_request` query method.
 ///
 /// ```
 /// use ic_canister_serve::serve_metrics;
-/// use ic_cdk::api::management_canister::http_request::{CanisterHttpRequestArgument, HttpResponse};
+/// use ic_cdk_management_canister::{HttpRequestArgs, HttpRequestResult};
 /// use ic_metrics_encoder::MetricsEncoder;
 ///
 /// fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
@@ -33,7 +27,7 @@ const MAX_LOGS_RESPONSE_SIZE: usize = 1 << 20;
 /// }
 ///
 /// #[ic_cdk::query]
-/// fn http_request(request: CanisterHttpRequestArgument) -> HttpResponse {
+/// fn http_request(request: HttpRequestArgs) -> HttpRequestResult {
 ///     let path = match request.url.find('?') {
 ///         None => &request.url[..],
 ///         Some(index) => &request.url[..index],
@@ -41,7 +35,7 @@ const MAX_LOGS_RESPONSE_SIZE: usize = 1 << 20;
 ///
 ///     match path {
 ///         "/metrics" => serve_metrics(encode_metrics),
-///         _ => HttpResponse {
+///         _ => HttpRequestResult {
 ///                 status: 404_u32.into(),
 ///                 body: "not_found".into(),
 ///                 ..Default::default()
@@ -51,13 +45,13 @@ const MAX_LOGS_RESPONSE_SIZE: usize = 1 << 20;
 /// ```
 pub fn serve_metrics(
     encode_metrics: impl FnOnce(&mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()>,
-) -> HttpResponse {
+) -> HttpRequestResult {
     let mut writer = MetricsEncoder::new(vec![], now() as i64 / 1_000_000);
 
     match encode_metrics(&mut writer) {
         Ok(()) => {
             let content_body: Vec<u8> = writer.into_inner();
-            HttpResponse {
+            HttpRequestResult {
                 status: 200_u8.into(),
                 headers: vec![
                     HttpHeader {
@@ -76,7 +70,7 @@ pub fn serve_metrics(
                 body: content_body,
             }
         }
-        Err(err) => HttpResponse {
+        Err(err) => HttpRequestResult {
             status: 500_u16.into(),
             headers: vec![],
             body: format!("Failed to encode metrics: {err}").into(),
@@ -85,20 +79,20 @@ pub fn serve_metrics(
 }
 
 /// Given an INFO and ERROR `GlobalBuffer`, render the buffers into a json encoded body of an
-/// HttpResponse that can be served via a Canister's `http_request` query method. The method's
-/// `CanisterHttpRequestArgument` allows selecting the logs based on severity (INFO/ERROR) and
+/// HttpRequestResult that can be served via a Canister's `http_request` query method. The method's
+/// `HttpRequestArgs` allows selecting the logs based on severity (INFO/ERROR) and
 /// timestamp.
 ///
 /// ```
 /// use ic_canister_log::{declare_log_buffer, export, log};
 /// use ic_canister_serve::serve_logs;
-/// use ic_cdk::api::management_canister::http_request::{CanisterHttpRequestArgument, HttpResponse};
+/// use ic_cdk_management_canister::{HttpRequestArgs, HttpRequestResult};
 ///
 /// declare_log_buffer!(name = INFO, capacity = 100);
 /// declare_log_buffer!(name = ERROR, capacity = 100);
 ///
 /// #[ic_cdk::query]
-/// fn http_request(request: CanisterHttpRequestArgument) -> HttpResponse {
+/// fn http_request(request: HttpRequestArgs) -> HttpRequestResult {
 ///     log!(INFO, "This is an INFO log");
 ///     log!(ERROR, "This is an ERROR log");
 ///
@@ -109,7 +103,7 @@ pub fn serve_metrics(
 ///
 ///     match path {
 ///         "/logs" => serve_logs(request, &INFO, &ERROR),
-///         _ => HttpResponse {
+///         _ => HttpRequestResult {
 ///                 status: 404_u32.into(),
 ///                 body: "not_found".into(),
 ///                 ..Default::default()
@@ -118,10 +112,10 @@ pub fn serve_metrics(
 /// }
 /// ```
 pub fn serve_logs(
-    request: CanisterHttpRequestArgument,
+    request: HttpRequestArgs,
     info_logs: &'static GlobalBuffer,
     error_logs: &'static GlobalBuffer,
-) -> HttpResponse {
+) -> HttpRequestResult {
     // Convert from generic HTTP request to LogsRequest.
     let request = match LogsRequest::try_from(request) {
         Ok(request) => request,
@@ -130,7 +124,7 @@ pub fn serve_logs(
                 .unwrap_or_default()
                 .into_bytes();
 
-            return HttpResponse {
+            return HttpRequestResult {
                 status: 400_u16.into(),
                 headers: vec![
                     HttpHeader {
@@ -157,7 +151,7 @@ pub fn serve_logs(
     });
 
     let content_body: Vec<u8> = body.into_bytes();
-    HttpResponse {
+    HttpRequestResult {
         status: 200_u8.into(),
         headers: vec![
             HttpHeader {
@@ -177,8 +171,8 @@ pub fn serve_logs(
 ///
 /// This does two main things:
 ///
-/// 1. Tries to convert from a generic CanisterHttpRequestArgument
-///    (via impl From<CanisterHttpRequestArgument>).
+/// 1. Tries to convert from a generic HttpRequestArgs
+///    (via impl From<HttpRequestArgs>).
 ///
 ///2. Renders JSON (via LogsRequest::render_json). Of course, this needs to
 ///   be fed logs.
@@ -198,43 +192,29 @@ impl LogsRequest {
     ///
     /// b. Implement the filtering specified by the query parameters.
     fn render_json(&self, info_logs: &LogBuffer, error_logs: &LogBuffer) -> String {
-        let mut info_logs = LogIter::new(LogSeverity::Info, self.skip_old_log_entries(info_logs));
-        let mut error_logs =
-            LogIter::new(LogSeverity::Error, self.skip_old_log_entries(error_logs));
+        let info_logs = LogIter::new(LogSeverity::Info, self.skip_old_log_entries(info_logs));
+        let error_logs = LogIter::new(LogSeverity::Error, self.skip_old_log_entries(error_logs));
 
         // Select sources. They will be merged later.
-        // Prioritize them by the timestamp of their first element.
-        let mut sources = PriorityQueue::new();
-        {
-            let info_priority = info_logs.priority();
-            let error_priority = error_logs.priority();
-            match self.severity {
-                LogSeverity::Info => {
-                    sources.push(ByAddress(&mut info_logs), info_priority);
-                    sources.push(ByAddress(&mut error_logs), error_priority);
-                }
-                LogSeverity::Error => {
-                    sources.push(ByAddress(&mut error_logs), error_priority);
-                }
-            }
-        }
+        let mut sources = match self.severity {
+            LogSeverity::Info => vec![info_logs, error_logs],
+            LogSeverity::Error => vec![error_logs],
+        };
 
         // Merge sources by timestamp.
         let mut approximate_total_size = 0;
         let mut interleaved_logs = vec![];
-        loop {
-            // PriorityQueue::pop removes the element with the highest priority.
-            // We prioritize by Reverse(first_log_entry.timestamp). See
-            // LogIter::priority. Therefore, this should be an Iterator with the
-            // earliest first LogEntry.
-            let mut log_iter = match sources.pop() {
-                None => break, // No more sources.
-                Some((log_iter, _priority)) => log_iter,
-            };
-
-            let log_entry = match log_iter.next() {
-                Some(log_entry) => log_entry,
-                None => continue,
+        // Keep picking the (non-exhausted) source whose next log entry is the
+        // earliest, until all sources are exhausted. In case of a tie, the
+        // source that comes first in `sources` wins. There are only a couple
+        // of sources, so a linear scan is perfectly adequate.
+        while let Some(log_iter) = sources
+            .iter_mut()
+            .filter(|log_iter| log_iter.head.is_some())
+            .min_by_key(|log_iter| log_iter.head_timestamp())
+        {
+            let Some(log_entry) = log_iter.next() else {
+                break; // Unreachable, because exhausted sources were filtered out above.
             };
 
             let enhanced_log_entry = EnhancedLogEntry::new(log_iter.severity, log_entry);
@@ -243,13 +223,6 @@ impl LogsRequest {
                 break;
             }
             interleaved_logs.push(enhanced_log_entry);
-
-            if log_iter.head.is_some() {
-                // This guard is a minor optimization, because earlier in this
-                // loop continue handles log_iter being empty.
-                let priority = log_iter.priority();
-                sources.push(log_iter, priority);
-            }
         }
 
         serde_json::json!({
@@ -268,12 +241,10 @@ impl LogsRequest {
     }
 }
 
-impl TryFrom<CanisterHttpRequestArgument> for LogsRequest {
+impl TryFrom<HttpRequestArgs> for LogsRequest {
     type Error = String;
 
-    fn try_from(
-        http_request: CanisterHttpRequestArgument,
-    ) -> Result<Self, /* description */ String> {
+    fn try_from(http_request: HttpRequestArgs) -> Result<Self, /* description */ String> {
         // Parse query parameters.
         let query = query_parameters_map(&http_request.url);
 
@@ -401,14 +372,9 @@ where
         }
     }
 
-    /// Based on the timestamp of the head log entry; earlier entries have
-    /// higher priority.
-    fn priority(&self) -> impl Ord + Debug + use<I> {
-        Reverse(
-            self.head
-                .map(|log_entry| log_entry.timestamp)
-                .unwrap_or_default(),
-        )
+    /// The timestamp of the next log entry, or None if this is exhausted.
+    fn head_timestamp(&self) -> Option<u64> {
+        self.head.map(|log_entry| log_entry.timestamp)
     }
 }
 

@@ -852,7 +852,7 @@ mod update_balance {
             let mock_result = match result {
                 MetricsResult::Ok => Ok(vec![]),
                 MetricsResult::Err => Err(CallError::from_sign_error(
-                    ic_cdk::management_canister::SignCallError::CallFailed(
+                    ic_cdk_management_canister::SignCallError::CallFailed(
                         ic_cdk::call::CallFailed::CallPerformFailed(
                             ic_cdk::call::CallPerformFailed {},
                         ),

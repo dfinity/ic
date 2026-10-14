@@ -343,7 +343,7 @@ fn should_not_purge_all_transcripts_of_certain_threshold_if_capacity_exceeded(
     // verify there is at least one high threshold transcript and at least one low threshold transcript
     let mut found_single_threshold = false;
     let mut found_other_threshold = false;
-    for (ni_dkg_id, _value) in store.store.iter() {
+    for ni_dkg_id in store.store.keys() {
         if ni_dkg_id.dkg_tag == single_transcript_threshold {
             found_single_threshold = true;
         } else if ni_dkg_id.dkg_tag == other_transcripts_threshold {

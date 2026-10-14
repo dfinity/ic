@@ -9,7 +9,7 @@ use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder,
+    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
 };
 use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -124,7 +124,7 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
 
     let proposal = ChangeCanisterRequest {
         stop_before_installing: true,
-        mode: CanisterInstallMode::Upgrade,
+        mode: CanisterInstallModeV2::Upgrade(None),
         canister_id: GOVERNANCE_CANISTER_ID,
         wasm_module,
         arg: vec![],

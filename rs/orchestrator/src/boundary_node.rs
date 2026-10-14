@@ -1,80 +1,35 @@
 use crate::{
-    error::{OrchestratorError, OrchestratorResult},
-    metrics::OrchestratorMetrics,
-    process_manager::{Process, ProcessManager, ProcessManagerImpl},
+    error::OrchestratorError,
+    process_manager::Process,
+    processes::{IcBoundaryManager, IcBoundaryProcess},
     registry_helper::RegistryHelper,
 };
-use ic_config::crypto::CryptoConfig;
-use ic_logger::{ReplicaLogger, info, warn};
+use ic_logger::{ReplicaLogger, warn};
 use ic_types::{NodeId, ReplicaVersion};
-use std::{
-    collections::HashMap,
-    ffi::OsString,
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-};
-
-struct BoundaryNodeProcess {
-    version: ReplicaVersion,
-    binary: PathBuf,
-    args: Vec<OsString>,
-    env: HashMap<OsString, OsString>,
-}
-
-impl Process for BoundaryNodeProcess {
-    const NAME: &'static str = "Boundary Node";
-
-    type Version = ReplicaVersion;
-
-    fn get_version(&self) -> &Self::Version {
-        &self.version
-    }
-
-    fn get_binary(&self) -> &Path {
-        &self.binary
-    }
-
-    fn get_args(&self) -> &[OsString] {
-        &self.args
-    }
-
-    fn get_env(&self) -> HashMap<OsString, OsString> {
-        self.env.clone()
-    }
-}
+use std::sync::Arc;
 
 pub(crate) struct BoundaryNodeManager {
     registry: Arc<RegistryHelper>,
-    _metrics: Arc<OrchestratorMetrics>,
-    process: Arc<Mutex<dyn ProcessManager<BoundaryNodeProcess>>>,
-    ic_binary_dir: PathBuf,
-    crypto_config: CryptoConfig,
+    process_manager: IcBoundaryManager,
     version: ReplicaVersion,
-    logger: ReplicaLogger,
     node_id: NodeId,
-    domain_name: Option<String>,
+    logger: ReplicaLogger,
 }
 
 impl BoundaryNodeManager {
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
-        metrics: Arc<OrchestratorMetrics>,
+        process_manager: IcBoundaryManager,
         version: ReplicaVersion,
         node_id: NodeId,
-        ic_binary_dir: PathBuf,
-        crypto_config: CryptoConfig,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
             registry,
-            _metrics: metrics,
-            process: Arc::new(Mutex::new(ProcessManagerImpl::new(logger.clone()))),
-            ic_binary_dir,
-            crypto_config,
+            process_manager,
             version,
             logger,
             node_id,
-            domain_name: None,
         }
     }
 
@@ -94,120 +49,37 @@ impl BoundaryNodeManager {
                     );
                     // NOTE: We could also shutdown the boundary node here. However, it makes sense to continue
                     // serving requests while the orchestrator is downloading the new image in most cases.
-                } else {
-                    match self.registry.get_node_domain_name(registry_version) {
-                        Ok(Some(domain_name)) => {
-                            let domain_name = Some(domain_name);
-
-                            // stop ic-boundary when the domain name changes and start it again.
-                            if domain_name != self.domain_name {
-                                if let Err(err) = self.ensure_boundary_node_stopped() {
-                                    warn!(self.logger, "Failed to stop Boundary Node: {}", err);
-                                }
-                                self.domain_name = domain_name;
-                            }
-
-                            // make sure the boundary node is running
-                            if let Err(err) = self.ensure_boundary_node_running(&self.version) {
-                                warn!(self.logger, "Failed to start Boundary Node: {}", err);
-                            }
-                        }
-                        // BN should not be active when the node doesn't have a domain name
-                        Ok(None) => {
-                            warn!(
-                                self.logger,
-                                "There is no domain associated with the node, while this is a requirement for the API boundary node. Shutting ic-boundary down."
-                            );
-                            if let Err(err) = self.ensure_boundary_node_stopped() {
-                                warn!(self.logger, "Failed to stop Boundary Node: {}", err);
-                            }
-                            self.domain_name = None;
-                        }
-                        // Failing to read the registry
-                        Err(err) => warn!(
-                            self.logger,
-                            "Failed to fetch Boundary Node domain name: {}", err
-                        ),
-                    }
+                } else if let Err(err) = self
+                    .process_manager
+                    .ensure_ic_boundary_running_and_restarted_on_domain_change(
+                        self.version.clone(),
+                        registry_version,
+                    )
+                {
+                    warn!(
+                        self.logger,
+                        "Failed to ensure {} is running: {}",
+                        IcBoundaryProcess::NAME,
+                        err
+                    );
                 }
             }
             // BN should not be active
             Err(OrchestratorError::ApiBoundaryNodeMissingError(_, _)) => {
-                if let Err(err) = self.ensure_boundary_node_stopped() {
-                    warn!(self.logger, "Failed to stop Boundary Node: {}", err);
+                if let Err(err) = self.process_manager.stop() {
+                    warn!(
+                        self.logger,
+                        "Failed to stop {}: {}",
+                        IcBoundaryProcess::NAME,
+                        err
+                    );
                 }
             }
             // Failing to read the registry
             Err(err) => warn!(
                 self.logger,
-                "Failed to fetch Boundary Node version: {}", err
+                "Failed to fetch API Boundary Node version: {}", err
             ),
         }
-    }
-
-    /// Start the current boundary node process
-    fn ensure_boundary_node_running(&self, version: &ReplicaVersion) -> OrchestratorResult<()> {
-        let mut process = self.process.lock().unwrap();
-
-        if process.is_running() {
-            return Ok(());
-        }
-        info!(self.logger, "Starting new boundary node process");
-
-        let binary = self.ic_binary_dir.join("ic-boundary");
-
-        let domain_name = self
-            .domain_name
-            .as_ref()
-            .ok_or_else(|| OrchestratorError::DomainNameMissingError(self.node_id))?;
-
-        let env = match env_file_reader::read_file("/opt/ic/share/ic-boundary.env") {
-            Ok(env) => env
-                .into_iter()
-                .map(|(k, v)| (OsString::from(k), OsString::from(v)))
-                .collect(),
-            Err(e) => {
-                return Err(OrchestratorError::IoError(
-                    "unable to read ic-boundary environment variables".to_string(),
-                    e,
-                ));
-            }
-        };
-
-        let args = vec![
-            format!("--tls-hostname={}", domain_name).into(),
-            format!(
-                "--crypto-config={}",
-                serde_json::to_string(&self.crypto_config)
-                    .map_err(OrchestratorError::SerializeCryptoConfigError)?
-            )
-            .into(),
-        ];
-
-        process
-            .start(BoundaryNodeProcess {
-                version: version.clone(),
-                binary,
-                args,
-                env,
-            })
-            .map_err(|e| {
-                OrchestratorError::IoError(
-                    "Error when attempting to start new boundary node".into(),
-                    e,
-                )
-            })
-    }
-
-    /// Stop the current boundary node process.
-    fn ensure_boundary_node_stopped(&self) -> OrchestratorResult<()> {
-        let mut process = self.process.lock().unwrap();
-        if process.is_running() {
-            return process.stop().map_err(|e| {
-                OrchestratorError::IoError("Error when attempting to stop boundary node".into(), e)
-            });
-        }
-
-        Ok(())
     }
 }

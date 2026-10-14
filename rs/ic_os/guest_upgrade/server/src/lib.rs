@@ -2,7 +2,7 @@ use crate::service::DiskEncryptionKeyExchangeServiceImpl;
 use attestation::attestation_package::SevRootCertificateVerification;
 use config_types::TrustedExecutionEnvironmentConfig;
 use ic_interfaces_registry::RegistryClient;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::replica_version::ReplicaVersionRegistry;
 use ic_types::ReplicaVersion;
 use server::DiskEncryptionKeyExchangeServer;
 use sev_guest::firmware::SevGuestFirmware;
@@ -12,7 +12,7 @@ use std::time::Duration;
 use thiserror::Error;
 use tokio::runtime::Handle;
 use tokio::sync::watch;
-use vsock_lib::VSockClient;
+use vsock_lib::client::VsockClient;
 use vsock_lib::protocol::Command;
 
 pub mod orchestrator;
@@ -38,14 +38,10 @@ pub struct DiskEncryptionKeyExchangeServerAgent {
     sev_firmware_factory: SevFirmwareFactory,
     sev_root_certificate_verification: SevRootCertificateVerification,
     trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
-    vsock_client: Box<dyn VSockClient + Send + Sync>,
+    vsock_client: Box<dyn VsockClient + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     store_device_path: PathBuf,
     store_luks_header_path: PathBuf,
-    /// If true, the server will send the Store LUKS header to the client.
-    /// Only false in unit tests testing backwards compatibility.
-    // TODO: Remove when all deployed GuestOS versions support sending the Store LUKS header.
-    send_luks_header: bool,
     port: u16,
     success_timeout: Duration,
 }
@@ -53,14 +49,13 @@ pub struct DiskEncryptionKeyExchangeServerAgent {
 impl DiskEncryptionKeyExchangeServerAgent {
     pub fn new(
         handle: Handle,
-        vsock_client: Box<dyn VSockClient + Send + Sync>,
+        vsock_client: Box<dyn VsockClient + Send + Sync>,
         sev_firmware_factory: SevFirmwareFactory,
         sev_root_certificate_verification: SevRootCertificateVerification,
         trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
         registry_client: Arc<dyn RegistryClient>,
         store_device_path: PathBuf,
         store_luks_header_path: PathBuf,
-        send_luks_header: bool,
         port: u16,
         success_timeout: Duration,
     ) -> Self {
@@ -73,7 +68,6 @@ impl DiskEncryptionKeyExchangeServerAgent {
             registry_client,
             store_device_path,
             store_luks_header_path,
-            send_luks_header,
             port,
             success_timeout,
         }
@@ -105,7 +99,6 @@ impl DiskEncryptionKeyExchangeServerAgent {
             self.trusted_execution_environment_config.clone(),
             self.store_device_path.clone(),
             self.store_luks_header_path.clone(),
-            self.send_luks_header,
             status_sender,
             expected_measurements,
         ));
@@ -124,6 +117,7 @@ impl DiskEncryptionKeyExchangeServerAgent {
         // Tell the host to start the Upgrade VM.
         self.vsock_client
             .send_command(Command::StartUpgradeGuestVM)
+            .map_err(|err| DiskEncryptionKeyExchangeError::UpgradeVmError(err.to_string()))?
             .map_err(|err| DiskEncryptionKeyExchangeError::UpgradeVmError(err.to_string()))?;
 
         // Wait for status.
@@ -150,7 +144,7 @@ impl DiskEncryptionKeyExchangeServerAgent {
         let registry_version = self.registry_client.get_latest_version();
         let expected_measurements = self
             .registry_client
-            .get_replica_version_record_from_version_id(replica_version, registry_version)
+            .get_replica_version_record(replica_version, registry_version)
             .map_err(|err| {
                 DiskEncryptionKeyExchangeError::ServerStartError(format!(
                     "Failed to get replica version record for {replica_version}: {err}"

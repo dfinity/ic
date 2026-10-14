@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_bench")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 load("//bazel:prost.bzl", "generated_files_check")
 
@@ -34,11 +35,9 @@ rust_library(
         "//rs/crypto/sha2",
         "//rs/phantom_newtype",
         "//rs/protobuf",
-        "@crate_index//:byte-unit",
         "@crate_index//:bytes",
         "@crate_index//:candid",
         "@crate_index//:comparable",
-        "@crate_index//:hex",
         "@crate_index//:prost",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
@@ -57,19 +56,15 @@ rust_test(
         "@crate_index//:strum_macros",
     ] + [
         # Keep sorted.
-        "@crate_index//:proptest-derive",
     ],
     deps = [
         # Keep sorted.
         "//rs/crypto/sha2",
         "//rs/phantom_newtype",
         "//rs/protobuf",
-        "@crate_index//:assert_matches",
-        "@crate_index//:byte-unit",
         "@crate_index//:bytes",
         "@crate_index//:candid",
         "@crate_index//:comparable",
-        "@crate_index//:hex",
         "@crate_index//:proptest",
         "@crate_index//:prost",
         "@crate_index//:serde",
@@ -94,5 +89,16 @@ generated_files_check(
         "//rs/test_utilities/compare_dirs",
         "//rs/types/base_types/protobuf_generator:lib",
         "@crate_index//:tempfile",
+    ],
+)
+
+rust_bench(
+    name = "canister_id_bench",
+    srcs = ["benches/canister_id.rs"],
+    crate_root = "benches/canister_id.rs",
+    deps = [
+        # Keep sorted.
+        ":base_types",
+        "@crate_index//:criterion",
     ],
 )

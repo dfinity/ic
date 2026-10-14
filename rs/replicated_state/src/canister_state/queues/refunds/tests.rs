@@ -27,10 +27,12 @@ fn test_add_single_refund() {
     let cycles = Cycles::new(1000);
 
     assert!(pool.is_empty());
+    assert_eq!(pool.total(), Cycles::zero());
 
     pool.add(canister_id, cycles);
 
     assert_eq!(pool.len(), 1);
+    assert_eq!(pool.total(), cycles);
     assert_eq!(
         &[refund(canister_id, cycles)],
         collect_iter(&pool).as_slice()
@@ -44,12 +46,14 @@ fn test_add_multiple_refunds() {
     let cycles = Cycles::new(1000);
 
     assert!(pool.is_empty());
+    assert_eq!(pool.total(), Cycles::zero());
 
     pool.add(canister_id, cycles);
     pool.add(canister_id, cycles);
     pool.add(canister_id, cycles);
 
     assert_eq!(pool.len(), 1);
+    assert_eq!(pool.total(), cycles * 3_u64);
     assert_eq!(
         &[refund(canister_id, cycles * 3_u64)],
         collect_iter(&pool).as_slice()
@@ -70,6 +74,7 @@ fn test_add_multiple_refunds_with_same_amount() {
 
     // They should be sorted by canister ID (lowest first).
     assert_eq!(pool.len(), 3);
+    assert_eq!(pool.total(), Cycles::new(3000));
     assert_eq!(
         &[
             refund(canister_id1, Cycles::new(1000)),
@@ -93,6 +98,7 @@ fn test_add_zero_cycles() {
     let mut pool = RefundPool::new();
     pool.add(CanisterId::from(1), Cycles::new(0));
     assert_eq!(pool.len(), 0);
+    assert_eq!(pool.total(), Cycles::zero());
     assert!(pool.is_empty());
 }
 
@@ -108,6 +114,7 @@ fn test_add_changes_priority() {
 
     // They should be sorted by amount (highest first).
     assert_eq!(pool.len(), 2);
+    assert_eq!(pool.total(), Cycles::new(1500));
     assert_eq!(
         &[
             refund(canister_id2, Cycles::new(1000)),
@@ -121,6 +128,7 @@ fn test_add_changes_priority() {
 
     // The (still 2) refunds should now be sorted accordingly.
     assert_eq!(pool.len(), 2);
+    assert_eq!(pool.total(), Cycles::new(2500));
     assert_eq!(
         &[
             refund(canister_id1, Cycles::new(1500)),
@@ -147,13 +155,21 @@ fn test_retain() {
     pool.add(canister_id2, Cycles::new(2000));
 
     assert_eq!(pool.len(), 2);
+    assert_eq!(pool.total(), Cycles::new(3000));
 
     // Retain only canister_id1.
     pool.retain(|refund| refund.recipient() == canister_id1);
 
     assert_eq!(pool.len(), 1);
+    assert_eq!(pool.total(), Cycles::new(1000));
     assert_eq!(
         &[refund(canister_id1, Cycles::new(1000))],
         collect_iter(&pool).as_slice()
     );
+
+    // Retain nothing.
+    pool.retain(|_| false);
+
+    assert!(pool.is_empty());
+    assert_eq!(pool.total(), Cycles::zero());
 }

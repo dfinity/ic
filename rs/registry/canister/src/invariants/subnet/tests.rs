@@ -5,6 +5,9 @@ use ic_base_types::SubnetId;
 use ic_protobuf::{
     registry::{
         node::v1::{NodeRecord, NodeRewardType},
+        replica_version::v1::{
+            GuestLaunchMeasurement, GuestLaunchMeasurements, ReplicaVersionRecord,
+        },
         subnet::v1::{
             CanisterCyclesCostSchedule, SubnetFeatures, SubnetListRecord, SubnetRecord, SubnetType,
         },
@@ -12,8 +15,8 @@ use ic_protobuf::{
     types::v1::{PrincipalId as PrincipalIdPb, SubnetId as SubnetIdPb},
 };
 use ic_registry_keys::{
-    make_default_initial_dkg_subnet_id_key, make_node_record_key, make_subnet_list_record_key,
-    make_subnet_record_key,
+    make_default_initial_dkg_subnet_id_key, make_node_record_key, make_replica_version_key,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, user_test_id};
 use strum::IntoEnumIterator;
@@ -162,6 +165,173 @@ fn all_nodes_have_a_chip_id() {
         test_subnet_record.encode_to_vec(),
     );
     check_subnet_invariants(&snapshot).unwrap();
+}
+
+const REPLICA_VERSION_ID: &str = "eb3ab997954f2a91db8a42f84132cf37078d481c";
+
+/// Returns a snapshot with a SEV-enabled test subnet whose nodes all have a chip
+/// ID, together with that subnet's record. The subnet does not run any GuestOS
+/// version yet, because that is what the tests below vary.
+fn setup_sev_enabled_subnet(
+    system_subnet_id: SubnetId,
+    test_subnet_id: SubnetId,
+) -> (RegistrySnapshot, SubnetRecord) {
+    let (mut snapshot, mut test_subnet_record) =
+        setup_minimal_registry_snapshot_for_check_subnet_invariants(
+            system_subnet_id,
+            test_subnet_id,
+            4,    // num_nodes_in_test_subnet
+            true, // with_chip_id
+        );
+
+    test_subnet_record.features = Some(SubnetFeatures {
+        sev_enabled: Some(true),
+        ..Default::default()
+    });
+    snapshot.insert(
+        make_subnet_record_key(test_subnet_id).into_bytes(),
+        test_subnet_record.encode_to_vec(),
+    );
+
+    (snapshot, test_subnet_record)
+}
+
+/// Elects the given GuestOS version, with launch measurements or without.
+fn elect_replica_version(
+    snapshot: &mut RegistrySnapshot,
+    replica_version_id: &str,
+    with_launch_measurements: bool,
+) {
+    let guest_launch_measurements = if with_launch_measurements {
+        Some(GuestLaunchMeasurements {
+            guest_launch_measurements: vec![GuestLaunchMeasurement {
+                // A SEV-SNP measurement is 48 bytes long. The value itself does not matter here.
+                measurement: vec![0x42; 48],
+                metadata: None,
+            }],
+        })
+    } else {
+        None
+    };
+
+    snapshot.insert(
+        make_replica_version_key(replica_version_id).into_bytes(),
+        ReplicaVersionRecord {
+            replica_version_id: Some(replica_version_id.to_string()),
+            release_package_sha256_hex:
+                "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D".to_string(),
+            release_package_urls: vec!["https://example.com/release_package.tar.zst".to_string()],
+            guest_launch_measurements,
+        }
+        .encode_to_vec(),
+    );
+}
+
+/// Points the given subnet at the given replica version (GuestOS version).
+fn deploy_replica_version_to_subnet(
+    snapshot: &mut RegistrySnapshot,
+    subnet_id: SubnetId,
+    subnet_record: &mut SubnetRecord,
+    replica_version_id: &str,
+) {
+    subnet_record.replica_version_id = replica_version_id.to_string();
+    snapshot.insert(
+        make_subnet_record_key(subnet_id).into_bytes(),
+        subnet_record.encode_to_vec(),
+    );
+}
+
+#[test]
+fn test_sev_enabled_subnet_runs_version_with_launch_measurements() {
+    // Step 1: Prepare the world.
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let (mut snapshot, mut test_subnet_record) =
+        setup_sev_enabled_subnet(system_subnet_id, test_subnet_id);
+
+    elect_replica_version(
+        &mut snapshot,
+        REPLICA_VERSION_ID,
+        true, // with_launch_measurements
+    );
+    deploy_replica_version_to_subnet(
+        &mut snapshot,
+        test_subnet_id,
+        &mut test_subnet_record,
+        REPLICA_VERSION_ID,
+    );
+
+    // Step 2: Run the code under test.
+    let result = check_subnet_invariants(&snapshot);
+
+    // Step 3: Verify result(s). The subnet is compliant, so there is no defect.
+    result.unwrap();
+}
+
+#[test]
+fn test_sev_enabled_subnet_cannot_run_version_without_launch_measurements() {
+    // Step 1: Prepare the world.
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let (mut snapshot, mut test_subnet_record) =
+        setup_sev_enabled_subnet(system_subnet_id, test_subnet_id);
+
+    elect_replica_version(
+        &mut snapshot,
+        REPLICA_VERSION_ID,
+        false, // with_launch_measurements
+    );
+    deploy_replica_version_to_subnet(
+        &mut snapshot,
+        test_subnet_id,
+        &mut test_subnet_record,
+        REPLICA_VERSION_ID,
+    );
+
+    // Step 2 & 3: Run the code under test, and verify the defect it reports.
+    assert_non_compliant_record(
+        &snapshot,
+        &format!(
+            "is sev-enabled, but the guestos version that it runs is missing guest launch \
+             measurements: {REPLICA_VERSION_ID:?}"
+        ),
+    );
+}
+
+/// Only SEV-enabled subnets are constrained. Versions without launch
+/// measurements have been elected in the past, and the subnets running them
+/// must stay compliant.
+#[test]
+fn test_subnet_without_sev_can_run_version_without_launch_measurements() {
+    // Step 1: Prepare the world.
+    let system_subnet_id = subnet_test_id(1);
+    let test_subnet_id = subnet_test_id(2);
+    let (mut snapshot, mut test_subnet_record) =
+        setup_minimal_registry_snapshot_for_check_subnet_invariants(
+            system_subnet_id,
+            test_subnet_id,
+            4,    // num_nodes_in_test_subnet
+            true, // with_chip_id
+        );
+
+    elect_replica_version(
+        &mut snapshot,
+        REPLICA_VERSION_ID,
+        false, // with_launch_measurements
+    );
+    deploy_replica_version_to_subnet(
+        &mut snapshot,
+        test_subnet_id,
+        &mut test_subnet_record,
+        REPLICA_VERSION_ID,
+    );
+
+    // Step 2: Run the code under test.
+    let result = check_subnet_invariants(&snapshot);
+
+    // Step 3: Verify result(s). Only SEV-enabled subnets are constrained, so
+    // there is no defect.
+    result.unwrap();
 }
 
 #[test]

@@ -6,8 +6,8 @@ This crate implements the disk encryption key exchange that occurs during GuestO
 
 The key exchange involves two GuestOS VMs running simultaneously on the same physical host:
 
-- **Server** (active GuestOS): Hosted by the orchestrator. Derives the disk encryption key from its own SEV measurement and sends it to the client.
-- **Client** (upgrade VM): A temporary GuestOS VM launched by the HostOS with the new image. Connects to the server, receives the key, writes it to disk, and shuts down.
+- **Server** (active GuestOS): Hosted by the orchestrator. Derives the disk encryption key from its own SEV measurement and sends it, together with the store partition's detached LUKS header, to the client.
+- **Client** (upgrade VM): A temporary GuestOS VM launched by the HostOS with the new image. Connects to the server, receives the key and header, copies the header to its own Var partition, re-keys it to its own SEV-derived key, and shuts down.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -16,16 +16,17 @@ The key exchange involves two GuestOS VMs running simultaneously on the same phy
 │  ┌──────────────────────┐   ┌────────────────────────┐  │
 │  │ Active GuestOS       │   │ Upgrade VM (new)       │  │
 │  │                      │   │                        │  │
-│  │  Orchestrator        │   │  guest_upgrade_client   │  │
-│  │    │                 │   │    │                    │  │
-│  │    ▼                 │   │    │                    │  │
-│  │  guest_upgrade_server│◄──┼────┘                    │  │
-│  │    │                 │   │                        │  │
-│  │    │ derive_key()    │   │  writes key to         │  │
-│  │    │ from SEV        │   │  /var/alternative_      │  │
-│  │    │ measurement     │   │  store.keyfile          │  │
+│  │  Orchestrator        │   │  guest_upgrade_client  │  │
+│  │    │                 │   │    │                   │  │
+│  │    ▼                 │   │    │                   │  │
+│  │  guest_upgrade_server│◄──┼────┘                   │  │
+│  │    │                 │   │  copies header to      │  │
+│  │    │ derive_key()    │   │  own Var partition,    │  │
+│  │    │ from SEV        │   │  re-keys it to own     │  │
+│  │    │ measurement     │   │  SEV-derived key       │  │
 │  │    ▼                 │   │                        │  │
-│  │  sends key ─────────►│───┼──► receives key         │  │
+│  │  sends key + ───────►│───┼──► receives key +      │  │
+│  │  header              │   │    header              │  │
 │  └──────────────────────┘   └────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```

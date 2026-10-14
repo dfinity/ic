@@ -62,7 +62,10 @@ pub enum StepType {
     /// a "target replay height" in this step. This target height should be chosen such that it is
     /// below the height causing the panic, but above or equal to the height of the last certification
     /// (share). Specifying this parameter will instruct ic-replay to stop at the given height and
-    /// create a checkpoint, which will then be used to propose the recovery CUP.
+    /// create a checkpoint, which will then be used to propose the recovery CUP. This checkpoint
+    /// requires an additional batch and will thus be created one height above the specified target
+    /// height, unless the target height is a CUP height, in which case the checkpoint should
+    /// already exist.
     ICReplay,
     /// Now we want to verify that the height of the locally obtained execution state matches the
     /// highest finalized height, which was agreed upon by the subnet.
@@ -136,7 +139,8 @@ pub struct AppSubnetRecoveryArgs {
     pub replacement_nodes: Option<Vec<NodeId>>,
 
     #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
+    /// The replay will stop at this height and checkpoint the state replayed up to
+    /// it. That checkpoint sits one height above, unless this is a CUP height.
     pub replay_until_height: Option<u64>,
 
     /// Public ssh key to be deployed to the subnet for read only access
@@ -313,6 +317,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 wait_for_confirmation(&self.logger);
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::DownloadConsensusPool => {
                 if self.params.download_pool_node.is_none() {
                     // We could pick a node with highest finalization and CUP height automatically,
@@ -354,6 +359,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::ICReplay => {
                 if self.params.replay_until_height.is_none() {
                     self.params.replay_until_height =
@@ -361,18 +367,20 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::ElectVersion => {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version =
-                        read_optional(&self.logger, "Version to bless (and upgrade to): ");
+                        read_optional(&self.logger, "Version to elect (and upgrade to): ");
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::UpgradeVersion => {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version = read_optional(
                         &self.logger,
-                        "Version to upgrade to (WARN: it should already be blessed): ",
+                        "Version to upgrade to (WARN: it should already be elected): ",
                     );
                 }
             }
@@ -398,6 +406,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::UploadState => {
                 if self.params.upload_method.is_none() {
                     self.params.upload_method = Some(read_data_location(
@@ -407,6 +416,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 }
             }
 
+            #[allow(clippy::collapsible_match)]
             StepType::WaitForCUP => {
                 if self.params.wait_for_cup_node.is_none() {
                     if let Some(DataLocation::Remote(ip)) = self.params.upload_method {
@@ -517,7 +527,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::ValidateReplayOutput => Ok(Box::new(
                 self.recovery
-                    .get_validate_replay_step(self.params.subnet_id, 0),
+                    .get_validate_replay_step(self.params.subnet_id),
             )),
 
             StepType::UploadState => {
@@ -591,7 +601,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::ProposeCup => {
-                let state_params = self.recovery.get_replay_output()?;
+                let state_params = self.recovery.get_replay_output()?.state_params;
                 let recovery_height = Recovery::get_recovery_height(state_params.height);
                 let default = vec![];
                 Ok(Box::new(self.recovery.update_recovery_cup(

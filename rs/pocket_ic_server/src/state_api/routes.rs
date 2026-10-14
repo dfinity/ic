@@ -12,8 +12,8 @@ use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
     CanisterSnapshotDownload, CanisterSnapshotUpload, DashboardRequest, DeleteSubnet,
     GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime,
-    GetTopology, IngressMessageStatus, MockCanisterHttp, PubKey, Query, QueryRequest,
-    SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
+    GetTopology, IngressMessageStatus, MockCanisterHttp, MockFlexibleCanisterHttp, PubKey, Query,
+    QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
     SubnetReadStateRequest, Tick,
 };
 use crate::{
@@ -35,8 +35,8 @@ use axum::{
 };
 use axum_extra::headers;
 use axum_extra::headers::HeaderMapExt;
-use backoff::backoff::Backoff;
-use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
+use backon::{BackoffBuilder, ExponentialBuilder};
+use base64::prelude::*;
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
 use ic_registry_routing_table::RoutingTable;
@@ -46,11 +46,11 @@ use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, IcpConfig, IcpFeatures, InitialTime, InstanceConfig,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCanisterSnapshotDownload, RawCanisterSnapshotId,
-    RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs, RawMessageId,
-    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTickConfigs, RawTime, Topology,
+    MockCanisterHttpResponse, MockFlexibleCanisterHttpResponse, RawAddCycles, RawCanisterCall,
+    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCanisterSnapshotDownload,
+    RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs,
+    RawMessageId, RawMockCanisterHttpResponse, RawMockFlexibleCanisterHttpResponse, RawPrincipalId,
+    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTickConfigs, RawTime, Topology,
 };
 use serde::Serialize;
 use slog::Level;
@@ -139,6 +139,10 @@ where
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
         .directory_route("/tick", post(handler_tick))
         .directory_route("/mock_canister_http", post(handler_mock_canister_http))
+        .directory_route(
+            "/mock_flexible_canister_http",
+            post(handler_mock_flexible_canister_http),
+        )
         .directory_route(
             "/canister_snapshot_download",
             post(handler_canister_snapshot_download),
@@ -288,6 +292,8 @@ where
         // Configures an IC instance to make progress automatically,
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
+        // Only returns after the certified time of the IC instance
+        // has been updated for the first time.
         .api_route("/{id}/auto_progress", post(auto_progress))
         // Returns whether automatic progress is enabled for an IC instance.
         .api_route("/{id}/auto_progress", get(get_auto_progress))
@@ -321,11 +327,13 @@ async fn run_operation<T: Serialize + FromOpOut>(
 ) -> (StatusCode, ApiResponse<T>) {
     let retry_if_busy = op.retry_if_busy();
     let op = Arc::new(op);
-    let mut retry_policy: ExponentialBackoff = ExponentialBackoffBuilder::new()
-        .with_initial_interval(Duration::from_millis(10))
-        .with_max_interval(Duration::from_secs(1))
-        .with_multiplier(2.0)
-        .with_max_elapsed_time(Some(Duration::from_secs(RETRY_TIMEOUT_S)))
+    let mut retry_policy = ExponentialBuilder::new()
+        .with_min_delay(Duration::from_millis(10))
+        .with_max_delay(Duration::from_secs(1))
+        .with_factor(2.0)
+        .with_jitter()
+        .with_total_delay(Some(Duration::from_secs(RETRY_TIMEOUT_S)))
+        .without_max_times()
         .build();
     loop {
         match api_state
@@ -347,7 +355,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                         break (
                             StatusCode::ACCEPTED,
                             ApiResponse::Started {
-                                state_label: base64::encode_config(state_label.0, base64::URL_SAFE),
+                                state_label: BASE64_URL_SAFE.encode(state_label.0),
                                 op_id: op_id.0.to_string(),
                             },
                         );
@@ -359,7 +367,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                                 "run_operation::retry_busy instance_id={} state_label={:?} op_id={}",
                                 instance_id, state_label, op_id.0
                             );
-                            match retry_policy.next_backoff() {
+                            match retry_policy.next() {
                                 Some(duration) => tokio::time::sleep(duration).await,
                                 None => {
                                     break (
@@ -375,10 +383,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                             break (
                                 StatusCode::CONFLICT,
                                 ApiResponse::Busy {
-                                    state_label: base64::encode_config(
-                                        state_label.0,
-                                        base64::URL_SAFE,
-                                    ),
+                                    state_label: BASE64_URL_SAFE.encode(state_label.0),
                                     op_id: op_id.0.to_string(),
                                 },
                             );
@@ -704,6 +709,24 @@ pub async fn handler_mock_canister_http(
         raw_mock_canister_http_response.into();
     let op = MockCanisterHttp {
         mock_canister_http_response,
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
+}
+
+pub async fn handler_mock_flexible_canister_http(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(raw_mock_flexible_canister_http_response): axum::extract::Json<
+        RawMockFlexibleCanisterHttpResponse,
+    >,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let mock_flexible_canister_http_response: MockFlexibleCanisterHttpResponse =
+        raw_mock_flexible_canister_http_response.into();
+    let op = MockFlexibleCanisterHttp {
+        mock_flexible_canister_http_response,
     };
     let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(response))
@@ -1229,7 +1252,7 @@ pub async fn handler_read_graph(
     // TODO: type state label and op id correctly but such that axum can handle it
     Path((state_label_str, op_id_str)): Path<(String, String)>,
 ) -> Response {
-    let Ok(vec) = base64::decode_config(state_label_str.as_bytes(), base64::URL_SAFE) else {
+    let Ok(vec) = BASE64_URL_SAFE.decode(state_label_str.as_bytes()) else {
         return (StatusCode::BAD_REQUEST, "Malformed state label.").into_response();
     };
     if let Ok(state_label) = StateLabel::try_from(vec) {
@@ -1264,7 +1287,7 @@ pub async fn handler_prune_graph(
     State(AppState { api_state, .. }): State<AppState>,
     Path((state_label_str, op_id_str)): Path<(String, String)>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
-    let Ok(vec) = base64::decode_config(state_label_str.as_bytes(), base64::URL_SAFE) else {
+    let Ok(vec) = BASE64_URL_SAFE.decode(state_label_str.as_bytes()) else {
         return (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<()>::Error {

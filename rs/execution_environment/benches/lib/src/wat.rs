@@ -1,7 +1,7 @@
 ///
 /// WAT templates and snippets.
 //
-use crate::common::Wasm64;
+use crate::common::{MAX_WASM64_HEAP_NUM_PAGES, Wasm64};
 
 /// Number of internal loop iterations for a benchmark.
 pub enum LoopIterations {
@@ -90,9 +90,9 @@ impl Module {
         B: core::fmt::Display,
     {
         let memory = if wasm64_status == Wasm64::Enabled {
-            "(memory i64 131072)"
+            format!("(memory i64 {MAX_WASM64_HEAP_NUM_PAGES})")
         } else {
-            "(memory 1)"
+            "(memory 1)".to_string()
         };
         let ty = if wasm64_status == Wasm64::Enabled {
             "i64"

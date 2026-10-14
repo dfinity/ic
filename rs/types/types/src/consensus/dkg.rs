@@ -41,15 +41,26 @@ impl PbArtifact for Message {
 /// Identifier of a DKG message.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct DkgMessageId {
-    pub hash: CryptoHashOf<Message>,
     pub height: Height,
+    pub hash: CryptoHashOf<Message>,
+}
+
+impl DkgMessageId {
+    /// Returns the lexicographically-smallest DkgMessageId at the given height.
+    pub fn smallest_at_height(height: Height) -> Self {
+        Self {
+            height,
+            // The lexicographically-smallest possible hash is an empty vector
+            hash: CryptoHashOf::from(CryptoHash(vec![])),
+        }
+    }
 }
 
 impl From<&Message> for DkgMessageId {
     fn from(msg: &Message) -> Self {
         Self {
-            hash: crypto_hash(msg),
             height: msg.content.dkg_id.start_block_height,
+            hash: crypto_hash(msg),
         }
     }
 }
@@ -57,8 +68,8 @@ impl From<&Message> for DkgMessageId {
 impl From<DkgMessageId> for pb::DkgMessageId {
     fn from(id: DkgMessageId) -> Self {
         Self {
-            hash: id.hash.clone().get().0,
             height: id.height.get(),
+            hash: id.hash.clone().get().0,
         }
     }
 }
@@ -68,8 +79,8 @@ impl TryFrom<pb::DkgMessageId> for DkgMessageId {
 
     fn try_from(id: pb::DkgMessageId) -> Result<Self, Self::Error> {
         Ok(Self {
-            hash: CryptoHash(id.hash.clone()).into(),
             height: Height::from(id.height),
+            hash: CryptoHash(id.hash.clone()).into(),
         })
     }
 }
@@ -87,9 +98,9 @@ pub struct DealingContent {
 
 impl DealingContent {
     /// Create a new DealingContent
-    pub fn new(dealing: NiDkgDealing, dkg_id: NiDkgId) -> Self {
+    pub fn new(dealing: NiDkgDealing, dkg_id: NiDkgId, version: ReplicaVersion) -> Self {
         DealingContent {
-            version: ReplicaVersion::default(),
+            version,
             dealing,
             dkg_id,
         }
@@ -215,6 +226,36 @@ impl std::hash::Hash for RemoteDkgAttempts {
     }
 }
 
+/// The subnet-splitting-related information available when the subnet is splitting at the summary
+/// block.
+#[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct SplittingArgs {
+    pub destination_subnet_id: SubnetId,
+    pub source_subnet_id: SubnetId,
+}
+
+/// The subnet-splitting-related information available once the subnet has been split at the
+/// previous summary block.
+#[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct PostSplitArgs {
+    pub new_subnet_id: SubnetId,
+}
+
+/// Represents the status of subnet splitting at the given summary height.
+#[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug, Default)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub enum SubnetSplittingStatus {
+    /// The subnet hasn't been requested to be split.
+    #[default]
+    NotScheduled,
+    /// The subnet is requested to be split at the height of the summary block.
+    Scheduled(SplittingArgs),
+    /// The subnet was split at the previous summary block.
+    PostSplit(PostSplitArgs),
+}
+
 /// The DKG summary will be present as the DKG payload at every block,
 /// corresponding to the start of a new DKG interval.
 #[serde_as]
@@ -236,8 +277,6 @@ pub struct DkgSummary {
     /// corresponding to this tag.
     #[serde_as(as = "Vec<(_, _)>")]
     next_transcripts: BTreeMap<NiDkgTag, NiDkgTranscript>,
-    /// Transcripts that are computed for remote subnets.
-    pub transcripts_for_remote_subnets: Vec<RemoteTranscriptResult>,
     /// The length of the current interval in rounds (following the start
     /// block).
     pub interval_length: Height,
@@ -247,6 +286,8 @@ pub struct DkgSummary {
     pub height: Height,
     /// The number of intervals a DKG for the given remote target was attempted.
     pub remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
+    /// Status of the subnet splitting.
+    pub subnet_splitting_status: SubnetSplittingStatus,
 }
 
 impl DkgSummary {
@@ -260,6 +301,7 @@ impl DkgSummary {
         next_interval_length: Height,
         height: Height,
         remote_dkg_attempts: BTreeMap<NiDkgTargetId, RemoteDkgAttempts>,
+        subnet_splitting_status: SubnetSplittingStatus,
     ) -> Self {
         Self {
             configs: configs
@@ -268,12 +310,12 @@ impl DkgSummary {
                 .collect(),
             current_transcripts,
             next_transcripts,
-            transcripts_for_remote_subnets: vec![],
             registry_version,
             interval_length,
             next_interval_length,
             height,
             remote_dkg_attempts,
+            subnet_splitting_status,
         }
     }
 
@@ -308,16 +350,6 @@ impl DkgSummary {
     /// Returns a reference to the next transcripts.
     pub fn next_transcripts(&self) -> &BTreeMap<NiDkgTag, NiDkgTranscript> {
         &self.next_transcripts
-    }
-
-    /// Return the set of transcripts (current and next) for all tags.
-    /// This function avoids expensive copying when transcripts are large.
-    pub fn into_transcripts(self) -> Vec<NiDkgTranscript> {
-        self.current_transcripts
-            .into_iter()
-            .chain(self.next_transcripts)
-            .map(|(_, t)| t)
-            .collect()
     }
 
     /// Returns `true` if the provided height is included in the DKG interval
@@ -355,6 +387,10 @@ impl DkgSummary {
             .map(|transcript| transcript.registry_version)
             .min()
             .expect("No current transcripts available")
+    }
+
+    pub fn subnet_splitting_status(&self) -> SubnetSplittingStatus {
+        self.subnet_splitting_status
     }
 }
 
@@ -422,10 +458,10 @@ impl From<&DkgSummary> for pb::Summary {
             interval_length: summary.interval_length.get(),
             next_interval_length: summary.next_interval_length.get(),
             height: summary.height.get(),
-            transcripts_for_remote_subnets: build_callback_ided_transcripts_vec(
-                summary.transcripts_for_remote_subnets.as_slice(),
-            ),
             remote_dkg_attempts: build_remote_dkg_attempts_vec(&summary.remote_dkg_attempts),
+            subnet_splitting_status: Some(pb::summary::SubnetSplittingStatus::from(
+                summary.subnet_splitting_status,
+            )),
         }
     }
 }
@@ -506,6 +542,63 @@ fn build_transcript_result(
     }
 }
 
+impl From<SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
+    fn from(status: SubnetSplittingStatus) -> Self {
+        match status {
+            SubnetSplittingStatus::NotScheduled => {
+                pb::summary::SubnetSplittingStatus::NotScheduled(())
+            }
+            SubnetSplittingStatus::Scheduled(splitting_args) => {
+                pb::summary::SubnetSplittingStatus::Scheduled(pb::SplittingArgs {
+                    destination_subnet_id: Some(subnet_id_into_protobuf(
+                        splitting_args.destination_subnet_id,
+                    )),
+                    source_subnet_id: Some(subnet_id_into_protobuf(
+                        splitting_args.source_subnet_id,
+                    )),
+                })
+            }
+            SubnetSplittingStatus::PostSplit(post_split_args) => {
+                pb::summary::SubnetSplittingStatus::PostSplit(pb::PostSplitArgs {
+                    new_subnet_id: Some(subnet_id_into_protobuf(post_split_args.new_subnet_id)),
+                })
+            }
+        }
+    }
+}
+
+impl TryFrom<pb::summary::SubnetSplittingStatus> for SubnetSplittingStatus {
+    type Error = ProxyDecodeError;
+
+    fn try_from(status: pb::summary::SubnetSplittingStatus) -> Result<Self, Self::Error> {
+        match status {
+            pb::summary::SubnetSplittingStatus::NotScheduled(()) => {
+                Ok(SubnetSplittingStatus::NotScheduled)
+            }
+            pb::summary::SubnetSplittingStatus::Scheduled(splitting_args) => {
+                Ok(SubnetSplittingStatus::Scheduled(SplittingArgs {
+                    destination_subnet_id: subnet_id_try_from_option(
+                        splitting_args.destination_subnet_id,
+                        "SplittingArgs::destination_subnet_id",
+                    )?,
+                    source_subnet_id: subnet_id_try_from_option(
+                        splitting_args.source_subnet_id,
+                        "SplittingArgs::source_subnet_id",
+                    )?,
+                }))
+            }
+            pb::summary::SubnetSplittingStatus::PostSplit(post_split_args) => {
+                Ok(SubnetSplittingStatus::PostSplit(PostSplitArgs {
+                    new_subnet_id: subnet_id_try_from_option(
+                        post_split_args.new_subnet_id,
+                        "PostSplitArgs::new_subnet_id",
+                    )?,
+                }))
+            }
+        }
+    }
+}
+
 impl TryFrom<pb::Summary> for DkgSummary {
     type Error = ProxyDecodeError;
 
@@ -522,11 +615,11 @@ impl TryFrom<pb::Summary> for DkgSummary {
             interval_length: Height::from(summary.interval_length),
             next_interval_length: Height::from(summary.next_interval_length),
             height: Height::from(summary.height),
-            transcripts_for_remote_subnets: build_transcripts_vec_from_pb(
-                summary.transcripts_for_remote_subnets,
-            )
-            .map_err(ProxyDecodeError::Other)?,
             remote_dkg_attempts: build_remote_dkg_attempts_map(&summary.remote_dkg_attempts),
+            subnet_splitting_status: try_from_option_field(
+                summary.subnet_splitting_status,
+                "Summary::subnet_splitting_status",
+            )?,
         })
     }
 }
@@ -682,7 +775,7 @@ pub enum DkgPayloadCreationError {
     FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
     FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
     FailedToGetVetKdKeyList(RegistryClientError),
-    MissingDkgStartBlock,
+    SubnetSplittingStatusError(String),
 }
 
 /// Reasons for why a dkg payload might be invalid.
@@ -690,7 +783,7 @@ pub enum DkgPayloadCreationError {
 pub enum InvalidDkgPayloadReason {
     CryptoError(CryptoError),
     DkgVerifyDealingError(DkgVerifyDealingError),
-    MismatchedDkgSummary(DkgSummary, DkgSummary),
+    MismatchedDkgSummary(Box<DkgSummary>, Box<DkgSummary>),
     MissingDkgConfigForDealing,
     DkgStartHeightDoesNotMatchParentBlock,
     DkgSummaryAtNonStartHeight(Height),
@@ -818,5 +911,49 @@ mod tests {
         assert_eq!(get_faults_tolerated(7), 2);
         assert_eq!(get_faults_tolerated(28), 9);
         assert_eq!(get_faults_tolerated(64), 21);
+    }
+
+    #[test]
+    fn test_dkg_message_id_less_than_height() {
+        const TEST_HASHES: [&[u8]; 4] = [&[], &[0], &[42; 32], &[u8::MAX; 32]];
+
+        fn message_id(height: u64, hash: &[u8]) -> DkgMessageId {
+            DkgMessageId {
+                height: Height::from(height),
+                hash: CryptoHashOf::from(CryptoHash(hash.to_vec())),
+            }
+        }
+
+        let smallest_at_height = DkgMessageId::smallest_at_height(Height::from(10));
+        for height in [0, 1, 9] {
+            for hash in TEST_HASHES {
+                let id = message_id(height, hash);
+                assert!(
+                    id < smallest_at_height,
+                    "expected {id:?} to be less than smallest_at_height"
+                );
+            }
+        }
+        for height in [10, 11, u64::MAX] {
+            for hash in TEST_HASHES {
+                let id = message_id(height, hash);
+                assert!(
+                    smallest_at_height <= id,
+                    "expected {id:?} to be greater than or equal to smallest_at_height"
+                );
+            }
+        }
+
+        // Edge-case: height is 0
+        let smallest_at_height = DkgMessageId::smallest_at_height(Height::from(0));
+        for height in [0, 1, u64::MAX] {
+            for hash in TEST_HASHES {
+                let id = message_id(height, hash);
+                assert!(
+                    smallest_at_height <= id,
+                    "expected {id:?} to be greater than or equal to smallest_at_height"
+                );
+            }
+        }
     }
 }

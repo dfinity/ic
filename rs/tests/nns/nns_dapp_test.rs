@@ -16,6 +16,7 @@ end::catalog[] */
 use anyhow::{Result, bail};
 
 use candid::Principal;
+use flate2::read::GzDecoder;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
@@ -27,7 +28,6 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use libflate::gzip::Decoder;
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
@@ -65,6 +65,15 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
     let ic_gateway_domain = ic_gateway_url.domain().unwrap();
     let dapp_url = format!("https://{canister_id}.{ic_gateway_domain}");
     let log = env.logger();
+
+    // On the Local backend the driver cannot resolve the gateway domain (nor its
+    // per-canister subdomains), so resolve the requested host directly to the
+    // gateway VM, and trust the CA that issued its certificate.
+    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
+    let parsed_dapp_url = Url::parse(&dapp_url).unwrap();
+    let resolve_override = ic_gateway.resolve_override_for_url(&parsed_dapp_url);
+    let root_cert = ic_gateway.root_certificate().unwrap();
+
     block_on(async {
         ic_system_test_driver::retry_with_msg_async!(
             format!("get html from {}", dapp_url),
@@ -72,11 +81,17 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
             secs(600),
             secs(30),
             async || {
-                let client = reqwest::Client::builder()
+                let mut builder = reqwest::Client::builder()
                     .use_rustls_tls()
                     .https_only(true)
-                    .http1_only()
-                    .build()?;
+                    .http1_only();
+                if let Some((domain, addr)) = &resolve_override {
+                    builder = builder.resolve(domain, *addr);
+                }
+                if let Some(cert) = &root_cert {
+                    builder = builder.add_root_certificate(cert.clone());
+                }
+                let client = builder.build()?;
 
                 let resp = client
                     .get(dapp_url.clone())
@@ -105,7 +120,7 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
                     }
                 };
 
-                let mut decoder = Decoder::new(&body_bytes[..]).unwrap();
+                let mut decoder = GzDecoder::new(&body_bytes[..]);
                 let mut decoded_data = Vec::new();
                 decoder.read_to_end(&mut decoded_data).unwrap();
 

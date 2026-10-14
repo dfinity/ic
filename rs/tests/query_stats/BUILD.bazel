@@ -1,10 +1,11 @@
-load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEFAULT_VCPUS_PER_VM", "MIN_LOCAL_CPUS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "query_stats_basic",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -18,6 +19,7 @@ system_test(
 
 system_test(
     name = "query_stats_below_threshold",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -31,6 +33,7 @@ system_test(
 
 system_test(
     name = "query_stats_above_threshold",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
@@ -44,6 +47,7 @@ system_test(
 
 system_test(
     name = "query_stats_https_outcalls",
+    cpus = MIN_LOCAL_CPUS + 5 * DEFAULT_VCPUS_PER_VM,  # 5 IC Node VMs * 6 vCPUs.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],

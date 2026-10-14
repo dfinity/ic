@@ -2,6 +2,7 @@ use ic_base_types::{EnvironmentVariables, NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
     BoundedAllowedViewers, CanisterSettingsArgs, LogVisibilityV2, SnapshotVisibility,
+    StatusVisibility,
 };
 use ic_types::{ComputeAllocation, InvalidComputeAllocationError, MemoryAllocation, PrincipalId};
 use ic_types_cycles::Cycles;
@@ -12,9 +13,10 @@ use std::convert::TryFrom;
 #[cfg(test)]
 mod tests;
 
-/// These limit comes from the spec and is not expected to change,
-/// which is why it is not part of the replica config.
+/// These limits come from the spec and are not expected to change,
+/// which is why they are not part of the replica config.
 const MAX_WASM_MEMORY_LIMIT: u64 = 1 << 48;
+const MAX_WASM_MEMORY_THRESHOLD: u64 = 1 << 48;
 /// Struct used for decoding CanisterSettingsArgs
 #[derive(Default)]
 pub(crate) struct CanisterSettings {
@@ -25,14 +27,17 @@ pub(crate) struct CanisterSettings {
     pub(crate) wasm_memory_threshold: Option<NumBytes>,
     pub(crate) freezing_threshold: Option<NumSeconds>,
     pub(crate) reserved_cycles_limit: Option<Cycles>,
+    pub(crate) minimum_incoming_canister_call_cycles: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibilityV2>,
     pub(crate) snapshot_visibility: Option<SnapshotVisibility>,
+    pub(crate) status_visibility: Option<StatusVisibility>,
     pub(crate) log_memory_limit: Option<NumBytes>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
     pub(crate) environment_variables: Option<EnvironmentVariables>,
 }
 
 impl CanisterSettings {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         controllers: Option<Vec<PrincipalId>>,
         compute_allocation: Option<ComputeAllocation>,
@@ -40,8 +45,10 @@ impl CanisterSettings {
         wasm_memory_threshold: Option<NumBytes>,
         freezing_threshold: Option<NumSeconds>,
         reserved_cycles_limit: Option<Cycles>,
+        minimum_incoming_canister_call_cycles: Option<Cycles>,
         log_visibility: Option<LogVisibilityV2>,
         snapshot_visibility: Option<SnapshotVisibility>,
+        status_visibility: Option<StatusVisibility>,
         log_memory_limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
         environment_variables: Option<EnvironmentVariables>,
@@ -53,8 +60,10 @@ impl CanisterSettings {
             wasm_memory_threshold,
             freezing_threshold,
             reserved_cycles_limit,
+            minimum_incoming_canister_call_cycles,
             log_visibility,
             snapshot_visibility,
+            status_visibility,
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
@@ -85,12 +94,20 @@ impl CanisterSettings {
         self.reserved_cycles_limit
     }
 
+    pub fn minimum_incoming_canister_call_cycles(&self) -> Option<Cycles> {
+        self.minimum_incoming_canister_call_cycles
+    }
+
     pub fn log_visibility(&self) -> Option<&LogVisibilityV2> {
         self.log_visibility.as_ref()
     }
 
     pub fn snapshot_visibility(&self) -> Option<&SnapshotVisibility> {
         self.snapshot_visibility.as_ref()
+    }
+
+    pub fn status_visibility(&self) -> Option<&StatusVisibility> {
+        self.status_visibility.as_ref()
     }
 
     pub fn log_memory_limit(&self) -> Option<NumBytes> {
@@ -139,6 +156,15 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
+        let minimum_incoming_canister_call_cycles = match input
+            .minimum_incoming_canister_call_cycles
+        {
+            Some(min) => Some(Cycles::from(min.0.to_u128().ok_or(
+                UpdateSettingsError::MinimumIncomingCanisterCallCyclesOutOfRange { provided: min },
+            )?)),
+            None => None,
+        };
+
         let log_memory_limit = match input.log_memory_limit {
             Some(ls) => Some(NumBytes::from(
                 ls.0.to_u64()
@@ -169,6 +195,11 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
                     .0
                     .to_u64()
                     .ok_or(UpdateSettingsError::WasmMemoryThresholdOutOfRange { provided: wmt })?;
+                if wmt > MAX_WASM_MEMORY_THRESHOLD {
+                    return Err(UpdateSettingsError::WasmMemoryThresholdOutOfRange {
+                        provided: wmt.into(),
+                    });
+                }
                 Some(NumBytes::new(wmt))
             }
             None => None,
@@ -198,8 +229,10 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             wasm_memory_threshold,
             freezing_threshold,
             reserved_cycles_limit,
+            minimum_incoming_canister_call_cycles,
             input.log_visibility,
             input.snapshot_visibility,
+            input.status_visibility,
             log_memory_limit,
             wasm_memory_limit,
             environment_variables,
@@ -225,8 +258,10 @@ pub(crate) struct CanisterSettingsBuilder {
     wasm_memory_threshold: Option<NumBytes>,
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
+    minimum_incoming_canister_call_cycles: Option<Cycles>,
     log_visibility: Option<LogVisibilityV2>,
     snapshot_visibility: Option<SnapshotVisibility>,
+    status_visibility: Option<StatusVisibility>,
     log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
     environment_variables: Option<EnvironmentVariables>,
@@ -242,8 +277,10 @@ impl CanisterSettingsBuilder {
             wasm_memory_threshold: None,
             freezing_threshold: None,
             reserved_cycles_limit: None,
+            minimum_incoming_canister_call_cycles: None,
             log_visibility: None,
             snapshot_visibility: None,
+            status_visibility: None,
             log_memory_limit: None,
             wasm_memory_limit: None,
             environment_variables: None,
@@ -258,8 +295,10 @@ impl CanisterSettingsBuilder {
             wasm_memory_threshold: self.wasm_memory_threshold,
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
+            minimum_incoming_canister_call_cycles: self.minimum_incoming_canister_call_cycles,
             log_visibility: self.log_visibility,
             snapshot_visibility: self.snapshot_visibility,
+            status_visibility: self.status_visibility,
             log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             environment_variables: self.environment_variables,
@@ -308,6 +347,16 @@ impl CanisterSettingsBuilder {
         }
     }
 
+    pub fn with_minimum_incoming_canister_call_cycles(
+        self,
+        minimum_incoming_canister_call_cycles: Cycles,
+    ) -> Self {
+        Self {
+            minimum_incoming_canister_call_cycles: Some(minimum_incoming_canister_call_cycles),
+            ..self
+        }
+    }
+
     pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
             log_visibility: Some(log_visibility),
@@ -318,6 +367,13 @@ impl CanisterSettingsBuilder {
     pub fn with_snapshot_visibility(self, snapshot_visibility: SnapshotVisibility) -> Self {
         Self {
             snapshot_visibility: Some(snapshot_visibility),
+            ..self
+        }
+    }
+
+    pub fn with_status_visibility(self, status_visibility: StatusVisibility) -> Self {
+        Self {
+            status_visibility: Some(status_visibility),
             ..self
         }
     }
@@ -349,6 +405,7 @@ pub enum UpdateSettingsError {
     MemoryAllocationOutOfRange { provided: candid::Nat },
     FreezingThresholdOutOfRange { provided: candid::Nat },
     ReservedCyclesLimitOutOfRange { provided: candid::Nat },
+    MinimumIncomingCanisterCallCyclesOutOfRange { provided: candid::Nat },
     WasmMemoryLimitOutOfRange { provided: candid::Nat },
     WasmMemoryThresholdOutOfRange { provided: candid::Nat },
     DuplicateEnvironmentVariables,
@@ -383,6 +440,14 @@ impl From<UpdateSettingsError> for UserError {
                     "Reserved cycles limit expected to be in the range of [0..2^128-1], got {provided}"
                 ),
             ),
+            UpdateSettingsError::MinimumIncomingCanisterCallCyclesOutOfRange { provided } => {
+                UserError::new(
+                    ErrorCode::CanisterContractViolation,
+                    format!(
+                        "Minimum incoming canister call cycles expected to be in the range of [0..2^128-1], got {provided}"
+                    ),
+                )
+            }
             UpdateSettingsError::WasmMemoryLimitOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
@@ -392,7 +457,7 @@ impl From<UpdateSettingsError> for UserError {
             UpdateSettingsError::WasmMemoryThresholdOutOfRange { provided } => UserError::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Wasm memory threshold expected to be in the range of [0..2^64-1], got {provided}"
+                    "Wasm memory threshold expected to be in the range of [0..2^48], got {provided}"
                 ),
             ),
             UpdateSettingsError::DuplicateEnvironmentVariables => UserError::new(
@@ -438,6 +503,16 @@ impl<'a> From<&'a SnapshotVisibility> for VisibilitySettings<'a> {
             SnapshotVisibility::Public => Self::Public,
             SnapshotVisibility::Controllers => Self::Controllers,
             SnapshotVisibility::AllowedViewers(principals) => Self::AllowedViewers(principals),
+        }
+    }
+}
+
+impl<'a> From<&'a StatusVisibility> for VisibilitySettings<'a> {
+    fn from(v: &'a StatusVisibility) -> Self {
+        match v {
+            StatusVisibility::Public => Self::Public,
+            StatusVisibility::Controllers => Self::Controllers,
+            StatusVisibility::AllowedViewers(principals) => Self::AllowedViewers(principals),
         }
     }
 }

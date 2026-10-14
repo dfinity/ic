@@ -1,5 +1,7 @@
 use crate::events::MinterEventAssert;
-use crate::{MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL};
+use crate::{
+    FEE_PERCENTILES_REFRESH_INTERVAL, MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL, drain_startup_tasks,
+};
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
 use ic_ckdoge_minter::{
@@ -161,6 +163,31 @@ impl MinterCanister {
             )
             .expect("BUG: failed to call estimate_withdrawal_fee");
         Decode!(&call_result, Result<WithdrawalFee, EstimateWithdrawalFeeError>).unwrap()
+    }
+
+    pub fn await_fee_refresh(&self) {
+        let refreshes_before = self.count_fee_percentile_refreshes();
+        self.env
+            .advance_time(FEE_PERCENTILES_REFRESH_INTERVAL + Duration::from_secs(1));
+        let max_ticks = 100;
+        for _ in 0..max_ticks {
+            self.env.tick();
+            if self.count_fee_percentile_refreshes() > refreshes_before {
+                return;
+            }
+        }
+        dbg!(self.get_logs());
+        panic!(
+            "BUG: did not observe a successful fee-percentile refresh within {max_ticks} ticks \
+             (the RefreshFeePercentiles task may have run but failed to compute a median fee)"
+        );
+    }
+
+    fn count_fee_percentile_refreshes(&self) -> usize {
+        self.get_logs()
+            .iter()
+            .filter(|entry| entry.message.contains("update median fee per vbyte"))
+            .count()
     }
 
     pub fn retrieve_doge_status(&self, ledger_burn_index: u64) -> RetrieveDogeStatus {
@@ -351,8 +378,7 @@ impl MinterCanister {
                 Some(NNS_ROOT_PRINCIPAL),
             )
             .expect("BUG: failed to upgrade minter");
-        // run immediate tasks after upgrade, like refreshing fee percentiles.
-        self.env.tick();
+        drain_startup_tasks(&self.env);
     }
 }
 

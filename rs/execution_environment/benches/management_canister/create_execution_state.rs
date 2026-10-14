@@ -1,6 +1,8 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use ic_config::execution_environment::{SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION};
-use ic_execution_environment::{CompilationCostHandling, RoundLimits, as_round_instructions};
+use ic_execution_environment::{
+    CompilationCostHandling, MemorySource, RoundLimits, as_round_instructions,
+};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_test_utilities_execution_environment::ExecutionTestBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
@@ -36,8 +38,10 @@ fn run_benchmark(
                 let _ = hypervisor.create_execution_state(
                     CanisterModule::new(wasm.clone()),
                     canister_id,
+                    ic_types::time::UNIX_EPOCH,
                     &mut round_limits,
                     compilation_cost_handling,
+                    MemorySource::Fresh,
                 );
             },
             BatchSize::SmallInput,

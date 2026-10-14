@@ -8,11 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 hex = { workspace = true }
-scoped_threadpool = "0.1.*"
+scoped_threadpool = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [dev-dependencies]
-assert_matches = { workspace = true }
 serde = { workspace = true }
-tempfile = { workspace = true }

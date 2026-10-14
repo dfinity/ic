@@ -256,6 +256,19 @@ impl RoundSchedule {
         }
     }
 
+    /// Drops canisters that were deleted during the round (e.g. by a
+    /// `delete_canister` subnet message) from all round accumulators, so that beyond
+    /// this point the round schedule only refers to existing canisters.
+    pub fn retain_existing_canisters(&mut self, state: &ReplicatedState) {
+        let exists = |canister_id: &CanisterId| state.canister_state(canister_id).is_some();
+        self.scheduled_canisters.retain(exists);
+        self.long_execution_canisters.retain(exists);
+        self.executed_canisters.retain(exists);
+        self.canisters_with_completed_messages.retain(exists);
+        self.fully_executed_canisters.retain(exists);
+        self.rate_limited_canisters.retain(exists);
+    }
+
     /// Computes and returns an iteration schedule covering active canisters only.
     ///
     /// Updates round accumulators (scheduled, rate limited, long execution

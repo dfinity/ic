@@ -53,7 +53,7 @@ pub use canister_threshold_sig::{
 mod tests;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
-use ic_types::signature::BasicSignatureBatch;
+use ic_types::signature::{BasicSigBatchEntry, BasicSignatureBatch};
 
 impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng, H: Signable> BasicSigner<H>
     for CryptoComponentImpl<C, R>
@@ -212,8 +212,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> BasicSigVerif
 
     fn verify_basic_sig_batch_multi_msg(
         &self,
-        inputs: &[(NodeId, &BasicSigOf<H>, &H)],
-        registry_version: RegistryVersion,
+        inputs: &[BasicSigBatchEntry<'_, H>],
     ) -> CryptoResult<()> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
@@ -223,15 +222,13 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> BasicSigVerif
         );
         debug!(logger;
             crypto.description => "start",
-            crypto.registry_version => registry_version.get(),
-            crypto.signature => format!("{:?}", inputs.iter().map(|(s, sig, _)| (s, sig)).collect::<Vec<_>>()),
+            crypto.signature => format!("{:?}", inputs.iter().map(|entry| (entry.signer, entry.signature, entry.registry_version)).collect::<Vec<_>>()),
         );
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::verify_basic_sig_batch_multi_msg(
             &self.csprng,
             self.registry_client.as_ref(),
             inputs,
-            registry_version,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
@@ -401,7 +398,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> MultiSigVerif
             crypto.method_name => "combine_multi_sig_individuals",
         );
         debug!(logger;
-            crypto.description => format!("start"),
+            crypto.description => "start",
             crypto.registry_version => registry_version.get(),
             crypto.signature_shares => format!("{:?}", signatures),
         );
@@ -420,7 +417,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> MultiSigVerif
             start_time,
         );
         debug!(logger;
-            crypto.description => format!("end"),
+            crypto.description => "end",
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
             crypto.signature => log_ok_content(&result),
@@ -444,7 +441,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> MultiSigVerif
             crypto.method_name => "verify_multi_sig_combined",
         );
         debug!(logger;
-            crypto.description => format!("start"),
+            crypto.description => "start",
             crypto.registry_version => registry_version.get(),
             crypto.signature => format!("{:?}", signature),
             crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
@@ -467,7 +464,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, H: Signable> MultiSigVerif
             start_time,
         );
         debug!(logger;
-            crypto.description => format!("end"),
+            crypto.description => "end",
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
         );
@@ -577,7 +574,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> ThresholdSigV
             crypto.method_name => "combine_threshold_sig_shares",
         );
         debug!(logger;
-            crypto.description => format!("start"),
+            crypto.description => "start",
             crypto.dkg_id => format!("{}", dkg_id),
             crypto.signature_shares => format!("{:?}", shares),
         );
@@ -596,7 +593,7 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> ThresholdSigV
             start_time,
         );
         debug!(logger;
-            crypto.description => format!("end"),
+            crypto.description => "end",
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
             crypto.signature => log_ok_content(&result),

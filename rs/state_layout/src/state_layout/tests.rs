@@ -1,6 +1,5 @@
 use super::*;
 
-use ic_config::execution_environment::LOG_MEMORY_STORE_FEATURE_ENABLED;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
@@ -20,7 +19,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
-use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles};
+use ic_types_cycles::{CanisterCyclesCostSchedule, CompoundCycles, NominalCyclesTesting};
 use itertools::Itertools;
 use proptest::prelude::*;
 use std::fs::File;
@@ -38,6 +37,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         cycles_debit: Cycles::zero(),
         reserved_balance: Cycles::zero(),
         reserved_balance_limit: None,
+        minimum_incoming_canister_call_cycles: Cycles::zero(),
         status: CanisterStatus::Stopped,
         rounds_scheduled: 0,
         scheduled_as_first: 0,
@@ -45,6 +45,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         interrupted_during_execution: 0,
         certified_data: vec![],
         consumed_cycles: NominalCycles::zero(),
+        consumed_cycles_monotonic: NominalCycles::zero(),
         stable_memory_size: NumWasmPages::from(0),
         heap_delta_debit: NumBytes::from(0),
         install_code_debit: NumInstructions::from(0),
@@ -52,16 +53,16 @@ fn default_canister_state_bits() -> CanisterStateBits {
         task_queue: TaskQueue::default(),
         global_timer_nanos: None,
         canister_version: 0,
+        canister_creation_timestamp_nanos: None,
         consumed_cycles_by_use_cases: BTreeMap::new(),
-        consumed_cycles_by_use_cases_as_counters: BTreeMap::new(),
+        consumed_cycles_by_use_cases_monotonic: BTreeMap::new(),
         canister_history: CanisterHistory::default(),
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
         total_query_stats: TotalQueryStats::default(),
         log_visibility: Default::default(),
         snapshot_visibility: Default::default(),
+        status_visibility: Default::default(),
         log_memory_limit: NumBytes::from(0),
-        canister_log: CanisterLog::default_aggregate(),
-        next_canister_log_record_idx: 0,
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         environment_variables: BTreeMap::new(),
@@ -71,7 +72,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
         local_subnet_messages_executed: 0,
         http_outcalls_executed: 0,
         heartbeats_and_global_timers_executed: 0,
-        log_memory_store_migrated: LOG_MEMORY_STORE_FEATURE_ENABLED,
         log_memory_store_persistent_next_idx: 0,
     }
 }
@@ -133,6 +133,30 @@ fn test_encode_decode_non_empty_controllers() {
     expected_controllers.insert(canister_test_id(0).get());
     expected_controllers.insert(IC_00.into());
     assert_eq!(canister_state_bits.controllers, expected_controllers);
+}
+
+#[test]
+fn test_encode_decode_consumed_cycles_monotonic() {
+    let canister_state_bits = CanisterStateBits {
+        consumed_cycles: NominalCycles::new(1000),
+        consumed_cycles_monotonic: NominalCycles::new(900),
+        ..default_canister_state_bits()
+    };
+
+    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+    let decoded = CanisterStateBits::try_from(pb_bits.clone()).unwrap();
+
+    assert_eq!(decoded.consumed_cycles, NominalCycles::new(1000));
+    assert_eq!(decoded.consumed_cycles_monotonic, NominalCycles::new(900));
+
+    // The field is absent in checkpoints written before it was introduced; it
+    // decodes as zero, which is what the by-use-case map did when it was introduced.
+    let mut pb_bits = pb_bits;
+    pb_bits.consumed_cycles_monotonic = None;
+    let decoded = CanisterStateBits::try_from(pb_bits).unwrap();
+
+    assert_eq!(decoded.consumed_cycles, NominalCycles::new(1000));
+    assert_eq!(decoded.consumed_cycles_monotonic, NominalCycles::zero());
 }
 
 #[test]
@@ -259,6 +283,7 @@ fn test_canister_snapshots_decode() {
         source: SnapshotSource::taken_from_canister(),
         global_timer: Some(CanisterTimer::Inactive),
         on_low_wasm_memory_hook_status: Some(OnLowWasmMemoryHookStatus::ConditionNotSatisfied),
+        restored: true,
     };
 
     let pb_bits =
@@ -591,6 +616,66 @@ fn test_can_remove_unverified_marker_file_twice() {
 }
 
 #[test]
+fn test_state_sync_checkpoint_stays_unverified_between_marker_removals() {
+    // `finalize_and_remove_unverified_marker` removes the unverified marker before the state sync marker.
+    // Readers on other threads, like the state sync advert loop calling `verified_or_state_sync_checkpoint_heights`,
+    // can observe the checkpoint in between and must still see an unverified state sync checkpoint.
+    with_test_replica_logger(|log| {
+        let tempdir = tmpdir("state_layout");
+        let root_path = tempdir.path().to_path_buf();
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
+        let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
+
+        let height = Height::new(1);
+        let scratchpad_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
+            state_layout.state_sync_scratchpad(height),
+            height,
+        )
+        .expect("failed to create checkpoint layout");
+        File::create(scratchpad_layout.raw_path().join(SYSTEM_METADATA_FILE)).unwrap();
+        // State sync marks its scratchpad before promoting it, which adds the unverified marker.
+        scratchpad_layout
+            .create_state_sync_checkpoint_marker()
+            .unwrap();
+        let checkpoint = state_layout
+            .promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height)
+            .unwrap()
+            .as_readonly();
+        assert!(checkpoint.is_unverified_state_sync_checkpoint());
+
+        checkpoint.remove_unverified_checkpoint_marker().unwrap();
+        assert!(checkpoint.is_unverified_state_sync_checkpoint());
+        assert!(matches!(
+            state_layout.checkpoint_status(height),
+            Ok(CheckpointStatus::UnverifiedStateSync)
+        ));
+        assert_eq!(
+            state_layout
+                .verified_or_state_sync_checkpoint_heights()
+                .unwrap(),
+            vec![height]
+        );
+        assert!(
+            state_layout
+                .verified_checkpoint_heights()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(matches!(
+            state_layout.checkpoint_verified(height),
+            Err(LayoutError::CheckpointUnverified(_))
+        ));
+
+        checkpoint.remove_state_sync_checkpoint_marker().unwrap();
+        assert!(checkpoint.is_checkpoint_verified());
+        assert_eq!(
+            state_layout.verified_checkpoint_heights().unwrap(),
+            vec![height]
+        );
+    });
+}
+
+#[test]
 fn test_canister_id_from_path() {
     assert_eq!(
         Some(CanisterId::from_u64(1)),
@@ -821,6 +906,48 @@ fn test_all_existing_wasm_files() {
         wasm_paths,
         BTreeSet::from([wasm_path_1, wasm_path_2, wasm_path_3, wasm_path_4])
     )
+}
+
+#[test]
+fn test_delete_canister_dir() {
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
+
+    // Deleting a canister without a directory is a no-op.
+    checkpoint_layout
+        .delete_canister_dir(&canister_test_id(42))
+        .unwrap();
+    assert!(checkpoint_layout.canister_ids().unwrap().is_empty());
+
+    // Create directories for two canisters, one of them with a wasm file.
+    let canister_layout = checkpoint_layout.canister(&canister_test_id(42)).unwrap();
+    File::create(canister_layout.wasm().path()).unwrap();
+    let _ = checkpoint_layout.canister(&canister_test_id(43)).unwrap();
+    assert_eq!(
+        checkpoint_layout.canister_ids().unwrap(),
+        vec![canister_test_id(42), canister_test_id(43)]
+    );
+
+    // Deleting a canister removes its directory with all its contents, but leaves
+    // the other canister alone.
+    checkpoint_layout
+        .delete_canister_dir(&canister_test_id(42))
+        .unwrap();
+    assert!(!canister_layout.raw_path().exists());
+    assert_eq!(
+        checkpoint_layout.canister_ids().unwrap(),
+        vec![canister_test_id(43)]
+    );
+
+    // Deleting the same canister again is a no-op.
+    checkpoint_layout
+        .delete_canister_dir(&canister_test_id(42))
+        .unwrap();
+    assert_eq!(
+        checkpoint_layout.canister_ids().unwrap(),
+        vec![canister_test_id(43)]
+    );
 }
 
 #[test]
@@ -1176,6 +1303,70 @@ fn can_add_and_delete_canister_snapshots(
             .unwrap();
         check_snapshot_layout(&checkpoint_layout, &snapshot_ids[(i + 1)..]);
     }
+}
+
+/// Tests that deleting a snapshot's directory is idempotent, i.e. that deleting a
+/// snapshot that has no directory is a no-op rather than a `NotFound` I/O error.
+///
+/// This is relied upon by the flush of `UnflushedCheckpointOp::DeleteSnapshot`: a
+/// snapshot created from uploaded metadata has no directory in tip until its `PageMap`s
+/// are first flushed, so deleting it before then would otherwise fail.
+#[test]
+fn delete_snapshot_dir_is_idempotent() {
+    let tmp = tmpdir("checkpoint");
+    let checkpoint_layout: CheckpointLayout<WriteOnly> =
+        CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
+
+    let canister_id = canister_test_id(100);
+    let snapshot_id = SnapshotId::from((canister_id, 0));
+    let other_snapshot_id = SnapshotId::from((canister_id, 1));
+
+    let snapshot_ids = || {
+        let mut snapshot_ids = checkpoint_layout.snapshot_ids().unwrap();
+        snapshot_ids.sort();
+        snapshot_ids
+    };
+    let num_canister_dirs = || {
+        std::fs::read_dir(checkpoint_layout.raw_path().join(SNAPSHOTS_DIR))
+            .unwrap()
+            .count()
+    };
+
+    // Deleting a snapshot that never had a directory is a no-op.
+    checkpoint_layout.delete_snapshot_dir(&snapshot_id).unwrap();
+    assert!(snapshot_ids().is_empty());
+
+    // Create the directories of two snapshots of the same canister.
+    checkpoint_layout.snapshot(&snapshot_id).unwrap();
+    checkpoint_layout.snapshot(&other_snapshot_id).unwrap();
+    let mut expected_snapshot_ids = vec![snapshot_id, other_snapshot_id];
+    expected_snapshot_ids.sort();
+    assert_eq!(snapshot_ids(), expected_snapshot_ids);
+    assert_eq!(num_canister_dirs(), 1);
+
+    // Deleting one of them retains the other, as well as the canister's directory.
+    checkpoint_layout.delete_snapshot_dir(&snapshot_id).unwrap();
+    assert_eq!(snapshot_ids(), vec![other_snapshot_id]);
+    assert_eq!(num_canister_dirs(), 1);
+
+    // And deleting it again is a no-op.
+    checkpoint_layout.delete_snapshot_dir(&snapshot_id).unwrap();
+    assert_eq!(snapshot_ids(), vec![other_snapshot_id]);
+    assert_eq!(num_canister_dirs(), 1);
+
+    // Deleting the canister's last snapshot also removes the canister's directory.
+    checkpoint_layout
+        .delete_snapshot_dir(&other_snapshot_id)
+        .unwrap();
+    assert!(snapshot_ids().is_empty());
+    assert_eq!(num_canister_dirs(), 0);
+
+    // As is deleting it again.
+    checkpoint_layout
+        .delete_snapshot_dir(&other_snapshot_id)
+        .unwrap();
+    assert!(snapshot_ids().is_empty());
+    assert_eq!(num_canister_dirs(), 0);
 }
 
 #[test]

@@ -3,10 +3,7 @@ use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_config::{
-    execution_environment::Config as HypervisorConfig,
-    subnet_config::{SubnetConfig, SubnetSecurity},
-};
+use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::UserError;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
@@ -24,10 +21,10 @@ use ic_ledger_suite_in_memory_ledger::{
     AllowancesRecentlyPurged, InMemoryLedger, verify_ledger_state,
 };
 use ic_ledger_suite_state_machine_helpers::{
-    AllowanceProvider, balance_of, fee, get_archive_blocks, get_archive_remaining_capacity,
-    get_archive_transaction, get_archive_transactions, get_blocks, get_canister_info,
-    get_transactions, icrc3_get_blocks, icrc21_consent_message, list_archives, metadata,
-    minting_account, parse_metric, send_approval, send_transfer, send_transfer_from,
+    AllowanceProvider, balance_of, fee, get_all_ledger_and_archive_blocks, get_archive_blocks,
+    get_archive_remaining_capacity, get_archive_transaction, get_archive_transactions, get_blocks,
+    get_canister_info, get_transactions, icrc3_get_blocks, icrc21_consent_message, list_archives,
+    metadata, minting_account, parse_metric, send_approval, send_transfer, send_transfer_from,
     supported_block_types, supported_standards, total_supply, transfer,
 };
 use ic_ledger_suite_state_machine_tests_constants::{
@@ -76,6 +73,7 @@ use std::{
 };
 
 mod allowances;
+mod block_schema;
 pub mod fee_collector;
 pub mod icrc_106;
 pub mod metrics;
@@ -1375,6 +1373,174 @@ pub fn test_archive_duplicate_controllers(ledger_wasm: Vec<u8>) {
     test_controllers(vec![p100], &ledger_wasm, encode_init_args);
 }
 
+pub fn test_change_trigger_threshold_before_archive_spawned<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    const UNREACHABLE_TRIGGER_THRESHOLD: usize = 1_000_000_000;
+    assert!(
+        UNREACHABLE_TRIGGER_THRESHOLD as u64 > ARCHIVE_TRIGGER_THRESHOLD * 10,
+        "UNREACHABLE_TRIGGER_THRESHOLD shall be at least 10x larger than ARCHIVE_TRIGGER_THRESHOLD"
+    );
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let (env, ledger_id) = setup(
+        ledger_wasm.clone(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 10_000_000)],
+    );
+
+    for i in 0..(ARCHIVE_TRIGGER_THRESHOLD - 2) {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
+    }
+    assert_eq!(
+        list_archives(&env, ledger_id),
+        vec![],
+        "no archive should have been spawned yet"
+    );
+
+    let raise_threshold = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(UNREACHABLE_TRIGGER_THRESHOLD),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(
+        ledger_id,
+        ledger_wasm.clone(),
+        Encode!(&raise_threshold).unwrap(),
+    )
+    .expect("failed to raise trigger_threshold before an archive was spawned");
+
+    for i in 0..(2 * ARCHIVE_TRIGGER_THRESHOLD) {
+        transfer(&env, ledger_id, p1.0, p2.0, 20_000 + i).expect("transfer failed");
+    }
+    assert_eq!(
+        list_archives(&env, ledger_id),
+        vec![],
+        "archiving should be suppressed by the raised trigger_threshold"
+    );
+    let blocks = icrc3_get_blocks(&env, ledger_id, 0, 4 * ARCHIVE_TRIGGER_THRESHOLD as usize);
+    assert!(
+        blocks.archived_blocks.is_empty(),
+        "no block should have been archived, got {:?}",
+        blocks.archived_blocks
+    );
+    assert_eq!(
+        blocks.blocks.len() as u64,
+        1 + (ARCHIVE_TRIGGER_THRESHOLD - 2) + 2 * ARCHIVE_TRIGGER_THRESHOLD,
+        "every block should still be held by the ledger"
+    );
+
+    let restore_threshold = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(ARCHIVE_TRIGGER_THRESHOLD as usize),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&restore_threshold).unwrap())
+        .expect("failed to restore trigger_threshold");
+
+    transfer(&env, ledger_id, p1.0, p2.0, 30_000).expect("transfer failed");
+    assert_eq!(
+        list_archives(&env, ledger_id).len(),
+        1,
+        "restoring the trigger threshold should archive the accumulated backlog"
+    );
+}
+
+/// Verify that all the blocks of a ledger can be retrieved also when the ledger itself holds more
+/// blocks than it returns in a single `get_blocks` response, e.g., since archiving was disabled by
+/// raising the archiving trigger threshold.
+pub fn test_get_all_blocks_with_archiving_disabled<T, Tokens>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+    Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
+{
+    // The maximum number of blocks returned in a single ledger `get_blocks` response.
+    const MAX_BLOCKS_PER_LEDGER_RESPONSE: u64 = 2_000;
+    const UNREACHABLE_TRIGGER_THRESHOLD: usize = 1_000_000_000;
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let (env, ledger_id) = setup(
+        ledger_wasm.clone(),
+        encode_init_args,
+        vec![(Account::from(p1.0), 1_000_000_000_000)],
+    );
+
+    // Generate enough blocks to trigger archiving, so that the blocks end up being spread over
+    // both the archive and the ledger.
+    for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
+    }
+    assert_eq!(
+        list_archives(&env, ledger_id).len(),
+        1,
+        "an archive should have been spawned"
+    );
+
+    // Suppress archiving, so that all the following blocks are retained by the ledger itself.
+    let raise_threshold = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_archive_options: Some(ChangeArchiveOptions {
+            trigger_threshold: Some(UNREACHABLE_TRIGGER_THRESHOLD),
+            ..Default::default()
+        }),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm, Encode!(&raise_threshold).unwrap())
+        .expect("failed to raise trigger_threshold");
+
+    // Generate more blocks than the ledger returns in a single `get_blocks` response.
+    for i in 0..=MAX_BLOCKS_PER_LEDGER_RESPONSE {
+        transfer(&env, ledger_id, p1.0, p2.0, 20_000 + i).expect("transfer failed");
+    }
+    let archives = list_archives(&env, ledger_id);
+    let num_archived_blocks = archives
+        .iter()
+        .map(|archive| archive.block_range_end.0.to_u64().unwrap() + 1)
+        .max()
+        .expect("an archive should have been spawned");
+    let chain_length = get_blocks(&env, Principal::from(ledger_id), 0, 0).chain_length;
+    let blocks_in_ledger = chain_length - num_archived_blocks;
+    assert!(
+        blocks_in_ledger > MAX_BLOCKS_PER_LEDGER_RESPONSE,
+        "the ledger should hold more blocks ({blocks_in_ledger}) than it returns in a single \
+         response ({MAX_BLOCKS_PER_LEDGER_RESPONSE})"
+    );
+
+    // Retrieving all the blocks should require multiple calls to the ledger.
+    let blocks = get_all_ledger_and_archive_blocks::<Tokens>(&env, ledger_id, None, None);
+    assert_eq!(
+        blocks.len() as u64,
+        chain_length,
+        "not all the ledger and archive blocks were retrieved"
+    );
+    // The same should hold when retrieving a sub-range of the blocks.
+    let num_blocks = chain_length - 1;
+    let blocks =
+        get_all_ledger_and_archive_blocks::<Tokens>(&env, ledger_id, Some(1), Some(num_blocks));
+    assert_eq!(
+        blocks.len() as u64,
+        num_blocks,
+        "not all the requested ledger and archive blocks were retrieved"
+    );
+
+    // Reconstruct the ledger state from all the retrieved blocks, and verify it against the state
+    // of the ledger itself. This catches any blocks that were retrieved more than once, or not at
+    // all.
+    verify_ledger_state::<Tokens>(&env, ledger_id, None, AllowancesRecentlyPurged::No);
+}
+
 pub fn test_upgrade_archive_options<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
@@ -1618,7 +1784,7 @@ where
     let mut prev_hash = None;
 
     // Check that the hash chain is correct.
-    for block in archived_blocks.into_iter().chain(resp.blocks.into_iter()) {
+    for block in archived_blocks.into_iter().chain(resp.blocks) {
         assert_eq!(
             prev_hash,
             get_phash(&block).expect("cannot get the hash of the previous block")
@@ -1632,29 +1798,27 @@ where
     assert_eq!(0, missing_blocks_reply.archived_blocks.len());
 }
 
-// Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
+// Generate random blocks and check that their CBOR encoding complies with the
+// ledger block CBOR schema (see the `block_schema` module).
 pub fn block_encoding_agrees_with_the_schema<Tokens: TokensType>() {
-    use std::path::PathBuf;
-
-    let block_cddl_path =
-        PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("block.cddl");
-    let block_cddl =
-        String::from_utf8(std::fs::read(block_cddl_path).expect("failed to read block.cddl file"))
-            .unwrap();
-
     let mut runner = TestRunner::default();
     runner
         .run(&arb_block::<Tokens>(), |block| {
-            let cbor_bytes = block.encode().into_vec();
-            cddl::validate_cbor_from_slice(&block_cddl, &cbor_bytes, None).map_err(|e| {
+            let encoded_block = block.encode();
+            block_schema::validate(&encoded_block).map_err(|e| {
                 TestCaseError::fail(format!(
                     "Failed to validate CBOR: {} (inspect it on https://cbor.me), error: {}",
-                    hex::encode(&cbor_bytes),
+                    hex::encode(encoded_block.as_slice()),
                     e
                 ))
             })
         })
         .unwrap();
+}
+
+// Check that the ledger block CBOR schema validator rejects malformed blocks.
+pub fn block_encoding_schema_catches_malformed_blocks() {
+    block_schema::assert_catches_malformed_blocks();
 }
 
 pub fn block_encoding_agreed_with_the_icrc3_schema<Tokens: TokensType>() {
@@ -2072,7 +2236,7 @@ pub fn icrc1_test_block_transformation<T, Tokens>(
     for (block_pre_upgrade, block_post_upgrade) in resp_pre_upgrade
         .blocks
         .into_iter()
-        .zip(resp_post_upgrade.blocks.into_iter())
+        .zip(resp_post_upgrade.blocks)
     {
         assert!(
             equivalent_values(&block_pre_upgrade, &block_post_upgrade),
@@ -3401,6 +3565,117 @@ where
     assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
 }
 
+/// A spend needs no allowance only when the spender *is* the account it spends from — which the
+/// ledger decides on the whole account, subaccount included. Owning the principal is not enough,
+/// so a caller holding funds under a subaccount must name that subaccount to reach them.
+pub fn test_transfer_from_self_subaccount<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    const SUBACCOUNT: [u8; 32] = [42; 32];
+
+    let owner = PrincipalId::new_user_test_id(1);
+    let to = PrincipalId::new_user_test_id(2);
+    let from = Account {
+        owner: owner.0,
+        subaccount: Some(SUBACCOUNT),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![(from, 100_000)]);
+
+    // Same owner, but the spender is {owner, None} while the funds are under {owner, SUBACCOUNT}:
+    // two different accounts, so this needs an allowance it does not have.
+    let mut transfer_from_args = default_transfer_from_args(from, to.0, 30_000);
+    transfer_from_args.spender_subaccount = None;
+    assert_eq!(
+        send_transfer_from(&env, canister_id, owner.0, &transfer_from_args),
+        Err(TransferFromError::InsufficientAllowance {
+            allowance: Nat::from(0_u8)
+        })
+    );
+    assert_eq!(balance_of(&env, canister_id, from), 100_000);
+    assert_eq!(balance_of(&env, canister_id, to.0), 0);
+
+    // Naming the account's own subaccount makes it a self-spend, which needs no allowance.
+    transfer_from_args.spender_subaccount = Some(SUBACCOUNT);
+    let block_index = send_transfer_from(&env, canister_id, owner.0, &transfer_from_args)
+        .expect("transfer_from failed");
+    assert_eq!(
+        block_index, 1,
+        "the rejected spend must not have written a block"
+    );
+    assert_eq!(balance_of(&env, canister_id, from), 100_000 - 30_000 - FEE);
+    assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
+}
+
+/// Burns from `{P, Some(s)}` with the spender naming that same subaccount, and reports what the
+/// ledger made of it — the two ledgers disagree, so the caller states which outcome its own owes.
+///
+/// ICRC ledgers accept it: burning is how an account holding tokens under a subaccount gives them
+/// up, and naming the account's own subaccount makes it a self-spend. The ICP ledger rejects it,
+/// because `Operation::Burn` (`rs/ledger_suite/icp/src/lib.rs`) checks an allowance for any spender
+/// — exempting the self-spend only when *consuming* one, not when checking.
+///
+/// Either way the books must stay consistent, which is asserted here: an accepted burn is fee-free
+/// and reduces the supply, a rejected one moves nothing at all.
+pub fn test_transfer_from_self_subaccount_burn<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) -> Result<BlockIndex, TransferFromError>
+where
+    T: CandidType,
+{
+    const SUBACCOUNT: [u8; 32] = [42; 32];
+    const INITIAL_BALANCE: u64 = 100_000;
+    const BURN_AMOUNT: u64 = 20_000;
+
+    let owner = PrincipalId::new_user_test_id(1);
+    let from = Account {
+        owner: owner.0,
+        subaccount: Some(SUBACCOUNT),
+    };
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![(from, INITIAL_BALANCE)]);
+
+    let minter = minting_account(&env, canister_id).expect("the ledger has a minting account");
+    let supply_before = total_supply(&env, canister_id);
+    let mut burn_args = default_transfer_from_args(from, minter, BURN_AMOUNT);
+    burn_args.spender_subaccount = Some(SUBACCOUNT);
+    burn_args.fee = None;
+
+    let result = send_transfer_from(&env, canister_id, owner.0, &burn_args);
+
+    match result {
+        Ok(_) => {
+            assert_eq!(
+                balance_of(&env, canister_id, from),
+                INITIAL_BALANCE - BURN_AMOUNT,
+                "a burn is fee-free, so only the burned amount leaves the account"
+            );
+            assert_eq!(
+                total_supply(&env, canister_id),
+                supply_before - BURN_AMOUNT,
+                "burning must reduce the supply rather than move the tokens"
+            );
+        }
+        Err(_) => {
+            assert_eq!(
+                balance_of(&env, canister_id, from),
+                INITIAL_BALANCE,
+                "a rejected burn must not move funds"
+            );
+            assert_eq!(
+                total_supply(&env, canister_id),
+                supply_before,
+                "a rejected burn must not change the supply"
+            );
+        }
+    }
+    result
+}
+
 pub fn test_transfer_from_minter<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
@@ -4394,7 +4669,7 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
     let account = Account::from(PrincipalId::new_user_test_id(1).0);
     let initial_balances = vec![(account, 100_000_000_u64)];
 
-    let subnet_config = SubnetConfig::new(SubnetType::Application, SubnetSecurity::None);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config.clone(),
         HypervisorConfig::default(),
@@ -5080,7 +5355,7 @@ pub mod archiving {
         }
 
         // Install a ledger with a lot of initial balances
-        let mut subnet_config = SubnetConfig::new(SubnetType::System, SubnetSecurity::None);
+        let mut subnet_config = SubnetConfig::new(SubnetType::System);
         // Set max_instructions_per_round to max(max_instructions_per_slice, max_instructions_per_install_code_slice)
         // to ensure that at most one canister message can be executed per round.
         subnet_config.scheduler_config.max_instructions_per_round = subnet_config

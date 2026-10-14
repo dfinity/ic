@@ -1,6 +1,6 @@
 use candid::CandidType;
 use canister_test::Project;
-use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
+use ic_config::subnet_config::SubnetConfig;
 use ic_nns_test_utils::state_test_helpers::{create_canister, update_with_sender};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
@@ -16,7 +16,7 @@ struct BreakMessageParams {
 
 fn state_machine_for_test(instructions_limit: u64) -> StateMachine {
     let mut hypervisor_config = ic_config::execution_environment::Config::default();
-    let mut subnet_config = SubnetConfig::new(SubnetType::System, SubnetSecurity::None);
+    let mut subnet_config = SubnetConfig::new(SubnetType::System);
 
     let instruction_limit = NumInstructions::new(instructions_limit);
     if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {
@@ -38,7 +38,7 @@ fn state_machine_for_test(instructions_limit: u64) -> StateMachine {
 
 #[test]
 fn test_next_message_if_over_instructions() {
-    let instructions_limit = 500_000;
+    let instructions_limit = 1_000_000;
     let state_machine = state_machine_for_test(instructions_limit);
 
     let long_message_wasm = Project::cargo_bin_maybe_from_env("long-message-canister", &[]);

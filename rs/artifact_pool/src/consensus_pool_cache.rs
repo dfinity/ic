@@ -512,7 +512,7 @@ mod test {
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
     use ic_test_utilities_time::FastForwardTimeSource;
-    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id, test_replica_version};
     use ic_types::consensus::*;
     use ic_types::crypto::crypto_hash;
     use ic_types::time::UNIX_EPOCH;
@@ -539,6 +539,7 @@ mod test {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let subnet_id = subnet_test_id(1);
+            let replica_version = test_replica_version();
             let committee = vec![node_test_id(0)];
             let dkg_interval_length = 3;
             let subnet_records = vec![(
@@ -553,6 +554,7 @@ mod test {
             let mut pool = TestConsensusPool::new(
                 node_test_id(0),
                 subnet_id,
+                replica_version.clone(),
                 pool_config,
                 time_source,
                 registry,
@@ -579,6 +581,7 @@ mod test {
             let finalization = Finalization::fake(FinalizationContent::new(
                 block.height(),
                 block.content.get_hash().clone(),
+                replica_version,
             ));
 
             // 2. Cache can be updated by finalization
@@ -649,6 +652,7 @@ mod test {
             let mut pool = TestConsensusPool::new(
                 node_test_id(0),
                 subnet_test_id(1),
+                test_replica_version(),
                 pool_config,
                 FastForwardTimeSource::new(),
                 setup_registry(subnet_test_id(1), subnet_records),
@@ -723,6 +727,7 @@ mod test {
             let mut pool = TestConsensusPool::new(
                 node_test_id(0),
                 subnet_test_id(1),
+                test_replica_version(),
                 pool_config,
                 FastForwardTimeSource::new(),
                 setup_registry(subnet_test_id(1), subnet_records),

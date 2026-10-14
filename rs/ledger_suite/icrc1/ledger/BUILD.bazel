@@ -16,7 +16,6 @@ package(default_visibility = ["//visibility:public"])
         crate_name = "ic_icrc1_ledger",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:async-trait",
             "@crate_index//:test-strategy",
         ],
         rustc_env = {
@@ -135,7 +134,6 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:candid",
             "@crate_index//:ciborium",
             "@crate_index//:ic-cdk",
-            "@crate_index//:ic-cdk-timers",
             "@crate_index//:ic-certification",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
@@ -262,7 +260,6 @@ package(default_visibility = ["//visibility:public"])
         srcs = ["tests/tests.rs"],
         crate_features = features,
         data = [
-            ":block.cddl",
             ":ledger_canister" + name_suffix + ".wasm.gz",
             ":ledger_canister" + name_suffix + "_nextledgerversion.wasm.gz",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
@@ -307,14 +304,12 @@ package(default_visibility = ["//visibility:public"])
             "//rs/types/base_types",
             "@crate_index//:assert_matches",
             "@crate_index//:candid",
-            "@crate_index//:cddl",
             "@crate_index//:ciborium",
             "@crate_index//:hex",
             "@crate_index//:ic-agent",
             "@crate_index//:ic-cbor",
             "@crate_index//:ic-certification",
             "@crate_index//:leb128",
-            "@crate_index//:num-bigint",
             "@crate_index//:num-traits",
             "@crate_index//:proptest",
             "@crate_index//:rand",
@@ -403,7 +398,6 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:candid",
             "@crate_index//:ciborium",
             "@crate_index//:ic-cdk",
-            "@crate_index//:ic-cdk-timers",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",

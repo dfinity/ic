@@ -9,7 +9,6 @@ use serde::de::DeserializeOwned;
 use slog::{Drain, Logger, info, o, warn};
 use slog_async::OverflowStrategy;
 use std::fs::{self, File};
-use std::os::unix::prelude::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,6 +17,7 @@ use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_P
 use crate::driver::pot_dsl::TestPath;
 
 use crate::driver::constants::{SSH_USERNAME, SUBREPORT_LOG_PREFIX};
+use crate::driver::logger::LockedLogFile;
 
 use super::farm::HostFeature;
 
@@ -45,7 +45,7 @@ pub struct TestEnvInner {
 impl TestEnv {
     pub fn new<P: AsRef<Path>>(path: P, logger: Logger) -> Result<TestEnv> {
         let base_path = PathBuf::from(path.as_ref());
-        let log_file = append_and_lock_exclusive(base_path.join("test.log"))?;
+        let log_file = LockedLogFile::open_append_and_lock_exclusive(base_path.join("test.log"))?;
         let file_drain = slog_term::FullFormat::new(slog_term::PlainDecorator::new(log_file))
             .build()
             .fuse();
@@ -318,16 +318,6 @@ fn ic_prep_path(base_path: PathBuf, name: &str) -> PathBuf {
         format!("ic_prep_{name}")
     };
     base_path.join(dir_name)
-}
-
-fn append_and_lock_exclusive<P: AsRef<Path>>(p: P) -> Result<File> {
-    let f = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(p)?;
-    let fd = f.as_raw_fd();
-    nix::fcntl::flock(fd, nix::fcntl::FlockArg::LockExclusiveNonblock)?;
-    Ok(f)
 }
 
 pub trait SshKeyGen {

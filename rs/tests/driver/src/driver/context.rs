@@ -27,6 +27,8 @@ pub struct GroupContext {
     pub enable_metrics: bool,
     pub logs_enabled: bool,
     pub exclude_logs: Vec<Regex>,
+    pub stream_ic_node_logs: bool,
+    pub stream_console_logs: bool,
     pub quiet: bool,
 }
 
@@ -46,6 +48,8 @@ impl GroupContext {
         enable_metrics: bool,
         logs_enabled: bool,
         exclude_logs: Vec<Regex>,
+        stream_ic_node_logs: bool,
+        stream_console_logs: bool,
         quiet: bool,
     ) -> Result<Self> {
         let task_id = subproc_info.as_ref().map(|t| t.0.clone());
@@ -73,6 +77,8 @@ impl GroupContext {
             enable_metrics,
             logs_enabled,
             exclude_logs,
+            stream_ic_node_logs,
+            stream_console_logs,
             quiet,
         })
     }

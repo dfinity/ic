@@ -138,6 +138,12 @@ pub struct Neuron {
     pub followees: BTreeMap<u64, neuron::Followees>,
     /// The neuron's followees, specified as a map of proposal topics IDs to followees neuron IDs.
     pub topic_followees: Option<neuron::TopicFollowees>,
+    /// The neuron's positive reward shares from its most recent participating reward event,
+    /// tagged with that event's end timestamp. An absent participation or a timestamp that differs
+    /// from `latest_reward_event.end_timestamp_seconds` means zero shares for that event. A neuron
+    /// might have a stale value here from an earlier voting reward event because old values are not
+    /// cleaned up.
+    pub latest_reward_event_participation: Option<neuron::RewardEventParticipation>,
     /// The accumulated unstaked maturity of the neuron, measured in "e8s equivalent", i.e., in equivalent of
     /// 10E-8 of a governance token.
     ///
@@ -227,6 +233,18 @@ pub mod neuron {
     )]
     pub struct TopicFollowees {
         pub topic_id_to_followees: BTreeMap<i32, FolloweesForTopic>,
+    }
+
+    /// Participation in a reward event. Governance currently populates both optional fields.
+    /// Consumers should use the shares only when both fields are present and the timestamp matches
+    /// `latest_reward_event.end_timestamp_seconds`.
+    #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+    pub struct RewardEventParticipation {
+        /// The end timestamp of the reward event that calculated these shares.
+        pub reward_event_end_timestamp_seconds: Option<u64>,
+        /// The sum of the neuron's voting power over all
+        /// reward-eligible Yes and No ballots in proposals settled by this event.
+        pub reward_shares: Option<candid::Nat>,
     }
 
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
@@ -392,6 +410,24 @@ pub struct UpgradeSnsControlledCanister {
     /// If the entire WASM does not fit into the 2 MiB ingress limit, then `new_canister_wasm` should be
     /// an empty, and this field should be set instead.
     pub chunked_canister_wasm: Option<ChunkedCanisterWasm>,
+    /// Options that only apply when mode is upgrade.
+    pub canister_upgrade_options: Option<upgrade_sns_controlled_canister::CanisterUpgradeOptions>,
+}
+/// Nested message and enum types in `UpgradeSnsControlledCanister`.
+pub mod upgrade_sns_controlled_canister {
+    #[derive(candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
+    pub struct CanisterUpgradeOptions {
+        /// Whether to skip the canister's pre_upgrade hook. This would generally be
+        /// used in emergencies. See the corresponding field in the Management
+        /// canister API.
+        pub skip_pre_upgrade: Option<bool>,
+        /// Whether to retain (keep) or drop (replace) the canister's Wasm main
+        /// memory across the upgrade. If the old WASM had a custom section named
+        /// "icp:private enhanced-orthogonal-persistence", then this must be set
+        /// (otherwise, the Management canister will block the upgrade). If keep is
+        /// used here, then the new WASM must also have the same custom section.
+        pub wasm_memory_persistence: Option<i32>,
+    }
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.
@@ -1061,6 +1097,11 @@ pub struct ProposalData {
     pub action_auxiliary: Option<proposal_data::ActionAuxiliary>,
     /// This proposal's topic.
     pub topic: Option<topics::Topic>,
+    /// The raw reply bytes returned by the target canister for a successful
+    /// ExecuteGenericNervousSystemFunction call, truncated to at most
+    /// MAX_SCALAR_FIELD_LEN_BYTES.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub execution_reply: Option<Vec<u8>>,
 }
 /// Nested message and enum types in `ProposalData`.
 pub mod proposal_data {

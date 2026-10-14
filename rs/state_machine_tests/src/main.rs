@@ -1,6 +1,6 @@
 use clap::Parser;
 use ic_config::execution_environment;
-use ic_config::subnet_config::{SubnetConfig, SubnetSecurity};
+use ic_config::subnet_config::SubnetConfig;
 use ic_crypto_iccsa::types::SignatureBytes;
 use ic_crypto_iccsa::{public_key_bytes_from_der, verify};
 use ic_crypto_utils_threshold_sig_der::{
@@ -67,10 +67,7 @@ fn main() {
         default_provisional_cycles_balance: Cycles::new(0),
         ..Default::default()
     };
-    let config = StateMachineConfig::new(
-        SubnetConfig::new(SubnetType::System, SubnetSecurity::None),
-        hypervisor_config,
-    );
+    let config = StateMachineConfig::new(SubnetConfig::new(SubnetType::System), hypervisor_config);
     let env = StateMachineBuilder::new().with_config(Some(config)).build();
     loop {
         debug_print!(&opts, "enter request loop");

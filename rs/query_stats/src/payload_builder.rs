@@ -959,7 +959,7 @@ mod tests {
                 .stats
                 .entry(canister_id)
                 // NOTE: This assumes that there are no nodeids identical in stats1 and stats2
-                .and_modify(|entry| entry.extend(stat2.clone().into_iter()))
+                .and_modify(|entry| entry.extend(stat2.clone()))
                 .or_insert(stat2);
         }
 

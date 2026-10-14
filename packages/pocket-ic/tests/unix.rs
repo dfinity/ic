@@ -15,7 +15,7 @@ use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
-use ic_types::ReplicaVersion;
+use ic_test_utilities_types::ids::test_replica_version;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use maplit::btreemap;
 use pocket_ic::common::rest::{
@@ -60,6 +60,7 @@ enum RejectionCode {
     DestinationInvalid,
     CanisterReject,
     CanisterError,
+    SysUnknown,
     Unknown,
 }
 
@@ -175,7 +176,7 @@ async fn resume_killed_instance_impl(
 #[tokio::test]
 async fn resume_killed_instance_default() {
     let err = resume_killed_instance_impl(None).await.unwrap_err();
-    assert!(err.contains("The state of subnet with seed c75e6e3e57387b40c79cb9503f7c18518284981467d26ccfa7097343fa8bb808 is incomplete."));
+    assert!(err.contains("The state of subnet with seed c947edd7b79ac24b01b686a2c1f1d9fb917d71842eb6f01bae5d9ea50a44cbca is incomplete."));
 }
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
@@ -184,7 +185,7 @@ async fn resume_killed_instance_strict() {
     let err = resume_killed_instance_impl(Some(IncompleteStateFlag::Disabled))
         .await
         .unwrap_err();
-    assert!(err.contains("The state of subnet with seed c75e6e3e57387b40c79cb9503f7c18518284981467d26ccfa7097343fa8bb808 is incomplete."));
+    assert!(err.contains("The state of subnet with seed c947edd7b79ac24b01b686a2c1f1d9fb917d71842eb6f01bae5d9ea50a44cbca is incomplete."));
 }
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
@@ -753,7 +754,7 @@ fn create_subnet_in_registry_canister() {
     for node_id in [node_id_1, node_id_2] {
         let create_subnet_payload = CreateSubnetPayload {
             node_ids: vec![NodeId::new(PrincipalId(node_id))],
-            replica_version_id: ReplicaVersion::default().to_string(),
+            replica_version_id: test_replica_version().to_string(),
             ..Default::default()
         };
         update_candid_as::<_, (Result<NewSubnet, String>,)>(

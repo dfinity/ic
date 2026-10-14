@@ -1217,7 +1217,7 @@ mod test {
 
         let ballots = &governance.heap_data.proposals.get(&1).unwrap().ballots;
         assert_eq!(ballots.len(), 100);
-        for (_, ballot) in ballots.iter() {
+        for ballot in ballots.values() {
             assert_eq!(ballot.vote, Vote::Yes as i32);
         }
     }
@@ -1331,7 +1331,7 @@ mod test {
 
         let ballots = &governance.heap_data.proposals.get(&1).unwrap().ballots;
         assert_eq!(ballots.len(), 9);
-        for (_, ballot) in ballots.iter() {
+        for ballot in ballots.values() {
             assert_eq!(ballot.vote, Vote::Yes as i32);
         }
 
@@ -1436,7 +1436,7 @@ mod test {
 
         let ballots = &governance.heap_data.proposals.get(&1).unwrap().ballots;
         assert_eq!(ballots.len(), 9);
-        for (_, ballot) in ballots.iter() {
+        for ballot in ballots.values() {
             assert_eq!(ballot.vote, Vote::Yes as i32);
         }
 

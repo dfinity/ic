@@ -1,5 +1,5 @@
 use crate::partitions::get_boot_partition_uuid;
-use crate::proposal::read_and_verify_signed_bless_alternative_guest_os_version_proposal;
+use alternative_guestos::proposal::read_and_verify_signed_bless_alternative_guest_os_version_proposal;
 use anyhow::{Context, Result};
 use attestation::attestation_package::AttestationPackageVerifier;
 use attestation::custom_data::{SevCustomData, SevCustomDataNamespace};
@@ -39,6 +39,8 @@ pub fn extract_and_verify_recovery_rootfs_hash(
 
     #[cfg(any(feature = "dev", test))]
     let nns_public_key_override = get_nns_public_key_override(config_mount.mount_point())?;
+    #[cfg(not(any(feature = "dev", test)))]
+    let nns_public_key_override: Option<Vec<u8>> = None;
 
     drop(config_mount);
 
@@ -52,7 +54,6 @@ pub fn extract_and_verify_recovery_rootfs_hash(
 
     let proposal = read_and_verify_signed_bless_alternative_guest_os_version_proposal(
         &boot_mount.mount_point().join(RECOVERY_PROPOSAL_FILE_NAME),
-        #[cfg(any(feature = "dev", test))]
         nns_public_key_override.as_deref(),
     )?;
 
@@ -89,7 +90,9 @@ pub fn extract_and_verify_recovery_rootfs_hash(
         .verify_chip_id(chip_ids)
         .context("This node's chip ID is not included in the expected chip IDs")?
         .verify_measurement(&guest_launch_measurements)
-        .context("This node is not running a GuestOS with one of the base launch measurements")?;
+        .context("This node is not running a GuestOS with one of the base launch measurements")?
+        .verify_guest_policy()
+        .context("Guest policy verification failed")?;
 
     proposal.rootfs_hash.context("Proposal missing rootfs_hash")
 }

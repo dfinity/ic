@@ -141,7 +141,22 @@ if [ "$DEVENV" = true ] && [ "$RUNTIME" = podman ]; then
     fi
 fi
 
-WORKDIR="/ic"
+# Mount the checkout at the same (canonical, symlink-resolved) absolute path
+# it has on the host, and use it as the working directory. This
+# - gives every checkout its own default bazel output base
+#   ($CTR_CACHE_DIR/bazel/_bazel_$CTR_USER/<md5 of the workspace path>) while
+#   the install base, repository cache and repo contents cache in the shared
+#   output_user_root stay shared. Bazel cannot recognize a server that runs in
+#   another container (separate PID namespaces), so two containers on one
+#   output base kill each other's server ("Server terminated abruptly (error
+#   code: 14 ...)");
+# - makes the absolute `gitdir:` pointers of linked git worktrees resolve
+#   (together with the GIT_COMMON_DIR mount below);
+# - keeps host paths valid inside the container.
+# The VS Code devcontainer (.devcontainer/devcontainer.json) mounts the
+# checkout the same way but pins its own output base, so the two never share
+# one.
+WORKDIR="$REPO_ROOT"
 
 # the docker image creates two users: ubuntu (1000) and buildifier (1001). Here we ensure the correct home is used.
 HOST_UID="$(id -u)"
@@ -165,25 +180,11 @@ CTR_CACHE_DIR="$CTR_HOME/.cache"
 # NOTE: in devenvs, ~/.cache is `/hoststorage/cache`
 CACHE_DIR="${CACHE_DIR:-${HOME}/.cache}"
 
-ZIG_CACHE="${CACHE_DIR}/zig-cache"
-mkdir -p "${ZIG_CACHE}"
-
-# ict stores testnet metadata here, shared with the host's ict. Some docker
-# daemons (e.g. namespace.so) can't bind-mount the host's /tmp, so under
-# docker we use a different host dir.
-CTR_ICT_TESTNETS="/tmp/ict_testnets" # path inside the container
-if [ "$RUNTIME" = docker ]; then
-    HOST_ICT_TESTNETS="${CACHE_DIR}/ict_testnets"
-else
-    HOST_ICT_TESTNETS="${CTR_ICT_TESTNETS}"
-fi
-mkdir -p "${HOST_ICT_TESTNETS}"
-
 # make sure we have all bind-mounts
 # ~/.aws, ~/.ssh: credentials forwarded to the container
-# ~/.cache: used as cache persisted across containers (cargo, etc)
+# $CACHE_DIR (~/.cache or -c/--cache-dir): caches persisted across containers (bazel, cargo, etc)
 # ~/.claude: persisted claude settings
-mkdir -p ~/.{aws,ssh,cache,claude}
+mkdir -p ~/.{aws,ssh,claude} "$CACHE_DIR"
 
 RUNTIME_RUN_ARGS=(
     -w "$WORKDIR"
@@ -208,9 +209,7 @@ RUNTIME_RUN_ARGS=(
     # ensures processes are reaped correctly
     --init
 
-    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"     # mount the local repo checkout
-    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache" # C toolchain cache, persisted to speed up rebuilds
-    --mount type=bind,source="${HOST_ICT_TESTNETS}",target="${CTR_ICT_TESTNETS}"
+    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"       # the checkout, at its host path
     --mount type=bind,source="${CACHE_DIR}",target="${CTR_CACHE_DIR}" # persisted root for caches (cargo, etc)
 
     # mount credentials & settings
@@ -221,6 +220,32 @@ RUNTIME_RUN_ARGS=(
     --mount type=tmpfs,target="/tmp/containers" # expected by ic-os build
 )
 
+# Inside a container `git worktree list` reports worktrees other than the
+# current one as "prunable" because their host checkouts are not mounted, so
+# never run `git worktree prune|repair|move|remove` in a container. For the
+# same reason gc's automatic worktree pruning is disabled in every container,
+# not only when started from a linked worktree: `git gc --auto` in a
+# main-checkout container could otherwise prune host worktrees idle for longer
+# than gc.worktreePruneExpire (default: 3 months).
+RUNTIME_RUN_ARGS+=(
+    -e GIT_CONFIG_COUNT=1
+    -e GIT_CONFIG_KEY_0=gc.worktreePruneExpire
+    -e GIT_CONFIG_VALUE_0=never
+)
+
+# Support linked git worktrees (`git worktree add`).
+#
+# A linked worktree's .git is a file pointing into the main repository's .git
+# directory on the host, which is not otherwise visible in the container, so
+# git (and everything that uses it: --config=stamped, rust-lint.sh, ic-admin's
+# build script under cargo, ...) would fail with "not a git repository".
+# Bind-mount the common git dir at its host path so that the pointer resolves.
+GIT_COMMON_DIR="$(cd "$REPO_ROOT" && realpath "$(git rev-parse --git-common-dir)")"
+if [ "$GIT_COMMON_DIR" != "$REPO_ROOT/.git" ]; then
+    eprintln "Detected linked git worktree; mounting '$GIT_COMMON_DIR'"
+    RUNTIME_RUN_ARGS+=(--mount type=bind,source="$GIT_COMMON_DIR",target="$GIT_COMMON_DIR")
+fi
+
 # Privilege/isolation flags required by the IC-OS guest build, per runtime.
 if [ "$RUNTIME" = docker ]; then
     # Under docker the IC-OS build runs (rootless) podman *inside* this
@@ -230,23 +255,33 @@ if [ "$RUNTIME" = docker ]; then
     # CAP_SYS_ADMIN so newuidmap can set up the nested user namespace; and host
     # networking so the inner build reaches the registry. This is much narrower
     # than the --privileged podman uses below.
+    #
+    # /dev/kvm and /dev/net/tun are additionally required by the local
+    # system-test backend (the `_local` tests; see
+    # rs/tests/driver/src/driver/local_backend.rs): it boots QEMU VMs (/dev/kvm)
+    # and creates a per-group Linux bridge and per-VM TAP devices (`ip tuntap
+    # add`, which opens /dev/net/tun). It does the latter inside a private
+    # user+network namespace it unshares itself, gaining CAP_NET_ADMIN over that
+    # namespace with no capability added to the container (the unprivileged
+    # userns nesting is already permitted here) -- so no --cap-add NET_ADMIN.
     RUNTIME_RUN_ARGS+=(
         --device /dev/fuse
+        --device /dev/kvm
+        --device /dev/net/tun
         --security-opt seccomp=unconfined
         --security-opt apparmor=unconfined
         --security-opt label=disable
         --security-opt systempaths=unconfined
         --cap-add SYS_ADMIN
         --network=host
-
-        # docker exposes /dev/fuse as 0600 root:root; this shim opens it up so
-        # the unprivileged container user (and fuse-overlayfs) can use it.
-        --entrypoint=/ic/ci/container/docker-init.sh
     )
 else
     # Privileged rootful podman is required due to requirements of IC-OS guest build;
     # additionally, we need to use hosts's cgroups and network.
-    RUNTIME_RUN_ARGS+=(--pids-limit=-1 --privileged --network=host --cgroupns=host)
+    #
+    # `--pids-limit=-1` turns into `--pids-limit=1` somewhere down the podman -> runc
+    # stack, so use a very high positive limit instead.
+    RUNTIME_RUN_ARGS+=(--pids-limit=4194304 --privileged --network=host --cgroupns=host)
 fi
 
 # In the devenv, inject some extra files into the container for convenience

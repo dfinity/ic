@@ -9,9 +9,6 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     crate_name = "config_types",
-    proc_macro_deps = [
-        "@crate_index//:securefmt",
-    ],
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",

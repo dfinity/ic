@@ -1,4 +1,4 @@
-use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetSecurity};
+use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_management_canister_types_private::{CanisterIdRecord, EmptyBlob, IC_00, Method, Payload};
 use ic_replica_tests as utils;
 use ic_test_utilities::assert_utils::assert_balance_equals;
@@ -80,7 +80,7 @@ fn can_deposit_cycles_via_the_management_canister() {
         let canister_id = test.create_universal_canister_with_args(vec![], num_cycles);
 
         // Create another canister with some cycles and ICP tokens.
-        let config = CyclesAccountManagerConfig::application_subnet(SubnetSecurity::None);
+        let config = CyclesAccountManagerConfig::application_subnet();
         let cycles_for_new_canister = config.canister_creation_fee + Cycles::new(100_000_000);
         let new_canister_id_payload = test
             .ingress(

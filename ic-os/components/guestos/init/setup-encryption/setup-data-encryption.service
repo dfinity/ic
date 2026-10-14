@@ -2,10 +2,13 @@
 Description=Set up and activate encrypted storage
 DefaultDependencies=no
 # When SEV is disabled, the key is read from /boot/config.
-# When SEV is enabled, the key is read from /var during the first boot after an upgrade.
+# When SEV is enabled, the store partition's detached LUKS header is read from /var.
 RequiresMountsFor=/boot/config /var
 Requires=init-config.service
 After=init-config.service
+Wants=ic-node-tmpfiles.service
+# needed for metrics
+After=ic-node-tmpfiles.service
 Wants=cryptsetup-pre.target
 Before=cryptsetup.target
 Conflicts=umount.target

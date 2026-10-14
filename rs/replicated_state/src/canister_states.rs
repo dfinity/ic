@@ -26,6 +26,7 @@ use crate::CanisterState;
 use crate::replicated_state::MemoryTaken;
 use ic_base_types::NumBytes;
 use ic_types::CanisterId;
+use ic_types_cycles::NominalCycles;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::BTreeMap;
@@ -78,6 +79,17 @@ struct ColdStats {
     /// equals the number of guaranteed-response callbacks; best-effort
     /// callbacks force the canister into `hot`).
     callback_count: usize,
+    /// Sum of `system_state.canister_metrics().consumed_cycles()`.
+    ///
+    /// Unlike the other aggregates, a cold canister's consumed cycles keep
+    /// growing while it stays cold (e.g. storage charging via `for_each_mut`),
+    /// but the sub-before / add-after bracketing around every cold-pool
+    /// mutation keeps this sum consistent regardless.
+    consumed_cycles: NominalCycles,
+    /// Sum of `system_state.canister_metrics().consumed_cycles_monotonic()`.
+    ///
+    /// Kept consistent the same way as `consumed_cycles` above.
+    consumed_cycles_monotonic: NominalCycles,
 }
 
 impl ColdStats {
@@ -96,6 +108,11 @@ impl ColdStats {
             .system_state
             .call_context_manager()
             .map_or(0, |ccm| ccm.unresponded_callback_count());
+        self.consumed_cycles += canister.system_state.canister_metrics().consumed_cycles();
+        self.consumed_cycles_monotonic += canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_monotonic();
     }
 
     /// Subtracts the contribution of `canister` from the aggregates.
@@ -113,6 +130,11 @@ impl ColdStats {
             .system_state
             .call_context_manager()
             .map_or(0, |ccm| ccm.unresponded_callback_count());
+        self.consumed_cycles -= canister.system_state.canister_metrics().consumed_cycles();
+        self.consumed_cycles_monotonic -= canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles_monotonic();
     }
 
     /// Computes `ColdStats` from scratch over the provided cold canisters.
@@ -514,6 +536,36 @@ impl CanisterStates {
             })
             .sum();
         hot + self.cold_stats.callback_count
+    }
+
+    /// Returns the total number of cycles consumed by all canisters.
+    ///
+    /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate.
+    pub fn total_consumed_cycles(&self) -> NominalCycles {
+        let hot = self
+            .hot
+            .values()
+            .fold(NominalCycles::zero(), |acc, canister| {
+                acc + canister.system_state.canister_metrics().consumed_cycles()
+            });
+        hot + self.cold_stats.consumed_cycles
+    }
+
+    /// Returns the total number of cycles consumed by all canisters, as the sum
+    /// of their monotonic `CanisterMetrics::consumed_cycles_monotonic()`.
+    ///
+    /// `O(|hot canisters|)` thanks to the precomputed cold-pool aggregate.
+    pub fn total_consumed_cycles_monotonic(&self) -> NominalCycles {
+        let hot = self
+            .hot
+            .values()
+            .fold(NominalCycles::zero(), |acc, canister| {
+                acc + canister
+                    .system_state
+                    .canister_metrics()
+                    .consumed_cycles_monotonic()
+            });
+        hot + self.cold_stats.consumed_cycles_monotonic
     }
 
     /// Returns the total memory usage of all canisters, including message memory.
