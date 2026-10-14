@@ -2,6 +2,7 @@ use crate::execution_environment::{RoundContext, RoundLimits};
 use crate::types::Response;
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, SubnetAvailableMemoryError,
@@ -1351,11 +1352,13 @@ impl From<CanisterManagerError> for RejectContext {
 /// install code. Install code can be executed in three modes - install,
 /// reinstall and upgrade.
 pub(crate) trait PausedInstallCodeExecution: Send + std::fmt::Debug {
+    /// Resumes a paused execution given the current subnet memory saturation.
     fn resume(
         self: Box<Self>,
         canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> DtsInstallCodeResult;
 
     /// Aborts the paused execution.

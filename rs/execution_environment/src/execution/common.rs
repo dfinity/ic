@@ -11,6 +11,9 @@ use crate::{
 };
 use candid::Encode;
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
+use ic_cycles_account_manager::{
+    CyclesAccountManager, CyclesAccountManagerSubnetConfig, ResourceSaturation,
+};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
     wasmtime_embedder::system_api::sandbox_safe_system_state::{
@@ -28,6 +31,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
     ReplicatedState, SystemState, metadata_state::can_have_subnet_admins,
@@ -874,11 +878,16 @@ pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutio
 /// Tries to apply the given canister changes to the given system state and
 /// subnet available memory. In case of an error, the partially applied changes
 /// are not undone.
+#[allow(clippy::too_many_arguments)]
 fn try_apply_canister_state_changes(
     system_state_modifications: SystemStateModifications,
     output: &WasmExecutionOutput,
     system_state: &mut SystemState,
     subnet_available_memory: &mut SubnetAvailableMemory,
+    cycles_account_manager: &CyclesAccountManager,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+    subnet_memory_saturation: &ResourceSaturation,
+    caller: PrincipalId,
     time: Time,
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
@@ -886,6 +895,8 @@ fn try_apply_canister_state_changes(
     metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
 ) -> HypervisorResult<RequestMetadataStats> {
+    let already_reserved_cycles = system_state_modifications.reserved_cycles();
+
     subnet_available_memory
         .try_decrement(
             output.allocated_bytes,
@@ -894,7 +905,7 @@ fn try_apply_canister_state_changes(
         )
         .map_err(|_| HypervisorError::OutOfMemory)?;
 
-    system_state_modifications.apply_changes(
+    let request_stats = system_state_modifications.apply_changes(
         time,
         system_state,
         network_topology,
@@ -902,7 +913,47 @@ fn try_apply_canister_state_changes(
         is_composite_query,
         metrics,
         log,
-    )
+    )?;
+
+    // Recompute the reservation for the allocated bytes based on the given
+    // subnet memory saturation and reserve the cycles missing on top of those
+    // already reserved by the Wasm executor. No cycles are refunded if the
+    // subnet memory saturation decreased during the execution.
+    let additional_reserved_cycles = cycles_account_manager
+        .storage_reservation_cycles(
+            output.allocated_bytes,
+            subnet_memory_saturation,
+            subnet_cycles_config,
+        )
+        .real()
+        - already_reserved_cycles;
+    // Only controllers of the canister learn how many cycles are missing.
+    let reveal_top_up = system_state.controllers.contains(&caller);
+    // Reserving cycles does not affect the freezing threshold check
+    // performed by the Wasm executor: the freezing threshold is reduced
+    // by the reserved balance.
+    system_state
+        .reserve_cycles(additional_reserved_cycles)
+        .map_err(|err| match err {
+            ReservationError::InsufficientCycles {
+                requested,
+                available,
+            } => HypervisorError::InsufficientCyclesInMemoryGrow {
+                bytes: output.allocated_bytes,
+                available,
+                threshold: requested,
+                reveal_top_up,
+            },
+            ReservationError::ReservedLimitExceed { requested, limit } => {
+                HypervisorError::ReservedCyclesLimitExceededInMemoryGrow {
+                    bytes: output.allocated_bytes,
+                    requested,
+                    limit,
+                }
+            }
+        })?;
+
+    Ok(request_stats)
 }
 
 /// Applies canister state change after Wasm execution if possible.
@@ -911,9 +962,16 @@ fn try_apply_canister_state_changes(
 /// Potential causes of failure:
 /// - Changes in the environment such as subnet available memory while the
 ///   long-execution with deterministic time slicing was in progress.
+/// - Insufficient cycles (or a too low reserved cycles limit) to reserve
+///   storage cycles based on the current subnet memory saturation (see below).
 /// - A mismatch between checks dones by the Wasm executor and checks done when
 ///   applying the changes due to a bug.
 /// - An escape from the Wasm sandbox that corrupts the execution output.
+///
+/// The Wasm executor reserves storage cycles based on the subnet memory
+/// saturation at the start of the execution, but the subnet memory saturation
+/// might have changed during a DTS execution. Hence, the reservation is
+/// recomputed based on the current `subnet_memory_saturation`.
 #[allow(clippy::too_many_arguments)]
 pub fn apply_canister_state_changes(
     canister_state_changes: CanisterStateChanges,
@@ -921,6 +979,10 @@ pub fn apply_canister_state_changes(
     system_state: &mut SystemState,
     output: &mut WasmExecutionOutput,
     round_limits: &mut RoundLimits,
+    cycles_account_manager: &CyclesAccountManager,
+    subnet_cycles_config: CyclesAccountManagerSubnetConfig,
+    subnet_memory_saturation: &ResourceSaturation,
+    caller: PrincipalId,
     time: Time,
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
@@ -947,6 +1009,10 @@ pub fn apply_canister_state_changes(
         output,
         system_state,
         &mut round_limits.subnet_available_memory,
+        cycles_account_manager,
+        subnet_cycles_config,
+        subnet_memory_saturation,
+        caller,
         time,
         network_topology,
         subnet_id,
@@ -971,7 +1037,12 @@ pub fn apply_canister_state_changes(
             call_tree_metrics.observe(request_stats, call_context_creation_time, time);
         }
         Err(err) => {
-            debug_assert_eq!(err, HypervisorError::OutOfMemory);
+            debug_assert!(matches!(
+                err,
+                HypervisorError::OutOfMemory
+                    | HypervisorError::InsufficientCyclesInMemoryGrow { .. }
+                    | HypervisorError::ReservedCyclesLimitExceededInMemoryGrow { .. }
+            ));
             match &err {
                 HypervisorError::WasmEngineError(err) => {
                     state_changes_error.inc();
@@ -980,7 +1051,9 @@ pub fn apply_canister_state_changes(
                         "[EXC-BUG]: Failed to apply state changes due to a bug: {}", err
                     )
                 }
-                HypervisorError::OutOfMemory => {
+                HypervisorError::OutOfMemory
+                | HypervisorError::InsufficientCyclesInMemoryGrow { .. }
+                | HypervisorError::ReservedCyclesLimitExceededInMemoryGrow { .. } => {
                     warn!(log, "Failed to apply state changes due to DTS: {}", err)
                 }
                 _ => {
@@ -1090,6 +1163,8 @@ mod test {
 
     use crate::metrics::CallTreeMetricsNoOp;
     use ic_base_types::NumSeconds;
+    use ic_config::subnet_config::DEFAULT_REFERENCE_SUBNET_SIZE;
+    use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_management_canister_types_private::{
         LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotVisibility, StatusVisibility,
     };
@@ -1097,11 +1172,13 @@ mod test {
     use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
     use ic_replicated_state::canister_state::canister_snapshots::CanisterSnapshots;
     use ic_replicated_state::{Memory, NumWasmPages, PageMap, SchedulerState};
+    use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_state::{ExecutionStateBuilder, SystemStateBuilder};
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::messages::NO_DEADLINE;
     use ic_types::time::UNIX_EPOCH;
+    use ic_types_cycles::CanisterCyclesCostSchedule;
     use strum::IntoEnumIterator;
 
     #[test]
@@ -1198,6 +1275,14 @@ mod test {
                 &mut system_state,
                 &mut output,
                 &mut round_limits,
+                &CyclesAccountManagerBuilder::new().build(),
+                CyclesAccountManagerSubnetConfig::new(
+                    SMALL_APP_SUBNET_MAX_SIZE,
+                    CanisterCyclesCostSchedule::Normal,
+                    DEFAULT_REFERENCE_SUBNET_SIZE,
+                ),
+                &ResourceSaturation::default(),
+                PrincipalId::new_anonymous(),
                 UNIX_EPOCH,
                 &Default::default(),
                 subnet_test_id(1),
