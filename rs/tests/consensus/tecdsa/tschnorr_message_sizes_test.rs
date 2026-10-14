@@ -163,8 +163,17 @@ fn dummy_message(message_size: usize) -> Vec<u8> {
 fn test_message_sizes(subnet: SubnetSnapshot, limit: Limit, log: &Logger) {
     let node = subnet.nodes().next().unwrap();
     let agent = node.with_default_agent(|agent| async move { agent });
-    let msg_can = block_on(MessageCanister::new(&agent, node.effective_canister_id()));
-    let sig_can = block_on(SignerCanister::new(&agent, node.effective_canister_id()));
+    let msg_can = block_on(MessageCanister::new_with_cycles_with_retries(
+        &agent,
+        node.effective_canister_id(),
+        CYCLES_LIMIT_PER_CANISTER,
+        log,
+    ));
+    let sig_can = block_on(SignerCanister::new_with_cycles(
+        &agent,
+        node.effective_canister_id(),
+        CYCLES_LIMIT_PER_CANISTER,
+    ));
     let cycles = SCHNORR_SIGNATURE_FEE;
 
     for key_id in &make_schnorr_key_ids_for_all_algorithms() {
