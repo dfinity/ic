@@ -485,7 +485,7 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_response_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: CanisterStateChanges,
+        mut canister_state_changes: CanisterStateChanges,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
@@ -527,6 +527,10 @@ impl ResponseHelper {
                 self.canister.canister_id(),
                 err,
             );
+            // Canister logs are persisted even if the other changes are not.
+            canister_state_changes
+                .system_state_modifications
+                .apply_canister_log(&mut self.canister.system_state, round.hypervisor.metrics());
             // Return total instructions: wasm executor leftovers + cleanup reservation.
             return Err((
                 self,

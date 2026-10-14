@@ -380,6 +380,25 @@ impl SystemStateModifications {
         }
     }
 
+    /// Appends the canister log records produced by the execution to the
+    /// canister log of the given system state, leaving the delta log empty.
+    ///
+    /// Canister logs must be persisted even if the execution fails at any
+    /// point, so this is called on whichever system state is persisted
+    /// eventually, also in case the other changes are not applied.
+    pub fn apply_canister_log<Metrics: CanisterLogMetrics>(
+        &mut self,
+        system_state: &mut SystemState,
+        metrics: &Metrics,
+    ) {
+        if !self.canister_log.is_empty() {
+            metrics.observe_delta_log_size(self.canister_log.bytes_used());
+        }
+        system_state
+            .log_memory_store
+            .append_delta_log(&mut self.canister_log);
+    }
+
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
     pub fn apply_changes<Metrics: CanisterLogMetrics>(
@@ -393,12 +412,7 @@ impl SystemStateModifications {
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
         // Append delta logs.
-        if !self.canister_log.is_empty() {
-            metrics.observe_delta_log_size(self.canister_log.bytes_used());
-        }
-        system_state
-            .log_memory_store
-            .append_delta_log(&mut self.canister_log);
+        self.apply_canister_log(system_state, metrics);
 
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;

@@ -681,7 +681,7 @@ impl InstallCodeHelper {
 
         let CanisterStateChanges {
             execution_state_changes,
-            system_state_modifications,
+            mut system_state_modifications,
         } = canister_state_changes;
 
         // Charge the ingress induction debit before applying the state changes of
@@ -749,6 +749,11 @@ impl InstallCodeHelper {
                     "[DTS] Failed install_code execution of canister {} due to concurrent cycle change: {:?}.",
                     self.canister.canister_id(),
                     err,
+                );
+                // Canister logs are persisted even if the other changes are not.
+                system_state_modifications.apply_canister_log(
+                    &mut self.canister.system_state,
+                    round.hypervisor.metrics(),
                 );
                 return (
                     instructions_consumed,

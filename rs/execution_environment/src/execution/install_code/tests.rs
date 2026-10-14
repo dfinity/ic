@@ -297,6 +297,62 @@ fn dts_install_code_resume_fails_due_to_cycles_decrease() {
     );
 }
 
+/// An `install_code` whose `canister_init` burns cycles fails if the cycles
+/// balance decreased concurrently (due to a postponed charge) while the Wasm
+/// execution was paused, but the canister log of `canister_init` is persisted.
+#[test]
+fn dts_install_code_concurrent_cycles_change_persists_canister_log() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_slice_instruction_limit(1_000_000)
+        .with_create_execution_state_base_cost(0)
+        .with_manual_execution()
+        .build();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    let cycles_to_burn = Cycles::new(1000);
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
+        arg: wasm()
+            .debug_print(b"init")
+            .instruction_counter_is_at_least(1_000_000)
+            .cycles_burn128(cycles_to_burn)
+            .build(),
+        sender_canister_version: None,
+    };
+
+    let ingress_id = test.dts_install_code(payload);
+    while !test.canister_state(canister_id).has_paused_install_code() {
+        assert_eq!(
+            test.canister_state(canister_id).next_execution(),
+            NextExecution::ContinueInstallCode
+        );
+        test.execute_slice(canister_id);
+    }
+
+    // Emulate a postponed charge leaving fewer cycles than burned by `canister_init`.
+    let cycles_debit = test.canister_state(canister_id).system_state.balance() - Cycles::new(1);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
+
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueInstallCode {
+        test.execute_slice(canister_id);
+    }
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+
+    // The canister has no code installed.
+    assert!(test.canister_state(canister_id).execution_state.is_none());
+
+    // The canister log of the failed `canister_init` is persisted.
+    assert_eq!(
+        test.canister_log_contents(canister_id),
+        vec![b"init".to_vec()]
+    );
+}
+
 /// Counterpart of `dts_install_code_resume_fails_due_to_cycles_decrease`: while
 /// resuming a paused `install_code` whose canister lost cycles fails, an
 /// increase of the cycles balance while the execution is paused is tolerated and

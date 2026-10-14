@@ -402,6 +402,17 @@ impl ExecutionTest {
         self.state().canister_state(&canister_id).unwrap()
     }
 
+    /// Returns the contents of the records in the canister log of the given canister.
+    pub fn canister_log_contents(&self, canister_id: CanisterId) -> Vec<Vec<u8>> {
+        self.canister_state(canister_id)
+            .system_state
+            .log_memory_store
+            .records(None)
+            .into_iter()
+            .map(|record| record.content)
+            .collect()
+    }
+
     pub fn install_code_instructions_limit(&self) -> NumInstructions {
         self.install_code_instruction_limits.message()
     }
