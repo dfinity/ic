@@ -74,6 +74,32 @@ impl TrackerHeapAccess {
     }
 }
 
+impl TrackerHeapAccess {
+    /// Checks the two heap ranges of a bulk memory operation (its destination
+    /// and, for a copy within the heap, its source) together, so that pages
+    /// shared by the two ranges are counted once.
+    pub fn check_bulk(&self, dst: Range<usize>, src: Option<Range<usize>>) -> HypervisorResult<()> {
+        let Some(tracker) = &self.tracker else {
+            return Ok(());
+        };
+        let as_u64 = |range: Range<usize>| range.start as u64..range.end as u64;
+        let fits = match src {
+            None => tracker.lock().check_range_fits(as_u64(dst)),
+            Some(src) => tracker.lock().check_ranges_fit(as_u64(dst), as_u64(src)),
+        };
+        self.result(fits)
+    }
+
+    fn result(&self, fits: bool) -> HypervisorResult<()> {
+        if fits {
+            Ok(())
+        } else {
+            self.page_limit_exceeded.store(true, Ordering::Relaxed);
+            Err(self.limit_exceeded_error())
+        }
+    }
+}
+
 impl HeapAccessCheck for TrackerHeapAccess {
     fn check(&self, range: Range<usize>) -> HypervisorResult<()> {
         if range.is_empty() {
@@ -88,11 +114,6 @@ impl HeapAccessCheck for TrackerHeapAccess {
         let fits = tracker
             .lock()
             .check_range_fits(range.start as u64..range.end as u64);
-        if fits {
-            Ok(())
-        } else {
-            self.page_limit_exceeded.store(true, Ordering::Relaxed);
-            Err(self.limit_exceeded_error())
-        }
+        self.result(fits)
     }
 }

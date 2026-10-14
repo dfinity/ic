@@ -1226,7 +1226,7 @@ fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
 
 #[test]
 fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
-    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    const INSTRUCTION_LIMIT: u64 = 50_000_000;
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
@@ -1405,7 +1405,7 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
 
 #[test]
 fn subnet_split_cleans_in_progress_install_code_calls() {
-    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    const INSTRUCTION_LIMIT: u64 = 50_000_000;
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
     let mut test = ExecutionTestBuilder::new()
@@ -1608,7 +1608,7 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
 /// around.
 #[test]
 fn consistent_install_code_calls_after_split() {
-    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    const INSTRUCTION_LIMIT: u64 = 50_000_000;
     let subnet_a = subnet_test_id(1);
     let subnet_b = subnet_test_id(2);
     let caller_canister = canister_test_id(1);

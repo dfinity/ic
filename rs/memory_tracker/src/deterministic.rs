@@ -295,26 +295,72 @@ impl DeterministicState {
         (in_bitmap.end - in_bitmap.start - accessed) + beyond_bitmap
     }
 
+    /// Returns the range of Wasm pages that overlap with the specified byte range.
+    fn wasm_page_range(byte_range: &Range<u64>) -> Range<usize> {
+        if byte_range.is_empty() {
+            return 0..0;
+        }
+        let wasm_page_size = WASM_PAGE_SIZE_IN_BYTES as u64;
+        let first_page = (byte_range.start / wasm_page_size) as usize;
+        let last_page = ((byte_range.end - 1) / wasm_page_size) as usize;
+        first_page..last_page + 1
+    }
+
     /// Returns true if accessing all pages in the specified byte range fits
     /// within the accessed page limit.
     fn range_fits_limit(&self, byte_range: Range<u64>) -> bool {
         let Some(limit) = self.max_accessed_wasm_pages else {
             return true;
         };
-        if byte_range.is_empty() {
-            return true;
-        }
-        let wasm_page_size = WASM_PAGE_SIZE_IN_BYTES as u64;
-        let first_page = (byte_range.start / wasm_page_size) as usize;
-        let last_page = ((byte_range.end - 1) / wasm_page_size) as usize;
-        let wasm_pages = first_page..last_page + 1;
+        self.wasm_page_ranges_fit_limit(limit, Self::wasm_page_range(&byte_range), 0..0)
+    }
 
+    /// Returns true if accessing all pages in both byte ranges fits within the
+    /// accessed page limit. Pages shared by the two ranges are counted once.
+    fn ranges_fit_limit(&self, first: Range<u64>, second: Range<u64>) -> bool {
+        let Some(limit) = self.max_accessed_wasm_pages else {
+            return true;
+        };
+        let mut first = Self::wasm_page_range(&first);
+        let mut second = Self::wasm_page_range(&second);
+        if first.is_empty() || second.is_empty() {
+            first = if first.is_empty() { second } else { first };
+            second = 0..0;
+        } else {
+            if first.start > second.start {
+                std::mem::swap(&mut first, &mut second);
+            }
+            // Merge overlapping or adjacent page ranges so that no page is
+            // counted twice.
+            if second.start <= first.end {
+                first = first.start..first.end.max(second.end);
+                second = 0..0;
+            }
+        }
+        self.wasm_page_ranges_fit_limit(limit, first, second)
+    }
+
+    /// Returns true if accessing all pages in the two disjoint Wasm page ranges
+    /// fits within the accessed page limit.
+    fn wasm_page_ranges_fit_limit(
+        &self,
+        limit: NumWasmPages,
+        first: Range<usize>,
+        second: Range<usize>,
+    ) -> bool {
+        debug_assert!(
+            first.is_empty() || second.is_empty() || first.end <= second.start,
+            "the ranges must be disjoint and ordered"
+        );
         let accessed = self.accessed_wasm_pages_count.get();
-        // Fast path: even if every page in the range is new, we stay within the limit.
-        if accessed + wasm_pages.len() <= limit.get() {
+        // Fast path: even if every page in the ranges is new, we stay within the limit.
+        if accessed + first.len() + second.len() <= limit.get() {
             return true;
         }
-        accessed + self.count_unaccessed_wasm_pages(wasm_pages) <= limit.get()
+        accessed
+            + self.count_unaccessed_wasm_pages(first)
+            + self.count_unaccessed_wasm_pages(second)
+            <= limit.get()
     }
 
     /// Marks specified Wasm page as dirty.
@@ -549,6 +595,15 @@ impl DeterministicMemoryTracker {
         // SAFETY: The caller must ensure that the tracker has a deterministic state.
         let state = &*self.state.borrow();
         state.range_fits_limit(byte_range)
+    }
+
+    /// Like `check_range_fits`, but for two byte ranges that are accessed by
+    /// the same operation (e.g. the source and the destination of a copy).
+    /// Pages shared by the two ranges are counted once.
+    pub fn check_ranges_fit(&self, first: Range<u64>, second: Range<u64>) -> bool {
+        // SAFETY: The caller must ensure that the tracker has a deterministic state.
+        let state = &*self.state.borrow();
+        state.ranges_fit_limit(first, second)
     }
 
     /// Returns the flag that is set once a page was refused because of the
