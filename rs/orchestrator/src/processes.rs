@@ -79,13 +79,13 @@ impl Process for ReplicaProcess {
         if *new_subnet_id != self.subnet_id {
             reasons.push(format!(
                 "Subnet ID changed from {} to {}, evidence of a destination node of a subnet split",
-                self.subnet_id, args.subnet_id
+                self.subnet_id, new_subnet_id
             ));
         }
         if !new_cup.is_signed() && new_cup.height() > self.cup_height {
             reasons.push(format!(
                 "Found higher unsigned CUP (height {} > {}), evidence of a subnet recovery",
-                args.cup.height(),
+                new_cup.height(),
                 self.cup_height
             ));
         }
