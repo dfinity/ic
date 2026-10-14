@@ -45,6 +45,10 @@ static FREE_PORT: AtomicU16 = AtomicU16::new(DEFAULT_SERVER_PORT);
 
 const REPLICA_VERSION: &str = "replica_version_1";
 const LUKS_HEADER_SIZE_BYTES: usize = 16 * 1024 * 1024;
+/// Server-side budget for one key exchange, which moves the LUKS header above on a single thread.
+/// A hung exchange costs this plus the `join_with_timeout` grace, so keep the sum of all exchange
+/// tests (`RUST_TEST_THREADS` of them run at a time) well below the Bazel test timeout.
+const SERVER_SUCCESS_TIMEOUT: Duration = Duration::from_secs(60);
 /// We register the following two measurements in the mock registry.
 const DEFAULT_CLIENT_MEASUREMENT: [u8; 48] = [42; 48];
 const DEFAULT_SERVER_MEASUREMENT: [u8; 48] = [52; 48];
@@ -276,7 +280,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
                 Ok(Ok(Payload::NoPayload))
             });
 
-        let server_agent = self.create_server_agent(vsock_client);
+        let server_agent = self.create_server_agent(vsock_client, SERVER_SUCCESS_TIMEOUT);
 
         let target_replica_version = ReplicaVersion::try_from(REPLICA_VERSION).unwrap();
         let server_future = server_agent
@@ -296,6 +300,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
     fn create_server_agent(
         &self,
         vsock_client: MockVsockClient,
+        success_timeout: Duration,
     ) -> DiskEncryptionKeyExchangeServerAgent {
         let server_sev_firmware = self.server_sev_firmware.clone();
         DiskEncryptionKeyExchangeServerAgent::new(
@@ -308,7 +313,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             self.store_device.path().to_path_buf(),
             self.server_store_luks_header.path().to_path_buf(),
             self.server_port,
-            Duration::from_secs(2),
+            success_timeout,
         )
     }
 
@@ -361,7 +366,7 @@ async fn join_with_timeout<A, B>(
     future_a: impl Future<Output = anyhow::Result<A>> + Unpin,
     future_b: impl Future<Output = anyhow::Result<B>> + Unpin,
 ) -> (anyhow::Result<A>, anyhow::Result<B>) {
-    const TIMEOUT: Duration = Duration::from_millis(500);
+    const TIMEOUT: Duration = Duration::from_secs(10);
 
     match futures::future::select(future_a, future_b).await {
         Either::Left((future_a_result, future_b)) => {
@@ -532,11 +537,18 @@ async fn test_server_timeout() {
         });
 
     let replica_version = ReplicaVersion::try_from(REPLICA_VERSION).unwrap();
-    DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default())
-        .create_server_agent(vsock_client)
+    let result = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default())
+        .create_server_agent(vsock_client, Duration::from_secs(2))
         .exchange_keys(&replica_version)
         .await
         .expect_err("Key exchange should fail when server times out");
+
+    assert!(
+        result
+            .to_string()
+            .contains("Timeout waiting for disk encryption key exchange"),
+        "{result}"
+    );
 }
 
 #[tokio::test]
@@ -619,7 +631,7 @@ async fn test_can_open_disk() {
 async fn test_replica_version_not_in_registry() {
     let fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
     let result = fixture
-        .create_server_agent(MockVsockClient::default())
+        .create_server_agent(MockVsockClient::default(), SERVER_SUCCESS_TIMEOUT)
         .exchange_keys(&ReplicaVersion::from_str("replica_version_missing").unwrap())
         .await
         .expect_err("Key exchange should fail when the target replica version is missing");
@@ -644,7 +656,7 @@ async fn test_start_upgrade_vm_command_fails() {
 
     let replica_version = ReplicaVersion::try_from(REPLICA_VERSION).unwrap();
     let result = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default())
-        .create_server_agent(vsock_client)
+        .create_server_agent(vsock_client, SERVER_SUCCESS_TIMEOUT)
         .exchange_keys(&replica_version)
         .await
         .expect_err("Key exchange should fail when starting the Upgrade VM fails");
