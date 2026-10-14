@@ -481,10 +481,6 @@ mod tests {
     const LONG_RUNNING: &str = "sleep 60";
 
     /// Returns whether the process with the given PID exists on the OS level.
-    ///
-    /// A process that exited but was not reaped yet (a zombie) still exists. The processes started
-    /// by a [`SingleProcessRunner`] are reaped before they are reported as not running anymore, so
-    /// this is deterministic for them.
     fn is_alive(pid: Pid) -> bool {
         match signal::kill(pid, None) {
             Ok(()) => true,
