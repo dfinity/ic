@@ -19,12 +19,11 @@ use crate::error::OrchestratorResult;
 
 /// How long [`SingleProcessRunner::stop`] waits for the process to exit after
 /// sending `SIGTERM`, before escalating to `SIGKILL`.
-const STOP_GRACE_PERIOD: Duration = if !cfg!(test) {
-    Duration::from_secs(30)
-} else {
-    // In tests, we want to fail fast.
-    Duration::from_secs(1)
-};
+#[cfg(not(test))]
+const STOP_GRACE_PERIOD: Duration = Duration::from_secs(30);
+// In tests, we want to fail fast.
+#[cfg(test)]
+const STOP_GRACE_PERIOD: Duration = Duration::from_secs(1);
 
 /// How long [`SingleProcessRunner::stop`] waits for the process to exit after
 /// sending `SIGKILL`, before giving up and returning an error.
