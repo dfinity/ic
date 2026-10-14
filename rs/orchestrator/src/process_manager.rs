@@ -44,8 +44,6 @@ struct RunningState<P> {
     exited: Condvar,
 }
 
-type RunningCell<P> = Arc<RunningState<P>>;
-
 /// Whether a running [`Process`] can keep running with new arguments.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum RestartDecision {
@@ -148,7 +146,7 @@ pub(crate) trait ProcessRunner<P: Process>: Send + Sync {
 
 /// A [`SingleProcessRunner`] manages running a single versioned [`Process`]
 pub(crate) struct SingleProcessRunner<P: Process> {
-    running_cell: RunningCell<P>,
+    running_cell: Arc<RunningState<P>>,
     log: ReplicaLogger,
     join_handle: Option<std::thread::JoinHandle<()>>,
 }
@@ -343,7 +341,7 @@ fn wait_on_exit<P>(
     name: &'static str,
     log: ReplicaLogger,
     mut process: std::process::Child,
-    running_cell: RunningCell<P>,
+    running_cell: Arc<RunningState<P>>,
 ) -> impl FnOnce() {
     move || {
         let exit_status = process.wait();
