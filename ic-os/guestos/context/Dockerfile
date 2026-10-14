@@ -115,6 +115,13 @@ RUN systemctl disable \
     fstrim.service \
     fstrim.timer
 
+# lvm2's blk-availability.service runs `blkdeactivate -u` from its ExecStop=,
+# which unmounts the LVM-backed /var/lib/ic/{backup,crypto,data} behind
+# systemd's back before ic-replica.service and ic-crypto-csp.service have
+# stopped. Mask it: systemd then unmounts them only after those services have
+# stopped, and systemd-shutdown detaches the DM devices at the very end.
+RUN systemctl mask blk-availability.service
+
 # ------ GUESTOS WORK --------------------------------------------
 
 # Divert symbolic link for dynamically generated nftables
