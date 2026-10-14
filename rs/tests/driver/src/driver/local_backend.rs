@@ -1135,15 +1135,20 @@ key-exchange-timeout-ms = 10000
         // VM records its pid under `working_dir/vms/<vm>/qemu.pid`; killing it
         // closes QEMU, which releases the TAP device it had open. A backend
         // hosts a single group per `bazel test` invocation, so every VM dir
-        // belongs to this group.
+        // belongs to this group. The VMs are stopped concurrently: a stop can
+        // take the whole SIGTERM grace period, which should not add up per VM.
         let vms_dir = self.active_local_backend.working_dir.join("vms");
         if let Ok(entries) = std::fs::read_dir(&vms_dir) {
-            for entry in entries.flatten() {
-                let pid_path = Self::qemu_pid_path(&entry.path());
-                if pid_path.exists() {
-                    self.stop_qemu(&pid_path);
+            let pid_paths: Vec<PathBuf> = entries
+                .flatten()
+                .map(|entry| Self::qemu_pid_path(&entry.path()))
+                .filter(|pid_path| pid_path.exists())
+                .collect();
+            std::thread::scope(|scope| {
+                for pid_path in &pid_paths {
+                    scope.spawn(move || self.stop_qemu(pid_path));
                 }
-            }
+            });
         }
 
         // Delete every TAP enslaved to the bridge, then the bridge itself. TAPs
