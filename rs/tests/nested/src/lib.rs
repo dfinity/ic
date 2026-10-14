@@ -159,9 +159,12 @@ pub fn guestos_panic_relaunch(env: TestEnv) {
 }
 
 /// Number of GuestOS relaunches logged by `guest_vm_runner` since the HostOS booted.
+/// `_TRANSPORT=journal` selects the runner's native journald entries only; its stderr is captured
+/// into the journal as well (`_TRANSPORT=stdout`), which would count every relaunch twice.
 fn count_guest_vm_relaunches(host: &NestedVm) -> Result<usize> {
     let out = host.block_on_bash_script(&format!(
-        "journalctl -q -b -o cat --no-pager | grep -c '{GUEST_VM_RELAUNCH_LINE}' || true"
+        "journalctl -q -b -o cat --no-pager _TRANSPORT=journal \
+         | grep -c '{GUEST_VM_RELAUNCH_LINE}' || true"
     ))?;
     out.trim()
         .parse()
@@ -208,7 +211,8 @@ fn guestos_panic_relaunch_inner(env: &TestEnv, host: &NestedVm) -> Result<()> {
         "nohup sudo sh -c 'sleep 5; echo c > /proc/sysrq-trigger' >/dev/null 2>&1 </dev/null &",
     )?;
 
-    // 3. guest_vm_runner saw the domain go away and relaunched it (expected within ~30 s).
+    // 3. guest_vm_runner saw the domain go away and relaunched it (expected within ~30 s),
+    // exactly once.
     let relaunches_after = retry_with_msg!(
         "Waiting for guest_vm_runner to relaunch the GuestOS",
         logger.clone(),
@@ -223,6 +227,11 @@ fn guestos_panic_relaunch_inner(env: &TestEnv, host: &NestedVm) -> Result<()> {
             }
         }
     )?;
+    ensure!(
+        relaunches_after == relaunches_before + 1,
+        "Expected exactly one relaunch, found {} ({relaunches_before} before the panic)",
+        relaunches_after - relaunches_before
+    );
 
     // 4. The guest is up again on a new boot. Bound each SSH attempt so a failure here still
     // leaves time for the diagnostics within the per-test timeout.
@@ -248,7 +257,7 @@ fn guestos_panic_relaunch_inner(env: &TestEnv, host: &NestedVm) -> Result<()> {
     // 5. The orchestrator serves its dashboard again (NestedVm's public address is the guest IP).
     host.await_orchestrator_dashboard_accessible()?;
 
-    // 6. Exactly one relaunch: the guest did not end up in a panic/reboot loop.
+    // 6. Still exactly one relaunch: the guest did not end up in a panic/reboot loop.
     let relaunches_final = count_guest_vm_relaunches(host)?;
     ensure!(
         relaunches_final == relaunches_after,
