@@ -240,10 +240,7 @@ pub fn execute_call_or_task(
         WasmExecutionResult::Finished(slice, output, state_changes) => {
             update_round_limits(round_limits, &slice);
             // The execution finished in its first slice, so the subnet memory
-            // saturation from the original context is still current. It is
-            // passed to `helper.finish` separately (rather than read from the
-            // original context there) because a resumed execution must use the
-            // subnet memory saturation at the start of its last slice instead.
+            // saturation from the original context is still current.
             let subnet_memory_saturation = original
                 .execution_parameters
                 .subnet_memory_saturation
@@ -509,6 +506,9 @@ impl CallOrTaskHelper {
     ///
     /// The storage reservation for the memory allocated by the execution uses
     /// the given subnet memory saturation at the start of the current slice.
+    /// It is passed separately (rather than read from the original context)
+    /// because a resumed execution must use the subnet memory saturation at
+    /// the start of its last slice instead.
     #[allow(clippy::too_many_arguments)]
     fn finish(
         mut self,
