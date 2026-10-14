@@ -266,7 +266,6 @@ impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
         self.set_running(Pid::from_raw(child.id() as i32), process);
 
         self.join_handle = Some(std::thread::spawn(wait_on_exit(
-            P::NAME,
             self.log.clone(),
             child,
             self.running_cell.clone(),
@@ -337,8 +336,7 @@ impl<P: Process> ProcessRunner<P> for SingleProcessRunner<P> {
 }
 
 /// Wait for the child process to return, log the exit status and send.
-fn wait_on_exit<P>(
-    name: &'static str,
+fn wait_on_exit<P: Process>(
     log: ReplicaLogger,
     mut process: std::process::Child,
     running_cell: Arc<RunningState<P>>,
@@ -346,9 +344,9 @@ fn wait_on_exit<P>(
     move || {
         let exit_status = process.wait();
         if let Err(e) = &exit_status {
-            warn!(log, "wait() for {} returned error: {:?}", name, e);
+            warn!(log, "wait() for {} returned error: {:?}", P::NAME, e);
         } else {
-            info!(log, "{} exited. Exit Status: {:?}", name, exit_status);
+            info!(log, "{} exited. Exit Status: {:?}", P::NAME, exit_status);
         }
         let _running = running_cell.running.lock().unwrap().take();
         running_cell.exited.notify_all();
