@@ -449,8 +449,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         }
 
         // If the validated artifacts finalize the last seen CUP height, we need to deliver all
-        // batches before we insert the cup. A listed finalization does not imply that, since the
-        // spool may have been listed while its height was still being synced.
+        // batches before we insert the cup.
         let finalized_height = PoolReader::new(pool).get_finalized_height();
         if let Some(cup_height) = last_cup_height
             && finalized_height >= cup_height
@@ -503,9 +502,6 @@ mod tests {
             .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
             .build();
             let genesis_cup = deps.pool.get_cache().cup_as_protobuf();
-            // A restore validates blocks through their notarizations. A block without one is
-            // checked against the local validation context instead, and the state manager of a
-            // restore has not certified anything yet, so such a block stays unvalidated.
             deps.state_manager
                 .get_mut()
                 .expect_latest_certified_height()
