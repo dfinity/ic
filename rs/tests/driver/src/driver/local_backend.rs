@@ -1101,6 +1101,12 @@ key-exchange-timeout-ms = 10000
                         .arg("-KILL")
                         .arg(pid.to_string())
                         .status();
+                } else {
+                    warn!(
+                        self.logger,
+                        "Process {pid} survived the SIGTERM grace period but is not the QEMU of {}; not killing it",
+                        pid_path.display()
+                    );
                 }
                 break;
             }
@@ -2083,25 +2089,28 @@ mod tests {
     fn qemu_cmdline_names_pidfile_requires_the_pidfile_argument_pair() {
         let pid_path = Path::new("/nonexistent/vms/vm/qemu.pid");
         let path = pid_path.to_str().unwrap();
-        // Two commands keep `sh` from exec'ing `sleep` in its place, so the
-        // process keeps the shell's argv, in which the positional arguments
-        // follow the `$0` given after the command.
-        let spawn = |args: &[&str]| std::process::Command::new("sh").args(args).spawn().unwrap();
-        let mut with = spawn(&["-c", "sleep 60; :", "sh", "-pidfile", path]);
-        let mut without_flag = spawn(&["-c", "sleep 60; :", "sh", path]);
-        let mut other_path = spawn(&["-c", "sleep 60; :", "sh", "-pidfile", "/other/qemu.pid"]);
-        assert!(qemu_cmdline_names_pidfile(with.id() as i32, pid_path));
-        assert!(!qemu_cmdline_names_pidfile(
-            without_flag.id() as i32,
-            pid_path
-        ));
-        assert!(!qemu_cmdline_names_pidfile(
-            other_path.id() as i32,
-            pid_path
-        ));
-        for child in [&mut with, &mut without_flag, &mut other_path] {
+        // `read` is a builtin, so `sh` blocks in it itself (no child process to
+        // orphan) until killed, with the positional arguments after `$0` in its argv.
+        let spawn = |args: &[&str]| {
+            std::process::Command::new("sh")
+                .args(["-c", "read _", "sh"])
+                .args(args)
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .unwrap()
+        };
+        let mut children = [
+            spawn(&["-pidfile", path]),
+            spawn(&[path]),
+            spawn(&["-pidfile", "/other/qemu.pid"]),
+        ];
+        let matches = children
+            .each_ref()
+            .map(|child| qemu_cmdline_names_pidfile(child.id() as i32, pid_path));
+        for child in &mut children {
             child.kill().unwrap();
             child.wait().unwrap();
         }
+        assert_eq!(matches, [true, false, false]);
     }
 }
