@@ -98,66 +98,17 @@ rust_binary(
     ],
 )
 
-ORCHESTRATOR_TEST_COMPILE_DATA = [
-    "testdata/nftables_assigned_cloud_engine.conf.golden",
-    "testdata/nftables_assigned_replica.conf.golden",
-    "testdata/nftables_boundary_node_app_subnet.conf.golden",
-    "testdata/nftables_boundary_node_system_subnet.conf.golden",
-    "testdata/nftables_unassigned_cloud_engine.conf.golden",
-    "testdata/nftables_unassigned_replica.conf.golden",
-]
-
-ORCHESTRATOR_TEST_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/temp_crypto",
-    "//rs/crypto/test_utils/canister_threshold_sigs",
-    "//rs/crypto/test_utils/crypto_returning_ok",
-    "//rs/crypto/test_utils/keys",
-    "//rs/crypto/test_utils/ni-dkg",
-    "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/crypto/test_utils/tls",
-    "//rs/crypto/tls_interfaces/mocks",
-    "//rs/ic_os/config/tool:config_lib",
-    "//rs/registry/fake",
-    "//rs/registry/proto_data_provider",
-    "//rs/registry/subnet_type",
-    "//rs/test_utilities/consensus",
-    "//rs/test_utilities/in_memory_logger",
-    "//rs/test_utilities/logger",
-    "//rs/test_utilities/registry",
-    "//rs/test_utilities/types",
-    "@crate_index//:assert_matches",
-    "@crate_index//:async-stream",
-    "@crate_index//:hyper-util",
-    "@crate_index//:lazy_static",
-    "@crate_index//:libc",
-    "@crate_index//:mockall",
-    "@crate_index//:rcgen",
-    "@crate_index//:rstest",
-    "@crate_index//:rustls",
-    "@crate_index//:tokio-rustls",
-]
-
 rust_test(
     name = "orchestrator_test",
-    compile_data = ORCHESTRATOR_TEST_COMPILE_DATA,
+    compile_data = [
+        "testdata/nftables_assigned_cloud_engine.conf.golden",
+        "testdata/nftables_assigned_replica.conf.golden",
+        "testdata/nftables_boundary_node_app_subnet.conf.golden",
+        "testdata/nftables_boundary_node_system_subnet.conf.golden",
+        "testdata/nftables_unassigned_cloud_engine.conf.golden",
+        "testdata/nftables_unassigned_replica.conf.golden",
+    ],
     crate = ":lib",
-    # Disable optimizations to speed up compilation otherwise it will take over 9 minutes on CI.
-    # It does not have an effect on the test runtime.
-    rustc_flags = ["-Copt-level=0"],
-    deps = ORCHESTRATOR_TEST_DEPENDENCIES,
-)
-
-# The PocketIC-backed tests in `cloud_engine::integration_tests` get their own
-# process. Keeping them apart also spares `orchestrator_test` the dependency on
-# `pocket-ic-server`.
-rust_test(
-    name = "orchestrator_cloud_engine_integration_test",
-    # Only the gated tests; everything else is covered by `orchestrator_test`.
-    args = ["cloud_engine::integration_tests"],
-    compile_data = ORCHESTRATOR_TEST_COMPILE_DATA,
-    crate = ":lib",
-    crate_features = ["cloud_engine_integration_tests"],
     data = [
         # Keep sorted.
         "//rs/pocket_ic_server:pocket-ic-server",
@@ -168,7 +119,38 @@ rust_test(
         "CLOUD_ENGINE_STUB_WASM": "$(rootpath //rs/rust_canisters/cloud_engine_stub:cloud_engine_stub_canister)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
-    # See `orchestrator_test`.
+    # Disable optimizations to speed up compilation otherwise it will take over 9 minutes on CI.
+    # It does not have an effect on the test runtime.
     rustc_flags = ["-Copt-level=0"],
-    deps = ORCHESTRATOR_TEST_DEPENDENCIES + ["//packages/pocket-ic"],
+    deps = [
+        # Keep sorted.
+        "//packages/pocket-ic",
+        "//rs/crypto/temp_crypto",
+        "//rs/crypto/test_utils/canister_threshold_sigs",
+        "//rs/crypto/test_utils/crypto_returning_ok",
+        "//rs/crypto/test_utils/keys",
+        "//rs/crypto/test_utils/ni-dkg",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/test_utils/tls",
+        "//rs/crypto/tls_interfaces/mocks",
+        "//rs/ic_os/config/tool:config_lib",
+        "//rs/registry/fake",
+        "//rs/registry/proto_data_provider",
+        "//rs/registry/subnet_type",
+        "//rs/test_utilities/consensus",
+        "//rs/test_utilities/in_memory_logger",
+        "//rs/test_utilities/logger",
+        "//rs/test_utilities/registry",
+        "//rs/test_utilities/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:async-stream",
+        "@crate_index//:hyper-util",
+        "@crate_index//:lazy_static",
+        "@crate_index//:libc",
+        "@crate_index//:mockall",
+        "@crate_index//:rcgen",
+        "@crate_index//:rstest",
+        "@crate_index//:rustls",
+        "@crate_index//:tokio-rustls",
+    ],
 )

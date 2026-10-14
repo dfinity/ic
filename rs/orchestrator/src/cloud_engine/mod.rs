@@ -9,7 +9,7 @@ mod agent;
 pub(crate) mod config;
 mod discovery;
 mod error;
-#[cfg(all(test, feature = "cloud_engine_integration_tests"))]
+#[cfg(test)]
 mod integration_tests;
 mod operator;
 

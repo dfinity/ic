@@ -6,11 +6,6 @@ edition.workspace = true
 description.workspace = true
 documentation.workspace = true
 
-[features]
-default = []
-# Compiles the PocketIC-backed tests in `cloud_engine::integration_tests`.
-cloud_engine_integration_tests = []
-
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
