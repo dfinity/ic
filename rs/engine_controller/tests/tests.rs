@@ -8,7 +8,7 @@ use candid::{Decode, Encode, Principal};
 use canister_test::Project;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_engine_controller::{
-    CreateEngineArgs, DeleteEngineArgs, EngineControllerInitArgs, NewSubnet,
+    CreateEngineArgs, DeleteEngineArgs, EngineControllerInitArgs, EngineResourceLimits, NewSubnet,
 };
 use ic_management_canister_types::CanisterSettings;
 use ic_nns_constants::{ENGINE_CONTROLLER_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
@@ -18,7 +18,8 @@ use ic_nns_test_utils::registry::{
 };
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::subnet::v1::{
-    SubnetListRecord as SubnetListRecordPb, SubnetRecord as SubnetRecordPb, SubnetType,
+    ResourceLimits as ResourceLimitsPb, SubnetListRecord as SubnetListRecordPb,
+    SubnetRecord as SubnetRecordPb, SubnetType,
 };
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
@@ -229,6 +230,7 @@ async fn create_engine_then_delete_engine_succeeds() {
         node_ids: node_principals(&node_ids),
         subnet_admins: vec![],
         replica_version_id: test_replica_version().to_string(),
+        resource_limits: None,
     };
 
     let new_subnet = call_create_engine(&pic, authorized(), &create_args)
@@ -285,6 +287,7 @@ async fn create_engine_caller_must_be_authorized() {
         node_ids: node_principals(&node_ids),
         subnet_admins: vec![],
         replica_version_id: test_replica_version().to_string(),
+        resource_limits: None,
     };
     let err = call_create_engine(&pic, attacker, &args).await.unwrap_err();
     assert!(err.contains("not authorized"), "unexpected error: {err}");
@@ -302,6 +305,7 @@ async fn create_engine_rejects_fewer_than_four_nodes() {
             node_ids: nodes,
             subnet_admins: vec![],
             replica_version_id: test_replica_version().to_string(),
+            resource_limits: None,
         },
     )
     .await
@@ -320,6 +324,7 @@ async fn create_engine_accepts_more_than_four_nodes() {
         node_ids: node_principals(&node_ids),
         subnet_admins: vec![],
         replica_version_id: test_replica_version().to_string(),
+        resource_limits: None,
     };
 
     let initial_subnets = subnet_list(&pic).await;
@@ -336,6 +341,41 @@ async fn create_engine_accepts_more_than_four_nodes() {
 }
 
 #[tokio::test]
+async fn create_engine_sets_resource_limits() {
+    let (pic, node_ids, _nns_subnet_id) = setup(4).await;
+    let create_args = CreateEngineArgs {
+        node_ids: node_principals(&node_ids),
+        subnet_admins: vec![],
+        replica_version_id: test_replica_version().to_string(),
+        resource_limits: Some(EngineResourceLimits {
+            maximum_state_size: Some(10 << 30),
+            maximum_state_delta: Some(2 << 30),
+        }),
+    };
+
+    let new_subnet_id = call_create_engine(&pic, authorized(), &create_args)
+        .await
+        .expect("create_engine should succeed")
+        .new_subnet_id
+        .expect("create_engine should return a new subnet id");
+
+    let raw = registry_get_value(
+        &pic,
+        make_subnet_record_key(new_subnet_id).as_bytes().to_vec(),
+    )
+    .await;
+    let subnet_record = SubnetRecordPb::decode(raw.as_slice()).unwrap();
+    assert_eq!(
+        subnet_record.resource_limits,
+        Some(ResourceLimitsPb {
+            maximum_state_size: Some(10 << 30),
+            maximum_state_delta: Some(2 << 30),
+            ..Default::default()
+        })
+    );
+}
+
+#[tokio::test]
 async fn create_engine_rejects_duplicates() {
     let (pic, node_ids, _nns_subnet_id) = setup(4).await;
     let mut nodes = node_principals(&node_ids);
@@ -347,6 +387,7 @@ async fn create_engine_rejects_duplicates() {
             node_ids: nodes,
             subnet_admins: vec![],
             replica_version_id: test_replica_version().to_string(),
+            resource_limits: None,
         },
     )
     .await
@@ -397,6 +438,7 @@ async fn init_arg_overrides_authorized_caller_and_survives_upgrade() {
         node_ids: node_principals(&node_ids),
         subnet_admins: vec![],
         replica_version_id: test_replica_version().to_string(),
+        resource_limits: None,
     };
     let err = call_create_engine(&pic, authorized(), &args)
         .await
