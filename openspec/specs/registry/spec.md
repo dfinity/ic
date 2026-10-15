@@ -259,6 +259,15 @@ Subnet configuration can be updated through governance proposals, including para
 - **WHEN** an update payload contains duplicate chain key IDs
 - **THEN** the operation panics with "have duplicates"
 
+#### Scenario: SEV can be enabled on an existing subnet
+- **WHEN** an `UpdateSubnetPayload` sets `features.sev_enabled` to `true` on a subnet that does not currently have SEV enabled
+- **THEN** the update is allowed, subject to the SEV subnet invariants (`check_sev_subnet_invariants`) confirming the subnet can actually run with SEV
+- **AND** SEV is no longer restricted to being set only at subnet creation time
+
+#### Scenario: SEV cannot be disabled once enabled
+- **WHEN** an `UpdateSubnetPayload` would leave `features.sev_enabled` effectively `false` (explicitly, or implicitly by omitting `sev_enabled` while replacing `features`) on a subnet that currently has SEV enabled
+- **THEN** `validate_sev_is_not_disabled` panics, since SEV cannot be turned off once enabled
+
 ### Requirement: Node Registration
 
 Nodes are added to the registry by node operators who have sufficient node allowances. Each node registration includes cryptographic keys, network endpoints, and association with a node operator.
