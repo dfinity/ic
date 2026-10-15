@@ -451,9 +451,10 @@ pub(crate) fn deserialize_consensus_artifacts(
             rename_file(&artifact_path);
         }
 
-        if !invalid.is_empty() {
+        // An invalid random tape may be from a height below the current one.
+        if let Some(failed_height) = invalid.iter().map(|i| i.id.height).min() {
             invalid_artifacts.append(&mut invalid);
-            return Err(ExitPoint::ValidationIncomplete(height));
+            return Err(ExitPoint::ValidationIncomplete(failed_height));
         }
 
         if new_finalized_height < target_height {
