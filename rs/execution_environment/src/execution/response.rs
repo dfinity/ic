@@ -7,7 +7,7 @@ use ic_base_types::CanisterId;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use more_asserts::debug_assert_le;
 
-use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
+use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     wasm_executor::{
         CanisterStateChanges, PausedWasmExecution, WasmExecutionResult, wasm_execution_error,
@@ -489,6 +489,7 @@ impl ResponseHelper {
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: &ResourceSaturation,
         reserved_cleanup_instructions: NumInstructions,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
@@ -546,6 +547,10 @@ impl ResponseHelper {
             &mut self.canister.system_state,
             &mut output,
             round_limits,
+            round.cycles_account_manager,
+            original.subnet_cycles_config,
+            subnet_memory_saturation,
+            original.call_origin.get_principal(),
             round.time,
             &round.network_topology,
             round.hypervisor.subnet_id(),
@@ -585,6 +590,7 @@ impl ResponseHelper {
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: &ResourceSaturation,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
         // Canister logs are persisted even if the other changes are not.
@@ -609,6 +615,10 @@ impl ResponseHelper {
             &mut self.canister.system_state,
             &mut output,
             round_limits,
+            round.cycles_account_manager,
+            original.subnet_cycles_config,
+            subnet_memory_saturation,
+            original.call_origin.get_principal(),
             round.time,
             &round.network_topology,
             round.hypervisor.subnet_id(),
@@ -865,6 +875,7 @@ impl PausedExecution for PausedResponseExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         _subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
         deallocation_sender: &DeallocationSender,
@@ -917,11 +928,19 @@ impl PausedExecution for PausedResponseExecution {
                 (helper, result)
             }
         };
+        // The subnet memory usage might have changed while the execution was
+        // paused. Use the current saturation for storage reservation, both when
+        // finishing this execution and for subsequent Wasm executions (e.g., the
+        // cleanup callback).
+        let execution_parameters = ExecutionParameters {
+            subnet_memory_saturation,
+            ..self.execution_parameters
+        };
         process_response_result(
             result,
             clean_canister,
             helper,
-            self.execution_parameters,
+            execution_parameters,
             self.reserved_cleanup_instructions,
             self.original,
             round,
@@ -987,6 +1006,7 @@ impl PausedExecution for PausedCleanupExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         _subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
         deallocation_sender: &DeallocationSender,
@@ -1042,11 +1062,18 @@ impl PausedExecution for PausedCleanupExecution {
                 (helper, result)
             }
         };
+        // The subnet memory usage might have changed while the cleanup callback
+        // was paused. Use the current saturation for storage reservation when
+        // finishing the cleanup callback.
+        let execution_parameters = ExecutionParameters {
+            subnet_memory_saturation,
+            ..self.execution_parameters
+        };
         process_cleanup_result(
             result,
             clean_canister,
             helper,
-            self.execution_parameters,
+            execution_parameters,
             self.callback_err,
             self.original,
             round,
@@ -1383,6 +1410,7 @@ fn process_response_result(
                 &original,
                 &round,
                 round_limits,
+                &execution_parameters.subnet_memory_saturation,
                 reserved_cleanup_instructions,
                 call_tree_metrics,
             ) {
@@ -1484,6 +1512,7 @@ fn process_cleanup_result(
                 &original,
                 &round,
                 round_limits,
+                &execution_parameters.subnet_memory_saturation,
                 call_tree_metrics,
             )
         }

@@ -1185,9 +1185,12 @@ fn refill_pool_empty(
 
         runtime.block_on(async {
             let mut count: u64 = 0;
-            // Keep polling until a slice is present in the pool and the pull was recorded.
+            // Keep polling until the pull was recorded, which happens after `put()` returned.
             loop {
-                if let (_, Some(_), _, _) = pool.lock().unwrap().slice_stats(REMOTE_SUBNET) {
+                if fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS)
+                    .values()
+                    .any(|&v| v > 0)
+                {
                     break;
                 }
                 count += 1;
@@ -1336,10 +1339,12 @@ fn refill_pool_append(
 
         runtime.block_on(async {
             let mut count: u64 = 0;
-            // Keep polling until the pooled slice has `expected_msg_count` messages.
+            // Keep polling until the pull was recorded, which happens after `append()` returned.
             loop {
-                let (_, _, msg_count, _) = pool.lock().unwrap().slice_stats(REMOTE_SUBNET);
-                if msg_count == expected_msg_count {
+                if fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS)
+                    .values()
+                    .any(|&v| v > 0)
+                {
                     break;
                 }
                 count += 1;

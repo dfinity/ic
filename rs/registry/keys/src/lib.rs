@@ -389,7 +389,7 @@ pub fn make_canister_ranges_key(range_start: CanisterId) -> String {
     // the bytes are big-endian encoded in the Principal.
     // If at some point we stop having the same length CanisterIds, we will need to prepend a length
     // byte into this encoding to have the same properties apply, and that will also require a data migration.
-    let encoded_range_start = hex::encode(range_start.get().to_vec());
+    let encoded_range_start = hex::encode(range_start.get_ref().as_slice());
     format!("{CANISTER_RANGES_PREFIX}{encoded_range_start}")
 }
 
