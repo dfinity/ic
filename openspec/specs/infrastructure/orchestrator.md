@@ -243,6 +243,34 @@ The orchestrator manages boundary node configuration for nodes that serve as API
 - **THEN** the `BoundaryNodeManager` checks the registry for boundary node configuration updates
 - **AND** appropriate actions are taken based on changes
 
+### Requirement: Cloud Engine Gateway Configuration
+Cloud engine nodes are "all-in-one" nodes: besides the replica, they also run `ic-gateway` (and potentially `ic-boundary`). `CloudEngineManager` fetches the HTTP Gateway configuration an engine's own `engine-operator` canister holds and hands it to the process manager that runs `ic-gateway`.
+
+#### Scenario: Engine operator discovery
+- **WHEN** a cloud engine node needs its `ic-gateway` configuration for the first time, or after discovery was invalidated
+- **THEN** the orchestrator queries the engine management canister's `getEngineOperatorBySubnet` method for this node's subnet, over an anonymous agent routed through a randomly chosen API boundary node (the engine management canister lives off the engine's own subnet)
+- **AND** the resolved operator canister id is cached and reused until invalidated
+
+#### Scenario: Fetching and validating the gateway configuration
+- **WHEN** the operator canister is known
+- **THEN** the orchestrator calls the operator canister, signing as this node, to fetch the HTTP Gateway config (base domains, DNS API URLs, DNS API key) and the ACME account credentials
+- **AND** `validate_engine_config` rejects an incomplete configuration (any of these fields missing) and malformed domains or DNS API URLs
+- **AND** a complete, valid configuration becomes the current `EngineConfig`, published for the process manager to run `ic-gateway` with; a previous valid configuration is kept on failure, never cleared
+- **AND** the `cloud_engine_config_fetches` metric counts each outcome (`ok`, `incomplete`, `not_ready`, `error`)
+
+#### Scenario: Operator not yet ready for this node
+- **WHEN** the operator canister does not yet recognize this node
+- **THEN** the fetch is retried on the next check without discarding the cached operator id
+- **AND** after 30 consecutive `not_ready` outcomes (about 5 minutes at the 10-second check interval), the operator id is invalidated so the next check re-resolves it
+
+#### Scenario: Non-cloud-engine nodes are unaffected
+- **WHEN** a node's subnet is not of type `CloudEngine`
+- **THEN** `CloudEngineManager` takes no action
+
+#### Scenario: Test stub for the engine canisters
+- **WHEN** orchestrator integration tests exercise `CloudEngineManager` end to end
+- **THEN** a single `cloud-engine-stub` canister (`rs/rust_canisters/cloud_engine_stub/`) is installed twice, once as the engine management canister and once as the engine operator canister, serving the three endpoints the orchestrator reads with `set_*` updates that let the test drive the complete, incomplete, and not-yet-authorized cases
+
 ### Requirement: Orchestrator Dashboard
 The orchestrator exposes an HTTP dashboard showing the current state of the node.
 
