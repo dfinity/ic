@@ -704,7 +704,7 @@ mod tests {
                 spool.restore(),
                 vec![(
                     Err(ExitPoint::ValidationIncomplete(failed_height)),
-                    failed_height - 1.into(),
+                    failed_height.decrement(),
                 )]
             );
         }
