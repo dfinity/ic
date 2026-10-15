@@ -430,10 +430,10 @@ fn check_high_threshold_public_key_and_cup_contents(
     for subnet_id in all_subnets.iter().copied() {
         let high_threshold_public_key_bytes: Option<PublicKey> = get_value_from_snapshot(
             snapshot,
-            make_crypto_threshold_signing_pubkey_key(subnet_id),
-        );
+            &make_crypto_threshold_signing_pubkey_key(subnet_id),
+        )?;
         let cup_contents_bytes: Option<CatchUpPackageContents> =
-            get_value_from_snapshot(snapshot, make_catch_up_package_contents_key(subnet_id));
+            get_value_from_snapshot(snapshot, &make_catch_up_package_contents_key(subnet_id))?;
         let high_threshold_public_key_proto = match high_threshold_public_key_bytes {
             Some(high_threshold_public_key_proto) => high_threshold_public_key_proto,
             None => {

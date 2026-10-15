@@ -85,7 +85,7 @@ impl RosettaRequestHandler {
         initial_sync_complete: Arc<AtomicBool>,
     ) -> Self {
         let canister_id = ledger.ledger_canister_id();
-        let canister_id_str = hex::encode(canister_id.get().into_vec());
+        let canister_id_str = hex::encode(canister_id.get_ref().as_slice());
         Self::new(
             crate::DEFAULT_BLOCKCHAIN.to_string(),
             ledger,
@@ -96,7 +96,7 @@ impl RosettaRequestHandler {
 
     pub fn network_id(&self) -> NetworkIdentifier {
         let canister_id = self.ledger.ledger_canister_id();
-        let net_id = hex::encode(canister_id.get().into_vec());
+        let net_id = hex::encode(canister_id.get_ref().as_slice());
         NetworkIdentifier::new(self.blockchain.clone(), net_id)
     }
 

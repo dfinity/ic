@@ -29,7 +29,7 @@
   // The install base and the repository cache stay shared under the same
   // output_user_root, and bazel/bazel_clean.sh removes the rc file with the
   // rest of ~/.cache/bazel.
-  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/bazel/devcontainer ~/.cache/cargo ~/.claude ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history && echo 'startup --output_base=/home/ubuntu/.cache/bazel/_bazel_ubuntu/devcontainer-${devcontainerId}' > ~/.cache/bazel/devcontainer/${devcontainerId}.bazelrc",
+  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache/bazel/devcontainer ~/.cache/cargo ~/.claude ~/.config ~/.local/share/fish /tmp/ict_testnets && touch ~/.zsh_history ~/.bash_history && echo 'startup --output_base=/home/ubuntu/.cache/bazel/_bazel_ubuntu/devcontainer-${devcontainerId}' > ~/.cache/bazel/devcontainer/${devcontainerId}.bazelrc",
   // Array form so that a checkout path with spaces cannot break it.
   "postStartCommand": [
     "${containerWorkspaceFolder}/ci/container/init.sh"
@@ -68,6 +68,11 @@
     {
       "source": "${localEnv:HOME}/.claude",
       "target": "/home/ubuntu/.claude",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.config",
+      "target": "/home/ubuntu/.config",
       "type": "bind"
     },
     {
