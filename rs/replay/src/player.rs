@@ -1148,7 +1148,7 @@ impl Player {
                             although the CUP at height {cup_height} was reported as finalized"
                         );
                         return Err(ReplayError::ValidationIncomplete(
-                            last_batch_height,
+                            last_batch_height.increment(),
                             invalid_artifacts,
                         ));
                     }
