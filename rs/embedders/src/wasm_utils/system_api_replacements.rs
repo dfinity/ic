@@ -41,6 +41,60 @@ fn make_body(
     }
 }
 
+/// The heap page limit check for a stable memory copy whose heap range is
+/// `[addr, addr + len)`, with `addr` and `len` in locals of type
+/// `operand_type`.
+///
+/// Same scheme as `inject_heap_bulk_check_fn` in the instrumentation: the
+/// range touches at most `(len >> 16) + 2` Wasm pages; if that fits into the
+/// heap page budget, fall through, otherwise let `__.check_heap_bulk_access`
+/// count the pages exactly and trap if the copy does not fit. The copy must
+/// not touch the heap before this check: a refused heap page would fault
+/// inside the copy, where it cannot be turned into a trap.
+fn check_heap_range(
+    addr: u32,
+    len: u32,
+    operand_type: DataType,
+    heap_page_budget: u32,
+    check_heap_bulk_access_fn: u32,
+) -> Vec<wirm::wasmparser::Operator<'static>> {
+    use wirm::wasmparser::Operator::*;
+    let get_as_i64 = |local_index: u32| -> Vec<wirm::wasmparser::Operator<'static>> {
+        match operand_type {
+            DataType::I32 => vec![LocalGet { local_index }, I64ExtendI32U],
+            _ => vec![LocalGet { local_index }],
+        }
+    };
+    let mut ops = get_as_i64(len);
+    ops.extend([
+        I64Const {
+            value: WASM_PAGE_SIZE.trailing_zeros() as i64,
+        },
+        I64ShrU,
+        I64Const { value: 2 },
+        I64Add,
+        GlobalGet {
+            global_index: heap_page_budget,
+        },
+        I64GtS,
+        If {
+            blockty: BlockType::Empty,
+        },
+    ]);
+    // `check_heap_bulk_access(dst, src, len, src_is_heap)` with no heap source.
+    ops.extend(get_as_i64(addr));
+    ops.push(I64Const { value: 0 });
+    ops.extend(get_as_i64(len));
+    ops.extend([
+        I32Const { value: 0 },
+        Call {
+            function_index: check_heap_bulk_access_fn,
+        },
+        End,
+    ]);
+    ops
+}
+
 pub(super) type ReplacementFunction = (
     // Function parameters.
     Vec<wirm::DataType>,
@@ -60,6 +114,15 @@ pub(super) fn replacement_functions(
     let dirty_pages_counter_index = injected_counters.dirty_pages_counter;
     let accessed_pages_counter_index = injected_counters.accessed_pages_counter;
     let decr_instruction_counter_fn = injected_counters.decr_instruction_counter_fn;
+    let check_heap_range = |addr: u32, len: u32, operand_type: DataType| {
+        check_heap_range(
+            addr,
+            len,
+            operand_type,
+            injected_counters.heap_page_budget,
+            injected_functions.check_heap_bulk_access,
+        )
+    };
 
     use wirm::wasmparser::Operator::*;
     let page_size_shift = PAGE_SIZE.trailing_zeros() as i32;
@@ -255,237 +318,244 @@ pub(super) fn replacement_functions(
                 const SHOULD_CALL_READ_API: u32 = 7;
                 make_body(
                     vec![(5, DataType::I32)], // src on bytemap, src + len on bytemap, accessed page cnt, mark bytemap iterator, should call first read api
-                    vec![
-                        // Decrement instruction counter by the size of the copy
-                        // and fixed overhead.
-                        LocalGet { local_index: LEN },
-                        I64ExtendI32U,
-                        I64Const {
-                            value: overhead_native::STABLE_READ.get() as i64,
-                        },
-                        I64Add,
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
-                        // if size is 0 we return
-                        // (correctness of the code that follows depends on the size being > 0)
-                        // note that we won't return errors if addresses are out of bounds
-                        // in this case
-                        LocalGet { local_index: LEN },
-                        I32Const { value: 0 },
-                        I32Eq,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        Return,
-                        End,
-                        // If memory is too big for 32bit api, we trap
-                        MemorySize {
-                            mem: stable_memory_index,
-                        },
-                        I64Const {
-                            value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
-                        },
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::StableMemoryTooBigFor32Bit as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // check bounds on stable memory (fail if src + size > mem_size)
-                        LocalGet { local_index: SRC },
-                        I64ExtendI32U,
-                        LocalGet { local_index: LEN },
-                        I64ExtendI32U,
-                        I64Add,
-                        MemorySize {
-                            mem: stable_memory_index,
-                        },
-                        I64Const {
-                            value: WASM_PAGE_SIZE as i64,
-                        },
-                        I64Mul,
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::StableMemoryOutOfBounds as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // src
-                        LocalGet { local_index: SRC },
-                        I32Const {
-                            value: page_size_shift,
-                        },
-                        I32ShrU,
-                        LocalTee {
-                            local_index: BYTEMAP_START,
-                        },
-                        // bytemap_end
-                        LocalGet { local_index: SRC },
-                        LocalGet { local_index: LEN },
-                        I32Add,
-                        I32Const { value: 1 },
-                        I32Sub,
-                        I32Const {
-                            value: page_size_shift,
-                        },
-                        I32ShrU,
-                        I32Const { value: 1 },
-                        I32Add,
-                        LocalTee {
-                            local_index: BYTEMAP_END,
-                        },
-                        Call {
-                            function_index: count_clean_pages_fn_index,
-                        },
-                        // On top of the stack we have the number of pages
-                        // that haven't been accessed in the given range.
-                        // We need to call the first read API if this
-                        // matches the total range.
-                        LocalTee {
-                            local_index: ACCESSED_PAGE_COUNT,
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_END,
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_START,
-                        },
-                        I32Sub,
-                        I32Eq,
-                        LocalSet {
-                            local_index: SHOULD_CALL_READ_API,
-                        },
-                        Drop, // Drop the number of unwritten pages.
-                        LocalGet {
-                            local_index: ACCESSED_PAGE_COUNT,
-                        },
-                        // fail if accessed pages limit exhausted
-                        I64ExtendI32U,
-                        GlobalGet {
-                            global_index: accessed_pages_counter_index,
-                        },
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // mark accessed pages if there are any to be marked
-                        LocalGet {
-                            local_index: ACCESSED_PAGE_COUNT,
-                        },
-                        I32Const { value: 0 },
-                        I32GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_START,
-                        },
-                        LocalSet {
-                            local_index: BYTEMAP_ITERATOR,
-                        }, // it
-                        Loop {
-                            blockty: BlockType::Empty,
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_ITERATOR,
-                        }, // it as arg for store
-                        LocalGet {
-                            local_index: BYTEMAP_ITERATOR,
-                        }, // it as arg for load
-                        I32Load8U {
-                            memarg: wirm::wasmparser::MemArg {
-                                align: 0,
-                                max_align: 0,
-                                offset: 0,
-                                // We assume the bytemap for stable memory is always
-                                // inserted directly after the stable memory.
-                                memory: stable_memory_index + 1,
+                    [
+                        vec![
+                            // Decrement instruction counter by the size of the copy
+                            // and fixed overhead.
+                            LocalGet { local_index: LEN },
+                            I64ExtendI32U,
+                            I64Const {
+                                value: overhead_native::STABLE_READ.get() as i64,
                             },
-                        },
-                        I32Const { value: 2 }, // READ_BIT
-                        I32Or,
-                        I32Store8 {
-                            memarg: wirm::wasmparser::MemArg {
-                                align: 0,
-                                max_align: 0,
-                                offset: 0,
-                                // We assume the bytemap for stable memory is always
-                                // inserted directly after the stable memory.
-                                memory: stable_memory_index + 1,
+                            I64Add,
+                            Call {
+                                function_index: decr_instruction_counter_fn,
                             },
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_ITERATOR,
-                        },
-                        I32Const { value: 1 },
-                        I32Add,
-                        LocalTee {
-                            local_index: BYTEMAP_ITERATOR,
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_END,
-                        },
-                        I32LtU,
-                        BrIf { relative_depth: 0 },
-                        End, // end loop
-                        End, // end if
-                        // perform the copy, calling API if it's the first access.
-                        LocalGet {
-                            local_index: SHOULD_CALL_READ_API,
-                        },
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        LocalGet { local_index: DST },
-                        I64ExtendI32U,
-                        LocalGet { local_index: SRC },
-                        I64ExtendI32U,
-                        LocalGet { local_index: LEN },
-                        I64ExtendI32U,
-                        Call {
-                            function_index: injected_functions.stable_read_first_access,
-                        },
-                        Else,
-                        LocalGet { local_index: DST },
-                        LocalGet { local_index: SRC },
-                        I64ExtendI32U,
-                        LocalGet { local_index: LEN },
-                        MemoryCopy {
-                            dst_mem: 0,
-                            src_mem: stable_memory_index,
-                        },
-                        End, // End actual copy.
-                        GlobalGet {
-                            global_index: accessed_pages_counter_index,
-                        },
-                        LocalGet {
-                            local_index: ACCESSED_PAGE_COUNT,
-                        },
-                        I64ExtendI32U,
-                        I64Sub,
-                        GlobalSet {
-                            global_index: accessed_pages_counter_index,
-                        },
-                    ],
+                            Drop,
+                            // if size is 0 we return
+                            // (correctness of the code that follows depends on the size being > 0)
+                            // note that we won't return errors if addresses are out of bounds
+                            // in this case
+                            LocalGet { local_index: LEN },
+                            I32Const { value: 0 },
+                            I32Eq,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            Return,
+                            End,
+                            // If memory is too big for 32bit api, we trap
+                            MemorySize {
+                                mem: stable_memory_index,
+                            },
+                            I64Const {
+                                value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
+                            },
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::StableMemoryTooBigFor32Bit as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // check bounds on stable memory (fail if src + size > mem_size)
+                            LocalGet { local_index: SRC },
+                            I64ExtendI32U,
+                            LocalGet { local_index: LEN },
+                            I64ExtendI32U,
+                            I64Add,
+                            MemorySize {
+                                mem: stable_memory_index,
+                            },
+                            I64Const {
+                                value: WASM_PAGE_SIZE as i64,
+                            },
+                            I64Mul,
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::StableMemoryOutOfBounds as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // src
+                            LocalGet { local_index: SRC },
+                            I32Const {
+                                value: page_size_shift,
+                            },
+                            I32ShrU,
+                            LocalTee {
+                                local_index: BYTEMAP_START,
+                            },
+                            // bytemap_end
+                            LocalGet { local_index: SRC },
+                            LocalGet { local_index: LEN },
+                            I32Add,
+                            I32Const { value: 1 },
+                            I32Sub,
+                            I32Const {
+                                value: page_size_shift,
+                            },
+                            I32ShrU,
+                            I32Const { value: 1 },
+                            I32Add,
+                            LocalTee {
+                                local_index: BYTEMAP_END,
+                            },
+                            Call {
+                                function_index: count_clean_pages_fn_index,
+                            },
+                            // On top of the stack we have the number of pages
+                            // that haven't been accessed in the given range.
+                            // We need to call the first read API if this
+                            // matches the total range.
+                            LocalTee {
+                                local_index: ACCESSED_PAGE_COUNT,
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_END,
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_START,
+                            },
+                            I32Sub,
+                            I32Eq,
+                            LocalSet {
+                                local_index: SHOULD_CALL_READ_API,
+                            },
+                            Drop, // Drop the number of unwritten pages.
+                            LocalGet {
+                                local_index: ACCESSED_PAGE_COUNT,
+                            },
+                            // fail if accessed pages limit exhausted
+                            I64ExtendI32U,
+                            GlobalGet {
+                                global_index: accessed_pages_counter_index,
+                            },
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // mark accessed pages if there are any to be marked
+                            LocalGet {
+                                local_index: ACCESSED_PAGE_COUNT,
+                            },
+                            I32Const { value: 0 },
+                            I32GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_START,
+                            },
+                            LocalSet {
+                                local_index: BYTEMAP_ITERATOR,
+                            }, // it
+                            Loop {
+                                blockty: BlockType::Empty,
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_ITERATOR,
+                            }, // it as arg for store
+                            LocalGet {
+                                local_index: BYTEMAP_ITERATOR,
+                            }, // it as arg for load
+                            I32Load8U {
+                                memarg: wirm::wasmparser::MemArg {
+                                    align: 0,
+                                    max_align: 0,
+                                    offset: 0,
+                                    // We assume the bytemap for stable memory is always
+                                    // inserted directly after the stable memory.
+                                    memory: stable_memory_index + 1,
+                                },
+                            },
+                            I32Const { value: 2 }, // READ_BIT
+                            I32Or,
+                            I32Store8 {
+                                memarg: wirm::wasmparser::MemArg {
+                                    align: 0,
+                                    max_align: 0,
+                                    offset: 0,
+                                    // We assume the bytemap for stable memory is always
+                                    // inserted directly after the stable memory.
+                                    memory: stable_memory_index + 1,
+                                },
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_ITERATOR,
+                            },
+                            I32Const { value: 1 },
+                            I32Add,
+                            LocalTee {
+                                local_index: BYTEMAP_ITERATOR,
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_END,
+                            },
+                            I32LtU,
+                            BrIf { relative_depth: 0 },
+                            End, // end loop
+                            End, // end if
+                        ],
+                        // The copy writes to the heap range [dst, dst + len).
+                        check_heap_range(DST, LEN, DataType::I32),
+                        vec![
+                            // perform the copy, calling API if it's the first access.
+                            LocalGet {
+                                local_index: SHOULD_CALL_READ_API,
+                            },
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            LocalGet { local_index: DST },
+                            I64ExtendI32U,
+                            LocalGet { local_index: SRC },
+                            I64ExtendI32U,
+                            LocalGet { local_index: LEN },
+                            I64ExtendI32U,
+                            Call {
+                                function_index: injected_functions.stable_read_first_access,
+                            },
+                            Else,
+                            LocalGet { local_index: DST },
+                            LocalGet { local_index: SRC },
+                            I64ExtendI32U,
+                            LocalGet { local_index: LEN },
+                            MemoryCopy {
+                                dst_mem: 0,
+                                src_mem: stable_memory_index,
+                            },
+                            End, // End actual copy.
+                            GlobalGet {
+                                global_index: accessed_pages_counter_index,
+                            },
+                            LocalGet {
+                                local_index: ACCESSED_PAGE_COUNT,
+                            },
+                            I64ExtendI32U,
+                            I64Sub,
+                            GlobalSet {
+                                global_index: accessed_pages_counter_index,
+                            },
+                        ],
+                    ]
+                    .concat(),
                 )
             }),
         ),
@@ -502,265 +572,272 @@ pub(super) fn replacement_functions(
                 const SHOULD_CALL_READ_API: u32 = 7;
                 make_body(
                     vec![(5, DataType::I32)], // src on bytemap, src + len on bytemap, accessed page cnt, mark bytemap iterator, should call first read api
-                    vec![
-                        // Decrement instruction counter by the size of the copy
-                        // and fixed overhead.
-                        LocalGet { local_index: LEN },
-                        I64Const {
-                            value: overhead_native::STABLE64_READ.get() as i64,
-                        },
-                        I64Add,
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
-                        // if size is 0 we return
-                        // (correctness of the code that follows depends on the size being > 0)
-                        // note that we won't return errors if addresses are out of bounds
-                        // in this case
-                        LocalGet { local_index: LEN },
-                        I64Const { value: 0 },
-                        I64Eq,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        Return,
-                        End,
-                        // check bounds on stable memory (fail if dst + size > mem_size)
-                        LocalGet { local_index: SRC },
-                        LocalGet { local_index: LEN },
-                        I64Add,
-                        LocalGet { local_index: SRC },
-                        // overflow (size != 0 because we checked earlier)
-                        I64LeU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::StableMemoryOutOfBounds as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        LocalGet { local_index: SRC },
-                        LocalGet { local_index: LEN },
-                        I64Add,
-                        MemorySize {
-                            mem: stable_memory_index,
-                        },
-                        I64Const {
-                            value: WASM_PAGE_SIZE as i64,
-                        },
-                        I64Mul,
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::StableMemoryOutOfBounds as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // check if these i64 hold valid heap addresses
-                        // check dst
-                        LocalGet { local_index: DST },
-                        I64Const {
-                            value: max_heap_address as i64,
-                        },
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::HeapOutOfBounds as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // check len
-                        LocalGet { local_index: LEN },
-                        I64Const {
-                            value: max_heap_address as i64,
-                        },
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::HeapOutOfBounds as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // src
-                        LocalGet { local_index: SRC },
-                        I64Const {
-                            value: page_size_shift as i64,
-                        },
-                        I64ShrU,
-                        I32WrapI64,
-                        LocalTee {
-                            local_index: BYTEMAP_START,
-                        },
-                        // bytemap_end
-                        LocalGet { local_index: SRC },
-                        LocalGet { local_index: LEN },
-                        I64Add,
-                        I64Const { value: 1 },
-                        I64Sub,
-                        I64Const {
-                            value: page_size_shift as i64,
-                        },
-                        I64ShrU,
-                        I64Const { value: 1 },
-                        I64Add,
-                        I32WrapI64,
-                        LocalTee {
-                            local_index: BYTEMAP_END,
-                        },
-                        Call {
-                            function_index: count_clean_pages_fn_index,
-                        },
-                        // On top of the stack we have the number of pages
-                        // that haven't been accessed in the given range.
-                        // We need to call the first read API if this
-                        // matches the total range.
-                        LocalTee {
-                            local_index: ACCESSED_PAGE_COUNT,
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_END,
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_START,
-                        },
-                        I32Sub,
-                        I32Eq,
-                        LocalSet {
-                            local_index: SHOULD_CALL_READ_API,
-                        }, // Should use first read API
-                        Drop, // Drop the number of unwritten pages.
-                        LocalGet {
-                            local_index: ACCESSED_PAGE_COUNT,
-                        }, // unaccessed pages
-                        // fail if accessed pages limit exhausted
-                        I64ExtendI32U,
-                        GlobalGet {
-                            global_index: accessed_pages_counter_index,
-                        },
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // mark accessed pages if there are any to be marked
-                        LocalGet {
-                            local_index: ACCESSED_PAGE_COUNT,
-                        },
-                        I32Const { value: 0 },
-                        I32GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_START,
-                        },
-                        LocalSet {
-                            local_index: BYTEMAP_ITERATOR,
-                        }, // it
-                        Loop {
-                            blockty: BlockType::Empty,
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_ITERATOR,
-                        }, // it as arg for store
-                        LocalGet {
-                            local_index: BYTEMAP_ITERATOR,
-                        }, // it as arg for load
-                        I32Load8U {
-                            memarg: wirm::wasmparser::MemArg {
-                                align: 0,
-                                max_align: 0,
-                                offset: 0,
-                                // We assume the bytemap for stable memory is always
-                                // inserted directly after the stable memory.
-                                memory: stable_memory_index + 1,
+                    [
+                        vec![
+                            // Decrement instruction counter by the size of the copy
+                            // and fixed overhead.
+                            LocalGet { local_index: LEN },
+                            I64Const {
+                                value: overhead_native::STABLE64_READ.get() as i64,
                             },
-                        },
-                        I32Const { value: 2 }, // READ_BIT
-                        I32Or,
-                        I32Store8 {
-                            memarg: wirm::wasmparser::MemArg {
-                                align: 0,
-                                max_align: 0,
-                                offset: 0,
-                                // We assume the bytemap for stable memory is always
-                                // inserted directly after the stable memory.
-                                memory: stable_memory_index + 1,
+                            I64Add,
+                            Call {
+                                function_index: decr_instruction_counter_fn,
                             },
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_ITERATOR,
-                        },
-                        I32Const { value: 1 },
-                        I32Add,
-                        LocalTee {
-                            local_index: BYTEMAP_ITERATOR,
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_END,
-                        },
-                        I32LtU,
-                        BrIf { relative_depth: 0 },
-                        End, // end loop
-                        End, // end if
-                        // perform the copy, calling API if it's the first access.
-                        LocalGet {
-                            local_index: SHOULD_CALL_READ_API,
-                        },
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        LocalGet { local_index: DST },
-                        LocalGet { local_index: SRC },
-                        LocalGet { local_index: LEN },
-                        Call {
-                            function_index: injected_functions.stable_read_first_access,
-                        },
-                        Else,
-                        LocalGet { local_index: DST },
-                        cast_to_heap_addr_type.clone(),
-                        LocalGet { local_index: SRC },
-                        LocalGet { local_index: LEN },
-                        cast_to_heap_addr_type.clone(),
-                        MemoryCopy {
-                            dst_mem: 0,
-                            src_mem: stable_memory_index,
-                        },
-                        End, // End actual copy.
-                        GlobalGet {
-                            global_index: accessed_pages_counter_index,
-                        },
-                        LocalGet {
-                            local_index: ACCESSED_PAGE_COUNT,
-                        },
-                        I64ExtendI32U,
-                        I64Sub,
-                        GlobalSet {
-                            global_index: accessed_pages_counter_index,
-                        },
-                    ],
+                            Drop,
+                            // if size is 0 we return
+                            // (correctness of the code that follows depends on the size being > 0)
+                            // note that we won't return errors if addresses are out of bounds
+                            // in this case
+                            LocalGet { local_index: LEN },
+                            I64Const { value: 0 },
+                            I64Eq,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            Return,
+                            End,
+                            // check bounds on stable memory (fail if dst + size > mem_size)
+                            LocalGet { local_index: SRC },
+                            LocalGet { local_index: LEN },
+                            I64Add,
+                            LocalGet { local_index: SRC },
+                            // overflow (size != 0 because we checked earlier)
+                            I64LeU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::StableMemoryOutOfBounds as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            LocalGet { local_index: SRC },
+                            LocalGet { local_index: LEN },
+                            I64Add,
+                            MemorySize {
+                                mem: stable_memory_index,
+                            },
+                            I64Const {
+                                value: WASM_PAGE_SIZE as i64,
+                            },
+                            I64Mul,
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::StableMemoryOutOfBounds as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // check if these i64 hold valid heap addresses
+                            // check dst
+                            LocalGet { local_index: DST },
+                            I64Const {
+                                value: max_heap_address as i64,
+                            },
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::HeapOutOfBounds as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // check len
+                            LocalGet { local_index: LEN },
+                            I64Const {
+                                value: max_heap_address as i64,
+                            },
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::HeapOutOfBounds as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // src
+                            LocalGet { local_index: SRC },
+                            I64Const {
+                                value: page_size_shift as i64,
+                            },
+                            I64ShrU,
+                            I32WrapI64,
+                            LocalTee {
+                                local_index: BYTEMAP_START,
+                            },
+                            // bytemap_end
+                            LocalGet { local_index: SRC },
+                            LocalGet { local_index: LEN },
+                            I64Add,
+                            I64Const { value: 1 },
+                            I64Sub,
+                            I64Const {
+                                value: page_size_shift as i64,
+                            },
+                            I64ShrU,
+                            I64Const { value: 1 },
+                            I64Add,
+                            I32WrapI64,
+                            LocalTee {
+                                local_index: BYTEMAP_END,
+                            },
+                            Call {
+                                function_index: count_clean_pages_fn_index,
+                            },
+                            // On top of the stack we have the number of pages
+                            // that haven't been accessed in the given range.
+                            // We need to call the first read API if this
+                            // matches the total range.
+                            LocalTee {
+                                local_index: ACCESSED_PAGE_COUNT,
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_END,
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_START,
+                            },
+                            I32Sub,
+                            I32Eq,
+                            LocalSet {
+                                local_index: SHOULD_CALL_READ_API,
+                            }, // Should use first read API
+                            Drop, // Drop the number of unwritten pages.
+                            LocalGet {
+                                local_index: ACCESSED_PAGE_COUNT,
+                            }, // unaccessed pages
+                            // fail if accessed pages limit exhausted
+                            I64ExtendI32U,
+                            GlobalGet {
+                                global_index: accessed_pages_counter_index,
+                            },
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // mark accessed pages if there are any to be marked
+                            LocalGet {
+                                local_index: ACCESSED_PAGE_COUNT,
+                            },
+                            I32Const { value: 0 },
+                            I32GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_START,
+                            },
+                            LocalSet {
+                                local_index: BYTEMAP_ITERATOR,
+                            }, // it
+                            Loop {
+                                blockty: BlockType::Empty,
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_ITERATOR,
+                            }, // it as arg for store
+                            LocalGet {
+                                local_index: BYTEMAP_ITERATOR,
+                            }, // it as arg for load
+                            I32Load8U {
+                                memarg: wirm::wasmparser::MemArg {
+                                    align: 0,
+                                    max_align: 0,
+                                    offset: 0,
+                                    // We assume the bytemap for stable memory is always
+                                    // inserted directly after the stable memory.
+                                    memory: stable_memory_index + 1,
+                                },
+                            },
+                            I32Const { value: 2 }, // READ_BIT
+                            I32Or,
+                            I32Store8 {
+                                memarg: wirm::wasmparser::MemArg {
+                                    align: 0,
+                                    max_align: 0,
+                                    offset: 0,
+                                    // We assume the bytemap for stable memory is always
+                                    // inserted directly after the stable memory.
+                                    memory: stable_memory_index + 1,
+                                },
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_ITERATOR,
+                            },
+                            I32Const { value: 1 },
+                            I32Add,
+                            LocalTee {
+                                local_index: BYTEMAP_ITERATOR,
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_END,
+                            },
+                            I32LtU,
+                            BrIf { relative_depth: 0 },
+                            End, // end loop
+                            End, // end if
+                        ],
+                        // The copy writes to the heap range [dst, dst + len).
+                        check_heap_range(DST, LEN, DataType::I64),
+                        vec![
+                            // perform the copy, calling API if it's the first access.
+                            LocalGet {
+                                local_index: SHOULD_CALL_READ_API,
+                            },
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            LocalGet { local_index: DST },
+                            LocalGet { local_index: SRC },
+                            LocalGet { local_index: LEN },
+                            Call {
+                                function_index: injected_functions.stable_read_first_access,
+                            },
+                            Else,
+                            LocalGet { local_index: DST },
+                            cast_to_heap_addr_type.clone(),
+                            LocalGet { local_index: SRC },
+                            LocalGet { local_index: LEN },
+                            cast_to_heap_addr_type.clone(),
+                            MemoryCopy {
+                                dst_mem: 0,
+                                src_mem: stable_memory_index,
+                            },
+                            End, // End actual copy.
+                            GlobalGet {
+                                global_index: accessed_pages_counter_index,
+                            },
+                            LocalGet {
+                                local_index: ACCESSED_PAGE_COUNT,
+                            },
+                            I64ExtendI32U,
+                            I64Sub,
+                            GlobalSet {
+                                global_index: accessed_pages_counter_index,
+                            },
+                        ],
+                    ]
+                    .concat(),
                 )
             }),
         ),
@@ -776,192 +853,199 @@ pub(super) fn replacement_functions(
                 const ACCESSED_PAGE_COUNT: u32 = 6;
                 make_body(
                     vec![(4, DataType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt, accessed page cnt
-                    vec![
-                        // Decrement instruction counter by the size of the copy
-                        // and fixed overhead.
-                        LocalGet { local_index: LEN },
-                        I64ExtendI32U,
-                        I64Const {
-                            value: overhead_native::STABLE_WRITE.get() as i64,
-                        },
-                        I64Add,
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
-                        // If memory is too big for 32bit api, we trap
-                        MemorySize {
-                            mem: stable_memory_index,
-                        },
-                        I64Const {
-                            value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
-                        },
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::StableMemoryTooBigFor32Bit as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // check bounds on stable memory (fail if dst + size > mem_size)
-                        LocalGet { local_index: DST },
-                        I64ExtendI32U,
-                        LocalGet { local_index: LEN },
-                        I64ExtendI32U,
-                        I64Add,
-                        MemorySize {
-                            mem: stable_memory_index,
-                        },
-                        I64Const {
-                            value: WASM_PAGE_SIZE as i64,
-                        },
-                        I64Mul,
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::StableMemoryOutOfBounds as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // mark writes in the bytemap
+                    [
+                        vec![
+                            // Decrement instruction counter by the size of the copy
+                            // and fixed overhead.
+                            LocalGet { local_index: LEN },
+                            I64ExtendI32U,
+                            I64Const {
+                                value: overhead_native::STABLE_WRITE.get() as i64,
+                            },
+                            I64Add,
+                            Call {
+                                function_index: decr_instruction_counter_fn,
+                            },
+                            Drop,
+                            // If memory is too big for 32bit api, we trap
+                            MemorySize {
+                                mem: stable_memory_index,
+                            },
+                            I64Const {
+                                value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
+                            },
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::StableMemoryTooBigFor32Bit as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // check bounds on stable memory (fail if dst + size > mem_size)
+                            LocalGet { local_index: DST },
+                            I64ExtendI32U,
+                            LocalGet { local_index: LEN },
+                            I64ExtendI32U,
+                            I64Add,
+                            MemorySize {
+                                mem: stable_memory_index,
+                            },
+                            I64Const {
+                                value: WASM_PAGE_SIZE as i64,
+                            },
+                            I64Mul,
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::StableMemoryOutOfBounds as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // mark writes in the bytemap
 
-                        // if size is 0 we return
-                        // (correctness of the code that follows depends on the size being > 0)
-                        // note that we won't return error if src address is out of bounds
-                        // in this case
-                        LocalGet { local_index: LEN },
-                        I32Const { value: 0 },
-                        I32Eq,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        Return,
-                        End,
-                        LocalGet { local_index: DST },
-                        I32Const {
-                            value: page_size_shift,
-                        },
-                        I32ShrU,
-                        LocalTee {
-                            local_index: BYTEMAP_START,
-                        },
-                        // bytemap_end
-                        LocalGet { local_index: DST },
-                        LocalGet { local_index: LEN },
-                        I32Add,
-                        I32Const { value: 1 },
-                        I32Sub,
-                        I32Const {
-                            value: page_size_shift,
-                        },
-                        I32ShrU,
-                        I32Const { value: 1 },
-                        I32Add,
-                        LocalTee {
-                            local_index: BYTEMAP_END,
-                        },
-                        // count pages already dirty
-                        Call {
-                            function_index: count_clean_pages_fn_index,
-                        },
-                        LocalTee {
-                            local_index: ACCESSED_PAGE_COUNT,
-                        },
-                        // fail if accessed pages limit exhausted
-                        I64ExtendI32U,
-                        GlobalGet {
-                            global_index: accessed_pages_counter_index,
-                        },
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        LocalTee {
-                            local_index: DIRTY_PAGE_COUNT,
-                        },
-                        // fail if dirty pages limit exhausted
-                        I64ExtendI32U,
-                        GlobalGet {
-                            global_index: dirty_pages_counter_index,
-                        },
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::MemoryWriteLimitExceeded as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // perform memory fill
-                        LocalGet {
-                            local_index: BYTEMAP_START,
-                        },
-                        // value to fill with
-                        I32Const { value: 3 },
-                        // calculate bytemap_size
-                        // bytemap_end = (dst + size - 1) / PAGE_SIZE + 1
-                        // bytemap_len = bytemap_end - bytemap_start
-                        LocalGet {
-                            local_index: BYTEMAP_END,
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_START,
-                        },
-                        // bytemap_end - bytemap_start
-                        I32Sub,
-                        MemoryFill {
-                            mem: stable_memory_bytemap_index,
-                        },
-                        // copy memory contents
-                        LocalGet { local_index: DST },
-                        I64ExtendI32U,
-                        LocalGet { local_index: SRC },
-                        LocalGet { local_index: LEN },
-                        MemoryCopy {
-                            dst_mem: stable_memory_index,
-                            src_mem: 0,
-                        },
-                        GlobalGet {
-                            global_index: dirty_pages_counter_index,
-                        },
-                        LocalGet {
-                            local_index: DIRTY_PAGE_COUNT,
-                        },
-                        I64ExtendI32U,
-                        I64Sub,
-                        GlobalSet {
-                            global_index: dirty_pages_counter_index,
-                        },
-                        GlobalGet {
-                            global_index: accessed_pages_counter_index,
-                        },
-                        LocalGet {
-                            local_index: ACCESSED_PAGE_COUNT,
-                        },
-                        I64ExtendI32U,
-                        I64Sub,
-                        GlobalSet {
-                            global_index: accessed_pages_counter_index,
-                        },
-                    ],
+                            // if size is 0 we return
+                            // (correctness of the code that follows depends on the size being > 0)
+                            // note that we won't return error if src address is out of bounds
+                            // in this case
+                            LocalGet { local_index: LEN },
+                            I32Const { value: 0 },
+                            I32Eq,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            Return,
+                            End,
+                            LocalGet { local_index: DST },
+                            I32Const {
+                                value: page_size_shift,
+                            },
+                            I32ShrU,
+                            LocalTee {
+                                local_index: BYTEMAP_START,
+                            },
+                            // bytemap_end
+                            LocalGet { local_index: DST },
+                            LocalGet { local_index: LEN },
+                            I32Add,
+                            I32Const { value: 1 },
+                            I32Sub,
+                            I32Const {
+                                value: page_size_shift,
+                            },
+                            I32ShrU,
+                            I32Const { value: 1 },
+                            I32Add,
+                            LocalTee {
+                                local_index: BYTEMAP_END,
+                            },
+                            // count pages already dirty
+                            Call {
+                                function_index: count_clean_pages_fn_index,
+                            },
+                            LocalTee {
+                                local_index: ACCESSED_PAGE_COUNT,
+                            },
+                            // fail if accessed pages limit exhausted
+                            I64ExtendI32U,
+                            GlobalGet {
+                                global_index: accessed_pages_counter_index,
+                            },
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            LocalTee {
+                                local_index: DIRTY_PAGE_COUNT,
+                            },
+                            // fail if dirty pages limit exhausted
+                            I64ExtendI32U,
+                            GlobalGet {
+                                global_index: dirty_pages_counter_index,
+                            },
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::MemoryWriteLimitExceeded as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // perform memory fill
+                            LocalGet {
+                                local_index: BYTEMAP_START,
+                            },
+                            // value to fill with
+                            I32Const { value: 3 },
+                            // calculate bytemap_size
+                            // bytemap_end = (dst + size - 1) / PAGE_SIZE + 1
+                            // bytemap_len = bytemap_end - bytemap_start
+                            LocalGet {
+                                local_index: BYTEMAP_END,
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_START,
+                            },
+                            // bytemap_end - bytemap_start
+                            I32Sub,
+                            MemoryFill {
+                                mem: stable_memory_bytemap_index,
+                            },
+                        ],
+                        // The copy reads from the heap range [src, src + len).
+                        check_heap_range(SRC, LEN, DataType::I32),
+                        vec![
+                            // copy memory contents
+                            LocalGet { local_index: DST },
+                            I64ExtendI32U,
+                            LocalGet { local_index: SRC },
+                            LocalGet { local_index: LEN },
+                            MemoryCopy {
+                                dst_mem: stable_memory_index,
+                                src_mem: 0,
+                            },
+                            GlobalGet {
+                                global_index: dirty_pages_counter_index,
+                            },
+                            LocalGet {
+                                local_index: DIRTY_PAGE_COUNT,
+                            },
+                            I64ExtendI32U,
+                            I64Sub,
+                            GlobalSet {
+                                global_index: dirty_pages_counter_index,
+                            },
+                            GlobalGet {
+                                global_index: accessed_pages_counter_index,
+                            },
+                            LocalGet {
+                                local_index: ACCESSED_PAGE_COUNT,
+                            },
+                            I64ExtendI32U,
+                            I64Sub,
+                            GlobalSet {
+                                global_index: accessed_pages_counter_index,
+                            },
+                        ],
+                    ]
+                    .concat(),
                 )
             }),
         ),
@@ -977,220 +1061,227 @@ pub(super) fn replacement_functions(
                 const ACCESSED_PAGE_COUNT: u32 = 6;
                 make_body(
                     vec![(4, DataType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt, accessed page cnt
-                    vec![
-                        // Decrement instruction counter by the size of the copy
-                        // and fixed overhead.
-                        LocalGet { local_index: LEN },
-                        I64Const {
-                            value: overhead_native::STABLE64_WRITE.get() as i64,
-                        },
-                        I64Add,
-                        Call {
-                            function_index: decr_instruction_counter_fn,
-                        },
-                        Drop,
-                        // if size is 0 we return
-                        // (correctness of the code that follows depends on the size being > 0)
-                        // note that we won't return errors if addresses are out of bounds
-                        // in this case
-                        LocalGet { local_index: LEN },
-                        I64Const { value: 0 },
-                        I64Eq,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        Return,
-                        End,
-                        // check bounds on stable memory (fail if dst + size > mem_size)
-                        LocalGet { local_index: DST },
-                        LocalGet { local_index: LEN },
-                        I64Add,
-                        LocalGet { local_index: DST },
-                        // overflow (size != 0 because we checked earlier)
-                        I64LeU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::StableMemoryOutOfBounds as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        LocalGet { local_index: DST },
-                        LocalGet { local_index: LEN },
-                        I64Add,
-                        MemorySize {
-                            mem: stable_memory_index,
-                        },
-                        I64Const {
-                            value: WASM_PAGE_SIZE as i64,
-                        },
-                        I64Mul,
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::StableMemoryOutOfBounds as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // check if these i64 hold valid heap addresses
-                        // check src
-                        LocalGet { local_index: SRC },
-                        I64Const {
-                            value: max_heap_address as i64,
-                        },
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::HeapOutOfBounds as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // check len
-                        LocalGet { local_index: LEN },
-                        I64Const {
-                            value: max_heap_address as i64,
-                        },
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::HeapOutOfBounds as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        LocalGet { local_index: DST },
-                        I64Const {
-                            value: page_size_shift as i64,
-                        },
-                        I64ShrU,
-                        I32WrapI64,
-                        LocalTee {
-                            local_index: BYTEMAP_START,
-                        },
-                        // bytemap_end
-                        LocalGet { local_index: DST },
-                        LocalGet { local_index: LEN },
-                        I64Add,
-                        I64Const { value: 1 },
-                        I64Sub,
-                        I64Const {
-                            value: page_size_shift as i64,
-                        },
-                        I64ShrU,
-                        I64Const { value: 1 },
-                        I64Add,
-                        I32WrapI64,
-                        LocalTee {
-                            local_index: BYTEMAP_END,
-                        },
-                        Call {
-                            function_index: count_clean_pages_fn_index,
-                        },
-                        LocalTee {
-                            local_index: ACCESSED_PAGE_COUNT,
-                        },
-                        // fail if accessed pages limit exhausted
-                        I64ExtendI32U,
-                        GlobalGet {
-                            global_index: accessed_pages_counter_index,
-                        },
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        LocalTee {
-                            local_index: DIRTY_PAGE_COUNT,
-                        },
-                        // fail if dirty pages limit exhausted
-                        I64ExtendI32U,
-                        GlobalGet {
-                            global_index: dirty_pages_counter_index,
-                        },
-                        I64GtU,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        I32Const {
-                            value: InternalErrorCode::MemoryWriteLimitExceeded as i32,
-                        },
-                        Call {
-                            function_index: injected_functions.internal_trap,
-                        },
-                        End,
-                        // perform memory fill
-                        LocalGet {
-                            local_index: BYTEMAP_START,
-                        },
-                        // value to fill with
-                        I32Const { value: 3 },
-                        // calculate bytemap_size
-                        // bytemap_end = (dst + size - 1) / PAGE_SIZE + 1
-                        // bytemap_len = bytemap_end - bytemap_start
-                        LocalGet {
-                            local_index: BYTEMAP_END,
-                        },
-                        LocalGet {
-                            local_index: BYTEMAP_START,
-                        },
-                        // bytemap_end - bytemap_start
-                        I32Sub,
-                        MemoryFill {
-                            mem: stable_memory_bytemap_index,
-                        },
-                        // copy memory contents
-                        LocalGet { local_index: DST },
-                        LocalGet { local_index: SRC },
-                        cast_to_heap_addr_type.clone(),
-                        LocalGet { local_index: LEN },
-                        cast_to_heap_addr_type,
-                        MemoryCopy {
-                            dst_mem: stable_memory_index,
-                            src_mem: 0,
-                        },
-                        GlobalGet {
-                            global_index: dirty_pages_counter_index,
-                        },
-                        LocalGet {
-                            local_index: DIRTY_PAGE_COUNT,
-                        },
-                        I64ExtendI32U,
-                        I64Sub,
-                        GlobalSet {
-                            global_index: dirty_pages_counter_index,
-                        },
-                        GlobalGet {
-                            global_index: accessed_pages_counter_index,
-                        },
-                        LocalGet {
-                            local_index: ACCESSED_PAGE_COUNT,
-                        },
-                        I64ExtendI32U,
-                        I64Sub,
-                        GlobalSet {
-                            global_index: accessed_pages_counter_index,
-                        },
-                    ],
+                    [
+                        vec![
+                            // Decrement instruction counter by the size of the copy
+                            // and fixed overhead.
+                            LocalGet { local_index: LEN },
+                            I64Const {
+                                value: overhead_native::STABLE64_WRITE.get() as i64,
+                            },
+                            I64Add,
+                            Call {
+                                function_index: decr_instruction_counter_fn,
+                            },
+                            Drop,
+                            // if size is 0 we return
+                            // (correctness of the code that follows depends on the size being > 0)
+                            // note that we won't return errors if addresses are out of bounds
+                            // in this case
+                            LocalGet { local_index: LEN },
+                            I64Const { value: 0 },
+                            I64Eq,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            Return,
+                            End,
+                            // check bounds on stable memory (fail if dst + size > mem_size)
+                            LocalGet { local_index: DST },
+                            LocalGet { local_index: LEN },
+                            I64Add,
+                            LocalGet { local_index: DST },
+                            // overflow (size != 0 because we checked earlier)
+                            I64LeU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::StableMemoryOutOfBounds as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            LocalGet { local_index: DST },
+                            LocalGet { local_index: LEN },
+                            I64Add,
+                            MemorySize {
+                                mem: stable_memory_index,
+                            },
+                            I64Const {
+                                value: WASM_PAGE_SIZE as i64,
+                            },
+                            I64Mul,
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::StableMemoryOutOfBounds as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // check if these i64 hold valid heap addresses
+                            // check src
+                            LocalGet { local_index: SRC },
+                            I64Const {
+                                value: max_heap_address as i64,
+                            },
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::HeapOutOfBounds as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // check len
+                            LocalGet { local_index: LEN },
+                            I64Const {
+                                value: max_heap_address as i64,
+                            },
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::HeapOutOfBounds as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            LocalGet { local_index: DST },
+                            I64Const {
+                                value: page_size_shift as i64,
+                            },
+                            I64ShrU,
+                            I32WrapI64,
+                            LocalTee {
+                                local_index: BYTEMAP_START,
+                            },
+                            // bytemap_end
+                            LocalGet { local_index: DST },
+                            LocalGet { local_index: LEN },
+                            I64Add,
+                            I64Const { value: 1 },
+                            I64Sub,
+                            I64Const {
+                                value: page_size_shift as i64,
+                            },
+                            I64ShrU,
+                            I64Const { value: 1 },
+                            I64Add,
+                            I32WrapI64,
+                            LocalTee {
+                                local_index: BYTEMAP_END,
+                            },
+                            Call {
+                                function_index: count_clean_pages_fn_index,
+                            },
+                            LocalTee {
+                                local_index: ACCESSED_PAGE_COUNT,
+                            },
+                            // fail if accessed pages limit exhausted
+                            I64ExtendI32U,
+                            GlobalGet {
+                                global_index: accessed_pages_counter_index,
+                            },
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            LocalTee {
+                                local_index: DIRTY_PAGE_COUNT,
+                            },
+                            // fail if dirty pages limit exhausted
+                            I64ExtendI32U,
+                            GlobalGet {
+                                global_index: dirty_pages_counter_index,
+                            },
+                            I64GtU,
+                            If {
+                                blockty: BlockType::Empty,
+                            },
+                            I32Const {
+                                value: InternalErrorCode::MemoryWriteLimitExceeded as i32,
+                            },
+                            Call {
+                                function_index: injected_functions.internal_trap,
+                            },
+                            End,
+                            // perform memory fill
+                            LocalGet {
+                                local_index: BYTEMAP_START,
+                            },
+                            // value to fill with
+                            I32Const { value: 3 },
+                            // calculate bytemap_size
+                            // bytemap_end = (dst + size - 1) / PAGE_SIZE + 1
+                            // bytemap_len = bytemap_end - bytemap_start
+                            LocalGet {
+                                local_index: BYTEMAP_END,
+                            },
+                            LocalGet {
+                                local_index: BYTEMAP_START,
+                            },
+                            // bytemap_end - bytemap_start
+                            I32Sub,
+                            MemoryFill {
+                                mem: stable_memory_bytemap_index,
+                            },
+                        ],
+                        // The copy reads from the heap range [src, src + len).
+                        check_heap_range(SRC, LEN, DataType::I64),
+                        vec![
+                            // copy memory contents
+                            LocalGet { local_index: DST },
+                            LocalGet { local_index: SRC },
+                            cast_to_heap_addr_type.clone(),
+                            LocalGet { local_index: LEN },
+                            cast_to_heap_addr_type,
+                            MemoryCopy {
+                                dst_mem: stable_memory_index,
+                                src_mem: 0,
+                            },
+                            GlobalGet {
+                                global_index: dirty_pages_counter_index,
+                            },
+                            LocalGet {
+                                local_index: DIRTY_PAGE_COUNT,
+                            },
+                            I64ExtendI32U,
+                            I64Sub,
+                            GlobalSet {
+                                global_index: dirty_pages_counter_index,
+                            },
+                            GlobalGet {
+                                global_index: accessed_pages_counter_index,
+                            },
+                            LocalGet {
+                                local_index: ACCESSED_PAGE_COUNT,
+                            },
+                            I64ExtendI32U,
+                            I64Sub,
+                            GlobalSet {
+                                global_index: accessed_pages_counter_index,
+                            },
+                        ],
+                    ]
+                    .concat(),
                 )
             }),
         ),

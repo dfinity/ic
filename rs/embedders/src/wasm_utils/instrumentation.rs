@@ -817,9 +817,7 @@ pub(super) struct InjectedCounters {
     pub dirty_pages_counter: u32,
     pub accessed_pages_counter: u32,
     /// Remaining number of Wasm heap pages that may be accessed. Read by the
-    /// heap bulk check functions; the injected stable memory bodies do not
-    /// check it yet.
-    #[allow(dead_code)]
+    /// heap bulk check functions and by the injected stable memory bodies.
     pub heap_page_budget: u32,
     /// Function to decrement the instruction counter.
     pub decr_instruction_counter_fn: u32,
