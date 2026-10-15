@@ -501,12 +501,14 @@ impl MultipleProcessesManager {
         }));
 
         // Cloud-engine nodes run ic-gateway as a sidecar.
+        let maybe_engine_config = self.engine_config.read().unwrap().clone();
         if self
             .registry
             .is_cloud_engine_subnet(subnet_id, registry_version)?
             // If the engine config is `None` (either because it's not yet initialized, or because
             // it was withdrawn), we stop `ic-gateway`.
-            && let Some(engine_config) = self.engine_config.read().unwrap().clone()
+            // Do not inline reading the lock as it would hold it until the end of the `if` block
+            && let Some(engine_config) = maybe_engine_config
         {
             result = result.and(
                 self.ic_gateway_manager
