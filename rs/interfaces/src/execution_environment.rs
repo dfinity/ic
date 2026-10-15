@@ -70,6 +70,15 @@ pub struct InstanceStats {
     /// Total time spent in SIGSEGV handler for heap.
     pub wasm_sigsegv_handler_duration: Duration,
 
+    /// How often a heap access was refused because of the accessed page
+    /// limit, by the component that detected it.
+    pub wasm_page_limit_refusals: HeapPageLimitRefusals,
+
+    /// Number of bulk memory operations and stable memory copies whose
+    /// page bound did not fit into the remaining budget, so that the host had
+    /// to count the pages exactly.
+    pub wasm_bulk_check_slow_path_calls: usize,
+
     /// Number of accessed OS pages (4KiB) in stable memory.
     pub stable_accessed_pages: usize,
 
@@ -90,6 +99,27 @@ pub struct InstanceStats {
 
     /// Total time spent in SIGSEGV handler for stable memory.
     pub stable_sigsegv_handler_duration: Duration,
+}
+
+/// Refusals of heap accesses because of the accessed page limit, by detector.
+///
+/// A message that exceeds the limit is refused once; the detector tells
+/// which check caught it. All three stay zero while the limit is inert.
+#[derive(Clone, Copy, PartialEq, Debug, Default, Deserialize, Serialize)]
+pub struct HeapPageLimitRefusals {
+    /// Wasm loads and stores, refused by the memory tracker's signal handler.
+    pub handler: usize,
+    /// Heap ranges touched by host functions, refused by the heap accessor.
+    pub host_accessor: usize,
+    /// Bulk memory operations and stable memory copies, refused by the
+    /// pre-check injected into the Wasm code.
+    pub bulk_check: usize,
+}
+
+impl HeapPageLimitRefusals {
+    pub fn total(&self) -> usize {
+        self.handler + self.host_accessor + self.bulk_check
+    }
 }
 
 impl InstanceStats {

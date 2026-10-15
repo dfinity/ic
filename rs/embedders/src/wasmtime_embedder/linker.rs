@@ -835,9 +835,10 @@ pub fn syscalls<
 
     // The "slow" path of the heap page limit check that the instrumentation
     // injects before bulk memory operations (`memory.copy`, `memory.fill`,
-    // `memory.init`). It is only called when the operation might not fit the
-    // remaining page budget. Operands are zero-extended for Wasm32 modules.
-    // `src` is only a heap address if `src_is_heap` is non-zero.
+    // `memory.init`) and into the stable memory copies. It is only called
+    // when the operation might not fit the remaining page budget. Operands
+    // are zero-extended for Wasm32 modules. `src` is only a heap address if
+    // `src_is_heap` is non-zero.
     linker
         .func_wrap("__", "check_heap_bulk_access", {
             move |mut caller: Caller<'_, StoreData>,
@@ -846,6 +847,7 @@ pub fn syscalls<
                   len: i64,
                   src_is_heap: i32| {
                 with_error_handling(&mut caller, |caller| {
+                    caller.data().heap_access.record_bulk_check_slow_path_call();
                     let heap_size = caller
                         .get_export(WASM_HEAP_MEMORY_NAME)
                         .and_then(|ext| ext.into_memory())
