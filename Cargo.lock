@@ -14525,11 +14525,23 @@ dependencies = [
 name = "ic-subnet-merging"
 version = "0.9.0"
 dependencies = [
+ "clap",
  "futures",
  "ic-base-types",
+ "ic-protobuf",
+ "ic-recovery",
+ "ic-registry-client-helpers",
+ "ic-registry-subnet-type",
+ "ic-subnet-tools",
+ "ic-types",
  "prometheus-parse",
  "reqwest",
+ "serde",
+ "slog",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -17703,6 +17715,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-management-canister-types 0.8.0",
+ "ic-recovery",
  "ic-registry-subnet-type",
  "ic-subnet-merging",
  "ic-system-test-driver",

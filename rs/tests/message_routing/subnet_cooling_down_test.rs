@@ -1,16 +1,24 @@
 /* tag::catalog[]
-Title:: Setting a subnet up to be "cooled down".
+Title:: Draining a subnet that is "cooling down" with the subnet merging tool.
 
 Goal:: Verify that a subnet holding what a subnet merge has to drain violates
 the individual terms of the "merge readiness" condition, i.e. that the
-condition a subnet merging tool waits for before merging such a subnet away is
-one that the subnet does not satisfy to begin with. The subnet also holds calls
-waiting for responses that never arrive: they are not drained, but make it
-possible to assert that a subnet merge populates the ingress history properly.
+condition the subnet merging tool waits for before merging such a subnet away
+is one that the subnet does not satisfy to begin with; and that once the tool
+(`rs/recovery/subnet_merging`) has labeled the subnet "cooling down", the
+subnet rejects ingress messages and query calls, and the tool eventually finds
+the condition to hold. The subnet also holds calls waiting
+for responses that never arrive: they are not drained, but make it possible to
+assert that a subnet merge populates the ingress history properly.
 
-The subnet that is set up to be cooled down, i.e. the one that would be merged
-away, is called `M`; a second Application subnet `T` holds the canisters at the
-other end of `M`'s cross-subnet calls.
+The subnet that is cooled down, i.e. the one that would be merged away, is
+called `M`; a second Application subnet `T` holds the canisters at the other
+end of `M`'s cross-subnet calls, and is the subnet the tool is told to merge
+`M` into. The tool does not get as far as merging though: it stops once `M` is
+ready to be merged.
+
+The tool submits the proposal labeling `M` as "cooling down" through
+`ic-admin`, with the test neuron.
 
 "Executing" an update call below always means submitting it as an ingress
 message without waiting for it to complete: most of the calls of this test are
@@ -54,32 +62,52 @@ Runbook::
    requests) and its subnet call context manager holds call contexts (the
    `install_code` calls that are executing). The remaining three terms are
    expected to hold and are only logged; `VIOLATED_CONDITIONS` says why.
+8. Hand over to the subnet merging tool, which runs one step at a time; the
+   checks of the steps below are made in between its steps, at the points the
+   step names give. The tool labels `M` as "cooling down" and records the
+   registry version `V` at which it reads the label back
+   (`CoolDownSourceSubnet`, `CheckRegistryForCoolingDownFlag`).
+9. After `CheckRegistryForCoolingDownFlag`: wait until `M` rejects ingress
+   messages, and then until it rejects query calls too.
+10. The tool waits until `M` is "merge ready" for `V`, i.e. until every term of
+   the condition of step 7 holds, at `V` rather than at the version of the
+   topology snapshot (`CheckMergeReadiness`).
+11. After `CheckMergeReadiness`: check that the two loops of step 2 are
+   stalled. `UT`'s iteration counter does not advance, as read via a query to
+   `T`. `UM`'s counter cannot be read, as `M` rejects query calls; instead,
+   the test checks that `M` keeps skipping canister execution, so that `UM`'s
+   loop cannot advance either.
 
 Success::
 Every term of the "merge readiness" condition that this scenario exercises is
-violated.
+violated before `M` starts cooling down; `M` then rejects ingress messages and
+query calls and becomes "merge ready" while both loops of step 2 are stalled.
 
 end::catalog[] */
 
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
+use ic_agent::Agent;
+use ic_recovery::RecoveryArgs;
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_merging::metrics_helper::{fetch_metrics, min_across_replicas};
 use ic_subnet_merging::readiness::{
     Condition, METRIC_SUBNET_CALL_CONTEXTS, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, SubnetNodeIps,
     Term, evaluate_merge_readiness,
 };
+use ic_subnet_merging::subnet_merging::{StepType, SubnetMerging, SubnetMergingArgs};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
     NnsInstallationBuilder, READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, TopologySnapshot,
+    get_guestos_img_version,
 };
 use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    UniversalCanister, assert_create_agent, block_on, create_canister, set_controller,
+    UniversalCanister, assert_create_agent, create_canister, set_controller,
 };
 use ic_types::Height;
 use ic_universal_canister::management::InstallMode;
@@ -87,7 +115,15 @@ use ic_universal_canister::{
     CallInterface, call_args, get_universal_canister_wasm, management, wasm,
 };
 use slog::{Logger, info};
+use std::net::IpAddr;
 use std::time::Duration;
+use tokio::runtime::Runtime;
+
+/// The number of rounds a subnet executed no canister message in because it is
+/// cooling down. The metrics making up the "merge readiness" condition are read
+/// by `ic_subnet_merging::readiness`.
+const METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION: &str =
+    "round_skipped_canister_execution_due_to_cooling_down";
 
 /// The value of the `type` label selecting the `install_code` call contexts of
 /// `METRIC_SUBNET_CALL_CONTEXTS`.
@@ -146,20 +182,42 @@ const CONDITIONS_BACKOFF: Duration = Duration::from_secs(5);
 const INDUCTION_TIMEOUT: Duration = Duration::from_secs(60);
 const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
 
-/// Timeouts of the test itself: the whole scenario takes a couple of minutes,
-/// the rest is headroom for the waits of the steps above. The overall timeout
+/// The directory the merging tool works in, relative to the test environment.
+const MERGING_DIR: &str = "subnet_merging";
+
+/// Timeout for the subnet to become "merge ready". The binding terms are the
+/// `install_code` calls of step 5, which take a couple of hundred rounds each
+/// (and are executed one at a time, as at most one long-running `install_code`
+/// makes progress per round), and the ingress history, which only becomes free
+/// of terminal statuses once the entries of the ingress messages submitted
+/// before the subnet started cooling down are pruned, i.e. at their (up to
+/// `MAX_INGRESS_TTL` = 5 minutes away) expiry times.
+const MERGE_READY_TIMEOUT: Duration = Duration::from_secs(2400);
+/// Timeout for the registry to reflect a proposal that `ic-admin` reported as
+/// executed.
+const REGISTRY_TIMEOUT: Duration = Duration::from_secs(300);
+/// How long the merging tool waits between two evaluations of a condition it
+/// waits for. Longer than a driver retry because every evaluation scrapes the
+/// metrics of all subnets.
+const POLL_INTERVAL: Duration = Duration::from_secs(10);
+
+/// How long the loops are observed to be stalled (step 11).
+const STALL_OBSERVATION_PERIOD: Duration = Duration::from_secs(15);
+
+/// Timeouts of the test itself: draining the `install_code` calls dominates,
+/// the rest of the scenario takes a couple of minutes. The overall timeout
 /// additionally covers the setup (booting the IC and installing the NNS).
-const PER_TEST_TIMEOUT: Duration = Duration::from_secs(900);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(1500);
+const PER_TEST_TIMEOUT: Duration = Duration::from_secs(3000);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(3600);
 
 /// The conditions this scenario violates, i.e. the ones step 7 checks. This
 /// includes `CommonQuorum`, since the replicas do not satisfy the individual
 /// conditions together. The three that are missing are expected to hold:
 ///
-/// * `RegistryVersion`, because this test creates no registry version: it
-///   evaluates the condition at the version of its own topology snapshot, which
-///   every subnet has long observed, rather than at the version a proposal
-///   labeling `M` as "cooling down" would create.
+/// * `RegistryVersion`, because step 7 evaluates the condition at the version
+///   of the test's topology snapshot, which every subnet has long observed,
+///   rather than at the version labeling `M` as "cooling down", which only
+///   exists from step 8 on.
 /// * `SubnetOutputQueues`, because the stream builder routes the responses of
 ///   the management canister out of the subnet output queues in the same round
 ///   they are produced in, i.e. before the metrics are observed on the state
@@ -218,10 +276,40 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    block_on(run(env));
+    // One runtime for the whole test, kept alive across all of its phases: the
+    // agents of the phase that sets the scenario up are used again by the
+    // checks made in between the steps of the merging tool.
+    //
+    // The merging tool runs on this thread, which is deliberately not inside
+    // that runtime: every registry read and every metrics scrape of the tool
+    // blocks on a runtime of its own, which a thread that is driving one cannot
+    // do.
+    let runtime = Runtime::new().expect("failed to create a tokio runtime");
+
+    let context = runtime.block_on(prepare(&env));
+    cool_down(&env, &context, &runtime);
 }
 
-async fn run(env: TestEnv) {
+/// Everything the checks made in between the steps of the merging tool need
+/// from the phase that set the scenario up.
+///
+/// Canister ids and agents rather than `UniversalCanister`s, which borrow the
+/// agent they were created with.
+struct Context {
+    logger: Logger,
+    m_subnet: SubnetSnapshot,
+    t_subnet: SubnetSnapshot,
+    m_agent: Agent,
+    t_agent: Agent,
+    /// The two canisters calling each other in a loop across subnets, `UM` on
+    /// `M` and `UT` on `T`.
+    um: Principal,
+    ut: Principal,
+}
+
+/// Steps 1 to 7: set the scenario up and check that `M` violates the
+/// individual conditions for merging it away.
+async fn prepare(env: &TestEnv) -> Context {
     let logger = env.logger();
     let topology = env.topology_snapshot();
 
@@ -378,6 +466,192 @@ async fn run(env: TestEnv) {
 
     // Step 7: Check that the scenario violates the individual conditions.
     check_conditions_violated(&topology, &m_subnet, &logger).await;
+
+    Context {
+        logger,
+        um: um.canister_id(),
+        ut: ut.canister_id(),
+        m_subnet,
+        t_subnet,
+        m_agent,
+        t_agent,
+    }
+}
+
+/// Steps 8 to 11: hand the scenario over to the subnet merging tool, and make
+/// the checks of the steps in between its steps.
+///
+/// Plain synchronous code, like `rs/tests/consensus/subnet_splitting_test.rs`:
+/// the tool's steps block on runtimes of their own, and the asynchronous checks
+/// of this test are driven through `runtime`, which this thread is not inside.
+fn cool_down(env: &TestEnv, context: &Context, runtime: &Runtime) {
+    let logger = &context.logger;
+    let topology = env.topology_snapshot();
+
+    let recovery_args = RecoveryArgs {
+        dir: env.get_path(MERGING_DIR),
+        nns_url: topology
+            .root_subnet()
+            .nodes()
+            .next()
+            .unwrap()
+            .get_public_url(),
+        replica_version: Some(get_guestos_img_version()),
+        // No step of this phase of the tool accesses a node via ssh.
+        admin_key_file: None,
+        test_mode: true,
+        skip_prompts: true,
+    };
+    let merging_args = SubnetMergingArgs {
+        source_subnet_id: context.m_subnet.subnet_id,
+        destination_subnet_id: context.t_subnet.subnet_id,
+        merge_ready_timeout_secs: MERGE_READY_TIMEOUT.as_secs(),
+        registry_timeout_secs: REGISTRY_TIMEOUT.as_secs(),
+        poll_interval_secs: POLL_INTERVAL.as_secs(),
+        next_step: None,
+    };
+
+    info!(
+        logger,
+        "Step 8: Handing subnet M ({}) over to the subnet merging tool", context.m_subnet.subnet_id,
+    );
+    let merging = SubnetMerging::new(
+        logger.clone(),
+        recovery_args,
+        /*neuron_args=*/ None,
+        merging_args,
+    );
+
+    for (step_type, step) in merging {
+        info!(logger, "Next step: {step_type:?}");
+        info!(logger, "{}", step.descr());
+        step.exec()
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
+
+        match step_type {
+            StepType::CheckRegistryForCoolingDownFlag => {
+                runtime.block_on(check_ingress_and_queries_rejected(context))
+            }
+            StepType::CheckMergeReadiness => {
+                info!(logger, "Step 10 done: subnet M is \"merge ready\"");
+                runtime.block_on(check_stalled_loops(context))
+            }
+            _ => {}
+        }
+    }
+
+    info!(
+        logger,
+        "Subnet M has been drained by the subnet merging tool"
+    );
+}
+
+/// Step 9: wait until the replicas of `M` observed the "cooling down" label,
+/// i.e. until `M` rejects ingress messages, and then until it rejects query
+/// calls too.
+///
+/// Both are waited for rather than checked once: the replica a call is sent to
+/// rejects ingress messages based on its latest state, but query calls based on
+/// its latest certified state, which may still be one before the label took
+/// effect.
+async fn check_ingress_and_queries_rejected(context: &Context) {
+    let logger = &context.logger;
+    let um = UniversalCanister::from_canister_id(&context.m_agent, context.um);
+
+    info!(
+        logger,
+        "Step 9: Waiting until subnet M rejects ingress messages"
+    );
+    retry_with_msg_async!(
+        "waiting until subnet M rejects ingress messages",
+        logger,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            // Submitted rather than called: an ingress message that is still
+            // accepted is never executed by a cooling down subnet, so waiting for
+            // its completion would only wait for it to expire.
+            match um.submit_update(wasm().reply_data(&[])).await {
+                Ok(_) => bail!("ingress message to UM was still accepted"),
+                Err(err) => {
+                    let err = err.to_string();
+                    if !err.contains("cooling down") {
+                        bail!("ingress message to UM failed unexpectedly: {err}");
+                    }
+                    Ok(())
+                }
+            }
+        }
+    )
+    .await
+    .expect("subnet M did not start rejecting ingress messages");
+    info!(
+        logger,
+        "Step 9: subnet M rejects ingress messages, so it is cooling down"
+    );
+
+    retry_with_msg_async!(
+        "waiting until subnet M rejects query calls",
+        logger,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            match um.query(wasm().reply_data(&[])).await {
+                Ok(_) => bail!("query call to UM was still answered"),
+                Err(err) => {
+                    let err = err.to_string();
+                    if !err.contains("cooling down") {
+                        bail!("query call to UM failed unexpectedly: {err}");
+                    }
+                    Ok(())
+                }
+            }
+        }
+    )
+    .await
+    .expect("subnet M did not start rejecting query calls");
+    info!(
+        logger,
+        "Step 9 done: subnet M rejects ingress messages and query calls"
+    );
+}
+
+/// Step 11: check that both call loops of step 2 are stalled, i.e. that `M`
+/// became "merge ready" because it is cooling down and not because the loops
+/// stopped making calls.
+///
+/// `UT`'s iteration counter is read via a query to `T`. `UM`'s counter cannot
+/// be read, as `M` rejects query calls; instead, the test checks that `M` keeps
+/// skipping canister execution, so that `UM`'s loop cannot advance either.
+async fn check_stalled_loops(context: &Context) {
+    let logger = &context.logger;
+    info!(
+        logger,
+        "Step 11: Checking that both call loops are stalled over {STALL_OBSERVATION_PERIOD:?}"
+    );
+    let ut = UniversalCanister::from_canister_id(&context.t_agent, context.ut);
+    let ut_before = global_counter(&ut).await.unwrap();
+    let skipped_before = rounds_with_skipped_canister_execution(&context.m_subnet).await;
+    tokio::time::sleep(STALL_OBSERVATION_PERIOD).await;
+    let ut_after = global_counter(&ut).await.unwrap();
+    let skipped_after = rounds_with_skipped_canister_execution(&context.m_subnet).await;
+    assert_eq!(
+        ut_before, ut_after,
+        "UT's call loop advanced from iteration {ut_before} to {ut_after} while subnet M was \
+         cooling down",
+    );
+    assert!(
+        skipped_after > skipped_before,
+        "subnet M skipped canister execution in no round over {STALL_OBSERVATION_PERIOD:?} \
+         ({skipped_before} rounds before, {skipped_after} after), so it was not cooling down and \
+         UM's loop was stalled for some other reason",
+    );
+    info!(
+        logger,
+        "Step 11 done: UT's call loop is stalled at iteration {ut_after} and subnet M skipped \
+         canister execution in {} rounds while waiting",
+        skipped_after - skipped_before,
+    );
 }
 
 /// Step 7: check that none of the `VIOLATED_CONDITIONS` of the "merge
@@ -604,7 +878,7 @@ fn install_code_payload(targets: &[Principal]) -> Vec<u8> {
 /// queues hold nothing but those calls by the time they are inducted.
 async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &Logger) {
     let expected_queued = (INSTALL_CODE_TARGETS.len() - 1) as f64;
-    let node_ips: Vec<_> = subnet.nodes().map(|node| node.get_ip_addr()).collect();
+    let node_ips = node_ips(subnet);
     retry_with_msg_async!(
         format!(
             "waiting until all {} `install_code` requests are inducted on subnet {}",
@@ -682,4 +956,32 @@ async fn global_counter(canister: &UniversalCanister<'_>) -> Result<u64> {
         .try_into()
         .map_err(|_| anyhow!("expected 8 bytes, got {} bytes: {reply:?}", reply.len()))?;
     Ok(u64::from_le_bytes(reply))
+}
+
+/// The IPs of the nodes of `subnet`.
+fn node_ips(subnet: &SubnetSnapshot) -> Vec<IpAddr> {
+    subnet.nodes().map(|node| node.get_ip_addr()).collect()
+}
+
+/// The number of rounds `subnet` executed no canister message in because it is
+/// cooling down, as the minimum across its replicas.
+///
+/// A subnet that is not cooling down never touches the counter, and a replica
+/// that never touched it does not report it at all, which is a zero here.
+async fn rounds_with_skipped_canister_execution(subnet: &SubnetSnapshot) -> f64 {
+    let node_ips = node_ips(subnet);
+    let metrics = fetch_metrics(&node_ips, &[METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION])
+        .await
+        .unwrap_or_else(|e| {
+            panic!(
+                "failed to fetch the skipped canister execution metric of subnet {}: {e}",
+                subnet.subnet_id
+            )
+        });
+    min_across_replicas(
+        &metrics,
+        METRIC_ROUNDS_SKIPPED_CANISTER_EXECUTION,
+        |_| true,
+        &node_ips,
+    )
 }
