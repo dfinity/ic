@@ -1659,17 +1659,11 @@ impl ExecutionTest {
                     subnet_cycles_config,
                     WasmExecutionMode::Wasm32,
                 );
-                let refunded = mgr
-                    .variable_execution_cost(
-                        NumInstructions::from(
-                            prepaid_instructions
-                                .get()
-                                .saturating_sub(instructions_used.get()),
-                        ),
-                        subnet_cycles_config,
-                        WasmExecutionMode::Wasm32,
-                    )
-                    .component_wise_min(prepaid);
+                let refunded = mgr.variable_execution_cost(
+                    prepaid_instructions.saturating_sub(instructions_used),
+                    subnet_cycles_config,
+                    WasmExecutionMode::Wasm32,
+                );
                 (prepaid - refunded).nominal()
             }
             Ok(Method::UpdateSettings)
