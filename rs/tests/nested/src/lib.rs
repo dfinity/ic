@@ -243,7 +243,8 @@ fn guestos_panic_relaunch_inner(env: &TestEnv, host: &NestedVm) -> Result<()> {
         relaunches_after - relaunches_before
     );
 
-    // 4. The guest is up again on a new boot. Bound each SSH attempt so a failure here still
+    // 4. The guest is up again on a new boot. Bound each SSH attempt, including the command I/O
+    // (a fresh session has no I/O timeout after authentication), so a failure here still
     // leaves time for the diagnostics within the per-test timeout.
     retry_with_msg!(
         "Waiting for the GuestOS to boot again",
@@ -252,6 +253,7 @@ fn guestos_panic_relaunch_inner(env: &TestEnv, host: &NestedVm) -> Result<()> {
         Duration::from_secs(10),
         || {
             let session = guest.block_on_ssh_session_with_timeout(Duration::from_secs(60))?;
+            session.set_timeout(60_000);
             let boot_id = guest.block_on_bash_script_from_session(
                 &session,
                 "cat /proc/sys/kernel/random/boot_id",
