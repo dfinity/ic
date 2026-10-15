@@ -63,6 +63,7 @@ tower = { workspace = true }
 
 [dev-dependencies]
 async-trait = { workspace = true }
+ic-consensus-mocks = { path = "../consensus/mocks" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-nervous-system-agent = { path = "../nervous_system/agent" }

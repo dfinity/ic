@@ -413,15 +413,18 @@ pub trait PausedExecution: std::fmt::Debug + Send {
     /// It takes:
     /// - the canister state,
     /// - system parameters that can change while the execution is in progress,
+    ///   e.g., the current subnet memory saturation,
     /// - helpers.
     ///
     /// If the execution finishes, then it returns the new canister state and
     /// the result of the execution.
+    #[allow(clippy::too_many_arguments)]
     fn resume(
         self: Box<Self>,
         canister: CanisterState,
         round_context: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
         deallocation_sender: &DeallocationSender,
@@ -4171,7 +4174,9 @@ impl ExecutionEnvironment {
                         })?;
                 validate_sender_on_subnet(
                     &origin.origin(),
-                    CanisterAccess::InstallChunkedCodeStore,
+                    CanisterAccess::InstallChunkedCodeStore {
+                        target_canister_id: args.target_canister_id(),
+                    },
                     store_canister,
                     &state.metadata.network_topology,
                     state.metadata.own_subnet_id,
@@ -4507,7 +4512,12 @@ impl ExecutionEnvironment {
                     time: state.metadata.time(),
                     cost_schedule: state.get_own_cost_schedule(),
                 };
-                let dts_result = paused.resume(canister, round, round_limits);
+                let subnet_memory_saturation = self.subnet_memory_saturation(
+                    &round_limits.subnet_available_memory,
+                    state.resource_limits(),
+                );
+                let dts_result =
+                    paused.resume(canister, round, round_limits, subnet_memory_saturation);
                 let dts_status = DtsInstallCodeStatus::ResumingPausedOrAbortedExecution;
                 self.process_install_code_result(
                     state,
@@ -5207,10 +5217,15 @@ pub fn execute_canister(
                     time,
                     cost_schedule: subnet_cycles_config.cost_schedule,
                 };
+                let subnet_memory_saturation = exec_env.subnet_memory_saturation(
+                    &round_limits.subnet_available_memory,
+                    resource_limits,
+                );
                 let result = paused.resume(
                     canister,
                     round_context,
                     round_limits,
+                    subnet_memory_saturation,
                     subnet_cycles_config.subnet_size,
                     &exec_env.call_tree_metrics,
                     exec_env.deallocator_thread.sender(),

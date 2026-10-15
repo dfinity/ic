@@ -12,7 +12,7 @@ use crate::execution_environment::{
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
+use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
     wasmtime_embedder::system_api::{ApiType, ExecutionParameters},
@@ -239,6 +239,12 @@ pub fn execute_call_or_task(
         }
         WasmExecutionResult::Finished(slice, output, state_changes) => {
             update_round_limits(round_limits, &slice);
+            // The execution finished in its first slice, so the subnet memory
+            // saturation from the original context is still current.
+            let subnet_memory_saturation = original
+                .execution_parameters
+                .subnet_memory_saturation
+                .clone();
             helper.finish(
                 output,
                 clean_canister,
@@ -246,6 +252,7 @@ pub fn execute_call_or_task(
                 original,
                 round,
                 round_limits,
+                &subnet_memory_saturation,
                 call_tree_metrics,
             )
         }
@@ -496,6 +503,13 @@ impl CallOrTaskHelper {
 
     /// Finishes an update call execution that could have run multiple rounds
     /// due to deterministic time slicing.
+    ///
+    /// The storage reservation for the memory allocated by the execution uses
+    /// the given subnet memory saturation at the start of the current slice.
+    /// It is passed separately (rather than read from the original context)
+    /// because a resumed execution must use the subnet memory saturation at
+    /// the start of its last slice instead.
+    #[allow(clippy::too_many_arguments)]
     fn finish(
         mut self,
         mut output: WasmExecutionOutput,
@@ -504,8 +518,19 @@ impl CallOrTaskHelper {
         original: OriginalContext,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: &ResourceSaturation,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
+        // Canister logs are persisted even if the other changes are not.
+        // Both states need the log because either may be returned below.
+        canister_state_changes
+            .system_state_modifications
+            .apply_canister_log(&mut clean_canister.system_state, round.hypervisor.metrics());
+        // apply_canister_log() drains the delta, so calling it again would not
+        // append the records to the helper canister. Copy the updated log instead.
+        self.canister
+            .set_log(clean_canister.system_state.log_memory_store.clone());
+
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -556,10 +581,6 @@ impl CallOrTaskHelper {
                 err,
             );
             self.deallocation_sender.send(Box::new(self.canister));
-            // Canister logs are persisted even if the other changes are not.
-            canister_state_changes
-                .system_state_modifications
-                .apply_canister_log(&mut clean_canister.system_state, round.hypervisor.metrics());
             // Perf counter: no need to update the call context, as it won't be saved.
             return finish_err(
                 clean_canister,
@@ -579,6 +600,10 @@ impl CallOrTaskHelper {
                     &mut self.canister.system_state,
                     &mut output,
                     round_limits,
+                    round.cycles_account_manager,
+                    original.subnet_cycles_config,
+                    subnet_memory_saturation,
+                    original.call_origin.get_principal(),
                     round.time,
                     &round.network_topology,
                     round.hypervisor.subnet_id(),
@@ -601,27 +626,20 @@ impl CallOrTaskHelper {
             }
             // Query methods only persist certain changes to the canister's state.
             CanisterCallOrTask::Query(_) => {
-                let mut system_state_modifications =
-                    canister_state_changes.system_state_modifications;
-                // Canister logs are persisted even if applying the other
-                // changes fails below.
-                system_state_modifications.apply_canister_log(
-                    &mut self.canister.system_state,
-                    round.hypervisor.metrics(),
-                );
-                if let Err(err) = system_state_modifications.apply_changes(
-                    round.time,
-                    &mut self.canister.system_state,
-                    &round.network_topology,
-                    round.hypervisor.subnet_id(),
-                    // Composite queries are always executed in the
-                    // non-replicated mode: a composite query called in the
-                    // replicated mode is rejected before its execution.
-                    false,
-                    round.hypervisor.metrics(),
-                    round.log,
-                ) {
-                    clean_canister.set_log(self.canister.system_state.log_memory_store.clone());
+                if let Err(err) = canister_state_changes
+                    .system_state_modifications
+                    .apply_changes(
+                        round.time,
+                        &mut self.canister.system_state,
+                        &round.network_topology,
+                        round.hypervisor.subnet_id(),
+                        // Composite queries are always executed in the
+                        // non-replicated mode: a composite query called in the
+                        // replicated mode is rejected before its execution.
+                        false,
+                        round.log,
+                    )
+                {
                     return finish_err(
                         clean_canister,
                         output.num_instructions_left,
@@ -746,6 +764,7 @@ impl PausedExecution for PausedCallOrTaskExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
         _subnet_size: usize,
         call_tree_metrics: &dyn CallTreeMetrics,
         deallocation_sender: &DeallocationSender,
@@ -831,6 +850,9 @@ impl PausedExecution for PausedCallOrTaskExecution {
                     instructions_consumed.display(),
                 );
                 update_round_limits(round_limits, &slice);
+                // The subnet memory usage might have changed while the execution
+                // was paused. Use the current subnet memory saturation for storage
+                // reservation when finishing the execution.
                 helper.finish(
                     output,
                     clean_canister,
@@ -838,6 +860,7 @@ impl PausedExecution for PausedCallOrTaskExecution {
                     self.original,
                     round,
                     round_limits,
+                    &subnet_memory_saturation,
                     call_tree_metrics,
                 )
             }

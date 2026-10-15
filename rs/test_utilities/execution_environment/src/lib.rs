@@ -407,7 +407,7 @@ impl ExecutionTest {
         self.canister_state(canister_id)
             .system_state
             .log_memory_store
-            .records(None)
+            .all_records_for_testing()
             .into_iter()
             .map(|record| record.content)
             .collect()

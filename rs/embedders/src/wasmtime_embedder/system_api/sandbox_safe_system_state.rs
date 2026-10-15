@@ -418,18 +418,19 @@ impl SystemStateModifications {
 
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
-    pub fn apply_changes<Metrics: CanisterLogMetrics>(
-        mut self,
+    pub fn apply_changes(
+        self,
         time: Time,
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
         is_composite_query: bool,
-        metrics: &Metrics,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
-        // Append delta logs.
-        self.apply_canister_log(system_state, metrics);
+        debug_assert!(
+            self.canister_log.is_empty(),
+            "Canister logs must be applied via `apply_canister_log()` before applying the other changes"
+        );
 
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
