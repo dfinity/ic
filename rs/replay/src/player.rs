@@ -120,7 +120,7 @@ pub enum ReplayError {
     StateDivergence(Height),
     /// Can't proceed because an upgrade was detected.
     UpgradeDetected(ReplayOutput),
-    /// Can't proceed because artifact validation failed after the given height.
+    /// Can't proceed because artifact validation failed at or after the given height.
     ValidationIncomplete(Height, Vec<InvalidArtifact>),
     /// Can't proceed because CUP verification failed at the given height.
     CUPVerificationFailed(Height),
@@ -1186,12 +1186,10 @@ impl Player {
                     );
                     println!("Updated the registry.");
                 }
-                Err(backup::ExitPoint::ValidationIncomplete(last_validated_height)) => {
-                    println!(
-                        "Validation of artifacts at height {last_validated_height:?} is not complete"
-                    );
+                Err(backup::ExitPoint::ValidationIncomplete(failed_height)) => {
+                    println!("Validation of artifacts at height {failed_height:?} is not complete");
                     return Err(ReplayError::ValidationIncomplete(
-                        last_validated_height,
+                        failed_height,
                         invalid_artifacts,
                     ));
                 }

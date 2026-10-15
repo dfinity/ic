@@ -76,7 +76,8 @@ pub(crate) enum ExitPoint {
     /// block with a validation context referencing a newer version than
     /// locally known.
     NewerRegistryVersion(RegistryVersion),
-    /// Can't proceed because artifact validation failed after the given height.
+    /// Can't proceed because artifact validation failed at or after the
+    /// given height.
     ValidationIncomplete(Height),
 }
 
@@ -453,7 +454,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         }
 
         if new_finalized_height < target_height {
-            return Err(ExitPoint::ValidationIncomplete(new_finalized_height));
+            return Err(ExitPoint::ValidationIncomplete(height));
         }
 
         // If the validated artifacts finalize the last seen CUP height, we need to deliver all
@@ -694,12 +695,12 @@ mod tests {
         for missing_notarization in [CUP_HEIGHT, CUP_HEIGHT - 1] {
             let spool = Spool::new();
             spool.remove(missing_notarization, "notarization.bin");
-            let last_validated_height = Height::from(missing_notarization - 1);
+            let failed_height = Height::from(missing_notarization);
             assert_eq!(
                 spool.restore(),
                 vec![(
-                    Err(ExitPoint::ValidationIncomplete(last_validated_height)),
-                    last_validated_height
+                    Err(ExitPoint::ValidationIncomplete(failed_height)),
+                    failed_height - 1.into(),
                 )]
             );
         }
