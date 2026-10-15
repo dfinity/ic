@@ -735,7 +735,7 @@ mod test {
 
                             block_identifier = PartialBlockIdentifier{
                                 index: None,
-                                hash: Some(hex::encode(invalid_block_hash.clone()))
+                                hash: Some(hex::encode(&invalid_block_hash))
                             };
 
                             // If the block identifier hash does not exist the service should return an error
@@ -744,7 +744,7 @@ mod test {
                             if blockchain.is_empty() {
                                 assert!(block_res.is_err());
                             } else {
-                                assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block with hash {} could not be found",hex::encode(invalid_block_hash.clone()))));
+                                assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block with hash {} could not be found",hex::encode(&invalid_block_hash))));
                             }
 
                             block_identifier = PartialBlockIdentifier{

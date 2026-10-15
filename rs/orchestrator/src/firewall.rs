@@ -1397,6 +1397,7 @@ mod tests {
             ipv4_address: "".to_string(),
             ipv4_gateway: "".to_string(),
             nns_urls: "http://www.fakeurl.com/".to_string(),
+            engine_management_canister_id: "null".to_string(),
             backup_retention_time_secs: "0".to_string(),
             backup_purging_interval_secs: "0".to_string(),
             query_stats_epoch_length: "600".to_string(),

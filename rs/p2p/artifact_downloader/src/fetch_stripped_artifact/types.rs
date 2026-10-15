@@ -23,7 +23,7 @@ pub(crate) type CanisterHttpResponseContentHash = CryptoHashOf<CanisterHttpRespo
 /// [`SignedIngress`] because all the fields of [`SignedIngress`] are derived from it.
 /// Note also that [`IngressMessageId`] is not strictly required here to uniquely identify
 /// [`SignedIngress`] but we keep it here because of [`IngressPool`] API.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct SignedIngressId {
     pub(crate) ingress_message_id: IngressMessageId,
     pub(crate) ingress_bytes_hash: IngressBytesHash,
@@ -60,10 +60,11 @@ impl TryFrom<pb::StrippedIngressMessage> for SignedIngressId {
 }
 
 /// Unique identifiers for messages that may be stripped from block proposals.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum StrippedMessageId {
     Ingress(SignedIngressId),
     IDkgDealing(IDkgArtifactId, NodeIndex),
+    CanisterHttpResponse(CanisterHttpResponseContentHash),
 }
 
 /// Messages that may be stripped from block proposals.
@@ -71,6 +72,7 @@ pub(crate) enum StrippedMessageId {
 pub(crate) enum StrippedMessage {
     Ingress(SignedIngressId, SignedIngress),
     IDkgDealing(IDkgArtifactId, NodeIndex, SignedIDkgDealing),
+    CanisterHttpResponse(CanisterHttpResponseContentHash, CanisterHttpResponse),
 }
 
 #[derive(Copy, Clone, Eq, Ord, PartialEq, PartialOrd)]
@@ -95,6 +97,7 @@ impl From<&StrippedMessageId> for StrippedMessageType {
         match id {
             StrippedMessageId::Ingress(_) => StrippedMessageType::Ingress,
             StrippedMessageId::IDkgDealing(_, _) => StrippedMessageType::IDkgDealing,
+            StrippedMessageId::CanisterHttpResponse(_) => StrippedMessageType::CanisterHttpResponse,
         }
     }
 }
@@ -104,6 +107,9 @@ impl From<&StrippedMessage> for StrippedMessageType {
         match id {
             StrippedMessage::Ingress(_, _) => StrippedMessageType::Ingress,
             StrippedMessage::IDkgDealing(_, _, _) => StrippedMessageType::IDkgDealing,
+            StrippedMessage::CanisterHttpResponse(_, _) => {
+                StrippedMessageType::CanisterHttpResponse
+            }
         }
     }
 }
@@ -113,6 +119,7 @@ impl CountBytes for StrippedMessage {
         match self {
             StrippedMessage::Ingress(_, ingress) => ingress.count_bytes(),
             StrippedMessage::IDkgDealing(_, _, dealing) => dealing.count_bytes(),
+            StrippedMessage::CanisterHttpResponse(_, response) => response.count_bytes(),
         }
     }
 }

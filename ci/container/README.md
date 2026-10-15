@@ -73,7 +73,8 @@ What the container sees:
 
 - The checkout (`git rev-parse --show-toplevel`) is bind-mounted at **the same absolute path as on the host** (canonical, i.e. with symlinks resolved) and is the working directory. Host paths therefore stay valid inside the container, and so do the absolute `gitdir:` pointers of linked git worktrees (`git worktree add`), whose main `.git` directory is bind-mounted at its host path as well. Nothing is mounted at `/ic`.
 - The container user matches the host uid: `ubuntu` (1000, home `/home/ubuntu`) or `buildifier` (1001, home `/home/buildifier`). Any other uid falls back to `root` with a warning; files created by the container are then root-owned.
-- `~/.cache` (or the directory given with `-c`/`--cache-dir`) is mounted at the container user's `~/.cache`. It holds bazel's output_user_root (output bases, install base, repository cache) and persists across containers. `~/.aws`, `~/.ssh` and `~/.claude` are mounted into the container user's home too, and the ssh agent socket is forwarded if one is running.
+- `~/.cache` (or the directory given with `-c`/`--cache-dir`) is mounted at the container user's `~/.cache`. It holds bazel's output_user_root (output bases, install base, repository cache) and persists across containers. `~/.aws`, `~/.ssh`, `~/.claude` and `~/.config` are mounted into the container user's home too, and the ssh agent socket is forwarded if one is running.
+- Since `~/.config` is shared, `gh` uses the host's login. If the host keeps the gh token in a system keyring, `~/.config/gh/hosts.yml` has no token; run `gh auth login --insecure-storage` on the host. Every other host tool config under `~/.config` applies in the container as well, including `~/.config/containers/`, which reconfigures the rootless podman that ic-os image builds run.
 - On a devenv, `~/.gitconfig` and the shell history files are mounted as well and `CARGO_TARGET_DIR` is set to `~/.cache/cargo`.
 - Extra `podman run`/`docker run` arguments come from `~/.container-run.conf` (see below).
 
@@ -84,7 +85,6 @@ User can create config `$HOME/.container-run.conf`, with `podman run` arguments,
 ```bash
 PODMAN_RUN_USR_ARGS=(
     --mount type=bind,source=${HOME}/dev,target=/home/ubuntu/dev
-    --mount type=bind,source=${HOME}/.config/fish,target=/home/ubuntu/.config/fish
     -e TESTVARIABLE="something-i-expect"
 )
 ```

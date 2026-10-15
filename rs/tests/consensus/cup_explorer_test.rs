@@ -64,16 +64,17 @@ use slog::info;
 use std::collections::BTreeSet;
 use tempfile::NamedTempFile;
 
-// A short DKG interval makes the app subnet halt faster, as it halts at the next CUP height, and
-// makes the system subnet generate its vetKD key faster.
+// A short DKG interval makes the app subnet halt faster, as it halts at the next CUP height.
 const DKG_INTERVAL: u64 = 14;
+// Slightly higher DKG interval length to allow all remote DKGs to be completed
+const SYSTEM_SUBNET_DKG_INTERVAL: u64 = 49;
 const NODES_COUNT: usize = 4;
 
 fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::fast_single_node(SubnetType::System)
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .with_dkg_interval_length(Height::from(SYSTEM_SUBNET_DKG_INTERVAL))
                 .with_chain_key_config(ChainKeyConfig {
                     key_configs: make_key_ids_for_all_schemes()
                         .into_iter()
