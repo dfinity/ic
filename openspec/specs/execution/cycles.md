@@ -143,6 +143,14 @@ When subnet resources become scarce, canisters must reserve cycles for future st
 - **THEN** the total reserved balance cannot exceed this limit
 - **AND** if a reservation would exceed the limit, the operation fails
 
+#### Scenario: Storage reservation recomputed when a DTS execution finishes
+- **WHEN** an update call, task, response/cleanup callback, or `install_code` execution is paused by deterministic time slicing and later resumed
+- **THEN** the storage reservation for memory the execution allocated is recomputed using the subnet memory saturation current at the start of the slice that finishes the execution, not the saturation at the start of the first slice
+- **AND** any additional cycles this recomputation requires are reserved on top of what was already reserved; no cycles are refunded if the saturation decreased instead
+- **AND** if the canister cannot reserve the additional cycles, the execution fails with `InsufficientCyclesInMemoryGrow` or `ReservedCyclesLimitExceededInMemoryGrow` and its state changes are discarded, the same as the existing DTS out-of-memory failure
+- **AND** an execution that finishes in its first slice reserves cycles exactly as before, using the saturation at the start of that slice
+- **AND** non-replicated executions (queries, `canister_inspect_message`) never reserve storage cycles
+
 ### Requirement: Cycles Transfer
 
 Canisters can send and receive cycles via inter-canister calls.
