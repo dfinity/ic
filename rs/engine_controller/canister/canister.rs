@@ -12,6 +12,7 @@ use ic_engine_controller::{
 };
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::{ResourceLimits as ResourceLimitsPb, SubnetFeatures};
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use registry_canister::mutations::do_create_subnet::{
     CanisterCyclesCostSchedule, CreateSubnetPayload,
@@ -151,12 +152,12 @@ async fn create_engine(args: CreateEngineArgs) -> Result<NewSubnet, String> {
             sev_enabled: Some(false),
         },
         resource_limits: args.resource_limits.map(|limits| {
-            ResourceLimitsPb {
+            ResourceLimits::from(ResourceLimitsPb {
                 maximum_state_size: limits.maximum_state_size,
                 maximum_state_delta: limits.maximum_state_delta,
-                ..Default::default()
-            }
-            .into()
+                maximum_query_instructions: None,
+                maximum_query_walltime_seconds: None,
+            })
         }),
         ..Default::default()
     };

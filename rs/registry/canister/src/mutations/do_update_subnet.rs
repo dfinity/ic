@@ -1954,10 +1954,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(
-        expected = "engine controller may only update `subnet_admins`, `is_halted`, `cooling_down` \
-                    and the state limits in `resource_limits`"
-    )]
+    #[should_panic(expected = "max_number_of_canisters")]
     fn engine_controller_cannot_update_disallowed_fields() {
         use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
 
@@ -2006,56 +2003,77 @@ mod tests {
         }
     }
 
+    /// The engine controller may set the state limits (`maximum_state_size`,
+    /// `maximum_state_delta`) of a CloudEngine subnet, but no other limit. So,
+    /// unlike for governance (see `resource_limits_resets_all_fields`), a limit
+    /// that the engine controller leaves unset keeps its current value instead
+    /// of being reset.
     #[test]
-    fn engine_controller_can_set_state_limits_keeping_the_rest() {
+    fn test_engine_controller_sets_state_limits_and_keeps_unset_limits() {
         use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
 
+        // Step 1: Prepare the world: a CloudEngine subnet on which governance
+        // has set all four limits. The values are arbitrary, but distinct, so
+        // that we can tell which ones survive.
         let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
-
-        let mut payload = make_empty_update_payload(subnet_id);
-        payload.resource_limits = Some(ResourceLimitsPb {
-            maximum_state_size: Some(1),
-            maximum_state_delta: Some(2),
-            maximum_query_instructions: Some(3),
+        let mut governance_payload = make_empty_update_payload(subnet_id);
+        governance_payload.resource_limits = Some(ResourceLimitsPb {
+            maximum_state_size: Some(1_000),
+            maximum_state_delta: Some(200),
+            maximum_query_instructions: Some(30),
             maximum_query_walltime_seconds: Some(4),
         });
-        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), payload);
+        registry.do_update_subnet(GOVERNANCE_CANISTER_ID.get(), governance_payload);
 
-        // Only the state size: the delta and the query limits keep their
-        // values instead of being reset.
-        let mut payload = make_empty_update_payload(subnet_id);
-        payload.resource_limits = Some(ResourceLimitsPb {
-            maximum_state_size: Some(10),
-            ..Default::default()
+        // Step 2: Run the code under test: the engine controller sets only the
+        // state size.
+        let mut engine_controller_payload = make_empty_update_payload(subnet_id);
+        engine_controller_payload.resource_limits = Some(ResourceLimitsPb {
+            maximum_state_size: Some(500),
+            maximum_state_delta: None,
+            maximum_query_instructions: None,
+            maximum_query_walltime_seconds: None,
         });
-        registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+        registry.do_update_subnet(
+            ENGINE_CONTROLLER_CANISTER_ID.get(),
+            engine_controller_payload,
+        );
 
+        // Step 3: Verify result(s): the state size is the new one; the state
+        // delta and both query limits are still what governance set.
         assert_eq!(
             registry.get_subnet_or_panic(subnet_id).resource_limits,
             Some(ResourceLimitsPb {
-                maximum_state_size: Some(10),
-                maximum_state_delta: Some(2),
-                maximum_query_instructions: Some(3),
+                maximum_state_size: Some(500),
+                maximum_state_delta: Some(200),
+                maximum_query_instructions: Some(30),
                 maximum_query_walltime_seconds: Some(4),
-            })
+            }),
         );
     }
 
+    /// The query limits stay governance-only: an engine controller payload
+    /// that sets one is rejected, even alongside an allowed state limit.
     #[test]
     #[should_panic(expected = "resource_limits.maximum_query_instructions")]
-    fn engine_controller_cannot_set_query_limits() {
+    fn test_engine_controller_cannot_set_query_limits() {
         use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
 
+        // Step 1: Prepare the world.
         let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
-
         let mut payload = make_empty_update_payload(subnet_id);
         payload.resource_limits = Some(ResourceLimitsPb {
-            maximum_state_size: Some(10),
-            maximum_query_instructions: Some(3),
-            ..Default::default()
+            maximum_state_size: Some(500),
+            maximum_state_delta: None,
+            maximum_query_instructions: Some(30),
+            maximum_query_walltime_seconds: None,
         });
 
+        // Step 2: Run the code under test.
         registry.do_update_subnet(ENGINE_CONTROLLER_CANISTER_ID.get(), payload);
+
+        // Step 3: Verify result(s): the call above panics, naming the
+        // offending field (see `should_panic`).
     }
 
     #[test]
