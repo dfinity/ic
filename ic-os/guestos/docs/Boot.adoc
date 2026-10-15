@@ -69,9 +69,10 @@ four complete command lines:
   TEE is enabled).
 
 The TEE command lines are part of the SEV-SNP launch measurement, so any change
-ships with a GuestOS release. `oops=panic panic=10` make a GuestOS that hits a
-kernel Oops or panic reboot (and be relaunched by HostOS) instead of hanging;
-see the comment in the template.
+ships with a GuestOS release. `oops=panic panic=10 softlockup_panic=1
+watchdog_thresh=60` make a GuestOS that hits a kernel Oops, panic or soft lockup
+reboot (and be relaunched by HostOS) instead of hanging; see the comment in the
+template.
 
 == Mount +/boot+ filesystems
 

@@ -177,12 +177,12 @@ fn guestos_panic_relaunch_inner(env: &TestEnv, host: &NestedVm) -> Result<()> {
 
     // 1. The kernel took the parameters on the direct-boot path; remember the boot id.
     let out = guest.block_on_bash_script(
-        "cat /proc/cmdline; \
-         cat /proc/sys/kernel/panic_on_oops /proc/sys/kernel/panic /proc/sys/kernel/random/boot_id",
+        "cat /proc/cmdline; cd /proc/sys/kernel && \
+         cat panic_on_oops panic softlockup_panic watchdog_thresh soft_watchdog random/boot_id",
     )?;
     info!(
         logger,
-        "GuestOS kernel cmdline, panic sysctls and boot id:\n{out}"
+        "GuestOS kernel cmdline, panic/lockup sysctls and boot id:\n{out}"
     );
     let mut lines = out.lines();
     let cmdline: Vec<&str> = lines
@@ -190,13 +190,23 @@ fn guestos_panic_relaunch_inner(env: &TestEnv, host: &NestedVm) -> Result<()> {
         .context("Missing /proc/cmdline")?
         .split_whitespace()
         .collect();
+    for param in [
+        "oops=panic",
+        "panic=10",
+        "softlockup_panic=1",
+        "watchdog_thresh=60",
+    ] {
+        ensure!(
+            cmdline.contains(&param),
+            "GuestOS did not boot with {param}: {out}"
+        );
+    }
+    // kernel.panic_on_oops, kernel.panic, kernel.softlockup_panic, kernel.watchdog_thresh and
+    // kernel.soft_watchdog (the soft-lockup detector is enabled), in the order read above.
+    let sysctls: Vec<&str> = lines.by_ref().take(5).collect();
     ensure!(
-        cmdline.contains(&"oops=panic") && cmdline.contains(&"panic=10"),
-        "GuestOS did not boot with oops=panic panic=10: {out}"
-    );
-    ensure!(
-        lines.next() == Some("1") && lines.next() == Some("10"),
-        "Expected kernel.panic_on_oops=1 and kernel.panic=10: {out}"
+        sysctls == ["1", "10", "1", "60", "1"],
+        "Unexpected panic/lockup sysctls {sysctls:?}: {out}"
     );
     let boot_id_before = lines.next().context("Missing boot id")?.to_string();
     let relaunches_before = count_guest_vm_relaunches(host)?;

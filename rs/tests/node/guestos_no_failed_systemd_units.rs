@@ -78,10 +78,11 @@ fn check_no_failed_systemd_units(env: TestEnv) {
     info!(logger, "No failed systemd units found on any GuestOS node.");
 }
 
-/// Assert that the kernel took `oops=panic panic=10` from the command line
-/// (ic-os/bootloader/guestos_boot_args.template): a GuestOS that Oopses or
-/// panics must reboot instead of hanging. Shares this group's single node to
-/// avoid a dedicated target.
+/// Assert that the kernel took `oops=panic panic=10 softlockup_panic=1
+/// watchdog_thresh=60` from the command line
+/// (ic-os/bootloader/guestos_boot_args.template): a GuestOS that hits a kernel
+/// Oops, panic or soft lockup must reboot instead of hanging. Shares this
+/// group's single node to avoid a dedicated target.
 fn check_kernel_panic_params(env: TestEnv) {
     let logger = env.logger();
     for node in env.topology_snapshot().subnets().flat_map(|s| s.nodes()) {
@@ -89,12 +90,13 @@ fn check_kernel_panic_params(env: TestEnv) {
             .expect("Failed to establish SSH session to GuestOS node");
         let out = node
             .block_on_bash_script(
-                "cat /proc/cmdline; cat /proc/sys/kernel/panic_on_oops /proc/sys/kernel/panic",
+                "cat /proc/cmdline; cd /proc/sys/kernel && \
+                 cat panic_on_oops panic softlockup_panic watchdog_thresh soft_watchdog",
             )
-            .expect("Failed to read the kernel cmdline and panic sysctls on GuestOS node");
+            .expect("Failed to read the kernel cmdline and panic/lockup sysctls on GuestOS node");
         info!(
             logger,
-            "Node {}: kernel cmdline and panic sysctls:\n{}", node.node_id, out
+            "Node {}: kernel cmdline and panic/lockup sysctls:\n{}", node.node_id, out
         );
         let mut lines = out.lines();
         let cmdline: Vec<&str> = lines
@@ -102,16 +104,25 @@ fn check_kernel_panic_params(env: TestEnv) {
             .unwrap_or_default()
             .split_whitespace()
             .collect();
-        assert!(
-            cmdline.contains(&"oops=panic") && cmdline.contains(&"panic=10"),
-            "Node {} did not boot with oops=panic panic=10:\n{}",
-            node.node_id,
-            out
-        );
+        for param in [
+            "oops=panic",
+            "panic=10",
+            "softlockup_panic=1",
+            "watchdog_thresh=60",
+        ] {
+            assert!(
+                cmdline.contains(&param),
+                "Node {} did not boot with {param}:\n{}",
+                node.node_id,
+                out
+            );
+        }
+        // kernel.panic_on_oops, kernel.panic, kernel.softlockup_panic, kernel.watchdog_thresh and
+        // kernel.soft_watchdog (the soft-lockup detector is enabled), in the order read above.
         assert_eq!(
             lines.collect::<Vec<_>>(),
-            ["1", "10"],
-            "Node {}: expected kernel.panic_on_oops=1 and kernel.panic=10:\n{}",
+            ["1", "10", "1", "60", "1"],
+            "Node {}: unexpected panic/lockup sysctls:\n{}",
             node.node_id,
             out
         );
