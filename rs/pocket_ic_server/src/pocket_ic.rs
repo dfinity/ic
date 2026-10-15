@@ -5170,6 +5170,7 @@ impl Operation for CallRequest {
                     IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
                 let ingress_validator = IngressValidatorBuilder::builder(
                     subnet.replica_logger.clone(),
+                    HttpHandlerMetrics::new(&MetricsRegistry::new()),
                     node.node_id,
                     subnet.get_subnet_id(),
                     subnet.registry_client.clone(),
@@ -5345,6 +5346,7 @@ impl Operation for QueryRequest {
                     IcRootOfTrust::from(icp_mainnet_root_public_key_for_testing());
                 let svc = QueryServiceBuilder::builder(
                     subnet.replica_logger.clone(),
+                    HttpHandlerMetrics::new(&MetricsRegistry::new()),
                     node.node_id,
                     Arc::new(PocketNodeSigner(node.node_signing_key.clone())),
                     subnet.registry_client.clone(),

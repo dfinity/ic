@@ -8,6 +8,7 @@ pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 use crate::{
     HttpError, IngressFilterService,
     common::{build_validator, certified_state_unavailable_error, validation_error_to_http_error},
+    metrics::HttpHandlerMetrics,
 };
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
@@ -41,6 +42,7 @@ use tower::ServiceExt;
 
 pub struct IngressValidatorBuilder {
     log: ReplicaLogger,
+    metrics: HttpHandlerMetrics,
     node_id: NodeId,
     subnet_id: SubnetId,
     malicious_flags: Option<MaliciousFlags>,
@@ -56,6 +58,7 @@ pub struct IngressValidatorBuilder {
 impl IngressValidatorBuilder {
     pub fn builder(
         log: ReplicaLogger,
+        metrics: HttpHandlerMetrics,
         node_id: NodeId,
         subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
@@ -66,6 +69,7 @@ impl IngressValidatorBuilder {
     ) -> Self {
         Self {
             log,
+            metrics,
             node_id,
             subnet_id,
             malicious_flags: None,
@@ -101,6 +105,7 @@ impl IngressValidatorBuilder {
         let log = self.log;
         IngressValidator {
             log: log.clone(),
+            metrics: self.metrics,
             node_id: self.node_id,
             subnet_id: self.subnet_id,
             registry_client: self.registry_client.clone(),
@@ -192,6 +197,7 @@ fn get_registry_data(
 #[derive(Clone)]
 pub struct IngressValidator {
     log: ReplicaLogger,
+    metrics: HttpHandlerMetrics,
     node_id: NodeId,
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
@@ -215,6 +221,7 @@ impl IngressValidator {
     ) -> Result<IngressMessageSubmitter, IngressError> {
         let Self {
             log,
+            metrics,
             node_id,
             subnet_id,
             registry_client,
@@ -339,6 +346,7 @@ impl IngressValidator {
         .map_err(|validation_error| {
             validation_error_to_http_error(msg.as_ref(), validation_error, &log)
         })?;
+        metrics.observe_validated_sender_info("call", msg.as_ref().sender_info());
 
         let ingress_filter = ingress_filter.lock().unwrap().clone();
 

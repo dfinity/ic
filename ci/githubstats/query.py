@@ -57,7 +57,15 @@ def die(*args):
 @contextlib.contextmanager
 def githubstats_db_cursor(conninfo: str, timeout: int):
     """Context manager that yields a cursor connected to the github PostgreSQL database."""
-    conn = psycopg.connect(conninfo, connect_timeout=timeout)
+    conn = psycopg.connect(
+        conninfo,
+        connect_timeout=timeout,
+        # Run each statement in its own transaction. Otherwise psycopg opens one on the first
+        # statement and it stays open, "idle in transaction", until the connection closes.
+        autocommit=True,
+        # Name the session in pg_stat_activity: the database only sees a node IP, not the client's.
+        fallback_application_name=f"githubstats-query ({os.environ.get('USER', 'unknown')})",
+    )
     try:
         with conn.cursor() as cursor:
             cursor.execute(f"SET statement_timeout = {timeout * 1000}")

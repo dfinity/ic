@@ -292,6 +292,7 @@ pub fn start_server(
 
     let call_handler = IngressValidatorBuilder::builder(
         log.clone(),
+        metrics.clone(),
         node_id,
         subnet_id,
         registry_client.clone(),
@@ -335,6 +336,7 @@ pub fn start_server(
     let query_router = |version| {
         QueryServiceBuilder::builder(
             log.clone(),
+            metrics.clone(),
             node_id,
             query_signer.clone(),
             registry_client.clone(),

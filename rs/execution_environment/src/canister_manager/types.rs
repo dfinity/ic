@@ -2,6 +2,7 @@ use crate::execution_environment::{RoundContext, RoundLimits};
 use crate::types::Response;
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, SubnetAvailableMemoryError,
@@ -348,6 +349,23 @@ pub(crate) struct CanisterManagerResponse {
     pub snapshot_to_make_immutable: Option<SnapshotId>,
 }
 
+/// The role of the canister whose controllers a `CanisterInvalidController`
+/// error refers to.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub(crate) enum ControlledCanisterRole {
+    /// The canister targeted by the call.
+    Target,
+    /// The store canister whose chunks `install_chunked_code` uses to install
+    /// code on the canister `target_canister_id`.
+    ChunkStore { target_canister_id: CanisterId },
+    /// The canister owning the snapshot `snapshot_id` that is loaded into the
+    /// different canister `target_canister_id`.
+    SnapshotOwner {
+        target_canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
+}
+
 #[derive(Eq, PartialEq, Debug)]
 pub(crate) enum CanisterManagerError {
     InvalidSubnetAdmin {
@@ -356,6 +374,8 @@ pub(crate) enum CanisterManagerError {
     },
     CanisterInvalidController {
         canister_id: CanisterId,
+        // Boxed to keep `CanisterManagerError` small.
+        role: Box<ControlledCanisterRole>,
         controllers_expected: BTreeSet<PrincipalId>,
         controller_provided: PrincipalId,
     },
@@ -445,11 +465,6 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         value: NumBytes,
         limit: NumBytes,
-    },
-    CanisterSnapshotNotController {
-        sender: PrincipalId,
-        canister_id: CanisterId,
-        snapshot_id: SnapshotId,
     },
     CanisterSnapshotNotLoadable {
         canister_id: CanisterId,
@@ -574,12 +589,28 @@ impl AsErrorHelp for CanisterManagerError {
                             or add the current caller as a subnet admin.".to_string(),
                 doc_link: doc_ref("invalid-subnet-admin"),
             },
-            CanisterManagerError::CanisterInvalidController { .. } => ErrorHelp::UserError {
-                suggestion: "Execute this call from a controller of the target canister or \
-                add the current caller as a controller."
-                    .to_string(),
-                doc_link: doc_ref("invalid-controller"),
-            },
+            CanisterManagerError::CanisterInvalidController { role, .. } => {
+                let suggestion = match **role {
+                    ControlledCanisterRole::Target => {
+                        "Execute this call from a controller of the target canister or \
+                        add the current caller as a controller."
+                    }
+                    // The store canister itself can also use its chunks.
+                    ControlledCanisterRole::ChunkStore { .. } => {
+                        "Execute this call from the store canister itself or a controller \
+                        of the store canister, or add the current caller as a controller \
+                        of the store canister."
+                    }
+                    ControlledCanisterRole::SnapshotOwner { .. } => {
+                        "Execute this call from a controller of the canister owning the \
+                        snapshot or add the current caller as a controller of that canister."
+                    }
+                };
+                ErrorHelp::UserError {
+                    suggestion: suggestion.to_string(),
+                    doc_link: doc_ref("invalid-controller"),
+                }
+            }
             CanisterManagerError::CanisterInvalidControllerOrSubnetAdmin { .. } => ErrorHelp::UserError {
                 suggestion: "Execute this call from a controller of the target canister or subnet admin \
                             or add the current caller as a controller or subnet admin.".to_string(),
@@ -705,13 +736,6 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "Try waiting a few seconds before retrying the operation.".to_string(),
                 doc_link: doc_ref("canister-heap-delta-rate-limited"),
             },
-            CanisterManagerError::CanisterSnapshotNotController { .. } => {
-                ErrorHelp::UserError {
-                    suggestion: "Make sure you are a controller of the canister that the snapshot belongs to."
-                        .to_string(),
-                    doc_link: "canister-snapshot-not-controller".to_string(),
-                }
-            }
             CanisterManagerError::CanisterSnapshotNotLoadable { .. } => {
                 ErrorHelp::UserError {
                     suggestion: "Snapshot is not currently loadable on the specified canister. Try again later. The call should succeed if you wait sufficiently long (usually ten minutes)."
@@ -920,6 +944,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CanisterInvalidController {
                 canister_id,
+                role,
                 controllers_expected,
                 controller_provided,
             } => {
@@ -928,10 +953,27 @@ impl From<CanisterManagerError> for UserError {
                     .map(|id| format!("{id}"))
                     .collect::<Vec<String>>()
                     .join(" ");
+                let requirement = match *role {
+                    ControlledCanisterRole::Target => {
+                        format!("Only the controllers of the canister {canister_id} can control it")
+                    }
+                    // The store canister itself can also use its chunks.
+                    ControlledCanisterRole::ChunkStore { target_canister_id } => format!(
+                        "Only the canister {canister_id} itself and its controllers can use its \
+                        chunks to install code on the canister {target_canister_id}"
+                    ),
+                    ControlledCanisterRole::SnapshotOwner {
+                        target_canister_id,
+                        snapshot_id,
+                    } => format!(
+                        "Only the controllers of the canister {canister_id} can load its snapshot \
+                        {snapshot_id} into the canister {target_canister_id}"
+                    ),
+                };
                 Self::new(
                     ErrorCode::CanisterInvalidController,
                     format!(
-                        "Only the controllers of the canister {canister_id} can control it.\n\
+                        "{requirement}.\n\
                         Canister's controllers: {controllers_expected}\n\
                         Sender's ID: {controller_provided}{additional_help}"
                     ),
@@ -1144,17 +1186,6 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterSnapshotImmutable,
                 "Only canister snapshots created by metadata upload can be mutated, and only until they are loaded onto a canister.".to_string(),
             ),
-            CanisterSnapshotNotController {
-                sender,
-                canister_id,
-                snapshot_id,
-            } => Self::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "Only a controller of the canister that snapshot {} belongs to can load it on canister {}. Sender: {}.{additional_help}",
-                    snapshot_id, canister_id, sender,
-                ),
-            ),
             CanisterSnapshotNotLoadable {
                 canister_id,
                 snapshot_id,
@@ -1321,11 +1352,13 @@ impl From<CanisterManagerError> for RejectContext {
 /// install code. Install code can be executed in three modes - install,
 /// reinstall and upgrade.
 pub(crate) trait PausedInstallCodeExecution: Send + std::fmt::Debug {
+    /// Resumes a paused execution given the current subnet memory saturation.
     fn resume(
         self: Box<Self>,
         canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> DtsInstallCodeResult;
 
     /// Aborts the paused execution.

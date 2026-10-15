@@ -105,7 +105,7 @@ impl LedgerAccess for MockLedger {
 async fn test_network_status_returns_error_during_initial_sync() {
     let ledger = Arc::new(MockLedger::new());
     let canister_id = ledger.ledger_canister_id();
-    let canister_id_str = hex::encode(canister_id.get().into_vec());
+    let canister_id_str = hex::encode(canister_id.get_ref().as_slice());
 
     let initial_sync_complete = Arc::new(AtomicBool::new(false));
     let req_handler = RosettaRequestHandler::new(

@@ -1,10 +1,10 @@
 // This module defines types and functions common between canister installation
 // and upgrades.
 
-use crate::execution::common::{log_dirty_pages, validate_sender_on_subnet};
+use crate::execution::common::{CanisterAccess, log_dirty_pages, validate_sender_on_subnet};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
-use ic_cycles_account_manager::CyclesAccountManagerSubnetConfig;
+use ic_cycles_account_manager::{CyclesAccountManagerSubnetConfig, ResourceSaturation};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges},
     wasmtime_embedder::system_api::ExecutionParameters,
@@ -257,6 +257,7 @@ impl InstallCodeHelper {
         paused: PausedInstallCodeHelper,
         original: &OriginalContext,
         round: &RoundContext,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> Result<Self, (CanisterManagerError, NumInstructions, LogMemoryStore)> {
         let mut helper = Self::new(clean_canister, original);
         let paused_instructions_left = paused.instructions_left;
@@ -305,6 +306,10 @@ impl InstallCodeHelper {
         // this counter (see `handle_wasm_execution`), so it is restored after
         // replaying all the steps.
         helper.executed_wasm_instructions = executed_wasm_instructions;
+        // The subnet memory usage might have changed while the execution was
+        // paused. Use the current saturation for storage reservation, both in
+        // subsequent stages (e.g., `canister_init` after `(start)`) and in `finish`.
+        helper.execution_parameters.subnet_memory_saturation = subnet_memory_saturation;
         Ok(helper)
     }
 
@@ -400,9 +405,11 @@ impl InstallCodeHelper {
         if self.allocated_bytes > self.deallocated_bytes {
             let bytes = self.allocated_bytes - self.deallocated_bytes;
 
+            // The allocated bytes only count towards the subnet memory usage
+            // from now on. Use the subnet memory saturation at the start of the slice.
             let reservation_cycles = round.cycles_account_manager.storage_reservation_cycles(
                 bytes,
-                &original.execution_parameters.subnet_memory_saturation,
+                &self.execution_parameters.subnet_memory_saturation,
                 original.subnet_cycles_config,
             );
 
@@ -538,7 +545,7 @@ impl InstallCodeHelper {
 
         validate_sender_on_subnet(
             &original.sender,
-            original.method,
+            CanisterAccess::Method(original.method),
             &self.canister,
             &original.network_topology,
             config.own_subnet_id,

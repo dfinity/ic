@@ -95,6 +95,7 @@ use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::{btreemap, btreeset};
+use num_traits::SaturatingSub;
 use num_traits::ops::saturating::SaturatingAdd;
 use prometheus::IntCounter;
 use slog::Level;
@@ -1640,16 +1641,32 @@ impl ExecutionTest {
             // Install and snapshot load messages are always charged at the
             // Wasm32 rate: the actual Wasm execution mode of the module being
             // installed is not known before compilation in the sandbox.
+            //
+            // They prepay the full message instruction limit and refund the
+            // unused instructions afterwards. Both amounts are scaled by the
+            // subnet size separately (with truncation), so the net charge is
+            // computed the same way here rather than as the cost of
+            // `instructions_used` alone. The two differ by rounding whenever
+            // the subnet size is not the reference subnet size.
             Ok(Method::InstallCode)
             | Ok(Method::InstallChunkedCode)
-            | Ok(Method::LoadCanisterSnapshot) => self
-                .cycles_account_manager()
-                .execution_cost(
-                    instructions_used,
-                    self.get_own_subnet_cycles_config(),
+            | Ok(Method::LoadCanisterSnapshot) => {
+                let mgr = self.cycles_account_manager();
+                let subnet_cycles_config = self.get_own_subnet_cycles_config();
+                let prepaid_instructions = self.install_code_instruction_limits.message();
+                debug_assert!(instructions_used <= prepaid_instructions);
+                let prepaid = mgr.execution_cost(
+                    prepaid_instructions,
+                    subnet_cycles_config,
                     WasmExecutionMode::Wasm32,
-                )
-                .nominal(),
+                );
+                let refunded = mgr.variable_execution_cost(
+                    prepaid_instructions.saturating_sub(&instructions_used),
+                    subnet_cycles_config,
+                    WasmExecutionMode::Wasm32,
+                );
+                (prepaid - refunded).nominal()
+            }
             Ok(Method::UpdateSettings)
             | Ok(Method::UploadChunk)
             | Ok(Method::TakeCanisterSnapshot)
@@ -2493,6 +2510,7 @@ pub struct ExecutionTestBuilder {
     subnet_admins: BTreeSet<PrincipalId>,
     network_topology: Option<NetworkTopology>,
     log_level: Option<Level>,
+    replica_logger: Option<ReplicaLogger>,
     resource_limits: ResourceLimits,
 }
 
@@ -2534,6 +2552,7 @@ impl Default for ExecutionTestBuilder {
             subnet_admins: BTreeSet::new(),
             network_topology: None,
             log_level: Some(Level::Warning),
+            replica_logger: None,
             resource_limits: Default::default(),
         }
     }
@@ -2615,6 +2634,15 @@ impl ExecutionTestBuilder {
     /// Passing `None` turns off replica logs completely.
     pub fn with_log_level(self, log_level: Option<Level>) -> Self {
         Self { log_level, ..self }
+    }
+
+    /// Uses the given logger for replica logs (instead of a test logger
+    /// configured via `with_log_level`).
+    pub fn with_replica_logger(self, replica_logger: ReplicaLogger) -> Self {
+        Self {
+            replica_logger: Some(replica_logger),
+            ..self
+        }
     }
 
     pub fn with_ecdsa_signature_fee(self, ecdsa_signing_fee: u128) -> Self {
@@ -3197,7 +3225,10 @@ impl ExecutionTestBuilder {
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
         let state_manager = Arc::new(FakeStateManager::new());
 
-        let log = test_logger(self.log_level);
+        let log = self
+            .replica_logger
+            .clone()
+            .unwrap_or_else(|| test_logger(self.log_level));
         let execution_services = ExecutionServicesForTesting::setup_execution(
             log.clone(),
             &metrics_registry,

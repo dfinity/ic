@@ -71,6 +71,7 @@ impl TestFixture {
                     ),
                     ..Default::default()
                 },
+                ..Default::default()
             },
             ..Default::default()
         };

@@ -7,7 +7,9 @@
 
 use crate::CanisterManager;
 use crate::canister_logs::fetch_canister_logs_response;
-use crate::execution::common::{canister_info, list_canisters, validate_sender_on_subnet};
+use crate::execution::common::{
+    CanisterAccess, canister_info, list_canisters, validate_sender_on_subnet,
+};
 use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
@@ -47,7 +49,7 @@ pub(super) fn execute_subnet_query(
             let canister = get_canister(state, args.get_canister_id())?;
             validate_sender_on_subnet(
                 &caller,
-                Ic00Method::FetchCanisterLogs,
+                CanisterAccess::Method(Ic00Method::FetchCanisterLogs),
                 canister,
                 &state.metadata.network_topology,
                 state.metadata.own_subnet_id,

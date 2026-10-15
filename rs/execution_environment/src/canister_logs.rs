@@ -1,6 +1,6 @@
 use crate::canister_manager::types::{CanisterManagerError, CanisterManagerResponse};
 use crate::canister_settings::VisibilitySettings;
-use crate::execution::common::validate_sender_on_subnet;
+use crate::execution::common::{CanisterAccess, validate_sender_on_subnet};
 use crate::execution_environment::{RoundLimits, as_round_instructions};
 use candid::Encode;
 use ic_management_canister_types_private::{
@@ -21,7 +21,7 @@ pub(crate) fn fetch_canister_logs(
     let canister_id = canister.canister_id();
     validate_sender_on_subnet(
         &sender,
-        Ic00Method::FetchCanisterLogs,
+        CanisterAccess::Method(Ic00Method::FetchCanisterLogs),
         canister,
         network_topology,
         own_subnet_id,

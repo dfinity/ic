@@ -170,10 +170,21 @@ impl CanisterSignerIdentity {
     fn sign_bytes(&self, bytes: &[u8]) -> Vec<u8> {
         let fut = self.signer.sign(bytes);
         // The `Identity` trait's `sign*` methods are sync; the underlying
-        // signer is async. Bridge with `block_in_place` since we run under a
-        // multi-thread Tokio runtime.
+        // signer is async. ic-agent calls `sign` while a request of the same
+        // future is in flight; a nested `block_on` on this thread shares tokio's
+        // thread-local parker and swallows that request’s wake-up, so block
+        // on a helper thread instead. `block_in_place` releases the runtime
+        // worker core while we block, in case this identity is ever used from
+        // a worker.
+        let handle = tokio::runtime::Handle::current();
         #[allow(clippy::disallowed_methods)]
-        tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(fut))
+        tokio::task::block_in_place(|| {
+            std::thread::scope(|s| {
+                s.spawn(|| handle.block_on(fut))
+                    .join()
+                    .unwrap_or_else(|payload| std::panic::resume_unwind(payload))
+            })
+        })
     }
 }
 
@@ -269,7 +280,7 @@ async fn call(
                 .await
         }
     }
-    .unwrap_or_else(|e| panic!("{:?} call failed: {}", mode, e))
+    .unwrap_or_else(|e| panic!("{mode:?} call failed: {e} ({e:?})"))
 }
 
 fn run_sender_info_test(env: TestEnv, mode: CallMode) {

@@ -1,0 +1,29 @@
+# Binaries to be shadowed within the limited console
+
+# Shells
+sh
+dash
+rbash
+ssh
+
+# Interpreters
+awk
+mawk
+nawk
+sed
+# Globbing requires we use the full path
+/usr/bin/perl*
+/usr/bin/python*
+
+# Cmd redirections
+env
+find
+xargs
+strace
+rsync
+output-wrapper.sh
+
+# Pagers
+less
+systemctl
+journalctl

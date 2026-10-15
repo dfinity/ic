@@ -14,6 +14,7 @@ use crate::execution::install_code::{
 use crate::execution_environment::{RoundContext, RoundLimits};
 use crate::hypervisor::{CanisterMemoryHandling, MemoryHandling, MemorySource};
 use ic_base_types::PrincipalId;
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
     wasmtime_embedder::system_api::ApiType,
@@ -588,6 +589,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> DtsInstallCodeResult {
         info!(
             round.log,
@@ -599,6 +601,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
             self.paused_helper,
             &self.original,
             &round,
+            subnet_memory_saturation,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -699,6 +702,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> DtsInstallCodeResult {
         info!(
             round.log,
@@ -710,6 +714,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
             self.paused_helper,
             &self.original,
             &round,
+            subnet_memory_saturation,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -809,6 +814,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
         clean_canister: CanisterState,
         round: RoundContext,
         round_limits: &mut RoundLimits,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> DtsInstallCodeResult {
         info!(
             round.log,
@@ -820,6 +826,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
             self.paused_helper,
             &self.original,
             &round,
+            subnet_memory_saturation,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {

@@ -433,6 +433,7 @@ pub struct HttpEndpointHandles {
     pub query_execution: QueryExecutionHandle,
     pub terminal_state_ingress_messages: Sender<(MessageId, Height)>,
     pub certified_height_watcher: watch::Sender<Height>,
+    pub metrics: MetricsRegistry,
 }
 
 pub struct HttpEndpointBuilder {
@@ -448,6 +449,7 @@ pub struct HttpEndpointBuilder {
     ingress_pool_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_channel_capacity: usize,
     platform_version: Option<PlatformVersion>,
+    malicious_flags: MaliciousFlags,
 }
 
 impl HttpEndpointBuilder {
@@ -465,6 +467,7 @@ impl HttpEndpointBuilder {
             certified_height: None,
             ingress_channel_capacity: MAX_P2P_IO_CHANNEL_SIZE,
             platform_version: None,
+            malicious_flags: MaliciousFlags::default(),
         }
     }
 
@@ -527,6 +530,11 @@ impl HttpEndpointBuilder {
         self
     }
 
+    pub fn with_malicious_flags(mut self, malicious_flags: MaliciousFlags) -> Self {
+        self.malicious_flags = malicious_flags;
+        self
+    }
+
     pub fn run(self) -> HttpEndpointHandles {
         let metrics = MetricsRegistry::new();
         let log = no_op_logger();
@@ -576,7 +584,7 @@ impl HttpEndpointBuilder {
             log,
             self.consensus_cache,
             SubnetType::Application,
-            MaliciousFlags::default(),
+            self.malicious_flags,
             nns_delegation_reader,
             self.pprof_collector,
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
@@ -591,6 +599,7 @@ impl HttpEndpointBuilder {
             query_execution: query_exe_handler,
             terminal_state_ingress_messages: terminal_state_ingress_messages_tx,
             certified_height_watcher: certified_height_watcher_tx,
+            metrics,
         }
     }
 }

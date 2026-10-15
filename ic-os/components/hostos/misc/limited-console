@@ -8,6 +8,16 @@ source /opt/ic/bin/config.sh
 # instead of /bin/bash, preventing shell escape. Standard commands still work via /bin.
 RESTRICTED_PATH="/opt/ic/bin/rbash:/opt/ic/bin:/bin:/usr/bin"
 
+run_hardened() {
+    env -i \
+        TERM="$TERM" \
+        LESSSECURE=1 \
+        SYSTEMD_PAGER=/usr/bin/less \
+        SYSTEMD_PAGERSECURE=1 \
+        PATH="$RESTRICTED_PATH" \
+        "$@"
+}
+
 # Show available commands
 show_menu() {
     echo "=== HostOS Limited Console ==="
@@ -81,7 +91,7 @@ execute_command() {
             if [ -n "${2:-}" ]; then
                 # Only allow sane unit names, e.g. letters, digits, `-_.@`
                 if [[ "$2" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
-                    systemctl status "$2"
+                    run_hardened /usr/bin/systemctl status "$2"
                 else
                     echo "Invalid service name"
                 fi
@@ -94,7 +104,7 @@ execute_command() {
             if [ -n "${2:-}" ]; then
                 # Only allow sane unit names, e.g. letters, digits, `-_.@`
                 if [[ "$2" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
-                    journalctl -u "$2" --no-pager -n 50
+                    run_hardened /usr/bin/journalctl -u "$2" -e
                 else
                     echo "Invalid service name"
                 fi
@@ -105,19 +115,11 @@ execute_command() {
             ;;
         "config-json")
             echo "=== /boot/config/config.json ==="
-            env -i \
-                TERM="$TERM" \
-                LESSSECURE=1 \
-                PATH="$RESTRICTED_PATH" \
-                /usr/bin/less /boot/config/config.json
+            run_hardened /usr/bin/less /boot/config/config.json
             ;;
         "guestos-console-logs")
             echo "=== GuestOS Serial Console Logs ==="
-            env -i \
-                TERM="$TERM" \
-                LESSSECURE=1 \
-                PATH="$RESTRICTED_PATH" \
-                /usr/bin/less -f /var/log/libvirt/qemu/guestos-serial.log
+            run_hardened /usr/bin/less -f /var/log/libvirt/qemu/guestos-serial.log
             ;;
         "network-config-settings")
             echo "=== Network Settings from Config ==="
@@ -184,7 +186,7 @@ execute_command() {
             echo "Type 'exit' to return to the limited console menu."
             echo ""
             # Start rbash with restricted environment and PATH
-            PATH="$RESTRICTED_PATH" /bin/rbash
+            run_hardened /bin/rbash
             ;;
         "clear")
             clear
