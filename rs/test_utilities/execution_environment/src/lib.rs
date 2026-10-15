@@ -95,6 +95,7 @@ use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::{btreemap, btreeset};
+use num_traits::SaturatingSub;
 use num_traits::ops::saturating::SaturatingAdd;
 use prometheus::IntCounter;
 use slog::Level;
