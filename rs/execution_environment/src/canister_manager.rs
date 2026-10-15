@@ -1056,6 +1056,7 @@ impl CanisterManager {
     pub(crate) fn get_canister_metadata(
         &self,
         sender: PrincipalId,
+        network_topology: &NetworkTopology,
         canister: &CanisterState,
         section_name: &str,
     ) -> Result<CanisterMetadataResponse, CanisterManagerError> {
@@ -1072,21 +1073,21 @@ impl CanisterManager {
                 section_name: section_name.to_string(),
             })?;
 
-        let is_sender_controller = canister.controllers().contains(&sender);
-        let can_non_controller_read_section = match custom_section.visibility() {
-            CustomSectionType::Public => true,
-            CustomSectionType::Private => false,
-        };
-        if is_sender_controller || can_non_controller_read_section {
-            Ok(CanisterMetadataResponse::new(
-                custom_section.content().to_vec(),
-            ))
-        } else {
-            Err(CanisterManagerError::CanisterMetadataSectionNotFound {
-                canister_id: canister.canister_id(),
-                section_name: section_name.to_string(),
-            })
+        match custom_section.visibility() {
+            CustomSectionType::Public => {}
+            CustomSectionType::Private => validate_sender_on_subnet(
+                &sender,
+                CanisterAccess::ReadPrivateCustomSection {
+                    section_name: section_name.to_string(),
+                },
+                canister,
+                network_topology,
+                self.config.own_subnet_id,
+            )?,
         }
+        Ok(CanisterMetadataResponse::new(
+            custom_section.content().to_vec(),
+        ))
     }
 
     /// Reports the cycles the canister has consumed, by use case.
@@ -2196,17 +2197,19 @@ impl CanisterManager {
                     });
                 }
                 Some(snapshot) => {
-                    // Verify the provided `snapshot_id` belongs to a canister controlled by the sender.
-                    // Only perform the check if target canister to load the snapshot
-                    // is not the same as the one owning the snapshot.
-                    if snapshot_canister_id != canister_id
-                        && !snapshot_canister.controllers().contains(&sender)
-                    {
-                        return Err(CanisterManagerError::CanisterSnapshotNotController {
-                            sender,
-                            canister_id,
-                            snapshot_id,
-                        });
+                    // Loading the snapshot of a different canister requires
+                    // access to the canister owning the snapshot.
+                    if snapshot_canister_id != canister_id {
+                        validate_sender_on_subnet(
+                            &sender,
+                            CanisterAccess::LoadSnapshotIntoOtherCanister {
+                                target_canister_id: canister_id,
+                                snapshot_id,
+                            },
+                            &snapshot_canister,
+                            network_topology,
+                            self.config.own_subnet_id,
+                        )?;
                     }
                     snapshot.clone()
                 }
