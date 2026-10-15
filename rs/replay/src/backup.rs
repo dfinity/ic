@@ -230,6 +230,10 @@ where
 /// Deserializes consensus artifacts, reading them from the backup spool height
 /// by height and inserting them into the consensus pool. It stops at certain
 /// points which require the execution state to catch up.
+///
+/// `observed_files` holds the files of the artifacts inserted into the pool that weren't validated
+/// yet, by artifact hash. Only random tapes may stay in there across heights (see below), and the
+/// caller keeps it across calls so that their files are still known after resuming.
 // TODO(CON-1494): change the return type of this function. Most variants of ExitPoint
 // are not result of errors.
 pub(crate) fn deserialize_consensus_artifacts(
@@ -241,12 +245,10 @@ pub(crate) fn deserialize_consensus_artifacts(
     validator: &ReplayValidator,
     dkg_manager: &mut DkgKeyManager,
     invalid_artifacts: &mut Vec<InvalidArtifact>,
+    observed_files: &mut HashMap<ConsensusMessageHash, PathBuf>,
 ) -> Result<(), ExitPoint> {
     let time_source = validator.get_timesource();
     let mut last_cup_height: Option<Height> = None;
-    // The files of the artifacts inserted into the pool that weren't validated yet, by artifact
-    // hash. Only random tapes may stay in there across heights (see below).
-    let mut observed_files = HashMap::new();
 
     loop {
         let height = match height_to_batches.iter().next() {
@@ -315,8 +317,7 @@ pub(crate) fn deserialize_consensus_artifacts(
                 rename_file(&file);
             } else {
                 let message = finalization.into_message();
-                observed_files.insert(message.get_cm_hash(), file);
-                artifacts.push(message);
+                artifacts.push((message, file));
             }
         }
 
@@ -352,8 +353,7 @@ pub(crate) fn deserialize_consensus_artifacts(
             }
 
             let message = proposal.into_message();
-            observed_files.insert(message.get_cm_hash(), file);
-            artifacts.push(message);
+            artifacts.push((message, file));
         }
 
         // Insert the random beacon and the random tape.
@@ -369,8 +369,7 @@ pub(crate) fn deserialize_consensus_artifacts(
             "random beacon",
             height,
         )?;
-        observed_files.insert(rb.get_cm_hash(), rb_path);
-        artifacts.push(rb.into_message());
+        artifacts.push((rb.into_message(), rb_path));
 
         let rt_path = path.join("random_tape.bin");
         if !rt_path.exists() {
@@ -384,8 +383,7 @@ pub(crate) fn deserialize_consensus_artifacts(
             "random tape",
             height,
         )?;
-        observed_files.insert(rt.get_cm_hash(), rt_path);
-        artifacts.push(rt.into_message());
+        artifacts.push((rt.into_message(), rt_path));
 
         // Insert the finalized notarization.
         if let Some(file_name) = height_artifacts.notarizations.first() {
@@ -396,11 +394,11 @@ pub(crate) fn deserialize_consensus_artifacts(
                 height,
             )?;
             let message = not.into_message();
-            observed_files.insert(message.get_cm_hash(), file);
-            artifacts.push(message);
+            artifacts.push((message, file));
         }
 
-        artifacts.into_iter().for_each(|message| {
+        artifacts.into_iter().for_each(|(message, file)| {
+            observed_files.insert(message.get_cm_hash(), file);
             pool.insert(UnvalidatedArtifact {
                 message,
                 peer_id: validator.replica_cfg.node_id,
@@ -651,6 +649,7 @@ mod tests {
             let mut height_to_batches =
                 heights_to_artifacts_metadata(self.dir.path(), Height::from(1)).unwrap();
             let mut invalid_artifacts = Vec::new();
+            let mut observed_files = HashMap::new();
             let mut exits = Vec::new();
             loop {
                 let result = deserialize_consensus_artifacts(
@@ -662,6 +661,7 @@ mod tests {
                     &validator,
                     &mut dkg_manager,
                     &mut invalid_artifacts,
+                    &mut observed_files,
                 );
                 let finalized_height = PoolReader::new(&pool).get_finalized_height();
                 let cup_height = match &result {

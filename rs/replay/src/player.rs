@@ -1090,6 +1090,8 @@ impl Player {
             .unwrap()
             .new_key_manager(&PoolReader::new(self.consensus_pool.as_ref().unwrap()));
         let mut invalid_artifacts = Vec::new();
+        // The files of the artifacts that weren't validated yet.
+        let mut observed_files = HashMap::new();
         // We start with the specified height and restore heights until we run out of
         // heights on the backup spool or bump into a newer replica version.
         loop {
@@ -1102,6 +1104,7 @@ impl Player {
                 self.validator.as_ref().unwrap(),
                 &mut dkg_manager,
                 &mut invalid_artifacts,
+                &mut observed_files,
             );
 
             // We don't want to replay heights strictly above the next CUP.
