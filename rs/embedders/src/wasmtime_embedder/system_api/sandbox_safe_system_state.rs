@@ -391,13 +391,12 @@ impl SystemStateModifications {
         system_state: &mut SystemState,
         metrics: &Metrics,
     ) {
-        let mut canister_log = self.canister_log.take();
-        if !canister_log.is_empty() {
-            metrics.observe_delta_log_size(canister_log.bytes_used());
+        if !self.canister_log.is_empty() {
+            metrics.observe_delta_log_size(self.canister_log.bytes_used());
         }
         system_state
             .log_memory_store
-            .append_delta_log(&mut canister_log);
+            .append_delta_log(&mut self.canister_log);
     }
 
     /// Verify that the changes to the system state are sound and apply them to
@@ -411,6 +410,11 @@ impl SystemStateModifications {
         is_composite_query: bool,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
+        debug_assert!(
+            self.canister_log.is_empty(),
+            "Canister logs must be applied via `apply_canister_log()` before applying the other changes"
+        );
+
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
