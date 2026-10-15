@@ -826,8 +826,9 @@ pub(super) struct InjectedCounters {
     /// Function to count clean pages.
     pub count_clean_pages_fn: u32,
     /// Functions that charge instructions for a bulk memory operation on the
-    /// heap and check it against the heap page budget.
-    pub heap_bulk_check_fns: HeapBulkCheckFns,
+    /// heap and check it against the heap page budget, indexed by
+    /// [`HeapBulkOp`].
+    pub heap_bulk_check_fns: [u32; 3],
 }
 
 /// The bulk memory operations on the heap, which differ in which of their
@@ -835,15 +836,17 @@ pub(super) struct InjectedCounters {
 #[derive(Copy, Clone, PartialEq, Debug)]
 enum HeapBulkOp {
     /// `memory.copy`: destination and source are heap addresses.
-    Copy,
+    Copy = 0,
     /// `memory.fill`: `(dst, value, len)`, only the destination is a heap address.
-    Fill,
+    Fill = 1,
     /// `memory.init`: `(dst, segment offset, len)`, only the destination is a
     /// heap address; the offset and length are `i32` even in Wasm64.
-    Init,
+    Init = 2,
 }
 
 impl HeapBulkOp {
+    const ALL: [Self; 3] = [Self::Copy, Self::Fill, Self::Init];
+
     /// The operand types of the operation, which are also the parameter and
     /// result types of its check function.
     fn operand_types(self, mem_type: WasmMemoryType) -> [DataType; 3] {
@@ -856,27 +859,6 @@ impl HeapBulkOp {
     }
 }
 
-/// Indices of the per-operation heap bulk check functions.
-pub(super) struct HeapBulkCheckFns {
-    copy: u32,
-    fill: u32,
-    init: u32,
-}
-
-impl HeapBulkCheckFns {
-    fn get(&self, op: HeapBulkOp) -> u32 {
-        match op {
-            HeapBulkOp::Copy => self.copy,
-            HeapBulkOp::Fill => self.fill,
-            HeapBulkOp::Init => self.init,
-        }
-    }
-
-    fn contains(&self, func_id: u32) -> bool {
-        [self.copy, self.fill, self.init].contains(&func_id)
-    }
-}
-
 /// Injects the check function for the given bulk memory operation on the heap.
 ///
 /// The function takes the three operands of the operation, charges
@@ -884,11 +866,12 @@ impl HeapBulkCheckFns {
 /// operation against the heap page budget and returns the operands unchanged,
 /// so that it can be called right before the operation.
 ///
-/// The check has a fast path in Wasm: the operation touches at most `need`
-/// Wasm pages, the number of pages spanned by its heap ranges. If
-/// `need <= budget`, the operation cannot exceed the limit whatever the state
-/// of the pages. Otherwise `__.check_heap_bulk_access` counts exactly the
-/// pages that are not yet accessed and traps if the operation does not fit.
+/// The check has a fast path in Wasm that only looks at the length: a range
+/// of `len` bytes touches at most `(len >> 16) + 2` Wasm pages, and a copy
+/// twice that. If this bound fits into the budget, the operation cannot
+/// exceed the limit whatever the state of the pages. Otherwise
+/// `__.check_heap_bulk_access` counts exactly the pages that are not yet
+/// accessed and traps if the operation does not fit.
 fn inject_heap_bulk_check_fn(
     module: &mut wirm::Module<'_>,
     mem_type: WasmMemoryType,
@@ -913,33 +896,6 @@ fn inject_heap_bulk_check_fn(
             _ => vec![LocalGet { local_index }],
         }
     };
-    // Pushes the number of Wasm pages spanned by `[addr, addr + len)` for a
-    // non-zero length: `((addr + len - 1) >> 16) - (addr >> 16) + 1`.
-    // Computed in `i64`, so it does not wrap for Wasm32 operands.
-    let span = |addr: u32| -> Vec<wirm::wasmparser::Operator<'static>> {
-        let mut ops = get_as_i64(addr);
-        ops.extend([
-            LocalGet { local_index: LEN64 },
-            I64Add,
-            I64Const { value: 1 },
-            I64Sub,
-            I64Const {
-                value: WASM_PAGE_SIZE.trailing_zeros() as i64,
-            },
-            I64ShrU,
-        ]);
-        ops.extend(get_as_i64(addr));
-        ops.extend([
-            I64Const {
-                value: WASM_PAGE_SIZE.trailing_zeros() as i64,
-            },
-            I64ShrU,
-            I64Sub,
-            I64Const { value: 1 },
-            I64Add,
-        ]);
-        ops
-    };
 
     let mut instructions = Vec::new();
     // Charge instructions for the length, like `decr_instruction_counter_fn`.
@@ -950,19 +906,18 @@ fn inject_heap_bulk_check_fn(
             function_index: decr_instruction_counter_fn,
         },
         Drop,
-        // Operations of length zero touch no page.
+        // Upper bound on the number of pages touched: `(len >> 16) + 2` per
+        // heap range.
         LocalGet { local_index: LEN64 },
-        I64Const { value: 0 },
-        I64Ne,
-        If {
-            blockty: BlockType::Empty,
+        I64Const {
+            value: WASM_PAGE_SIZE.trailing_zeros() as i64,
         },
+        I64ShrU,
+        I64Const { value: 2 },
+        I64Add,
     ]);
-    // need = span(dst) [+ span(src)]
-    instructions.extend(span(DST));
     if op == HeapBulkOp::Copy {
-        instructions.extend(span(SRC));
-        instructions.push(I64Add);
+        instructions.extend([I64Const { value: 1 }, I64Shl]);
     }
     instructions.extend([
         GlobalGet {
@@ -989,7 +944,6 @@ fn inject_heap_bulk_check_fn(
         Call {
             function_index: check_heap_bulk_access_fn,
         },
-        End,
         End,
         // Return the operands unchanged.
         LocalGet { local_index: DST },
@@ -1230,27 +1184,16 @@ fn export_additional_symbols<'a>(
 
     // push the functions checking bulk memory operations on the heap against
     // the heap page budget
-    let heap_bulk_check_fns = {
-        let mut inject = |op| {
-            inject_heap_bulk_check_fn(
-                &mut module,
-                main_memory_type,
-                op,
-                heap_page_budget,
-                *decr_instruction_counter_fn_id,
-                injected_functions.check_heap_bulk_access,
-            )
-        };
-        let copy = inject(HeapBulkOp::Copy);
-        let fill = inject(HeapBulkOp::Fill);
-        let init = match main_memory_type {
-            // In Wasm32, `memory.fill` and `memory.init` have the same
-            // operand types and heap operands, so they share the function.
-            WasmMemoryType::Wasm32 => fill,
-            WasmMemoryType::Wasm64 => inject(HeapBulkOp::Init),
-        };
-        HeapBulkCheckFns { copy, fill, init }
-    };
+    let heap_bulk_check_fns = HeapBulkOp::ALL.map(|op| {
+        inject_heap_bulk_check_fn(
+            &mut module,
+            main_memory_type,
+            op,
+            heap_page_budget,
+            *decr_instruction_counter_fn_id,
+            injected_functions.check_heap_bulk_access,
+        )
+    });
 
     // function to count clean pages in a given range
     // Arg 0 - start of the range
@@ -1655,7 +1598,7 @@ fn inject_metering(
                 // against the heap page budget and returns the operands
                 // unchanged.
                 elems.extend([Call {
-                    function_index: injected_counters.heap_bulk_check_fns.get(op),
+                    function_index: injected_counters.heap_bulk_check_fns[op as usize],
                 }]);
             }
         }
@@ -1875,7 +1818,7 @@ pub(super) fn instrument(
         .filter(|f| {
             *f.func_id != injected_counters.decr_instruction_counter_fn
                 && *f.func_id != injected_counters.count_clean_pages_fn
-                && !injected_counters.heap_bulk_check_fns.contains(*f.func_id)
+                && !injected_counters.heap_bulk_check_fns.contains(&*f.func_id)
         })
     {
         inject_metering(
