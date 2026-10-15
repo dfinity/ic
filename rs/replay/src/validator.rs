@@ -305,8 +305,8 @@ impl ReplayValidator {
     /// Validate the given consensus pool by moving its artifacts to the unvalidated section of a
     /// temp pool, and doing validation there.
     /// If the temp pool does not reach the target height, return a
-    /// [ReplayError::ValidationIncomplete] with the new finalized height and the invalid artifacts
-    /// found.
+    /// [ReplayError::ValidationIncomplete] with the first height that couldn't be finalized and the
+    /// invalid artifacts found.
     /// Return just the invalid artifacts otherwise.
     pub(crate) fn validate_in_tmp_pool(
         &self,
