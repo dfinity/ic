@@ -244,6 +244,9 @@ pub(crate) fn deserialize_consensus_artifacts(
 ) -> Result<(), ExitPoint> {
     let time_source = validator.get_timesource();
     let mut last_cup_height: Option<Height> = None;
+    // The files of the artifacts inserted into the pool that weren't validated yet, by artifact
+    // hash. Only random tapes may stay in there across heights (see below).
+    let mut observed_files = HashMap::new();
 
     loop {
         let height = match height_to_batches.iter().next() {
@@ -274,7 +277,6 @@ pub(crate) fn deserialize_consensus_artifacts(
         }
 
         let mut artifacts = Vec::new();
-        let mut observed_files = HashMap::new();
 
         if height_artifacts.proposals.is_empty() {
             println!(
