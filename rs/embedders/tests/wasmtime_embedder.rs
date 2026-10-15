@@ -1145,16 +1145,42 @@ fn run_with_heap_page_limit(
     (result, accessed)
 }
 
-/// The expectations shared by the Wasm32 and Wasm64 variants of the bulk
-/// memory tests: method name, heap page limit, whether the method exceeds
-/// the limit, and the number of Wasm pages accessed afterwards.
-fn assert_bulk_memory_ops_respect_heap_page_limit(wat: &str) {
-    #[derive(Debug, Clone, Copy, PartialEq)]
-    enum Expected {
-        Succeeds,
-        ExceedsLimit,
-        TrapsOutOfBounds,
+/// The outcome of running a method under a heap page limit.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Expected {
+    Succeeds,
+    ExceedsLimit,
+    TrapsOutOfBounds,
+}
+
+/// Runs each case `(method, heap page limit, expected outcome, expected
+/// number of accessed Wasm pages afterwards)` on a fresh instance of `wat`.
+fn assert_heap_page_limit_cases(wat: &str, cases: &[(&str, u64, Expected, usize)]) {
+    use Expected::*;
+    for &(method, limit, expected, expected_accessed) in cases {
+        let (result, accessed) = run_with_heap_page_limit(wat, limit, method);
+        match (expected, &result) {
+            (Succeeds, Ok(_)) => {}
+            (ExceedsLimit, Err(HypervisorError::MemoryAccessLimitExceeded(_))) => {}
+            (
+                TrapsOutOfBounds,
+                Err(HypervisorError::Trapped {
+                    trap_code: TrapCode::HeapOutOfBounds,
+                    ..
+                }),
+            ) => {}
+            _ => panic!("{method} with limit {limit}: expected {expected:?}, got {result:?}"),
+        }
+        assert_eq!(
+            accessed, expected_accessed,
+            "{method} with limit {limit}: accessed pages"
+        );
     }
+}
+
+/// The expectations shared by the Wasm32 and Wasm64 variants of the bulk
+/// memory tests.
+fn assert_bulk_memory_ops_respect_heap_page_limit(wat: &str) {
     use Expected::*;
     let cases = [
         // Fast path: the bound of `(len >> 16) + 2` pages per heap range fits
@@ -1203,25 +1229,7 @@ fn assert_bulk_memory_ops_respect_heap_page_limit(wat: &str) {
         ("fill_out_of_bounds", 1, TrapsOutOfBounds, 0),
         ("copy_from_out_of_bounds", 2, TrapsOutOfBounds, 0),
     ];
-    for (method, limit, expected, expected_accessed) in cases {
-        let (result, accessed) = run_with_heap_page_limit(wat, limit, method);
-        match (expected, &result) {
-            (Succeeds, Ok(_)) => {}
-            (ExceedsLimit, Err(HypervisorError::MemoryAccessLimitExceeded(_))) => {}
-            (
-                TrapsOutOfBounds,
-                Err(HypervisorError::Trapped {
-                    trap_code: TrapCode::HeapOutOfBounds,
-                    ..
-                }),
-            ) => {}
-            _ => panic!("{method} with limit {limit}: expected {expected:?}, got {result:?}"),
-        }
-        assert_eq!(
-            accessed, expected_accessed,
-            "{method} with limit {limit}: accessed pages"
-        );
-    }
+    assert_heap_page_limit_cases(wat, &cases);
 }
 
 /// A module with a 4-page heap and one method per bulk memory operation
@@ -1284,6 +1292,122 @@ fn wasm_memory_accessed_page_limit_for_bulk_memory_ops_wasm32() {
 #[test]
 fn wasm_memory_accessed_page_limit_for_bulk_memory_ops_wasm64() {
     assert_bulk_memory_ops_respect_heap_page_limit(&bulk_memory_ops_wat(true));
+}
+
+/// A module with a 4-page heap and one method per stable memory operation
+/// under test. `wasm64` selects the heap address type, `api64` the 64-bit
+/// stable API (`stable64_read`/`stable64_write` with `i64` operands) instead
+/// of the 32-bit one; Wasm64 modules only have the 64-bit API.
+fn stable_memory_ops_wat(wasm64: bool, api64: bool) -> String {
+    let (a, memory) = if wasm64 {
+        ("i64", "i64 4")
+    } else {
+        ("i32", "4")
+    };
+    let (s, read, write) = if api64 {
+        ("i64", "stable64_read", "stable64_write")
+    } else {
+        ("i32", "stable_read", "stable_write")
+    };
+    format!(
+        r#"
+    (module
+        (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+        (import "ic0" "{read}" (func $stable_read (param {s} {s} {s})))
+        (import "ic0" "{write}" (func $stable_write (param {s} {s} {s})))
+        (func $grow (drop (call $stable_grow (i64.const 4))))
+        ;; stable_read(dst, offset, len) writes to the heap at dst
+        (func (export "canister_update read_pages_0_1")
+            (call $grow)
+            (call $stable_read ({s}.const 0) ({s}.const 0) ({s}.const 131072)))
+        (func (export "canister_update read_pages_0_1_2")
+            (call $grow)
+            (call $stable_read ({s}.const 0) ({s}.const 0) ({s}.const 196608)))
+        ;; stable_write(offset, src, len) reads from the heap at src
+        (func (export "canister_update write_from_pages_0_1")
+            (call $grow)
+            (call $stable_write ({s}.const 0) ({s}.const 0) ({s}.const 131072)))
+        ;; The write marks stable page 0 as accessed, so the read takes the
+        ;; `memory.copy` branch instead of the first-access host call.
+        (func (export "canister_update write_page_0_then_read_into_page_2")
+            (call $grow)
+            (call $stable_write ({s}.const 0) ({s}.const 0) ({s}.const 4))
+            (call $stable_read ({s}.const 131072) ({s}.const 0) ({s}.const 4)))
+        (func (export "canister_update load_page_0_then_read_into_page_0")
+            (call $grow)
+            (drop (i32.load ({a}.const 0)))
+            (call $stable_read ({s}.const 8) ({s}.const 0) ({s}.const 4)))
+        (func (export "canister_update load_page_0_then_read_into_page_1")
+            (call $grow)
+            (drop (i32.load ({a}.const 0)))
+            (call $stable_read ({s}.const 65536) ({s}.const 0) ({s}.const 4)))
+        (func (export "canister_update load_page_0_then_write_from_page_0")
+            (call $grow)
+            (drop (i32.load ({a}.const 0)))
+            (call $stable_write ({s}.const 0) ({s}.const 8) ({s}.const 4)))
+        (func (export "canister_update read_zero_bytes_into_page_3")
+            (call $grow)
+            (call $stable_read ({s}.const 196608) ({s}.const 0) ({s}.const 0)))
+        (func (export "canister_update read_out_of_bounds")
+            (call $grow)
+            (call $stable_read ({s}.const 196608) ({s}.const 0) ({s}.const 131072)))
+        (func (export "canister_update write_from_out_of_bounds")
+            (call $grow)
+            (call $stable_write ({s}.const 0) ({s}.const 196608) ({s}.const 131072)))
+        (memory (export "memory") {memory})
+    )"#
+    )
+}
+
+/// The injected `stable_read`/`stable_write` bodies check their heap range
+/// against the heap page limit before copying, like bulk memory operations.
+fn assert_stable_memory_ops_respect_heap_page_limit(wat: &str) {
+    use Expected::*;
+    let cases = [
+        // Fast path: the bound of `(len >> 16) + 2` pages fits into the budget.
+        ("read_pages_0_1", 4, Succeeds, 2),
+        ("write_from_pages_0_1", 4, Succeeds, 2),
+        // Slow path: the host counts the pages exactly. Nothing is mapped if
+        // the check fails.
+        ("read_pages_0_1", 2, Succeeds, 2),
+        ("read_pages_0_1", 1, ExceedsLimit, 0),
+        ("read_pages_0_1_2", 3, Succeeds, 3),
+        ("read_pages_0_1_2", 2, ExceedsLimit, 0),
+        ("write_from_pages_0_1", 2, Succeeds, 2),
+        ("write_from_pages_0_1", 1, ExceedsLimit, 0),
+        // Both branches of `stable_read` are covered: the first-access host
+        // call (above) and the `memory.copy` of already accessed stable pages.
+        ("write_page_0_then_read_into_page_2", 2, Succeeds, 2),
+        ("write_page_0_then_read_into_page_2", 1, ExceedsLimit, 1),
+        // Accessed heap pages do not count.
+        ("load_page_0_then_read_into_page_0", 1, Succeeds, 1),
+        ("load_page_0_then_read_into_page_1", 1, ExceedsLimit, 1),
+        ("load_page_0_then_write_from_page_0", 1, Succeeds, 1),
+        // Zero-length operations touch no page.
+        ("read_zero_bytes_into_page_3", 0, Succeeds, 0),
+        // Out-of-bounds heap ranges trap without touching any page, on the
+        // fast path (bound 4, budget 4) and on the slow path (budget 1).
+        ("read_out_of_bounds", 4, TrapsOutOfBounds, 0),
+        ("read_out_of_bounds", 1, TrapsOutOfBounds, 0),
+        ("write_from_out_of_bounds", 4, TrapsOutOfBounds, 0),
+        ("write_from_out_of_bounds", 1, TrapsOutOfBounds, 0),
+    ];
+    assert_heap_page_limit_cases(wat, &cases);
+}
+
+#[test]
+fn wasm_memory_accessed_page_limit_for_stable_memory_ops_wasm32() {
+    assert_stable_memory_ops_respect_heap_page_limit(&stable_memory_ops_wat(false, false));
+}
+
+#[test]
+fn wasm_memory_accessed_page_limit_for_stable64_memory_ops_wasm32() {
+    assert_stable_memory_ops_respect_heap_page_limit(&stable_memory_ops_wat(false, true));
+}
+
+#[test]
+fn wasm_memory_accessed_page_limit_for_stable64_memory_ops_wasm64() {
+    assert_stable_memory_ops_respect_heap_page_limit(&stable_memory_ops_wat(true, true));
 }
 
 /// The injected check charges the same instructions for a bulk memory
