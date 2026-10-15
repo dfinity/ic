@@ -492,6 +492,11 @@ impl ResponseHelper {
         reserved_cleanup_instructions: NumInstructions,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
+        // Canister logs are persisted even if the other changes are not.
+        canister_state_changes
+            .system_state_modifications
+            .apply_canister_log(&mut self.canister.system_state, round.hypervisor.metrics());
+
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -527,10 +532,6 @@ impl ResponseHelper {
                 self.canister.canister_id(),
                 err,
             );
-            // Canister logs are persisted even if the other changes are not.
-            canister_state_changes
-                .system_state_modifications
-                .apply_canister_log(&mut self.canister.system_state, round.hypervisor.metrics());
             // Return total instructions: wasm executor leftovers + cleanup reservation.
             return Err((
                 self,

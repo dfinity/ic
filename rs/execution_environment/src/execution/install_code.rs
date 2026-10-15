@@ -684,6 +684,10 @@ impl InstallCodeHelper {
             mut system_state_modifications,
         } = canister_state_changes;
 
+        // Canister logs are persisted even if the other changes are not.
+        system_state_modifications
+            .apply_canister_log(&mut self.canister.system_state, round.hypervisor.metrics());
+
         // Charge the ingress induction debit before applying the state changes of
         // the Wasm execution below: the latter may burn cycles via
         // `ic0.cycles_burn128()`, which would otherwise leave a debit that the
@@ -750,11 +754,6 @@ impl InstallCodeHelper {
                     self.canister.canister_id(),
                     err,
                 );
-                // Canister logs are persisted even if the other changes are not.
-                system_state_modifications.apply_canister_log(
-                    &mut self.canister.system_state,
-                    round.hypervisor.metrics(),
-                );
                 return (
                     instructions_consumed,
                     Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
@@ -762,9 +761,9 @@ impl InstallCodeHelper {
             }
         }
 
-        // Apply system state changes always.
-        // The result will be checked later after we've checked the wasm execution result so that we
-        // don't miss logging in case there was an error from Wasm execution.
+        // Apply the remaining system state changes, but check the Wasm execution
+        // result first so that a Wasm failure takes precedence over a failure to
+        // apply these changes.
         let result_of_applying_system_state_modifications = system_state_modifications
             .apply_changes(
                 original.time,

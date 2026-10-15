@@ -506,6 +506,14 @@ impl CallOrTaskHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
+        // Canister logs are persisted even if the other changes are not.
+        // Both states need the log because either may be returned below.
+        canister_state_changes
+            .system_state_modifications
+            .apply_canister_log(&mut clean_canister.system_state, round.hypervisor.metrics());
+        self.canister
+            .set_log(clean_canister.system_state.log_memory_store.clone());
+
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -556,10 +564,6 @@ impl CallOrTaskHelper {
                 err,
             );
             self.deallocation_sender.send(Box::new(self.canister));
-            // Canister logs are persisted even if the other changes are not.
-            canister_state_changes
-                .system_state_modifications
-                .apply_canister_log(&mut clean_canister.system_state, round.hypervisor.metrics());
             // Perf counter: no need to update the call context, as it won't be saved.
             return finish_err(
                 clean_canister,
@@ -601,27 +605,21 @@ impl CallOrTaskHelper {
             }
             // Query methods only persist certain changes to the canister's state.
             CanisterCallOrTask::Query(_) => {
-                let mut system_state_modifications =
-                    canister_state_changes.system_state_modifications;
-                // Canister logs are persisted even if applying the other
-                // changes fails below.
-                system_state_modifications.apply_canister_log(
-                    &mut self.canister.system_state,
-                    round.hypervisor.metrics(),
-                );
-                if let Err(err) = system_state_modifications.apply_changes(
-                    round.time,
-                    &mut self.canister.system_state,
-                    &round.network_topology,
-                    round.hypervisor.subnet_id(),
-                    // Composite queries are always executed in the
-                    // non-replicated mode: a composite query called in the
-                    // replicated mode is rejected before its execution.
-                    false,
-                    round.hypervisor.metrics(),
-                    round.log,
-                ) {
-                    clean_canister.set_log(self.canister.system_state.log_memory_store.clone());
+                if let Err(err) = canister_state_changes
+                    .system_state_modifications
+                    .apply_changes(
+                        round.time,
+                        &mut self.canister.system_state,
+                        &round.network_topology,
+                        round.hypervisor.subnet_id(),
+                        // Composite queries are always executed in the
+                        // non-replicated mode: a composite query called in the
+                        // replicated mode is rejected before its execution.
+                        false,
+                        round.hypervisor.metrics(),
+                        round.log,
+                    )
+                {
                     return finish_err(
                         clean_canister,
                         output.num_instructions_left,
