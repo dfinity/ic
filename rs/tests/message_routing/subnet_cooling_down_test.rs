@@ -121,9 +121,9 @@ const INIT_INSTRUCTIONS: u64 = 295 * B;
 /// `U7`. The test never sets it, so those loops never end.
 const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 
-/// The number of nodes of every subnet. More than one so that the minima and
-/// maxima the merge readiness condition is made of range over more than one
-/// replica.
+/// The number of nodes of every subnet. More than one so that the terms of the
+/// merge readiness condition, each of which has to hold on at least 2/3 of the
+/// replicas of a subnet, range over more than one replica.
 const SUBNET_SIZE: usize = 4;
 
 /// The DKG interval length of the Application subnets, i.e. one less than the
@@ -385,7 +385,8 @@ async fn run(env: TestEnv) {
 /// The terms are evaluated by `ic_subnet_merging::readiness`, i.e. by the same
 /// code a subnet merging tool evaluates them with. Every term is evaluated
 /// repeatedly until all of `VIOLATED_CONDITIONS` are violated at the same
-/// evaluation.
+/// evaluation with every replica successfully scraped, so missing data cannot
+/// stand in for the violations this scenario is meant to exercise.
 async fn check_conditions_violated(
     topology: &TopologySnapshot,
     m_subnet: &SubnetSnapshot,
@@ -412,8 +413,20 @@ async fn check_conditions_violated(
         CONDITIONS_TIMEOUT,
         CONDITIONS_BACKOFF,
         || async {
-            let terms =
+            let readiness =
                 evaluate_merge_readiness(&subnets, m_subnet.subnet_id, registry_version).await?;
+            if !readiness.scrape_failures.is_empty() {
+                bail!(
+                    "cannot check readiness violations with incomplete metrics: {}",
+                    readiness
+                        .scrape_failures
+                        .iter()
+                        .map(|(subnet_id, err)| format!("subnet {subnet_id}: {err}"))
+                        .collect::<Vec<_>>()
+                        .join("; "),
+                );
+            }
+            let terms = readiness.terms;
             let satisfied: Vec<&str> = VIOLATED_CONDITIONS
                 .iter()
                 .map(|condition| term(&terms, *condition))
