@@ -17,8 +17,8 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     Height, RegistryVersion, SubnetId,
     consensus::{
-        BlockProposal, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable, Finalization,
-        HasHeight, Notarization, RandomBeacon, RandomTape,
+        BlockProposal, CatchUpPackage, ConsensusMessage, ConsensusMessageHash,
+        ConsensusMessageHashable, Finalization, HasHeight, Notarization, RandomBeacon, RandomTape,
     },
     time::UNIX_EPOCH,
 };
@@ -273,7 +273,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         }
 
         let mut artifacts = Vec::new();
-        let mut expected = HashMap::new();
+        let mut observed_files = HashMap::new();
 
         if height_artifacts.proposals.is_empty() {
             println!(
@@ -315,7 +315,7 @@ pub(crate) fn deserialize_consensus_artifacts(
                 rename_file(&file);
             } else {
                 let message = finalization.into_message();
-                expected.insert(message.get_cm_hash(), file);
+                observed_files.insert(message.get_cm_hash(), file);
                 artifacts.push(message);
             }
         }
@@ -352,7 +352,7 @@ pub(crate) fn deserialize_consensus_artifacts(
             }
 
             let message = proposal.into_message();
-            expected.insert(message.get_cm_hash(), file);
+            observed_files.insert(message.get_cm_hash(), file);
             artifacts.push(message);
         }
 
@@ -369,6 +369,7 @@ pub(crate) fn deserialize_consensus_artifacts(
             "random beacon",
             height,
         )?;
+        observed_files.insert(rb.get_cm_hash(), rb_path);
         artifacts.push(rb.into_message());
 
         let rt_path = path.join("random_tape.bin");
@@ -383,6 +384,7 @@ pub(crate) fn deserialize_consensus_artifacts(
             "random tape",
             height,
         )?;
+        observed_files.insert(rt.get_cm_hash(), rt_path);
         artifacts.push(rt.into_message());
 
         // Insert the finalized notarization.
@@ -394,7 +396,7 @@ pub(crate) fn deserialize_consensus_artifacts(
                 height,
             )?;
             let message = not.into_message();
-            expected.insert(message.get_cm_hash(), file);
+            observed_files.insert(message.get_cm_hash(), file);
             artifacts.push(message);
         }
 
@@ -414,25 +416,15 @@ pub(crate) fn deserialize_consensus_artifacts(
             last_finalized_height
         };
         // call validator, which moves artifacts to validated or removes invalid
-        let (mut invalid, failure_after_height) =
-            match validator.validate(pool, &mut expected, dkg_manager, target_height) {
-                Ok(artifacts) => (artifacts, None),
-                Err(ReplayError::ValidationIncomplete(h, artifacts)) => (artifacts, Some(h)),
-                Err(other) => {
-                    println!("Unexpected failure during validation: {other:?}");
-                    (Vec::new(), Some(last_finalized_height))
-                }
-            };
+        let (mut invalid, validated) = validator.validate(pool, dkg_manager);
+        let new_finalized_height = PoolReader::new(pool).get_finalized_height();
+        println!("Validated artifacts up to new finalized height: {new_finalized_height}");
+
         for i in &invalid {
-            match i.get_file_name() {
-                Some(name) => {
-                    let artifact_path = path.join(name);
-                    assert!(
-                        artifact_path.exists(),
-                        "Path to invalid artifact doesn't exist."
-                    );
+            match observed_files.get(&i.id.hash) {
+                Some(artifact_path) => {
                     println!("Invalid artifact detected: {:?}", artifact_path);
-                    rename_file(&artifact_path);
+                    rename_file(artifact_path);
                     return Err(ExitPoint::ValidationIncomplete(height));
                 }
                 None => println!("Failed to get path for invalid artifact: {i:?}"),
@@ -440,24 +432,36 @@ pub(crate) fn deserialize_consensus_artifacts(
         }
         invalid_artifacts.append(&mut invalid);
 
-        // All the artifacts that we expect to be validated and hence removed from the collection.
-        // If they weren't we remove them here and hopefully rsync the correct ones next time.
-        for (_, artifact_path) in expected {
+        // If any artifact that we expect to be validated is not, we remove it here and hopefully
+        // rsync the correct ones next time.
+        for artifact_path in observed_files
+            .iter()
+            .filter(|(hash, _)| !validated.contains(hash))
+            // Exception for  the random tape: even though there is a random tape at that height, it
+            // could legitimately stay unvalidated because the validator only validates tapes up to
+            // `finalized_height + 1`. Thus, if there were no finalizations at that height nor at
+            // the previous height, the tape at the current height would be left invalidated. Though
+            // do not worry: as soon as a later finalization is found, the tape is still in the
+            // unvalidated pool and will still be validated (or reported as invalid otherwise).
+            .filter(|(hash, _)| !matches!(hash, ConsensusMessageHash::RandomTape(..)))
+            .map(|(_, path)| path)
+        {
             println!("Artifact couldn't be validated: {artifact_path:?}");
-            rename_file(&artifact_path);
+            rename_file(artifact_path);
         }
 
-        if let Some(height) = failure_after_height {
-            return Err(ExitPoint::ValidationIncomplete(height));
+        if new_finalized_height < target_height {
+            return Err(ExitPoint::ValidationIncomplete(new_finalized_height));
         }
 
         // If we just inserted a height_artifacts, which finalizes the last seen CUP
         // height, we need to deliver all batches before we insert the cup.
         if let Some(cup_height) = last_cup_height
-            && height >= cup_height
-            && !height_artifacts.finalizations.is_empty()
+            && new_finalized_height >= cup_height
         {
-            println!("Found a CUP at height {cup_height:?}, finalized at height {height:?}");
+            println!(
+                "Found a CUP at height {cup_height:?}, finalized at height {new_finalized_height:?}"
+            );
             return Err(ExitPoint::CUPHeightWasFinalized(cup_height));
         }
     }

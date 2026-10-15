@@ -599,37 +599,25 @@ impl BackupArtifact {
         Ok(buf)
     }
 
-    /// Returns the name of the file in which the artifact is stored.
-    pub fn get_file_name(&self) -> &'static str {
-        match self {
-            BackupArtifact::Finalization(_) => "finalization.bin",
-            BackupArtifact::Notarization(_) => "notarization.bin",
-            BackupArtifact::BlockProposal(_) => "block_proposal.bin",
-            BackupArtifact::RandomTape(_) => "random_tape.bin",
-            BackupArtifact::RandomBeacon(_) => "random_beacon.bin",
-            BackupArtifact::CatchUpPackage(_) => "catch_up_package.bin",
-        }
-    }
-
     /// Each artifact will be stored separately used the following path:
     ///
     /// <subnet_id>/<replica_version>/<(height / N) * N>/height/<artifact_specific_name>.bin
     pub fn file_location(&self, path: &Path) -> (PathBuf, String) {
         // Create a subdirectory for the height
-        let height = match self {
-            BackupArtifact::Finalization(artifact) => artifact.height(),
-            BackupArtifact::Notarization(artifact) => artifact.height(),
-            BackupArtifact::BlockProposal(artifact) => artifact.height(),
-            BackupArtifact::RandomTape(artifact) => artifact.height(),
-            BackupArtifact::RandomBeacon(artifact) => artifact.height(),
-            BackupArtifact::CatchUpPackage((height, _)) => *height,
+        let (height, file_name) = match self {
+            BackupArtifact::Finalization(artifact) => (artifact.height(), "finalization.bin"),
+            BackupArtifact::Notarization(artifact) => (artifact.height(), "notarization.bin"),
+            BackupArtifact::BlockProposal(artifact) => (artifact.height(), "block_proposal.bin"),
+            BackupArtifact::RandomTape(artifact) => (artifact.height(), "random_tape.bin"),
+            BackupArtifact::RandomBeacon(artifact) => (artifact.height(), "random_beacon.bin"),
+            BackupArtifact::CatchUpPackage((height, _)) => (*height, "catch_up_package.bin"),
         };
         // We group heights by directories to avoid running into any kind of unexpected
         // FS inode limitations. Each group directory will contain at most
         // [BACKUP_GROUP_SIZE] heights.
         let group_key = (height.get() / BACKUP_GROUP_SIZE) * BACKUP_GROUP_SIZE;
         let path_with_height = path.join(group_key.to_string()).join(height.to_string());
-        (path_with_height, self.get_file_name().to_string())
+        (path_with_height, file_name.to_string())
     }
 }
 
