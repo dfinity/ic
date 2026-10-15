@@ -21,6 +21,8 @@ The backup system continuously syncs consensus artifacts from subnet nodes, repl
 - **THEN** artifacts are synced from up to `nodes_syncing` (default 5) randomly selected subnet nodes via rsync
 - **AND** the backup user authenticates with the configured SSH private key
 - **AND** artifacts are stored in a spool directory organized by `{subnet_id}/{replica_version}/{bucket}/{height}`
+- **AND** rsync is run with `--exclude=*.tmp` unquoted, so the `.tmp` files a replica creates while writing an artifact are genuinely excluded from the spool, rather than only appearing to be by a glob pattern rsync never expands
+- **AND** `--ignore-existing` means a `.tmp` file that did make it into the spool before this fix is never replaced by the real artifact afterwards
 
 #### Scenario: Backup replay verification
 - **WHEN** the replay period elapses (default 240 seconds)
