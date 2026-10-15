@@ -488,6 +488,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::fake::FakeVerifier;
     use ic_test_utilities_types::ids::node_test_id;
+    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
     use tempfile::TempDir;
 
     const DKG_INTERVAL_LENGTH: u64 = 9;
@@ -603,10 +604,16 @@ mod tests {
             }
         }
 
+        fn file(&self, height: u64, file_name: &str) -> PathBuf {
+            cup_file_name(self.dir.path(), Height::from(height)).with_file_name(file_name)
+        }
+
         fn remove(&self, height: u64, file_name: &str) {
-            let file =
-                cup_file_name(self.dir.path(), Height::from(height)).with_file_name(file_name);
-            fs::remove_file(file).unwrap();
+            fs::remove_file(self.file(height, file_name)).unwrap();
+        }
+
+        fn replace(&self, height: u64, file_name: &str, artifact: impl Message) {
+            fs::write(self.file(height, file_name), artifact.encode_to_vec()).unwrap();
         }
 
         /// Deserializes the spool from height 1 into a fresh pool the way `restore_from_backup`
@@ -708,5 +715,106 @@ mod tests {
                 )]
             );
         }
+    }
+
+    /// Replaces the artifact in the given file of the spool at the given height with an invalid
+    /// one, which only the validator can tell apart from a valid one.
+    fn replace_with_invalid_artifact(spool: &Spool, height: u64, file_name: &str) {
+        let validated = spool.deps.pool.validated();
+        let h = Height::from(height);
+        match file_name {
+            "block_proposal.bin" => {
+                let mut proposal = validated.block_proposal().get_by_height(h).next().unwrap();
+                // Only the single node of the subnet is a block maker.
+                proposal.signature.signer = node_test_id(1);
+                spool.replace(height, file_name, pb::BlockProposal::from(proposal));
+            }
+            // The fake signatures of the test pool have no signers, so they lack a quorum.
+            "notarization.bin" => {
+                let notarization = validated.notarization().get_by_height(h).next().unwrap();
+                spool.replace(height, file_name, pb::Notarization::from(notarization));
+            }
+            "finalization.bin" => {
+                let finalization = validated.finalization().get_by_height(h).next().unwrap();
+                spool.replace(height, file_name, pb::Finalization::from(finalization));
+            }
+            // Random beacons and tapes must be signed by the low-threshold DKG instance.
+            "random_beacon.bin" => {
+                let mut beacon = validated.random_beacon().get_by_height(h).next().unwrap();
+                beacon.signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+                spool.replace(height, file_name, pb::RandomBeacon::from(beacon));
+            }
+            "random_tape.bin" => {
+                let mut tape = validated.random_tape().get_by_height(h).next().unwrap();
+                tape.signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+                spool.replace(height, file_name, pb::RandomTape::from(tape));
+            }
+            _ => panic!("Unexpected file name {file_name}"),
+        }
+    }
+
+    fn assert_renamed(spool: &Spool, height: u64, file_name: &str) {
+        assert!(
+            !spool.file(height, file_name).exists()
+                && spool.file(height, &format!("invalid_{file_name}")).exists(),
+            "{file_name} at height {height} was not renamed"
+        );
+    }
+
+    /// The restore renames the file of an artifact that the validator rejects as invalid, so that
+    /// the next rsync replaces it, and stops at its height.
+    #[test]
+    fn invalid_artifacts_are_renamed() {
+        const HEIGHT: u64 = CUP_HEIGHT / 2;
+        for file_name in [
+            "block_proposal.bin",
+            "notarization.bin",
+            "finalization.bin",
+            "random_beacon.bin",
+            "random_tape.bin",
+        ] {
+            let spool = Spool::new();
+            replace_with_invalid_artifact(&spool, HEIGHT, file_name);
+
+            let results: Vec<_> = spool
+                .restore()
+                .into_iter()
+                .map(|(result, _)| result)
+                .collect();
+
+            assert_eq!(
+                results,
+                vec![Err(ExitPoint::ValidationIncomplete(Height::from(HEIGHT)))],
+                "{file_name}"
+            );
+            assert_renamed(&spool, HEIGHT, file_name);
+        }
+    }
+
+    /// The validator only validates random tapes up to the height above the finalized one. So if
+    /// there are no finalizations at two consecutive heights, the tape at the second one is only
+    /// validated along with the next finalization. If that tape is invalid, its file must still be
+    /// renamed, and the restore must report its height as the one that failed.
+    #[test]
+    fn invalid_random_tape_validated_at_a_later_height_is_renamed() {
+        const HEIGHT: u64 = CUP_HEIGHT / 2;
+        let spool = Spool::new();
+        spool.remove(HEIGHT - 1, "finalization.bin");
+        spool.remove(HEIGHT, "finalization.bin");
+        replace_with_invalid_artifact(&spool, HEIGHT, "random_tape.bin");
+
+        let results: Vec<_> = spool
+            .restore()
+            .into_iter()
+            .map(|(result, _)| result)
+            .collect();
+
+        assert_eq!(
+            results,
+            vec![Err(ExitPoint::ValidationIncomplete(Height::from(HEIGHT)))]
+        );
+        assert_renamed(&spool, HEIGHT, "random_tape.bin");
+        // The valid tape at the height at which the invalid one was found is left alone.
+        assert!(spool.file(HEIGHT + 1, "random_tape.bin").exists());
     }
 }
