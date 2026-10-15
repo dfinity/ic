@@ -306,60 +306,28 @@ impl DeterministicState {
         first_page..last_page + 1
     }
 
-    /// Returns true if accessing all pages in the specified byte range fits
-    /// within the accessed page limit.
-    fn range_fits_limit(&self, byte_range: Range<u64>) -> bool {
-        let Some(limit) = self.max_accessed_wasm_pages else {
-            return true;
-        };
-        self.wasm_page_ranges_fit_limit(limit, Self::wasm_page_range(&byte_range), 0..0)
-    }
-
     /// Returns true if accessing all pages in both byte ranges fits within the
     /// accessed page limit. Pages shared by the two ranges are counted once.
     fn ranges_fit_limit(&self, first: Range<u64>, second: Range<u64>) -> bool {
         let Some(limit) = self.max_accessed_wasm_pages else {
             return true;
         };
-        let mut first = Self::wasm_page_range(&first);
-        let mut second = Self::wasm_page_range(&second);
-        if first.is_empty() || second.is_empty() {
-            first = if first.is_empty() { second } else { first };
-            second = 0..0;
-        } else {
-            if first.start > second.start {
-                std::mem::swap(&mut first, &mut second);
-            }
-            // Merge overlapping or adjacent page ranges so that no page is
-            // counted twice.
-            if second.start <= first.end {
-                first = first.start..first.end.max(second.end);
-                second = 0..0;
-            }
-        }
-        self.wasm_page_ranges_fit_limit(limit, first, second)
-    }
-
-    /// Returns true if accessing all pages in the two disjoint Wasm page ranges
-    /// fits within the accessed page limit.
-    fn wasm_page_ranges_fit_limit(
-        &self,
-        limit: NumWasmPages,
-        first: Range<usize>,
-        second: Range<usize>,
-    ) -> bool {
-        debug_assert!(
-            first.is_empty() || second.is_empty() || first.end <= second.start,
-            "the ranges must be disjoint and ordered"
-        );
+        let first = Self::wasm_page_range(&first);
+        let second = Self::wasm_page_range(&second);
+        // Inclusion-exclusion: pages in both ranges are counted twice by the
+        // sum, so the overlap is subtracted. If the ranges are disjoint, the
+        // overlap is an inverted or empty range of length zero.
+        let overlap = first.start.max(second.start)..first.end.min(second.end);
         let accessed = self.accessed_wasm_pages_count.get();
         // Fast path: even if every page in the ranges is new, we stay within the limit.
-        if accessed + first.len() + second.len() <= limit.get() {
+        let distinct = first.len() + second.len() - overlap.len();
+        if accessed + distinct <= limit.get() {
             return true;
         }
         accessed
             + self.count_unaccessed_wasm_pages(first)
             + self.count_unaccessed_wasm_pages(second)
+            - self.count_unaccessed_wasm_pages(overlap)
             <= limit.get()
     }
 
@@ -592,9 +560,7 @@ impl DeterministicMemoryTracker {
     /// start of the tracked memory) fits within the accessed page limit, given
     /// the pages accessed so far.
     pub fn check_range_fits(&self, byte_range: Range<u64>) -> bool {
-        // SAFETY: The caller must ensure that the tracker has a deterministic state.
-        let state = &*self.state.borrow();
-        state.range_fits_limit(byte_range)
+        self.check_ranges_fit(byte_range, 0..0)
     }
 
     /// Like `check_range_fits`, but for two byte ranges that are accessed by

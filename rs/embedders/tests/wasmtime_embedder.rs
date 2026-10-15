@@ -1151,58 +1151,65 @@ fn run_with_heap_page_limit(
 fn assert_bulk_memory_ops_respect_heap_page_limit(wat: &str) {
     #[derive(Debug, Clone, Copy, PartialEq)]
     enum Expected {
-        Ok,
-        LimitExceeded,
-        OutOfBounds,
+        Succeeds,
+        ExceedsLimit,
+        TrapsOutOfBounds,
     }
     use Expected::*;
     let cases = [
-        // Fast path: the operation spans at most `budget` pages.
-        ("fill_pages_0_1", 2, Ok, 2),
-        ("copy_page_0_to_1", 2, Ok, 2),
-        ("init_page_0", 2, Ok, 1),
-        // The operation spans more pages than the budget and nothing is
-        // mapped before the check fails.
-        ("fill_pages_0_1_2", 2, LimitExceeded, 0),
-        ("fill_pages_0_1_2", 3, Ok, 3),
-        ("copy_page_0_to_2", 1, LimitExceeded, 0),
-        ("copy_page_0_to_2", 2, Ok, 2),
-        ("init_page_0", 0, LimitExceeded, 0),
+        // Fast path: the bound of `(len >> 16) + 2` pages per heap range fits
+        // into the budget.
+        ("fill_pages_0_1", 4, Succeeds, 2),
+        ("copy_page_0_to_1", 6, Succeeds, 2),
+        ("init_page_0", 2, Succeeds, 1),
+        // Slow path: the bound exceeds the budget, so the host counts the
+        // pages exactly. Nothing is mapped if the check fails.
+        ("fill_pages_0_1", 2, Succeeds, 2),
+        ("fill_pages_0_1_2", 2, ExceedsLimit, 0),
+        ("fill_pages_0_1_2", 3, Succeeds, 3),
+        ("copy_page_0_to_1", 2, Succeeds, 2),
+        ("copy_page_0_to_2", 1, ExceedsLimit, 0),
+        ("copy_page_0_to_2", 2, Succeeds, 2),
+        ("init_page_0", 0, ExceedsLimit, 0),
         // The exact check only counts distinct unaccessed pages: a copy whose
-        // source and destination share pages spans 4 pages in total but only
-        // touches pages 0 and 1.
-        ("copy_overlapping_pages_0_1", 2, Ok, 2),
-        ("copy_overlapping_pages_0_1", 1, LimitExceeded, 0),
+        // source and destination share pages only touches pages 0 and 1.
+        ("copy_overlapping_pages_0_1", 2, Succeeds, 2),
+        ("copy_overlapping_pages_0_1", 1, ExceedsLimit, 0),
         // Accessed pages do not count: loads from pages 0 and 1 use up the
         // budget, but filling them again fits, filling a new page does not.
-        ("load_pages_0_1_then_fill_them", 2, Ok, 2),
-        ("load_pages_0_1_then_fill_page_2", 2, LimitExceeded, 2),
+        ("load_pages_0_1_then_fill_them", 2, Succeeds, 2),
+        ("load_pages_0_1_then_fill_page_2", 2, ExceedsLimit, 2),
         // A short copy with a constant length is expanded inline by the
         // compiler; it is checked all the same.
         (
             "load_pages_0_1_then_copy_8_bytes_to_page_2",
             2,
-            LimitExceeded,
+            ExceedsLimit,
             2,
         ),
-        ("load_pages_0_1_then_copy_8_bytes_within_page_1", 2, Ok, 2),
-        // Zero-length operations touch no page.
-        ("fill_zero_bytes_at_page_3", 0, Ok, 0),
+        (
+            "load_pages_0_1_then_copy_8_bytes_within_page_1",
+            2,
+            Succeeds,
+            2,
+        ),
+        // Zero-length operations touch no page, also when the host checks them.
+        ("fill_zero_bytes_at_page_3", 0, Succeeds, 0),
         // Out-of-bounds operations trap without touching any page, also when
         // they would exceed the limit.
-        // ... both on the fast path (2 pages spanned, budget 2) ...
-        ("fill_out_of_bounds", 2, OutOfBounds, 0),
-        // ... and on the slow path (2 pages spanned, budget 1).
-        ("fill_out_of_bounds", 1, OutOfBounds, 0),
-        ("copy_from_out_of_bounds", 2, OutOfBounds, 0),
+        // ... both on the fast path (bound 4, budget 4) ...
+        ("fill_out_of_bounds", 4, TrapsOutOfBounds, 0),
+        // ... and on the slow path (bound 4, budget 1).
+        ("fill_out_of_bounds", 1, TrapsOutOfBounds, 0),
+        ("copy_from_out_of_bounds", 2, TrapsOutOfBounds, 0),
     ];
     for (method, limit, expected, expected_accessed) in cases {
         let (result, accessed) = run_with_heap_page_limit(wat, limit, method);
         match (expected, &result) {
-            (Ok, std::result::Result::Ok(_)) => {}
-            (LimitExceeded, Err(HypervisorError::MemoryAccessLimitExceeded(_))) => {}
+            (Succeeds, Ok(_)) => {}
+            (ExceedsLimit, Err(HypervisorError::MemoryAccessLimitExceeded(_))) => {}
             (
-                OutOfBounds,
+                TrapsOutOfBounds,
                 Err(HypervisorError::Trapped {
                     trap_code: TrapCode::HeapOutOfBounds,
                     ..
@@ -1217,95 +1224,66 @@ fn assert_bulk_memory_ops_respect_heap_page_limit(wat: &str) {
     }
 }
 
-const BULK_MEMORY_OPS_WAT_WASM32: &str = r#"
+/// A module with a 4-page heap and one method per bulk memory operation
+/// under test, with `i32` or `i64` heap addresses.
+fn bulk_memory_ops_wat(wasm64: bool) -> String {
+    let (a, memory) = if wasm64 {
+        ("i64", "i64 4")
+    } else {
+        ("i32", "4")
+    };
+    format!(
+        r#"
     (module
         (func (export "canister_update fill_pages_0_1")
-            (memory.fill (i32.const 0) (i32.const 1) (i32.const 131072)))
+            (memory.fill ({a}.const 0) (i32.const 1) ({a}.const 131072)))
         (func (export "canister_update fill_pages_0_1_2")
-            (memory.fill (i32.const 0) (i32.const 1) (i32.const 196608)))
+            (memory.fill ({a}.const 0) (i32.const 1) ({a}.const 196608)))
         (func (export "canister_update copy_page_0_to_1")
-            (memory.copy (i32.const 65536) (i32.const 0) (i32.const 65536)))
+            (memory.copy ({a}.const 65536) ({a}.const 0) ({a}.const 65536)))
         (func (export "canister_update copy_page_0_to_2")
-            (memory.copy (i32.const 131072) (i32.const 0) (i32.const 65536)))
+            (memory.copy ({a}.const 131072) ({a}.const 0) ({a}.const 65536)))
         (func (export "canister_update copy_overlapping_pages_0_1")
             ;; source [100, 65636), destination [1000, 66536)
-            (memory.copy (i32.const 1000) (i32.const 100) (i32.const 65536)))
+            (memory.copy ({a}.const 1000) ({a}.const 100) ({a}.const 65536)))
         (func (export "canister_update init_page_0")
-            (memory.init 0 (i32.const 0) (i32.const 0) (i32.const 4)))
+            (memory.init 0 ({a}.const 0) (i32.const 0) (i32.const 4)))
         (func (export "canister_update load_pages_0_1_then_fill_them")
-            (drop (i32.load (i32.const 0)))
-            (drop (i32.load (i32.const 65536)))
-            (memory.fill (i32.const 0) (i32.const 1) (i32.const 131072)))
+            (drop (i32.load ({a}.const 0)))
+            (drop (i32.load ({a}.const 65536)))
+            (memory.fill ({a}.const 0) (i32.const 1) ({a}.const 131072)))
         (func (export "canister_update load_pages_0_1_then_fill_page_2")
-            (drop (i32.load (i32.const 0)))
-            (drop (i32.load (i32.const 65536)))
-            (memory.fill (i32.const 131072) (i32.const 1) (i32.const 1)))
+            (drop (i32.load ({a}.const 0)))
+            (drop (i32.load ({a}.const 65536)))
+            (memory.fill ({a}.const 131072) (i32.const 1) ({a}.const 1)))
         (func (export "canister_update load_pages_0_1_then_copy_8_bytes_to_page_2")
-            (drop (i32.load (i32.const 0)))
-            (drop (i32.load (i32.const 65536)))
-            (memory.copy (i32.const 131072) (i32.const 0) (i32.const 8)))
+            (drop (i32.load ({a}.const 0)))
+            (drop (i32.load ({a}.const 65536)))
+            (memory.copy ({a}.const 131072) ({a}.const 0) ({a}.const 8)))
         (func (export "canister_update load_pages_0_1_then_copy_8_bytes_within_page_1")
-            (drop (i32.load (i32.const 0)))
-            (drop (i32.load (i32.const 65536)))
-            (memory.copy (i32.const 65600) (i32.const 65536) (i32.const 8)))
+            (drop (i32.load ({a}.const 0)))
+            (drop (i32.load ({a}.const 65536)))
+            (memory.copy ({a}.const 65600) ({a}.const 65536) ({a}.const 8)))
         (func (export "canister_update fill_zero_bytes_at_page_3")
-            (memory.fill (i32.const 196608) (i32.const 1) (i32.const 0)))
+            (memory.fill ({a}.const 196608) (i32.const 1) ({a}.const 0)))
         (func (export "canister_update fill_out_of_bounds")
-            (memory.fill (i32.const 196608) (i32.const 1) (i32.const 131072)))
+            (memory.fill ({a}.const 196608) (i32.const 1) ({a}.const 131072)))
         (func (export "canister_update copy_from_out_of_bounds")
-            (memory.copy (i32.const 0) (i32.const 196608) (i32.const 131072)))
-        (memory (export "memory") 4)
+            (memory.copy ({a}.const 0) ({a}.const 196608) ({a}.const 131072)))
+        (memory (export "memory") {memory})
         (data "\01\02\03\04")
-    )"#;
-
-const BULK_MEMORY_OPS_WAT_WASM64: &str = r#"
-    (module
-        (func (export "canister_update fill_pages_0_1")
-            (memory.fill (i64.const 0) (i32.const 1) (i64.const 131072)))
-        (func (export "canister_update fill_pages_0_1_2")
-            (memory.fill (i64.const 0) (i32.const 1) (i64.const 196608)))
-        (func (export "canister_update copy_page_0_to_1")
-            (memory.copy (i64.const 65536) (i64.const 0) (i64.const 65536)))
-        (func (export "canister_update copy_page_0_to_2")
-            (memory.copy (i64.const 131072) (i64.const 0) (i64.const 65536)))
-        (func (export "canister_update copy_overlapping_pages_0_1")
-            (memory.copy (i64.const 1000) (i64.const 100) (i64.const 65536)))
-        (func (export "canister_update init_page_0")
-            (memory.init 0 (i64.const 0) (i32.const 0) (i32.const 4)))
-        (func (export "canister_update load_pages_0_1_then_fill_them")
-            (drop (i32.load (i64.const 0)))
-            (drop (i32.load (i64.const 65536)))
-            (memory.fill (i64.const 0) (i32.const 1) (i64.const 131072)))
-        (func (export "canister_update load_pages_0_1_then_fill_page_2")
-            (drop (i32.load (i64.const 0)))
-            (drop (i32.load (i64.const 65536)))
-            (memory.fill (i64.const 131072) (i32.const 1) (i64.const 1)))
-        (func (export "canister_update load_pages_0_1_then_copy_8_bytes_to_page_2")
-            (drop (i32.load (i64.const 0)))
-            (drop (i32.load (i64.const 65536)))
-            (memory.copy (i64.const 131072) (i64.const 0) (i64.const 8)))
-        (func (export "canister_update load_pages_0_1_then_copy_8_bytes_within_page_1")
-            (drop (i32.load (i64.const 0)))
-            (drop (i32.load (i64.const 65536)))
-            (memory.copy (i64.const 65600) (i64.const 65536) (i64.const 8)))
-        (func (export "canister_update fill_zero_bytes_at_page_3")
-            (memory.fill (i64.const 196608) (i32.const 1) (i64.const 0)))
-        (func (export "canister_update fill_out_of_bounds")
-            (memory.fill (i64.const 196608) (i32.const 1) (i64.const 131072)))
-        (func (export "canister_update copy_from_out_of_bounds")
-            (memory.copy (i64.const 0) (i64.const 196608) (i64.const 131072)))
-        (memory (export "memory") i64 4)
-        (data "\01\02\03\04")
-    )"#;
+    )"#
+    )
+}
 
 #[test]
 fn wasm_memory_accessed_page_limit_for_bulk_memory_ops_wasm32() {
-    assert_bulk_memory_ops_respect_heap_page_limit(BULK_MEMORY_OPS_WAT_WASM32);
+    assert_bulk_memory_ops_respect_heap_page_limit(&bulk_memory_ops_wat(false));
 }
 
 #[test]
 fn wasm_memory_accessed_page_limit_for_bulk_memory_ops_wasm64() {
-    assert_bulk_memory_ops_respect_heap_page_limit(BULK_MEMORY_OPS_WAT_WASM64);
+    assert_bulk_memory_ops_respect_heap_page_limit(&bulk_memory_ops_wat(true));
 }
 
 /// The injected check charges the same instructions for a bulk memory

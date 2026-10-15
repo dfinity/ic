@@ -72,9 +72,7 @@ impl TrackerHeapAccess {
             kib(self.limits.query),
         ))
     }
-}
 
-impl TrackerHeapAccess {
     /// Checks the two heap ranges of a bulk memory operation (its destination
     /// and, for a copy within the heap, its source) together, so that pages
     /// shared by the two ranges are counted once.
@@ -83,14 +81,12 @@ impl TrackerHeapAccess {
             return Ok(());
         };
         let as_u64 = |range: Range<usize>| range.start as u64..range.end as u64;
-        let fits = match src {
-            None => tracker.lock().check_range_fits(as_u64(dst)),
-            Some(src) => tracker.lock().check_ranges_fit(as_u64(dst), as_u64(src)),
-        };
-        self.result(fits)
-    }
-
-    fn result(&self, fits: bool) -> HypervisorResult<()> {
+        // Host functions run on the Wasm thread while no signal is being
+        // handled, so the lock is uncontended. Only the bitmap is consulted
+        // under the lock; no heap memory is touched.
+        let fits = tracker
+            .lock()
+            .check_ranges_fit(as_u64(dst), as_u64(src.unwrap_or(0..0)));
         if fits {
             Ok(())
         } else {
@@ -102,18 +98,6 @@ impl TrackerHeapAccess {
 
 impl HeapAccessCheck for TrackerHeapAccess {
     fn check(&self, range: Range<usize>) -> HypervisorResult<()> {
-        if range.is_empty() {
-            return Ok(());
-        }
-        let Some(tracker) = &self.tracker else {
-            return Ok(());
-        };
-        // Host functions run on the Wasm thread while no signal is being
-        // handled, so the lock is uncontended. Only the bitmap is consulted
-        // under the lock; no heap memory is touched.
-        let fits = tracker
-            .lock()
-            .check_range_fits(range.start as u64..range.end as u64);
-        self.result(fits)
+        self.check_bulk(range, None)
     }
 }
