@@ -3,10 +3,11 @@
 //!
 //! For the subnet `S` that is cooling down and a registry version `V` at which
 //! it is labeled as such, the condition holds iff all of the following
-//! terms, one per `Condition`, hold. Every term ranges over one or more
-//! subnets, and holds iff, on each of these subnets, at least 2/3 of the
-//! replicas (see `quorum`) can be scraped and satisfy it. A replica that
-//! cannot be scraped satisfies no term.
+//! terms hold. On every subnet, the same quorum of at least 2/3 of its
+//! replicas (see `quorum`) must be scraped and satisfy all applicable terms
+//! together, including `RegistryVersion`. The individual terms below report
+//! their own quorums for diagnostics; `CommonQuorum` enforces their conjunction
+//! on each replica. A replica that cannot be scraped satisfies no term.
 //!
 //! 1. `RegistryVersion`: a replica of any subnet satisfies it iff it reports
 //!    `mr_registry_version >= V`.
@@ -25,6 +26,8 @@
 //!    `replicated_state_subnet_call_contexts > 0` for any type.
 //! 8. `RefundPool`: a replica of `S` satisfies it iff it reports no
 //!    `replicated_state_pending_refunds > 0`.
+//! 9. `CommonQuorum`: on each subnet, at least 2/3 of its replicas satisfy all
+//!    applicable conditions above together.
 
 use crate::metrics_helper::{self, Labels, Metrics, ScrapeError};
 
@@ -68,6 +71,8 @@ pub enum Condition {
     SubnetOutputQueues,
     SubnetCallContexts,
     RefundPool,
+    /// On each subnet, the same quorum satisfies all applicable conditions.
+    CommonQuorum,
 }
 
 /// A term of the readiness condition: which condition it states, what has to
@@ -112,10 +117,12 @@ impl std::error::Error for ReadinessError {}
 /// is cooling down and a registry version `V` at which it is labeled as such.
 /// Returns one term per condition.
 ///
-/// Every term has to hold on at least 2/3 of the replicas of every subnet it
-/// ranges over. A node that cannot be scraped does not fail the evaluation, but
-/// satisfies no term: most terms compare against zero, which missing data
-/// would satisfy.
+/// On every subnet, the same quorum of at least 2/3 of the replicas must
+/// satisfy all applicable conditions, including the registry version. The
+/// `CommonQuorum` term checks this in addition to the individual terms, so
+/// readiness holds iff every returned term is satisfied.
+/// A node that cannot be scraped does not fail the evaluation, but satisfies
+/// no term: most terms compare against zero, which missing data would satisfy.
 pub async fn evaluate_merge_readiness(
     subnets: &SubnetNodeIps,
     source_subnet_id: SubnetId,
@@ -218,49 +225,60 @@ fn evaluate(
     let holds_on_source =
         |satisfies: &dyn Fn(&Metrics, &IpAddr) -> bool| holds_on(&source_subnet_id, satisfies);
 
-    // Terms 1 and 2 range over all subnets: the registry version of the
-    // replicas of every subnet and the streams of all remote subnets towards
-    // this one.
     let source_subnet = source_subnet_id.to_string();
-    let registry_version_reached = subnets.keys().all(|subnet_id| {
-        holds_on(subnet_id, &|metrics, ip| {
-            metrics_helper::min_on_replica(metrics, METRIC_REGISTRY_VERSION, |_| true, ip)
-                >= registry_version as f64
-        })
+    let registry_version_reached_on = |metrics: &Metrics, ip: &IpAddr| {
+        metrics_helper::min_on_replica(metrics, METRIC_REGISTRY_VERSION, |_| true, ip)
+            >= registry_version as f64
+    };
+    let incoming_streams_empty_on = reports_nothing(METRIC_STREAM_MESSAGES, |labels| {
+        labels.get("remote") == Some(&source_subnet)
     });
-    let incoming_streams_empty = subnets
-        .keys()
-        .filter(|&&subnet_id| subnet_id != source_subnet_id)
-        .all(|subnet_id| {
-            holds_on(
-                subnet_id,
-                &reports_nothing(METRIC_STREAM_MESSAGES, |labels| {
-                    labels.get("remote") == Some(&source_subnet)
-                }),
-            )
-        });
-
-    let outgoing_streams_empty =
-        holds_on_source(&reports_nothing(METRIC_STREAM_MESSAGES, |_| true));
-    let ingress_history_processing_only = holds_on_source(&reports_nothing(
-        METRIC_INGRESS_HISTORY_BY_STATE,
-        |labels| {
+    let outgoing_streams_empty_on = reports_nothing(METRIC_STREAM_MESSAGES, |_| true);
+    let ingress_history_processing_only_on =
+        reports_nothing(METRIC_INGRESS_HISTORY_BY_STATE, |labels| {
             labels
                 .get("state")
                 .is_some_and(|state| state != "processing")
-        },
-    ));
-    let subnet_input_queues_empty =
-        holds_on_source(&reports_nothing(METRIC_SUBNET_INPUT_QUEUE_MESSAGES, |_| {
-            true
-        }));
-    let subnet_output_queues_empty = holds_on_source(&reports_nothing(
-        METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
-        |_| true,
-    ));
-    let subnet_call_contexts_empty =
-        holds_on_source(&reports_nothing(METRIC_SUBNET_CALL_CONTEXTS, |_| true));
-    let refund_pool_empty = holds_on_source(&reports_nothing(METRIC_PENDING_REFUNDS, |_| true));
+        });
+    let subnet_input_queues_empty_on =
+        reports_nothing(METRIC_SUBNET_INPUT_QUEUE_MESSAGES, |_| true);
+    let subnet_output_queues_empty_on =
+        reports_nothing(METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES, |_| true);
+    let subnet_call_contexts_empty_on = reports_nothing(METRIC_SUBNET_CALL_CONTEXTS, |_| true);
+    let refund_pool_empty_on = reports_nothing(METRIC_PENDING_REFUNDS, |_| true);
+
+    // Keep the individual quorum results for diagnostics. They cannot establish
+    // readiness alone: different replicas may satisfy different conditions as
+    // a call moves from a subnet queue to a call context and then to a stream.
+    let registry_version_reached = subnets
+        .keys()
+        .all(|subnet_id| holds_on(subnet_id, &registry_version_reached_on));
+    let incoming_streams_empty = subnets
+        .keys()
+        .filter(|&&subnet_id| subnet_id != source_subnet_id)
+        .all(|subnet_id| holds_on(subnet_id, &incoming_streams_empty_on));
+    let outgoing_streams_empty = holds_on_source(&outgoing_streams_empty_on);
+    let ingress_history_processing_only = holds_on_source(&ingress_history_processing_only_on);
+    let subnet_input_queues_empty = holds_on_source(&subnet_input_queues_empty_on);
+    let subnet_output_queues_empty = holds_on_source(&subnet_output_queues_empty_on);
+    let subnet_call_contexts_empty = holds_on_source(&subnet_call_contexts_empty_on);
+    let refund_pool_empty = holds_on_source(&refund_pool_empty_on);
+
+    let common_quorum = subnets.keys().all(|subnet_id| {
+        holds_on(subnet_id, &|metrics, ip| {
+            registry_version_reached_on(metrics, ip)
+                && if *subnet_id == source_subnet_id {
+                    outgoing_streams_empty_on(metrics, ip)
+                        && ingress_history_processing_only_on(metrics, ip)
+                        && subnet_input_queues_empty_on(metrics, ip)
+                        && subnet_output_queues_empty_on(metrics, ip)
+                        && subnet_call_contexts_empty_on(metrics, ip)
+                        && refund_pool_empty_on(metrics, ip)
+                } else {
+                    incoming_streams_empty_on(metrics, ip)
+                }
+        })
+    });
 
     let term = |condition, description: String, satisfied: bool| Term {
         condition,
@@ -321,6 +339,13 @@ fn evaluate(
             "the refund pool holds no pending anonymous refund on at least 2/3 of the replicas"
                 .to_string(),
             refund_pool_empty,
+        ),
+        term(
+            Condition::CommonQuorum,
+            "on every subnet, the same quorum of at least 2/3 of its replicas satisfies all \
+             applicable conditions together, including the registry version"
+                .to_string(),
+            common_quorum,
         ),
     ]
 }
@@ -537,6 +562,7 @@ mod tests {
                 Condition::SubnetOutputQueues,
                 Condition::SubnetCallContexts,
                 Condition::RefundPool,
+                Condition::CommonQuorum,
             ]
         );
         assert!(terms.iter().all(|term| term.satisfied));
@@ -666,7 +692,7 @@ mod tests {
                 }
                 assert_eq!(
                     violated(&metrics),
-                    vec![*condition],
+                    vec![*condition, Condition::CommonQuorum],
                     "{metric}{labels:?} = {value} on replicas {violating:?} of {subnet_id}"
                 );
             }
@@ -697,9 +723,9 @@ mod tests {
     }
 
     #[test]
-    fn replicas_violating_different_conditions_do_not_add_up() {
-        // Each of the conditions on `S` is violated on a different replica of
-        // `S`, i.e. no condition on more than a third of them.
+    fn replicas_violating_different_conditions_do_not_form_a_common_quorum() {
+        // Each individual condition has a quorum, but only two replicas of
+        // `S` satisfy every applicable condition together.
         let mut metrics = ready_metrics();
         set(&mut metrics, s(), 1, METRIC_PENDING_REFUNDS, &[], 1.0);
         set(
@@ -709,6 +735,80 @@ mod tests {
             METRIC_SUBNET_OUTPUT_QUEUE_MESSAGES,
             &[],
             1.0,
+        );
+        assert_eq!(violated(&metrics), vec![Condition::CommonQuorum]);
+    }
+
+    #[test]
+    fn successive_call_stages_do_not_establish_readiness() {
+        let mut metrics = ready_metrics();
+        // Three honest replicas observe successive stages: before cooling,
+        // executing a management call, and holding its undelivered response.
+        // The fourth replica falsely reports that every condition holds.
+        set(
+            &mut metrics,
+            s(),
+            1,
+            METRIC_REGISTRY_VERSION,
+            &[],
+            V as f64 - 1.0,
+        );
+        set(
+            &mut metrics,
+            s(),
+            2,
+            METRIC_SUBNET_CALL_CONTEXTS,
+            &[("type", "install_code")],
+            1.0,
+        );
+        set(
+            &mut metrics,
+            s(),
+            3,
+            METRIC_STREAM_MESSAGES,
+            &[("remote", r().to_string().as_str())],
+            1.0,
+        );
+        assert_eq!(violated(&metrics), vec![Condition::CommonQuorum]);
+    }
+
+    #[test]
+    fn remote_registry_and_stream_conditions_need_the_same_quorum() {
+        let mut metrics = ready_metrics();
+        set(
+            &mut metrics,
+            r(),
+            5,
+            METRIC_REGISTRY_VERSION,
+            &[],
+            V as f64 - 1.0,
+        );
+        set(
+            &mut metrics,
+            r(),
+            6,
+            METRIC_STREAM_MESSAGES,
+            &[("remote", s().to_string().as_str())],
+            1.0,
+        );
+        assert_eq!(violated(&metrics), vec![Condition::CommonQuorum]);
+    }
+
+    #[test]
+    fn one_replica_per_subnet_may_violate_all_applicable_conditions() {
+        let mut metrics = ready_metrics();
+        for violation in violations() {
+            violation.set_on(&mut metrics, nodes(violation.subnet_id)[0]);
+        }
+        // The quorum is shared within each subnet, independently of which
+        // replica fails on another subnet.
+        set(
+            &mut metrics,
+            s(),
+            1,
+            METRIC_REGISTRY_VERSION,
+            &[],
+            V as f64 - 1.0,
         );
         assert_eq!(violated(&metrics), vec![]);
     }
@@ -723,7 +823,10 @@ mod tests {
 
         // Together with a second replica that violates a condition, it is not.
         set(&mut metrics, s(), 2, METRIC_PENDING_REFUNDS, &[], 1.0);
-        assert_eq!(violated(&metrics), vec![Condition::RefundPool]);
+        assert_eq!(
+            violated(&metrics),
+            vec![Condition::RefundPool, Condition::CommonQuorum]
+        );
 
         // Two unscraped replicas of `S` violate every condition on `S`, even
         // though they report nothing that would violate them.
@@ -740,6 +843,7 @@ mod tests {
                 Condition::SubnetOutputQueues,
                 Condition::SubnetCallContexts,
                 Condition::RefundPool,
+                Condition::CommonQuorum,
             ]
         );
 
@@ -749,7 +853,11 @@ mod tests {
         unscrape(&mut metrics, r(), 7);
         assert_eq!(
             violated(&metrics),
-            vec![Condition::RegistryVersion, Condition::IncomingStreams]
+            vec![
+                Condition::RegistryVersion,
+                Condition::IncomingStreams,
+                Condition::CommonQuorum
+            ]
         );
     }
 
@@ -813,7 +921,7 @@ mod tests {
             }
             assert_eq!(
                 violated(&metrics),
-                vec![Condition::RegistryVersion],
+                vec![Condition::RegistryVersion, Condition::CommonQuorum],
                 "two replicas of {subnet_id} report no registry version"
             );
         }

@@ -122,8 +122,8 @@ const INIT_INSTRUCTIONS: u64 = 295 * B;
 const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 
 /// The number of nodes of every subnet. More than one so that the terms of the
-/// merge readiness condition, each of which has to hold on at least 2/3 of the
-/// replicas of a subnet, range over more than one replica.
+/// merge readiness condition, which must hold together on the same quorum of
+/// at least 2/3 of the replicas of a subnet, range over more than one replica.
 const SUBNET_SIZE: usize = 4;
 
 /// The DKG interval length of the Application subnets, i.e. one less than the
@@ -152,8 +152,9 @@ const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
 const PER_TEST_TIMEOUT: Duration = Duration::from_secs(900);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(1500);
 
-/// The conditions this scenario violates, i.e. the ones step 7 checks. The
-/// three that are missing are expected to hold:
+/// The conditions this scenario violates, i.e. the ones step 7 checks. This
+/// includes `CommonQuorum`, since the replicas do not satisfy the individual
+/// conditions together. The three that are missing are expected to hold:
 ///
 /// * `RegistryVersion`, because this test creates no registry version: it
 ///   evaluates the condition at the version of its own topology snapshot, which
@@ -170,12 +171,13 @@ const OVERALL_TIMEOUT: Duration = Duration::from_secs(1500);
 ///   refund, and the pool only holds on to refunds whose destination subnet
 ///   is cooling down while this one is not, or whose stream is full (which
 ///   would require a more complex test setup).
-const VIOLATED_CONDITIONS: [Condition; 5] = [
+const VIOLATED_CONDITIONS: [Condition; 6] = [
     Condition::IncomingStreams,
     Condition::OutgoingStreams,
     Condition::IngressHistory,
     Condition::SubnetInputQueues,
     Condition::SubnetCallContexts,
+    Condition::CommonQuorum,
 ];
 
 fn main() -> Result<()> {
