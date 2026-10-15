@@ -1140,6 +1140,18 @@ impl Player {
                 // Since the pool cache assumes we always have at most one CUP inside the pool,
                 // we should deliver all batches before inserting a new CUP into the pool.
                 Err(backup::ExitPoint::CUPHeightWasFinalized(cup_height)) => {
+                    // If we did not manage to deliver up to the CUP height, abort: we can't
+                    // validate the CUP without the state hash
+                    if last_batch_height < cup_height {
+                        println!(
+                            "Only the batches up to height {last_batch_height} could be delivered \
+                            although the CUP at height {cup_height} was reported as finalized"
+                        );
+                        return Err(ReplayError::ValidationIncomplete(
+                            last_batch_height,
+                            invalid_artifacts,
+                        ));
+                    }
                     info!(
                         self.log,
                         "Loading the CUP at height {cup_height} from the disk, \

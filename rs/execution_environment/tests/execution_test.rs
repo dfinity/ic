@@ -3693,6 +3693,54 @@ fn canister_metrics_via_query_call_by_controller_succeeds() {
     assert_eq!(canister_metrics_count(&env), 1);
 }
 
+// A subnet admin who is not a controller of a canister can install code on it
+// on a cloud engine, but not on a rented subnet (both on the free cost
+// schedule).
+#[test]
+fn install_code_by_subnet_admin_succeeds_only_on_cloud_engine() {
+    let subnet_admin = user_test_id(100).get();
+    for subnet_type in [SubnetType::CloudEngine, SubnetType::Application] {
+        let env = StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                SubnetConfig::new(subnet_type),
+                HypervisorConfig::default(),
+            )))
+            .with_subnet_type(subnet_type)
+            .with_cost_schedule(CanisterCyclesCostSchedule::Free)
+            .with_subnet_admins(vec![subnet_admin])
+            .build();
+        let canister_id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, None);
+        assert!(
+            !env.get_controllers(canister_id)
+                .unwrap()
+                .contains(&subnet_admin)
+        );
+
+        let install_code_args = InstallCodeArgsV2 {
+            mode: CanisterInstallModeV2::Install,
+            canister_id: canister_id.get(),
+            wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
+            arg: vec![],
+            sender_canister_version: None,
+        };
+        let result = env.execute_ingress_as(
+            subnet_admin,
+            IC_00,
+            Method::InstallCode,
+            install_code_args.encode(),
+        );
+        match subnet_type {
+            SubnetType::CloudEngine => {
+                result.unwrap();
+            }
+            _ => assert_eq!(
+                result.unwrap_err().code(),
+                ErrorCode::CanisterInvalidController
+            ),
+        }
+    }
+}
+
 #[test]
 fn canister_metrics_via_query_call_by_subnet_admin_succeeds() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
