@@ -857,56 +857,42 @@ impl HeapBulkOp {
     }
 }
 
-/// Injects the check function for the given bulk memory operation on the heap.
-///
-/// The function takes the three operands of the operation, charges
-/// instructions for its length like `decr_instruction_counter_fn`, checks the
-/// operation against the heap page budget and returns the operands unchanged,
-/// so that it can be called right before the operation.
+/// Pushes the local `local_index` of type `ty` zero-extended to `i64`.
+fn get_local_as_i64(
+    (local_index, ty): (u32, DataType),
+) -> impl Iterator<Item = wirm::wasmparser::Operator<'static>> {
+    use wirm::wasmparser::Operator::*;
+    [LocalGet { local_index }]
+        .into_iter()
+        .chain((ty == DataType::I32).then_some(I64ExtendI32U))
+}
+
+/// The heap page limit check for a copy or fill of `len` bytes that touches
+/// the heap range `[dst, dst + len)` and, if `src` is given, `[src, src + len)`.
+/// The operands are locals of the given types (`i32` or `i64`).
 ///
 /// The check has a fast path in Wasm that only looks at the length: a range
-/// of `len` bytes touches at most `(len >> 16) + 2` Wasm pages, and a copy
-/// twice that. If this bound fits into the budget, the operation cannot
-/// exceed the limit whatever the state of the pages. Otherwise
+/// of `len` bytes touches at most `(len >> 16) + 2` Wasm pages, and two
+/// ranges twice that. If this bound fits into the budget, the operation
+/// cannot exceed the limit whatever the state of the pages. Otherwise
 /// `__.check_heap_bulk_access` counts exactly the pages that are not yet
-/// accessed and traps if the operation does not fit.
-fn inject_heap_bulk_check_fn(
-    module: &mut wirm::Module<'_>,
-    mem_type: WasmMemoryType,
-    op: HeapBulkOp,
+/// accessed and traps if the operation does not fit. The operation must not
+/// touch the heap before this check: a refused heap page would fault inside
+/// the copy, where it cannot be turned into a trap.
+pub(super) fn heap_page_limit_check(
+    dst: (u32, DataType),
+    src: Option<(u32, DataType)>,
+    len: (u32, DataType),
     heap_page_budget: u32,
-    decr_instruction_counter_fn: u32,
     check_heap_bulk_access_fn: u32,
-) -> u32 {
+) -> Vec<wirm::wasmparser::Operator<'static>> {
     use wirm::wasmparser::{BlockType, Operator::*};
 
-    let operand_types = op.operand_types(mem_type);
-    const DST: u32 = 0;
-    const SRC: u32 = 1;
-    const LEN: u32 = 2;
-    // Local holding the length as `i64`.
-    const LEN64: u32 = 3;
-
-    // Pushes the given operand zero-extended to `i64`.
-    let get_as_i64 = |local_index: u32| -> Vec<wirm::wasmparser::Operator<'static>> {
-        match operand_types[local_index as usize] {
-            DataType::I32 => vec![LocalGet { local_index }, I64ExtendI32U],
-            _ => vec![LocalGet { local_index }],
-        }
-    };
-
     let mut instructions = Vec::new();
-    // Charge instructions for the length, like `decr_instruction_counter_fn`.
-    instructions.extend(get_as_i64(LEN));
+    // Upper bound on the number of pages touched: `(len >> 16) + 2` per
+    // heap range.
+    instructions.extend(get_local_as_i64(len));
     instructions.extend([
-        LocalTee { local_index: LEN64 },
-        Call {
-            function_index: decr_instruction_counter_fn,
-        },
-        Drop,
-        // Upper bound on the number of pages touched: `(len >> 16) + 2` per
-        // heap range.
-        LocalGet { local_index: LEN64 },
         I64Const {
             value: WASM_PAGE_SIZE.trailing_zeros() as i64,
         },
@@ -914,7 +900,7 @@ fn inject_heap_bulk_check_fn(
         I64Const { value: 2 },
         I64Add,
     ]);
-    if op == HeapBulkOp::Copy {
+    if src.is_some() {
         instructions.extend([I64Const { value: 1 }, I64Shl]);
     }
     instructions.extend([
@@ -927,23 +913,66 @@ fn inject_heap_bulk_check_fn(
         },
     ]);
     // Slow path: `check_heap_bulk_access(dst, src, len, src_is_heap)`.
-    instructions.extend(get_as_i64(DST));
-    if op == HeapBulkOp::Copy {
-        instructions.extend(get_as_i64(SRC));
-        instructions.extend([LocalGet { local_index: LEN64 }, I32Const { value: 1 }]);
-    } else {
-        instructions.extend([
-            I64Const { value: 0 },
-            LocalGet { local_index: LEN64 },
-            I32Const { value: 0 },
-        ]);
+    instructions.extend(get_local_as_i64(dst));
+    match src {
+        Some(src) => instructions.extend(get_local_as_i64(src)),
+        None => instructions.push(I64Const { value: 0 }),
     }
+    instructions.extend(get_local_as_i64(len));
     instructions.extend([
+        I32Const {
+            value: src.is_some() as i32,
+        },
         Call {
             function_index: check_heap_bulk_access_fn,
         },
         End,
-        // Return the operands unchanged.
+    ]);
+    instructions
+}
+
+/// Injects the check function for the given bulk memory operation on the heap.
+///
+/// The function takes the three operands of the operation, charges
+/// instructions for its length like `decr_instruction_counter_fn`, runs
+/// [`heap_page_limit_check`] and returns the operands unchanged, so that it
+/// can be called right before the operation.
+fn inject_heap_bulk_check_fn(
+    module: &mut wirm::Module<'_>,
+    mem_type: WasmMemoryType,
+    op: HeapBulkOp,
+    heap_page_budget: u32,
+    decr_instruction_counter_fn: u32,
+    check_heap_bulk_access_fn: u32,
+) -> u32 {
+    use wirm::wasmparser::Operator::*;
+
+    let operand_types = op.operand_types(mem_type);
+    const DST: u32 = 0;
+    const SRC: u32 = 1;
+    const LEN: u32 = 2;
+    let dst = (DST, operand_types[DST as usize]);
+    let src = (op == HeapBulkOp::Copy).then_some((SRC, operand_types[SRC as usize]));
+    let len = (LEN, operand_types[LEN as usize]);
+
+    let mut instructions = Vec::new();
+    // Charge instructions for the length, like `decr_instruction_counter_fn`.
+    instructions.extend(get_local_as_i64(len));
+    instructions.extend([
+        Call {
+            function_index: decr_instruction_counter_fn,
+        },
+        Drop,
+    ]);
+    instructions.extend(heap_page_limit_check(
+        dst,
+        src,
+        len,
+        heap_page_budget,
+        check_heap_bulk_access_fn,
+    ));
+    // Return the operands unchanged.
+    instructions.extend([
         LocalGet { local_index: DST },
         LocalGet { local_index: SRC },
         LocalGet { local_index: LEN },
@@ -952,8 +981,8 @@ fn inject_heap_bulk_check_fn(
     let num_instructions = instructions.len();
     let instructions_with_offsets = instructions.into_iter().map(|op| (op, 0)).collect();
     let body = Body {
-        locals: vec![(1, DataType::I64)],
-        num_locals: 1,
+        locals: vec![],
+        num_locals: 0,
         instructions: Instructions::new(instructions_with_offsets, 0, false),
         num_instructions,
         name: None,

@@ -13,7 +13,9 @@
 
 use crate::{
     InternalErrorCode, WASM_PAGE_SIZE,
-    wasm_utils::instrumentation::{InjectedCounters, InjectedFunctions, WasmMemoryType},
+    wasm_utils::instrumentation::{
+        InjectedCounters, InjectedFunctions, WasmMemoryType, heap_page_limit_check,
+    },
     wasmtime_embedder::system_api_complexity::overhead_native,
 };
 use ic_interfaces::execution_environment::StableMemoryApi;
@@ -41,60 +43,6 @@ fn make_body(
     }
 }
 
-/// The heap page limit check for a stable memory copy whose heap range is
-/// `[addr, addr + len)`, with `addr` and `len` in locals of type
-/// `operand_type`.
-///
-/// Same scheme as `inject_heap_bulk_check_fn` in the instrumentation: the
-/// range touches at most `(len >> 16) + 2` Wasm pages; if that fits into the
-/// heap page budget, fall through, otherwise let `__.check_heap_bulk_access`
-/// count the pages exactly and trap if the copy does not fit. The copy must
-/// not touch the heap before this check: a refused heap page would fault
-/// inside the copy, where it cannot be turned into a trap.
-fn check_heap_range(
-    addr: u32,
-    len: u32,
-    operand_type: DataType,
-    heap_page_budget: u32,
-    check_heap_bulk_access_fn: u32,
-) -> Vec<wirm::wasmparser::Operator<'static>> {
-    use wirm::wasmparser::Operator::*;
-    let get_as_i64 = |local_index: u32| -> Vec<wirm::wasmparser::Operator<'static>> {
-        match operand_type {
-            DataType::I32 => vec![LocalGet { local_index }, I64ExtendI32U],
-            _ => vec![LocalGet { local_index }],
-        }
-    };
-    let mut ops = get_as_i64(len);
-    ops.extend([
-        I64Const {
-            value: WASM_PAGE_SIZE.trailing_zeros() as i64,
-        },
-        I64ShrU,
-        I64Const { value: 2 },
-        I64Add,
-        GlobalGet {
-            global_index: heap_page_budget,
-        },
-        I64GtS,
-        If {
-            blockty: BlockType::Empty,
-        },
-    ]);
-    // `check_heap_bulk_access(dst, src, len, src_is_heap)` with no heap source.
-    ops.extend(get_as_i64(addr));
-    ops.push(I64Const { value: 0 });
-    ops.extend(get_as_i64(len));
-    ops.extend([
-        I32Const { value: 0 },
-        Call {
-            function_index: check_heap_bulk_access_fn,
-        },
-        End,
-    ]);
-    ops
-}
-
 pub(super) type ReplacementFunction = (
     // Function parameters.
     Vec<wirm::DataType>,
@@ -114,11 +62,14 @@ pub(super) fn replacement_functions(
     let dirty_pages_counter_index = injected_counters.dirty_pages_counter;
     let accessed_pages_counter_index = injected_counters.accessed_pages_counter;
     let decr_instruction_counter_fn = injected_counters.decr_instruction_counter_fn;
+    // The heap page limit check for a copy between the heap range
+    // `[addr, addr + len)` and stable memory, with `addr` and `len` in locals
+    // of type `operand_type`.
     let check_heap_range = |addr: u32, len: u32, operand_type: DataType| {
-        check_heap_range(
-            addr,
-            len,
-            operand_type,
+        heap_page_limit_check(
+            (addr, operand_type),
+            None,
+            (len, operand_type),
             injected_counters.heap_page_budget,
             injected_functions.check_heap_bulk_access,
         )

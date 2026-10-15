@@ -72,13 +72,12 @@ expression: out
     local.get 0
   )
   (func (;9;) (type 8) (param i32 i32 i32) (result i32 i32 i32)
-    (local i64)
     local.get 2
     i64.extend_i32_u
-    local.tee 3
     call 8
     drop
-    local.get 3
+    local.get 2
+    i64.extend_i32_u
     i64.const 16
     i64.shr_u
     i64.const 2
@@ -92,7 +91,8 @@ expression: out
       i64.extend_i32_u
       local.get 1
       i64.extend_i32_u
-      local.get 3
+      local.get 2
+      i64.extend_i32_u
       i32.const 1
       call 6
     end
@@ -101,13 +101,12 @@ expression: out
     local.get 2
   )
   (func (;10;) (type 8) (param i32 i32 i32) (result i32 i32 i32)
-    (local i64)
     local.get 2
     i64.extend_i32_u
-    local.tee 3
     call 8
     drop
-    local.get 3
+    local.get 2
+    i64.extend_i32_u
     i64.const 16
     i64.shr_u
     i64.const 2
@@ -118,7 +117,8 @@ expression: out
       local.get 0
       i64.extend_i32_u
       i64.const 0
-      local.get 3
+      local.get 2
+      i64.extend_i32_u
       i32.const 0
       call 6
     end
@@ -127,13 +127,12 @@ expression: out
     local.get 2
   )
   (func (;11;) (type 8) (param i32 i32 i32) (result i32 i32 i32)
-    (local i64)
     local.get 2
     i64.extend_i32_u
-    local.tee 3
     call 8
     drop
-    local.get 3
+    local.get 2
+    i64.extend_i32_u
     i64.const 16
     i64.shr_u
     i64.const 2
@@ -144,7 +143,8 @@ expression: out
       local.get 0
       i64.extend_i32_u
       i64.const 0
-      local.get 3
+      local.get 2
+      i64.extend_i32_u
       i32.const 0
       call 6
     end
