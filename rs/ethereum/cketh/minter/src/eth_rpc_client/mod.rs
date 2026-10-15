@@ -28,26 +28,66 @@ pub const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
 
 pub const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
 
+/// The Sepolia services this minter is willing to query, ordered by preference: a client querying
+/// fewer than all of them takes a prefix.
+///
+/// Mainnet leaves the choice to the EVM RPC canister, which ranks its supported providers by when
+/// each last answered successfully
+/// (<https://github.com/internet-computer-protocol/evm-rpc-canister/blob/evm_rpc-v2.6.0/src/memory.rs>).
+/// Sepolia names them instead because that canister's supported set also holds `rpc.sepolia.org`,
+/// which this minter dropped, and naming is the only way to exclude it. Naming then fixes the count
+/// too: `ConsensusStrategy::Threshold` rejects a `total` that differs from the number of named
+/// services.
+const SEPOLIA_SERVICES: &[EthSepoliaService] = &[
+    EthSepoliaService::BlockPi,
+    EthSepoliaService::PublicNode,
+    EthSepoliaService::Alchemy,
+    EthSepoliaService::Ankr,
+];
+
 /// How many providers a client queries, and how many of them must return the same result for the
 /// EVM RPC canister to report a consistent one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Threshold {
-    pub total: u8,
-    pub min: u8,
+    total: u8,
+    min: u8,
 }
 
 impl Threshold {
     /// The threshold [`balance_scan_rpc_client`] queries with.
-    pub const BALANCE_SCAN: Self = Self { total: 3, min: 2 };
+    pub const BALANCE_SCAN: Self = Self::new(3, 2);
+    const MINTING_MAINNET: Self = Self::new(4, 3);
+    const MINTING_SEPOLIA: Self = Self::new(4, 2);
+
+    const fn new(total: u8, min: u8) -> Self {
+        assert!(
+            min >= 1,
+            "BUG: a threshold must require at least one provider"
+        );
+        assert!(
+            min <= total,
+            "BUG: a threshold cannot require more providers than it queries"
+        );
+        assert!(
+            total as usize <= SEPOLIA_SERVICES.len(),
+            "BUG: a threshold cannot query more providers than Sepolia services are named"
+        );
+        Self { total, min }
+    }
+
+    pub const fn total(&self) -> u8 {
+        self.total
+    }
 }
 
 /// Client for the queries whose result the minter acts on irreversibly: minting, and signing and
 /// sending transactions.
 pub fn rpc_client(state: &State) -> EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles> {
-    let min = match state.ethereum_network() {
-        EthereumNetwork::Mainnet => 3_u8,
-        EthereumNetwork::Sepolia => 2_u8,
+    let threshold = match state.ethereum_network() {
+        EthereumNetwork::Mainnet => Threshold::MINTING_MAINNET,
+        EthereumNetwork::Sepolia => Threshold::MINTING_SEPOLIA,
     };
-    rpc_client_with_threshold(state, Threshold { total: 4, min })
+    rpc_client_with_threshold(state, threshold)
 }
 
 /// Client for the ckERC20 automatic-deposit balance scan.
@@ -69,16 +109,11 @@ fn rpc_client_with_threshold(
 ) -> EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles> {
     const MAX_NUM_RETRIES: u32 = 10;
 
-    assert!(
-        threshold.min <= threshold.total,
-        "BUG: min_threshold too high"
-    );
-
     let providers = match state.ethereum_network() {
         EthereumNetwork::Mainnet => EvmRpcServices::EthMainnet(None),
-        EthereumNetwork::Sepolia => {
-            EvmRpcServices::EthSepolia(Some(sepolia_services(threshold.total)))
-        }
+        EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(Some(
+            SEPOLIA_SERVICES[..usize::from(threshold.total)].to_vec(),
+        )),
     };
 
     EvmRpcClient::builder(IcRuntime::new(), state.evm_rpc_id())
@@ -89,28 +124,6 @@ fn rpc_client_with_threshold(
         })
         .with_retry_strategy(DoubleCycles::with_max_num_retries(MAX_NUM_RETRIES))
         .build()
-}
-
-/// The `total` Sepolia services to query, from the set this minter is willing to use.
-///
-/// Mainnet leaves the choice to the EVM RPC canister, which ranks its supported providers by how
-/// recently each last answered. Sepolia names them instead because that canister's supported set
-/// also holds `rpc.sepolia.org`, which this minter dropped, and naming is the only way to exclude
-/// it. Naming then fixes the count too — `ConsensusStrategy::Threshold` rejects a `total` that
-/// differs from the number of named services — so a client querying fewer takes a prefix.
-fn sepolia_services(total: u8) -> Vec<EthSepoliaService> {
-    const SERVICES: &[EthSepoliaService] = &[
-        EthSepoliaService::BlockPi,
-        EthSepoliaService::PublicNode,
-        EthSepoliaService::Alchemy,
-        EthSepoliaService::Ankr,
-    ];
-    assert!(
-        usize::from(total) <= SERVICES.len(),
-        "BUG: {total} Sepolia services requested, only {} available",
-        SERVICES.len()
-    );
-    SERVICES[..usize::from(total)].to_vec()
 }
 
 /// Aggregates responses of different providers to the same query.

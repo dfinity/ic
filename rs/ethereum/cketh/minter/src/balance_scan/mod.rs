@@ -208,10 +208,9 @@ pub struct ScanErrors {
     pub(crate) call: u64,
 }
 
-/// Balances of one chunk, or `None` when its `eth_call` failed or its reply did not decode; either
-/// is tallied in `errors`. A reply without the client's minimum number of agreeing providers is
-/// such a failure: [`NoReduction`] never falls back to a single provider's answer, so one provider
-/// claiming an empty balance cannot hide a funded address.
+/// Balances of one chunk, or `None` when its `eth_call` failed, which under [`NoReduction`]
+/// includes the providers not agreeing on a reply, or when the reply did not decode; either is
+/// tallied in `errors`.
 async fn chunk_balances<R: Runtime>(
     input: Vec<u8>,
     n: usize,

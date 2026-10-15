@@ -210,7 +210,19 @@ impl CkErc20Setup {
     /// tick where both ERC-20 and ETH pairs are due use [`Self::run_balance_scan_with_eth`].
     pub fn run_balance_scan(&self, balances: &[(&str, u128)]) {
         self.env.advance_time(BALANCE_SCAN_INTERVAL);
-        self.answer_balance_scan_batch(None, balances);
+        self.answer_balance_scan_batch(None, &every_provider_answering(balances));
+    }
+
+    /// Like [`Self::run_balance_scan`], but each provider the scan queries answers from its own
+    /// balances, given in the order the providers are queried, so a tick where the providers
+    /// disagree can be driven.
+    pub fn run_balance_scan_with_each_provider_answering(
+        &self,
+        balances_per_provider: [&[(&str, u128)]; BALANCE_SCAN_PROVIDERS],
+    ) {
+        self.env.advance_time(BALANCE_SCAN_INTERVAL);
+        let answers: Vec<_> = zip(balance_scan_providers(), balances_per_provider).collect();
+        self.answer_balance_scan_batch(None, &answers);
     }
 
     /// Like [`Self::run_balance_scan`], but for a tick where both ERC-20 and ETH pairs are
@@ -230,15 +242,25 @@ impl CkErc20Setup {
     /// [`Self::answer_eth_balance_scan`] runs.
     pub fn answer_erc20_balance_scan(&self, balances: &[(&str, u128)]) {
         self.env.advance_time(BALANCE_SCAN_INTERVAL);
-        self.answer_balance_scan_batch(Some(ScanBatchKind::Erc20), balances);
+        self.answer_balance_scan_batch(
+            Some(ScanBatchKind::Erc20),
+            &every_provider_answering(balances),
+        );
     }
 
     /// Answer the ETH batch a mixed tick is suspended on and settle the reply.
     pub fn answer_eth_balance_scan(&self, balances: &[(&str, u128)]) {
-        self.answer_balance_scan_batch(Some(ScanBatchKind::Eth), balances);
+        self.answer_balance_scan_batch(
+            Some(ScanBatchKind::Eth),
+            &every_provider_answering(balances),
+        );
     }
 
-    fn answer_balance_scan_batch(&self, kind: Option<ScanBatchKind>, balances: &[(&str, u128)]) {
+    fn answer_balance_scan_batch(
+        &self,
+        kind: Option<ScanBatchKind>,
+        answers: &[(JsonRpcProvider, &[(&str, u128)])],
+    ) {
         let request =
             JsonRpcRequestMatcher::new(JsonRpcProvider::Provider1, JsonRpcMethod::EthCall)
                 .with_request_params(
@@ -247,18 +269,16 @@ impl CkErc20Setup {
                 .find_rpc_call(&self.env)
                 .expect("BUG: no balance-scan eth_call pending");
         let (kind, holders) = parse_scan_batch(&eth_call_input_bytes(&request));
-        let response: Vec<u128> = holders
-            .iter()
-            .map(|holder| scanned_balance(balances, holder))
-            .collect();
-        MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
-            .with_request_params_filter(EthCallInputStartsWith::batcher(kind))
-            .respond_for_providers_with(
-                JsonRpcProvider::iter().take(usize::from(Threshold::BALANCE_SCAN.total)),
-                balance_scan_response(&response),
-            )
-            .build()
-            .expect_rpc_calls(self);
+        let mut mock = MockJsonRpcProviders::when(JsonRpcMethod::EthCall)
+            .with_request_params_filter(EthCallInputStartsWith::batcher(kind));
+        for (provider, balances) in answers {
+            let response: Vec<u128> = holders
+                .iter()
+                .map(|holder| scanned_balance(balances, holder))
+                .collect();
+            mock = mock.respond_with(*provider, balance_scan_response(&response));
+        }
+        mock.build().expect_rpc_calls(self);
         self.env.tick();
         self.env.tick();
     }
@@ -1279,6 +1299,22 @@ fn parse_scan_batch(input: &[u8]) -> (ScanBatchKind, Vec<String>) {
         })
         .collect();
     (kind, holders)
+}
+
+/// How many providers the balance scan queries: the scan uses fewer than the minter's other
+/// calls, so a stub for one of the remaining providers would never be consumed.
+const BALANCE_SCAN_PROVIDERS: usize = Threshold::BALANCE_SCAN.total() as usize;
+
+fn balance_scan_providers() -> impl Iterator<Item = JsonRpcProvider> {
+    JsonRpcProvider::iter().take(BALANCE_SCAN_PROVIDERS)
+}
+
+fn every_provider_answering<'a>(
+    balances: &'a [(&'a str, u128)],
+) -> Vec<(JsonRpcProvider, &'a [(&'a str, u128)])> {
+    balance_scan_providers()
+        .map(|provider| (provider, balances))
+        .collect()
 }
 
 fn scanned_balance(balances: &[(&str, u128)], holder: &str) -> u128 {
