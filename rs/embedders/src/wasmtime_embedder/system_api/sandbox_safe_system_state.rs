@@ -391,12 +391,13 @@ impl SystemStateModifications {
         system_state: &mut SystemState,
         metrics: &Metrics,
     ) {
-        if !self.canister_log.is_empty() {
-            metrics.observe_delta_log_size(self.canister_log.bytes_used());
+        let mut canister_log = self.canister_log.take();
+        if !canister_log.is_empty() {
+            metrics.observe_delta_log_size(canister_log.bytes_used());
         }
         system_state
             .log_memory_store
-            .append_delta_log(&mut self.canister_log);
+            .append_delta_log(&mut canister_log);
     }
 
     /// Verify that the changes to the system state are sound and apply them to
