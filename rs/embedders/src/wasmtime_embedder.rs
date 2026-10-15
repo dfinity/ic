@@ -17,7 +17,8 @@ use wasmtime::{
 pub use host_memory::WasmtimeMemoryCreator;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
+    CanisterBacktrace, HeapPageLimitRefusals, HypervisorError, HypervisorResult, InstanceStats,
+    SystemApi, TrapCode,
 };
 use ic_logger::{ReplicaLogger, debug, error, fatal};
 use ic_replicated_state::{
@@ -1016,6 +1017,8 @@ pub struct PageAccessResults {
     pub wasm_mprotect_count: usize,
     pub wasm_copy_page_count: usize,
     pub wasm_sigsegv_handler_duration: Duration,
+    pub wasm_page_limit_refusals: HeapPageLimitRefusals,
+    pub wasm_bulk_check_slow_path_calls: usize,
     pub stable_dirty_pages: Vec<PageIndex>,
     pub stable_accessed_pages: usize,
     pub stable_sigsegv_count: usize,
@@ -1119,6 +1122,13 @@ impl WasmtimeInstance {
 
             let wasm_sigsegv_handler_duration = wasm_tracker.metrics().sigsegv_handler_duration();
 
+            let heap_access = &self.store.data().heap_access;
+            let wasm_page_limit_refusals = HeapPageLimitRefusals {
+                handler: wasm_tracker.metrics().sigsegv_refused_count(),
+                ..heap_access.refusals()
+            };
+            let wasm_bulk_check_slow_path_calls = heap_access.bulk_check_slow_path_calls();
+
             // We don't have a tracker for stable memory.
             if !self
                 .memory_trackers
@@ -1136,6 +1146,8 @@ impl WasmtimeInstance {
                     wasm_mprotect_count: wasm_tracker.metrics().mprotect_count(),
                     wasm_copy_page_count: wasm_tracker.metrics().copy_page_count(),
                     wasm_sigsegv_handler_duration,
+                    wasm_page_limit_refusals,
+                    wasm_bulk_check_slow_path_calls,
                     stable_dirty_pages,
                     stable_accessed_pages,
                     ..Default::default()
@@ -1163,6 +1175,8 @@ impl WasmtimeInstance {
                 wasm_mprotect_count: wasm_tracker.metrics().mprotect_count(),
                 wasm_copy_page_count: wasm_tracker.metrics().copy_page_count(),
                 wasm_sigsegv_handler_duration,
+                wasm_page_limit_refusals,
+                wasm_bulk_check_slow_path_calls,
                 stable_dirty_pages,
                 stable_accessed_pages,
                 stable_sigsegv_count: stable_tracker.metrics().sigsegv_count(),
@@ -1202,6 +1216,8 @@ impl WasmtimeInstance {
             wasm_mprotect_count: res.wasm_mprotect_count,
             wasm_copy_page_count: res.wasm_copy_page_count,
             wasm_sigsegv_handler_duration: res.wasm_sigsegv_handler_duration,
+            wasm_page_limit_refusals: res.wasm_page_limit_refusals,
+            wasm_bulk_check_slow_path_calls: res.wasm_bulk_check_slow_path_calls,
             stable_accessed_pages: res.stable_accessed_pages,
             stable_dirty_pages: res.stable_dirty_pages.len(),
             stable_sigsegv_count: res.stable_sigsegv_count,

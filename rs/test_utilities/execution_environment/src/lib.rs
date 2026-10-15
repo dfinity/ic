@@ -2914,6 +2914,17 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_wasm_memory_accessed_page_limit(
+        mut self,
+        wasm_memory_accessed_page_limit: MemoryPageLimit,
+    ) -> Self {
+        self.execution_config
+            .embedders_config
+            .wasm_memory_accessed_page_limit = wasm_memory_accessed_page_limit;
+
+        self
+    }
+
     pub fn with_max_canister_http_requests_in_flight(
         mut self,
         max_canister_http_requests_in_flight: usize,

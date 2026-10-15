@@ -12,8 +12,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ic_logger::replica_logger::no_op_logger;
-use ic_replicated_state::PageMap;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
+use ic_replicated_state::{NumWasmPages, PageMap};
 use ic_sys::PAGE_SIZE;
 
 struct BenchData {
@@ -37,7 +37,10 @@ fn tracked_region() -> *mut c_void {
 }
 
 /// Creates a tracker over `ptr`, which resets the whole region to `PROT_NONE`.
-fn new_tracker(ptr: *mut c_void) -> DeterministicMemoryTracker {
+fn new_tracker(
+    ptr: *mut c_void,
+    max_accessed_wasm_pages: Option<NumWasmPages>,
+) -> DeterministicMemoryTracker {
     DeterministicMemoryTracker::new(
         ptr,
         NumBytes::new(WASM_PAGE_SIZE_IN_BYTES as u64),
@@ -47,7 +50,7 @@ fn new_tracker(ptr: *mut c_void) -> DeterministicMemoryTracker {
         MemoryLimits {
             max_memory_size: NumBytes::new(WASM_PAGE_SIZE_IN_BYTES as u64),
             max_dirty_pages: NumOsPages::new((WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as u64),
-            max_accessed_wasm_pages: None,
+            max_accessed_wasm_pages,
         },
         /* page_overhead */ 0,
         Arc::new(SignalMutex::new(|_| {})),
@@ -69,7 +72,23 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
             // Setup input data for measurement
             || BenchData {
                 ptr,
-                tracker: new_tracker(ptr),
+                tracker: new_tracker(ptr, None),
+            },
+            // Do the actual measurement
+            |data| {
+                black_box(&data.tracker).handle_sigsegv(Some(AccessKind::Read), black_box(data.ptr))
+            },
+        )
+    });
+
+    // As in production: the accessed page limit is checked before the page is
+    // mapped and the page budget callback runs afterwards.
+    group.bench_function("fault handler sim read with page limit", |bench| {
+        bench.iter_with_setup(
+            // Setup input data for measurement
+            || BenchData {
+                ptr,
+                tracker: new_tracker(ptr, Some(NumWasmPages::new(1))),
             },
             // Do the actual measurement
             |data| {
@@ -93,7 +112,7 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
             || {
                 let data = BenchData {
                     ptr,
-                    tracker: new_tracker(ptr),
+                    tracker: new_tracker(ptr, None),
                 };
 
                 data.tracker

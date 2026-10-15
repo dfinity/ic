@@ -10,7 +10,8 @@ use ic_embedders::{
     wasmtime_embedder::{CanisterMemoryType, system_api::ApiType, system_api_complexity},
 };
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, Heap, HypervisorError, HypervisorResult, SystemApi, TrapCode,
+    CanisterBacktrace, Heap, HeapPageLimitRefusals, HypervisorError, HypervisorResult, SystemApi,
+    TrapCode,
 };
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
@@ -1124,6 +1125,91 @@ fn heap_page_budget_equals_limit_minus_accessed_pages() {
     assert_eq!(instance.heap_page_budget(), expected);
     instance.run(func_ref("wasm_page_4")).unwrap();
     assert_eq!(instance.heap_page_budget(), expected - 1);
+}
+
+/// The instance stats report which check refused an access because of the
+/// heap page limit and how often the bulk pre-check took the slow path.
+#[test]
+fn heap_page_limit_stats_report_detector_and_slow_path() {
+    let wat = r#"
+            (module
+                (import "ic0" "msg_arg_data_copy"
+                    (func $msg_arg_data_copy (param i32 i32 i32)))
+
+                (func (export "canister_update load_pages_0_to_2")
+                    (drop (i32.load (i32.const 0)))
+                    (drop (i32.load (i32.const 65536)))
+                    (drop (i32.load (i32.const 131072)))
+                )
+                (func (export "canister_update host_write_pages_0_to_2")
+                    (call $msg_arg_data_copy (i32.const 0) (i32.const 0) (i32.const 196608))
+                )
+                ;; bound (len >> 16) + 2 = 4 pages > limit 2: slow path, refused
+                (func (export "canister_update fill_pages_0_to_2")
+                    (memory.fill (i32.const 0) (i32.const 1) (i32.const 196608))
+                )
+                ;; bound 3 pages > budget 2: slow path, fits exactly
+                (func (export "canister_update fill_pages_0_1")
+                    (memory.fill (i32.const 0) (i32.const 1) (i32.const 131072))
+                )
+                ;; bound 2 pages <= budget 2: fast path
+                (func (export "canister_update fill_page_0")
+                    (memory.fill (i32.const 0) (i32.const 1) (i32.const 8))
+                )
+                (memory (export "memory") 4)
+            )"#;
+    let config = config_with_wasm_memory_accessed_page_limit(2);
+    let run = |method: &str| {
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_api_type(ApiType::update(
+                UNIX_EPOCH,
+                vec![7_u8; 3 * WASM_PAGE_SIZE_IN_BYTES],
+                Cycles::zero(),
+                user_test_id(24).get(),
+                call_context_test_id(13),
+                None,
+            ))
+            .with_wat(wat)
+            .build();
+        let result = instance.run(FuncRef::Method(WasmMethod::Update(method.to_string())));
+        let stats = instance.get_stats();
+        (
+            result,
+            stats.wasm_page_limit_refusals,
+            stats.wasm_bulk_check_slow_path_calls,
+        )
+    };
+    let refusals = |handler, host_accessor, bulk_check| HeapPageLimitRefusals {
+        handler,
+        host_accessor,
+        bulk_check,
+    };
+
+    let (result, detected, slow_path_calls) = run("load_pages_0_to_2");
+    assert_matches!(result, Err(HypervisorError::MemoryAccessLimitExceeded(_)));
+    assert_eq!(detected, refusals(1, 0, 0));
+    assert_eq!(slow_path_calls, 0);
+
+    let (result, detected, slow_path_calls) = run("host_write_pages_0_to_2");
+    assert_matches!(result, Err(HypervisorError::MemoryAccessLimitExceeded(_)));
+    assert_eq!(detected, refusals(0, 1, 0));
+    assert_eq!(slow_path_calls, 0);
+
+    let (result, detected, slow_path_calls) = run("fill_pages_0_to_2");
+    assert_matches!(result, Err(HypervisorError::MemoryAccessLimitExceeded(_)));
+    assert_eq!(detected, refusals(0, 0, 1));
+    assert_eq!(slow_path_calls, 1);
+
+    let (result, detected, slow_path_calls) = run("fill_pages_0_1");
+    assert_matches!(result, Ok(_));
+    assert_eq!(detected, refusals(0, 0, 0));
+    assert_eq!(slow_path_calls, 1);
+
+    let (result, detected, slow_path_calls) = run("fill_page_0");
+    assert_matches!(result, Ok(_));
+    assert_eq!(detected, refusals(0, 0, 0));
+    assert_eq!(slow_path_calls, 0);
 }
 
 /// Runs `method` of a fresh instance of `wat` with the given heap page limit

@@ -28,6 +28,7 @@ use ic_types::{
 };
 use ic_types_cycles::CanisterCyclesCostSchedule;
 mod basic;
+mod heap_page_limit;
 mod helper;
 mod simd;
 
@@ -36,6 +37,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
     let mut benchmarks = vec![];
     benchmarks.extend(basic::benchmarks());
     benchmarks.extend(simd::benchmarks());
+    benchmarks.extend(heap_page_limit::benchmarks());
 
     ////////////////////////////////////////////////////////////////////
     // Benchmark function.
@@ -43,64 +45,77 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
         c,
         "execution_environment:wasm_instructions",
         &benchmarks,
-        |_id: &str,
-         exec_env: &ExecutionEnvironment,
-         _expected_iterations,
-         common::BenchmarkArgs {
-             canister_state,
-             ingress,
-             time,
-             network_topology,
-             execution_parameters,
-             subnet_available_memory,
-             subnet_memory_reservation,
-             subnet_available_callbacks,
-             ..
-         }| {
-            let mut round_limits = RoundLimits {
-                instructions: as_round_instructions(
-                    execution_parameters.instruction_limits.message(),
-                ),
-                subnet_available_memory,
-                subnet_available_callbacks,
-                compute_allocation_used: 0,
-                subnet_memory_reservation,
-            };
-            let instructions_before = round_limits.instructions;
-            let res = exec_env.execute_canister_input(
-                canister_state,
-                execution_parameters.instruction_limits.clone(),
-                execution_parameters.instruction_limits.message(),
-                CanisterMessageOrTask::Message(ingress),
-                None,
-                time,
-                network_topology,
-                &mut round_limits,
-                Default::default(),
-                CyclesAccountManagerSubnetConfig::new(
-                    SMALL_APP_SUBNET_MAX_SIZE,
-                    CanisterCyclesCostSchedule::Normal,
-                    DEFAULT_REFERENCE_SUBNET_SIZE,
-                ),
-            );
-            // We do not validate the number of executed instructions.
-            let _executed_instructions =
-                as_num_instructions(instructions_before - round_limits.instructions);
-            let response = match res {
-                ExecuteMessageResult::Finished { response, .. } => response,
-                ExecuteMessageResult::Paused { .. } => panic!("Unexpected paused execution"),
-            };
-            let ExecutionResponse::Ingress((_, status)) = response else {
-                panic!("Expected ingress result");
-            };
-            let IngressStatus::Known { state, .. } = status else {
-                panic!("Unexpected ingress status");
-            };
-            if let IngressState::Failed(err) = state {
-                assert_eq!(err.code(), ErrorCode::CanisterDidNotReply)
-            }
-        },
+        execute_update,
     );
+
+    // The same bulk memory operations with the accessed heap page limit
+    // nearly exhausted, so that every operation takes the slow path of the
+    // injected check (a host call that counts the pages exactly).
+    common::run_benchmarks_with_config(
+        c,
+        "execution_environment:wasm_instructions_heap_page_limit",
+        &heap_page_limit::benchmarks(),
+        heap_page_limit::config(),
+        execute_update,
+    );
+}
+
+fn execute_update(
+    _id: &str,
+    exec_env: &ExecutionEnvironment,
+    _expected_iterations: u64,
+    common::BenchmarkArgs {
+        canister_state,
+        ingress,
+        time,
+        network_topology,
+        execution_parameters,
+        subnet_available_memory,
+        subnet_memory_reservation,
+        subnet_available_callbacks,
+        ..
+    }: common::BenchmarkArgs,
+) {
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(execution_parameters.instruction_limits.message()),
+        subnet_available_memory,
+        subnet_available_callbacks,
+        compute_allocation_used: 0,
+        subnet_memory_reservation,
+    };
+    let instructions_before = round_limits.instructions;
+    let res = exec_env.execute_canister_input(
+        canister_state,
+        execution_parameters.instruction_limits.clone(),
+        execution_parameters.instruction_limits.message(),
+        CanisterMessageOrTask::Message(ingress),
+        None,
+        time,
+        network_topology,
+        &mut round_limits,
+        Default::default(),
+        CyclesAccountManagerSubnetConfig::new(
+            SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
+            DEFAULT_REFERENCE_SUBNET_SIZE,
+        ),
+    );
+    // We do not validate the number of executed instructions.
+    let _executed_instructions =
+        as_num_instructions(instructions_before - round_limits.instructions);
+    let response = match res {
+        ExecuteMessageResult::Finished { response, .. } => response,
+        ExecuteMessageResult::Paused { .. } => panic!("Unexpected paused execution"),
+    };
+    let ExecutionResponse::Ingress((_, status)) = response else {
+        panic!("Expected ingress result");
+    };
+    let IngressStatus::Known { state, .. } = status else {
+        panic!("Unexpected ingress status");
+    };
+    if let IngressState::Failed(err) = state {
+        assert_eq!(err.code(), ErrorCode::CanisterDidNotReply)
+    }
 }
 
 criterion_group! {
