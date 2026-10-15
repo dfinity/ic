@@ -323,7 +323,7 @@ impl ReplayValidator {
         if new_height < target_height {
             // `new_height` was finalized so `new_height + 1` or above failed
             Err(ReplayError::ValidationIncomplete(
-                new_height + 1.into(),
+                new_height.increment(),
                 invalid,
             ))
         } else {
