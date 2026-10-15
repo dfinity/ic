@@ -365,6 +365,9 @@ pub(crate) mod fake {
         pub(crate) process: Option<Arc<P>>,
         pub(crate) starts: usize,
         pub(crate) stops: usize,
+        /// Whether stopping the running process fails, as if it did not exit even after
+        /// `SIGKILL`. The process then keeps running.
+        pub(crate) fail_stop: bool,
     }
 
     /// A [`ProcessRunner`] that records start/stop calls instead of spawning processes.
@@ -379,6 +382,7 @@ pub(crate) mod fake {
                     process: None,
                     starts: 0,
                     stops: 0,
+                    fail_stop: false,
                 })),
             }
         }
@@ -390,20 +394,24 @@ pub(crate) mod fake {
 
     impl<P: Process> ProcessRunner<P> for FakeProcessRunner<P> {
         fn start(&mut self, process: P) -> Result<()> {
+            // If a process is already running, the production implementation stops it first.
+            self.stop()?;
             let mut log = self.log.lock().unwrap();
-            if log.process.replace(Arc::new(process)).is_some() {
-                // If a process was already running, the production implementation stops it.
-                log.stops += 1;
-            }
+            log.process = Some(Arc::new(process));
             log.starts += 1;
             Ok(())
         }
 
         fn stop(&mut self) -> Result<()> {
             let mut log = self.log.lock().unwrap();
-            if log.process.take().is_some() {
-                log.stops += 1;
+            if log.process.is_none() {
+                return Ok(());
             }
+            if log.fail_stop {
+                return Err(std::io::Error::other("the process did not exit"));
+            }
+            log.process = None;
+            log.stops += 1;
             Ok(())
         }
 

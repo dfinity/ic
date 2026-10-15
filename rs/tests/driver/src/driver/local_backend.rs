@@ -653,6 +653,7 @@ impl LocalBackend {
     /// [`start_dnsmasq`](Self::start_dnsmasq).
     pub fn create_group(&self, group_name: &str) -> Result<()> {
         let bridge = Self::bridge_name(group_name);
+        let mac = bridge_mac(group_name);
         let prefix = Self::group_ipv6_prefix(group_name);
         // The gateway address (`<prefix>1`) lives on the bridge.
         let gateway = Self::group_gateway_ipv6(group_name);
@@ -696,16 +697,23 @@ impl LocalBackend {
         // `ip -6 addr add {gateway}/64` auto-creates (`proto kernel metric 256`):
         // replacing it in place sets its source. A separate route would land at
         // metric 1024 and lose to the metric-256 kernel route.
+        //
+        // The `lo` addresses need `nodad`: the kernel flags every new IPv6
+        // address tentative and only clears that flag from a workqueue item
+        // (loopback skips DAD, but in that same deferred step), while `ip -6
+        // route ... src` rejects a tentative source with "Invalid source
+        // address". Without `nodad` the route command races the workqueue, which
+        // it loses on a loaded host. `nodad` skips the tentative state entirely.
         let create_script = format!(
             "ip link del {bridge} 2>/dev/null; \
-             ip link add name {bridge} type bridge && \
+             ip link add name {bridge} address {mac} type bridge && \
              ip link set dev {bridge} up && \
              ip -6 addr add {gateway}/64 dev {bridge} nodad && \
              ip addr add {ipv4_gateway}/24 dev {bridge} && \
              {name_server_addrs}\
-             ip -6 addr replace {mgmt}/128 dev lo && \
-             ip -6 addr replace {logs}/128 dev lo && \
-             ip -6 addr replace {files}/128 dev lo && \
+             ip -6 addr replace {mgmt}/128 dev lo nodad && \
+             ip -6 addr replace {logs}/128 dev lo nodad && \
+             ip -6 addr replace {files}/128 dev lo nodad && \
              ip -6 route replace {prefix}/64 dev {bridge} proto kernel metric 256 src {mgmt}"
         );
         Self::run_shell(&create_script, "create group bridge")?;
@@ -1054,13 +1062,13 @@ key-exchange-timeout-ms = 10000
     /// Stop the QEMU process recorded in `pid_path`, if running. Best-effort and
     /// idempotent.
     ///
-    /// Sends SIGTERM (QEMU powers the guest off and exits), waits briefly for a
-    /// graceful exit, then escalates to SIGKILL. Signalling via the pid-file
-    /// (rather than a `Child` handle) lets any process tear a VM down: QEMU is
-    /// daemonized and reparented to an init-like ancestor (PID 1 of the test
-    /// action's execution environment), so no process holds a handle on it. The
-    /// teardown of that environment (bazel's `linux-sandbox`) remains the final
-    /// safety net.
+    /// Sends SIGTERM (QEMU exits at once without shutting the guest down),
+    /// waits briefly for it to exit, then escalates to SIGKILL. Signalling via
+    /// the pid-file (rather than a `Child` handle) lets any process tear a VM
+    /// down: QEMU is daemonized and reparented to an init-like ancestor (PID 1
+    /// of the test action's execution environment), so no process holds a
+    /// handle on it. The teardown of that environment (bazel's `linux-sandbox`)
+    /// remains the final safety net.
     fn stop_qemu(&self, pid_path: &Path) {
         let Ok(contents) = std::fs::read_to_string(pid_path) else {
             return;
@@ -1080,14 +1088,11 @@ key-exchange-timeout-ms = 10000
         while Path::new(&format!("/proc/{pid}")).exists() {
             if Instant::now() >= deadline {
                 // Guard against PID reuse before force-killing: the pid-file may
-                // be old, so confirm the process still looks like QEMU (exec
-                // basename truncated to `qemu-system-x86` in `comm`, hence a
-                // prefix match). Failing closed just defers to the teardown of
-                // the test action's execution environment.
-                let still_qemu = std::fs::read_to_string(format!("/proc/{pid}/comm"))
-                    .map(|c| c.trim_end().starts_with("qemu-"))
-                    .unwrap_or(false);
-                if still_qemu {
+                // be old, so confirm the process is the QEMU that `start_vm`
+                // launched for this VM, i.e. its command line names this
+                // pid-file. Failing closed just defers to the teardown of the
+                // test action's execution environment.
+                if qemu_cmdline_names_pidfile(pid, pid_path) {
                     warn!(
                         self.logger,
                         "QEMU (pid {pid}) survived the SIGTERM grace period; sending SIGKILL"
@@ -1096,6 +1101,12 @@ key-exchange-timeout-ms = 10000
                         .arg("-KILL")
                         .arg(pid.to_string())
                         .status();
+                } else {
+                    warn!(
+                        self.logger,
+                        "Process {pid} survived the SIGTERM grace period but is not the QEMU of {}; not killing it",
+                        pid_path.display()
+                    );
                 }
                 break;
             }
@@ -1124,15 +1135,20 @@ key-exchange-timeout-ms = 10000
         // VM records its pid under `working_dir/vms/<vm>/qemu.pid`; killing it
         // closes QEMU, which releases the TAP device it had open. A backend
         // hosts a single group per `bazel test` invocation, so every VM dir
-        // belongs to this group.
+        // belongs to this group. The VMs are stopped concurrently: a stop can
+        // take the whole SIGTERM grace period, which should not add up per VM.
         let vms_dir = self.active_local_backend.working_dir.join("vms");
         if let Ok(entries) = std::fs::read_dir(&vms_dir) {
-            for entry in entries.flatten() {
-                let pid_path = Self::qemu_pid_path(&entry.path());
-                if pid_path.exists() {
-                    self.stop_qemu(&pid_path);
+            let pid_paths: Vec<PathBuf> = entries
+                .flatten()
+                .map(|entry| Self::qemu_pid_path(&entry.path()))
+                .filter(|pid_path| pid_path.exists())
+                .collect();
+            std::thread::scope(|scope| {
+                for pid_path in &pid_paths {
+                    scope.spawn(move || self.stop_qemu(pid_path));
                 }
-            }
+            });
         }
 
         // Delete every TAP enslaved to the bridge, then the bridge itself. TAPs
@@ -1763,6 +1779,20 @@ key-exchange-timeout-ms = 10000
     }
 }
 
+/// Deterministic MAC address for `group_name`'s bridge, i.e. of the gateway.
+///
+/// A bridge without an explicitly set MAC takes the lowest MAC among its ports,
+/// so attaching or removing a TAP could change the gateway's MAC under the
+/// running guests, whose neighbour caches keep the old one for up to a minute,
+/// cutting them off from the host until then.
+fn bridge_mac(group_name: &str) -> MacAddr6 {
+    use ic_crypto_sha2::Sha256;
+    let hash = Sha256::hash(group_name.as_bytes());
+    // 0x6a as in `vm_mac`, but a second byte that is no `NodeType` index (see
+    // `calculate_deterministic_mac`), so it never equals a VM's MAC.
+    [0x6a, 0xff, hash[0], hash[1], hash[2], hash[3]].into()
+}
+
 /// Deterministic MAC address for a `(group, vm)` pair.
 fn vm_mac(group_name: &str, vm_name: &str) -> MacAddr6 {
     use ic_crypto_sha2::Sha256;
@@ -2038,5 +2068,54 @@ fn has_gpt_header(path: &Path) -> Result<bool> {
         Err(err) => {
             Err(err).with_context(|| format!("reading the GPT signature of {}", path.display()))
         }
+    }
+}
+
+/// Whether `/proc/<pid>/cmdline` has the argument pair `-pidfile <pid_path>`,
+/// i.e. the process is the QEMU that `start_vm` launched for this VM.
+fn qemu_cmdline_names_pidfile(pid: i32, pid_path: &Path) -> bool {
+    let pid_path = pid_path.display().to_string();
+    std::fs::read(format!("/proc/{pid}/cmdline"))
+        .map(|cmdline| {
+            cmdline
+                .split(|b| *b == 0)
+                .collect::<Vec<_>>()
+                .windows(2)
+                .any(|pair| pair[0] == b"-pidfile" && pair[1] == pid_path.as_bytes())
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn qemu_cmdline_names_pidfile_requires_the_pidfile_argument_pair() {
+        let pid_path = Path::new("/nonexistent/vms/vm/qemu.pid");
+        let path = pid_path.to_str().unwrap();
+        // `read` is a builtin, so `sh` blocks in it itself (no child process to
+        // orphan) until killed, with the positional arguments after `$0` in its argv.
+        let spawn = |args: &[&str]| {
+            std::process::Command::new("sh")
+                .args(["-c", "read _", "sh"])
+                .args(args)
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .unwrap()
+        };
+        let mut children = [
+            spawn(&["-pidfile", path]),
+            spawn(&[path]),
+            spawn(&["-pidfile", "/other/qemu.pid"]),
+        ];
+        let matches = children
+            .each_ref()
+            .map(|child| qemu_cmdline_names_pidfile(child.id() as i32, pid_path));
+        for child in &mut children {
+            child.kill().unwrap();
+            child.wait().unwrap();
+        }
+        assert_eq!(matches, [true, false, false]);
     }
 }

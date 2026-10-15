@@ -7,6 +7,7 @@ use crate::{
     adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
+    cloud_engine::Config as CloudEngineConfig,
     config_parser::{ConfigError, ConfigSource, ConfigValidate},
     crypto::CryptoConfig,
     execution_environment::Config as HypervisorConfig,
@@ -59,6 +60,7 @@ pub struct Config {
     pub adapters_config: AdaptersConfig,
     pub bitcoin_payload_builder_config: BitcoinPayloadBuilderConfig,
     pub initial_ipv4_config: IPv4Config,
+    pub cloud_engine: CloudEngineConfig,
     pub domain: String,
 }
 
@@ -88,6 +90,7 @@ pub struct ConfigOptional {
     pub adapters_config: Option<AdaptersConfig>,
     pub bitcoin_payload_builder_config: Option<BitcoinPayloadBuilderConfig>,
     pub initial_ipv4_config: Option<IPv4Config>,
+    pub cloud_engine: Option<CloudEngineConfig>,
     pub domain: Option<String>,
 }
 
@@ -126,6 +129,7 @@ impl Config {
             adapters_config: AdaptersConfig::default(),
             bitcoin_payload_builder_config: BitcoinPayloadBuilderConfig::default(),
             initial_ipv4_config: IPv4Config::default(),
+            cloud_engine: CloudEngineConfig::default(),
             domain: String::default(),
         }
     }
@@ -190,6 +194,7 @@ impl Config {
             initial_ipv4_config: cfg
                 .initial_ipv4_config
                 .unwrap_or(default.initial_ipv4_config),
+            cloud_engine: cfg.cloud_engine.unwrap_or(default.cloud_engine),
             domain: cfg.domain.unwrap_or_default(),
         })
     }
