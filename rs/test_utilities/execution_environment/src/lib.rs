@@ -1661,7 +1661,7 @@ impl ExecutionTest {
                     WasmExecutionMode::Wasm32,
                 );
                 let refunded = mgr.variable_execution_cost(
-                    prepaid_instructions.saturating_sub(instructions_used),
+                    prepaid_instructions.saturating_sub(&instructions_used),
                     subnet_cycles_config,
                     WasmExecutionMode::Wasm32,
                 );
