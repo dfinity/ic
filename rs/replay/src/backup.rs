@@ -418,11 +418,16 @@ pub(crate) fn deserialize_consensus_artifacts(
         let new_finalized_height = PoolReader::new(pool).get_finalized_height();
         println!("Validated artifacts up to new finalized height: {new_finalized_height}");
 
+        observed_files.retain(|hash, _| !validated.contains(hash));
+
         for i in &invalid {
-            match observed_files.get(&i.id.hash) {
+            match observed_files.remove(&i.id.hash) {
                 Some(artifact_path) => {
-                    println!("Invalid artifact detected: {:?}", artifact_path);
-                    rename_file(artifact_path);
+                    println!(
+                        "Invalid artifact detected: {artifact_path:?}, reason: {}",
+                        i.message
+                    );
+                    rename_file(&artifact_path);
                 }
                 None => println!("Failed to get path for invalid artifact: {i:?}"),
             }
@@ -430,22 +435,18 @@ pub(crate) fn deserialize_consensus_artifacts(
 
         // If any artifact that we expect to be validated is not, we remove it here and hopefully
         // rsync the correct ones next time.
-        for artifact_path in observed_files
-            .iter()
-            .filter(|(hash, _)| !validated.contains(hash))
-            // If the artifact is invalid, it was already renamed above
-            .filter(|(hash, _)| !invalid.iter().any(|i| &i.id.hash == *hash))
-            // Exception for  the random tape: even though there is a random tape at that height, it
-            // could legitimately stay unvalidated because the validator only validates tapes up to
-            // `finalized_height + 1`. Thus, if there were no finalizations at that height nor at
-            // the previous height, the tape at the current height would be left invalidated. Though
-            // do not worry: as soon as a later finalization is found, the tape is still in the
-            // unvalidated pool and will still be validated (or reported as invalid otherwise).
-            .filter(|(hash, _)| !matches!(hash, ConsensusMessageHash::RandomTape(..)))
-            .map(|(_, path)| path)
+        // Exception for the random tape: even though there is a random tape at that height, it
+        // could legitimately stay unvalidated because the validator only validates tapes up to
+        // `finalized_height + 1`. Thus, if there were no finalizations at that height nor at the
+        // previous height, the tape at the current height would be left unvalidated. Though do not
+        // worry: the tape is still in the unvalidated pool and will be validated as soon as a
+        // later finalization is found (or reported as invalid otherwise, in which case we keep
+        // its file to rename it).
+        for (_, artifact_path) in observed_files
+            .extract_if(|hash, _| !matches!(hash, ConsensusMessageHash::RandomTape(..)))
         {
             println!("Artifact couldn't be validated: {artifact_path:?}");
-            rename_file(artifact_path);
+            rename_file(&artifact_path);
         }
 
         if !invalid.is_empty() {
