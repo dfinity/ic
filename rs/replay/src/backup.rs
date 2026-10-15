@@ -614,6 +614,28 @@ mod tests {
             fs::write(self.file(height, file_name), artifact.encode_to_vec()).unwrap();
         }
 
+        /// Returns the files of the spool that the restore renamed, sorted.
+        fn renamed_files(&self) -> Vec<PathBuf> {
+            fn walk(dir: &Path, files: &mut Vec<PathBuf>) {
+                for entry in fs::read_dir(dir).unwrap() {
+                    let path = entry.unwrap().path();
+                    if path.is_dir() {
+                        walk(&path, files);
+                    } else if path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with("invalid_"))
+                    {
+                        files.push(path);
+                    }
+                }
+            }
+            let mut files = Vec::new();
+            walk(self.dir.path(), &mut files);
+            files.sort();
+            files
+        }
+
         /// Deserializes the spool from height 1 into a fresh pool the way `restore_from_backup`
         /// does: after every `CUPHeightWasFinalized` exit, the CUP is inserted and the
         /// deserialization resumed. Returns every exit with the finalized height of the pool at
@@ -684,15 +706,61 @@ mod tests {
         }
     }
 
-    #[test]
-    fn cup_heights_are_reported_as_finalized_once_the_pool_finalized_them() {
+    /// The exits of the restore of a spool in which all heights can be validated.
+    fn complete_restore() -> Vec<(Result<(), ExitPoint>, Height)> {
         let cup = |height: u64| Err(ExitPoint::CUPHeightWasFinalized(Height::from(height)));
+        vec![
+            // CUP heights are reported as finalized once the pool finalized them
+            (cup(CUP_HEIGHT), Height::from(CUP_HEIGHT)),
+            (cup(2 * CUP_HEIGHT), Height::from(2 * CUP_HEIGHT)),
+            (Ok(()), Height::from(TOP_HEIGHT)),
+        ]
+    }
+
+    #[test]
+    fn valid_spool_is_restored_without_renaming_files() {
+        let spool = Spool::new();
+        assert_eq!(spool.restore(), complete_restore());
+        assert_eq!(spool.renamed_files(), Vec::<PathBuf>::new());
+    }
+
+    /// Without finalizations at two consecutive heights, the random tape at the second one stays
+    /// unvalidated until the next finalization. Its file must not be renamed in the meantime.
+    #[test]
+    fn random_tape_waiting_for_a_later_finalization_is_not_renamed() {
+        const HEIGHT: u64 = CUP_HEIGHT / 2;
+        let spool = Spool::new();
+        spool.remove(HEIGHT - 1, "finalization.bin");
+        spool.remove(HEIGHT, "finalization.bin");
+
+        assert_eq!(spool.restore(), complete_restore());
+        assert_eq!(spool.renamed_files(), Vec::<PathBuf>::new());
+    }
+
+    /// The restore renames the files of the artifacts that couldn't be validated and leaves the
+    /// validated ones alone. Without its notarization, neither the block proposal nor the
+    /// finalization of a height get validated, unlike its random beacon and tape.
+    #[test]
+    fn artifacts_that_could_not_be_validated_are_renamed() {
+        const HEIGHT: u64 = CUP_HEIGHT / 2;
+        let spool = Spool::new();
+        spool.remove(HEIGHT, "notarization.bin");
+
+        let results: Vec<_> = spool
+            .restore()
+            .into_iter()
+            .map(|(result, _)| result)
+            .collect();
+
         assert_eq!(
-            Spool::new().restore(),
+            results,
+            vec![Err(ExitPoint::ValidationIncomplete(Height::from(HEIGHT)))]
+        );
+        assert_eq!(
+            spool.renamed_files(),
             vec![
-                (cup(CUP_HEIGHT), Height::from(CUP_HEIGHT)),
-                (cup(2 * CUP_HEIGHT), Height::from(2 * CUP_HEIGHT)),
-                (Ok(()), Height::from(TOP_HEIGHT)),
+                spool.file(HEIGHT, "invalid_block_proposal.bin"),
+                spool.file(HEIGHT, "invalid_finalization.bin"),
             ]
         );
     }
@@ -816,5 +884,27 @@ mod tests {
         assert_renamed(&spool, HEIGHT, "random_tape.bin");
         // The valid tape at the height at which the invalid one was found is left alone.
         assert!(spool.file(HEIGHT + 1, "random_tape.bin").exists());
+    }
+
+    /// All the invalid artifacts found at a height are renamed.
+    #[test]
+    fn all_invalid_artifacts_of_a_height_are_renamed() {
+        const HEIGHT: u64 = CUP_HEIGHT / 2;
+        let spool = Spool::new();
+        replace_with_invalid_artifact(&spool, HEIGHT, "block_proposal.bin");
+        replace_with_invalid_artifact(&spool, HEIGHT, "random_tape.bin");
+
+        let results: Vec<_> = spool
+            .restore()
+            .into_iter()
+            .map(|(result, _)| result)
+            .collect();
+
+        assert_eq!(
+            results,
+            vec![Err(ExitPoint::ValidationIncomplete(Height::from(HEIGHT)))]
+        );
+        assert_renamed(&spool, HEIGHT, "block_proposal.bin");
+        assert_renamed(&spool, HEIGHT, "random_tape.bin");
     }
 }
