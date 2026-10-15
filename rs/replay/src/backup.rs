@@ -422,18 +422,18 @@ pub(crate) fn deserialize_consensus_artifacts(
                 Some(artifact_path) => {
                     println!("Invalid artifact detected: {:?}", artifact_path);
                     rename_file(artifact_path);
-                    return Err(ExitPoint::ValidationIncomplete(height));
                 }
                 None => println!("Failed to get path for invalid artifact: {i:?}"),
             }
         }
-        invalid_artifacts.append(&mut invalid);
 
         // If any artifact that we expect to be validated is not, we remove it here and hopefully
         // rsync the correct ones next time.
         for artifact_path in observed_files
             .iter()
             .filter(|(hash, _)| !validated.contains(hash))
+            // If the artifact is invalid, it was already renamed above
+            .filter(|(hash, _)| !invalid.iter().any(|i| &i.id.hash == *hash))
             // Exception for  the random tape: even though there is a random tape at that height, it
             // could legitimately stay unvalidated because the validator only validates tapes up to
             // `finalized_height + 1`. Thus, if there were no finalizations at that height nor at
@@ -445,6 +445,11 @@ pub(crate) fn deserialize_consensus_artifacts(
         {
             println!("Artifact couldn't be validated: {artifact_path:?}");
             rename_file(artifact_path);
+        }
+
+        if !invalid.is_empty() {
+            invalid_artifacts.append(&mut invalid);
+            return Err(ExitPoint::ValidationIncomplete(height));
         }
 
         if new_finalized_height < target_height {
