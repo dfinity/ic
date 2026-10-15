@@ -618,7 +618,6 @@ impl CallOrTaskHelper {
                         // non-replicated mode: a composite query called in the
                         // replicated mode is rejected before its execution.
                         false,
-                        round.hypervisor.metrics(),
                         round.log,
                     )
                 {

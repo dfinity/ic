@@ -771,7 +771,6 @@ impl InstallCodeHelper {
                 &round.network_topology,
                 round.hypervisor.subnet_id(),
                 false, // Install cannot happen in composite_query.
-                round.hypervisor.metrics(),
                 round.log,
             );
 

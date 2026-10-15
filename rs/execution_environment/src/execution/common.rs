@@ -872,7 +872,6 @@ fn try_apply_canister_state_changes(
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
     is_composite_query: bool,
-    metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
 ) -> HypervisorResult<RequestMetadataStats> {
     subnet_available_memory
@@ -889,7 +888,6 @@ fn try_apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
-        metrics,
         log,
     )
 }
@@ -944,7 +942,6 @@ pub fn apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
-        metrics,
         log,
     ) {
         Ok(request_stats) => {
