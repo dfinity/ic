@@ -121,9 +121,9 @@ const INIT_INSTRUCTIONS: u64 = 295 * B;
 /// `U7`. The test never sets it, so those loops never end.
 const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 
-/// The number of nodes of every subnet. More than one so that the minima and
-/// maxima the merge readiness condition is made of range over more than one
-/// replica.
+/// The number of nodes of every subnet. More than one so that the terms of the
+/// merge readiness condition, which must hold together on the same quorum of
+/// at least 2/3 of the replicas of a subnet, range over more than one replica.
 const SUBNET_SIZE: usize = 4;
 
 /// The DKG interval length of the Application subnets, i.e. one less than the
@@ -152,8 +152,9 @@ const INDUCTION_BACKOFF: Duration = Duration::from_secs(1);
 const PER_TEST_TIMEOUT: Duration = Duration::from_secs(900);
 const OVERALL_TIMEOUT: Duration = Duration::from_secs(1500);
 
-/// The conditions this scenario violates, i.e. the ones step 7 checks. The
-/// three that are missing are expected to hold:
+/// The conditions this scenario violates, i.e. the ones step 7 checks. This
+/// includes `CommonQuorum`, since the replicas do not satisfy the individual
+/// conditions together. The three that are missing are expected to hold:
 ///
 /// * `RegistryVersion`, because this test creates no registry version: it
 ///   evaluates the condition at the version of its own topology snapshot, which
@@ -170,12 +171,13 @@ const OVERALL_TIMEOUT: Duration = Duration::from_secs(1500);
 ///   refund, and the pool only holds on to refunds whose destination subnet
 ///   is cooling down while this one is not, or whose stream is full (which
 ///   would require a more complex test setup).
-const VIOLATED_CONDITIONS: [Condition; 5] = [
+const VIOLATED_CONDITIONS: [Condition; 6] = [
     Condition::IncomingStreams,
     Condition::OutgoingStreams,
     Condition::IngressHistory,
     Condition::SubnetInputQueues,
     Condition::SubnetCallContexts,
+    Condition::CommonQuorum,
 ];
 
 fn main() -> Result<()> {
@@ -385,7 +387,8 @@ async fn run(env: TestEnv) {
 /// The terms are evaluated by `ic_subnet_merging::readiness`, i.e. by the same
 /// code a subnet merging tool evaluates them with. Every term is evaluated
 /// repeatedly until all of `VIOLATED_CONDITIONS` are violated at the same
-/// evaluation.
+/// evaluation with every replica successfully scraped, so missing data cannot
+/// stand in for the violations this scenario is meant to exercise.
 async fn check_conditions_violated(
     topology: &TopologySnapshot,
     m_subnet: &SubnetSnapshot,
@@ -412,8 +415,20 @@ async fn check_conditions_violated(
         CONDITIONS_TIMEOUT,
         CONDITIONS_BACKOFF,
         || async {
-            let terms =
+            let readiness =
                 evaluate_merge_readiness(&subnets, m_subnet.subnet_id, registry_version).await?;
+            if !readiness.scrape_failures.is_empty() {
+                bail!(
+                    "cannot check readiness violations with incomplete metrics: {}",
+                    readiness
+                        .scrape_failures
+                        .iter()
+                        .map(|(subnet_id, err)| format!("subnet {subnet_id}: {err}"))
+                        .collect::<Vec<_>>()
+                        .join("; "),
+                );
+            }
+            let terms = readiness.terms;
             let satisfied: Vec<&str> = VIOLATED_CONDITIONS
                 .iter()
                 .map(|condition| term(&terms, *condition))

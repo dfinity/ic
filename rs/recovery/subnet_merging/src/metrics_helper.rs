@@ -55,6 +55,19 @@ impl std::error::Error for ScrapeError {}
 /// could otherwise hold on partial data. A series that no node reports is
 /// absent though, as a node that responds simply does not export that series.
 pub async fn fetch_metrics(node_ips: &[IpAddr], metrics: &[&str]) -> Result<Metrics, ScrapeError> {
+    match fetch_available_metrics(node_ips, metrics).await {
+        (metrics, None) => Ok(metrics),
+        (_, Some(err)) => Err(err),
+    }
+}
+
+/// Fetches all series of the given metrics from those of the given nodes that
+/// can be scraped. Returns their metrics, along with the nodes that could not
+/// be scraped, if any.
+pub async fn fetch_available_metrics(
+    node_ips: &[IpAddr],
+    metrics: &[&str],
+) -> (Metrics, Option<ScrapeError>) {
     let responses = join_all(node_ips.iter().map(fetch_node_metrics)).await;
 
     let mut result = Metrics::new();
@@ -69,10 +82,8 @@ pub async fn fetch_metrics(node_ips: &[IpAddr], metrics: &[&str]) -> Result<Metr
             Err(reason) => failures.push((*ip, reason)),
         }
     }
-    if !failures.is_empty() {
-        return Err(ScrapeError { failures });
-    }
-    Ok(result)
+    let failures = (!failures.is_empty()).then_some(ScrapeError { failures });
+    (result, failures)
 }
 
 async fn fetch_node_metrics(ip: &IpAddr) -> Result<String, String> {
@@ -130,19 +141,44 @@ pub fn matching_series<'a>(
         .collect()
 }
 
-/// The largest value any replica reports for any series of `metric` whose
-/// labels match `labels_match`. A series that a replica does not report reads
-/// as zero, so this is zero if there is no such series.
-pub fn max_across_replicas(
+/// The values `replica` reports for the series of `metric` whose labels match
+/// `labels_match`.
+fn replica_values<'a>(
+    metrics: &'a Metrics,
+    metric: &str,
+    labels_match: impl Fn(&Labels) -> bool,
+    replica: IpAddr,
+) -> impl Iterator<Item = f64> + 'a {
+    matching_series(metrics, metric, labels_match)
+        .into_iter()
+        .filter_map(move |values| values.get(&replica))
+        .copied()
+}
+
+/// The largest value `replica` reports for any series of `metric` whose labels
+/// match `labels_match`, or zero if it reports no such series.
+pub fn max_on_replica(
     metrics: &Metrics,
     metric: &str,
     labels_match: impl Fn(&Labels) -> bool,
+    replica: &IpAddr,
 ) -> f64 {
-    matching_series(metrics, metric, labels_match)
-        .into_iter()
-        .flat_map(|values| values.values())
-        .copied()
-        .fold(0.0, f64::max)
+    replica_values(metrics, metric, labels_match, *replica)
+        .reduce(f64::max)
+        .unwrap_or(0.0)
+}
+
+/// The smallest value `replica` reports for any series of `metric` whose labels
+/// match `labels_match`, or zero if it reports no such series.
+pub fn min_on_replica(
+    metrics: &Metrics,
+    metric: &str,
+    labels_match: impl Fn(&Labels) -> bool,
+    replica: &IpAddr,
+) -> f64 {
+    replica_values(metrics, metric, labels_match, *replica)
+        .reduce(f64::min)
+        .unwrap_or(0.0)
 }
 
 /// The smallest value any of the given replicas reports for any series of
@@ -154,17 +190,9 @@ pub fn min_across_replicas(
     labels_match: impl Fn(&Labels) -> bool,
     replicas: &[IpAddr],
 ) -> f64 {
-    let series = matching_series(metrics, metric, labels_match);
     replicas
         .iter()
-        .map(|ip| {
-            series
-                .iter()
-                .filter_map(|values| values.get(ip))
-                .copied()
-                .reduce(f64::min)
-                .unwrap_or(0.0)
-        })
+        .map(|ip| min_on_replica(metrics, metric, &labels_match, ip))
         .reduce(f64::min)
         .unwrap_or(0.0)
 }
@@ -248,7 +276,7 @@ some_other_metric 12
     }
 
     #[test]
-    fn across_replicas_test() {
+    fn on_replica_test() {
         let metrics = Metrics::from([
             (
                 series("mr_stream_messages", &[("remote", "a")]),
@@ -263,19 +291,27 @@ some_other_metric 12
                 values(&[(1, 100.0)]),
             ),
         ]);
+        let remote_a = |labels: &Labels| labels.get("remote").is_some_and(|remote| remote == "a");
 
         assert_eq!(
-            max_across_replicas(&metrics, "mr_stream_messages", |_| true),
+            max_on_replica(&metrics, "mr_stream_messages", |_| true, &ip(1)),
             5.0
         );
         assert_eq!(
-            max_across_replicas(&metrics, "mr_stream_messages", |labels| labels
-                .get("remote")
-                .is_some_and(|remote| remote == "a")),
-            3.0
+            min_on_replica(&metrics, "mr_stream_messages", |_| true, &ip(1)),
+            1.0
         );
         assert_eq!(
-            max_across_replicas(&metrics, "mr_registry_version", |_| true),
+            max_on_replica(&metrics, "mr_stream_messages", remote_a, &ip(2)),
+            3.0
+        );
+        // A replica that reports no matching series reads as zero.
+        assert_eq!(
+            max_on_replica(&metrics, "mr_stream_messages", |_| true, &ip(3)),
+            0.0
+        );
+        assert_eq!(
+            min_on_replica(&metrics, "mr_registry_version", |_| true, &ip(1)),
             0.0
         );
         assert_eq!(
