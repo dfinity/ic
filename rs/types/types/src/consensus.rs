@@ -924,6 +924,27 @@ pub enum ConsensusMessage {
     EquivocationProof(EquivocationProof),
 }
 
+impl ConsensusMessage {
+    /// Loads whatever the message holds lazily, i.e. the payload of the block that a
+    /// block proposal or a catch-up package carries (see [`Payload::load`]).
+    pub fn load(&self) {
+        match self {
+            ConsensusMessage::BlockProposal(proposal) => proposal.as_ref().payload.load(),
+            ConsensusMessage::CatchUpPackage(cup) => cup.content.block.as_ref().payload.load(),
+            ConsensusMessage::RandomBeacon(_)
+            | ConsensusMessage::Finalization(_)
+            | ConsensusMessage::Notarization(_)
+            | ConsensusMessage::RandomBeaconShare(_)
+            | ConsensusMessage::NotarizationShare(_)
+            | ConsensusMessage::FinalizationShare(_)
+            | ConsensusMessage::RandomTape(_)
+            | ConsensusMessage::RandomTapeShare(_)
+            | ConsensusMessage::CatchUpPackageShare(_)
+            | ConsensusMessage::EquivocationProof(_) => {}
+        }
+    }
+}
+
 impl IdentifiableArtifact for ConsensusMessage {
     const NAME: &'static str = "consensus";
     type Id = ConsensusMessageId;
