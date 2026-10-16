@@ -1595,6 +1595,10 @@ impl CertifiedSlicePool {
     /// a header that is ahead in one and behind in another comes from a peer that
     /// is misbehaving. It is ignored rather than merged.
     pub fn record_peer_header(&mut self, subnet_id: SubnetId, header: &StreamHeader) {
+        if !self.advances_recorded_peer_header(subnet_id, header) {
+            return;
+        }
+
         match self.peer_headers.entry(subnet_id) {
             Entry::Vacant(vacant) => {
                 vacant.insert(Arc::new(header.clone()));
@@ -1602,14 +1606,6 @@ impl CertifiedSlicePool {
 
             Entry::Occupied(mut occupied) => {
                 let recorded = occupied.get();
-                // Nothing to do unless the header advances some index.
-                if recorded.begin() >= header.begin()
-                    && recorded.end() >= header.end()
-                    && recorded.signals_end() >= header.signals_end()
-                {
-                    return;
-                }
-
                 if recorded.begin() <= header.begin()
                     && recorded.end() <= header.end()
                     && recorded.signals_end() <= header.signals_end()
@@ -1625,6 +1621,21 @@ impl CertifiedSlicePool {
                 }
             }
         }
+    }
+
+    /// Whether `header` is ahead of the peer's recorded header (if any) in any of
+    /// `begin`, `end` or `signals_end`, i.e. whether `record_peer_header()` would
+    /// do anything with it.
+    pub fn advances_recorded_peer_header(
+        &self,
+        subnet_id: SubnetId,
+        header: &StreamHeader,
+    ) -> bool {
+        self.peer_headers.get(&subnet_id).is_none_or(|recorded| {
+            recorded.begin() < header.begin()
+                || recorded.end() < header.end()
+                || recorded.signals_end() < header.signals_end()
+        })
     }
 
     /// Schedules a pull from `subnet_id`, unless one is already scheduled.
