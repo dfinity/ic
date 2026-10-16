@@ -39,23 +39,21 @@ pub(crate) fn uri_prefix<Artifact: PbArtifact>() -> String {
     Artifact::NAME.to_lowercase()
 }
 
-fn build_axum_router<Artifact, Pool>(pool: Arc<RwLock<Pool>>) -> Router
+/// A pool shared with the components writing to it, read by taking its lock on each access.
+struct SharedPool<Pool>(Arc<RwLock<Pool>>);
+
+impl<Artifact, Pool> ValidatedPoolReader<Artifact> for SharedPool<Pool>
 where
-    Artifact: PbArtifact,
-    Pool: ValidatedPoolReader<Artifact> + 'static,
+    Artifact: IdentifiableArtifact,
+    Pool: ValidatedPoolReader<Artifact>,
 {
-    Router::new()
-        .route(
-            &format!("/{}/rpc", uri_prefix::<Artifact>()),
-            any(rpc_handler),
-        )
-        .with_state(pool)
-        // Disable request size limit since consensus might push artifacts larger than limit.
-        .layer(DefaultBodyLimit::disable())
+    fn get(&self, id: &Artifact::Id) -> Option<Artifact> {
+        self.0.read().unwrap().get(id)
+    }
 }
 
 async fn rpc_handler<Artifact, Pool>(
-    State(pool): State<Arc<RwLock<Pool>>>,
+    State(pool): State<Arc<Pool>>,
     payload: Bytes,
 ) -> Result<Bytes, StatusCode>
 where
@@ -65,11 +63,7 @@ where
     let jh = tokio::task::spawn_blocking(move || {
         let id: Artifact::Id =
             Artifact::PbId::proxy_decode(&payload).map_err(|_| StatusCode::BAD_REQUEST)?;
-        let artifact = pool
-            .read()
-            .unwrap()
-            .get(&id)
-            .ok_or(StatusCode::NO_CONTENT)?;
+        let artifact = pool.get(&id).ok_or(StatusCode::NO_CONTENT)?;
         Ok::<_, StatusCode>(Bytes::from(Artifact::PbMessage::proxy_encode(artifact)))
     });
     let bytes = jh.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
@@ -121,6 +115,8 @@ impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifa
 }
 
 impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
+    /// Downloads the `Artifact`s wanted by the bouncers built from `pool`, and serves the
+    /// `Artifact`s of `pool` to the peers.
     pub fn new<Pool, Factory>(
         log: ReplicaLogger,
         rt: Handle,
@@ -132,37 +128,66 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         Pool: ValidatedPoolReader<Artifact> + 'static,
         Factory: BouncerFactory<Artifact::Id, Pool> + 'static,
     {
-        let pool_clone = pool.clone();
         (
-            move |transport: Arc<dyn Transport>| {
-                let bouncer = {
-                    let p = pool.read().unwrap();
-                    bouncer_factory.new_bouncer(&p)
-                };
-                let (bouncer_tx, bouncer_rx) = watch::channel(bouncer);
-                let jh = rt.spawn(async move {
-                    loop {
-                        let bouncer = {
-                            let p = pool.read().unwrap();
-                            bouncer_factory.new_bouncer(&p)
-                        };
-                        if bouncer_tx.send(bouncer).is_err() {
-                            break;
-                        }
-
-                        tokio::time::sleep(bouncer_factory.refresh_period()).await
-                    }
-                });
-                Self {
-                    log,
-                    transport,
-                    bouncer_rx,
-                    metrics: FetchArtifactMetrics::new::<Artifact>(&metrics_registry),
-                    jh: Arc::new(jh),
-                }
-            },
-            build_axum_router(pool_clone),
+            Self::downloader(log, rt, pool.clone(), bouncer_factory, metrics_registry),
+            Self::router(Arc::new(SharedPool(pool))),
         )
+    }
+
+    /// Downloads the `Artifact`s wanted by the bouncers built from `pool`.
+    pub(crate) fn downloader<Pool, Factory>(
+        log: ReplicaLogger,
+        rt: Handle,
+        pool: Arc<RwLock<Pool>>,
+        bouncer_factory: Factory,
+        metrics_registry: MetricsRegistry,
+    ) -> impl FnOnce(Arc<dyn Transport>) -> Self
+    where
+        Pool: Send + Sync + 'static,
+        Factory: BouncerFactory<Artifact::Id, Pool> + 'static,
+    {
+        move |transport: Arc<dyn Transport>| {
+            let bouncer = {
+                let p = pool.read().unwrap();
+                bouncer_factory.new_bouncer(&p)
+            };
+            let (bouncer_tx, bouncer_rx) = watch::channel(bouncer);
+            let jh = rt.spawn(async move {
+                loop {
+                    let bouncer = {
+                        let p = pool.read().unwrap();
+                        bouncer_factory.new_bouncer(&p)
+                    };
+                    if bouncer_tx.send(bouncer).is_err() {
+                        break;
+                    }
+
+                    tokio::time::sleep(bouncer_factory.refresh_period()).await
+                }
+            });
+            Self {
+                log,
+                transport,
+                bouncer_rx,
+                metrics: FetchArtifactMetrics::new::<Artifact>(&metrics_registry),
+                jh: Arc::new(jh),
+            }
+        }
+    }
+
+    /// Serves the `Artifact`s of `pool` to the peers' downloaders.
+    pub(crate) fn router<Pool>(pool: Arc<Pool>) -> Router
+    where
+        Pool: ValidatedPoolReader<Artifact> + 'static,
+    {
+        Router::new()
+            .route(
+                &format!("/{}/rpc", uri_prefix::<Artifact>()),
+                any(rpc_handler),
+            )
+            .with_state(pool)
+            // Disable request size limit since consensus might push artifacts larger than limit.
+            .layer(DefaultBodyLimit::disable())
     }
 
     /// Returns a watcher over the bouncer used by this assembler, so callers can react to the
