@@ -1485,6 +1485,15 @@ mod tests {
                 .into_message(),
             );
 
+            // We later check that unsigned CUPs are not broadcasted, so we pin the condition of
+            // having an unsigned CUP in the pool here.
+            assert!(
+                messages.iter().any(
+                    |m| matches!(m, ConsensusMessage::CatchUpPackage(cup) if !cup.is_signed())
+                ),
+                "Test requires an unsigned CUP in the pool"
+            );
+
             pool.apply(
                 messages
                     .into_iter()
@@ -1506,19 +1515,26 @@ mod tests {
                 _ => panic!("No signer for aggregate artifacts"),
             };
 
-            pool.get_all_for_initial_broadcast().for_each(|m| {
+            for m in pool.get_all_for_initial_broadcast() {
                 if m.height().get() <= height_offset + 15 {
                     assert!(!m.is_share());
                 }
+
                 if m.is_share() {
                     assert_eq!(get_signer(&m), node);
                 }
-            });
+
+                if let ConsensusMessage::CatchUpPackage(cup) = m
+                    && !cup.is_signed()
+                {
+                    panic!("Unsigned CUPs should not be broadcasted");
+                }
+            }
 
             assert_eq!(
                 pool.get_all_for_initial_broadcast().count(),
-                // 1 CUP, 15 heights of aggregates, 5 heights of shares, 20 heights of proposals
-                1 + 15 * 4 + 5 * 4 + 20 * 5
+                // 15 heights of aggregates, 5 heights of shares, 20 heights of proposals
+                15 * 4 + 5 * 4 + 20 * 5
             );
         });
     }
