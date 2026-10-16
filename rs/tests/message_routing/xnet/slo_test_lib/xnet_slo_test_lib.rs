@@ -472,7 +472,8 @@ pub fn check_success(
 /// one of the subnets to deploy XNet test canisters to, and a configuration,
 /// and runs an instance of the XNet SLO test. It assumes the IC instance under
 /// test is already set up and ignores all `config` parameters related to the
-/// IC topology (e.g., `nodes_per_subnet`).
+/// IC topology (e.g., `nodes_per_subnet`). The canisters are torn down via the
+/// most up-to-date node of their subnet in the topology of `env`.
 ///
 ///
 /// # Panics
@@ -491,7 +492,7 @@ pub async fn test_async_impl(
 
     // Step 1: Install Xnet canisters on each subnet.
     // Step 2: Start all canisters (via update `start` call).
-    let canisters = deploy_and_start(env, &endpoints_runtimes, &config, logger).await;
+    let canisters = deploy_and_start(env.clone(), &endpoints_runtimes, &config, logger).await;
 
     // Step 3: Wait for canisters to exchange messages.
     info!(
@@ -500,6 +501,31 @@ pub async fn test_async_impl(
         config.runtime.as_secs()
     );
     tokio::time::sleep(Duration::from_secs(config.runtime.as_secs())).await;
+
+    // By now the node behind an endpoint may lag behind the rest of its subnet, e.g.
+    // when its host is oversubscribed. If it lags by more than 90s, it accepts an
+    // update call, but then drops it without telling the client: the client sets
+    // the call's `ingress_expiry` 4 minutes ahead, but the node's ingress manager
+    // only accepts calls that expire at most 5.5 minutes after the time of its
+    // latest finalized block. The client then waits for the call until it times
+    // out. So send the calls of the tear down to the most up-to-date node of each
+    // subnet instead.
+    let teardown_runtimes = join_all(
+        canisters
+            .iter()
+            .map(|subnet_canisters| up_to_date_runtime(&env, &subnet_canisters[0], logger)),
+    )
+    .await;
+    let canisters = canisters
+        .iter()
+        .zip(&teardown_runtimes)
+        .map(|(subnet_canisters, runtime)| {
+            subnet_canisters
+                .iter()
+                .map(|canister| Canister::new(runtime, canister.canister_id()))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
 
     // Step 4: Stop all canisters (via update `stop` call).
     // Step 5: Collect metrics from all canisters (via query `metrics` call).
@@ -513,6 +539,55 @@ pub async fn test_async_impl(
         check_success(aggregated_metrics, &config, logger),
         "Test failed."
     );
+}
+
+/// Returns a runtime for the most up-to-date node, i.e. the one with the highest
+/// certified height, of the subnet hosting the given canister.
+async fn up_to_date_runtime(
+    env: &TestEnv,
+    canister: &Canister<'_>,
+    logger: &slog::Logger,
+) -> Runtime {
+    let canister_id = canister.canister_id();
+    let subnet = env
+        .topology_snapshot()
+        .subnets()
+        .find(|subnet| {
+            subnet
+                .subnet_canister_ranges()
+                .iter()
+                .any(|range| range.contains(&canister_id))
+        })
+        .unwrap_or_else(|| panic!("No subnet hosts canister {canister_id}"));
+    let nodes = join_all(subnet.nodes().map(|node| async move {
+        let certified_height = node
+            .status_async()
+            .await
+            .ok()
+            .and_then(|status| status.certified_height);
+        (certified_height, node)
+    }))
+    .await;
+    info!(
+        logger,
+        "Certified heights of the nodes of subnet {}: {:?}",
+        subnet.subnet_id,
+        nodes
+            .iter()
+            .map(|(certified_height, node)| (node.node_id, *certified_height))
+            .collect::<Vec<_>>()
+    );
+    let (_, node) = nodes
+        .into_iter()
+        .max_by_key(|(certified_height, _)| *certified_height)
+        .unwrap();
+    info!(
+        logger,
+        "Sending the calls of the tear down for subnet {} to node {}",
+        subnet.subnet_id,
+        node.node_id
+    );
+    runtime_from_url(node.get_public_url(), node.effective_canister_id())
 }
 
 pub async fn stop_all_canister(canisters: &[Vec<Canister<'_>>]) {
