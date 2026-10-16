@@ -1,6 +1,6 @@
 use ic_certification::{CertificateValidationError, verify_certified_data};
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_interfaces_registry::RegistryRecord;
+use ic_interfaces_registry::{RegistryRecord, RegistryUpdates};
 use ic_registry_transport::{
     GetChunk, dechunkify_mutation_value,
     pb::v1::{CertifiedResponse, HighCapacityRegistryAtomicMutateRequest},
@@ -125,7 +125,7 @@ pub async fn decode_hash_tree(
     since_version: u64,
     hash_tree: MixedHashTree,
     get_chunk: &(impl GetChunk + Sync),
-) -> Result<(Vec<RegistryRecord>, RegistryVersion), CertificationError> {
+) -> Result<(RegistryUpdates, RegistryVersion), CertificationError> {
     // Extract structured deltas from their tree representation.
     let labeled_tree = LabeledTree::<Vec<u8>>::try_from(hash_tree).map_err(|err| {
         CertificationError::MalformedHashTree(format!(
@@ -147,8 +147,18 @@ pub async fn decode_hash_tree(
     let current_version = validate_version_range(since_version, &certified_payload)?;
 
     let mut changes = vec![];
+    let mut version_timestamps = BTreeMap::new();
     for (version, atomic_mutation) in certified_payload.delta {
         let version = RegistryVersion::from(version);
+
+        // The registry canister stamps each atomic mutation with the time it was
+        // applied, and that stamp is covered by the certified changelog, so every
+        // node observes the same value. Mutations applied before the canister
+        // recorded timestamps carry 0; leave those absent rather than claiming
+        // they were applied at the UNIX epoch.
+        if atomic_mutation.0.timestamp_nanoseconds != 0 {
+            version_timestamps.insert(version, atomic_mutation.0.timestamp_nanoseconds);
+        }
 
         for mutation in atomic_mutation.0.mutations {
             let key = String::from_utf8_lossy(&mutation.key[..]).to_string();
@@ -164,7 +174,13 @@ pub async fn decode_hash_tree(
         }
     }
 
-    Ok((changes, RegistryVersion::from(current_version)))
+    Ok((
+        RegistryUpdates {
+            records: changes,
+            version_timestamps,
+        },
+        RegistryVersion::from(current_version),
+    ))
 }
 
 /// Parses a response of the "get_certified_changes_since" registry method,
@@ -179,7 +195,7 @@ pub(crate) async fn decode_certified_deltas(
     nns_pk: &ThresholdSigPublicKey,
     payload: &[u8],
     get_chunk: &(impl GetChunk + Sync),
-) -> Result<(Vec<RegistryRecord>, RegistryVersion, Time), CertificationError> {
+) -> Result<(RegistryUpdates, RegistryVersion, Time), CertificationError> {
     let certified_response = CertifiedResponse::decode(payload).map_err(|err| {
         CertificationError::DeserError(format!(
             "failed to decode certified response from {canister_id}: {err:?}"

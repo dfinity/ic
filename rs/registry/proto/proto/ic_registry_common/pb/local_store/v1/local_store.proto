@@ -9,6 +9,15 @@ import "google/protobuf/wrappers.proto";
 message ChangelogEntry {
   // The default, an empty list, is _invalid_ here.
   repeated KeyMutation key_mutations = 1;
+
+  // The time at which the registry canister applied this mutation, in
+  // nanoseconds since UNIX EPOCH.
+  //
+  // This is replicated NNS state (it is part of the certified changelog), so
+  // every node observes the same value for a given registry version. Entries
+  // written before this field was introduced decode as 0, which callers must
+  // treat as "created long ago".
+  uint64 timestamp_nanoseconds = 2;
 }
 
 // A mutation of a single key.
