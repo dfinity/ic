@@ -13,6 +13,10 @@ attested for public commits (hard requirement), CDN fallback with a loud
 warning only for versions whose commit is not public yet. Fallback records carry
 the "attestation_pending" marker so they are re-verified -- and rewritten,
 without the marker -- on the first run after their commit is disclosed.
+
+Finally tests the verification of mainnet-canister-revisions.json: test canister
+pins that sync-with-released-nervous-system-wasms computes from CDN downloads are
+only recorded when the build's attested SHA256SUMS agrees (F-008).
 """
 
 import hashlib
@@ -20,6 +24,7 @@ import io
 import json
 import logging
 import pathlib
+import re
 import subprocess
 import urllib.error
 import urllib.request
@@ -465,3 +470,281 @@ def test_pending_record_is_skipped_while_commit_is_private(tmp_path, monkeypatch
     )
 
     assert json.loads(path.read_text())["guestos"]["subnets"][subnet] == pending
+
+
+def test_fetch_attested_sums_tries_policies_in_order(monkeypatch):
+    # Each policy is one (build-workflow, source-ref-regex) pair passed to the
+    # script as a whole: a workflow of one policy must never be combined with the
+    # ref regex of another.
+    seen = []
+    succeed_on = {}
+
+    def fake_run(cmd, **kwargs):
+        assert kwargs.get("check") is True
+        seen.append(tuple(cmd[3:5]))
+        if len(seen) != succeed_on["call"]:
+            raise ATTESTATION_FAILED
+        pathlib.Path(cmd[5]).write_text(f"{HASH} governance-canister.wasm.gz\n", encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    policies = mainnet_revisions.NNS_CANISTER_ATTESTATION_POLICIES
+    master = ("dfinity/ic/.github/workflows/ci-kickoff.yml", "refs/heads/master")
+    release_testing = ("dfinity/ic/.github/workflows/release-testing.yml", r"refs/heads/(rc--|hotfix-)[^/]+")
+
+    # A master build verifies: the release-testing policy is never consulted.
+    succeed_on["call"] = 1
+    assert mainnet_revisions.fetch_attested_sha256sums(VERSION, "canisters", policies) == {
+        "governance-canister.wasm.gz": HASH
+    }
+    assert seen == [master]
+
+    # A hotfix build verifies under the second policy only.
+    seen.clear()
+    succeed_on["call"] = 2
+    assert mainnet_revisions.fetch_attested_sha256sums(VERSION, "canisters", policies) == {
+        "governance-canister.wasm.gz": HASH
+    }
+    assert seen == [master, release_testing]
+
+    # Nothing verifies: the verifier's failure propagates.
+    seen.clear()
+    succeed_on["call"] = 0
+    with pytest.raises(subprocess.CalledProcessError):
+        mainnet_revisions.fetch_attested_sha256sums(VERSION, "canisters", policies)
+    assert seen == [master, release_testing]
+
+
+# The rev currently pinned in mainnet-canister-revisions.json (built before
+# #11569, so its attestation is not acceptable) and a later master commit.
+OLD_REV = "0c9710598f7ef85692b588a6ec518c8d8bf817ae"
+NEW_REV = "34de476a722b3edaa3665ddfeca88d9b400b3fd6"
+TEST_HASH = hashlib.sha256(b"governance-canister_test.wasm.gz").hexdigest()
+PROD_HASH = hashlib.sha256(b"governance-canister.wasm.gz").hexdigest()
+
+
+def canisters(rev=OLD_REV, test_sha256=HASH, prod_rev=None, prod_sha256=HASH) -> dict:
+    """A canister map as written by sync-with-released-nervous-system-wasms."""
+    return {
+        "governance": {"rev": prod_rev or rev, "sha256": prod_sha256},
+        "governance-canister_test": {"rev": rev, "sha256": test_sha256},
+        "nns_dapp_test": {"sha256": HASH, "tag": "proposal-143823"},
+        "sns_aggregator_test": {"sha256": HASH, "tag": "proposal-138924-agg"},
+    }
+
+
+NEW = dict(rev=NEW_REV, test_sha256=TEST_HASH, prod_sha256=PROD_HASH)
+ATTESTED_NEW = {"governance-canister.wasm.gz": PROD_HASH, "governance-canister_test.wasm.gz": TEST_HASH}
+
+
+def attestation_with(monkeypatch, *, attested=None, public=True):
+    """
+    Stub the attestation verifier: `attested` is the verified SHA256SUMS of NEW_REV's
+    canisters directory, or None to make verification fail. `public`: whether the
+    commit exists in dfinity/ic. Returns the list of fetches made.
+    """
+    fetches = []
+
+    def fake_attested(version, subdir, policies):
+        fetches.append((version, subdir, policies))
+        if attested is None:
+            raise ATTESTATION_FAILED
+        return dict(attested)
+
+    monkeypatch.setattr(mainnet_revisions, "fetch_attested_sha256sums", fake_attested)
+    monkeypatch.setattr(mainnet_revisions, "commit_is_public", lambda version: public)
+    return fetches
+
+
+def forbid_attestation_checks(monkeypatch):
+    def forbidden(*args, **kwargs):
+        # pytest.fail() raises an exception that `pytest.raises(Exception)` cannot swallow.
+        pytest.fail("must not be called")
+
+    monkeypatch.setattr(mainnet_revisions, "fetch_attested_sha256sums", forbidden)
+    monkeypatch.setattr(mainnet_revisions, "commit_is_public", forbidden)
+
+
+def test_unchanged_test_pin_is_not_reverified(monkeypatch):
+    # The pin recorded today predates #11569 and could not be verified: it must be
+    # left alone rather than failing every run.
+    forbid_attestation_checks(monkeypatch)
+    after = canisters()
+    mainnet_revisions.verify_cdn_test_canister_pins(canisters(), after)
+    assert after == canisters()
+
+
+def test_new_test_pin_verified_against_attested_sums(monkeypatch):
+    fetches = attestation_with(monkeypatch, attested=ATTESTED_NEW)
+    after = canisters(**NEW)
+    mainnet_revisions.verify_cdn_test_canister_pins(canisters(), after)
+    assert after == canisters(**NEW)
+    assert fetches == [(NEW_REV, "canisters", mainnet_revisions.NNS_CANISTER_ATTESTATION_POLICIES)]
+
+
+def flip_last_hex_digit(sha256: str) -> str:
+    return sha256[:-1] + ("0" if sha256[-1] != "0" else "1")
+
+
+def test_test_pin_not_matching_attested_sums_fails(monkeypatch):
+    # The CDN served a different governance-canister_test than the attested build.
+    attestation_with(
+        monkeypatch, attested={**ATTESTED_NEW, "governance-canister_test.wasm.gz": flip_last_hex_digit(TEST_HASH)}
+    )
+    with pytest.raises(Exception, match="does not match its build attestation"):
+        mainnet_revisions.verify_cdn_test_canister_pins(canisters(), canisters(**NEW))
+
+
+def test_prod_hash_must_match_attested_sums(monkeypatch):
+    # The module deployed on mainnet is not the attested build of the rev it reports.
+    attestation_with(
+        monkeypatch, attested={**ATTESTED_NEW, "governance-canister.wasm.gz": flip_last_hex_digit(PROD_HASH)}
+    )
+    with pytest.raises(Exception, match="does not match its build attestation"):
+        mainnet_revisions.verify_cdn_test_canister_pins(canisters(), canisters(**NEW))
+
+
+def test_missing_attested_entry_fails(monkeypatch):
+    attestation_with(monkeypatch, attested={"governance-canister.wasm.gz": PROD_HASH})
+    with pytest.raises(Exception, match="does not match its build attestation"):
+        mainnet_revisions.verify_cdn_test_canister_pins(canisters(), canisters(**NEW))
+
+
+def test_changed_bytes_at_pinned_rev_fail_without_fetch(monkeypatch):
+    # The tool re-hashes the CDN every run: a different hash at the same rev means
+    # the CDN now serves different bytes for an immutable artifact.
+    forbid_attestation_checks(monkeypatch)
+    with pytest.raises(Exception, match="suspect tampering"):
+        mainnet_revisions.verify_cdn_test_canister_pins(canisters(), canisters(test_sha256=flip_last_hex_digit(HASH)))
+
+
+def test_test_and_prod_revs_must_agree(monkeypatch):
+    forbid_attestation_checks(monkeypatch)
+    with pytest.raises(Exception, match="upgraded while this ran"):
+        mainnet_revisions.verify_cdn_test_canister_pins(canisters(), canisters(**NEW, prod_rev=OLD_REV))
+
+
+def test_public_commit_without_attestation_is_refused(monkeypatch):
+    attestation_with(monkeypatch, attested=None, public=True)
+    with pytest.raises(Exception, match="Refusing to record"):
+        mainnet_revisions.verify_cdn_test_canister_pins(canisters(), canisters(**NEW))
+
+
+def test_private_commit_keeps_previous_test_pin(monkeypatch, caplog):
+    # An undisclosed security patch: nothing unverified is recorded, and the
+    # production pin (anchored on chain) still moves on.
+    attestation_with(monkeypatch, attested=None, public=False)
+    after = canisters(**NEW)
+    with caplog.at_level(logging.WARNING, logger="logger"):
+        mainnet_revisions.verify_cdn_test_canister_pins(canisters(), after)
+    assert after["governance-canister_test"] == canisters()["governance-canister_test"]
+    assert after["governance"] == canisters(**NEW)["governance"]
+    assert any("is not public" in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize(
+    "canister_map, error",
+    [
+        pytest.param(
+            {k: v for k, v in canisters(**NEW).items() if k != "governance"},
+            "must contain governance-canister_test and governance",
+            id="missing production canister",
+        ),
+        pytest.param(
+            {**canisters(**NEW), "governance-canister_test": {"rev": NEW_REV, "sha256": ""}},
+            "governance-canister_test sha256 must be a 64-character lowercase hex sha256",
+            id="empty sha256",
+        ),
+        pytest.param(
+            {**canisters(**NEW), "governance-canister_test": {"tag": "v1", "sha256": TEST_HASH}},
+            "governance-canister_test rev must be a 40-character lowercase hex git commit id",
+            id="tag instead of rev",
+        ),
+    ],
+)
+def test_malformed_test_pin_is_rejected(monkeypatch, canister_map, error):
+    forbid_attestation_checks(monkeypatch)
+    with pytest.raises(Exception, match=error):
+        mainnet_revisions.verify_cdn_test_canister_pins(canisters(), canister_map)
+
+
+def test_unclassified_test_canister_fails():
+    mainnet_revisions.check_test_canisters_classified(canisters())
+    with pytest.raises(Exception, match="new-canister_test"):
+        mainnet_revisions.check_test_canisters_classified({**canisters(), "new-canister_test": {}})
+
+
+def fake_sync_tool(monkeypatch, repo_root: pathlib.Path, proposed: dict):
+    """Stub the `bazel run` of sync-with-released-nervous-system-wasms to propose `proposed`."""
+
+    def fake_check_call(cmd, cwd):
+        assert cwd == repo_root
+        assert cmd[:6] == ["bazel", "run", mainnet_revisions.SYNC_CANISTERS_TOOL, "--", "--output", cmd[5]]
+        output = pathlib.Path(cmd[5])
+        # `bazel run` executes the tool in its runfiles directory: the path must be
+        # absolute, and it must not be (or be next to) the repository file.
+        assert output.is_absolute()
+        assert repo_root not in output.parents
+        output.write_text(mainnet_revisions.dump_canisters_json(proposed), encoding="utf-8")
+
+    monkeypatch.setattr(subprocess, "check_call", fake_check_call)
+
+
+def test_canisters_file_untouched_when_verification_fails(tmp_path, monkeypatch):
+    path = tmp_path / mainnet_revisions.SAVED_VERSIONS_CANISTERS_FILE
+    original = mainnet_revisions.dump_canisters_json(canisters())
+    path.write_text(original, encoding="utf-8")
+    forbid_attestation_checks(monkeypatch)
+    fake_sync_tool(monkeypatch, tmp_path, canisters(test_sha256=flip_last_hex_digit(HASH)))
+
+    with pytest.raises(Exception, match="suspect tampering"):
+        mainnet_revisions.update_mainnet_revisions_canisters_file(tmp_path, logging.getLogger("logger"))
+
+    # A retry starts from the same state: the unverified result is nowhere in the
+    # working tree.
+    assert path.read_text(encoding="utf-8") == original
+    assert sorted(p.name for p in tmp_path.iterdir()) == [mainnet_revisions.SAVED_VERSIONS_CANISTERS_FILE]
+
+
+def test_canisters_file_updated_when_verified(tmp_path, monkeypatch):
+    path = tmp_path / mainnet_revisions.SAVED_VERSIONS_CANISTERS_FILE
+    path.write_text(mainnet_revisions.dump_canisters_json(canisters()), encoding="utf-8")
+    attestation_with(monkeypatch, attested=ATTESTED_NEW)
+    fake_sync_tool(monkeypatch, tmp_path, canisters(**NEW))
+
+    mainnet_revisions.update_mainnet_revisions_canisters_file(tmp_path, logging.getLogger("logger"))
+
+    assert path.read_text(encoding="utf-8") == mainnet_revisions.dump_canisters_json(canisters(**NEW))
+    assert sorted(p.name for p in tmp_path.iterdir()) == [mainnet_revisions.SAVED_VERSIONS_CANISTERS_FILE]
+
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
+
+
+def test_dump_canisters_json_round_trips_the_repository_file():
+    # The installed file must look exactly as if the sync tool had written it.
+    contents = (REPO_ROOT / mainnet_revisions.SAVED_VERSIONS_CANISTERS_FILE).read_text(encoding="utf-8")
+    assert mainnet_revisions.dump_canisters_json(json.loads(contents)) == contents
+
+
+def test_test_canister_classification_matches_sync_tool_and_bazel():
+    # A test canister added to the sync tool must be classified here, and the file
+    # names must be the ones Bazel downloads.
+    main_rs = (REPO_ROOT / "rs/nervous_system/tools/sync-with-released-nervous-system-wasms/src/main.rs").read_text(
+        encoding="utf-8"
+    )
+    nns_test_canisters = set(re.findall(r'\(\s*"([^"]+_test)",\s*[A-Z_]+_CANISTER_ID\s*\)', main_rs))
+    external_test_canisters = {
+        name
+        for name, body in re.findall(
+            r'\(\s*"([^"]+)",\s*ExternalCanisterInfo\s*\{(.*?)\}\s*,?\s*\)', main_rs, re.DOTALL
+        )
+        if "test_filename: Some(" in body
+    }
+    assert nns_test_canisters == set(mainnet_revisions.CDN_TEST_CANISTERS)
+    assert external_test_canisters == set(mainnet_revisions.UNANCHORED_TEST_CANISTERS)
+
+    module_bazel = (REPO_ROOT / "MODULE.bazel").read_text(encoding="utf-8")
+    for key, (filename, prod_key, prod_filename) in mainnet_revisions.CDN_TEST_CANISTERS.items():
+        assert f'"{key}": "{filename}"' in module_bazel
+        assert f'"{prod_key}": "{prod_filename}"' in module_bazel
