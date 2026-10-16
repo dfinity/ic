@@ -1446,6 +1446,7 @@ def top(args):
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        exclude_branches=sql.SQL("{}::text[]").format(sql.Literal(args.exclude_branch)),
         job=sql.Literal(args.job if args.job else ""),
         exclude_jobs=sql.SQL("{}::text[]").format(sql.Literal(args.exclude_job)),
         exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
@@ -1551,6 +1552,7 @@ def last(args):
         time_filter=get_time_filter(args),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        exclude_branches=sql.SQL("{}::text[]").format(sql.Literal(args.exclude_branch)),
         job=sql.Literal(args.job if args.job else ""),
         exclude_jobs=sql.SQL("{}::text[]").format(sql.Literal(args.exclude_job)),
         exclude_prs=sql.SQL("{}::int[]").format(sql.Literal(args.exclude_pr)),
@@ -1698,6 +1700,14 @@ Mutually exclusive with --day/--week/--month""",
 
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
     filter_parser.add_argument("--branch", metavar="B", type=str, help="Filter by branch SQL LIKE pattern")
+    filter_parser.add_argument(
+        "--exclude-branch",
+        metavar="B",
+        type=str,
+        action="append",
+        default=[],
+        help="Exclude test runs on branches matching this SQL LIKE pattern (can be repeated)",
+    )
     filter_parser.add_argument(
         "--job",
         metavar="JOB",
