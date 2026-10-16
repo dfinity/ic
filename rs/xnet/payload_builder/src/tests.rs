@@ -1044,7 +1044,8 @@ async fn handle_advert_duplicate_content() {
 }
 
 /// An advert offering nothing we do not already have is answered with our own
-/// certified header, so its sender can observe our stream's `begin`.
+/// certified header, so its sender can observe our stream's `begin`. It is only
+/// verified if it advances the recorded header.
 #[tokio::test]
 async fn handle_advert_nothing_new() {
     with_test_replica_logger(|log| {
@@ -1065,8 +1066,9 @@ async fn handle_advert_nothing_new() {
 
         // Two copies, as from two nodes of the source subnet at the same certified
         // height: each is answered, or only one of the peer's nodes would learn our
-        // header per height.
-        let mut store = store_expecting_decodes(&advertised, 2);
+        // header per height. Only the first one advances the recorded header, so only
+        // it is verified.
+        let mut store = store_expecting_decodes(&advertised, 1);
         let expected_reply = own_header.clone();
         store
             .expect_encode_certified_stream_slice()
@@ -1082,7 +1084,7 @@ async fn handle_advert_nothing_new() {
                 advert_handler.handle_advert(REMOTE_SUBNET, make_advert(&advertised)),
                 Ok(XNetAdvertOutcome::NothingNew)
             );
-            // Advertised header was recorded regardless.
+            // Recorded from the first copy.
             assert_eq!(
                 Some(Arc::new(advertised.header())),
                 recorded_peer_header(&pool)

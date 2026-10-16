@@ -1555,8 +1555,20 @@ impl XNetAdvertHandler for XNetAdvertHandlerImpl {
                 return Ok(outcome);
             }
 
-            // Verify that the header is signed by `source_subnet` before recording the
-            // header or replying to it.
+            // Don't bother verifying the signature if we wouldn't record it anyway.
+            // Producing a reply is cheaper and we already checked the node's membership.
+            XNetAdvertOutcome::NothingNew
+                if !self
+                    .slice_pool
+                    .lock()
+                    .unwrap()
+                    .advances_recorded_peer_header(source_subnet, &claimed) =>
+            {
+                return Ok(outcome);
+            }
+
+            // Verify that the header is signed by `source_subnet` before recording it or
+            // acting on it.
             XNetAdvertOutcome::NothingNew | XNetAdvertOutcome::Actionable => {}
         }
 
