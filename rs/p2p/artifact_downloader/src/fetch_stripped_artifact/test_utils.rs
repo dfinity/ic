@@ -52,13 +52,16 @@ use std::{
     sync::Arc,
 };
 
-use crate::fetch_stripped_artifact::types::{
-    StrippedMessage, StrippedMessageId,
-    rpc::{
-        GetCanisterHttpResponseInBlockResponse, GetIDkgDealingInBlockResponse,
-        GetIngressMessageInBlockResponse,
+use crate::fetch_stripped_artifact::{
+    canister_http::MIN_STRIPPED_CONTENT_BYTES,
+    types::{
+        StrippedMessage, StrippedMessageId,
+        rpc::{
+            GetCanisterHttpResponseInBlockResponse, GetIDkgDealingInBlockResponse,
+            GetIngressMessageInBlockResponse,
+        },
+        stripped::{StrippedCanisterHttpResponses, StrippedIDkgDealings},
     },
-    stripped::{StrippedCanisterHttpResponses, StrippedIDkgDealings},
 };
 
 use super::types::{
@@ -336,17 +339,10 @@ pub(crate) fn fake_canister_http_response(
     }
 }
 
-/// A canister http reject response for the given callback id.
+/// A canister http reject response for the given callback id, just big enough to
+/// be stripped.
 pub(crate) fn fake_canister_http_reject(callback_id: u64) -> CanisterHttpResponse {
-    CanisterHttpResponse {
-        id: CallbackId::new(callback_id),
-        content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
-            reject_code: RejectCode::SysTransient,
-            // Comfortably above `MIN_STRIPPED_CONTENT_BYTES`, so that the tests
-            // which expect a reject to be stripped still do.
-            message: "rejected because the remote end did something regrettable".repeat(2),
-        }),
-    }
+    fake_canister_http_reject_of_size(callback_id, MIN_STRIPPED_CONTENT_BYTES + 1)
 }
 
 /// A canister http reject response for the given callback id, whose content

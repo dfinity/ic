@@ -6,7 +6,7 @@ use std::{
 };
 
 use criterion::{BatchSize, Bencher, Criterion, black_box, criterion_group, criterion_main};
-use ic_artifact_downloader::FetchStrippedConsensusArtifact;
+use ic_artifact_downloader::{FetchStrippedConsensusArtifact, MIN_STRIPPED_CONTENT_BYTES};
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
 use ic_interfaces::p2p::consensus::{
     ArtifactAssembler, AssembleResult, BouncerValue, Peers, ValidatedPoolReader,
@@ -418,7 +418,7 @@ fn assemble_canister_http_responses(criterion: &mut Criterion) {
 ///
 /// A single byte is too small to be worth stripping, so `(1, 1, 1)` measures a
 /// block with nothing worth stripping, while every other case strips each of its
-/// responses: [`MIN_STRIPPED_RESPONSE_BYTES`] is the smallest that is stripped.
+/// responses: [`MIN_STRIPPED_CONTENT_BYTES`] is the smallest that is stripped.
 ///
 /// Every case has to fit into `MAX_CANISTER_HTTP_PAYLOAD_SIZE` once the metadata
 /// and the signatures are counted, which is why the larger response counts pair
@@ -431,14 +431,10 @@ const CANISTER_HTTP_BENCH_CASES: [(u64, usize, usize); 8] = [
     (1, 2_000_000, 27),
     (100, 16 * 1024, 1),
     (100, 16 * 1024, 27),
-    (500, MIN_STRIPPED_RESPONSE_BYTES, 1),
+    (500, MIN_STRIPPED_CONTENT_BYTES, 1),
     (500, 3 * 1024, 1),
     (500, 1024, 27),
 ];
-
-/// The smallest canister http response that is stripped from a block, i.e. the
-/// stripper's `MIN_STRIPPED_CONTENT_BYTES`.
-const MIN_STRIPPED_RESPONSE_BYTES: usize = 64;
 
 /// Panics unless `stripped_block` declares as many stripped canister http responses
 /// as `canister_http_responses` has responses worth stripping, so that no case can
@@ -449,7 +445,7 @@ fn assert_declares_stripped_responses(
 ) {
     let expected = canister_http_responses
         .iter()
-        .filter(|response| response.content.count_bytes() >= MIN_STRIPPED_RESPONSE_BYTES)
+        .filter(|response| response.content.count_bytes() >= MIN_STRIPPED_CONTENT_BYTES)
         .count();
     let declared = match stripped_block.msg {
         Some(pb::stripped_consensus_message::Msg::StrippedBlockProposal(proposal)) => {

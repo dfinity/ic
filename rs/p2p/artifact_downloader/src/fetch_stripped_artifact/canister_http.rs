@@ -118,7 +118,7 @@ pub(crate) fn strip_responses(
 }
 
 /// The smallest response content that is worth stripping.
-const MIN_STRIPPED_CONTENT_BYTES: usize = 64;
+pub const MIN_STRIPPED_CONTENT_BYTES: usize = 64;
 
 /// Whether a slot holds a response whose content is worth stripping.
 fn is_worth_stripping(response: &Option<pb::CanisterHttpResponse>) -> bool {
@@ -372,7 +372,6 @@ mod tests {
     fn identical_responses_are_stripped_once_test() {
         let response = fake_canister_http_response(1, 1024);
         let reject = fake_canister_http_reject(2);
-        let tiny = fake_canister_http_response(3, MIN_STRIPPED_CONTENT_BYTES - 1);
 
         let payload = fake_canister_http_payload(vec![
             fake_flexible_canister_http_responses_message(
@@ -383,7 +382,6 @@ mod tests {
                 2,
                 &[(reject.clone(), NODE_1), (reject.clone(), NODE_2)],
             ),
-            fake_canister_http_response_message(&tiny, &[NODE_1]),
         ]);
 
         let (stripped, stripped_hashes) =
@@ -393,7 +391,7 @@ mod tests {
             stripped_hashes,
             BTreeSet::from_iter([hash_of(&response), hash_of(&reject)])
         );
-        assert_eq!(responses_left_in_payload(&stripped), vec![tiny]);
+        assert_eq!(responses_left_in_payload(&stripped), Vec::new());
 
         let responses = [&response, &reject]
             .into_iter()
@@ -490,6 +488,25 @@ mod tests {
         assert_eq!(
             reinsert_responses(&payload, &BTreeMap::new()).unwrap(),
             payload
+        );
+    }
+
+    /// A slot that already holds its content is left alone, even if the content is
+    /// provided again, so putting the contents back a second time changes nothing.
+    #[test]
+    fn reinsert_responses_is_idempotent_test() {
+        let (payload, all) = fake_canister_http_payload_with_every_kind();
+        let (stripped, _) = strip_responses(&payload).expect("Should have stripped something");
+        let responses = all
+            .into_iter()
+            .map(|response| (hash_of(&response), Some(response)))
+            .collect();
+
+        let reinserted = reinsert_responses(&stripped, &responses).unwrap();
+
+        assert_eq!(
+            reinsert_responses(&reinserted, &responses).unwrap(),
+            reinserted
         );
     }
 
