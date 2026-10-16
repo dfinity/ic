@@ -456,7 +456,10 @@ pub(crate) fn deserialize_consensus_artifacts(
         }
 
         if new_finalized_height < target_height {
-            return Err(ExitPoint::ValidationIncomplete(height));
+            // `new_finalized_height` was finalized so `new_finalized_height + 1` or above failed
+            return Err(ExitPoint::ValidationIncomplete(
+                new_finalized_height.increment(),
+            ));
         }
 
         // If the validated artifacts finalize the last seen CUP height, we need to deliver all
