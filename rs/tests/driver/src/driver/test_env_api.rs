@@ -145,7 +145,7 @@ use crate::{
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
     },
     retry_with_msg, retry_with_msg_async, retry_with_msg_async_quiet,
-    util::{MetricsFetcher, block_on, create_agent},
+    util::{block_on, create_agent},
 };
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
@@ -196,7 +196,7 @@ use slog::{Logger, debug, info, warn};
 use ssh2::Session;
 use std::{
     cmp::max,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     convert::TryFrom,
     fs,
     future::Future,
@@ -1124,62 +1124,6 @@ impl IcNodeSnapshot {
             "Failed to insert egress {action} rule on node {node_id} for target {target}"
         ))
     }
-
-    pub fn assert_metrics_values(&self, metrics_to_check: &BTreeMap<&str, u64>, port: u16) {
-        if metrics_to_check.is_empty() {
-            return;
-        }
-
-        block_on(async {
-            let metrics_fetcher = MetricsFetcher::new_with_port(
-                std::iter::once(self.clone()),
-                metrics_to_check.keys().map(ToString::to_string).collect(),
-                port,
-            );
-            let metrics = match metrics_fetcher.fetch::<u64>().await {
-                Ok(metrics) => metrics,
-                Err(e) => {
-                    info!(
-                        self.env.logger(),
-                        "Could not fetch replica metrics for node {}: {e:?}", self.node_id
-                    );
-                    return;
-                }
-            };
-            assert!(
-                !metrics.is_empty(),
-                "No error counters were found in metrics for node {} on port {port}",
-                self.node_id
-            );
-            for (name, value) in metrics {
-                // Assert the metrics to check are prefix-free. This allows to specify a metric name
-                // prefix to check all metrics with that prefix.
-                let mut metrics_to_check = metrics_to_check
-                    .iter()
-                    .filter(|(metric_name, _)| name.starts_with(**metric_name))
-                    .map(|(_, max_value)| *max_value);
-                let max_value = metrics_to_check.next().unwrap_or_default();
-                // Assert that the iterator only had one element, i.e. the metrics to check are
-                // prefix-free.
-                assert!(
-                    metrics_to_check.count() == 0,
-                    "The metric `{name}` is not prefix-free with respect to the other metrics to check. \
-                    This is not allowed. Please specify a prefix-free set of metrics to check."
-                );
-
-                assert!(
-                    value[0] <= max_value,
-                    "The metric `{name}` on node {} exceeded the maximum allowed value: \
-                    {} > {max_value}. \
-                    If this is expected to happen in the test, \
-                    create `SystemTestGroup` with `remove_metrics_to_check(\"{name}\")` or \
-                    with `update_orchestrator_metrics_to_check(\"{name}\", $max_value)`",
-                    self.node_id,
-                    value[0],
-                );
-            }
-        });
-    }
 }
 
 pub struct CanisterInstaller<'a> {
@@ -1305,6 +1249,21 @@ impl HasTopologySnapshot for TestEnv {
         let local_store_path = prep_dir.registry_local_store_path();
         Self::create_topology_snapshot(name, local_store_path, self.clone())
     }
+}
+
+/// Syncs the registry local store of the no-name Internet Computer of `env` with the NNS, such
+/// that subsequent topology snapshots of `env` reflect the latest registry version.
+pub async fn sync_local_registry_with_nns(env: &TestEnv) -> Result<()> {
+    let prep_dir = env
+        .prep_dir("")
+        .ok_or_else(|| anyhow!("No no-name Internet Computer"))?;
+    let local_registry =
+        LocalRegistry::new(prep_dir.registry_local_store_path(), Duration::from_secs(5))
+            .context("Failed to create local registry for NNS sync")?;
+    local_registry
+        .sync_with_nns()
+        .await
+        .context("Failed to sync local registry with NNS")
 }
 
 pub trait GetFirstHealthyNodeSnapshot {

@@ -7,14 +7,12 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use ic_crypto_sha2::Sha256;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use slog::{Logger, debug, info, warn};
-
-use ic_registry_local_registry::LocalRegistry;
 
 use crate::driver::{
     constants::SSH_USERNAME,
@@ -24,10 +22,10 @@ use crate::driver::{
     log_events,
     nested::HasNestedVms,
     resource::DiskImage,
-    test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
+    test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{
         CreateDnsRecords, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, RetrieveIpv4Addr,
-        SshSession, TopologySnapshot, scp_recv_from, try_scp_send_to,
+        SshSession, TopologySnapshot, scp_recv_from, sync_local_registry_with_nns, try_scp_send_to,
     },
     test_setup::{GroupSetup, SystemTestBackend},
     universal_vm::{UniversalVm, UniversalVms},
@@ -424,25 +422,8 @@ impl HasPrometheus for TestEnv {
         };
 
         // Sync the local registry store with the NNS before picking up the topology
-        let prep_dir = self
-            .prep_dir("")
-            .ok_or_else(|| anyhow!("No no-name Internet Computer"))?;
-        let local_store_path = prep_dir.registry_local_store_path();
-        match LocalRegistry::new(local_store_path, Duration::from_secs(5)) {
-            Ok(local_registry) => {
-                if let Err(e) = block_on(local_registry.sync_with_nns()) {
-                    warn!(
-                        self.logger(),
-                        "Failed to sync local registry with NNS: {e:?}. Using cached topology."
-                    );
-                }
-            }
-            Err(e) => {
-                warn!(
-                    self.logger(),
-                    "Failed to create local registry for NNS sync: {e:?}. Using cached topology."
-                );
-            }
+        if let Err(e) = block_on(sync_local_registry_with_nns(self)) {
+            warn!(self.logger(), "{e:?}. Using cached topology.");
         }
 
         let topology_snapshot = self.safe_topology_snapshot()?;

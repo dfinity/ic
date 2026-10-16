@@ -21,6 +21,7 @@ pub mod log_events;
 pub mod logger;
 pub mod metrics_setup_task;
 pub mod metrics_sync_task;
+pub mod metrics_watchdog_task;
 pub mod nested;
 pub mod node_software_version;
 pub mod plan;

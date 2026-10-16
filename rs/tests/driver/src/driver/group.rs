@@ -9,10 +9,7 @@ use crate::driver::{
     report::Outcome,
     task::{DebugKeepaliveTask, EmptyTask},
     task_scheduler::{TaskScheduler, TaskTable},
-    test_env_api::{
-        FarmBaseUrl, HasFarmUrl, HasGroupSetup, HasTopologySnapshot, IcNodeContainer,
-        ORCHESTRATOR_METRICS_PORT, REPLICA_METRICS_PORT, TopologySnapshot,
-    },
+    test_env_api::{FarmBaseUrl, HasFarmUrl, HasGroupSetup},
 };
 use crate::driver::{
     keepalive_task::{KEEPALIVE_TASK_NAME, keepalive_task},
@@ -20,6 +17,10 @@ use crate::driver::{
     logs_stream_task::{LOGS_STREAM_TASK_NAME, journald_node_logs_dir, logs_stream_task},
     metrics_setup_task::{METRICS_SETUP_TASK_NAME, metrics_setup_task},
     metrics_sync_task::{METRICS_SYNC_TASK_NAME, metrics_sync_task},
+    metrics_watchdog_task::{
+        METRICS_WATCHDOG_TASK_NAME, MetricsToCheck, assert_current_metrics,
+        assert_no_metrics_errors, metrics_watchdog_task,
+    },
     report::SystemTestGroupError,
     serve_files_task::{SERVE_FILES_TASK_NAME, serve_files_task},
     subprocess_task::SubprocessTask,
@@ -245,6 +246,7 @@ pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
            && task_name.ne(LOG_CONSOLES_TASK_NAME)
            && task_name.ne(METRICS_SETUP_TASK_NAME)
            && task_name.ne(METRICS_SYNC_TASK_NAME)
+           && task_name.ne(METRICS_WATCHDOG_TASK_NAME)
            && task_name.ne(VECTOR_LOGGING_TASK_NAME)
            && task_name.ne(SERVE_FILES_TASK_NAME)
            && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX)
@@ -464,52 +466,43 @@ impl SystemTestSubGroup {
     }
 }
 
-// Replica metrics to check by default. Including a prefix is supported and will match on all
-// metrics with that prefix. For that reason, keep the list prefix-free.
-fn default_replica_metrics() -> BTreeMap<&'static str, u64> {
-    BTreeMap::from([
-        ("critical_errors", 0),
-        ("consensus_invalidated_artifacts", 0),
-        ("dkg_invalidated_artifacts", 0),
-        ("idkg_invalidated_artifacts", 0),
-        ("certification_invalidated_artifacts", 0),
-        ("canister_http_invalidated_artifacts", 0),
-        ("mr_canister_http_accounting_errors_total", 0),
-        ("canister_http_pool_manager_errors", 0),
-    ])
-}
-
-// Orchestrator metrics to check by default. Including a prefix is supported and will match on all
-// metrics with that prefix. For that reason, keep the list prefix-free.
-fn default_orchestrator_metrics() -> BTreeMap<&'static str, u64> {
-    BTreeMap::from([
-        ("orchestrator_cup_deserialization_failed_total", 0),
-        ("orchestrator_state_removal_failed_total", 0),
-        ("orchestrator_tasks_failed_total", 0),
-        ("orchestrator_processes_start_attempts_total", 1),
-    ])
-}
-
-fn check_metrics_for_nodes(
-    topology: &TopologySnapshot,
-    replica_metrics: &BTreeMap<&str, u64>,
-    orchestrator_metrics: &BTreeMap<&str, u64>,
-) {
-    for node in topology.subnets().flat_map(|subnet| subnet.nodes()) {
-        node.assert_metrics_values(replica_metrics, REPLICA_METRICS_PORT);
-        node.assert_metrics_values(orchestrator_metrics, ORCHESTRATOR_METRICS_PORT);
+// Metrics to check by default. Including a prefix is supported and will match on all metrics with
+// that prefix. For that reason, keep the lists prefix-free.
+fn default_metrics_to_check() -> MetricsToCheck {
+    let to_map = |metrics: &[(&str, u64)]| {
+        metrics
+            .iter()
+            .map(|(name, max_value)| (name.to_string(), *max_value))
+            .collect()
+    };
+    MetricsToCheck {
+        replica: to_map(&[
+            ("critical_errors", 0),
+            ("consensus_invalidated_artifacts", 0),
+            ("dkg_invalidated_artifacts", 0),
+            ("idkg_invalidated_artifacts", 0),
+            ("certification_invalidated_artifacts", 0),
+            ("canister_http_invalidated_artifacts", 0),
+            ("mr_canister_http_accounting_errors_total", 0),
+            ("canister_http_pool_manager_errors", 0),
+        ]),
+        orchestrator: to_map(&[
+            ("orchestrator_cup_deserialization_failed_total", 0),
+            ("orchestrator_state_removal_failed_total", 0),
+            ("orchestrator_tasks_failed_total", 0),
+            ("orchestrator_processes_start_attempts_total", 1),
+        ]),
     }
 }
 
-/// Checks replica and orchestrator error metrics on all subnet nodes, using the
-/// same thresholds as the default `SystemTestGroup` teardown. Call this before
-/// replica restart so that errors accumulated in the current process are not lost.
+/// Checks the current values of the replica and orchestrator metrics on all nodes, using the
+/// metrics to check of the `SystemTestGroup`. The `metrics_watchdog` task only scrapes the nodes
+/// periodically, so call this right before a restart triggered by the test so that errors
+/// accumulated in the current processes since the last scrape are not lost.
 pub fn assert_no_critical_errors(env: &TestEnv) {
-    check_metrics_for_nodes(
-        &env.topology_snapshot(),
-        &default_replica_metrics(),
-        &default_orchestrator_metrics(),
-    );
+    let metrics_to_check =
+        MetricsToCheck::try_read_attribute(env).unwrap_or_else(|_| default_metrics_to_check());
+    assert_current_metrics(env, &metrics_to_check);
 }
 
 /// Returns the teardowns that download the Prometheus data directory to the local
@@ -559,8 +552,7 @@ pub struct SystemTestGroup {
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
     with_farm: bool,
-    replica_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
-    orchestrator_metrics_to_check: BTreeMap<&'static str, /*max value of the metric =*/ u64>,
+    metrics_to_check: MetricsToCheck,
     /// Map from an unallowed log phrase to a set of exclusion phrases. A log line counts
     /// as a match if its (Vector-normalized) `MESSAGE` contains the pattern and does not
     /// contain any of the associated exclusions, comparing ASCII case-insensitively.
@@ -605,8 +597,7 @@ impl SystemTestGroup {
             timeout_per_test: None,
             overall_timeout: None,
             with_farm: true,
-            replica_metrics_to_check: default_replica_metrics(),
-            orchestrator_metrics_to_check: default_orchestrator_metrics(),
+            metrics_to_check: default_metrics_to_check(),
             unallowed_log_patterns: BTreeMap::from([
                 ("This is a bug".to_string(), BTreeSet::new()),
                 (
@@ -652,20 +643,20 @@ impl SystemTestGroup {
         metric_name: &'static str,
         max_value: u64,
     ) -> Self {
-        self.orchestrator_metrics_to_check
-            .insert(metric_name, max_value);
+        self.metrics_to_check
+            .orchestrator
+            .insert(metric_name.to_string(), max_value);
         self
     }
 
     pub fn remove_metrics_to_check(mut self, metric_name: &str) -> Self {
-        self.replica_metrics_to_check.remove(metric_name);
-        self.orchestrator_metrics_to_check.remove(metric_name);
+        self.metrics_to_check.replica.remove(metric_name);
+        self.metrics_to_check.orchestrator.remove(metric_name);
         self
     }
 
     pub fn remove_all_metrics_to_check(mut self) -> Self {
-        self.replica_metrics_to_check = BTreeMap::new();
-        self.orchestrator_metrics_to_check = BTreeMap::new();
+        self.metrics_to_check = MetricsToCheck::default();
 
         self
     }
@@ -905,6 +896,24 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(metrics_sync_task_id)) as Box<dyn Task>
         };
 
+        // The metrics_watchdog_task periodically records the peaks of the metrics to check, such that
+        // the assert_no_metrics_errors teardown also catches errors raised before a restart.
+        let metrics_watchdog_task_id = TaskId::Test(String::from(METRICS_WATCHDOG_TASK_NAME));
+        let metrics_watchdog_task = if self.with_farm && !self.metrics_to_check.is_empty() {
+            Box::from(subproc(
+                metrics_watchdog_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    let metrics_to_check = self.metrics_to_check.clone();
+                    move || metrics_watchdog_task(group_ctx, metrics_to_check)
+                },
+                &mut compose_ctx,
+                quiet,
+            )) as Box<dyn Task>
+        } else {
+            Box::from(EmptyTask::new(metrics_watchdog_task_id)) as Box<dyn Task>
+        };
+
         let vector_logging_task_id = TaskId::Test(String::from(VECTOR_LOGGING_TASK_NAME));
         let vector_logging_task = if group_ctx.logs_enabled {
             let group_ctx = group_ctx.clone();
@@ -933,6 +942,7 @@ impl SystemTestGroup {
             {
                 let group_ctx = group_ctx.clone();
                 let logger = logger.clone();
+                let metrics_to_check = self.metrics_to_check.clone();
                 move || {
                     debug!(logger, ">>> setup_fn");
                     let cli_arguments = CliArguments {
@@ -948,6 +958,9 @@ impl SystemTestGroup {
                     // child processes) can use it when querying log/metric backends.
                     GroupStartTime(start_time).write_attribute(&env);
 
+                    // Persist the metrics to check so that tests can check them before restarts.
+                    metrics_to_check.write_attribute(&env);
+
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
                 }
@@ -957,26 +970,9 @@ impl SystemTestGroup {
         );
 
         let assert_no_metric_errors_fn: Option<(String, Box<dyn PotSetupFn>)> =
-            if !self.replica_metrics_to_check.is_empty()
-                || !self.orchestrator_metrics_to_check.is_empty()
-            {
+            if !self.metrics_to_check.is_empty() {
                 let teardown_fn = move |env: TestEnv| {
-                    let topology = match env.safe_topology_snapshot() {
-                        Ok(topology) => topology,
-                        Err(e) => {
-                            info!(
-                                env.logger(),
-                                "Could not get topology ({e:?}) => skipping checks of metrics."
-                            );
-                            return;
-                        }
-                    };
-
-                    check_metrics_for_nodes(
-                        &topology,
-                        &self.replica_metrics_to_check,
-                        &self.orchestrator_metrics_to_check,
-                    );
+                    assert_no_metrics_errors(&env, &self.metrics_to_check);
                 };
                 Some((
                     ASSERT_NO_METRICS_ERRORS_TASK_NAME.to_string(),
@@ -1093,7 +1089,7 @@ impl SystemTestGroup {
                 Some(keepalive_task),
                 EvalOrder::Sequential,
                 vec![compose(
-                    None,
+                    Some(metrics_watchdog_task),
                     EvalOrder::Sequential,
                     std::iter::once(setup_plan)
                         .chain(
@@ -1214,7 +1210,7 @@ impl SystemTestGroup {
             )))),
             EvalOrder::Sequential,
             vec![compose(
-                None,
+                Some(metrics_watchdog_task),
                 EvalOrder::Sequential,
                 std::iter::once(setup_plan)
                     .chain(
