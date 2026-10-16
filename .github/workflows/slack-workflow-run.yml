@@ -23,6 +23,10 @@ on:
       - Update mainnet canister versions file
       - Kickoff
       - Bazel Dependency Submission
+      # Their runs have no person to notify: the schedule's actor is the merge queue, and the open
+      # workflow is dispatched by fix-flaky-test.yml with GITHUB_TOKEN.
+      - Schedule Fix Flaky Tests
+      - Open Deflake PR
 
 jobs:
   slack-workflow-run:
@@ -38,8 +42,10 @@ jobs:
           CHANNEL="eng-idx-alerts"
           FULL_MESSAGE="nothing"
 
-          # if a job was cancelled, never post it to slack
-          if [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(cancelled)$ ]]; then
+          # if a job was cancelled, never post it to slack. The flaky-test fixing runs are the exception: a job
+          # that hits its timeout cancels its run, and nobody cancels these runs by hand.
+          if [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(cancelled)$ ]] \
+            && [[ "$TRIGGERING_WORKFLOW_NAME" != "Schedule Fix Flaky Tests" && "$TRIGGERING_WORKFLOW_NAME" != "Open Deflake PR" ]]; then
             POST_TO_SLACK="false"
             echo "post_to_slack=${POST_TO_SLACK}" >> $GITHUB_OUTPUT
             exit 0
@@ -47,8 +53,8 @@ jobs:
           elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(success)$ ]]; then
             FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
             POST_TO_SLACK="false"
-          # if a job failed or timed out, always post it to slack
-          elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(failure|timed_out)$ ]]; then
+          # if a job failed or timed out (or one of the runs excepted above was cancelled), always post it to slack
+          elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(failure|timed_out|cancelled)$ ]]; then
             FULL_MESSAGE=":fire: ${MESSAGE} :disappointed:"
             POST_TO_SLACK="true"
           fi
