@@ -117,6 +117,9 @@ fn set_up_assembler(
     mock_bouncer_factory
         .expect_new_bouncer()
         .returning(|_| Box::new(|_| BouncerValue::Wants));
+    mock_bouncer_factory
+        .expect_refresh_period()
+        .return_const(Duration::from_secs(1));
     let handler = FetchStrippedConsensusArtifact::new(
         no_op_logger(),
         handle,
