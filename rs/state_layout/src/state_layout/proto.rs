@@ -87,6 +87,25 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             local_subnet_messages_executed: item.local_subnet_messages_executed,
             http_outcalls_executed: item.http_outcalls_executed,
             heartbeats_and_global_timers_executed: item.heartbeats_and_global_timers_executed,
+            connection_metrics: item
+                .connection_metrics
+                .into_iter()
+                .map(
+                    |(
+                        sender_canister_id,
+                        ConnectionMetrics {
+                            last_access_timestamp,
+                            count,
+                        },
+                    )| {
+                        pb_canister_state_bits::CanisterToCanisterMetrics {
+                            sender_canister_id: Some(sender_canister_id.into()),
+                            timestamp_nanos: last_access_timestamp.as_nanos_since_unix_epoch(),
+                            count,
+                        }
+                    },
+                )
+                .collect(),
         }
     }
 }
@@ -253,6 +272,31 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             local_subnet_messages_executed: value.local_subnet_messages_executed,
             http_outcalls_executed: value.http_outcalls_executed,
             heartbeats_and_global_timers_executed: value.heartbeats_and_global_timers_executed,
+            connection_metrics: value
+                .connection_metrics
+                .into_iter()
+                .map(
+                    |pb_canister_state_bits::CanisterToCanisterMetrics {
+                         sender_canister_id,
+                         timestamp_nanos,
+                         count,
+                     }| {
+                        let sender_canister_id = try_from_option_field(
+                            sender_canister_id,
+                            "CanisterStateBits::CanisterToCanisterMetrics::sender_canister_id",
+                        )?;
+                        Ok((
+                            sender_canister_id,
+                            ConnectionMetrics {
+                                last_access_timestamp: Time::from_nanos_since_unix_epoch(
+                                    timestamp_nanos,
+                                ),
+                                count,
+                            },
+                        ))
+                    },
+                )
+                .collect::<Result<BTreeMap<_, _>, Self::Error>>()?,
         })
     }
 }
