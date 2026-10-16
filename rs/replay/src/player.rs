@@ -120,7 +120,7 @@ pub enum ReplayError {
     StateDivergence(Height),
     /// Can't proceed because an upgrade was detected.
     UpgradeDetected(ReplayOutput),
-    /// Can't proceed because artifact validation failed after the given height.
+    /// Can't proceed because artifact validation failed at or after the given height.
     ValidationIncomplete(Height, Vec<InvalidArtifact>),
     /// Can't proceed because CUP verification failed at the given height.
     CUPVerificationFailed(Height),
@@ -1090,6 +1090,8 @@ impl Player {
             .unwrap()
             .new_key_manager(&PoolReader::new(self.consensus_pool.as_ref().unwrap()));
         let mut invalid_artifacts = Vec::new();
+        // The files of the artifacts that weren't validated yet.
+        let mut observed_files = HashMap::new();
         // We start with the specified height and restore heights until we run out of
         // heights on the backup spool or bump into a newer replica version.
         loop {
@@ -1102,6 +1104,7 @@ impl Player {
                 self.validator.as_ref().unwrap(),
                 &mut dkg_manager,
                 &mut invalid_artifacts,
+                &mut observed_files,
             );
 
             // We don't want to replay heights strictly above the next CUP.
@@ -1148,7 +1151,7 @@ impl Player {
                             although the CUP at height {cup_height} was reported as finalized"
                         );
                         return Err(ReplayError::ValidationIncomplete(
-                            last_batch_height,
+                            last_batch_height.increment(),
                             invalid_artifacts,
                         ));
                     }
@@ -1186,12 +1189,10 @@ impl Player {
                     );
                     println!("Updated the registry.");
                 }
-                Err(backup::ExitPoint::ValidationIncomplete(last_validated_height)) => {
-                    println!(
-                        "Validation of artifacts at height {last_validated_height:?} is not complete"
-                    );
+                Err(backup::ExitPoint::ValidationIncomplete(failed_height)) => {
+                    println!("Validation of artifacts at height {failed_height:?} is not complete");
                     return Err(ReplayError::ValidationIncomplete(
-                        last_validated_height,
+                        failed_height,
                         invalid_artifacts,
                     ));
                 }
