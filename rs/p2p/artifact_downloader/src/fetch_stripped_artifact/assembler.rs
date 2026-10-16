@@ -93,16 +93,14 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
     }
 }
 
-impl<Pool: ValidatedPoolReader<ConsensusMessage>>
-    BouncerFactory<StrippedConsensusMessageId, ConsensusPoolWrapper<Pool>>
+impl<Pool: ValidatedPoolReader<ConsensusMessage>> BouncerFactory<StrippedConsensusMessageId, Pool>
     for BouncerFactoryWrapper<Pool>
 {
     fn new_bouncer(
         &self,
-        pool: &ConsensusPoolWrapper<Pool>,
+        pool: &Pool,
     ) -> ic_interfaces::p2p::consensus::Bouncer<StrippedConsensusMessageId> {
-        let pool = pool.consensus_pool.read().unwrap();
-        let nested = self.bouncer_factory.new_bouncer(&pool);
+        let nested = self.bouncer_factory.new_bouncer(pool);
 
         Box::new(move |id| nested(id.as_ref()))
     }
@@ -149,13 +147,16 @@ impl FetchStrippedConsensusArtifact {
             metrics: StrippedMessageSenderMetrics::new(&metrics_registry),
         });
 
-        let (fetch_stripped_fn, subrouter) = FetchArtifact::new(
+        let fetch_stripped_fn = FetchArtifact::downloader(
             log.clone(),
             rt,
-            Arc::new(RwLock::new(ConsensusPoolWrapper { consensus_pool })),
+            consensus_pool.clone(),
             Arc::new(BouncerFactoryWrapper { bouncer_factory }),
             metrics_registry.clone(),
         );
+        let subrouter = FetchArtifact::<MaybeStrippedConsensusMessage>::router(Arc::new(
+            ConsensusPoolWrapper { consensus_pool },
+        ));
 
         let router = axum::Router::new().merge(router).merge(subrouter);
 
@@ -762,6 +763,7 @@ mod tests {
     };
     use crate::fetch_stripped_artifact::types::stripped::StrippedCanisterHttpResponses;
     use assert_matches::assert_matches;
+    use axum::http::{Request, StatusCode};
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_interfaces::p2p::consensus::BouncerValue;
     use ic_logger::no_op_logger;
@@ -774,6 +776,7 @@ mod tests {
     use ic_types::consensus::idkg::IDkgObject;
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_2};
     use std::collections::BTreeSet;
+    use tower::ServiceExt;
 
     use super::*;
 
@@ -1222,6 +1225,87 @@ mod tests {
         .0;
 
         (f)(Arc::new(transport))
+    }
+
+    /// The router of `NODE_1`, which serves the messages of `consensus_pool` to its peers.
+    fn build_router(consensus_pool: MockValidatedPoolReader<ConsensusMessage>) -> axum::Router {
+        FetchStrippedConsensusArtifact::new(
+            no_op_logger(),
+            tokio::runtime::Handle::current(),
+            Arc::new(RwLock::new(consensus_pool)),
+            Arc::new(RwLock::new(
+                MockValidatedPoolReader::<SignedIngress>::default(),
+            )),
+            Arc::new(RwLock::new(
+                MockValidatedPoolReader::<IDkgMessage>::default(),
+            )),
+            Arc::new(RwLock::new(FakeCanisterHttpPool::empty())),
+            Arc::new(MockBouncerFactory::default()),
+            MetricsRegistry::new(),
+            NODE_1,
+        )
+        .1
+    }
+
+    /// Requests the consensus message `id` from `router`, the way the peers' [`FetchArtifact`]
+    /// do.
+    async fn request_consensus_message(
+        router: axum::Router,
+        id: StrippedConsensusMessageId,
+    ) -> Result<MaybeStrippedConsensusMessage, StatusCode> {
+        let request = Request::builder()
+            .uri("/strippedconsensus/rpc")
+            .body(axum::body::Body::from(
+                pb::StrippedConsensusMessageId::proxy_encode(id),
+            ))
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        if response.status() != StatusCode::OK {
+            return Err(response.status());
+        }
+
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        Ok(pb::StrippedConsensusMessage::proxy_decode(&bytes).unwrap())
+    }
+
+    #[tokio::test]
+    async fn serves_stripped_block_proposal_test() {
+        let (ingress, _ingress_id) = fake_ingress_message_with_sig("fake_1", vec![1, 2, 3]);
+        let block_proposal =
+            ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![ingress]));
+        let stripped_block_proposal = block_proposal.clone().strip();
+        assert_matches!(
+            stripped_block_proposal,
+            MaybeStrippedConsensusMessage::StrippedBlockProposal(_)
+        );
+        let mut consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
+        consensus_pool
+            .expect_get()
+            .with(mockall::predicate::eq(block_proposal.id()))
+            .once()
+            .return_const(block_proposal);
+
+        let response =
+            request_consensus_message(build_router(consensus_pool), stripped_block_proposal.id())
+                .await;
+
+        assert_eq!(response, Ok(stripped_block_proposal));
+    }
+
+    #[tokio::test]
+    async fn serves_no_content_for_missing_consensus_message_test() {
+        let block_proposal =
+            ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses(vec![]));
+        let mut consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
+        consensus_pool.expect_get().once().return_const(None);
+
+        let response =
+            request_consensus_message(build_router(consensus_pool), block_proposal.strip().id())
+                .await;
+
+        assert_eq!(response, Err(StatusCode::NO_CONTENT));
     }
 
     fn set_up_assembler_with_fake_dependencies(
