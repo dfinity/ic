@@ -108,7 +108,7 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>>
     }
 
     fn refresh_period(&self) -> Duration {
-        Duration::from_secs(3)
+        self.bouncer_factory.refresh_period()
     }
 }
 
