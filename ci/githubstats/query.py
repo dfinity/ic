@@ -2,7 +2,7 @@
 #
 # Run via:
 #
-#   bazel run //ci/githubstats:query -- --help
+#   bazel --quiet run //ci/githubstats:query -- --help
 #
 import argparse
 import contextlib
@@ -1652,7 +1652,7 @@ def add_columns_argument(parser, columns_metadata):
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="bazel run //ci/githubstats:query --")
+    parser = argparse.ArgumentParser(prog="bazel --quiet run //ci/githubstats:query --")
 
     # Arguments common to all subcommands:
     common_parser = argparse.ArgumentParser(add_help=False)
@@ -1748,22 +1748,22 @@ Note that 'bazel-test-all-%%' matches both, and that of these two only the forme
         epilog="""
 Examples:
   # Show the top 10 most flaky tests in the last week
-  bazel run //ci/githubstats:query -- top 10 flaky% --week
+  bazel --quiet run //ci/githubstats:query -- top 10 flaky% --week
 
   # Show the top 5 tests on PRs where failures had the highest impact in the last week
-  bazel run //ci/githubstats:query -- top 5 impact --prs --week
+  bazel --quiet run //ci/githubstats:query -- top 5 impact --prs --week
 
   # Show the 100 slowest tests in the last month that took at least 30 minutes
-  bazel run //ci/githubstats:query -- top 100 duration_p90 --ge '30 minutes' --month
+  bazel --quiet run //ci/githubstats:query -- top 100 duration_p90 --ge '30 minutes' --month
 
   # Show tests in a specific date range
-  bazel run //ci/githubstats:query -- top 20 fail% --since '2026-01-01' --until '2026-01-31'
+  bazel --quiet run //ci/githubstats:query -- top 20 fail% --since '2026-01-01' --until '2026-01-31'
 
   # Show the top 10 most impactful tests that ran since the time of a specific commit
-  bazel run //ci/githubstats:query -- top 10 impact --since abc123def
+  bazel --quiet run //ci/githubstats:query -- top 10 impact --since abc123def
 
   # Show the top 10 most flaky tests in the last week on RBE @ Namespace
-  bazel run //ci/githubstats:query -- top 10 flaky% --week --job 'bazel-test-all-rbe-bazel-test-%'
+  bazel --quiet run //ci/githubstats:query -- top 10 flaky% --week --job 'bazel-test-all-rbe-bazel-test-%'
 """,
     )
     top_parser.add_argument(
@@ -1851,16 +1851,16 @@ duration_p90:\t\t90th percentile duration of all runs in the specified period"""
         epilog="""
 Examples:
   # Show the last flaky runs of the root_tests in the last week
-  bazel run //ci/githubstats:query -- last --flaky //rs/tests/node:root_tests --week
+  bazel --quiet run //ci/githubstats:query -- last --flaky //rs/tests/node:root_tests --week
 
   # Show all runs of a test in a specific date range
-  bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since '2026-01-29 13:00' --until '2026-01-30'
+  bazel --quiet run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since '2026-01-29 13:00' --until '2026-01-30'
 
   # Show all runs of a test since the time of a specific commit
-  bazel run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since abc123def
+  bazel --quiet run //ci/githubstats:query -- last //rs/tests/nns:rent_subnet_test --since abc123def
 
   # Show the last flaky runs of a *_local system-test, which only runs on RBE @ Namespace, and download their logs from GitHub
-  bazel run //ci/githubstats:query -- last --flaky //rs/tests/consensus:safety_test_local --week
+  bazel --quiet run //ci/githubstats:query -- last --flaky //rs/tests/consensus:safety_test_local --week
 """,
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
