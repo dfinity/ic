@@ -1194,6 +1194,9 @@ mod tests {
             .expect_new_bouncer()
             .returning(|_| Box::new(|_| BouncerValue::Wants));
         bouncer_factory
+            .expect_refresh_period()
+            .return_const(Duration::from_secs(1));
+        bouncer_factory
     }
 
     /// The assembler of `NODE_1`, which looks for the messages stripped from a block
@@ -1582,6 +1585,9 @@ mod tests {
                     }
                 })
             });
+        mock_bouncer_factory
+            .expect_refresh_period()
+            .return_const(Duration::from_secs(1));
 
         // The missing ingress is never in the local pool, and there are no peers to fetch it
         // from, so the fetch of the missing stripped message would otherwise stay pending forever.
