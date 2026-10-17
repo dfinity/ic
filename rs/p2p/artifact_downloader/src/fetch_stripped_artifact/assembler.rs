@@ -78,11 +78,11 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>> ValidatedPoolReader<MaybeStrip
         &self,
         id: &<MaybeStrippedConsensusMessage as IdentifiableArtifact>::Id,
     ) -> Option<MaybeStrippedConsensusMessage> {
-        self.consensus_pool
-            .read()
-            .unwrap()
-            .get(id.as_ref())
-            .map(Strippable::strip)
+        // The pool hands out a block proposal with its payload already loaded.
+        let message = self.consensus_pool.read().unwrap().get(id.as_ref());
+        // Stripping a block can take milliseconds, so it is done once the lock on the
+        // pool is released.
+        message.map(Strippable::strip)
     }
 
     fn get_all_for_initial_broadcast(
