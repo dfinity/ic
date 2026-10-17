@@ -428,7 +428,7 @@ pub fn setup_and_start_vms(
     }
     // In the tests we may need to identify, which node/s have malicious behavior.
     // We dump this info into a file.
-    env.write_json_object(NODES_INFO, &nodes_info)?;
+    merge_nodes_info(env, nodes_info)?;
 
     let mut result = Ok(());
     // Wait for all threads to finish and return an error if any of them fails.
@@ -967,4 +967,45 @@ fn create_setupos_config_image(
         "[{}] Successfully created config image at: {:?}", name, config_image
     );
     Ok(config_image)
+}
+
+/// Adds `new_entries` to the environment's `nodes_info.json`, keeping the
+/// entries of the ICs set up earlier in it (ICs are set up one after another).
+fn merge_nodes_info(env: &TestEnv, new_entries: NodesInfo) -> Result<()> {
+    let mut nodes_info: NodesInfo = if env.get_json_path(NODES_INFO).exists() {
+        env.read_json_object(NODES_INFO)?
+    } else {
+        NodesInfo::new()
+    };
+    nodes_info.extend(new_entries);
+    env.write_json_object(NODES_INFO, &nodes_info)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_base_types::PrincipalId;
+
+    #[test]
+    fn merge_nodes_info_keeps_entries_of_earlier_ics() {
+        let dir = tempfile::tempdir().unwrap();
+        let env = TestEnv::new_without_duplicating_logger(
+            dir.path(),
+            slog::Logger::root(slog::Discard, slog::o!()),
+        );
+        let node = |n| NodeId::from(PrincipalId::new_node_test_id(n));
+        merge_nodes_info(&env, NodesInfo::from([(node(1), None)])).unwrap();
+        merge_nodes_info(
+            &env,
+            NodesInfo::from([(node(2), Some(MaliciousBehavior::new(true)))]),
+        )
+        .unwrap();
+        assert_eq!(
+            env.read_json_object::<NodesInfo, _>(NODES_INFO).unwrap(),
+            NodesInfo::from([
+                (node(1), None),
+                (node(2), Some(MaliciousBehavior::new(true)))
+            ])
+        );
+    }
 }
