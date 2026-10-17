@@ -1,8 +1,10 @@
-load("//toolchains/sysimage:toolchain.bzl", "vfat_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_filesystem", "vfat_image")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 exports_files([
+    "context/Dockerfile",
+    "context/docker-base",
     "grubenv",
     "guestos_grub.cfg",
     "hostos_grub.cfg",
@@ -12,26 +14,47 @@ exports_files([
     "setupos_boot_args.template",
 ])
 
-genrule(
-    name = "build-bootloader-tree",
-    srcs = [
+# The bootloader tree: the grub modules and EFI image built in the bootloader
+# base image by context/Dockerfile (in a microVM).
+build_container_filesystem(
+    name = "bootloader-rootfs.tar",
+    base_image_ref = "context/docker-base",
+    base_rootfs = "//toolchains/sysimage:icos_base_bootloader_rootfs",
+    context_files = [
+        "context/Dockerfile",
         "context/docker-base",
     ],
-    outs = [
-        "bootloader-tree.tar",
-    ],
-    cmd = "$(location build-bootloader-tree.sh) -b $< -o $@",
-    # Bazel doesn't forward the "requires-network" tag to the Remote Execution API (REAPI)
-    # so we need this Namespace.so-specific execution property to open up the network on RBE:
-    exec_properties = {"namespace_requires_network": "true"},
-    tags = [
-        "manual",
-        "requires-network",
-    ],
+    dockerfile = "context/Dockerfile",
+    file_build_arg = "BASE_IMAGE=docker-base",
+    tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    tools = ["build-bootloader-tree.sh"],
+)
+
+# Only /build/boot of it, as a tar of the /boot hierarchy with the /boot/grub
+# and /boot/efi portions, from which the grub and EFI partitions are built.
+genrule(
+    name = "build-bootloader-tree",
+    # The dev-container image tag stands in for its tar (see //toolchains/sysimage:toolchain.bzl).
+    srcs = [
+        ":bootloader-rootfs.tar",
+        "//:ci/container/TAG",
+    ],
+    outs = ["bootloader-tree.tar"],
+    cmd = """
+set -euo pipefail
+umask 022
+tmpdir="$$(mktemp -d -p "$$PWD")"
+chmod g-s "$$tmpdir"  # see toolchains/sysimage/tmpdir_wrapper.sh
+trap 'rm -rf "$$tmpdir"' EXIT
+tar --strip-components=1 -C "$$tmpdir" -x -f $(location :bootloader-rootfs.tar) build
+tar cf $@ --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "$$tmpdir" boot
+""",
+    tags = ["manual"],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 vfat_image(

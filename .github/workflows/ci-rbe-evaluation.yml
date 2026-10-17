@@ -143,20 +143,23 @@ jobs:
     container:
       # The RBE worker image of .github/actions/bazel-namespace/rbe.bazelrc: the
       # update-image-references job of container-autobuild.yml rewrites both.
-      image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:991e1c9b39455d275f3a852f7f10b3e38208cdcc3c8e8aab04025683ec166e0c
-      # ic-os image builds run 'podman build' (rootless) and are forced to run locally in
-      # this container by --strategy_regexp=ic-os[:/].*=local in bazel/conf/.bazelrc.build.
-      # Rootless podman needs to create user namespaces, which fails in an unprivileged
-      # container with "cannot clone: Operation not permitted".
+      image: nscr.io/c9ptjuknd7oc6/ic-build@sha256:fac27369c3b2e018d78a5d6ab90201974007188f98da67c4c76b7692bbf37d1a
+      # Not --privileged: the ic-os container filesystems are built in a microVM on the RBE workers
+      # (IcosContainerVmBuild), so no podman runs here any more. What remains needs:
+      # - CAP_SYS_ADMIN and no AppArmor confinement: the bind mount of the "Mount the Bazel
+      #   repository cache" step.
+      # - no seccomp/AppArmor confinement and an unmasked /proc: Bazel's linux-sandbox for the actions
+      #   that run locally, which creates user, mount and PID namespaces and mounts /proc.
       options: >-
-        --privileged --mount type=tmpfs,target="/tmp/containers"
+        --cap-add SYS_ADMIN --security-opt seccomp=unconfined --security-opt apparmor=unconfined
+        --security-opt systempaths=unconfined
       volumes:
         # nscloud-setup finds the runner's Namespace token in here and exports NSC_TOKEN_FILE,
         # which nsc and namespace-actions/upload-artifact read.
         - /var/run/nsc/:/var/run/nsc/
         # The runner profile's Namespace cache volume (always /cache on the host). The
         # "Mount the Bazel repository cache" step bind-mounts a directory of it into this
-        # container; mount(2) needs CAP_SYS_ADMIN, which --privileged above grants.
+        # container; mount(2) needs CAP_SYS_ADMIN, which the options above grant.
         - /cache:/cache
         # The runner's scratch filesystem, see runs-on above.
         - /namespace/scratch:/namespace/scratch
@@ -234,8 +237,9 @@ jobs:
         run: echo "common --repository_cache=/var/cache/bazel-repository-cache" >>/tmp/bazel-rbe.bazelrc
 
       - name: Prepare the scratch directory for the ic-os image builds
-        # The ic-os image actions run locally (see the container options above) and each
-        # writes several GB of scratch under $TMPDIR, by default /tmp: this container's
+        # Actions that run locally in this container (the ic-os image actions run remotely,
+        # except under --config=icos_host) can write several GB of scratch under
+        # $TMPDIR, by default /tmp: this container's
         # overlay root, a containerd snapshot on the Namespace cache volume which risks
         # filling up if the ic-os build writes its temporary scratch there.
         # $HOME is no alternative: it is on the runner's root disk, an overlayfs with layers
@@ -358,7 +362,7 @@ jobs:
         timeout-minutes: 100 # Backstop, see "Infer Bazel Targets".
         env:
           # Bazel's local strategy hands actions the client's TMPDIR (--action_env has no
-          # effect on it), so this is what moves the ic-os image builds' scratch to the
+          # effect on it), so this is what moves the scratch of locally run actions to the
           # scratch filesystem; see the "Prepare the scratch directory" step.
           TMPDIR: /namespace/scratch/tmp
         uses: ./.github/actions/bazel-namespace
