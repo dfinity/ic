@@ -17,7 +17,9 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     systest,
-    util::{MessageCanister, MetricsFetcher, block_on, runtime_from_url},
+    util::{
+        CYCLES_LIMIT_PER_CANISTER, MessageCanister, MetricsFetcher, block_on, runtime_from_url,
+    },
 };
 use ic_types::Height;
 use slog::info;
@@ -68,7 +70,13 @@ fn test(test_env: TestEnv) {
         )
         .await;
 
-        let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
+        let msg_can = MessageCanister::new_with_cycles_with_retries(
+            &app_agent,
+            app_node.effective_canister_id(),
+            CYCLES_LIMIT_PER_CANISTER,
+            &log,
+        )
+        .await;
         // Get the public key first to make sure feature is working
         let mut pub_keys = BTreeMap::new();
         for key_id in &key_ids {
