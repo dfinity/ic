@@ -904,7 +904,6 @@ fn try_apply_canister_state_changes(
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
     is_composite_query: bool,
-    metrics: &HypervisorMetrics,
     log: &ReplicaLogger,
 ) -> HypervisorResult<RequestMetadataStats> {
     let already_reserved_cycles = system_state_modifications.reserved_cycles();
@@ -923,7 +922,6 @@ fn try_apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
-        metrics,
         log,
     )?;
 
@@ -1008,8 +1006,12 @@ pub fn apply_canister_state_changes(
 ) {
     let CanisterStateChanges {
         execution_state_changes,
-        system_state_modifications,
+        mut system_state_modifications,
     } = canister_state_changes;
+
+    // Canister logs are persisted even if applying the other changes fails
+    // below and hence they are applied before taking the clean system state.
+    system_state_modifications.apply_canister_log(system_state, metrics);
 
     let clean_system_state = system_state.clone();
     let clean_subnet_available_memory = round_limits.subnet_available_memory;
@@ -1029,7 +1031,6 @@ pub fn apply_canister_state_changes(
         network_topology,
         subnet_id,
         is_composite_query,
-        metrics,
         log,
     ) {
         Ok(request_stats) => {
