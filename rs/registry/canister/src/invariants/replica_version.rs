@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use crate::common::LOG_PREFIX;
 use crate::invariants::common::{
-    InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
+    InvariantCheckError, LOG_PREFIX, RegistrySnapshot, assert_valid_urls_and_hash,
     get_all_replica_version_records, get_api_boundary_node_records_from_snapshot,
     get_subnet_ids_from_snapshot, get_value_from_snapshot,
 };
