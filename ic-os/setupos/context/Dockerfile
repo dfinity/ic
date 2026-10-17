@@ -80,7 +80,7 @@ RUN systemctl disable \
 
 # commit-time is checked in the setupOS installation to verify that images
 # are < six weeks old.
-COPY commit-time /commit-time
+COPY --chmod=644 commit-time /commit-time
 
 # Clear additional files that may lead to indeterministic build.
 RUN rm -rf \

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
-# Process wrapper for commands that are run as part of the ic-os build.
+# Process wrapper for the ic-os commands that run podman: the IcosContainer*
+# actions of toolchain.bzl and the bare-metal deployment tool
+# (ic-os/dev-tools/bare_metal_deployment). All other ic-os build commands use
+# tmpdir_wrapper.sh.
 # Usage:
 # ./proc_wrapper.sh COMMAND
 

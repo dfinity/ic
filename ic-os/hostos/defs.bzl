@@ -114,7 +114,7 @@ def _custom_partitions(_):
         vg_name = "hostlvm",
         vg_uuid = "4c7GVZ-Df82-QEcJ-xXtV-JgRL-IjLE-hK0FgA",
         pv_uuid = "eu0VQE-HlTi-EyRc-GceP-xZtn-3j6t-iqEwyv",
-        tags = ["manual", "no-cache"],
+        tags = ["manual"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],

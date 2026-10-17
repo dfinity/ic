@@ -1,13 +1,20 @@
 load("@python_deps//:requirements.bzl", "requirement")
-load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 package(default_visibility = ["//visibility:public"])
 
-# Process wrapper for commands that are run as part of the ic-os build.
+# Process wrapper for the ic-os build commands that run podman.
 sh_binary(
     name = "proc_wrapper",
     srcs = ["proc_wrapper.sh"],
+)
+
+# Process wrapper for all other ic-os build commands. They need no privileges,
+# so they can run sandboxed and remotely.
+sh_binary(
+    name = "tmpdir_wrapper",
+    srcs = ["tmpdir_wrapper.sh"],
 )
 
 # Common libs
@@ -19,6 +26,17 @@ py_library(
 py_library(
     name = "utils",
     srcs = ["utils.py"],
+)
+
+py_library(
+    name = "container_context",
+    srcs = ["container_context.py"],
+)
+
+py_test(
+    name = "container_context_test",
+    srcs = ["container_context_test.py"],
+    deps = [":container_context"],
 )
 
 # Build tools
@@ -36,6 +54,7 @@ py_binary(
     name = "build_container_filesystem_tar",
     srcs = ["build_container_filesystem_tar.py"],
     deps = [
+        ":container_context",
         requirement("invoke"),
     ],
 )
@@ -48,6 +67,7 @@ py_binary(
 py_binary(
     name = "build_ext4_image",
     srcs = ["build_ext4_image.py"],
+    deps = [":utils"],
 )
 
 py_binary(

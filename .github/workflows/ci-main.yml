@@ -43,7 +43,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:0b6a915e614105c632a0c7a0f6e530ed506decfbd0316b297b28e9c555c532a2
+      image: ghcr.io/dfinity/ic-build@sha256:8feb9922e4beaa0f4cca4626d497a3efbf0dd6255b13f5fe006c41c734350167
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/tmp/containers"
     timeout-minutes: 90
@@ -650,9 +650,36 @@ jobs:
 
             cd "$CI_PROJECT_DIR"
 
-            # Always build all IC-OS images, canisters and binaries: this is the
-            # no-cache side of the build-determinism comparison. Only release builds are stamped.
-            ci/container/build-ic.sh -i -c -b ${{ case(needs.config.outputs.release-build == 'true', '', '--no-release') }}
+            # Build all canisters and binaries without a cache: this is the no-cache side of the
+            # build-determinism comparison. Only release builds are stamped.
+            build_ic_args=(-c -b)
+
+            # The IC-OS images take the longest. Build them too, except on PRs whose changes
+            # don't reach any of the images that build-ic.sh -i builds: their cached images were
+            # already checked against a no-cache build when their inputs last changed.
+            if [[ '${{ needs.config.outputs.diff-only }}' != 'true' ]]; then
+              build_ic_args+=(-i)
+            else
+              affected="$(ci/scripts/targets.py build --include_manual \
+                '--base=${{ github.event.pull_request.base.sha }}' \
+                '--head=${{ github.event.pull_request.head.sha }}')"
+              # build-ic.sh's target list and this selection aren't Bazel inputs.
+              changed="$(git diff --name-only --merge-base \
+                '${{ github.event.pull_request.base.sha }}' '${{ github.event.pull_request.head.sha }}')"
+              # A deleted file (e.g. one a glob picked up) isn't in the head's Bazel graph, so the
+              # query above can't see what depended on it.
+              deleted="$(git diff --name-only --no-renames --diff-filter=D --merge-base \
+                '${{ github.event.pull_request.base.sha }}' '${{ github.event.pull_request.head.sha }}')"
+              if grep -qxE '//ic-os/(guestos/envs/(prod|recovery)|hostos/envs/prod|setupos/envs/prod):bundle(-disk|-update)?' <<<"$affected" \
+                || grep -qxE 'ci/container/build-ic\.sh|ci/scripts/targets\.py' <<<"$changed" \
+                || [[ -n "$deleted" ]]; then
+                build_ic_args+=(-i)
+              else
+                echo "::notice::No IC-OS image inputs were modified: build-ic skips the IC-OS images"
+              fi
+            fi
+
+            ci/container/build-ic.sh "${build_ic_args[@]}" ${{ case(needs.config.outputs.release-build == 'true', '', '--no-release') }}
 
   build-determinism:
     name: Build Determinism
