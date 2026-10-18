@@ -643,6 +643,7 @@ fn test_archiving() {
             retrieve_blocks_from_ledger_interval_seconds: None,
             min_retrieve_blocks_from_ledger_interval_seconds: None,
             max_retrieve_blocks_from_ledger_interval_seconds: None,
+            allowed_poke_callers: None,
         });
         let index = env
             .install_canister(index_ng_wasm(), Encode!(&index_init_arg).unwrap(), None)
@@ -704,6 +705,7 @@ fn test_archiving_all_blocks() {
         retrieve_blocks_from_ledger_interval_seconds: None,
         min_retrieve_blocks_from_ledger_interval_seconds: None,
         max_retrieve_blocks_from_ledger_interval_seconds: None,
+        allowed_poke_callers: None,
     });
     let index = env
         .install_canister(index_ng_wasm(), Encode!(&index_init_arg).unwrap(), None)

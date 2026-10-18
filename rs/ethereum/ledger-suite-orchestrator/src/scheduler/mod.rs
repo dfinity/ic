@@ -907,6 +907,7 @@ async fn install_ledger_suite<R: CanisterRuntime>(
         retrieve_blocks_from_ledger_interval_seconds: None,
         min_retrieve_blocks_from_ledger_interval_seconds: None,
         max_retrieve_blocks_from_ledger_interval_seconds: None,
+        allowed_poke_callers: None,
     }));
     install_canister_once::<Index, _, _>(
         &args.contract,
