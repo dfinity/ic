@@ -1768,17 +1768,19 @@ impl Governance {
 
     /// Saves a generic function call's reply on its proposal, keeping at most
     /// `MAX_SCALAR_FIELD_LEN_BYTES` bytes.
-    fn set_proposal_execution_reply(&mut self, pid: u64, mut execution_reply: Vec<u8>) {
-        execution_reply.truncate(MAX_SCALAR_FIELD_LEN_BYTES);
-        let Some(proposal) = self.proto.proposals.get_mut(&pid) else {
+    fn set_proposal_execution_reply(&mut self, proposal_id: u64, mut execution_reply: Vec<u8>) {
+        let Some(proposal) = self.proto.proposals.get_mut(&proposal_id) else {
             log!(
                 ERROR,
                 "Tried to record reply after executing proposal {}, but unable to find the proposal.",
-                pid,
+                proposal_id,
             );
             return;
         };
 
+        execution_reply.truncate(MAX_SCALAR_FIELD_LEN_BYTES);
+        // Because truncate (previous line) does not actually free the extra space.
+        execution_reply.shrink_to_fit();
         proposal.execution_reply = Some(execution_reply);
     }
 
