@@ -1,6 +1,5 @@
 use super::*;
 use crate::{
-    MAX_SCALAR_FIELD_LEN_BYTES,
     governance::test_helpers::{DoNothingLedger, basic_governance_proto, execute_proposal},
     pb::v1::nervous_system_function::{FunctionType, GenericNervousSystemFunction},
     types::test_helpers::NativeEnvironment,
@@ -134,7 +133,9 @@ fn test_execute_generic_nervous_system_function_call_failure_leaves_execution_re
 #[test]
 fn test_execute_generic_nervous_system_function_truncates_oversized_reply() {
     // Step 1: Prepare the world.
-    let oversized_reply = vec![7_u8; MAX_SCALAR_FIELD_LEN_BYTES + 100];
+    // This is about the largest possible inter-canister reply. Using something
+    // this large makes the memory savings (verified later) dramatic.
+    let oversized_reply = vec![7_u8; 2 * 1024 * 1024];
 
     let mut env = NativeEnvironment::default();
     env.set_call_canister_response(
@@ -145,14 +146,39 @@ fn test_execute_generic_nervous_system_function_truncates_oversized_reply() {
     );
 
     let mut governance = new_governance(READY_TO_EXECUTE_PROPOSAL.clone(), env);
+    let proposal_id = 1;
+    assert_eq!(
+        governance
+            .proto
+            .proposals
+            .keys()
+            .copied()
+            .collect::<Vec<u64>>(),
+        vec![proposal_id],
+    );
 
     // Step 2: Run the code under test.
-    let proposal_data = execute_proposal(&mut governance, 1);
+    let _proposal_data_clone = execute_proposal(&mut governance, proposal_id);
+    let proposal_data: &ProposalData = governance.proto.proposals.get(&proposal_id).unwrap();
 
     // Step 3: Verify result(s).
-    let stored_reply = proposal_data.execution_reply.expect("reply should be set");
-    assert_eq!(stored_reply.len(), MAX_SCALAR_FIELD_LEN_BYTES);
-    assert_eq!(stored_reply, oversized_reply[..MAX_SCALAR_FIELD_LEN_BYTES]);
+    let stored_reply: &Vec<u8> = proposal_data
+        .execution_reply
+        .as_ref()
+        .expect("reply should be set");
+    assert_eq!(stored_reply.len(), MAX_EXECUTION_REPLY_LEN_BYTES);
+    assert_eq!(
+        *stored_reply,
+        oversized_reply[..MAX_EXECUTION_REPLY_LEN_BYTES]
+    );
     assert_ne!(proposal_data.executed_timestamp_seconds, 0);
     assert_eq!(proposal_data.failure_reason, None);
+
+    // Not only must the reply be truncated, but the excess memory must be
+    // released (i.e. capacity goes from 2 MiB down to 5 KB).
+    assert!(
+        stored_reply.capacity() <= MAX_EXECUTION_REPLY_LEN_BYTES + 500,
+        "{}",
+        stored_reply.capacity(),
+    );
 }

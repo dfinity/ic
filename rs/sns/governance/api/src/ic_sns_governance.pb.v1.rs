@@ -1099,7 +1099,7 @@ pub struct ProposalData {
     pub topic: Option<topics::Topic>,
     /// The raw reply bytes returned by the target canister for a successful
     /// ExecuteGenericNervousSystemFunction call, truncated to at most
-    /// MAX_SCALAR_FIELD_LEN_BYTES.
+    /// MAX_EXECUTION_REPLY_LEN_BYTES (5 KB).
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub execution_reply: Option<Vec<u8>>,
 }

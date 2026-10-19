@@ -108,9 +108,10 @@ fn test(env: TestEnv, config: TestConfig) {
         .expect("Failed to establish SSH session");
 
     // Stop the replica on the unassigned node, delete crypto keys, deploy the test key PEM, restart everything.
+    // Stop ic-replica first so its vault client can't socket-activate a vault that loads the old keys.
     let script = r#"set -e
-        sudo systemctl stop ic-crypto-csp
         sudo systemctl stop ic-replica
+        sudo systemctl stop ic-crypto-csp.socket ic-crypto-csp.service
         sudo rm /var/lib/ic/crypto/public_keys.pb
         sudo rm /var/lib/ic/crypto/sks_data.pb
         cat <<EOT >/tmp/node_operator_private_key.pem
@@ -124,7 +125,7 @@ EOT
         sudo cp /tmp/config.json.tmp /run/config/config.json
         sudo cp /tmp/node_operator_private_key.pem /var/lib/ic/data/node_operator_private_key.pem
         sudo chmod a+r /var/lib/ic/data/node_operator_private_key.pem
-        sudo systemctl start ic-crypto-csp
+        sudo systemctl start ic-crypto-csp.socket ic-crypto-csp.service
         sudo systemctl restart generate-ic-config
         sudo systemctl start ic-replica
         "#
@@ -136,11 +137,16 @@ EOT
     }
 
     // Wait until the node registers itself and updates the registry, then check that we have
-    // exactly 1 unassigned node.
+    // exactly 1 unassigned node, with a new node ID.
     info!(&logger, "Make sure we have 1 unassigned node again");
     topology = block_on(topology.block_for_newer_registry_version()).unwrap();
     let num_unassigned_nodes = topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 1);
+    assert_ne!(
+        topology.unassigned_nodes().next().unwrap().node_id,
+        unassigned_node.node_id,
+        "the removed node registered again with its old node ID"
+    );
 }
 
 /// Add a RewardTable which, if present, will force Registry Canister to look at `max_rewardable_nodes`,

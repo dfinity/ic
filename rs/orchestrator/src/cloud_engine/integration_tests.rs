@@ -12,7 +12,10 @@
 
 use super::{config::EngineConfig, *};
 use crate::{
-    processes::{IcGatewayProcessConfig, MultipleProcessesManager, ReplicaProcessConfig},
+    process_manager::Process,
+    processes::{
+        IcGatewayProcess, IcGatewayProcessConfig, MultipleProcessesManager, ReplicaProcessConfig,
+    },
     registry_helper::RegistryHelper,
 };
 use assert_matches::assert_matches;
@@ -27,9 +30,12 @@ use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType as PbSubnetType
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{ROOT_SUBNET_ID_KEY, make_subnet_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities_consensus::{fake::Fake, make_genesis};
 use ic_test_utilities_registry::add_subnet_key_record;
 use ic_test_utilities_types::ids::{NODE_1, SUBNET_1, SUBNET_2};
-use ic_types::{PlatformVersion, ReplicaVersion, subnet_id_into_protobuf};
+use ic_types::{
+    PlatformVersion, ReplicaVersion, consensus::dkg::DkgSummary, subnet_id_into_protobuf,
+};
 use nix::unistd::Pid;
 use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use std::{
@@ -328,17 +334,18 @@ impl Fixture {
                     replica_version: ReplicaVersion::try_from(REPLICA_VERSION).unwrap(),
                 },
                 ENGINE_SUBNET,
+                &make_genesis(DkgSummary::fake()),
                 VERSION,
             )
             .expect("starting the managed processes should not fail");
     }
 
-    /// A restart takes two turns, one to signal the old process and one to
-    /// start the new, so drive it until the dump shows `domain`. Gives up
-    /// after five seconds.
+    /// One turn of the process manager, which (re)starts `ic-gateway` with
+    /// `domain`. The stub dumps its environment only after being spawned, so
+    /// wait until the dump shows `domain`. Gives up after five seconds.
     async fn await_gateway_serving(&mut self, domain: &str) {
+        self.start_all();
         for _ in 0..50 {
-            self.start_all();
             if self
                 .gateway_env()
                 .is_some_and(|env| env.contains(&format!("DOMAIN={domain}")))
@@ -365,7 +372,12 @@ impl Fixture {
     }
 
     fn gateway_pid(&self) -> Option<Pid> {
-        self.processes.get_ic_gateway_pid()
+        self.processes
+            .observers()
+            .into_iter()
+            .find(|observer| observer.name() == IcGatewayProcess::NAME)
+            .expect("ic-gateway should be a managed process")
+            .get_pid()
     }
 
     /// What the manager published for the process manager to run with.
@@ -460,8 +472,7 @@ async fn ic_gateway_restarts_only_when_the_configuration_changes() {
         .await;
     fixture.manager.check().await;
 
-    // The process runner only compares versions, so an environment-only change
-    // takes effect through the explicit restart.
+    // A changed configuration restarts the process.
     fixture.await_gateway_serving(OTHER_BASE_DOMAIN).await;
 
     assert_ne!(fixture.gateway_pid(), Some(pid));

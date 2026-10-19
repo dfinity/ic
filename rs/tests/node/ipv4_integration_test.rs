@@ -178,9 +178,10 @@ pub fn test(env: TestEnv) {
         assert_eq!(num_unassigned_nodes, 0);
 
         info!(log, "Waiting until the removed node registers itself again and updates the registry ...");
+        // Stop ic-replica first so its vault client can't socket-activate a vault that loads the old keys.
         if let Err(e) = unassigned_node.block_on_bash_script(&indoc::formatdoc! {r#"set -e
-            sudo systemctl stop ic-crypto-csp
             sudo systemctl stop ic-replica
+            sudo systemctl stop ic-crypto-csp.socket ic-crypto-csp.service
             sudo rm /var/lib/ic/crypto/public_keys.pb
             sudo rm /var/lib/ic/crypto/sks_data.pb
             cat <<EOT >/tmp/node_operator_private_key.pem
@@ -188,7 +189,7 @@ pub fn test(env: TestEnv) {
 EOT
             sudo cp /tmp/node_operator_private_key.pem /var/lib/ic/data/node_operator_private_key.pem
             sudo chmod a+r /var/lib/ic/data/node_operator_private_key.pem
-            sudo systemctl start ic-crypto-csp
+            sudo systemctl start ic-crypto-csp.socket ic-crypto-csp.service
             sudo systemctl start ic-replica
             "#}) {
             panic!("Script execution failed: {e:?}");
@@ -197,11 +198,13 @@ EOT
         info!(log, "Waiting for the registry to update from version {:?} ...", topology.get_registry_version());
         let topology = topology.block_for_newer_registry_version().await.unwrap();
 
-        info!(log, "Assert there is 1 unassigned node again");
+        info!(log, "Assert there is 1 unassigned node again, with a new node ID");
         assert_eq!(topology.unassigned_nodes().count(), 1);
+        let removed_node_id = unassigned_node.node_id;
+        let unassigned_node: IcNodeSnapshot = topology.unassigned_nodes().next().unwrap();
+        assert_ne!(unassigned_node.node_id, removed_node_id, "the removed node registered again with its old node ID");
 
         info!(log, "Checking unassigned node's IPv4 config and domain name after its registration");
-        let unassigned_node: IcNodeSnapshot = topology.unassigned_nodes().next().unwrap();
         let ipv4_config = unassigned_node.get_ipv4_configuration().expect("Failed to get IPv4 configuration");
         assert_eq!(ipv4_config.ip_addr, UNASSIGNED_NODE_IPV4_ADDRESS);
         assert_eq!(ipv4_config.gateway_ip_addr, vec![IPV4_GATEWAY]);

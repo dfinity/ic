@@ -2089,6 +2089,7 @@ fn qemu_cmdline_names_pidfile(pid: i32, pid_path: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Read;
 
     #[test]
     fn qemu_cmdline_names_pidfile_requires_the_pidfile_argument_pair() {
@@ -2096,13 +2097,18 @@ mod tests {
         let path = pid_path.to_str().unwrap();
         // `read` is a builtin, so `sh` blocks in it itself (no child process to
         // orphan) until killed, with the positional arguments after `$0` in its argv.
+        // `spawn` can return before `/proc/<pid>/cmdline` shows the new argv, so wait
+        // for the newline that `sh` echoes once it runs.
         let spawn = |args: &[&str]| {
-            std::process::Command::new("sh")
-                .args(["-c", "read _", "sh"])
+            let mut child = std::process::Command::new("sh")
+                .args(["-c", "echo; read _", "sh"])
                 .args(args)
                 .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
                 .spawn()
-                .unwrap()
+                .unwrap();
+            child.stdout.as_mut().unwrap().read_exact(&mut [0]).unwrap();
+            child
         };
         let mut children = [
             spawn(&["-pidfile", path]),
