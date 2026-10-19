@@ -35,12 +35,14 @@ use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CountBytes, Height, NodeId, RegistryVersion, SubnetId};
-use ic_xnet_payload_builder::certified_slice_pool::{CertifiedSlicePool, UnpackedStreamSlice};
+use ic_xnet_payload_builder::certified_slice_pool::{
+    CertifiedSlicePool, POOL_BYTE_SIZE_SOFT_CAP, POOLED_SLICE_BYTE_SIZE_DIVISOR,
+    POOLED_SLICE_BYTE_SIZE_MAX, UnpackedStreamSlice, adjusted_byte_limit,
+};
 use ic_xnet_payload_builder::testing::*;
 use ic_xnet_payload_builder::{
     ExpectedIndices, LABEL_POOLED, LABEL_REMOTE, LABEL_SCHEDULED, LABEL_STATUS, MAX_SIGNALS,
-    METRIC_PULL_ATTEMPT_COUNT, METRIC_SHADOW_PULLS, POOL_BYTE_SIZE_SOFT_CAP,
-    POOLED_SLICE_BYTE_SIZE_DIVISOR, XNetPayloadBuilderImpl, adjusted_byte_limit,
+    METRIC_PULL_ATTEMPT_COUNT, METRIC_SHADOW_PULLS, XNetPayloadBuilderImpl,
     refill_stream_slice_indices,
 };
 use maplit::btreemap;
@@ -1172,7 +1174,7 @@ fn refill_pool_empty(
             ],
         });
 
-        let refill_handle = PoolRefillTask::start(
+        let refill_handle = PullTask::start(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
@@ -1326,7 +1328,7 @@ fn refill_pool_append(
             ],
         });
 
-        let refill_handle = PoolRefillTask::start(
+        let refill_handle = PullTask::start(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
@@ -1445,7 +1447,7 @@ fn refill_pool_put_invalid_slice(
             ],
         });
 
-        let refill_handle = PoolRefillTask::start(
+        let refill_handle = PullTask::start(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
@@ -1581,7 +1583,7 @@ fn refill_pool_append_invalid_slice(
             ],
         });
 
-        let refill_handle = PoolRefillTask::start(
+        let refill_handle = PullTask::start(
             Arc::clone(&pool),
             endpoint_resolver,
             xnet_client,
