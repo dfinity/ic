@@ -220,7 +220,8 @@ The governance canister supports a comprehensive set of native proposal actions,
 
 #### Scenario: Generic nervous system function call reply is retained
 - **WHEN** an `ExecuteGenericNervousSystemFunction` proposal's call to the target canister returns
-- **THEN** the reply is stored on the proposal rather than discarded, truncated if it is too long
+- **THEN** the reply is stored on the proposal (`ProposalData.execution_reply`) rather than discarded, truncated to at most `MAX_EXECUTION_REPLY_LEN_BYTES` (5 KB) if it is too long
+- **AND** truncation shrinks the stored buffer's allocated capacity to fit (`shrink_to_fit`), rather than just shortening its length, so a large reply does not keep holding memory it no longer needs
 - **AND** success or failure is still determined only by whether the call itself succeeded, since the reply's meaning is specific to the target canister and cannot be interpreted generically
 
 #### Scenario: Dapp management proposals scope limit
