@@ -1187,6 +1187,9 @@ mod tests {
         }
     }
 
+    /// How often the assemblers in these tests refresh their bouncers.
+    const BOUNCER_REFRESH_PERIOD: Duration = Duration::from_secs(1);
+
     /// A bouncer factory whose bouncers want every block proposal.
     fn wanting_bouncer_factory() -> MockBouncerFactory<ConsensusMessage> {
         let mut bouncer_factory = MockBouncerFactory::default();
@@ -1195,7 +1198,7 @@ mod tests {
             .returning(|_| Box::new(|_| BouncerValue::Wants));
         bouncer_factory
             .expect_refresh_period()
-            .return_const(Duration::from_secs(1));
+            .return_const(BOUNCER_REFRESH_PERIOD);
         bouncer_factory
     }
 
@@ -1587,7 +1590,7 @@ mod tests {
             });
         mock_bouncer_factory
             .expect_refresh_period()
-            .return_const(Duration::from_secs(1));
+            .return_const(BOUNCER_REFRESH_PERIOD);
 
         // The missing ingress is never in the local pool, and there are no peers to fetch it
         // from, so the fetch of the missing stripped message would otherwise stay pending forever.
@@ -1618,11 +1621,11 @@ mod tests {
         // Wait until the assembler has downloaded the stripped proposal
         started.notified().await;
 
-        // The proposal is no longer wanted. Advancing past the bouncer refresh period delivers
-        // the new `Unwanted` value, which must abort the assembly instead of waiting forever for
-        // the missing ingress.
+        // The proposal is no longer wanted. Advancing by the bouncer refresh period delivers the
+        // new `Unwanted` value, which must abort the assembly instead of waiting forever for the
+        // missing ingress.
         wants.store(false, Ordering::SeqCst);
-        tokio::time::advance(Duration::from_secs(4)).await;
+        tokio::time::advance(BOUNCER_REFRESH_PERIOD).await;
 
         assert_eq!(handle.await.unwrap(), AssembleResult::Unwanted);
     }
