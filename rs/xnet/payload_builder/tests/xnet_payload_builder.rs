@@ -5,6 +5,7 @@ use ic_interfaces::messaging::{XNetPayloadBuilder, XNetPayloadValidationError};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -53,7 +54,6 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
-use tokio::sync::mpsc;
 use tokio::time::Duration;
 
 mod common;
@@ -80,15 +80,13 @@ impl XNetPayloadBuilderFixture {
         let registry = get_registry_for_test();
         let certified_slice_pool =
             Arc::new(Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log)));
-        let (refill_trigger, _refill_receiver) = mpsc::channel(100);
-        let refill_task_handle = RefillTaskHandle(Mutex::new(refill_trigger));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&fixture.metrics));
         let xnet_payload_builder = XNetPayloadBuilderImpl::new_from_components(
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             registry,
             certified_slice_pool.clone(),
-            refill_task_handle,
+            PullTaskHandle::disconnected(),
             metrics,
             fixture.log,
         )
@@ -266,6 +264,16 @@ fn get_registry_for_test() -> Arc<dyn RegistryClient> {
     let registry = Arc::new(FakeRegistryClient::new(Arc::new(data_provider)));
     registry.update_to_latest_version();
     registry
+}
+
+/// A `StateManager` with no certified state, so a `PullTask` sees no streams of
+/// ours.
+fn state_manager_without_certified_state() -> Arc<MockStateManager> {
+    let mut state_manager = MockStateManager::new();
+    state_manager
+        .expect_get_latest_certified_state()
+        .returning(|| None);
+    Arc::new(state_manager)
 }
 
 /// Creates an incoming `CertifiedStreamSlice` containing `msg_count` messages
@@ -1184,6 +1192,7 @@ fn refill_pool_empty(
             endpoint_resolver,
             xnet_client,
             Arc::clone(&store),
+            state_manager_without_certified_state(),
             runtime.handle().clone(),
             &metrics_registry,
             log,
@@ -1220,7 +1229,6 @@ fn refill_pool_empty(
             )]),
             fetch_int_counter_vec(&metrics_registry, METRIC_SHADOW_PULLS)
         );
-        assert!(!pool.lock().unwrap().unschedule_pull(REMOTE_SUBNET));
 
         assert_opt_slices_eq(
             Some(certified_slice),
@@ -1338,6 +1346,7 @@ fn refill_pool_append(
             endpoint_resolver,
             xnet_client,
             Arc::clone(&store),
+            state_manager_without_certified_state(),
             runtime.handle().clone(),
             &metrics_registry,
             log.clone(),
@@ -1362,13 +1371,13 @@ fn refill_pool_append(
             }
         });
 
-        // Not scheduled, but pooled.
+        // Scheduled, as the pooled prefix's header offers more messages; and pooled.
         let remote = REMOTE_SUBNET.to_string();
         assert_eq!(
             metric_vec(&[(
                 &[
                     (LABEL_REMOTE, remote.as_str()),
-                    (LABEL_SCHEDULED, "false"),
+                    (LABEL_SCHEDULED, "true"),
                     (LABEL_POOLED, "true")
                 ],
                 1
@@ -1457,6 +1466,7 @@ fn refill_pool_put_invalid_slice(
             endpoint_resolver,
             xnet_client,
             Arc::clone(&store),
+            state_manager_without_certified_state(),
             runtime.handle().clone(),
             &metrics_registry,
             log,
@@ -1593,6 +1603,7 @@ fn refill_pool_append_invalid_slice(
             endpoint_resolver,
             xnet_client,
             Arc::clone(&store),
+            state_manager_without_certified_state(),
             runtime.handle().clone(),
             &metrics_registry,
             log.clone(),

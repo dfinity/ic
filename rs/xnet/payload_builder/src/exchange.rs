@@ -35,6 +35,7 @@ use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_registry_client_helpers::node::{NodeRecord, NodeRegistry};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_replicated_state::metadata_state::StreamMap;
 use ic_replicated_state::{ReplicatedState, replicated_state::ReplicatedStateMessageRouting};
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
 use ic_types::registry::RegistryClientError;
@@ -44,6 +45,7 @@ use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use rand::{Rng, thread_rng};
+use std::collections::{BTreeSet, VecDeque};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -608,6 +610,9 @@ pub(crate) struct XNetAdvertHandlerImpl {
     /// holds the recorded headers.
     slice_pool: Arc<Mutex<CertifiedSlicePool>>,
 
+    /// Used for requesting pulls from peers whose adverts offer something to pull.
+    pull_task: PullTaskHandle,
+
     log: ReplicaLogger,
 }
 
@@ -617,6 +622,7 @@ impl XNetAdvertHandlerImpl {
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         registry: Arc<dyn RegistryClient>,
         slice_pool: Arc<Mutex<CertifiedSlicePool>>,
+        pull_task: PullTaskHandle,
         log: ReplicaLogger,
     ) -> Self {
         Self {
@@ -624,6 +630,7 @@ impl XNetAdvertHandlerImpl {
             certified_stream_store,
             registry,
             slice_pool,
+            pull_task,
             log,
         }
     }
@@ -708,7 +715,7 @@ impl XNetAdvertHandler for XNetAdvertHandlerImpl {
             // A duplicate of a previously recorded header: re-enqueue _the recorded header_
             // for a pull, in case we tried and failed before.
             XNetAdvertOutcome::Duplicate => {
-                self.slice_pool.lock().unwrap().schedule_pull(source_subnet);
+                self.pull_task.request_pull(source_subnet);
                 return Ok(outcome);
             }
 
@@ -742,16 +749,15 @@ impl XNetAdvertHandler for XNetAdvertHandlerImpl {
             })?;
         debug_assert_eq!(slice.header(), &claimed, "Inconsistent slice decoding");
 
-        {
-            let mut slice_pool = self.slice_pool.lock().unwrap();
-            if outcome == XNetAdvertOutcome::Actionable {
-                slice_pool.schedule_pull(source_subnet);
-            }
-
-            // Record every verified header: the recorded header shows how far the peer has
-            // garbage collected its messages, which is what tells us whether we still owe
-            // it an advert.
-            slice_pool.record_peer_header(source_subnet, slice.header());
+        // Record every verified header: the recorded header shows how far the peer has
+        // garbage collected its messages, which is what tells us whether we still owe
+        // it an advert.
+        self.slice_pool
+            .lock()
+            .unwrap()
+            .record_peer_header(source_subnet, slice.header());
+        if outcome == XNetAdvertOutcome::Actionable {
+            self.pull_task.request_pull(source_subnet);
         }
 
         Ok(outcome)
@@ -1170,17 +1176,77 @@ pub struct PullIndices {
     pub byte_limit: usize,
 }
 
-/// A handle for a `PullTask` to be used for triggering pool refills and
-/// terminating the task (by dropping the handle).
-pub struct RefillTaskHandle(pub Mutex<mpsc::Sender<RegistryVersion>>);
+/// Subnets to pull from, in the order they were scheduled, without duplicates.
+#[derive(Default)]
+struct PullSchedule {
+    queue: VecDeque<SubnetId>,
+    scheduled: BTreeSet<SubnetId>,
+}
 
-impl RefillTaskHandle {
+impl PullSchedule {
+    /// Schedules a pull from `subnet_id`, unless one is already scheduled.
+    fn push(&mut self, subnet_id: SubnetId) {
+        if self.scheduled.insert(subnet_id) {
+            self.queue.push_back(subnet_id);
+        }
+    }
+
+    /// Removes `subnet_id` from the schedule. Returns whether it was scheduled.
+    fn remove(&mut self, subnet_id: SubnetId) -> bool {
+        if !self.scheduled.remove(&subnet_id) {
+            return false;
+        }
+        self.queue.retain(|&scheduled| scheduled != subnet_id);
+        true
+    }
+}
+
+/// Capacity of the channel carrying pull requests to a `PullTask`.
+const PULL_REQUESTS_CAPACITY: usize = 1024;
+
+/// A handle for a `PullTask`, used for triggering pool refills and requesting
+/// pulls. The task terminates once all its handles are dropped.
+#[derive(Clone)]
+pub struct PullTaskHandle {
+    refill_trigger: mpsc::Sender<RegistryVersion>,
+    pull_requests: mpsc::Sender<SubnetId>,
+}
+
+impl PullTaskHandle {
+    /// Creates a handle, along with the receiving ends of its refill trigger and
+    /// pull request channels.
+    pub(crate) fn new() -> (
+        Self,
+        mpsc::Receiver<RegistryVersion>,
+        mpsc::Receiver<SubnetId>,
+    ) {
+        let (refill_trigger, refill_receiver) = mpsc::channel(1);
+        let (pull_requests, pull_request_receiver) = mpsc::channel(PULL_REQUESTS_CAPACITY);
+        let handle = Self {
+            refill_trigger,
+            pull_requests,
+        };
+        (handle, refill_receiver, pull_request_receiver)
+    }
+
+    /// Creates a handle not connected to any `PullTask`, for when the pool is
+    /// refilled by other means.
+    pub fn disconnected() -> Self {
+        Self::new().0
+    }
+
     /// Triggers a slice pool refill, validating slices against the given registry
-    /// version.
+    /// version. Also schedules a pull from every peer with something left to pull.
     pub fn trigger_refill(&self, registry_version: RegistryVersion) {
-        // We don't care if the send succeeded or not. If it didn't, the refill task is
-        // just behind.
-        self.0.lock().unwrap().try_send(registry_version).ok();
+        // We don't care if the send succeeded or not. If it didn't, the task is just
+        // behind.
+        self.refill_trigger.try_send(registry_version).ok();
+    }
+
+    /// Requests a pull from `subnet_id`.
+    pub(crate) fn request_pull(&self, subnet_id: SubnetId) {
+        // If the channel is full, the next refill trigger schedules the pull anyway.
+        self.pull_requests.try_send(subnet_id).ok();
     }
 }
 
@@ -1197,6 +1263,10 @@ pub struct PullTask {
     /// Used for validating slices before they are pooled.
     certified_stream_store: Arc<dyn CertifiedStreamStore>,
 
+    /// Used for reading our own streams from the latest certified state, to tell
+    /// which peers have something left to pull.
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+
     /// Tokio runtime to be used for spawning async query tasks.
     runtime_handle: runtime::Handle,
 
@@ -1212,28 +1282,58 @@ impl PullTask {
         endpoint_resolver: Arc<XNetEndpointResolver>,
         xnet_client: Arc<dyn XNetClient>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
+        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         runtime_handle: runtime::Handle,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
-    ) -> RefillTaskHandle {
-        let (refill_trigger, mut refill_receiver) = mpsc::channel(1);
+    ) -> PullTaskHandle {
+        let (handle, mut refill_receiver, mut pull_request_receiver) = PullTaskHandle::new();
         let task = Arc::new(Self {
             pool,
             endpoint_resolver,
             xnet_client,
             certified_stream_store,
+            state_manager,
             runtime_handle: runtime_handle.clone(),
             metrics: PullTaskMetrics::new(metrics_registry),
             log,
         });
 
         runtime_handle.spawn(async move {
-            while let Some(registry_version) = refill_receiver.recv().await {
-                task.refill_pool(registry_version);
+            // Owned by the event loop, which handles one event at a time, so it needs no
+            // lock.
+            let mut schedule = PullSchedule::default();
+            loop {
+                tokio::select! {
+                    Some(registry_version) = refill_receiver.recv() => {
+                        task.schedule_pending_pulls(&mut schedule);
+                        task.refill_pool(registry_version, &mut schedule);
+                    }
+                    Some(subnet_id) = pull_request_receiver.recv() => schedule.push(subnet_id),
+                    // All handles were dropped.
+                    else => break,
+                }
             }
         });
 
-        RefillTaskHandle(Mutex::new(refill_trigger))
+        handle
+    }
+
+    /// Schedules a pull from every peer with something left to pull.
+    fn schedule_pending_pulls(&self, schedule: &mut PullSchedule) {
+        let state = self.state_manager.get_latest_certified_state();
+        let no_streams = StreamMap::new();
+        let own_streams = state
+            .as_ref()
+            .map_or(&no_streams, |state| state.get_ref().streams());
+        let pending = self
+            .pool
+            .lock()
+            .unwrap()
+            .subnets_with_something_to_pull(own_streams);
+        for subnet_id in pending {
+            schedule.push(subnet_id);
+        }
     }
 
     /// Queries all subnets for new slices and puts / appends them to the pool after
@@ -1242,16 +1342,19 @@ impl PullTask {
     /// Also unschedules every subnet it pulls from, as advert-driven pulling
     /// would; and records whether it was scheduled and whether the pull pooled
     /// anything.
-    fn refill_pool(self: &Arc<Self>, registry_version: RegistryVersion) {
-        let pulls: Vec<_> = {
-            let mut pool = self.pool.lock().unwrap();
-            pool.refill_stream_slice_indices(self.endpoint_resolver.subnet_id)
-                .into_iter()
-                .map(|(subnet_id, indices)| (subnet_id, indices, pool.unschedule_pull(subnet_id)))
-                .collect()
-        };
+    fn refill_pool(
+        self: &Arc<Self>,
+        registry_version: RegistryVersion,
+        schedule: &mut PullSchedule,
+    ) {
+        let pulls = self
+            .pool
+            .lock()
+            .unwrap()
+            .refill_stream_slice_indices(self.endpoint_resolver.subnet_id);
 
-        for (subnet_id, indices, scheduled) in pulls {
+        for (subnet_id, indices) in pulls {
+            let scheduled = schedule.remove(subnet_id);
             let task = Arc::clone(self);
             self.runtime_handle.spawn(async move {
                 if let Ok(pooled) = task.pull(subnet_id, indices, registry_version).await {
