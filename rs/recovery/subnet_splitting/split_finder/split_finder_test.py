@@ -13,11 +13,11 @@ FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_communic
 
 # The canisters in "fake_communication_sample.csv" form a cycling graph. Subtracting
 # "fake_communication_baseline_sample.csv" from it leaves one message per edge, except:
-# - canister 1 sent no new message to canister 0 (diff is 0);
+# - canister 1 sent no new message to canister 0 (diff is 0), so that edge is dropped;
 # - the counter of canister 2 to canister 1 was reset, so the fresh count (1) is used;
 # - the counts of canisters 10 and 19 are higher in both samples but their diff is still 1;
 # - the baseline-only rows (canister 0 -> canister 1 and canister 20 -> canister 0) are ignored.
-FAKE_COMMUNICATION_EDGES = {(i, (i - 1) % 20): 0 if i == 1 else 1 for i in range(20)}
+FAKE_COMMUNICATION_EDGES = {(i, (i - 1) % 20): 1 for i in range(20) if i != 1}
 
 
 class TestCsvLoading(unittest.TestCase):
@@ -46,6 +46,23 @@ class TestCsvLoading(unittest.TestCase):
                 Path(FAKE_COMMUNICATION_SAMPLE_CSV_PATH).read_text().rstrip("\n")
                 + "\nunknown-sender,rwlgt-iiaaa-aaaaa-aaaaa-cai,1"
                 + "\nrwlgt-iiaaa-aaaaa-aaaaa-cai,unknown-receiver,1\n"
+            )
+            result = load_subnet_data(
+                FAKE_LOAD_SAMPLE_CSV_PATH,
+                FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH,
+                "ingress_messages_executed",
+                communication_path,
+                FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
+            )
+        self.assertEqual(result["edges"], FAKE_COMMUNICATION_EDGES)
+
+    def test_self_communication_is_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            communication_path = Path(tmp_dir) / "communication.csv"
+            # A canister calling itself stays co-located under any split, so self-edges are ignored.
+            communication_path.write_text(
+                Path(FAKE_COMMUNICATION_SAMPLE_CSV_PATH).read_text().rstrip("\n")
+                + "\nrwlgt-iiaaa-aaaaa-aaaaa-cai,rwlgt-iiaaa-aaaaa-aaaaa-cai,5\n"
             )
             result = load_subnet_data(
                 FAKE_LOAD_SAMPLE_CSV_PATH,
@@ -91,8 +108,8 @@ class TestCsvLoading(unittest.TestCase):
             result,
             [
                 ("rwlgt-iiaaa-aaaaa-aaaaa-cai", "rwlgt-iiaaa-aaaaa-aaaaa-cai"),
-                ("r7inp-6aaaa-aaaaa-aaabq-cai", "qoctq-giaaa-aaaaa-aaaea-cai"),
-                ("qhbym-qaaaa-aaaaa-aaafq-cai", "qvhpv-4qaaa-aaaaa-aaagq-cai"),
+                ("r7inp-6aaaa-aaaaa-aaabq-cai", "qjdve-lqaaa-aaaaa-aaaeq-cai"),
+                ("qsgjb-riaaa-aaaaa-aaaga-cai", "qvhpv-4qaaa-aaaaa-aaagq-cai"),
             ],
             msg=f"`find_split` returned unexpected split: {result}",
         )
