@@ -759,10 +759,12 @@ impl RosettaRequestHandler {
                 ApiError::invalid_request(format!("Max block has to be a valid u64: {err}"))
             })?;
 
+        // Cap the limit to MAX_SEARCH_LIMIT to bound the number of blocks fetched in a single request.
         let limit: u64 = request
             .limit
             .unwrap_or(MAX_SEARCH_LIMIT as i64)
             .try_into()
+            .map(|limit: u64| limit.min(MAX_SEARCH_LIMIT as u64))
             .map_err(|err| {
                 ApiError::invalid_request(format!("Limit has to be a valid u64: {err}"))
             })?;
@@ -851,8 +853,11 @@ impl RosettaRequestHandler {
             )
             .map_err(|e| ApiError::invalid_block_id(format!("Error fetching blocks: {e:?}")))?;
 
+        // If rosetta blocks is empty that means the entire blockchain was traversed but no transactions were found that match the search criteria
+        let last_traversed_block_index = blocks.iter().map(|block| block.index).min().unwrap_or(0);
+
         let mut transactions = vec![];
-        for block in blocks.clone().into_iter() {
+        for block in blocks.into_iter() {
             let rosetta_core_block = self.hashed_block_to_rosetta_core_block(block).await?;
             for transaction in rosetta_core_block.transactions.into_iter() {
                 transactions.push(BlockTransaction {
@@ -871,8 +876,6 @@ impl RosettaRequestHandler {
         // Sort the transactions by block index in descending order
         transactions.sort_by_key(|b| std::cmp::Reverse(b.block_identifier.index));
 
-        // If rosetta blocks is empty that means the entire blockchain was traversed but no transactions were found that match the search criteria
-        let last_traversed_block_index = blocks.iter().map(|block| block.index).min().unwrap_or(0);
         let num_fetched_transactions = transactions.len();
 
         Ok(SearchTransactionsResponse {
