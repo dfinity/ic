@@ -962,6 +962,10 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
                     min: max_catch_up_height,
                     max: max_catch_up_height,
                 })
+                // Do not broadcast unsigned (i.e. genesis or recovery) CUPs: peers would consider
+                // them invalid, as they have no signature. Instead, each peer obtains such a CUP
+                // from its own orchestrator, which creates it from the registry.
+                .filter(|x| x.is_signed())
                 .map(|x| x.into_message())
                 .chain(
                     self.validated
@@ -1066,7 +1070,9 @@ mod tests {
         artifact::IdentifiableArtifact,
         batch::ValidationContext,
         consensus::{BlockProposal, RandomBeacon, dkg::DkgSummary},
-        crypto::{CryptoHash, CryptoHashOf, crypto_hash},
+        crypto::{
+            CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, crypto_hash,
+        },
         time::UNIX_EPOCH,
     };
     use prost::Message;
@@ -1513,25 +1519,25 @@ mod tests {
                     ]);
                 }
             }
-            messages.push(
-                CatchUpPackage::fake(CatchUpContent::new(
-                    HashedBlock::new(
-                        crypto_hash,
-                        fake_block(Height::from(height_offset), Rank(0)),
-                    ),
-                    HashedRandomBeacon::new(
-                        crypto_hash,
-                        RandomBeacon::fake(RandomBeaconContent {
-                            version: test_replica_version(),
-                            height: Height::from(height_offset),
-                            parent: CryptoHashOf::from(CryptoHash(vec![])),
-                        }),
-                    ),
-                    CryptoHashOf::from(CryptoHash(vec![])),
-                    None,
-                ))
-                .into_message(),
-            );
+            let mut cup = CatchUpPackage::fake(CatchUpContent::new(
+                HashedBlock::new(
+                    crypto_hash,
+                    fake_block(Height::from(height_offset), Rank(0)),
+                ),
+                HashedRandomBeacon::new(
+                    crypto_hash,
+                    RandomBeacon::fake(RandomBeaconContent {
+                        version: test_replica_version(),
+                        height: Height::from(height_offset),
+                        parent: CryptoHashOf::from(CryptoHash(vec![])),
+                    }),
+                ),
+                CryptoHashOf::from(CryptoHash(vec![])),
+                None,
+            ));
+            // Sign the CUP, as unsigned CUPs are not broadcast
+            cup.signature.signature = CombinedThresholdSigOf::new(CombinedThresholdSig(vec![1]));
+            messages.push(cup.into_message());
 
             pool.apply(
                 messages
@@ -1569,6 +1575,43 @@ mod tests {
                 1 + 15 * 4 + 5 * 4 + 20 * 5
             );
         });
+    }
+
+    /// The CUP that the pool is initialized with is broadcast on startup only if it is signed, as
+    /// peers would consider unsigned (i.e. genesis or recovery) CUPs invalid.
+    #[test]
+    fn test_initial_broadcast_includes_cup_only_if_signed() {
+        for is_signed in [false, true] {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                let mut cup = make_genesis(DkgSummary::fake());
+                if is_signed {
+                    cup.signature.signature =
+                        CombinedThresholdSigOf::new(CombinedThresholdSig(vec![1]));
+                }
+                assert_eq!(cup.is_signed(), is_signed);
+                let pool = new_from_cup_without_bytes(
+                    node_test_id(0),
+                    subnet_test_id(0),
+                    cup.clone(),
+                    pool_config,
+                    MetricsRegistry::new(),
+                    no_op_logger(),
+                    FastForwardTimeSource::new(),
+                );
+
+                let broadcast_cups: Vec<_> = pool
+                    .get_all_for_initial_broadcast()
+                    .filter(|m| matches!(m, ConsensusMessage::CatchUpPackage(_)))
+                    .collect();
+
+                let expected_cups = if is_signed {
+                    vec![cup.into_message()]
+                } else {
+                    vec![]
+                };
+                assert_eq!(broadcast_cups, expected_cups, "is_signed: {is_signed}");
+            });
+        }
     }
 
     #[test]
