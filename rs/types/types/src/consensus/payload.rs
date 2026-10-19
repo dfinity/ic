@@ -210,6 +210,12 @@ impl Payload {
         }
     }
 
+    /// Loads a payload created by [`Self::new_with`] now rather than on first access.
+    /// Does nothing if the payload is loaded already.
+    pub fn load(&self) {
+        let _: &BlockPayload = self.as_ref();
+    }
+
     pub(crate) fn new_from_hash_and_value(
         hash: CryptoHashOf<BlockPayload>,
         payload: BlockPayload,

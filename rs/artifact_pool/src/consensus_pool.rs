@@ -843,9 +843,11 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
     }
 }
 
+/// The interface the P2P layer uses to read from the validated pool.
+/// Returned block proposals are guaranteed to be fully loaded.
 impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
     fn get(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
-        self.validated.get(id)
+        self.validated.get(id).inspect(ConsensusMessage::load)
     }
 
     fn get_all_for_initial_broadcast(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
@@ -1036,7 +1038,8 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
                         })
                         .map(|x| x.into_message()),
                 )
-                .chain(random_tape_iterator),
+                .chain(random_tape_iterator)
+                .inspect(ConsensusMessage::load),
         )
     }
 }
@@ -1357,6 +1360,55 @@ mod tests {
 
             pool.remove(&id);
             assert!(!pool.unvalidated.contains(&id));
+        });
+    }
+
+    /// p2p hands out the block proposals it gets from the pool after letting go of the
+    /// lock on it, by which time the block, payload included, may have been purged. So
+    /// it has to get them with their payload already loaded.
+    #[test]
+    fn test_block_proposals_for_peers_come_with_their_payload() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                subnet_test_id(0),
+                make_genesis(DkgSummary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            );
+            let block_proposal =
+                BlockProposal::fake(fake_block(Height::from(1), Rank(0)), node_test_id(0));
+            let message = block_proposal.clone().into_message();
+            let id = message.get_id();
+            pool.apply(vec![ChangeAction::AddToValidated(
+                ValidatedConsensusArtifact {
+                    msg: message.clone(),
+                    timestamp: time_source.get_relative_time(),
+                },
+            )]);
+
+            let served = ValidatedPoolReader::get(&pool, &id).expect("The proposal is in the pool");
+            let broadcast: Vec<_> = pool
+                .get_all_for_initial_broadcast()
+                .filter(|message| message.get_id() == id)
+                .collect();
+            assert_eq!(broadcast.len(), 1);
+
+            pool.apply(vec![ChangeAction::RemoveFromValidated(message)]);
+            assert!(ValidatedPoolReader::get(&pool, &id).is_none());
+
+            for message in std::iter::once(served).chain(broadcast) {
+                let ConsensusMessage::BlockProposal(proposal) = message else {
+                    panic!("Expected a block proposal, got {message:?}");
+                };
+                assert_eq!(
+                    proposal.as_ref().payload.as_ref(),
+                    block_proposal.as_ref().payload.as_ref()
+                );
+            }
         });
     }
 
