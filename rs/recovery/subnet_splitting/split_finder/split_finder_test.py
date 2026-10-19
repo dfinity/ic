@@ -11,6 +11,14 @@ FAKE_LOAD_BASELINE_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_load_baseline_sam
 FAKE_COMMUNICATION_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_communication_sample.csv")
 FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH = str(TEST_DATA_DIR / "fake_communication_baseline_sample.csv")
 
+# The canisters in "fake_communication_sample.csv" form a cycling graph. Subtracting
+# "fake_communication_baseline_sample.csv" from it leaves one message per edge, except:
+# - canister 1 sent no new message to canister 0 (diff is 0);
+# - the counter of canister 2 to canister 1 was reset, so the fresh count (1) is used;
+# - the counts of canisters 10 and 19 are higher in both samples but their diff is still 1;
+# - the baseline-only rows (canister 0 -> canister 1 and canister 20 -> canister 0) are ignored.
+FAKE_COMMUNICATION_EDGES = {(i, (i - 1) % 20): 0 if i == 1 else 1 for i in range(20)}
+
 
 class TestCsvLoading(unittest.TestCase):
     def test_valid_csv_files_load(self):
@@ -27,8 +35,7 @@ class TestCsvLoading(unittest.TestCase):
             [1.0, 0.0, 1.0, 0.0, 3.0, 1.0, 3.0, 1.0, 3.0, 1.0, 3.0, 1.0, 3.0, 1.0, 3.0, 1.0, 3.0, 1.0, 3.0, 1.0],
             msg=f"`load_subnet_data` returned {result}",
         )
-        # the canisters in "fake_communication_sample.csv" form a cycling graph
-        self.assertEqual(result["edges"], {(i, (i - 1) % 20): 1 for i in range(20)})
+        self.assertEqual(result["edges"], FAKE_COMMUNICATION_EDGES)
         self.assertEqual(len(result["index_to_canister_id"]), len(result["load"]))
 
     def test_communication_with_unknown_canisters_is_ignored(self):
@@ -47,7 +54,7 @@ class TestCsvLoading(unittest.TestCase):
                 communication_path,
                 FAKE_COMMUNICATION_BASELINE_SAMPLE_CSV_PATH,
             )
-        self.assertEqual(result["edges"], {(i, (i - 1) % 20): 1 for i in range(20)})
+        self.assertEqual(result["edges"], FAKE_COMMUNICATION_EDGES)
 
     def test_communication_counter_reset_uses_fresh_count(self):
         header = "sender_canister_id,receiver_canister_id,count\n"
@@ -83,10 +90,9 @@ class TestCsvLoading(unittest.TestCase):
         self.assertEqual(
             result,
             [
-                ("rwlgt-iiaaa-aaaaa-aaaaa-cai", "rrkah-fqaaa-aaaaa-aaaaq-cai"),
-                ("rkp4c-7iaaa-aaaaa-aaaca-cai", "qoctq-giaaa-aaaaa-aaaea-cai"),
-                ("qsgjb-riaaa-aaaaa-aaaga-cai", "qvhpv-4qaaa-aaaaa-aaagq-cai"),
-                ("sp3hj-caaaa-aaaaa-aaajq-cai", "sp3hj-caaaa-aaaaa-aaajq-cai"),
+                ("rwlgt-iiaaa-aaaaa-aaaaa-cai", "rwlgt-iiaaa-aaaaa-aaaaa-cai"),
+                ("r7inp-6aaaa-aaaaa-aaabq-cai", "qoctq-giaaa-aaaaa-aaaea-cai"),
+                ("qhbym-qaaaa-aaaaa-aaafq-cai", "qvhpv-4qaaa-aaaaa-aaagq-cai"),
             ],
             msg=f"`find_split` returned unexpected split: {result}",
         )
