@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
+### Fixed
+- Cap the `limit` of `/search/transactions` requests to the maximum of 10,000 transactions per request (PR_LINK).
 
 ### Fixed
 - Limit the number of envelopes in `/construction/combine` to 720 and the size of signatures and public keys, and reject repeated envelopes ([#12251](https://github.com/dfinity/ic/pull/12251))
