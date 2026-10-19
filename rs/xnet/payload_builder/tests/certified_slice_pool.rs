@@ -1798,11 +1798,11 @@ fn pool_put_more_useful_slice_only(
     });
 }
 
-/// Tests that `schedule_pending_pulls()` schedules a pull from a peer iff its
-/// recorded header offers something not covered by the cached stream position
-/// (or pooled slice); and only once.
+/// Tests that `subnets_with_something_to_pull()` returns a peer iff its recorded
+/// header offers something not covered by the cached stream position (or pooled
+/// slice).
 #[test]
-fn pool_schedule_pending_pulls() {
+fn pool_subnets_with_something_to_pull() {
     with_test_replica_logger(|log| {
         let mut pool = CertifiedSlicePool::new(&MetricsRegistry::new(), log);
         let header = StreamHeaderBuilder::new()
@@ -1812,17 +1812,19 @@ fn pool_schedule_pending_pulls() {
             .build();
         let no_reject_signals = btreemap![];
 
-        // Nothing scheduled for a peer we have heard nothing from.
-        pool.schedule_pending_pulls(&no_reject_signals);
-        assert!(!pool.unschedule_pull(SRC_SUBNET));
+        // Nothing to pull from a peer we have heard nothing from.
+        assert!(
+            pool.subnets_with_something_to_pull(&no_reject_signals)
+                .is_empty()
+        );
 
         // With nothing pooled and no stream position, the recorded header has
-        // something to pull. Scheduled only once.
+        // something to pull.
         pool.record_peer_header(SRC_SUBNET, &header);
-        pool.schedule_pending_pulls(&no_reject_signals);
-        pool.schedule_pending_pulls(&no_reject_signals);
-        assert!(pool.unschedule_pull(SRC_SUBNET));
-        assert!(!pool.unschedule_pull(SRC_SUBNET));
+        assert_eq!(
+            vec![SRC_SUBNET],
+            pool.subnets_with_something_to_pull(&no_reject_signals)
+        );
 
         // Nothing to pull once past payloads cover the recorded header...
         pool.garbage_collect(btreemap! {
@@ -1832,8 +1834,10 @@ fn pool_schedule_pending_pulls() {
                 max_no_gc_header_begin: header.begin(),
             }
         });
-        pool.schedule_pending_pulls(&no_reject_signals);
-        assert!(!pool.unschedule_pull(SRC_SUBNET));
+        assert!(
+            pool.subnets_with_something_to_pull(&no_reject_signals)
+                .is_empty()
+        );
 
         // ...unless the recorded header's `begin` would garbage collect a reject
         // signal of ours that the stream position's would not.
@@ -1844,10 +1848,12 @@ fn pool_schedule_pending_pulls() {
                 max_no_gc_header_begin: 0.into(),
             }
         });
-        pool.schedule_pending_pulls(&btreemap! {
-            SRC_SUBNET => stream_with_reject_signal_at(0.into())
-        });
-        assert!(pool.unschedule_pull(SRC_SUBNET));
+        assert_eq!(
+            vec![SRC_SUBNET],
+            pool.subnets_with_something_to_pull(&btreemap! {
+                SRC_SUBNET => stream_with_reject_signal_at(0.into())
+            })
+        );
     });
 }
 
