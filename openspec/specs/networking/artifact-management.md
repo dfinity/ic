@@ -33,6 +33,12 @@ The consensus pool must initialize correctly from configuration, supporting both
 - **AND** a `ConsensusCacheImpl` is initialized from the persistent pool contents
 - **AND** height-indexed lookups are available for all consensus message types (RandomBeacon, BlockProposal, Notarization, Finalization, RandomTape, CatchUpPackage, and their share variants, plus EquivocationProof)
 
+#### Scenario: Unsigned CatchUpPackages are not offered to peers
+- **WHEN** `ConsensusPoolImpl` computes the validated artifacts to offer peers (`ValidatedPoolReader::get_all_validated_by_filter` for `CatchUpPackage`)
+- **AND** the validated pool contains an unsigned CatchUpPackage, e.g. a genesis or recovery CUP taken directly from the registry without a signature
+- **THEN** that CatchUpPackage is filtered out of what gets offered, since peers cannot validate a CUP with no signature
+- **AND** each peer instead obtains the same unsigned CUP from its own orchestrator, which creates it from the registry directly
+
 ### Requirement: Consensus Pool Section Operations (ic-artifact-pool)
 
 The consensus pool must support insert, remove, purge-below, and purge-type-below operations on both validated and unvalidated sections. Each section is indexed by height and supports queries across all consensus artifact types.

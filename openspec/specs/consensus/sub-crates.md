@@ -194,7 +194,7 @@ This crate defines feature flags that control consensus behavior. It provides co
 ### Requirements
 
 ### Requirement: Hashes-in-Blocks Feature Flag
-The `HASHES_IN_BLOCKS_ENABLED` flag controls whether block proposals strip full ingress messages and IDKG dealings, replacing them with hashes.
+The `HASHES_IN_BLOCKS_ENABLED` flag controls whether block proposals strip full ingress messages, IDKG dealings, and canister HTTP responses, replacing them with hashes.
 
 #### Scenario: Hashes-in-blocks is enabled
 - **WHEN** `HASHES_IN_BLOCKS_ENABLED` is `true`
@@ -207,6 +207,20 @@ The `HASHES_IN_BLOCKS_ENABLED` flag controls whether block proposals strip full 
 - **THEN** the receiver reconstructs the block by looking up referenced ingress messages in the ingress pool
 - **AND** the receiver looks up referenced IDKG dealings in the IDKG pool
 - **AND** if artifacts are not found locally, the receiver fetches them from peers advertising the block
+
+#### Scenario: Canister HTTP responses are stripped from block proposals
+- **WHEN** a block proposal is stripped for sending to peers
+- **AND** the block's canister HTTP payload contains a response whose content is at least `MIN_STRIPPED_CONTENT_BYTES` (64 bytes)
+- **THEN** `strip_responses` removes that response's content from the payload and names it by the content hash the payload already carries
+- **AND** a response is stripped whatever kind of outcall it answers, since the replicas that signed for it already hold its content
+- **AND** a payload with nothing to strip (no response reaches the threshold) is left byte-for-byte untouched, so a block without a qualifying response never pays for re-encoding
+- **AND** the replica's own terse rejects, and responses below the threshold, stay in the block since stripping them would save little or nothing
+
+#### Scenario: Receivers reassemble stripped canister HTTP responses
+- **WHEN** a block is received with canister HTTP responses stripped
+- **THEN** the receiver looks up each named response's content in the local canister HTTP pool
+- **AND** if the content is not found locally, the receiver fetches it from peers via the `/block/canister_http_response/rpc` endpoint
+- **AND** the receiver re-encodes the reassembled payload, which validation accepts only if it reproduces the bytes the block hash covers
 
 ---
 
