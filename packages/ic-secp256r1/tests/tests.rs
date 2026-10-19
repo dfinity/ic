@@ -549,3 +549,21 @@ fn mainnet_keys_are_the_ones_in_the_cups() {
         "021a3eee9d02e8d9cc32f19ca572615a1fa4712742b3a623228db9289c87e859c5",
     );
 }
+
+#[test]
+fn pocketic_keys_are_derived_like_in_pocketic() {
+    // PocketIC derives each key from this seed and the key name.
+    let seed_key = PrivateKey::generate_insecure_key_for_testing(42);
+    for (key_id, name) in [
+        (PocketIcMasterPublicKeyId::EcdsaKey1, "key_1"),
+        (PocketIcMasterPublicKeyId::EcdsaTestKey1, "test_key_1"),
+        (PocketIcMasterPublicKeyId::EcdsaDfxTestKey, "dfx_test_key"),
+    ] {
+        let path = DerivationPath::new(vec![DerivationIndex(name.as_bytes().to_vec())]);
+        assert_eq!(
+            PublicKey::pocketic_key(key_id),
+            seed_key.derive_subkey(&path).0.public_key(),
+            "{name}",
+        );
+    }
+}

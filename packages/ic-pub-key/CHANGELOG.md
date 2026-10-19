@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add offline derivation for the mainnet ECDSA keys `key_1` and `test_key_1` over the secp256r1 curve, behind the new (default) `secp256r1` feature.
+- Add offline derivation for ECDSA keys over the secp256r1 curve, behind the new (default) `secp256r1` feature. It supports the mainnet keys `key_1` and `test_key_1` as well as the PocketIC keys.
 
 ### Changed
 

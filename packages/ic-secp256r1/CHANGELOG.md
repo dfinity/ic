@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add `PublicKey::mainnet_key` returning the mainnet master public keys `key_1` and `test_key_1`
+- Add `PublicKey::pocketic_key` returning the master public keys PocketIC uses for `key_1`, `test_key_1` and `dfx_test_key`
 
 ## [0.2.0] - 2026-02-11
 

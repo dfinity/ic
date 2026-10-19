@@ -134,6 +134,15 @@ impl TryFrom<&EcdsaKeyId> for MasterPublicKey {
                     "test_key_1" => ic_secp256r1::PublicKey::mainnet_key(
                         ic_secp256r1::MasterPublicKeyId::EcdsaTestKey1,
                     ),
+                    "pocketic_key_1" => ic_secp256r1::PublicKey::pocketic_key(
+                        ic_secp256r1::PocketIcMasterPublicKeyId::EcdsaKey1,
+                    ),
+                    "pocketic_test_key_1" => ic_secp256r1::PublicKey::pocketic_key(
+                        ic_secp256r1::PocketIcMasterPublicKeyId::EcdsaTestKey1,
+                    ),
+                    "dfx_test_key" => ic_secp256r1::PublicKey::pocketic_key(
+                        ic_secp256r1::PocketIcMasterPublicKeyId::EcdsaDfxTestKey,
+                    ),
                     _ => return Err(Error::UnknownKeyIdentifier),
                 };
 
@@ -505,8 +514,6 @@ impl DerivedPublicKey {
 /// * `pocketic_test_key_1`: The key used by PocketIC when a request to the management canister
 ///   uses `test_key_1`.
 /// * `dfx_test_key`: PocketIC specific test key
-///
-/// For the secp256r1 curve, only `key_1` and `test_key_1` are supported.
 pub fn derive_ecdsa_key(args: &EcdsaPublicKeyArgs) -> Result<EcdsaPublicKeyResult, Error> {
     let canister_id = args.canister_id.ok_or(Error::CanisterIdMissing)?;
 

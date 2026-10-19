@@ -326,8 +326,8 @@ fn test_ecdsa_secp256k1_derivation_test_key1() {
     );
 }
 
-// The expected keys were computed offline with `ic-secp256r1`, not taken from the
-// `ecdsa_public_key` answers of mainnet.
+// The expected secp256r1 keys are what the replica's `derive_threshold_public_key`,
+// which answers `ecdsa_public_key`, returns for these master keys.
 #[cfg(feature = "secp256r1")]
 #[test]
 fn test_ecdsa_secp256r1_derivation_key1() {
@@ -422,6 +422,66 @@ fn test_ecdsa_secp256k1_derivation_pocketic_dfx_test_key() {
             "dfx_test_key",
         ],
         "03f005cf69911ae75f622ce0a621ccddba1a30ea1f6c3d67dd56acbbddb88a9374",
+    );
+}
+
+#[cfg(feature = "secp256r1")]
+#[test]
+fn test_ecdsa_secp256r1_derivation_pocketic_key1() {
+    test_ecdsa_derivation_with_curve(
+        EcdsaCurve::Secp256r1,
+        "pocketic_key_1",
+        "uzt4z-lp777-77774-qaabq-cai",
+        &[
+            "Test",
+            "Derivation",
+            "For",
+            "PocketIC",
+            "ECDSA",
+            "secp256r1",
+            "key_1",
+        ],
+        "02d3536db48ecef1eb8249f04553046902fbe7d979140530e5294452b94f0e38ad",
+    );
+}
+
+#[cfg(feature = "secp256r1")]
+#[test]
+fn test_ecdsa_secp256r1_derivation_pocketic_test_key1() {
+    test_ecdsa_derivation_with_curve(
+        EcdsaCurve::Secp256r1,
+        "pocketic_test_key_1",
+        "uzt4z-lp777-77774-qaabq-cai",
+        &[
+            "Test",
+            "Derivation",
+            "For",
+            "PocketIC",
+            "ECDSA",
+            "secp256r1",
+            "test_key_1",
+        ],
+        "03080d5850ca18f277d7f39c3cfd37635b6527a73ba63b774d26d4cdf725e1ce39",
+    );
+}
+
+#[cfg(feature = "secp256r1")]
+#[test]
+fn test_ecdsa_secp256r1_derivation_pocketic_dfx_test_key() {
+    test_ecdsa_derivation_with_curve(
+        EcdsaCurve::Secp256r1,
+        "dfx_test_key",
+        "uzt4z-lp777-77774-qaabq-cai",
+        &[
+            "Test",
+            "Derivation",
+            "For",
+            "PocketIC",
+            "ECDSA",
+            "secp256r1",
+            "dfx_test_key",
+        ],
+        "036cd2e52401b60ec8b86041f9c624438eb69ab271def9c9a439bd9fb49fa88ac7",
     );
 }
 
