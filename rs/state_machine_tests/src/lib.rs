@@ -184,9 +184,8 @@ use ic_types::{
 };
 use ic_types_cycles::{CanisterCyclesCostSchedule, Cycles, CyclesUseCase, NominalCycles};
 use ic_xnet_payload_builder::{
-    RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
-    certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
-    testing::XNetPayloadBuilderTesting,
+    XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, certified_slice_pool::CertifiedSlicePool,
+    exchange::RefillTaskHandle, testing::XNetPayloadBuilderTesting,
 };
 
 use maplit::btreemap;
@@ -839,8 +838,11 @@ impl PocketXNetImpl {
     }
 
     fn refill(&self, registry_version: RegistryVersion, log: ReplicaLogger) {
-        let refill_stream_slice_indices =
-            refill_stream_slice_indices(&self.pool.lock().unwrap(), self.own_subnet_id);
+        let refill_stream_slice_indices = self
+            .pool
+            .lock()
+            .unwrap()
+            .refill_stream_slice_indices(self.own_subnet_id);
 
         for (subnet_id, indices) in refill_stream_slice_indices {
             // When restoring a PocketIC instance from its state,
