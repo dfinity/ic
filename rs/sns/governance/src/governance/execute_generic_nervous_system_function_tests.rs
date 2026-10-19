@@ -1,6 +1,5 @@
 use super::*;
 use crate::{
-    MAX_SCALAR_FIELD_LEN_BYTES,
     governance::test_helpers::{DoNothingLedger, basic_governance_proto, execute_proposal},
     pb::v1::nervous_system_function::{FunctionType, GenericNervousSystemFunction},
     types::test_helpers::NativeEnvironment,
@@ -167,15 +166,18 @@ fn test_execute_generic_nervous_system_function_truncates_oversized_reply() {
         .execution_reply
         .as_ref()
         .expect("reply should be set");
-    assert_eq!(stored_reply.len(), MAX_SCALAR_FIELD_LEN_BYTES);
-    assert_eq!(*stored_reply, oversized_reply[..MAX_SCALAR_FIELD_LEN_BYTES]);
+    assert_eq!(stored_reply.len(), MAX_EXECUTION_REPLY_LEN_BYTES);
+    assert_eq!(
+        *stored_reply,
+        oversized_reply[..MAX_EXECUTION_REPLY_LEN_BYTES]
+    );
     assert_ne!(proposal_data.executed_timestamp_seconds, 0);
     assert_eq!(proposal_data.failure_reason, None);
 
     // Not only must the reply be truncated, but the excess memory must be
-    // released (i.e. capacity goes from 2 MiB down to 50 KB).
+    // released (i.e. capacity goes from 2 MiB down to 5 KB).
     assert!(
-        stored_reply.capacity() <= MAX_SCALAR_FIELD_LEN_BYTES + 500,
+        stored_reply.capacity() <= MAX_EXECUTION_REPLY_LEN_BYTES + 500,
         "{}",
         stored_reply.capacity(),
     );
