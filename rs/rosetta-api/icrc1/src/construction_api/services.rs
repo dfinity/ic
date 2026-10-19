@@ -364,8 +364,8 @@ mod tests {
     #[test]
     fn memo_length_boundary_is_inclusive() {
         assert!(validate_memo(None).is_ok());
-        assert!(validate_memo(Some(&vec![0u8; MAX_MEMO_LENGTH_BYTES])).is_ok());
-        assert!(validate_memo(Some(&vec![0u8; MAX_MEMO_LENGTH_BYTES + 1])).is_err());
+        assert!(validate_memo(Some(&vec![0_u8; MAX_MEMO_LENGTH_BYTES])).is_ok());
+        assert!(validate_memo(Some(&vec![0_u8; MAX_MEMO_LENGTH_BYTES + 1])).is_err());
     }
 
     // An oversized memo is rejected by `construction_payloads` before any
@@ -374,7 +374,7 @@ mod tests {
     fn construction_payloads_rejects_oversized_memo() {
         let now = SystemTime::UNIX_EPOCH + std::time::Duration::from_nanos(NOW_NANOS);
         let metadata = ConstructionPayloadsRequestMetadata {
-            memo: Some(vec![0u8; MAX_MEMO_LENGTH_BYTES + 1]),
+            memo: Some(vec![0_u8; MAX_MEMO_LENGTH_BYTES + 1]),
             ingress_start: Some(NOW_NANOS),
             ingress_end: Some(NOW_NANOS + MAX_INGRESS_WINDOW.as_nanos() as u64),
             created_at_time: None,
