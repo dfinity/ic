@@ -1627,6 +1627,24 @@ mod tests {
         assert_eq!(handle.await.unwrap(), AssembleResult::Unwanted);
     }
 
+    /// Stripped consensus messages are bounced like the consensus messages they were stripped
+    /// from, so their bouncer is refreshed just as often.
+    #[test]
+    fn bouncer_factory_wrapper_uses_the_wrapped_refresh_period() {
+        let refresh_period = Duration::from_millis(1234);
+        let mut bouncer_factory = MockBouncerFactory::<ConsensusMessage>::default();
+        bouncer_factory
+            .expect_refresh_period()
+            .times(1)
+            .return_const(refresh_period);
+        let wrapper: BouncerFactoryWrapper<MockValidatedPoolReader<ConsensusMessage>> =
+            BouncerFactoryWrapper {
+                bouncer_factory: Arc::new(bouncer_factory),
+            };
+
+        assert_eq!(wrapper.refresh_period(), refresh_period);
+    }
+
     #[test]
     fn try_assemble_rejects_reconstructed_block_with_mismatched_id() {
         let block_proposal = fake_block_proposal_with_ingresses(vec![]);
