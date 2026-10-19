@@ -960,9 +960,9 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
                     min: max_catch_up_height,
                     max: max_catch_up_height,
                 })
-                // Do not broadcast unsigned CUPs (like genesis or recovery CUPs) because peers
-                // would invalidate them anyways. They should know about them from their
-                // orchestrators by looking at the registry.
+                // Do not broadcast unsigned (i.e. genesis or recovery) CUPs: peers would consider
+                // them invalid, as they have no signature. Instead, each peer obtains such a CUP
+                // from its own orchestrator, which creates it from the registry.
                 .filter(|x| x.is_signed())
                 .map(|x| x.into_message())
                 .chain(
