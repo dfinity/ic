@@ -6,6 +6,22 @@ fn test_ecdsa_derivation(
     derivation_path: &[&'static str],
     expected_dpk: &'static str,
 ) {
+    test_ecdsa_derivation_with_curve(
+        EcdsaCurve::Secp256k1,
+        key_name,
+        canister_id,
+        derivation_path,
+        expected_dpk,
+    );
+}
+
+fn test_ecdsa_derivation_with_curve(
+    curve: EcdsaCurve,
+    key_name: &'static str,
+    canister_id: &'static str,
+    derivation_path: &[&'static str],
+    expected_dpk: &'static str,
+) {
     use std::str::FromStr;
 
     let derivation_path = derivation_path
@@ -17,7 +33,7 @@ fn test_ecdsa_derivation(
         canister_id: Some(ic_pub_key::CanisterId::from_str(canister_id).unwrap()),
         derivation_path,
         key_id: EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
+            curve,
             name: key_name.to_string(),
         },
     };
@@ -307,6 +323,48 @@ fn test_ecdsa_secp256k1_derivation_test_key1() {
             "test_key_1",
         ],
         "0262c4eb6534f278ceebcc8f4172d38acf7d76e1c74ee1e10f362d59f73658ae50",
+    );
+}
+
+// The expected keys were computed offline with `ic-secp256r1`, not taken from the
+// `ecdsa_public_key` answers of mainnet.
+#[cfg(feature = "secp256r1")]
+#[test]
+fn test_ecdsa_secp256r1_derivation_key1() {
+    test_ecdsa_derivation_with_curve(
+        EcdsaCurve::Secp256r1,
+        "key_1",
+        "h5jwf-5iaaa-aaaan-qmvoa-cai",
+        &[
+            "Test",
+            "Derivation",
+            "For",
+            "Mainnet",
+            "ECDSA",
+            "secp256r1",
+            "key_1",
+        ],
+        "02cda0a98456eaf736d750a6b3885433df81b9a5e76c2ee74e4552d9de1a3b38a5",
+    );
+}
+
+#[cfg(feature = "secp256r1")]
+#[test]
+fn test_ecdsa_secp256r1_derivation_test_key1() {
+    test_ecdsa_derivation_with_curve(
+        EcdsaCurve::Secp256r1,
+        "test_key_1",
+        "h5jwf-5iaaa-aaaan-qmvoa-cai",
+        &[
+            "Test",
+            "Derivation",
+            "For",
+            "Mainnet",
+            "ECDSA",
+            "secp256r1",
+            "test_key_1",
+        ],
+        "038bee03c1155d5b11e08b90fbdebb584c84ba617b916498b9c3d7bdc7a3d32eb8",
     );
 }
 

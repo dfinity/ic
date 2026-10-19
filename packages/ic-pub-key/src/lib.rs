@@ -27,8 +27,15 @@
 //! As an extension of the management canister interface, this crate also allows
 //! deriving keys relative to the hardcoded test master keys used by PocketIC.
 
-#[cfg(not(any(feature = "secp256k1", feature = "ed25519", feature = "vetkeys")))]
-compile_error!("At least one of the features (secp256k1, ed25519, vetkeys) must be enabled");
+#[cfg(not(any(
+    feature = "secp256k1",
+    feature = "secp256r1",
+    feature = "ed25519",
+    feature = "vetkeys"
+)))]
+compile_error!(
+    "At least one of the features (secp256k1, secp256r1, ed25519, vetkeys) must be enabled"
+);
 
 pub use ic_management_canister_types::{
     CanisterId, EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, EcdsaPublicKeyResult, SchnorrAlgorithm,
@@ -59,6 +66,8 @@ enum MasterPublicKeyInner {
     EcdsaSecp256k1(ic_secp256k1::PublicKey),
     #[cfg(feature = "secp256k1")]
     Bip340Secp256k1(ic_secp256k1::PublicKey),
+    #[cfg(feature = "secp256r1")]
+    EcdsaSecp256r1(ic_secp256r1::PublicKey),
     #[cfg(feature = "ed25519")]
     Ed25519(ic_ed25519::PublicKey),
     #[cfg(feature = "vetkeys")]
@@ -88,6 +97,13 @@ impl MasterPublicKey {
                 )]);
                 DerivedPublicKeyInner::Bip340Secp256k1(mk.derive_subkey(&path))
             }
+            #[cfg(feature = "secp256r1")]
+            MasterPublicKeyInner::EcdsaSecp256r1(mk) => {
+                let path = ic_secp256r1::DerivationPath::new(vec![ic_secp256r1::DerivationIndex(
+                    canister_id.as_slice().to_vec(),
+                )]);
+                DerivedPublicKeyInner::EcdsaSecp256r1(mk.derive_subkey(&path))
+            }
             #[cfg(feature = "ed25519")]
             MasterPublicKeyInner::Ed25519(mk) => {
                 let path = ic_ed25519::DerivationPath::new(vec![ic_ed25519::DerivationIndex(
@@ -108,6 +124,24 @@ impl TryFrom<&EcdsaKeyId> for MasterPublicKey {
     type Error = Error;
 
     fn try_from(key_id: &EcdsaKeyId) -> Result<Self, Self::Error> {
+        #[cfg(feature = "secp256r1")]
+        {
+            if key_id.curve == EcdsaCurve::Secp256r1 {
+                let mk = match key_id.name.as_ref() {
+                    "key_1" => ic_secp256r1::PublicKey::mainnet_key(
+                        ic_secp256r1::MasterPublicKeyId::EcdsaKey1,
+                    ),
+                    "test_key_1" => ic_secp256r1::PublicKey::mainnet_key(
+                        ic_secp256r1::MasterPublicKeyId::EcdsaTestKey1,
+                    ),
+                    _ => return Err(Error::UnknownKeyIdentifier),
+                };
+
+                let inner = MasterPublicKeyInner::EcdsaSecp256r1(mk);
+                return Ok(Self { inner });
+            }
+        }
+
         if key_id.curve != EcdsaCurve::Secp256k1 {
             return Err(Error::AlgorithmNotSupported);
         }
@@ -242,6 +276,8 @@ enum DerivedPublicKeyInner {
     EcdsaSecp256k1((ic_secp256k1::PublicKey, [u8; 32])),
     #[cfg(feature = "secp256k1")]
     Bip340Secp256k1((ic_secp256k1::PublicKey, [u8; 32])),
+    #[cfg(feature = "secp256r1")]
+    EcdsaSecp256r1((ic_secp256r1::PublicKey, [u8; 32])),
     #[cfg(feature = "ed25519")]
     Ed25519((ic_ed25519::PublicKey, [u8; 32])),
     #[cfg(feature = "vetkeys")]
@@ -283,6 +319,15 @@ impl CanisterMasterKey {
                     context.to_vec(),
                 )]);
                 DerivedPublicKeyInner::Bip340Secp256k1(
+                    ck.0.derive_subkey_with_chain_code(&path, &ck.1),
+                )
+            }
+            #[cfg(feature = "secp256r1")]
+            DerivedPublicKeyInner::EcdsaSecp256r1(ck) => {
+                let path = ic_secp256r1::DerivationPath::new(vec![ic_secp256r1::DerivationIndex(
+                    context.to_vec(),
+                )]);
+                DerivedPublicKeyInner::EcdsaSecp256r1(
                     ck.0.derive_subkey_with_chain_code(&path, &ck.1),
                 )
             }
@@ -331,6 +376,18 @@ impl CanisterMasterKey {
                     ck.0.derive_subkey_with_chain_code(&path, &ck.1),
                 )
             }
+            #[cfg(feature = "secp256r1")]
+            DerivedPublicKeyInner::EcdsaSecp256r1(ck) => {
+                let path = ic_secp256r1::DerivationPath::new(
+                    path.iter()
+                        .cloned()
+                        .map(ic_secp256r1::DerivationIndex)
+                        .collect(),
+                );
+                DerivedPublicKeyInner::EcdsaSecp256r1(
+                    ck.0.derive_subkey_with_chain_code(&path, &ck.1),
+                )
+            }
             #[cfg(feature = "ed25519")]
             DerivedPublicKeyInner::Ed25519(ck) => {
                 let path = ic_ed25519::DerivationPath::new(
@@ -359,6 +416,8 @@ impl CanisterMasterKey {
             DerivedPublicKeyInner::EcdsaSecp256k1(ck) => ck.0.serialize_sec1(true),
             #[cfg(feature = "secp256k1")]
             DerivedPublicKeyInner::Bip340Secp256k1(ck) => ck.0.serialize_sec1(true),
+            #[cfg(feature = "secp256r1")]
+            DerivedPublicKeyInner::EcdsaSecp256r1(ck) => ck.0.serialize_sec1(true),
             #[cfg(feature = "ed25519")]
             DerivedPublicKeyInner::Ed25519(ck) => ck.0.serialize_raw().to_vec(),
             #[cfg(feature = "vetkeys")]
@@ -375,6 +434,8 @@ impl CanisterMasterKey {
             DerivedPublicKeyInner::EcdsaSecp256k1(ck) => Some(ck.1.to_vec()),
             #[cfg(feature = "secp256k1")]
             DerivedPublicKeyInner::Bip340Secp256k1(ck) => Some(ck.1.to_vec()),
+            #[cfg(feature = "secp256r1")]
+            DerivedPublicKeyInner::EcdsaSecp256r1(ck) => Some(ck.1.to_vec()),
             #[cfg(feature = "ed25519")]
             DerivedPublicKeyInner::Ed25519(ck) => Some(ck.1.to_vec()),
             #[cfg(feature = "vetkeys")]
@@ -396,6 +457,8 @@ impl DerivedPublicKey {
             DerivedPublicKeyInner::EcdsaSecp256k1(ck) => ck.0.serialize_sec1(true),
             #[cfg(feature = "secp256k1")]
             DerivedPublicKeyInner::Bip340Secp256k1(ck) => ck.0.serialize_sec1(true),
+            #[cfg(feature = "secp256r1")]
+            DerivedPublicKeyInner::EcdsaSecp256r1(ck) => ck.0.serialize_sec1(true),
             #[cfg(feature = "ed25519")]
             DerivedPublicKeyInner::Ed25519(ck) => ck.0.serialize_raw().to_vec(),
             #[cfg(feature = "vetkeys")]
@@ -412,6 +475,8 @@ impl DerivedPublicKey {
             DerivedPublicKeyInner::EcdsaSecp256k1(ck) => Some(ck.1.to_vec()),
             #[cfg(feature = "secp256k1")]
             DerivedPublicKeyInner::Bip340Secp256k1(ck) => Some(ck.1.to_vec()),
+            #[cfg(feature = "secp256r1")]
+            DerivedPublicKeyInner::EcdsaSecp256r1(ck) => Some(ck.1.to_vec()),
             #[cfg(feature = "ed25519")]
             DerivedPublicKeyInner::Ed25519(ck) => Some(ck.1.to_vec()),
             #[cfg(feature = "vetkeys")]
@@ -440,6 +505,8 @@ impl DerivedPublicKey {
 /// * `pocketic_test_key_1`: The key used by PocketIC when a request to the management canister
 ///   uses `test_key_1`.
 /// * `dfx_test_key`: PocketIC specific test key
+///
+/// For the secp256r1 curve, only `key_1` and `test_key_1` are supported.
 pub fn derive_ecdsa_key(args: &EcdsaPublicKeyArgs) -> Result<EcdsaPublicKeyResult, Error> {
     let canister_id = args.canister_id.ok_or(Error::CanisterIdMissing)?;
 

@@ -7,6 +7,7 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     crate_features = [
         "secp256k1",
+        "secp256r1",
         "ed25519",
         "vetkeys",
     ],
@@ -14,9 +15,10 @@ rust_library(
     version = "0.3.0",
     deps = [
         "//packages/ic-ed25519",
+        "//packages/ic-management-canister-types",
         "//packages/ic-secp256k1",
+        "//packages/ic-secp256r1",
         "@crate_index//:ic-cdk-management-canister",
-        "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-vetkeys",
     ],
 )
@@ -29,6 +31,7 @@ rust_doc(
     crate = ":ic-pub-key",
     rustdoc_flags = [
         "--cfg=feature=\"secp256k1\"",
+        "--cfg=feature=\"secp256r1\"",
         "--cfg=feature=\"ed25519\"",
         "--cfg=feature=\"vetkeys\"",
     ],
@@ -39,6 +42,7 @@ rust_doc_test(
     crate = ":ic-pub-key",
     crate_features = [
         "secp256k1",
+        "secp256r1",
         "ed25519",
         "vetkeys",
     ],
@@ -50,6 +54,7 @@ rust_test(
     crate = ":ic-pub-key",
     crate_features = [
         "secp256k1",
+        "secp256r1",
         "ed25519",
         "vetkeys",
     ],
@@ -60,6 +65,7 @@ rust_test_suite(
     srcs = glob(["tests/**/*.rs"]),
     crate_features = [
         "secp256k1",
+        "secp256r1",
         "ed25519",
         "vetkeys",
     ],

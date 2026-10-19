@@ -5,6 +5,7 @@
 
 //! A crate with handling of ECDSA keys over the secp256r1 curve
 
+use hex_literal::hex;
 use p256::{
     AffinePoint, NistP256, Scalar,
     elliptic_curve::{
@@ -543,6 +544,15 @@ impl PrivateKey {
     }
 }
 
+/// An identifier for the mainnet production key
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum MasterPublicKeyId {
+    /// The production master key "key_1" for ECDSA
+    EcdsaKey1,
+    /// The test master key "test_key_1" for ECDSA
+    EcdsaTestKey1,
+}
+
 /// An ECDSA public key
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey {
@@ -550,6 +560,20 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
+    /// Return the public master keys used in the production mainnet
+    pub fn mainnet_key(key_id: MasterPublicKeyId) -> Self {
+        match key_id {
+            MasterPublicKeyId::EcdsaKey1 => Self::deserialize_sec1(&hex!(
+                "03225c6e2c86eeb576f99a456692e11dd41e37382d117d4dbdad6dcc29703a2fe6"
+            ))
+            .expect("Hardcoded master key was rejected"),
+            MasterPublicKeyId::EcdsaTestKey1 => Self::deserialize_sec1(&hex!(
+                "021a3eee9d02e8d9cc32f19ca572615a1fa4712742b3a623228db9289c87e859c5"
+            ))
+            .expect("Hardcoded master key was rejected"),
+        }
+    }
+
     /// Deserialize a public key stored in SEC1 format
     ///
     /// This is just the encoding of the point. Both compressed and uncompressed

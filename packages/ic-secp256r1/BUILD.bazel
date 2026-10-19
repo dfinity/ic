@@ -9,6 +9,7 @@ rust_library(
     version = "0.2.0",
     deps = [
         # Keep sorted.
+        "@crate_index//:hex-literal",
         "@crate_index//:hmac",
         "@crate_index//:num-bigint",
         "@crate_index//:p256",
