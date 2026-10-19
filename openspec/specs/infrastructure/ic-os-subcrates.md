@@ -661,6 +661,27 @@ The `guest_vm_runner` crate manages the lifecycle of GuestOS virtual machines on
 
 ---
 
+### Requirement: GuestOS Kernel Panic and Lockup Recovery
+
+The GuestOS kernel command line (`BOOT_ARGS_A/B` and `BOOT_ARGS_TEE_A/B` in `guestos_boot_args.template`) includes `oops=panic panic=10 softlockup_panic=1 watchdog_thresh=60`, so that a kernel fault reboots the guest instead of leaving it hung while still reported as running.
+
+#### Scenario: Kernel Oops escalates to a reboot
+- **WHEN** the GuestOS kernel hits an Oops (e.g. during the initramfs module-load burst)
+- **THEN** `oops=panic` turns the Oops into a kernel panic
+- **AND** `panic=10` reboots the guest 10 seconds later, giving the console time to flush the panic trace
+
+#### Scenario: Soft lockup escalates to a reboot
+- **WHEN** a vCPU stays in kernel mode without rescheduling for more than 2x `watchdog_thresh` (120 seconds)
+- **THEN** `softlockup_panic=1` panics the kernel, which reboots the guest 10 seconds later
+- **AND** a vCPU the host did not schedule for that long is excused via the kvmclock `PVCLOCK_GUEST_STOPPED` flag, so a paused or migrated VM is not treated as locked up
+
+#### Scenario: Reboot relaunches the guest VM
+- **WHEN** the GuestOS domain reboots (from a kernel panic or otherwise)
+- **THEN** libvirt's `on_reboot=destroy` ends the domain
+- **AND** `guest_vm_runner` relaunches it in-process right away
+
+---
+
 ### Requirement: Manual GuestOS Recovery (manual_guestos_recovery)
 
 The `manual_guestos_recovery` crate provides an interactive TUI for performing manual GuestOS recovery operations.
