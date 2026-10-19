@@ -237,6 +237,13 @@ The ic-replay tool replays past finalized blocks to reconstruct state at any hei
 - **AND** blocks are replayed starting from the specified `start_height`
 - **AND** if an upgrade is required (different replica version), replay stops and reports the required version
 
+#### Scenario: Invalid backup artifacts are renamed for the next rsync
+- **WHEN** replay from backup finds an artifact that fails validation at a given height
+- **THEN** `ic-replay` looks up the exact file that artifact was read from by its hash (`observed_files`), rather than reconstructing the file name, since backed-up artifact file names no longer embed the hash
+- **AND** every invalid artifact at that height is renamed, not just the first one, so the next rsync from the subnet replaces it
+- **AND** random beacons are expected to validate at every height, so an unvalidated beacon's file is renamed like any other invalid artifact
+- **AND** random tapes are only validated up to `finalized_height + 1`, so a tape that is still unvalidated at the current height is not renamed until it is later found invalid
+
 #### Scenario: Replay with target height
 - **WHEN** a `replay_until_height` is specified
 - **THEN** replay stops at the given height and creates a checkpoint
