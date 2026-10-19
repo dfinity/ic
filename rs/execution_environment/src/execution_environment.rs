@@ -5071,13 +5071,60 @@ pub struct ExecuteCanisterResult {
     pub description: Option<String>,
 }
 
+/// Records the load and connection metrics for a message about to be executed.
+fn observe_message_metrics(
+    canister: &mut CanisterState,
+    message: &CanisterMessage,
+    network_topology: &NetworkTopology,
+    own_subnet_id: SubnetId,
+    time: Time,
+) {
+    let canister_metrics = canister.system_state.canister_metrics_mut();
+    match message {
+        CanisterMessage::Ingress(_) => {
+            canister_metrics
+                .load_metrics_mut()
+                .observe_ingress_message();
+        }
+        CanisterMessage::Request(request) => {
+            if network_topology.route(request.sender.get()) == Some(own_subnet_id) {
+                canister_metrics
+                    .load_metrics_mut()
+                    .observe_local_subnet_message();
+
+                canister_metrics
+                    .connection_metrics_mut()
+                    .increment(request.sender(), time);
+            } else {
+                canister_metrics
+                    .load_metrics_mut()
+                    .observe_remote_subnet_message();
+            }
+        }
+        CanisterMessage::Response {
+            response,
+            callback: _,
+        } => {
+            if network_topology.route(response.respondent.get()) == Some(own_subnet_id) {
+                canister_metrics
+                    .load_metrics_mut()
+                    .observe_local_subnet_message();
+            } else {
+                canister_metrics
+                    .load_metrics_mut()
+                    .observe_remote_subnet_message();
+            }
+        }
+    }
+}
+
 /// Executes the given input message or task.
 /// This is a helper for `execute_canister()`.
 fn execute_canister_input(
     input: CanisterMessageOrTask,
     prepaid_execution_cycles: Option<CompoundCycles<Instructions>>,
     exec_env: &ExecutionEnvironment,
-    mut canister: CanisterState,
+    canister: CanisterState,
     instruction_limits: InstructionLimits,
     max_instructions_per_query_message: NumInstructions,
     network_topology: Arc<NetworkTopology>,
@@ -5086,49 +5133,6 @@ fn execute_canister_input(
     resource_limits: ResourceLimits,
     subnet_cycles_config: CyclesAccountManagerSubnetConfig,
 ) -> ExecuteCanisterResult {
-    // Only aborted executions are resumed with prepaid execution cycles.
-    let is_resuming_aborted_execution = prepaid_execution_cycles.is_some();
-    // Don't double count metrics if resuming an aborted execution
-    if !is_resuming_aborted_execution {
-        let load_metrics = &mut canister
-            .system_state
-            .canister_metrics_mut()
-            .load_metrics_mut();
-        match &input {
-            CanisterMessageOrTask::Message(CanisterMessage::Ingress(_)) => {
-                load_metrics.observe_ingress_message();
-            }
-            CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
-                if network_topology.route(request.sender.get()) == Some(exec_env.own_subnet_id) {
-                    load_metrics.observe_local_subnet_message();
-
-                    canister
-                        .system_state
-                        .canister_metrics_mut()
-                        .connection_metrics_mut()
-                        .increment(request.sender(), time);
-                } else {
-                    load_metrics.observe_remote_subnet_message();
-                }
-            }
-            CanisterMessageOrTask::Message(CanisterMessage::Response {
-                response,
-                callback: _,
-            }) => {
-                if network_topology.route(response.respondent.get()) == Some(exec_env.own_subnet_id)
-                {
-                    load_metrics.observe_local_subnet_message();
-                } else {
-                    load_metrics.observe_remote_subnet_message();
-                }
-            }
-            CanisterMessageOrTask::Task(CanisterTask::GlobalTimer | CanisterTask::Heartbeat) => {
-                load_metrics.observe_heartbeat_or_global_timer();
-            }
-            CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory) => {}
-        }
-    }
-
     let info = input.to_string();
     let result = exec_env.execute_canister_input(
         canister,
@@ -5222,10 +5226,20 @@ pub fn execute_canister(
                 };
             }
             ExecutionTask::Heartbeat => {
+                canister
+                    .system_state
+                    .canister_metrics_mut()
+                    .load_metrics_mut()
+                    .observe_heartbeat_or_global_timer();
                 let task = CanisterMessageOrTask::Task(CanisterTask::Heartbeat);
                 (task, None)
             }
             ExecutionTask::GlobalTimer => {
+                canister
+                    .system_state
+                    .canister_metrics_mut()
+                    .load_metrics_mut()
+                    .observe_heartbeat_or_global_timer();
                 let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
                 (task, None)
             }
@@ -5236,13 +5250,24 @@ pub fn execute_canister(
             ExecutionTask::AbortedExecution {
                 input,
                 prepaid_execution_cycles,
-            } => (input, Some(prepaid_execution_cycles)),
+            } => {
+                // Load and connection metrics were already recorded when the input was first
+                // executed, before the execution was aborted.
+                (input, Some(prepaid_execution_cycles))
+            }
             ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode { .. } => {
                 unreachable!("The guard at the beginning filters these cases out")
             }
         },
         None => {
             let message = canister.pop_input().unwrap();
+            observe_message_metrics(
+                &mut canister,
+                &message,
+                &network_topology,
+                exec_env.own_subnet_id,
+                time,
+            );
             if let CanisterMessage::Request(req) = &message
                 && req.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
             {
