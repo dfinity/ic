@@ -72,6 +72,8 @@ The orchestrator manages the lifecycle of the replica process, including startin
 - **WHEN** `stop()` is called on the `ProcessManager`
 - **THEN** the entire process group is sent SIGTERM (using negative PID)
 - **AND** this ensures all child processes spawned by the replica are also terminated
+- **AND** `stop()` blocks until the process has actually exited, waiting up to `STOP_GRACE_PERIOD` (30 seconds) after SIGTERM before escalating to SIGKILL, then up to `KILL_TIMEOUT` (10 seconds) more before giving up
+- **AND** a caller that receives `Ok(())` is guaranteed the process has terminated, which the stop-then-start logic for leaving a subnet, observing a recovery CUP or subnet-ID change, and restarting `ic-boundary` on a domain-name change all rely on to avoid racing the old process
 
 ### Requirement: GuestOS Upgrade Orchestration
 The orchestrator periodically checks whether the replica should be upgraded to a new version based on the registry and catch-up packages (CUPs).
