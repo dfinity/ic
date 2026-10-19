@@ -7,7 +7,9 @@ use super::utils::{
     handle_construction_hash, handle_construction_parse, handle_construction_payloads,
     handle_construction_submit,
 };
-use crate::common::constants::{INGRESS_INTERVAL_OVERLAP, MAX_INGRESS_WINDOW};
+use crate::common::constants::{
+    INGRESS_INTERVAL_OVERLAP, MAX_INGRESS_WINDOW, MAX_MEMO_LENGTH_BYTES,
+};
 use crate::common::types::Error;
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -140,6 +142,23 @@ fn validate_ingress_window(now: u64, ingress_start: u64, ingress_end: u64) -> Re
     Ok(())
 }
 
+/// Validate the caller-provided memo before it is copied into every envelope.
+///
+/// The memo is part of the canister method arguments, which are replicated once
+/// per ingress expiry, so an unbounded memo would be amplified by up to the
+/// number of expiries in the (at most 24h) ingress window.
+fn validate_memo(memo: Option<&Vec<u8>>) -> Result<(), Error> {
+    if let Some(memo) = memo
+        && memo.len() > MAX_MEMO_LENGTH_BYTES
+    {
+        return Err(Error::processing_construction_failed(&format!(
+            "The memo must not be longer than {MAX_MEMO_LENGTH_BYTES} bytes: Length: {}",
+            memo.len()
+        )));
+    }
+    Ok(())
+}
+
 pub fn construction_payloads(
     operations: Vec<Operation>,
     metadata: Option<ConstructionPayloadsRequestMetadata>,
@@ -171,6 +190,8 @@ pub fn construction_payloads(
         .as_ref()
         .and_then(|meta| meta.created_at_time)
         .unwrap_or(now);
+
+    validate_memo(metadata.as_ref().and_then(|meta| meta.memo.as_ref()))?;
 
     let memo = metadata
         .as_ref()
@@ -336,6 +357,32 @@ mod tests {
         let max = MAX_INGRESS_WINDOW.as_nanos() as u64;
         assert!(validate_ingress_window(NOW_NANOS, NOW_NANOS, NOW_NANOS + max).is_ok());
         assert!(validate_ingress_window(NOW_NANOS, NOW_NANOS, NOW_NANOS + max + 1).is_err());
+    }
+
+    // Boundary: a memo of exactly the max length is accepted, one byte more is
+    // rejected. No memo is accepted.
+    #[test]
+    fn memo_length_boundary_is_inclusive() {
+        assert!(validate_memo(None).is_ok());
+        assert!(validate_memo(Some(&vec![0u8; MAX_MEMO_LENGTH_BYTES])).is_ok());
+        assert!(validate_memo(Some(&vec![0u8; MAX_MEMO_LENGTH_BYTES + 1])).is_err());
+    }
+
+    // An oversized memo is rejected by `construction_payloads` before any
+    // envelopes are built, even with the maximum permitted ingress window.
+    #[test]
+    fn construction_payloads_rejects_oversized_memo() {
+        let now = SystemTime::UNIX_EPOCH + std::time::Duration::from_nanos(NOW_NANOS);
+        let metadata = ConstructionPayloadsRequestMetadata {
+            memo: Some(vec![0u8; MAX_MEMO_LENGTH_BYTES + 1]),
+            ingress_start: Some(NOW_NANOS),
+            ingress_end: Some(NOW_NANOS + MAX_INGRESS_WINDOW.as_nanos() as u64),
+            created_at_time: None,
+        };
+        let result =
+            construction_payloads(vec![], Some(metadata), &Principal::anonymous(), vec![], now);
+        let err = result.expect_err("oversized memo should be rejected");
+        assert!(format!("{err:?}").contains("memo must not be longer"));
     }
 
     fn call_construction_derive<T: RosettaSupportedKeyPair>(key_pair: &T) {

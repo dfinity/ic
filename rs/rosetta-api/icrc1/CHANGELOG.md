@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+- Limit the memo length in `/construction/payloads` to 1024 bytes
+
 ## [1.2.10] - 2026-07-02
 ### Added
 - Add ICRC-122/152 support ([#9586](https://github.com/dfinity/ic/pull/9586))
