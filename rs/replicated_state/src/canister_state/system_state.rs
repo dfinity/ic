@@ -239,8 +239,8 @@ impl LRUConnectionMetrics {
                     last_access_timestamp: access_timestamp,
                     count: 0,
                 });
-        metrics_entry.count += 1;
         metrics_entry.last_access_timestamp = access_timestamp;
+        metrics_entry.count += 1;
 
         self.evict();
     }

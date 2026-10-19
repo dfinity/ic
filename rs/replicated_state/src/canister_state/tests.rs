@@ -1861,7 +1861,7 @@ fn reverts_stopping_status_after_split() {
 }
 
 #[test]
-fn lru_connection_metrics_evicts_entries_in_eviction_key_order() {
+fn lru_connection_metrics_evicts_entries_in_correct_order() {
     let connection_metrics = |nanos, count| ConnectionMetrics {
         last_access_timestamp: Time::from_nanos_since_unix_epoch(nanos),
         count,
