@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 ### Fixed
-- Cap the `limit` of `/search/transactions` requests to the maximum of 10,000 transactions per request (PR_LINK).
+- Cap the `limit` of `/search/transactions` requests to the maximum of 10,000 transactions per request ([#11892](https://github.com/dfinity/ic/pull/11892)).
 
 ## [1.2.10] - 2026-07-02
 ### Added
