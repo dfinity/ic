@@ -61,9 +61,9 @@ def load_subnet_data(
     # Ignore self-edges (a canister calling itself stays co-located under any split) and edges
     # without new messages since the baseline: neither can affect the objective, but each edge
     # still costs the MILP a binary variable and four constraints.
-    relevant_edges = (
-        communication_data["sender_canister_id"] != communication_data["receiver_canister_id"]
-    ) & (communication_data["count"] > 0)
+    relevant_edges = (communication_data["sender_canister_id"] != communication_data["receiver_canister_id"]) & (
+        communication_data["count"] > 0
+    )
     communication_data = communication_data[known_canisters & relevant_edges]
 
     edges: Dict[Tuple[int, int], int] = {}
