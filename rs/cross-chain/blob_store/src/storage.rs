@@ -81,7 +81,7 @@ impl<M: Memory> BlobStore<M> {
         self.store.is_empty()
     }
 
-    pub fn iter_metadata(&self) -> impl Iterator<Item = (Hash, Metadata)> + '_ {
+    pub fn iter_metadata(&self) -> impl Iterator<Item = (Hash, Metadata)> {
         self.metadata.iter()
     }
 
