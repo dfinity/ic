@@ -1933,18 +1933,13 @@ mod tests {
                 assert_for_all_subnet_splitting_statuses(
                     &mut pool,
                     |status, should_skip, test_height| {
-                        let content = gen_content(test_height);
-                        let mut signature = ThresholdSignature::fake();
                         // Signed by the active high-threshold NI-DKG ID, if there is one.
-                        if let Some(dkg_id) =
-                            active_high_threshold_nidkg_id(cache.as_ref(), test_height)
-                        {
-                            signature.signer = dkg_id;
-                        }
-                        let cert = Certification {
-                            height: test_height,
-                            height_witness: Some(Witness::new_for_testing_with_height()),
-                            signed: Signed { content, signature },
+                        let dkg_id = active_high_threshold_nidkg_id(cache.as_ref(), test_height)
+                            .unwrap_or_else(|| fake_dkg_id(0));
+                        let CertificationMessage::Certification(cert) =
+                            fake_cert(test_height, dkg_id).message
+                        else {
+                            unreachable!("only full certifications are expected")
                         };
 
                         let result = certifier.validate_certification(&cert);

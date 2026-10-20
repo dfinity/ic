@@ -13,8 +13,8 @@ mod xnet_client_tests;
 pub use crate::proximity::{GenRangeFn, ProximityMap};
 
 use crate::certified_slice_pool::{
-    CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes, decode_slice_header,
-    has_high_threshold_signer,
+    CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes, check_certification,
+    decode_slice_header, normalize_certification,
 };
 use async_trait::async_trait;
 use http_body_util::BodyExt;
@@ -699,18 +699,9 @@ impl XNetPayloadBuilderImpl {
             );
         }
 
-        // Do not accept slices with a height witness, which the pool drops.
-        if certified_slice.certification.height_witness.is_some() {
-            return SliceValidationResult::Invalid(format!(
-                "Stream from {subnet_id}: certification has a height witness"
-            ));
-        }
-
-        // Only accept slices that were signed with the high-threshold Ni-DKG.
-        if !has_high_threshold_signer(&certified_slice.certification) {
-            return SliceValidationResult::Invalid(format!(
-                "Stream from {subnet_id}: certification signer is not a high-threshold NI-DKG ID"
-            ));
+        // Only accept slices without a height witness, signed with the high-threshold NI-DKG.
+        if let Err(reason) = check_certification(&certified_slice.certification) {
+            return SliceValidationResult::Invalid(format!("Stream from {subnet_id}: {reason}"));
         }
 
         // Do not accept slices from subnets whose type cannot be determined.
@@ -1575,6 +1566,13 @@ impl XNetAdvertHandler for XNetAdvertHandlerImpl {
             // Verify that the header is signed by `source_subnet` before recording the
             // header or replying to it.
             XNetAdvertOutcome::NothingNew | XNetAdvertOutcome::Actionable => {}
+        }
+
+        // Like pulled slices (see `CertifiedSlicePool::put()`), normalize the
+        // certification, then check it.
+        let advert = normalize_certification(advert);
+        if check_certification(&advert.certification).is_err() {
+            return Err(XNetAdvertError::InvalidSignature);
         }
 
         // Use the latest registry version for validation. There is a potential race

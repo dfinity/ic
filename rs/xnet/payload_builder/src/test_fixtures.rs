@@ -31,7 +31,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     CryptoHashOfPartialState, Height, NumBytes, RegistryVersion, SubnetId,
     consensus::certification::{Certification, CertificationContent},
-    crypto::{CryptoHash, Signed},
+    crypto::{CryptoHash, Signed, threshold_sig::ni_dkg::NiDkgTag},
     messages::CallbackId,
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
@@ -275,6 +275,10 @@ pub(crate) fn make_advert_for(
         false,
     );
 
+    // Like all certifications, signed with a high-threshold key.
+    let mut signature = ThresholdSignature::fake();
+    signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+
     CertifiedStreamSlice {
         payload: stream_encoding::encode_tree(tree),
         merkle_proof: vec![],
@@ -285,7 +289,7 @@ pub(crate) fn make_advert_for(
                 content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
                     vec![],
                 ))),
-                signature: ThresholdSignature::fake(),
+                signature,
             },
         },
     }

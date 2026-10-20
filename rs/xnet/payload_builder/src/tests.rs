@@ -16,14 +16,13 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_replicated_state::Stream;
 use ic_replicated_state::metadata_state::StreamMap;
 use ic_test_utilities::state_manager::FakeStateManager;
-use ic_test_utilities_consensus::{dkg::fake_dkg_id, fake::Fake};
+use ic_test_utilities_consensus::{dkg::fake_dkg_id, fake::Fake, idkg::fake_vetkd_key_id};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count,
     fetch_int_counter_vec, fetch_int_gauge, metric_vec,
 };
 use ic_test_utilities_types::ids::{NODE_42, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5};
-use ic_test_utilities_types::xnet::StreamSliceBuilder;
 use ic_types::CryptoHashOfPartialState;
 use ic_types::consensus::certification::{Certification, CertificationContent};
 use ic_types::crypto::{CryptoHash, Signed, threshold_sig::ni_dkg::NiDkgTag};
@@ -783,7 +782,7 @@ async fn validate_rejects_slice_without_high_threshold_signer() {
         let fixture = PayloadBuilderTestFixture::with_xnet_state();
         let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
 
-        let master_public_key_tag = fake_dkg_id("bls12_381_g2:some_key".parse().unwrap()).dkg_tag;
+        let master_public_key_tag = fake_dkg_id(fake_vetkd_key_id()).dkg_tag;
         for dkg_tag in [NiDkgTag::LowThreshold, master_public_key_tag] {
             // A payload that is valid against the state alone, but for the signer.
             let mut payload = fixture.oldest_payload().clone();
@@ -804,57 +803,56 @@ async fn validate_rejects_slice_without_high_threshold_signer() {
     });
 }
 
-/// Pulled slices whose certification has a height witness are rejected before
-/// being decoded. Called directly, as `put()` and `append()` currently drop the
-/// height witness before validating.
+/// `validate_slice()` rejects a slice with a height witness or a signer that is
+/// not a high-threshold NI-DKG ID before decoding it.
 #[tokio::test]
-async fn pool_validate_slice_rejects_height_witness() {
+async fn pool_validate_slice_rejects_unnormalized_certification() {
     with_test_replica_logger(|log| {
-        let slice = make_certified_stream_slice(
-            REMOTE_SUBNET,
-            StreamConfig {
-                message_begin: 0,
-                message_end: 2,
-                signal_end: 0,
-            },
-        );
+        let config = StreamConfig {
+            message_begin: 0,
+            message_end: 2,
+            signal_end: 0,
+        };
+        let stream = generate_stream(&config);
+        let slice = make_certified_stream_slice(REMOTE_SUBNET, config);
 
-        // Without a height witness, the slice is decoded and accepted.
-        let mut certified_stream_store = MockCertifiedStreamStore::new();
-        certified_stream_store
-            .expect_decode_certified_stream_slice()
-            .times(1)
-            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
+        // With a normalized certification, the slice is decoded and accepted.
         assert_matches!(
             validate_pooled_slice(
                 &slice,
                 REMOTE_SUBNET,
-                &certified_stream_store,
+                &store_expecting_decodes(&stream, 1),
                 REGISTRY_VERSION,
                 &log
             ),
             Ok(())
         );
 
-        // With one, it is rejected before being decoded.
-        let mut slice = slice;
-        slice.certification.height_witness = Some(Witness::new_for_testing_with_height());
-        let mut certified_stream_store = MockCertifiedStreamStore::new();
-        certified_stream_store
-            .expect_decode_certified_stream_slice()
-            .never();
-        assert_matches!(
-            validate_pooled_slice(
-                &slice,
-                REMOTE_SUBNET,
-                &certified_stream_store,
-                REGISTRY_VERSION,
-                &log
-            ),
-            Err(CertifiedSliceError::DecodeStreamError(
-                DecodeStreamError::InvalidSignature(subnet_id)
-            )) if subnet_id == REMOTE_SUBNET
-        );
+        // With a height witness or a low-threshold signer, it is rejected before being decoded.
+        let mut with_height_witness = slice.clone();
+        with_height_witness.certification.height_witness =
+            Some(Witness::new_for_testing_with_height());
+        let mut with_low_threshold_signer = slice;
+        with_low_threshold_signer
+            .certification
+            .signed
+            .signature
+            .signer
+            .dkg_tag = NiDkgTag::LowThreshold;
+        for slice in [with_height_witness, with_low_threshold_signer] {
+            assert_matches!(
+                validate_pooled_slice(
+                    &slice,
+                    REMOTE_SUBNET,
+                    &store_expecting_decodes(&stream, 0),
+                    REGISTRY_VERSION,
+                    &log
+                ),
+                Err(CertifiedSliceError::DecodeStreamError(
+                    DecodeStreamError::InvalidSignature(subnet_id)
+                )) if subnet_id == REMOTE_SUBNET
+            );
+        }
     });
 }
 
@@ -1298,6 +1296,29 @@ async fn handle_advert_invalid_signature() {
         );
         assert_eq!(None, recorded_peer_header(&pool));
         assert!(!unschedule_pull(&pool));
+    });
+}
+
+/// An advert with a height witness and a low-threshold signer is normalized and
+/// handled like any other.
+#[tokio::test]
+async fn handle_advert_normalizes_certification() {
+    with_test_replica_logger(|log| {
+        let advertised = peer_stream_for_advert_tests();
+        let header = advertised.header();
+        let (advert_handler, pool) =
+            advert_handler_and_pool(store_expecting_decodes(&advertised, 1), log);
+
+        let mut advert = make_advert(&advertised);
+        advert.certification.height_witness = Some(Witness::new_for_testing_with_height());
+        advert.certification.signed.signature.signer.dkg_tag = NiDkgTag::LowThreshold;
+
+        assert_matches!(
+            advert_handler.handle_advert(REMOTE_SUBNET, advert),
+            Ok(XNetAdvertOutcome::Actionable)
+        );
+        assert_eq!(Some(Arc::new(header)), recorded_peer_header(&pool));
+        assert!(unschedule_pull(&pool));
     });
 }
 

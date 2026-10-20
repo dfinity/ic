@@ -207,7 +207,7 @@ impl AsRef<CertificationContent> for CertificationMessage {
 pub struct Certification {
     /// The height that the CertificationContent belongs to
     pub height: Height,
-    /// The witness for the height: always set by the certifier, `None` in XNet
+    /// The witness for the height: always set by the certifier, dropped from XNet
     /// stream slices.
     pub height_witness: Option<Witness>,
     /// The signature on the CertificationContent

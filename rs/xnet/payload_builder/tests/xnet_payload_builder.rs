@@ -978,7 +978,7 @@ fn validate_xnet_payload(
 }
 
 #[test]
-fn get_xnet_payload_drops_height_witness() {
+fn get_xnet_payload_normalizes_certification() {
     with_test_replica_logger(|log| {
         // Incoming stream from `SUBNET_1` with 10 messages, none of them inducted yet.
         let mut stream = out_stream(StreamIndex::new(0), StreamIndex::new(0));
@@ -991,12 +991,12 @@ fn get_xnet_payload_drops_height_witness() {
         );
         let fixture = XNetPayloadBuilderFixture::new(state_manager);
 
-        // Has no height witness.
+        // Has a normalized certification.
         let slice = in_slice(&stream, StreamIndex::new(0), StreamIndex::new(0), 10, &log);
         CertifiedSlicePool::put(
             &fixture.certified_slice_pool,
             SUBNET_1,
-            with_height_witness(slice.clone()),
+            with_unnormalized_certification(slice.clone()),
             fixture.state_manager.as_ref(),
             REGISTRY_VERSION,
             &log,

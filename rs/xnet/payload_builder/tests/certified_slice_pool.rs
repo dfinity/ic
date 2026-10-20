@@ -1242,7 +1242,7 @@ fn pool_append_non_empty_to_non_empty(
 }
 
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
-fn pool_drops_height_witness(
+fn pool_normalizes_certification(
     #[strategy(arb_stream_slice(
         2, // min_size
         10, // max_size
@@ -1256,7 +1256,7 @@ fn pool_drops_height_witness(
 
     with_test_replica_logger(|log| {
         let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
-        // Has no height witness.
+        // Has a normalized certification.
         let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1267,11 +1267,11 @@ fn pool_drops_height_witness(
         let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
         let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log.clone()));
 
-        // Put a slice with a height witness: it is pooled without.
+        // Put a slice with an unnormalized certification: it is pooled normalized.
         put(
             &pool,
             SRC_SUBNET,
-            with_height_witness(slice.clone()),
+            with_unnormalized_certification(slice.clone()),
             &*store,
             &log,
         )
@@ -1281,8 +1281,8 @@ fn pool_drops_height_witness(
             take_slice(&pool, SRC_SUBNET, None, None, None),
         );
 
-        // Put the first half of the slice, then append the second half with a height
-        // witness: the merged slice is pooled without.
+        // Put the first half of the slice, then append the second half with an
+        // unnormalized certification: the merged slice is pooled normalized.
         let prefix_len = msg_count / 2;
         let mid = from + (prefix_len as u64).into();
         let prefix_slice = fixture.get_slice(DST_SUBNET, from, prefix_len);
@@ -1291,58 +1291,12 @@ fn pool_drops_height_witness(
         append(
             &pool,
             SRC_SUBNET,
-            with_height_witness(suffix_slice),
+            with_unnormalized_certification(suffix_slice),
             &*store,
             &log,
         )
         .unwrap();
         assert_opt_slices_eq(Some(slice), take_slice(&pool, SRC_SUBNET, None, None, None));
-    });
-}
-
-#[test_strategy::proptest(ProptestConfig::with_cases(10))]
-fn pool_rejects_non_high_threshold_signer(
-    #[strategy(arb_stream_slice(
-        1, // min_size
-        10, // max_size
-        0, // min_signal_count
-        10, // max_signal_count
-        CURRENT_CERTIFICATION_VERSION,
-    ))]
-    test_slice: (Stream, StreamIndex, usize),
-) {
-    let (stream, from, msg_count) = test_slice;
-
-    with_test_replica_logger(|log| {
-        let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
-
-        let mut certified_stream_store = MockCertifiedStreamStore::new();
-        certified_stream_store
-            .expect_decode_certified_stream_slice()
-            .never();
-        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
-        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log.clone()));
-
-        for dkg_tag in non_high_threshold_dkg_tags() {
-            let slice =
-                with_signer_dkg_tag(fixture.get_slice(DST_SUBNET, from, msg_count), dkg_tag);
-
-            assert_matches!(
-                put(&pool, SRC_SUBNET, slice.clone(), &*store, &log),
-                Err(CertifiedSliceError::DecodeStreamError(
-                    DecodeStreamError::InvalidSignature(subnet_id)
-                )) if subnet_id == SRC_SUBNET
-            );
-            assert_matches!(
-                append(&pool, SRC_SUBNET, slice, &*store, &log),
-                Err(CertifiedSliceError::DecodeStreamError(
-                    DecodeStreamError::InvalidSignature(subnet_id)
-                )) if subnet_id == SRC_SUBNET
-            );
-        }
-
-        // Pool should be untouched.
-        assert_eq!((None, None, 0, 0), slice_stats(&pool, SRC_SUBNET));
     });
 }
 
