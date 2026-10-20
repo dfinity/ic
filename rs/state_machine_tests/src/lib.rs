@@ -5549,7 +5549,7 @@ fn certify_hash(
                     dealer_subnet: subnet_id,
                     target_subnet: NiDkgTargetSubnet::Local,
                     start_block_height: *height,
-                    dkg_tag: NiDkgTag::LowThreshold,
+                    dkg_tag: NiDkgTag::HighThreshold,
                 },
             },
         },

@@ -2526,12 +2526,20 @@ fn uses_latest_certified_state_to_decode_certified_streams() {
         );
 
         let certification = certify_height(&state_manager, Height(2));
+        assert!(certification.height_witness.is_some());
 
         let slice = state_manager
             .encode_certified_stream_slice(subnet, None, None, None, None)
             .expect("failed to encode certified stream");
 
-        assert_eq!(certification, slice.certification);
+        // The certification, minus the height witness.
+        assert_eq!(
+            Certification {
+                height_witness: None,
+                ..certification
+            },
+            slice.certification
+        );
     });
 }
 

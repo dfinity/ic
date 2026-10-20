@@ -11,7 +11,10 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Stream, testing::ReplicatedStateTesting};
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
+use ic_test_utilities_consensus::{
+    dkg::fake_dkg_id,
+    fake::{Fake, FakeVerifier},
+};
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_gauge, fetch_histogram_stats, fetch_int_counter_vec,
 };
@@ -19,7 +22,7 @@ use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_42};
 use ic_types::{
     Height, SubnetId,
     consensus::certification::{Certification, CertificationContent},
-    crypto::Signed,
+    crypto::{Signed, threshold_sig::ni_dkg::NiDkgTag},
     signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex},
 };
@@ -182,17 +185,45 @@ fn certify_height(state_manager: &impl StateManager, h: Height) -> Certification
         })
         .expect("no hash to certify");
 
+    // Like all certifications, signed with a high-threshold key.
+    let mut signature = ThresholdSignature::fake();
+    signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+
     let certification = Certification {
         height: h,
         height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: CertificationContent::new(hash),
-            signature: ThresholdSignature::fake(),
+            signature,
         },
     };
 
     state_manager.deliver_state_certification(certification.clone());
     certification
+}
+
+/// Returns `slice` with a (fake) height witness, as served by subnets running
+/// older replica versions.
+pub fn with_height_witness(mut slice: CertifiedStreamSlice) -> CertifiedStreamSlice {
+    slice.certification.height_witness = Some(Witness::new_for_testing_with_height());
+    slice
+}
+
+/// The signer NI-DKG tags that no certification has.
+pub fn non_high_threshold_dkg_tags() -> Vec<NiDkgTag> {
+    vec![
+        NiDkgTag::LowThreshold,
+        fake_dkg_id("bls12_381_g2:some_key".parse().unwrap()).dkg_tag,
+    ]
+}
+
+/// Returns `slice` with its signer's NI-DKG tag replaced by `dkg_tag`.
+pub fn with_signer_dkg_tag(
+    mut slice: CertifiedStreamSlice,
+    dkg_tag: NiDkgTag,
+) -> CertifiedStreamSlice {
+    slice.certification.signed.signature.signer.dkg_tag = dkg_tag;
+    slice
 }
 
 /// `CertifiedStreamSlice` equality assert that prints unpacked slice contents

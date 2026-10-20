@@ -14,6 +14,7 @@ pub use crate::proximity::{GenRangeFn, ProximityMap};
 
 use crate::certified_slice_pool::{
     CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes, decode_slice_header,
+    has_high_threshold_signer,
 };
 use async_trait::async_trait;
 use http_body_util::BodyExt;
@@ -665,6 +666,8 @@ impl XNetPayloadBuilderImpl {
     }
 
     /// Validates the `certified_slice` received from `subnet_id`:
+    ///  * ensures its certification has no height witness and a high-threshold
+    ///    signer, like all pooled slices (see `CertifiedSlicePool::put()`);
     ///  * checks its signature against the public key of `subnet_id`;
     ///  * ensures stream message bounds are valid and slice message bounds are
     ///    within stream message bounds;
@@ -694,6 +697,20 @@ impl XNetPayloadBuilderImpl {
             return SliceValidationResult::Invalid(
                 "Loopback stream is inducted separately".to_string(),
             );
+        }
+
+        // Do not accept slices with a height witness, which the pool drops.
+        if certified_slice.certification.height_witness.is_some() {
+            return SliceValidationResult::Invalid(format!(
+                "Stream from {subnet_id}: certification has a height witness"
+            ));
+        }
+
+        // Only accept slices that were signed with the high-threshold Ni-DKG.
+        if !has_high_threshold_signer(&certified_slice.certification) {
+            return SliceValidationResult::Invalid(format!(
+                "Stream from {subnet_id}: certification signer is not a high-threshold NI-DKG ID"
+            ));
         }
 
         // Do not accept slices from subnets whose type cannot be determined.

@@ -205,12 +205,12 @@ impl AsRef<CertificationContent> for CertificationMessage {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Certification {
-    /// the height that the CertificationContent belongs to
+    /// The height that the CertificationContent belongs to
     pub height: Height,
-    /// the witness for the height
-    /// TODO: remove option after staged roll-out
+    /// The witness for the height: always set by the certifier, `None` in XNet
+    /// stream slices.
     pub height_witness: Option<Witness>,
-    /// the signature on the CertificationContent
+    /// The signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignature<CertificationContent>>,
 }
 

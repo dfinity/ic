@@ -1,9 +1,13 @@
 use super::test_fixtures::*;
 use super::*;
-use crate::certified_slice_pool::{CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError};
+use crate::certified_slice_pool::{
+    CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError,
+    validate_slice as validate_pooled_slice,
+};
 use crate::testing::XNetPayloadBuilderTesting;
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
+use ic_crypto_tree_hash::Witness;
 use ic_interfaces::messaging::{InvalidXNetPayload, XNetPayloadValidationFailure};
 use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
@@ -12,16 +16,17 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_replicated_state::Stream;
 use ic_replicated_state::metadata_state::StreamMap;
 use ic_test_utilities::state_manager::FakeStateManager;
-use ic_test_utilities_consensus::fake::Fake;
+use ic_test_utilities_consensus::{dkg::fake_dkg_id, fake::Fake};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count,
     fetch_int_counter_vec, fetch_int_gauge, metric_vec,
 };
 use ic_test_utilities_types::ids::{NODE_42, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5};
+use ic_test_utilities_types::xnet::StreamSliceBuilder;
 use ic_types::CryptoHashOfPartialState;
 use ic_types::consensus::certification::{Certification, CertificationContent};
-use ic_types::crypto::{CryptoHash, Signed};
+use ic_types::crypto::{CryptoHash, Signed, threshold_sig::ni_dkg::NiDkgTag};
 use ic_types::signature::ThresholdSignature;
 use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::RejectReason;
@@ -744,6 +749,111 @@ async fn validate_rejects_slice_from_unknown_subnet() {
             Err(ValidationError::InvalidArtifact(
                 InvalidXNetPayload::InvalidSlice(msg)
             )) if msg.contains("No subnet type for subnet")
+        );
+    });
+}
+
+#[tokio::test]
+async fn validate_rejects_slice_with_height_witness() {
+    with_test_replica_logger(|log| {
+        let fixture = PayloadBuilderTestFixture::with_xnet_state();
+        let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
+
+        // A payload that is valid against the state alone, plus a height witness.
+        let mut payload = fixture.oldest_payload().clone();
+        let slice = payload.stream_slices.values_mut().next().unwrap();
+        slice.certification.height_witness = Some(Witness::new_for_testing_with_height());
+
+        assert_matches!(
+            xnet_payload_builder.validate_xnet_payload(
+                &payload,
+                &fixture.validation_context,
+                &[],
+            ),
+            Err(ValidationError::InvalidArtifact(
+                InvalidXNetPayload::InvalidSlice(msg)
+            )) if msg.contains("certification has a height witness")
+        );
+    });
+}
+
+#[tokio::test]
+async fn validate_rejects_slice_without_high_threshold_signer() {
+    with_test_replica_logger(|log| {
+        let fixture = PayloadBuilderTestFixture::with_xnet_state();
+        let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
+
+        let master_public_key_tag = fake_dkg_id("bls12_381_g2:some_key".parse().unwrap()).dkg_tag;
+        for dkg_tag in [NiDkgTag::LowThreshold, master_public_key_tag] {
+            // A payload that is valid against the state alone, but for the signer.
+            let mut payload = fixture.oldest_payload().clone();
+            let slice = payload.stream_slices.values_mut().next().unwrap();
+            slice.certification.signed.signature.signer.dkg_tag = dkg_tag;
+
+            assert_matches!(
+                xnet_payload_builder.validate_xnet_payload(
+                    &payload,
+                    &fixture.validation_context,
+                    &[],
+                ),
+                Err(ValidationError::InvalidArtifact(
+                    InvalidXNetPayload::InvalidSlice(msg)
+                )) if msg.contains("certification signer is not a high-threshold NI-DKG ID")
+            );
+        }
+    });
+}
+
+/// Pulled slices whose certification has a height witness are rejected before
+/// being decoded. Called directly, as `put()` and `append()` currently drop the
+/// height witness before validating.
+#[tokio::test]
+async fn pool_validate_slice_rejects_height_witness() {
+    with_test_replica_logger(|log| {
+        let slice = make_certified_stream_slice(
+            REMOTE_SUBNET,
+            StreamConfig {
+                message_begin: 0,
+                message_end: 2,
+                signal_end: 0,
+            },
+        );
+
+        // Without a height witness, the slice is decoded and accepted.
+        let mut certified_stream_store = MockCertifiedStreamStore::new();
+        certified_stream_store
+            .expect_decode_certified_stream_slice()
+            .times(1)
+            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
+        assert_matches!(
+            validate_pooled_slice(
+                &slice,
+                REMOTE_SUBNET,
+                &certified_stream_store,
+                REGISTRY_VERSION,
+                &log
+            ),
+            Ok(())
+        );
+
+        // With one, it is rejected before being decoded.
+        let mut slice = slice;
+        slice.certification.height_witness = Some(Witness::new_for_testing_with_height());
+        let mut certified_stream_store = MockCertifiedStreamStore::new();
+        certified_stream_store
+            .expect_decode_certified_stream_slice()
+            .never();
+        assert_matches!(
+            validate_pooled_slice(
+                &slice,
+                REMOTE_SUBNET,
+                &certified_stream_store,
+                REGISTRY_VERSION,
+                &log
+            ),
+            Err(CertifiedSliceError::DecodeStreamError(
+                DecodeStreamError::InvalidSignature(subnet_id)
+            )) if subnet_id == REMOTE_SUBNET
         );
     });
 }

@@ -4211,7 +4211,11 @@ impl CertifiedStreamStore for StateManagerImpl {
         Ok(CertifiedStreamSlice {
             payload: stream_encoding::encode_tree(slice_as_tree),
             merkle_proof: v1::Witness::proxy_encode(witness),
-            certification,
+            // The receiving subnet has no use for the height witness.
+            certification: Certification {
+                height_witness: None,
+                ..certification
+            },
         })
     }
 

@@ -503,6 +503,18 @@ impl CertifierImpl {
             return Some(ChangeAction::HandleInvalid(msg, e));
         }
 
+        // Check that the signer is the expected high threshold DKG.
+        let dkg_id = active_high_threshold_nidkg_id(
+            self.consensus_pool_cache.as_ref(),
+            certification.height,
+        )?;
+        if certification.signed.signature.signer != dkg_id {
+            return Some(ChangeAction::HandleInvalid(
+                msg,
+                format!("Unexpected signer (expected: {:?})", dkg_id),
+            ));
+        }
+
         // Verify the certification signature.
         match verifier.validate(
             self.replica_config.subnet_id,
@@ -712,7 +724,7 @@ mod tests {
             CertificationShare,
         },
         crypto::{
-            CryptoHash, CryptoHashOf,
+            CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf,
             threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         },
         signature::*,
@@ -1315,7 +1327,8 @@ mod tests {
                         if let CertificationMessage::Certification(mut cert) =
                             fake_cert_default(Height::from(5)).message
                         {
-                            cert.signed.signature.signer = fake_dkg_id(i);
+                            cert.signed.signature.signature =
+                                CombinedThresholdSigOf::new(CombinedThresholdSig(vec![i]));
                             to_unvalidated(CertificationMessage::Certification(cert))
                         } else {
                             unreachable!("only full certifications are expected")
@@ -1444,6 +1457,41 @@ mod tests {
                     )
                 ))
             );
+        };
+        test_certification_validation(height, test);
+    }
+
+    /// Test that certification validation fails if the signer is not the active high-threshold
+    /// NI-DKG ID.
+    #[test]
+    fn test_invalidate_certificate_with_unexpected_signer() {
+        let height = Height::from(5);
+        let test = |certifier: &CertifierImpl, cert: &mut Certification| {
+            // Signed by the active high-threshold NI-DKG ID.
+            let expected_signer = cert.signed.signature.signer.clone();
+            assert_eq!(
+                certifier.validate_certification(cert),
+                Some(ChangeAction::MoveToValidated(
+                    CertificationMessage::Certification(cert.clone())
+                ))
+            );
+
+            for signer in [
+                fake_dkg_id(1),
+                NiDkgId {
+                    dkg_tag: NiDkgTag::LowThreshold,
+                    ..expected_signer.clone()
+                },
+            ] {
+                cert.signed.signature.signer = signer;
+                assert_eq!(
+                    certifier.validate_certification(cert),
+                    Some(ChangeAction::HandleInvalid(
+                        CertificationMessage::Certification(cert.clone()),
+                        format!("Unexpected signer (expected: {:?})", expected_signer)
+                    ))
+                );
+            }
         };
         test_certification_validation(height, test);
     }
@@ -1881,17 +1929,22 @@ mod tests {
                     log,
                 );
 
+                let cache = pool.get_cache();
                 assert_for_all_subnet_splitting_statuses(
                     &mut pool,
                     |status, should_skip, test_height| {
                         let content = gen_content(test_height);
+                        let mut signature = ThresholdSignature::fake();
+                        // Signed by the active high-threshold NI-DKG ID, if there is one.
+                        if let Some(dkg_id) =
+                            active_high_threshold_nidkg_id(cache.as_ref(), test_height)
+                        {
+                            signature.signer = dkg_id;
+                        }
                         let cert = Certification {
                             height: test_height,
                             height_witness: Some(Witness::new_for_testing_with_height()),
-                            signed: Signed {
-                                content,
-                                signature: ThresholdSignature::fake(),
-                            },
+                            signed: Signed { content, signature },
                         };
 
                         let result = certifier.validate_certification(&cert);

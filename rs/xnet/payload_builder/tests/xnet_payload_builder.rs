@@ -977,6 +977,38 @@ fn validate_xnet_payload(
     });
 }
 
+#[test]
+fn get_xnet_payload_drops_height_witness() {
+    with_test_replica_logger(|log| {
+        // Incoming stream from `SUBNET_1` with 10 messages, none of them inducted yet.
+        let mut stream = out_stream(StreamIndex::new(0), StreamIndex::new(0));
+        for _ in 0..10 {
+            stream.push(RequestBuilder::new().build().into());
+        }
+        let state_manager = StateManagerFixture::local(log.clone()).with_stream(
+            SUBNET_1,
+            out_stream(StreamIndex::new(0), StreamIndex::new(0)),
+        );
+        let fixture = XNetPayloadBuilderFixture::new(state_manager);
+
+        // Has no height witness.
+        let slice = in_slice(&stream, StreamIndex::new(0), StreamIndex::new(0), 10, &log);
+        CertifiedSlicePool::put(
+            &fixture.certified_slice_pool,
+            SUBNET_1,
+            with_height_witness(slice.clone()),
+            fixture.state_manager.as_ref(),
+            REGISTRY_VERSION,
+            &log,
+        )
+        .unwrap();
+
+        let (_, payload, byte_size) = fixture.get_xnet_payload(usize::MAX);
+        assert_opt_slices_eq(Some(slice), payload.stream_slices.get(&SUBNET_1).cloned());
+        assert_eq!(byte_size, fixture.validate_xnet_payload(&payload).unwrap());
+    });
+}
+
 /// A fake `XNetClient` that returns the results matching the respective
 /// query URLs and panics on all other URLs.
 ///
