@@ -4,7 +4,7 @@ use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{GuestOSConfig, GuestVMType};
 use guest_disk::DEFAULT_STORE_LUKS_HEADER_PATH;
 use guest_upgrade_client::DefaultDiskCryptoOps;
-use guest_upgrade_client::create_nns_registry_client;
+use guest_upgrade_client::NnsElectedMeasurementsProvider;
 use guest_upgrade_shared::{DEFAULT_SERVER_PORT, STORE_DEVICE};
 use sev::firmware::guest::Firmware;
 use std::path::PathBuf;
@@ -35,7 +35,7 @@ pub async fn main() -> Result<()> {
 
 async fn try_run_exchange(guestos_config: GuestOSConfig) -> Result<()> {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
-    let nns_registry_client = create_nns_registry_client(&guestos_config)?;
+    let elected_measurements_provider = NnsElectedMeasurementsProvider::new(&guestos_config)?;
 
     let sev_firmware = Firmware::open().context("Failed to open SEV firmware")?;
 
@@ -43,7 +43,7 @@ async fn try_run_exchange(guestos_config: GuestOSConfig) -> Result<()> {
         guestos_config,
         SevRootCertificateVerification::Verify,
         Box::new(sev_firmware),
-        Arc::new(nns_registry_client),
+        Arc::new(elected_measurements_provider),
         Arc::new(DefaultDiskCryptoOps),
         PathBuf::from(STORE_DEVICE),
         PathBuf::from(DEFAULT_STORE_LUKS_HEADER_PATH),

@@ -1,5 +1,6 @@
 use crate::tls::SkipServerCertificateCheck;
 use anyhow::{Context, Error, Result, anyhow, bail};
+use async_trait::async_trait;
 use attestation::SevAttestationPackage;
 use attestation::attestation_package::{
     AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
@@ -15,9 +16,16 @@ use hyper_rustls::{HttpsConnectorBuilder, MaybeHttpsStream};
 use hyper_util::rt::TokioIo;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_interfaces_registry::RegistryClient;
+use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::replica_version::ReplicaVersionRegistry;
+use ic_registry_keys::make_replica_version_key;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_nns_data_provider_wrappers::CertifiedNnsDataProvider;
+use ic_registry_transport::Error as RegistryTransportError;
+use ic_types::ReplicaVersion;
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use prost::Message;
 use rcgen::CertifiedKey;
 use rustls::ClientConfig;
 use rustls::pki_types::PrivateKeyDer;
@@ -29,9 +37,11 @@ use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpStream;
 use tonic::transport::{Channel, Endpoint};
 use tower::{Service, service_fn};
+use url::Url;
 use x509_parser::certificate::X509Certificate;
 use x509_parser::nom::AsBytes;
 use x509_parser::prelude::FromDer;
@@ -39,6 +49,13 @@ use x509_parser::prelude::FromDer;
 mod tls;
 
 const NNS_PUBLIC_KEY_PATH: &str = "/run/config/nns_public_key.pem";
+
+/// How long a single update call to the registry may take. The agent's default (6 minutes) is
+/// longer than systemd gives the whole key exchange (`guest-upgrade-client.service`).
+const REGISTRY_UPDATE_CALL_TIMEOUT: Duration = Duration::from_secs(60);
+/// How often to try reading a record from the registry before giving up.
+const REGISTRY_UPDATE_CALL_ATTEMPT_COUNT: usize = 3;
+const REGISTRY_UPDATE_CALL_RETRY_DELAY: Duration = Duration::from_secs(5);
 
 type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
 
@@ -96,10 +113,153 @@ impl DiskCryptoOps for DefaultDiskCryptoOps {
     }
 }
 
+/// Source of the launch measurements of elected GuestOS versions, against which the client
+/// verifies the server's attestation report.
+#[mockall::automock]
+#[async_trait]
+pub trait ElectedMeasurementsProvider: Send + Sync {
+    /// Returns the launch measurements of `guestos_version`. Fails if the version is not elected.
+    async fn get_measurements_of_version(
+        &self,
+        guestos_version: &ReplicaVersion,
+    ) -> Result<Vec<Vec<u8>>>;
+
+    /// Returns the launch measurements of all elected GuestOS versions. Only needed for servers
+    /// that do not report their GuestOS version yet.
+    async fn get_measurements_of_all_versions(&self) -> Result<Vec<Vec<u8>>>;
+}
+
+/// Reads launch measurements from the NNS registry.
+pub struct NnsElectedMeasurementsProvider {
+    nns_urls: Vec<Url>,
+    nns_public_key: ThresholdSigPublicKey,
+}
+
+impl NnsElectedMeasurementsProvider {
+    pub fn new(guestos_config: &GuestOSConfig) -> Result<Self> {
+        let nns_public_key = parse_threshold_sig_key_from_pem_file(Path::new(NNS_PUBLIC_KEY_PATH))
+            .context("Cannot read NNS public key")?;
+
+        Ok(Self {
+            nns_urls: guestos_config.icos_settings.nns_urls.clone(),
+            nns_public_key,
+        })
+    }
+}
+
+#[async_trait]
+impl ElectedMeasurementsProvider for NnsElectedMeasurementsProvider {
+    async fn get_measurements_of_version(
+        &self,
+        guestos_version: &ReplicaVersion,
+    ) -> Result<Vec<Vec<u8>>> {
+        // Read the record with an update call: its reply is certified by the NNS subnet, and the
+        // agent verifies the certificate against the NNS public key. The certificate only covers
+        // this request, so the host, which controls our network, can neither forge nor replay the
+        // reply.
+        let nns_public_key = self.nns_public_key;
+        let registry_canister =
+            RegistryCanister::new_with_agent_transformer(self.nns_urls.clone(), |agent| {
+                agent
+                    .with_nns_public_key(nns_public_key)
+                    .with_ingress_timeout(REGISTRY_UPDATE_CALL_TIMEOUT)
+            });
+        let key = make_replica_version_key(guestos_version).into_bytes();
+
+        let mut attempt = 1;
+        let record_bytes = loop {
+            let result = registry_canister
+                .get_value_with_update(key.clone(), /*version_opt=*/ None)
+                .await;
+            match result {
+                Ok((record_bytes, _registry_version)) => break record_bytes,
+                Err(RegistryTransportError::KeyNotPresent(_)) => {
+                    bail!("GuestOS version {guestos_version} is not elected")
+                }
+                Err(err) if attempt < REGISTRY_UPDATE_CALL_ATTEMPT_COUNT => {
+                    eprintln!(
+                        "Attempt {attempt} to read the record of GuestOS version \
+                         {guestos_version} failed, retrying: {err}"
+                    );
+                    attempt += 1;
+                    tokio::time::sleep(REGISTRY_UPDATE_CALL_RETRY_DELAY).await;
+                }
+                Err(err) => bail!(
+                    "Failed to read the record of GuestOS version {guestos_version} from the \
+                     registry: {err}"
+                ),
+            }
+        };
+
+        let record = ReplicaVersionRecord::decode(record_bytes.as_slice()).with_context(|| {
+            format!("Failed to decode the record of GuestOS version {guestos_version}")
+        })?;
+
+        Ok(record
+            .guest_launch_measurements
+            .unwrap_or_default()
+            .guest_launch_measurements
+            .into_iter()
+            .map(|measurement| measurement.measurement)
+            .collect::<Vec<Vec<u8>>>())
+    }
+
+    async fn get_measurements_of_all_versions(&self) -> Result<Vec<Vec<u8>>> {
+        // Without knowing the server's version, we have to download the whole registry, which
+        // can take minutes on nodes far away from the NNS.
+        let registry_client = RegistryClientImpl::new(
+            Arc::new(CertifiedNnsDataProvider::new(
+                tokio::runtime::Handle::current(),
+                self.nns_urls.clone(),
+                self.nns_public_key,
+            )),
+            /*metrics_registry=*/ None,
+        );
+        registry_client.try_polling_latest_version(usize::MAX)?;
+
+        registry_client
+            .get_guest_launch_measurements(registry_client.get_latest_version())
+            .map_err(|e| anyhow!("Failed to get elected measurements from registry: {e}"))
+    }
+}
+
+/// Returns the launch measurements to verify the server's attestation report against: those of
+/// the GuestOS version the server reports or, if it reports none, those of all elected versions.
+///
+/// The reported version is not trusted: if the server's attested measurement is not among the
+/// measurements of the version it reports, the verification fails.
+async fn get_elected_measurements(
+    elected_measurements_provider: &dyn ElectedMeasurementsProvider,
+    server_guestos_version: Option<&str>,
+) -> Result<Vec<Vec<u8>>> {
+    // Servers built before they started reporting their GuestOS version.
+    let Some(server_guestos_version) = server_guestos_version else {
+        println!(
+            "Server did not report its GuestOS version, reading the launch measurements of all \
+             elected versions"
+        );
+        return elected_measurements_provider
+            .get_measurements_of_all_versions()
+            .await;
+    };
+
+    let server_guestos_version =
+        ReplicaVersion::try_from(server_guestos_version).with_context(|| {
+            format!("Server reported an invalid GuestOS version {server_guestos_version:?}")
+        })?;
+    println!(
+        "Server reported GuestOS version {server_guestos_version}, reading its launch measurements"
+    );
+
+    elected_measurements_provider
+        .get_measurements_of_version(&server_guestos_version)
+        .await
+}
+
 pub struct DiskEncryptionKeyExchangeClientAgent {
     guestos_config: GuestOSConfig,
     sev_firmware: Box<dyn SevGuestFirmware>,
-    nns_registry_client: Arc<dyn RegistryClient>,
+    elected_measurements_provider: Arc<dyn ElectedMeasurementsProvider>,
     store_device_path: PathBuf,
     store_luks_header_path: PathBuf,
     server_port: u16,
@@ -115,7 +275,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         guestos_config: GuestOSConfig,
         sev_root_certificate_verification: SevRootCertificateVerification,
         sev_firmware: Box<dyn SevGuestFirmware>,
-        nns_registry_client: Arc<dyn RegistryClient>,
+        elected_measurements_provider: Arc<dyn ElectedMeasurementsProvider>,
         crypto_ops: Arc<dyn DiskCryptoOps>,
         store_device_path: PathBuf,
         store_luks_header_path: PathBuf,
@@ -124,7 +284,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         DiskEncryptionKeyExchangeClientAgent {
             guestos_config,
             sev_firmware,
-            nns_registry_client,
+            elected_measurements_provider,
             store_device_path,
             store_luks_header_path,
             server_port,
@@ -230,11 +390,11 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .sev_attestation_package
             .context("Server attestation report is missing")?;
 
-        let registry_version = self.nns_registry_client.get_latest_version();
-        let elected_measurements = self
-            .nns_registry_client
-            .get_guest_launch_measurements(registry_version)
-            .map_err(|e| anyhow!("Failed to get elected measurements from registry: {e}"))?;
+        let elected_measurements = get_elected_measurements(
+            self.elected_measurements_provider.as_ref(),
+            disk_encryption_data.guestos_version.as_deref(),
+        )
+        .await?;
 
         verify_server_attestation_package(
             server_attestation_package,
@@ -407,19 +567,75 @@ fn extract_server_public_key_der(conn: &MaybeHttpsStream<TokioIo<TcpStream>>) ->
     Ok(public_key_der)
 }
 
-pub fn create_nns_registry_client(guestos_config: &GuestOSConfig) -> Result<RegistryClientImpl> {
-    let nns_public_key = parse_threshold_sig_key_from_pem_file(Path::new(NNS_PUBLIC_KEY_PATH))
-        .context("Cannot read NNS public key")?;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let client = RegistryClientImpl::new(
-        Arc::new(CertifiedNnsDataProvider::new(
-            tokio::runtime::Handle::current(),
-            guestos_config.icos_settings.nns_urls.clone(),
-            nns_public_key,
-        )),
-        /*metrics_registry=*/ None,
-    );
-    client.try_polling_latest_version(usize::MAX)?;
+    const SERVER_GUESTOS_VERSION: &str = "server_guestos_version";
+    const SERVER_MEASUREMENT: [u8; 48] = [52; 48];
 
-    Ok(client)
+    #[tokio::test]
+    async fn test_get_elected_measurements_of_reported_version() {
+        let mut provider = MockElectedMeasurementsProvider::new();
+        provider
+            .expect_get_measurements_of_version()
+            .once()
+            .withf(|guestos_version| guestos_version.as_ref() == SERVER_GUESTOS_VERSION)
+            .returning(|_| Ok(vec![SERVER_MEASUREMENT.to_vec()]));
+        provider.expect_get_measurements_of_all_versions().never();
+
+        let measurements = get_elected_measurements(&provider, Some(SERVER_GUESTOS_VERSION))
+            .await
+            .unwrap();
+
+        assert_eq!(measurements, vec![SERVER_MEASUREMENT.to_vec()]);
+    }
+
+    #[tokio::test]
+    async fn test_get_elected_measurements_of_all_versions_if_server_reports_no_version() {
+        let mut provider = MockElectedMeasurementsProvider::new();
+        provider.expect_get_measurements_of_version().never();
+        provider
+            .expect_get_measurements_of_all_versions()
+            .once()
+            .returning(|| Ok(vec![SERVER_MEASUREMENT.to_vec()]));
+
+        let measurements = get_elected_measurements(&provider, None).await.unwrap();
+
+        assert_eq!(measurements, vec![SERVER_MEASUREMENT.to_vec()]);
+    }
+
+    #[tokio::test]
+    async fn test_get_elected_measurements_rejects_invalid_version() {
+        let mut provider = MockElectedMeasurementsProvider::new();
+        provider.expect_get_measurements_of_version().never();
+        provider.expect_get_measurements_of_all_versions().never();
+
+        let error = get_elected_measurements(&provider, Some("../replica_version"))
+            .await
+            .unwrap_err();
+
+        assert!(
+            format!("{error:#}").contains("invalid GuestOS version"),
+            "{error:#}"
+        );
+    }
+
+    /// A server must not be able to make the client fall back to all elected versions by
+    /// reporting a version that is not elected.
+    #[tokio::test]
+    async fn test_get_elected_measurements_does_not_fall_back_if_version_is_not_elected() {
+        let mut provider = MockElectedMeasurementsProvider::new();
+        provider
+            .expect_get_measurements_of_version()
+            .once()
+            .returning(|guestos_version| bail!("GuestOS version {guestos_version} is not elected"));
+        provider.expect_get_measurements_of_all_versions().never();
+
+        let error = get_elected_measurements(&provider, Some(SERVER_GUESTOS_VERSION))
+            .await
+            .unwrap_err();
+
+        assert!(format!("{error:#}").contains("not elected"), "{error:#}");
+    }
 }

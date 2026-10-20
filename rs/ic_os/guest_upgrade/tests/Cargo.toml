@@ -16,6 +16,7 @@ guest_upgrade_shared = { path = "../shared" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-registry-client-fake = { path = "../../../registry/fake" }
+ic-registry-client-helpers = { path = "../../../registry/helpers" }
 ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
 ic-test-utilities-registry = { path = "../../../test_utilities/registry" }
 ic-types = { path = "../../../types/types" }

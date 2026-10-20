@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use anyhow::{bail, ensure};
+use anyhow::{Context, bail, ensure};
 use attestation::SevAttestationPackage;
 use attestation::attestation_package::SevRootCertificateVerification;
 use config_types::{
@@ -12,6 +12,7 @@ use futures::future::Either;
 use futures::{FutureExt, TryFutureExt};
 use guest_upgrade_client::DiskEncryptionKeyExchangeClientAgent;
 use guest_upgrade_client::MockDiskCryptoOps;
+use guest_upgrade_client::MockElectedMeasurementsProvider;
 use guest_upgrade_client::verify_server_attestation_package;
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
 use guest_upgrade_shared::DEFAULT_SERVER_PORT;
@@ -20,6 +21,7 @@ use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurements, ReplicaVersionRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_client_helpers::replica_version::ReplicaVersionRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::add_replica_version_record;
 use ic_types::ReplicaVersion;
@@ -43,10 +45,14 @@ use vsock_lib::protocol::{Command, Payload};
 
 static FREE_PORT: AtomicU16 = AtomicU16::new(DEFAULT_SERVER_PORT);
 
+/// The version the server upgrades to. Its record lists the client's measurement.
 const REPLICA_VERSION: &str = "replica_version_1";
+/// The GuestOS version the server runs. Its record lists the server's measurement.
+const SERVER_GUESTOS_VERSION: &str = "server_guestos_version";
 const LUKS_HEADER_SIZE_BYTES: usize = 16 * 1024 * 1024;
 const SERVER_SUCCESS_TIMEOUT: Duration = Duration::from_secs(60);
-/// We register the following two measurements in the mock registry.
+/// We register the following two measurements in the mock registry, the client's under
+/// `REPLICA_VERSION` and the server's under `SERVER_GUESTOS_VERSION`.
 const DEFAULT_CLIENT_MEASUREMENT: [u8; 48] = [42; 48];
 const DEFAULT_SERVER_MEASUREMENT: [u8; 48] = [52; 48];
 /// A measurement that is not registered in the mock registry.
@@ -86,6 +92,8 @@ struct TestConfig {
     /// Custom data to use in the client attestation (None for default).
     /// Allows testing invalid client attestation data.
     client_custom_data_override: Option<[u8; 64]>,
+    /// The GuestOS version the server reports to the client.
+    server_guestos_version: &'static str,
 }
 
 impl Default for TestConfig {
@@ -99,6 +107,7 @@ impl Default for TestConfig {
             client_custom_data_override: None,
             client_chip_id: DEFAULT_CHIP_ID,
             server_chip_id: DEFAULT_CHIP_ID,
+            server_guestos_version: SERVER_GUESTOS_VERSION,
         }
     }
 }
@@ -107,6 +116,8 @@ impl Default for TestConfig {
 struct DiskEncryptionKeyExchangeTestFixture {
     /// Mock registry client
     registry_client: Arc<dyn ic_interfaces_registry::RegistryClient>,
+    /// The GuestOS version the server reports to the client
+    server_guestos_version: ReplicaVersion,
     /// Trusted execution environment configuration
     trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
     /// Guest OS configuration for the client
@@ -133,28 +144,27 @@ impl DiskEncryptionKeyExchangeTestFixture {
 
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
-        add_replica_version_record(
-            &registry_data_provider,
-            1,
-            REPLICA_VERSION,
-            ReplicaVersionRecord {
-                replica_version_id: Some(REPLICA_VERSION.to_string()),
-                release_package_sha256_hex: "abc".to_string(),
-                guest_launch_measurements: Some(GuestLaunchMeasurements {
-                    guest_launch_measurements: vec![
-                        GuestLaunchMeasurement {
-                            measurement: DEFAULT_CLIENT_MEASUREMENT.into(),
+        for (replica_version, measurement) in [
+            (REPLICA_VERSION, DEFAULT_CLIENT_MEASUREMENT),
+            (SERVER_GUESTOS_VERSION, DEFAULT_SERVER_MEASUREMENT),
+        ] {
+            add_replica_version_record(
+                &registry_data_provider,
+                1,
+                replica_version,
+                ReplicaVersionRecord {
+                    replica_version_id: Some(replica_version.to_string()),
+                    release_package_sha256_hex: "abc".to_string(),
+                    guest_launch_measurements: Some(GuestLaunchMeasurements {
+                        guest_launch_measurements: vec![GuestLaunchMeasurement {
+                            measurement: measurement.into(),
                             metadata: None,
-                        },
-                        GuestLaunchMeasurement {
-                            measurement: DEFAULT_SERVER_MEASUREMENT.into(),
-                            metadata: None,
-                        },
-                    ],
-                }),
-                release_package_urls: vec![],
-            },
-        );
+                        }],
+                    }),
+                    release_package_urls: vec![],
+                },
+            );
+        }
 
         let registry_client = Arc::new(FakeRegistryClient::new(registry_data_provider));
         registry_client.update_to_latest_version();
@@ -208,6 +218,8 @@ impl DiskEncryptionKeyExchangeTestFixture {
                 )
                 .with_measurement(config.client_measurement),
             registry_client,
+            server_guestos_version: ReplicaVersion::try_from(config.server_guestos_version)
+                .unwrap(),
             trusted_execution_environment_config,
             client_guestos_config,
             store_device,
@@ -306,7 +318,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             Arc::new(move || Ok(Box::new(server_sev_firmware.clone()))),
             SevRootCertificateVerification::TestOnlySkipVerification,
             self.trusted_execution_environment_config.clone(),
-            ReplicaVersion::try_from(REPLICA_VERSION).unwrap(),
+            self.server_guestos_version.clone(),
             self.registry_client.clone(),
             self.store_device.path().to_path_buf(),
             self.server_store_luks_header.path().to_path_buf(),
@@ -323,12 +335,39 @@ impl DiskEncryptionKeyExchangeTestFixture {
             self.client_guestos_config.clone(),
             SevRootCertificateVerification::TestOnlySkipVerification,
             Box::new(self.client_sev_firmware.clone()),
-            self.registry_client.clone(),
+            Arc::new(self.create_elected_measurements_provider()),
             self.crypto_ops.clone(),
             store_device_path,
             store_luks_header_path,
             self.server_port,
         )
+    }
+
+    /// Answers the client's lookups from the mock registry. Since the server always reports its
+    /// GuestOS version, the client must never read the measurements of all elected versions.
+    fn create_elected_measurements_provider(&self) -> MockElectedMeasurementsProvider {
+        let registry_client = self.registry_client.clone();
+        let mut provider = MockElectedMeasurementsProvider::new();
+        provider
+            .expect_get_measurements_of_version()
+            .returning(move |guestos_version| {
+                let record = registry_client
+                    .get_replica_version_record(
+                        guestos_version,
+                        registry_client.get_latest_version(),
+                    )
+                    .unwrap()
+                    .with_context(|| format!("GuestOS version {guestos_version} is not elected"))?;
+                Ok(record
+                    .guest_launch_measurements
+                    .unwrap_or_default()
+                    .guest_launch_measurements
+                    .into_iter()
+                    .map(|measurement| measurement.measurement)
+                    .collect::<Vec<Vec<u8>>>())
+            });
+        provider.expect_get_measurements_of_all_versions().never();
+        provider
     }
 
     /// Checks that the client copied the server's Store LUKS header.
@@ -473,6 +512,38 @@ async fn test_server_measurement_not_in_registry() {
 
     let mut fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
     fixture.expect_can_open(false);
+    assert_statuses_contain_errors(fixture.run_key_exchange_test().await, "InvalidMeasurement");
+    fixture.verify_no_artifacts_persisted();
+}
+
+#[tokio::test]
+async fn test_server_guestos_version_not_elected() {
+    let config = TestConfig {
+        server_guestos_version: "unelected_guestos_version",
+        ..Default::default()
+    };
+    let mut fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
+    fixture.expect_can_open(false);
+
+    let (server_result, client_result) = fixture.run_key_exchange_test().await;
+
+    assert_status_contains_error(&server_result, "Debug info from Upgrade VM");
+    assert_statuses_contain_errors((server_result, client_result), "not elected");
+    fixture.verify_no_artifacts_persisted();
+}
+
+/// A server that reports a version other than the one it runs must be rejected: its attested
+/// measurement is not among the measurements of the reported version.
+#[tokio::test]
+async fn test_server_reports_other_guestos_version() {
+    let config = TestConfig {
+        // The target version is elected, but its record only lists the client's measurement.
+        server_guestos_version: REPLICA_VERSION,
+        ..Default::default()
+    };
+    let mut fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
+    fixture.expect_can_open(false);
+
     assert_statuses_contain_errors(fixture.run_key_exchange_test().await, "InvalidMeasurement");
     fixture.verify_no_artifacts_persisted();
 }

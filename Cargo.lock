@@ -5449,6 +5449,7 @@ name = "guest_upgrade_client"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "attestation",
  "config_tool",
  "config_types",
@@ -5460,10 +5461,16 @@ dependencies = [
  "hyper-util",
  "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces-registry",
+ "ic-protobuf",
  "ic-registry-client",
  "ic-registry-client-helpers",
+ "ic-registry-keys",
+ "ic-registry-nns-data-provider",
  "ic-registry-nns-data-provider-wrappers",
+ "ic-registry-transport",
+ "ic-types",
  "mockall",
+ "prost",
  "rcgen 0.13.2",
  "rustls",
  "sev",
@@ -5472,6 +5479,7 @@ dependencies = [
  "tokio",
  "tonic",
  "tower",
+ "url",
  "x509-parser 0.18.1",
 ]
 
@@ -5534,6 +5542,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-protobuf",
  "ic-registry-client-fake",
+ "ic-registry-client-helpers",
  "ic-registry-proto-data-provider",
  "ic-test-utilities-registry",
  "ic-types",

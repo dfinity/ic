@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 attestation = { path = "../../sev/attestation" }
 config_tool = { path = "../../config/tool" }
 config_types = { path = "../../config/types" }
@@ -17,11 +18,17 @@ der = { workspace = true }
 guest_disk = { path = "../../os_tools/guest_disk" }
 guest_upgrade_shared = { path = "../shared" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
+ic-protobuf = { path = "../../../protobuf" }
 ic-registry-client = { path = "../../../registry/client" }
 ic-registry-client-helpers = { path = "../../../registry/helpers" }
+ic-registry-keys = { path = "../../../registry/keys" }
+ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
 ic-registry-nns-data-provider-wrappers = { path = "../../../registry/nns_data_provider_wrappers" }
+ic-registry-transport = { path = "../../../registry/transport" }
+ic-types = { path = "../../../types/types" }
 ic-crypto-utils-threshold-sig-der = { path = "../../../crypto/utils/threshold_sig_der" }
 mockall = { workspace = true }
+prost = { workspace = true }
 sev_guest = { path = "../../sev/guest" }
 rcgen = { workspace = true }
 rustls = { workspace = true }
@@ -29,6 +36,7 @@ sev = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
+url = { workspace = true }
 x509-parser = { workspace = true }
 hyper-rustls = { workspace = true }
 hyper-util = { workspace = true }

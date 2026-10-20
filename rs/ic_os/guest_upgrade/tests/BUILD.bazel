@@ -22,6 +22,7 @@ rust_test(
         "//rs/interfaces/registry",
         "//rs/protobuf",
         "//rs/registry/fake",
+        "//rs/registry/helpers",
         "//rs/registry/proto_data_provider",
         "//rs/test_utilities/registry",
         "//rs/types/types",

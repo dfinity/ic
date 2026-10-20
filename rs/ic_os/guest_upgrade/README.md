@@ -43,6 +43,14 @@ Both VMs attest to each other over TLS using SEV-SNP attestation reports:
    - **Custom data** matches the expected TLS key binding (prevents MITM/replay).
    - **Chip ID** matches the local report's chip ID (proves same physical CPU).
 
+The server checks the client's measurement against the target version of the upgrade, using the
+orchestrator's registry. The client checks the server's measurement against the GuestOS version
+the server reports. It reads only that version's record from the NNS registry, with an update call
+whose certified reply it verifies against the NNS public key. The reported version is not trusted:
+a server that reports a version other than the one it runs fails the measurement check. Servers
+that do not report their version yet make the client fall back to downloading the whole registry
+and accepting the measurements of any elected version.
+
 ## Sequence
 
 See `ic-os/docs/Upgrades.adoc` for the full upgrade sequence including the HostOS and orchestrator steps that surround this key exchange.
