@@ -57,7 +57,6 @@ impl TryFrom<pb::Certification> for Certification {
     fn try_from(value: pb::Certification) -> Result<Self, Self::Error> {
         Ok(Self {
             height: Height::new(value.height),
-            // height_witness: value.height_witness.map(Witness::try_from).transpose()?,
             height_witness: try_from_option_field(
                 value.height_witness,
                 "Certification::height_witness",
