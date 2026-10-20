@@ -1837,7 +1837,10 @@ impl StateMachineBuilder {
             bitcoin_clients.doge_testnet_client,
             sm.subnet_id,
             sm.registry_client.clone(),
-            BitcoinPayloadBuilderConfig::default(),
+            // Tolerate slow responses from the adapters on loaded test machines.
+            BitcoinPayloadBuilderConfig {
+                adapter_timeout: Duration::from_secs(1),
+            },
             sm.replica_logger.clone(),
         ));
 

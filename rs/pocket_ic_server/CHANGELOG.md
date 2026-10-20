@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+- Requests to the bitcoin and dogecoin adapters (fetching blocks and sending transactions) time out after 1s instead of 50ms,
+  so that sending a transaction through the bitcoin or dogecoin canister no longer fails spuriously on a loaded machine.
+
 
 
 ## 16.1.0 - 2026-10-08
