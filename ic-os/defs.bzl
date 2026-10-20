@@ -362,7 +362,9 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                     "//rs/ic_os/build_tools/dflate",
                     "@zstd//:zstd_cli",
                 ],
-                tags = ["manual"],
+                # Not from the remote cache, which PR builds write to, so that release builds sign
+                # it themselves (the stamped exclusion in .bazelrc.build doesn't match genrules).
+                tags = ["manual", "no-remote-cache"],
                 visibility = ["//rs/tests:__subpackages__", "//ic-os:__subpackages__"],
             )
 
