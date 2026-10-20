@@ -228,8 +228,7 @@ impl MinterCanister {
     where
         P: Fn(&Txid) -> bool,
     {
-        // Sending a transaction can fail transiently, in which case the minter
-        // only retries in its next `ProcessLogic` run.
+        // The minter retries a failed resubmission only in its next `ProcessLogic` run.
         const MAX_PROCESS_LOGIC_RUNS: usize = 3;
 
         let is_submitted = |tx_status: &RetrieveDogeStatus| match tx_status {
@@ -238,18 +237,19 @@ impl MinterCanister {
         };
         self.env
             .advance_time(MAX_TIME_IN_QUEUE + Duration::from_nanos(1));
-        for _ in 1..MAX_PROCESS_LOGIC_RUNS {
-            if let Ok(RetrieveDogeStatus::Submitted { txid, .. }) =
-                self.try_await_doge_transaction_with_status(ledger_burn_index, is_submitted)
-            {
-                return txid;
+        let mut last_status = None;
+        for _ in 0..MAX_PROCESS_LOGIC_RUNS {
+            match self.try_await_doge_transaction_with_status(ledger_burn_index, is_submitted) {
+                Ok(RetrieveDogeStatus::Submitted { txid }) => return txid,
+                Ok(_) => unreachable!(),
+                Err(status) => last_status = status,
             }
             self.env.advance_time(PROCESS_LOGIC_INTERVAL);
         }
-        match self.await_doge_transaction_with_status(ledger_burn_index, is_submitted) {
-            RetrieveDogeStatus::Submitted { txid, .. } => txid,
-            _ => unreachable!(),
-        }
+        dbg!(self.get_logs());
+        panic!(
+            "Unexpected transaction status after {MAX_PROCESS_LOGIC_RUNS} ProcessLogic runs; last status {last_status:?}"
+        )
     }
 
     pub fn await_finalized_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
