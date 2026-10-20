@@ -497,7 +497,7 @@ impl CertifierImpl {
         // not, we consider the certification invalid.
         if let Err(e) = validate_height_witness(
             certification.height,
-            &certification.height_witness,
+            certification.height_witness.as_ref(),
             &certification.signed.content.hash,
         ) {
             return Some(ChangeAction::HandleInvalid(msg, e));
@@ -541,11 +541,9 @@ impl CertifierImpl {
 
         // If the share has an invalid content or does not belong to the
         // committee
-        if let Err(e) = validate_height_witness(
-            share.height,
-            &Some(share.height_witness.clone()),
-            &content.hash,
-        ) {
+        if let Err(e) =
+            validate_height_witness(share.height, Some(&share.height_witness), &content.hash)
+        {
             return Some(ChangeAction::HandleInvalid(msg, e));
         }
 
@@ -661,7 +659,7 @@ impl CertifierImpl {
 
 fn validate_height_witness(
     height: Height,
-    height_witness: &Option<Witness>,
+    height_witness: Option<&Witness>,
     hash: &CryptoHashOfPartialState,
 ) -> Result<(), String> {
     let Some(height_witness) = height_witness else {
