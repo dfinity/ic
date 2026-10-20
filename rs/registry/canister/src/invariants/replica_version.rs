@@ -98,7 +98,10 @@ pub(crate) fn check_replica_version_invariants(
 
         // Enforce that the stored version always matches the key
         if let Some(replica_version_id) = replica_version_id {
-            assert_eq!(replica_version_id, version);
+            assert_eq!(
+                replica_version_id, version,
+                "The registry key and internal `replica_version_id` must be consistent."
+            );
         }
     }
 
@@ -680,5 +683,23 @@ mod tests {
     #[test]
     fn set_hash_and_url() {
         check_replica_version(MOCK_HASH, vec![MOCK_URL.into()]);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "The registry key and internal `replica_version_id` must be consistent."
+    )]
+    fn panic_with_inner_version_mismatch() {
+        let registry = invariant_compliant_registry(0);
+
+        let key = make_replica_version_key("will-explode");
+        let value = ReplicaVersionRecord {
+            replica_version_id: Some("because-does-not-match".to_string()),
+            ..Default::default()
+        }
+        .encode_to_vec();
+
+        let mutation = vec![upsert(key.as_bytes(), value)];
+        registry.check_global_state_invariants(&mutation);
     }
 }

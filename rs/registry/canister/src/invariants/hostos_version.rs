@@ -50,6 +50,12 @@ pub(crate) fn check_hostos_version_invariants(
             &record.release_package_sha256_hex,
             false,
         );
+
+        // Enforce that the stored version always matches the key
+        assert_eq!(
+            record.hostos_version_id, version,
+            "The registry key and internal `hostos_version_id` must be consistent."
+        );
     }
 
     Ok(())
@@ -69,7 +75,7 @@ mod tests {
     use crate::common::test_helpers::invariant_compliant_registry;
     use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
     use ic_registry_keys::make_hostos_version_key;
-    use ic_registry_transport::{insert, pb::v1::RegistryMutation};
+    use ic_registry_transport::{insert, pb::v1::RegistryMutation, upsert};
     use prost::Message;
 
     // HostOS version IDs are git commit IDs (pointing to the source code used
@@ -106,5 +112,23 @@ mod tests {
         let mutations = register_version_mutation("G@RBAGE");
 
         registry.check_global_state_invariants(&mutations);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "The registry key and internal `hostos_version_id` must be consistent."
+    )]
+    fn panic_with_inner_version_mismatch() {
+        let registry = invariant_compliant_registry(0);
+
+        let key = make_hostos_version_key("will-explode");
+        let value = HostosVersionRecord {
+            hostos_version_id: "because-does-not-match".to_string(),
+            ..Default::default()
+        }
+        .encode_to_vec();
+
+        let mutation = vec![upsert(key.as_bytes(), value)];
+        registry.check_global_state_invariants(&mutation);
     }
 }

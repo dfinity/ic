@@ -103,6 +103,9 @@ rust_test(
     env = {
         "PEBBLE": "$(rootpath //:pebble)",
         "CHALLTESTSRV": "$(rootpath //:pebble-challtestsrv)",
+        # Validate challenges immediately instead of after a random 0-4 s delay: rustls-acme
+        # abandons an order whose challenge is still being validated 1 s after triggering it.
+        "PEBBLE_VA_NOSLEEP": "1",
     },
     proc_macro_deps = [
         # Keep sorted.
