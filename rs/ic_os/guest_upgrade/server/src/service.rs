@@ -12,6 +12,7 @@ use guest_upgrade_shared::api::{
     disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeService,
 };
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
+use ic_types::ReplicaVersion;
 use sev_guest::attestation_package::generate_attestation_package;
 use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use std::ops::Deref;
@@ -24,6 +25,8 @@ use x509_parser::parse_x509_certificate;
 pub struct DiskEncryptionKeyExchangeServiceImpl {
     sev_firmware_factory: SevFirmwareFactory,
     trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
+    /// The GuestOS version this server booted from.
+    guestos_version: ReplicaVersion,
     my_public_key: Vec<u8>,
     status_sender: Sender<Result<(), String>>,
     /// Expected launch measurements of the client GuestOS.
@@ -39,6 +42,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         sev_root_certificate_verification: SevRootCertificateVerification,
         my_public_key: Vec<u8>,
         trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
+        guestos_version: ReplicaVersion,
         store_device_path: PathBuf,
         store_luks_header_path: PathBuf,
         status_sender: Sender<Result<(), String>>,
@@ -48,6 +52,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
             sev_firmware_factory,
             my_public_key,
             trusted_execution_environment_config,
+            guestos_version,
             status_sender,
             expected_measurements,
             sev_root_certificate_verification,
@@ -170,6 +175,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
             ),
             sev_attestation_package: Some(my_attestation_package.into()),
             luks_header: Some(luks_header),
+            guestos_version: Some(self.guestos_version.to_string()),
         }))
     }
 
