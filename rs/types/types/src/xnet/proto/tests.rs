@@ -3,13 +3,14 @@ use crate::{
     consensus::certification::{Certification, CertificationContent},
     crypto::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet},
     },
     signature::ThresholdSignature,
     xnet::CertifiedStreamSlice,
 };
 use assert_matches::assert_matches;
 use ic_crypto_tree_hash::{Digest, Witness};
+use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::types::v1 as pb_types;
@@ -90,6 +91,28 @@ fn certified_stream_slice_ignores_height_and_witness() {
         certified_stream_slice,
         CertifiedStreamSlice::try_from(certified_stream_slice_proto).unwrap()
     );
+}
+
+/// Decoding sets the signer's NI-DKG tag to `HighThreshold`.
+#[test]
+fn certified_stream_slice_normalizes_signer() {
+    let certified_stream_slice = certified_stream_slice_for_test();
+    let master_public_key_tag =
+        NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name: "key".to_string(),
+        }));
+    for dkg_tag in [NiDkgTag::LowThreshold, master_public_key_tag] {
+        let mut other_signer = certified_stream_slice.clone();
+        other_signer.certification.signature.signer.dkg_tag = dkg_tag;
+        assert_eq!(
+            certified_stream_slice,
+            v1::CertifiedStreamSlice::proxy_decode(&v1::CertifiedStreamSlice::proxy_encode(
+                other_signer
+            ))
+            .unwrap()
+        );
+    }
 }
 
 #[test]

@@ -19,7 +19,7 @@ use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_42};
 use ic_types::{
     Height, SubnetId,
     consensus::certification::{Certification, CertificationContent},
-    crypto::{Signed, threshold_sig::ni_dkg::NiDkgTag},
+    crypto::Signed,
     signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex},
 };
@@ -182,28 +182,17 @@ fn certify_height(state_manager: &impl StateManager, h: Height) -> Certification
         })
         .expect("no hash to certify");
 
-    // Like all certifications, signed with a high-threshold key.
-    let mut signature = ThresholdSignature::fake();
-    signature.signer.dkg_tag = NiDkgTag::HighThreshold;
-
     let certification = Certification {
         height: h,
         height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
         signed: Signed {
             content: CertificationContent::new(hash),
-            signature,
+            signature: ThresholdSignature::fake(),
         },
     };
 
     state_manager.deliver_state_certification(certification.clone());
     certification
-}
-
-/// Returns `slice` with a low-threshold signer, as subnets running older replica
-/// versions may serve it.
-pub fn with_low_threshold_signer(mut slice: CertifiedStreamSlice) -> CertifiedStreamSlice {
-    slice.certification.signature.signer.dkg_tag = NiDkgTag::LowThreshold;
-    slice
 }
 
 /// `CertifiedStreamSlice` equality assert that prints unpacked slice contents

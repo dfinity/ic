@@ -5,8 +5,9 @@
 use crate::{
     CryptoHashOfPartialState, Height,
     consensus::certification::{Certification, CertificationContent, CertificationShare},
-    crypto::{CryptoHash, Signed},
+    crypto::{CryptoHash, Signed, threshold_sig::ni_dkg::NiDkgTag},
     replica_version::ReplicaVersionParseError,
+    signature::ThresholdSignature,
     xnet::CertifiedStreamSlice,
 };
 use ic_crypto_tree_hash::Witness;
@@ -93,8 +94,8 @@ impl TryFrom<pb::CertificationShare> for CertificationShare {
     }
 }
 
-/// Neither encodes nor decodes the certification's `height` and `height_witness`,
-/// which its signature does not cover.
+/// Leaves out the certification's `height` and `height_witness`, which its
+/// signature does not cover.
 ///
 /// TODO: Switch to a wire-compatible certification message without them.
 impl From<CertifiedStreamSlice> for pb::CertifiedStreamSlice {
@@ -111,6 +112,11 @@ impl From<CertifiedStreamSlice> for pb::CertifiedStreamSlice {
         }
     }
 }
+/// Ignores the certification's `height` and `height_witness` and sets its signer's
+/// NI-DKG tag to `HighThreshold`, as the signature covers none of them.
+///
+/// TODO: Reject other NI-DKG tags instead, once all subnets validate the signer
+/// (see `CertifierImpl::validate_certification()`).
 impl TryFrom<pb::CertifiedStreamSlice> for CertifiedStreamSlice {
     type Error = ProxyDecodeError;
 
@@ -118,15 +124,15 @@ impl TryFrom<pb::CertifiedStreamSlice> for CertifiedStreamSlice {
         let certification = value.certification.ok_or(ProxyDecodeError::MissingField(
             "CertifiedStreamSlice::certification",
         ))?;
+        let mut signature: ThresholdSignature<CertificationContent> =
+            try_from_option_field(certification.signature, "Certification::signature")?;
+        signature.signer.dkg_tag = NiDkgTag::HighThreshold;
         Ok(Self {
             payload: value.payload,
             merkle_proof: value.merkle_proof,
             certification: Signed {
                 content: try_from_option_field(certification.content, "Certification::content")?,
-                signature: try_from_option_field(
-                    certification.signature,
-                    "Certification::signature",
-                )?,
+                signature,
             },
         })
     }

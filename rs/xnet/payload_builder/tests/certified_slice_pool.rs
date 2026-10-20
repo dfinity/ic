@@ -1242,65 +1242,6 @@ fn pool_append_non_empty_to_non_empty(
 }
 
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
-fn pool_normalizes_signer(
-    #[strategy(arb_stream_slice(
-        2, // min_size
-        10, // max_size
-        0, // min_signal_count
-        10, // max_signal_count
-        CURRENT_CERTIFICATION_VERSION,
-    ))]
-    test_slice: (Stream, StreamIndex, usize),
-) {
-    let (stream, from, msg_count) = test_slice;
-
-    with_test_replica_logger(|log| {
-        let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
-        // Has a high-threshold signer.
-        let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
-
-        let mut certified_stream_store = MockCertifiedStreamStore::new();
-        // Actual return value does not matter as long as it's `Ok(_)`.
-        certified_stream_store
-            .expect_decode_certified_stream_slice()
-            .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
-        let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
-        let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log.clone()));
-
-        // Put a slice with a low-threshold signer: it is pooled with a high-threshold one.
-        put(
-            &pool,
-            SRC_SUBNET,
-            with_low_threshold_signer(slice.clone()),
-            &*store,
-            &log,
-        )
-        .unwrap();
-        assert_opt_slices_eq(
-            Some(slice.clone()),
-            take_slice(&pool, SRC_SUBNET, None, None, None),
-        );
-
-        // Put the first half of the slice, then append the second half with a
-        // low-threshold signer: the merged slice is pooled with a high-threshold one.
-        let prefix_len = msg_count / 2;
-        let mid = from + (prefix_len as u64).into();
-        let prefix_slice = fixture.get_slice(DST_SUBNET, from, prefix_len);
-        put(&pool, SRC_SUBNET, prefix_slice, &*store, &log).unwrap();
-        let suffix_slice = fixture.get_partial_slice(DST_SUBNET, from, mid, msg_count - prefix_len);
-        append(
-            &pool,
-            SRC_SUBNET,
-            with_low_threshold_signer(suffix_slice),
-            &*store,
-            &log,
-        )
-        .unwrap();
-        assert_opt_slices_eq(Some(slice), take_slice(&pool, SRC_SUBNET, None, None, None));
-    });
-}
-
-#[test_strategy::proptest(ProptestConfig::with_cases(10))]
 fn pool_put_invalid_slice(
     #[strategy(arb_stream_slice(
         1, // min_size

@@ -1,9 +1,6 @@
 use super::test_fixtures::*;
 use super::*;
-use crate::certified_slice_pool::{
-    CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError,
-    validate_slice as validate_pooled_slice,
-};
+use crate::certified_slice_pool::{CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, CertifiedSliceError};
 use crate::testing::XNetPayloadBuilderTesting;
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
@@ -15,7 +12,7 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_replicated_state::Stream;
 use ic_replicated_state::metadata_state::StreamMap;
 use ic_test_utilities::state_manager::FakeStateManager;
-use ic_test_utilities_consensus::{dkg::fake_dkg_id, fake::Fake, idkg::fake_vetkd_key_id};
+use ic_test_utilities_consensus::fake::Fake;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count,
@@ -24,7 +21,7 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_types::ids::{NODE_42, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5};
 use ic_types::CryptoHashOfPartialState;
 use ic_types::consensus::certification::{Certification, CertificationContent};
-use ic_types::crypto::{CryptoHash, Signed, threshold_sig::ni_dkg::NiDkgTag};
+use ic_types::crypto::{CryptoHash, Signed};
 use ic_types::signature::ThresholdSignature;
 use ic_types::state_manager::StateManagerError;
 use ic_types::xnet::RejectReason;
@@ -751,79 +748,6 @@ async fn validate_rejects_slice_from_unknown_subnet() {
     });
 }
 
-#[tokio::test]
-async fn validate_rejects_slice_without_high_threshold_signer() {
-    with_test_replica_logger(|log| {
-        let fixture = PayloadBuilderTestFixture::with_xnet_state();
-        let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
-
-        let master_public_key_tag = fake_dkg_id(fake_vetkd_key_id()).dkg_tag;
-        for dkg_tag in [NiDkgTag::LowThreshold, master_public_key_tag] {
-            // A payload that is valid against the state alone, but for the signer.
-            let mut payload = fixture.oldest_payload().clone();
-            let slice = payload.stream_slices.values_mut().next().unwrap();
-            slice.certification.signature.signer.dkg_tag = dkg_tag;
-
-            assert_matches!(
-                xnet_payload_builder.validate_xnet_payload(
-                    &payload,
-                    &fixture.validation_context,
-                    &[],
-                ),
-                Err(ValidationError::InvalidArtifact(
-                    InvalidXNetPayload::InvalidSlice(msg)
-                )) if msg.contains("certification signer is not a high-threshold NI-DKG ID")
-            );
-        }
-    });
-}
-
-/// `validate_slice()` rejects a slice whose signer is not a high-threshold NI-DKG
-/// ID before decoding it.
-#[tokio::test]
-async fn pool_validate_slice_rejects_non_high_threshold_signer() {
-    with_test_replica_logger(|log| {
-        let config = StreamConfig {
-            message_begin: 0,
-            message_end: 2,
-            signal_end: 0,
-        };
-        let stream = generate_stream(&config);
-        let slice = make_certified_stream_slice(REMOTE_SUBNET, config);
-
-        // With a high-threshold signer, the slice is decoded and accepted.
-        assert_matches!(
-            validate_pooled_slice(
-                &slice,
-                REMOTE_SUBNET,
-                &store_expecting_decodes(&stream, 1),
-                REGISTRY_VERSION,
-                &log
-            ),
-            Ok(())
-        );
-
-        // With any other signer, it is rejected before being decoded.
-        let master_public_key_tag = fake_dkg_id(fake_vetkd_key_id()).dkg_tag;
-        for dkg_tag in [NiDkgTag::LowThreshold, master_public_key_tag] {
-            let mut slice = slice.clone();
-            slice.certification.signature.signer.dkg_tag = dkg_tag;
-            assert_matches!(
-                validate_pooled_slice(
-                    &slice,
-                    REMOTE_SUBNET,
-                    &store_expecting_decodes(&stream, 0),
-                    REGISTRY_VERSION,
-                    &log
-                ),
-                Err(CertifiedSliceError::DecodeStreamError(
-                    DecodeStreamError::InvalidSignature(subnet_id)
-                )) if subnet_id == REMOTE_SUBNET
-            );
-        }
-    });
-}
-
 /// Building and validating payloads both schedule a pull from every peer whose
 /// recorded header offers more than the past payloads and the pool cover.
 #[tokio::test]
@@ -1264,27 +1188,6 @@ async fn handle_advert_invalid_signature() {
         );
         assert_eq!(None, recorded_peer_header(&pool));
         assert!(!unschedule_pull(&pool));
-    });
-}
-
-/// An advert with a low-threshold signer is normalized and handled like any other.
-#[tokio::test]
-async fn handle_advert_normalizes_signer() {
-    with_test_replica_logger(|log| {
-        let advertised = peer_stream_for_advert_tests();
-        let header = advertised.header();
-        let (advert_handler, pool) =
-            advert_handler_and_pool(store_expecting_decodes(&advertised, 1), log);
-
-        let mut advert = make_advert(&advertised);
-        advert.certification.signature.signer.dkg_tag = NiDkgTag::LowThreshold;
-
-        assert_matches!(
-            advert_handler.handle_advert(REMOTE_SUBNET, advert),
-            Ok(XNetAdvertOutcome::Actionable)
-        );
-        assert_eq!(Some(Arc::new(header)), recorded_peer_header(&pool));
-        assert!(unschedule_pull(&pool));
     });
 }
 

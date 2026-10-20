@@ -21,7 +21,6 @@ use ic_replicated_state::{Stream, metadata_state::StreamMap};
 use ic_types::{
     CountBytes, RegistryVersion, SubnetId,
     consensus::certification::SignedCertificationContent,
-    crypto::threshold_sig::ni_dkg::NiDkgTag,
     xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex},
 };
 use messages::Messages;
@@ -1373,8 +1372,7 @@ impl CertifiedSlicePool {
     }
 
     /// Places the provided slice into the pool, after trimming off any prefix
-    /// before the corresponding `stream_positions` entry and normalizing its
-    /// signer (see `normalize_signer()`).
+    /// before the corresponding `stream_positions` entry.
     ///
     /// Decoding, unpacking and validating the slice (requiring an expensive BLS
     /// signature verification) is done without holding the pool lock. The lock is
@@ -1393,7 +1391,6 @@ impl CertifiedSlicePool {
         registry_version: RegistryVersion,
         log: &ReplicaLogger,
     ) -> CertifiedSliceResult<bool> {
-        let slice = normalize_signer(slice);
         validate_slice(
             &slice,
             subnet_id,
@@ -1411,8 +1408,7 @@ impl CertifiedSlicePool {
     /// Appends a partial slice to the corresponding pool entry, trimming
     /// off any prefix before the matching`self.stream_positions` entry.
     /// Appending virtually consists of prepending the pooled messages to the
-    /// provided partial slice, whose certification (with its signer normalized,
-    /// see `normalize_signer()`) the merged slice takes on.
+    /// provided partial slice.
     ///
     /// The provided partial slice's messages (if any) must extend gap-free the
     /// ones already in the pool and its `signals_end` must not regress. Its
@@ -1437,7 +1433,7 @@ impl CertifiedSlicePool {
         registry_version: RegistryVersion,
         log: &ReplicaLogger,
     ) -> CertifiedSliceResult<bool> {
-        let partial: UnpackedStreamSlice = normalize_signer(partial).try_into()?;
+        let partial: UnpackedStreamSlice = partial.try_into()?;
 
         // Clone the pooled slice, if any, instead of removing it: this way the
         // payload builder can make use of it while we validate; and if the merge
@@ -1855,23 +1851,14 @@ fn compare_usefulness(
 /// its signature with respect to the given `registry_version`.
 ///
 /// Returns `Err(DecodeStreamError)` if the slice could not be decoded or its
-/// certification was invalid, including if its signer is not a high-threshold
-/// NI-DKG ID (see `has_high_threshold_signer()`).
-pub(crate) fn validate_slice(
+/// certification was invalid.
+fn validate_slice(
     slice: &CertifiedStreamSlice,
     subnet_id: SubnetId,
     certified_stream_store: &dyn CertifiedStreamStore,
     registry_version: RegistryVersion,
     log: &ReplicaLogger,
 ) -> CertifiedSliceResult<()> {
-    if !has_high_threshold_signer(&slice.certification) {
-        info!(
-            log,
-            "Stream slice from subnet {}: signer is not a high-threshold NI-DKG ID", subnet_id
-        );
-        return Err(DecodeStreamError::InvalidSignature(subnet_id).into());
-    }
-
     match certified_stream_store.decode_certified_stream_slice(subnet_id, registry_version, slice) {
         Ok(_) => Ok(()),
         Err(err) => {
@@ -1882,25 +1869,6 @@ pub(crate) fn validate_slice(
             Err(err.into())
         }
     }
-}
-
-/// Sets the NI-DKG tag of `slice`'s signer to `HighThreshold`, so
-/// `has_high_threshold_signer()` holds.
-///
-/// TODO: Stop normalizing (but keep checking) once all subnets validate the
-/// signer (see `CertifierImpl::validate_certification()`).
-pub(crate) fn normalize_signer(mut slice: CertifiedStreamSlice) -> CertifiedStreamSlice {
-    slice.certification.signature.signer.dkg_tag = NiDkgTag::HighThreshold;
-    slice
-}
-
-/// Tests whether `certification` claims to be signed with a high-threshold
-/// NI-DKG transcript, as all certifications are.
-pub(crate) fn has_high_threshold_signer(certification: &SignedCertificationContent) -> bool {
-    matches!(
-        certification.signature.signer.dkg_tag,
-        NiDkgTag::HighThreshold
-    )
 }
 
 /// Decodes the payload of a `CertifiedStreamSlice`, without validating its
