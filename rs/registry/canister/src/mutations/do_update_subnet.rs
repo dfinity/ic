@@ -692,13 +692,14 @@ mod tests {
     use crate::common::test_helpers::{
         add_fake_subnet, add_guest_launch_measurements_to_replica_version,
         get_invariant_compliant_subnet_record, invariant_compliant_registry,
-        prepare_registry_with_nodes, prepare_registry_with_nodes_and_chip_id,
+        prepare_registry_with_cloud_engine_subnet, prepare_registry_with_nodes,
+        prepare_registry_with_nodes_and_chip_id,
     };
     use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
-    use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+    use ic_nns_constants::{ENGINE_CONTROLLER_CANISTER_ID, GOVERNANCE_CANISTER_ID};
     use ic_protobuf::registry::subnet::v1::{
         CanisterCyclesCostSchedule, ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
         SubnetRecord as SubnetRecordPb,
@@ -1910,8 +1911,6 @@ mod tests {
     /// for exercising the engine-controller permission checks on
     /// `do_update_subnet`.
     fn make_registry_with_cloud_engine_subnet() -> (Registry, SubnetId) {
-        use crate::common::test_helpers::prepare_registry_with_cloud_engine_subnet;
-
         let mut registry = invariant_compliant_registry(0);
         let (mutate_request, subnet_id) = prepare_registry_with_cloud_engine_subnet(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
@@ -1920,8 +1919,6 @@ mod tests {
 
     #[test]
     fn engine_controller_can_update_cloud_engine_subnet_admins() {
-        use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
-
         let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
 
         let new_admins = vec![*TEST_USER1_PRINCIPAL, *TEST_USER2_PRINCIPAL];
@@ -1942,8 +1939,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "engine controller may only update CloudEngine subnets")]
     fn engine_controller_cannot_update_non_cloud_engine_subnet() {
-        use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
-
         // Default fixture is an Application subnet.
         let (mut registry, subnet_id) = make_registry_for_update_subnet_tests();
 
@@ -1956,8 +1951,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "max_number_of_canisters")]
     fn engine_controller_cannot_update_disallowed_fields() {
-        use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
-
         let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
 
         let mut payload = make_empty_update_payload(subnet_id);
@@ -1969,8 +1962,6 @@ mod tests {
 
     #[test]
     fn engine_controller_can_set_is_halted() {
-        use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
-
         let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
 
         let mut payload = make_empty_update_payload(subnet_id);
@@ -1983,8 +1974,6 @@ mod tests {
 
     #[test]
     fn engine_controller_can_set_cooling_down() {
-        use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
-
         let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
 
         // Sanity check: subnets do not cool down by default.
@@ -2010,8 +1999,6 @@ mod tests {
     /// of being reset.
     #[test]
     fn test_engine_controller_sets_state_limits_and_keeps_unset_limits() {
-        use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
-
         // Step 1: Prepare the world: a CloudEngine subnet on which governance
         // has set all four limits. The values are arbitrary, but distinct, so
         // that we can tell which ones survive.
@@ -2057,8 +2044,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "resource_limits.maximum_query_instructions")]
     fn test_engine_controller_cannot_set_query_limits() {
-        use ic_nns_constants::ENGINE_CONTROLLER_CANISTER_ID;
-
         // Step 1: Prepare the world.
         let (mut registry, subnet_id) = make_registry_with_cloud_engine_subnet();
         let mut payload = make_empty_update_payload(subnet_id);
