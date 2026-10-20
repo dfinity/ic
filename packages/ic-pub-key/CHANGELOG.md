@@ -13,7 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Upgrade the `ic-management-canister-types` dependency from `0.8.0` to `0.11.0`, whose `EcdsaCurve` has the `Secp256r1` variant. The re-exported types now come from that version.
+- Upgrade the `ic-management-canister-types` dependency from `0.5.0` to `0.11.0`, whose `EcdsaCurve` has the `Secp256r1` variant. The re-exported types now come from that version.
+- Upgrade the (optional) `ic-vetkeys` dependency from `0.6.0` to `0.7.0`.
+- The `vetkeys` feature now also depends on `ic-cdk-management-canister`.
 
 ## [0.3.0] - 2026-02-04
 
