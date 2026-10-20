@@ -14,11 +14,9 @@ exports_files([
 
 genrule(
     name = "build-bootloader-tree",
-    # The dev-container image tag stands in for its podman and tar (see
-    # //toolchains/sysimage:toolchain.bzl).
     srcs = [
         "context/docker-base",
-        "//:ci/container/TAG",
+        "//:ci/container/TAG",  # stands in for the dev-container tools in the cache key
     ],
     outs = [
         "bootloader-tree.tar",
@@ -26,9 +24,7 @@ genrule(
     cmd = "$(location build-bootloader-tree.sh) -b $(location context/docker-base) -o $@",
     tags = [
         "manual",
-        # Runs rootless 'podman build', which needs to create user namespaces:
-        # keep it on the host like the IcosContainer* actions of
-        # //toolchains/sysimage:toolchain.bzl. Its output is still cached.
+        # Runs rootless podman, which needs user namespaces.
         "no-remote-exec",
         "no-sandbox",
         "requires-network",

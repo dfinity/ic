@@ -172,9 +172,7 @@ def icos_build(
         name = "alternative_guestos_base_bootfs_tree_tar",
         srcs = [
             ":base-update-img.tar.zst",
-            # The dev-container image tag stands in for its tar and fusermount (see
-            # //toolchains/sysimage:toolchain.bzl).
-            "//:ci/container/TAG",
+            "//:ci/container/TAG",  # stands in for the dev-container tools in the cache key
         ],
         outs = ["alternative_guestos_base_bootfs_tree.tar"],
         cmd = """
@@ -200,8 +198,7 @@ mounted=1
 tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
 """,
         message = "Extracting base GuestOS boot partition via fuse2fs",
-        # Mounting with fuse2fs needs /dev/fuse and the setuid fusermount, which
-        # neither the sandbox nor the remote executors provide.
+        # fuse2fs needs /dev/fuse and the setuid fusermount.
         tags = ["manual", "no-sandbox", "no-remote-exec"],
         target_compatible_with = ["@platforms//os:linux"],
         tools = ["//:fuse2fs"],
@@ -308,8 +305,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
                 extracted_vmlinuz,
                 extracted_ovmf_sev,
             ],
-            # Scratch in the working directory, not /tmp: the boot partition image
-            # is 1 GiB, which the remote executors' 1 GB /tmp can't hold (#10797).
+            # Scratch in the working directory: remote executors only have a 1 GB /tmp (#10797).
             cmd = """
                 umask 022
                 tmpdir="$$(mktemp -d -p "$$PWD")"
@@ -348,11 +344,9 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
             native.genrule(
                 name = "generate-" + partition_root_signed_tzst,
                 testonly = malicious,
-                # The dev-container image tag stands in for its veritysetup (see
-                # //toolchains/sysimage:toolchain.bzl).
                 srcs = [
                     partition_root_unsigned_tzst,
-                    "//:ci/container/TAG",
+                    "//:ci/container/TAG",  # stands in for the dev-container tools in the cache key
                 ],
                 outs = [partition_root_signed_tzst, partition_root_hash],
                 cmd = "$(location //toolchains/sysimage:tmpdir_wrapper) " +
@@ -406,9 +400,7 @@ tar --create --file "$@" --numeric-owner -C "$$tmpdir/bootfs" .
             # are validated against the proposal *in the same genrule* so that the
             # validation can never become a leaf target that is silently skipped.
             measurement_srcs = [
-                # The dev-container image tag stands in for its jq (see
-                # //toolchains/sysimage:toolchain.bzl).
-                "//:ci/container/TAG",
+                "//:ci/container/TAG",  # stands in for the dev-container tools in the cache key
                 ":" + extracted_ovmf_sev,
                 ":" + extracted_boot_args,
                 ":" + extracted_initrd,

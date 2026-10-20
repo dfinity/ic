@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -14,8 +15,6 @@ from pathlib import Path
 from typing import List, Optional
 
 import invoke
-
-from toolchains.sysimage.container_context import arrange_context, resolve_file_args
 
 
 @dataclass(frozen=True)
@@ -47,6 +46,35 @@ def load_base_image_tar_file(tar_file: Path):
     storage_args = get_storage_dir_args()
     cmd = f"podman {storage_args} image load --quiet --input {tar_file}"
     invoke.run(cmd)
+
+
+def copy_file(source: str, target: str):
+    # COPY keeps the context files' modes. Besides the executable bit, those depend on how Bazel
+    # materialized the inputs, so normalize them.
+    shutil.copyfile(source, target)
+    os.chmod(target, 0o755 if os.stat(source).st_mode & 0o111 else 0o644)
+
+
+def make_directories(context_dir, path):
+    """Create path and its missing parents below context_dir with mode 0755, whatever the umask."""
+    missing = []
+    while not os.path.isdir(path) and os.path.abspath(path) != os.path.abspath(context_dir):
+        missing.append(path)
+        path = os.path.dirname(path)
+    for directory in reversed(missing):
+        os.mkdir(directory)
+        os.chmod(directory, 0o755)
+
+
+def arrange_component_files(context_dir, component_files):
+    """Add component files into the context directory by copying them to their defined paths."""
+    for component_file in component_files:
+        source_file, install_target = component_file.split(":")
+        if install_target[0] == "/":
+            install_target = install_target[1:]
+        install_target = os.path.join(context_dir, install_target)
+        make_directories(context_dir, os.path.dirname(install_target))
+        copy_file(source_file, install_target)
 
 
 def build_container(
@@ -118,6 +146,23 @@ def export_container_filesystem(image_tag: str, destination_tar_filename: str):
 
     if proc.returncode != 0:
         raise RuntimeError(f"podman export failed (exit {proc.returncode})")
+
+
+def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:
+    result = list()
+    for arg in file_build_args:
+        chunks = arg.split("=")
+        if len(chunks) != 2:
+            raise RuntimeError(f"File build arg '{arg}' is not valid")
+        (name, pathname) = chunks
+
+        path = Path(context_dir) / pathname
+
+        with open(path, "r") as f:
+            value = f.readline().strip()
+            result.append(f"{name}={value}")
+
+    return result
 
 
 def get_args():
@@ -210,9 +255,12 @@ def main():
     # tempfile cleanup is handled by proc_wrapper.sh
     context_dir = tempfile.mkdtemp()
 
-    # Add all context files directly into dir, and the component files to
-    # their paths in it.
-    arrange_context(context_dir, context_files, component_files)
+    # Add all context files directly into dir
+    for context_file in context_files:
+        copy_file(context_file, os.path.join(context_dir, os.path.basename(context_file)))
+
+    # Fill context with remaining component files from map
+    arrange_component_files(context_dir, component_files)
 
     # Bazel can't read files. (: Resolve them here, instead.
     if args.file_build_args:

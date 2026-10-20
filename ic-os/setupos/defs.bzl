@@ -190,16 +190,12 @@ def _custom_partitions(mode):
 def create_test_img(name, source, **kwargs):
     native.genrule(
         name = name,
-        # The dev-container image tag stands in for the host tools used here and by
-        # setupos-disable-checks (see //toolchains/sysimage:toolchain.bzl).
         srcs = [
             source,
-            "//:ci/container/TAG",
+            "//:ci/container/TAG",  # stands in for the dev-container tools in the cache key
         ],
         outs = [name + ".tar.zst"],
-        # Scratch, including setupos-disable-checks' temporary files, in the working
-        # directory, not /tmp: the SetupOS disk image is several GB and the remote
-        # executors only have a 1 GB /tmp (#10797).
+        # Scratch in the working directory: remote executors only have a 1 GB /tmp (#10797).
         cmd = """
             umask 022
             tmpdir="$$(mktemp -d -p "$$PWD")"
@@ -208,7 +204,6 @@ def create_test_img(name, source, **kwargs):
             export TMPDIR="$$tmpdir"
             tar -xf $(location """ + source + """) -C $$tmpdir
             $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path $$tmpdir/disk.img
-            # Same flags as build_disk_image.py, so that the output is deterministic.
             tar --zstd -cf $@ --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C $$tmpdir disk.img
         """,
         target_compatible_with = ["@platforms//os:linux"],

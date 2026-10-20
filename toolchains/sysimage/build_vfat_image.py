@@ -41,7 +41,7 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform, mtools):
             os.mkdir(os.path.join(fs_basedir, path))
             subprocess.run(
                 [
-                    os.path.abspath(mtools),
+                    mtools,
                     "-c",
                     "mmd",
                     "-i",
@@ -56,7 +56,7 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform, mtools):
                 f.write(tf.extractfile(member).read())
             subprocess.run(
                 [
-                    os.path.abspath(mtools),
+                    mtools,
                     "-c",
                     "mcopy",
                     "-o",
@@ -79,7 +79,7 @@ def install_extra_files(out_file, extra_files, path_transform, mtools):
             install_target = install_target[1:]
         subprocess.run(
             [
-                os.path.abspath(mtools),
+                mtools,
                 "-c",
                 "mcopy",
                 "-o",

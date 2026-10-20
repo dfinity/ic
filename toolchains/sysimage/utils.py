@@ -5,16 +5,10 @@
 
 import os
 
-# Freeze the clock at the epoch for reproducible timestamps by preloading
-# libfaketime directly, with its shared memory disabled. Both the `faketime`
-# wrapper and libfaketime itself create a semaphore and shared memory in
-# /dev/shm named after the PID, to share a running clock between processes.
-# Bazel sandboxes have separate PID namespaces but share /dev/shm, so
-# concurrent sandboxed actions collide ("File exists"). A frozen absolute time
-# needs no shared clock.
-# Where distributions install libfaketime; the first one present is used. The
-# dev container (Debian/Ubuntu, x86_64) has the first. Set LIBFAKETIME to
-# override, e.g. when running these tools outside Bazel on another host.
+# libfaketime is preloaded directly, with its shared memory disabled: both the
+# `faketime` wrapper and libfaketime create a semaphore and shared memory in
+# /dev/shm named after the PID. Bazel sandboxes have separate PID namespaces but
+# share /dev/shm, so concurrent actions collided ("File exists").
 LIBFAKETIME_PATHS = [
     "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1",
     "/usr/lib/aarch64-linux-gnu/faketime/libfaketime.so.1",
@@ -25,9 +19,7 @@ FAKETIME = "1970-1-1 0:0:0"
 
 
 def find_libfaketime():
-    """Return the path of libfaketime, or raise if it isn't installed."""
-    # If the library is missing, ld.so only warns and the command runs with the
-    # real clock, silently producing non-reproducible images. Fail instead.
+    # Without it, ld.so only warns and the images silently get real timestamps.
     override = os.environ.get("LIBFAKETIME")
     candidates = [override] if override else LIBFAKETIME_PATHS
     for path in candidates:
@@ -40,7 +32,7 @@ def find_libfaketime():
 
 
 def faketime_env(env=None):
-    """Return a copy of env (default: os.environ) that runs commands with the clock frozen at the epoch."""
+    """Return a copy of env (default: os.environ) with the clock frozen at the epoch."""
     libfaketime = find_libfaketime()
     env = dict(os.environ if env is None else env)
     env["LD_PRELOAD"] = libfaketime + (":" + env["LD_PRELOAD"] if env.get("LD_PRELOAD") else "")

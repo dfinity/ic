@@ -1,5 +1,5 @@
 load("@python_deps//:requirements.bzl", "requirement")
-load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 package(default_visibility = ["//visibility:public"])
@@ -28,17 +28,6 @@ py_library(
     srcs = ["utils.py"],
 )
 
-py_library(
-    name = "container_context",
-    srcs = ["container_context.py"],
-)
-
-py_test(
-    name = "container_context_test",
-    srcs = ["container_context_test.py"],
-    deps = [":container_context"],
-)
-
 # Build tools
 py_binary(
     name = "build_container_base_image",
@@ -54,7 +43,6 @@ py_binary(
     name = "build_container_filesystem_tar",
     srcs = ["build_container_filesystem_tar.py"],
     deps = [
-        ":container_context",
         requirement("invoke"),
     ],
 )

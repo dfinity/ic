@@ -215,7 +215,7 @@ def main():
     # Now build the basic filesystem image. Wrap again in fakeroot
     # so correct permissions are read for all files etc.
     mke2fs_args = [
-        os.path.abspath(args.mkfs_ext4),
+        args.mkfs_ext4,
         "-E",
         "hash_seed=c61251eb-100b-48fe-b089-57dea7368612",
         "-U",

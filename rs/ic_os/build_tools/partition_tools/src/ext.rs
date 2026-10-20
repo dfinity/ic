@@ -13,12 +13,10 @@ use crate::gpt;
 
 const STORE_NAME: &str = "backing_store";
 
-/// Where distributions install libfaketime, which is preloaded to run debugfs with
-/// the clock frozen at the epoch; the first one present is used. Set `LIBFAKETIME`
-/// to override. We don't use the `faketime` wrapper and disable libfaketime's
-/// shared memory: both create a semaphore and shared memory in /dev/shm named after
-/// the PID, which collide between Bazel sandboxes (separate PID namespaces, shared
-/// /dev/shm).
+/// libfaketime is preloaded directly, with its shared memory disabled: both the
+/// `faketime` wrapper and libfaketime create a semaphore and shared memory in
+/// /dev/shm named after the PID, which collide between Bazel sandboxes (separate
+/// PID namespaces, shared /dev/shm). See toolchains/sysimage/utils.py.
 const LIBFAKETIME_PATHS: &[&str] = &[
     "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1",
     "/usr/lib/aarch64-linux-gnu/faketime/libfaketime.so.1",
@@ -26,10 +24,8 @@ const LIBFAKETIME_PATHS: &[&str] = &[
     "/usr/lib/faketime/libfaketime.so.1",
 ];
 
-/// The path of libfaketime, or an error if it isn't installed.
+/// The path of libfaketime (`LIBFAKETIME` overrides), or an error if it isn't installed.
 fn find_libfaketime() -> Result<PathBuf> {
-    // If the library is missing, ld.so only warns and debugfs runs with the
-    // real clock, silently producing non-reproducible images. Fail instead.
     let candidates: Vec<PathBuf> = match std::env::var_os("LIBFAKETIME").filter(|v| !v.is_empty()) {
         Some(path) => vec![PathBuf::from(path)],
         None => LIBFAKETIME_PATHS.iter().map(PathBuf::from).collect(),

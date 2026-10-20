@@ -2,20 +2,15 @@
 Tools for building IC OS image.
 """
 
-# Mnemonics of the actions that run `podman build`. Rootless podman needs to
-# create user namespaces, so bazel/conf/.bazelrc.build forces these (and only
-# these) to run locally, outside the sandbox. All other actions of this file
-# only operate on plain image files and run sandboxed or remotely.
+# The actions that run podman, which bazel/conf/.bazelrc.build runs locally.
 ICOS_CONTAINER_MNEMONICS = ["IcosContainerBaseImage", "IcosContainerBuild"]
 
 def _run_with_wrapper(ctx, wrapper, executable, arguments, tools, execution_requirements, inputs, **kwargs):
     ctx.actions.run(
         executable = wrapper.files_to_run.executable,
         arguments = [executable] + arguments,
-        # Besides their declared tools, the image actions use some tools of the dev-container image
-        # (podman, fakeroot, libfaketime, tar, sfdisk, veritysetup, ...), which aren't Bazel inputs.
-        # Its tag stands in for them, so that a new image doesn't serve images built with the old
-        # tools from the cache.
+        # The actions also use tools of the dev container (podman, fakeroot, tar, ...), which Bazel
+        # can't see. Its tag stands in for them in the cache key.
         inputs = inputs + [ctx.file._icos_host_tools],
         tools = tools + [wrapper.files_to_run],
         execution_requirements = execution_requirements |
@@ -23,17 +18,15 @@ def _run_with_wrapper(ctx, wrapper, executable, arguments, tools, execution_requ
         **kwargs
     )
 
-# Similar to ctx.actions.run but runs the command wrapped in the podman process
-# wrapper that sets up a private podman storage. Only for the actions with a
-# mnemonic in ICOS_CONTAINER_MNEMONICS. Can only be used in rules defined by
-# _icos_build_rule.
+# Similar to ctx.actions.run but runs the command wrapped in proc_wrapper.sh,
+# for podman. Can only be used in rules defined by _icos_build_rule.
 def _run_with_podman_wrapper(ctx, executable, arguments = [], tools = [], execution_requirements = {}, inputs = [], **kwargs):
     if kwargs.get("mnemonic") not in ICOS_CONTAINER_MNEMONICS:
         fail("podman actions must use a mnemonic of ICOS_CONTAINER_MNEMONICS")
     _run_with_wrapper(ctx, ctx.attr._icos_build_proc_wrapper, executable, arguments, tools, execution_requirements, inputs, **kwargs)
 
-# Similar to ctx.actions.run but runs the command with a private TMPDIR that is
-# cleaned up afterwards. Can only be used in rules defined by _icos_build_rule.
+# Similar to ctx.actions.run but runs the command wrapped in tmpdir_wrapper.sh.
+# Can only be used in rules defined by _icos_build_rule.
 def _run_with_icos_wrapper(ctx, executable, arguments = [], tools = [], execution_requirements = {}, inputs = [], **kwargs):
     _run_with_wrapper(ctx, ctx.attr._icos_tmpdir_wrapper, executable, arguments, tools, execution_requirements, inputs, **kwargs)
 
