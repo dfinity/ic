@@ -15,6 +15,7 @@ documentation.workspace = true
 [dependencies]
 hex-literal = { workspace = true }
 hmac = { workspace = true }
+ic_principal = { workspace = true }
 num-bigint = { workspace = true }
 p256 = { workspace = true }
 pem = { workspace = true }
@@ -26,6 +27,6 @@ zeroize = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
-hex-literal = { workspace = true }
+ic_principal = { workspace = true, features = ["convert"] }
 rand_chacha = { workspace = true }
 wycheproof = { workspace = true, features = ["ecdsa"] }

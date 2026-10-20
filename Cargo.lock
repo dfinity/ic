@@ -13583,6 +13583,7 @@ dependencies = [
  "hex",
  "hex-literal 1.1.0",
  "hmac",
+ "ic_principal",
  "num-bigint 0.4.6",
  "p256",
  "pem 3.0.6",

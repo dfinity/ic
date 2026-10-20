@@ -11,6 +11,7 @@ rust_library(
         # Keep sorted.
         "@crate_index//:hex-literal",
         "@crate_index//:hmac",
+        "@crate_index//:ic_principal",
         "@crate_index//:num-bigint",
         "@crate_index//:p256",
         "@crate_index//:pem",
@@ -32,6 +33,7 @@ rust_test(
         "@crate_index//:hex",
         "@crate_index//:hex-literal",
         "@crate_index//:hmac",
+        "@crate_index//:ic_principal",
         "@crate_index//:num-bigint",
         "@crate_index//:p256",
         "@crate_index//:pem",
@@ -55,6 +57,7 @@ rust_test_suite(
         "@crate_index//:hex",
         "@crate_index//:hex-literal",
         "@crate_index//:hmac",
+        "@crate_index//:ic_principal",
         "@crate_index//:num-bigint",
         "@crate_index//:p256",
         "@crate_index//:pem",

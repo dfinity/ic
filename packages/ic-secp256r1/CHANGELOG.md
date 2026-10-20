@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add `PublicKey::mainnet_key` returning the mainnet master public keys `key_1` and `test_key_1`
-- Add `PublicKey::pocketic_key` returning the master public keys PocketIC uses for `key_1`, `test_key_1` and `dfx_test_key`
+- Add `PublicKey::mainnet_key` returning the mainnet master public keys `key_1` and `test_key_1`, identified by the new `MasterPublicKeyId`
+- Add `PublicKey::pocketic_key` returning the master public keys PocketIC uses for `key_1`, `test_key_1` and `dfx_test_key`, identified by the new `PocketIcMasterPublicKeyId`
+- Add `PublicKey::derive_mainnet_key` and `PublicKey::derive_pocketic_key`, offline equivalents of the `ecdsa_public_key` management canister call, and re-export `ic_principal::Principal` as `CanisterId` for them
 
 ## [0.2.0] - 2026-02-11
 

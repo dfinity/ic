@@ -17,6 +17,8 @@ use rand::{CryptoRng, RngCore};
 use std::sync::LazyLock;
 use zeroize::ZeroizeOnDrop;
 
+pub use ic_principal::Principal as CanisterId;
+
 /// An error indicating that decoding a key failed
 #[derive(Clone, Debug)]
 pub enum KeyDecodingError {
@@ -606,6 +608,37 @@ impl PublicKey {
             ))
             .expect("Hardcoded master key was rejected"),
         }
+    }
+
+    /// Derive a public key from the mainnet parameters
+    ///
+    /// This is an offline equivalent to the `ecdsa_public_key` management canister call
+    pub fn derive_mainnet_key(
+        key_id: MasterPublicKeyId,
+        canister_id: &CanisterId,
+        derivation_path: &[Vec<u8>],
+    ) -> (Self, [u8; 32]) {
+        let mk = PublicKey::mainnet_key(key_id);
+        mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
+            canister_id.as_slice(),
+            derivation_path,
+        ))
+    }
+
+    /// Derive a public key as is done on PocketIC
+    ///
+    /// This is an offline equivalent to the `ecdsa_public_key` management canister call
+    /// when running on PocketIC
+    pub fn derive_pocketic_key(
+        key_id: PocketIcMasterPublicKeyId,
+        canister_id: &CanisterId,
+        derivation_path: &[Vec<u8>],
+    ) -> (Self, [u8; 32]) {
+        let mk = PublicKey::pocketic_key(key_id);
+        mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
+            canister_id.as_slice(),
+            derivation_path,
+        ))
     }
 
     /// Deserialize a public key stored in SEC1 format
