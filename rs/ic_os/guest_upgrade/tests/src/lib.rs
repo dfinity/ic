@@ -343,8 +343,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
         )
     }
 
-    /// Answers the client's lookups from the mock registry. Since the server always reports its
-    /// GuestOS version, the client must never read the measurements of all elected versions.
+    /// Answers the client's lookups from the mock registry.
     fn create_elected_measurements_provider(&self) -> MockElectedMeasurementsProvider {
         let registry_client = self.registry_client.clone();
         let mut provider = MockElectedMeasurementsProvider::new();
@@ -366,7 +365,6 @@ impl DiskEncryptionKeyExchangeTestFixture {
                     .map(|measurement| measurement.measurement)
                     .collect::<Vec<Vec<u8>>>())
             });
-        provider.expect_get_measurements_of_all_versions().never();
         provider
     }
 

@@ -47,9 +47,8 @@ The server checks the client's measurement against the target version of the upg
 orchestrator's registry. The client checks the server's measurement against the GuestOS version
 the server reports. It reads only that version's record from the NNS registry, with an update call
 whose certified reply it verifies against the NNS public key. The reported version is not trusted:
-a server that reports a version other than the one it runs fails the measurement check. Servers
-that do not report their version yet make the client fall back to downloading the whole registry
-and accepting the measurements of any elected version.
+a server that reports a version other than the one it runs fails the measurement check, and a
+server that reports no version is rejected.
 
 ## Sequence
 

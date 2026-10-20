@@ -23,6 +23,7 @@ message GetDiskEncryptionKeyResponse {
 
   // The GuestOS version the server booted from. The launch measurement in the
   // server's attestation report belongs to this version.
+  // The client rejects responses without it.
   optional string guestos_version = 4;
 }
 

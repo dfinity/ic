@@ -15,13 +15,9 @@ use http::Uri;
 use hyper_rustls::{HttpsConnectorBuilder, MaybeHttpsStream};
 use hyper_util::rt::TokioIo;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
-use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
-use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client_helpers::replica_version::ReplicaVersionRegistry;
 use ic_registry_keys::make_replica_version_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_nns_data_provider_wrappers::CertifiedNnsDataProvider;
 use ic_registry_transport::Error as RegistryTransportError;
 use ic_types::ReplicaVersion;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
@@ -123,10 +119,6 @@ pub trait ElectedMeasurementsProvider: Send + Sync {
         &self,
         guestos_version: &ReplicaVersion,
     ) -> Result<Vec<Vec<u8>>>;
-
-    /// Returns the launch measurements of all elected GuestOS versions. Only needed for servers
-    /// that do not report their GuestOS version yet.
-    async fn get_measurements_of_all_versions(&self) -> Result<Vec<Vec<u8>>>;
 }
 
 /// Reads launch measurements from the NNS registry.
@@ -203,28 +195,10 @@ impl ElectedMeasurementsProvider for NnsElectedMeasurementsProvider {
             .map(|measurement| measurement.measurement)
             .collect::<Vec<Vec<u8>>>())
     }
-
-    async fn get_measurements_of_all_versions(&self) -> Result<Vec<Vec<u8>>> {
-        // Without knowing the server's version, we have to download the whole registry, which
-        // can take minutes on nodes far away from the NNS.
-        let registry_client = RegistryClientImpl::new(
-            Arc::new(CertifiedNnsDataProvider::new(
-                tokio::runtime::Handle::current(),
-                self.nns_urls.clone(),
-                self.nns_public_key,
-            )),
-            /*metrics_registry=*/ None,
-        );
-        registry_client.try_polling_latest_version(usize::MAX)?;
-
-        registry_client
-            .get_guest_launch_measurements(registry_client.get_latest_version())
-            .map_err(|e| anyhow!("Failed to get elected measurements from registry: {e}"))
-    }
 }
 
 /// Returns the launch measurements to verify the server's attestation report against: those of
-/// the GuestOS version the server reports or, if it reports none, those of all elected versions.
+/// the GuestOS version the server reports.
 ///
 /// The reported version is not trusted: if the server's attested measurement is not among the
 /// measurements of the version it reports, the verification fails.
@@ -232,16 +206,8 @@ async fn get_elected_measurements(
     elected_measurements_provider: &dyn ElectedMeasurementsProvider,
     server_guestos_version: Option<&str>,
 ) -> Result<Vec<Vec<u8>>> {
-    // Servers built before they started reporting their GuestOS version.
-    let Some(server_guestos_version) = server_guestos_version else {
-        println!(
-            "Server did not report its GuestOS version, reading the launch measurements of all \
-             elected versions"
-        );
-        return elected_measurements_provider
-            .get_measurements_of_all_versions()
-            .await;
-    };
+    let server_guestos_version =
+        server_guestos_version.context("Server did not report its GuestOS version")?;
 
     let server_guestos_version =
         ReplicaVersion::try_from(server_guestos_version).with_context(|| {
@@ -582,7 +548,6 @@ mod tests {
             .once()
             .withf(|guestos_version| guestos_version.as_ref() == SERVER_GUESTOS_VERSION)
             .returning(|_| Ok(vec![SERVER_MEASUREMENT.to_vec()]));
-        provider.expect_get_measurements_of_all_versions().never();
 
         let measurements = get_elected_measurements(&provider, Some(SERVER_GUESTOS_VERSION))
             .await
@@ -592,24 +557,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_elected_measurements_of_all_versions_if_server_reports_no_version() {
+    async fn test_get_elected_measurements_rejects_missing_version() {
         let mut provider = MockElectedMeasurementsProvider::new();
         provider.expect_get_measurements_of_version().never();
-        provider
-            .expect_get_measurements_of_all_versions()
-            .once()
-            .returning(|| Ok(vec![SERVER_MEASUREMENT.to_vec()]));
 
-        let measurements = get_elected_measurements(&provider, None).await.unwrap();
+        let error = get_elected_measurements(&provider, None).await.unwrap_err();
 
-        assert_eq!(measurements, vec![SERVER_MEASUREMENT.to_vec()]);
+        assert!(
+            format!("{error:#}").contains("did not report its GuestOS version"),
+            "{error:#}"
+        );
     }
 
     #[tokio::test]
     async fn test_get_elected_measurements_rejects_invalid_version() {
         let mut provider = MockElectedMeasurementsProvider::new();
         provider.expect_get_measurements_of_version().never();
-        provider.expect_get_measurements_of_all_versions().never();
 
         let error = get_elected_measurements(&provider, Some("../replica_version"))
             .await
@@ -621,16 +584,13 @@ mod tests {
         );
     }
 
-    /// A server must not be able to make the client fall back to all elected versions by
-    /// reporting a version that is not elected.
     #[tokio::test]
-    async fn test_get_elected_measurements_does_not_fall_back_if_version_is_not_elected() {
+    async fn test_get_elected_measurements_fails_if_version_is_not_elected() {
         let mut provider = MockElectedMeasurementsProvider::new();
         provider
             .expect_get_measurements_of_version()
             .once()
             .returning(|guestos_version| bail!("GuestOS version {guestos_version} is not elected"));
-        provider.expect_get_measurements_of_all_versions().never();
 
         let error = get_elected_measurements(&provider, Some(SERVER_GUESTOS_VERSION))
             .await
