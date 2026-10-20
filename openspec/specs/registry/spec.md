@@ -125,6 +125,7 @@ Before any mutation is applied, the registry validates that the resulting state 
 #### Scenario: Replica version invariants
 - **WHEN** the registry state is validated
 - **THEN** all referenced replica versions exist in the blessed versions list
+- **AND** each `ReplicaVersionRecord`'s own `replica_version_id` field must equal the version ID encoded in its registry key, or the invariant check panics
 
 #### Scenario: API boundary node invariants
 - **WHEN** the registry state is validated
@@ -133,6 +134,7 @@ Before any mutation is applied, the registry validates that the resulting state 
 #### Scenario: HostOS version invariants
 - **WHEN** the registry state is validated
 - **THEN** HostOS version records are well-formed
+- **AND** each `HostosVersionRecord`'s own `hostos_version_id` field must equal the version ID encoded in its registry key, or the invariant check panics
 
 #### Scenario: Endpoint invariants
 - **WHEN** the registry state is validated
