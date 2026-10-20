@@ -4,6 +4,7 @@ use crate::certified_slice_pool::{CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, Certi
 use crate::testing::XNetPayloadBuilderTesting;
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
+use ic_crypto_tree_hash::Witness;
 use ic_interfaces::messaging::{InvalidXNetPayload, XNetPayloadValidationFailure};
 use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
@@ -881,7 +882,7 @@ fn advert_handler_and_pool_for(
     // for it has been delivered.
     state_manager.deliver_state_certification(Certification {
         height: CERTIFIED_HEIGHT,
-        height_witness: None,
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
             signature: ThresholdSignature::fake(),

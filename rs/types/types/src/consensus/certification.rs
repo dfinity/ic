@@ -218,8 +218,7 @@ pub struct Certification {
     /// the height that the CertificationContent belongs to
     pub height: Height,
     /// the witness for the height
-    /// TODO: remove option after staged roll-out
-    pub height_witness: Option<Witness>,
+    pub height_witness: Witness,
     /// the signature on the CertificationContent
     pub signed: SignedCertificationContent,
 }
