@@ -1,6 +1,7 @@
 use crate::events::MinterEventAssert;
 use crate::{
-    FEE_PERCENTILES_REFRESH_INTERVAL, MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL, drain_startup_tasks,
+    FEE_PERCENTILES_REFRESH_INTERVAL, MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL,
+    PROCESS_LOGIC_INTERVAL, drain_startup_tasks,
 };
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
@@ -25,6 +26,8 @@ use pocket_ic::common::rest::RawMessageId;
 use pocket_ic::{PocketIc, RejectResponse};
 use std::sync::Arc;
 use std::time::Duration;
+
+const AWAIT_STATUS_MAX_TICKS: usize = 20;
 
 pub struct MinterCanister {
     pub(crate) env: Arc<PocketIc>,
@@ -225,12 +228,25 @@ impl MinterCanister {
     where
         P: Fn(&Txid) -> bool,
     {
+        // Sending a transaction can fail transiently, in which case the minter
+        // only retries in its next `ProcessLogic` run.
+        const MAX_PROCESS_LOGIC_RUNS: usize = 3;
+
+        let is_submitted = |tx_status: &RetrieveDogeStatus| match tx_status {
+            RetrieveDogeStatus::Submitted { txid } => predicate(txid),
+            _ => false,
+        };
         self.env
             .advance_time(MAX_TIME_IN_QUEUE + Duration::from_nanos(1));
-        let status = self.await_doge_transaction_with_status(ledger_burn_index, |tx_status| {
-            matches!(tx_status, RetrieveDogeStatus::Submitted { txid } if predicate(txid))
-        });
-        match status {
+        for _ in 1..MAX_PROCESS_LOGIC_RUNS {
+            if let Ok(RetrieveDogeStatus::Submitted { txid, .. }) =
+                self.try_await_doge_transaction_with_status(ledger_burn_index, is_submitted)
+            {
+                return txid;
+            }
+            self.env.advance_time(PROCESS_LOGIC_INTERVAL);
+        }
+        match self.await_doge_transaction_with_status(ledger_burn_index, is_submitted) {
             RetrieveDogeStatus::Submitted { txid, .. } => txid,
             _ => unreachable!(),
         }
@@ -254,18 +270,33 @@ impl MinterCanister {
     where
         F: Fn(&RetrieveDogeStatus) -> bool,
     {
+        self.try_await_doge_transaction_with_status(ledger_burn_index, filter)
+            .unwrap_or_else(|last_status| {
+                dbg!(self.get_logs());
+                panic!(
+                    "Unexpected transaction status in {AWAIT_STATUS_MAX_TICKS} ticks; last status {last_status:?}"
+                )
+            })
+    }
+
+    fn try_await_doge_transaction_with_status<F>(
+        &self,
+        ledger_burn_index: u64,
+        filter: F,
+    ) -> Result<RetrieveDogeStatus, Option<RetrieveDogeStatus>>
+    where
+        F: Fn(&RetrieveDogeStatus) -> bool,
+    {
         let mut last_status = None;
-        let max_ticks = 20;
-        for _ in 0..max_ticks {
+        for _ in 0..AWAIT_STATUS_MAX_TICKS {
             let status = self.retrieve_doge_status(ledger_burn_index);
             if filter(&status) {
-                return status;
+                return Ok(status);
             }
             last_status = Some(status);
             self.env.tick();
         }
-        dbg!(self.get_logs());
-        panic!("Unexpected transaction status in {max_ticks} ticks; last status {last_status:?}")
+        Err(last_status)
     }
 
     pub fn get_logs(&self) -> Vec<LogEntry<Priority>> {
