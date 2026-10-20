@@ -20,7 +20,7 @@ use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_replicated_state::{Stream, metadata_state::StreamMap};
 use ic_types::{
     CountBytes, RegistryVersion, SubnetId,
-    consensus::certification::Certification,
+    consensus::certification::SignedCertificationContent,
     crypto::threshold_sig::ni_dkg::NiDkgTag,
     xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex},
 };
@@ -811,7 +811,7 @@ pub struct UnpackedStreamSlice {
     merkle_proof: Witness,
 
     /// The certification of the root hash.
-    certification: Certification,
+    certification: SignedCertificationContent,
 }
 
 impl UnpackedStreamSlice {
@@ -953,7 +953,7 @@ impl UnpackedStreamSlice {
             .transpose()
     }
 
-    /// Packs a `Payload`, `Witness` and `Certification` into a
+    /// Packs a `Payload`, `Witness` and certification into a
     /// `CertifiedStreamSlice`.
     fn pack(self) -> CertifiedStreamSlice {
         CertifiedStreamSlice {
@@ -988,7 +988,7 @@ pub fn certified_slice_count_bytes(packed: &CertifiedStreamSlice) -> CertifiedSl
 /// `UnpackedStreamSlice`.
 ///
 /// Returns a deterministic byte size estimate of the provided certified slice.
-fn slice_count_bytes(payload: &Payload, certification: &Certification) -> usize {
+fn slice_count_bytes(payload: &Payload, certification: &SignedCertificationContent) -> usize {
     let stream_begin = payload.header.begin();
     let stream_end = payload.header.end();
     let slice_begin = payload.messages_begin();
@@ -1374,7 +1374,7 @@ impl CertifiedSlicePool {
 
     /// Places the provided slice into the pool, after trimming off any prefix
     /// before the corresponding `stream_positions` entry and normalizing its
-    /// certification (see `normalize_certification()`).
+    /// signer (see `normalize_signer()`).
     ///
     /// Decoding, unpacking and validating the slice (requiring an expensive BLS
     /// signature verification) is done without holding the pool lock. The lock is
@@ -1393,7 +1393,7 @@ impl CertifiedSlicePool {
         registry_version: RegistryVersion,
         log: &ReplicaLogger,
     ) -> CertifiedSliceResult<bool> {
-        let slice = normalize_certification(slice);
+        let slice = normalize_signer(slice);
         validate_slice(
             &slice,
             subnet_id,
@@ -1411,8 +1411,8 @@ impl CertifiedSlicePool {
     /// Appends a partial slice to the corresponding pool entry, trimming
     /// off any prefix before the matching`self.stream_positions` entry.
     /// Appending virtually consists of prepending the pooled messages to the
-    /// provided partial slice, whose normalized certification (see
-    /// `normalize_certification()`) the merged slice takes on.
+    /// provided partial slice, whose certification (with its signer normalized,
+    /// see `normalize_signer()`) the merged slice takes on.
     ///
     /// The provided partial slice's messages (if any) must extend gap-free the
     /// ones already in the pool and its `signals_end` must not regress. Its
@@ -1437,7 +1437,7 @@ impl CertifiedSlicePool {
         registry_version: RegistryVersion,
         log: &ReplicaLogger,
     ) -> CertifiedSliceResult<bool> {
-        let partial: UnpackedStreamSlice = normalize_certification(partial).try_into()?;
+        let partial: UnpackedStreamSlice = normalize_signer(partial).try_into()?;
 
         // Clone the pooled slice, if any, instead of removing it: this way the
         // payload builder can make use of it while we validate; and if the merge
@@ -1855,7 +1855,8 @@ fn compare_usefulness(
 /// its signature with respect to the given `registry_version`.
 ///
 /// Returns `Err(DecodeStreamError)` if the slice could not be decoded or its
-/// certification was invalid, including if `check_certification()` rejects it.
+/// certification was invalid, including if its signer is not a high-threshold
+/// NI-DKG ID (see `has_high_threshold_signer()`).
 pub(crate) fn validate_slice(
     slice: &CertifiedStreamSlice,
     subnet_id: SubnetId,
@@ -1863,8 +1864,11 @@ pub(crate) fn validate_slice(
     registry_version: RegistryVersion,
     log: &ReplicaLogger,
 ) -> CertifiedSliceResult<()> {
-    if let Err(reason) = check_certification(&slice.certification) {
-        info!(log, "Stream slice from subnet {}: {}", subnet_id, reason);
+    if !has_high_threshold_signer(&slice.certification) {
+        info!(
+            log,
+            "Stream slice from subnet {}: signer is not a high-threshold NI-DKG ID", subnet_id
+        );
         return Err(DecodeStreamError::InvalidSignature(subnet_id).into());
     }
 
@@ -1880,35 +1884,21 @@ pub(crate) fn validate_slice(
     }
 }
 
-/// Drops the height witness from `slice`'s certification and sets its signer's
-/// NI-DKG tag to `HighThreshold`, so `check_certification()` accepts it.
+/// Sets the NI-DKG tag of `slice`'s signer to `HighThreshold`, so
+/// `has_high_threshold_signer()` holds.
 ///
-/// TODO: Stop normalizing (but keep checking) once all subnets omit the height
-/// witness (see `StateManagerImpl::encode_certified_stream_slice()`) and validate
-/// the signer (see `CertifierImpl::validate_certification()`).
-pub(crate) fn normalize_certification(mut slice: CertifiedStreamSlice) -> CertifiedStreamSlice {
-    slice.certification.height_witness = None;
-    slice.certification.signed.signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+/// TODO: Stop normalizing (but keep checking) once all subnets validate the
+/// signer (see `CertifierImpl::validate_certification()`).
+pub(crate) fn normalize_signer(mut slice: CertifiedStreamSlice) -> CertifiedStreamSlice {
+    slice.certification.signature.signer.dkg_tag = NiDkgTag::HighThreshold;
     slice
-}
-
-/// Returns the reason to reject `certification`, if it has a height witness or
-/// its signer is not a high-threshold NI-DKG ID.
-pub(crate) fn check_certification(certification: &Certification) -> Result<(), &'static str> {
-    if certification.height_witness.is_some() {
-        return Err("certification has a height witness");
-    }
-    if !has_high_threshold_signer(certification) {
-        return Err("certification signer is not a high-threshold NI-DKG ID");
-    }
-    Ok(())
 }
 
 /// Tests whether `certification` claims to be signed with a high-threshold
 /// NI-DKG transcript, as all certifications are.
-fn has_high_threshold_signer(certification: &Certification) -> bool {
+pub(crate) fn has_high_threshold_signer(certification: &SignedCertificationContent) -> bool {
     matches!(
-        certification.signed.signature.signer.dkg_tag,
+        certification.signature.signer.dkg_tag,
         NiDkgTag::HighThreshold
     )
 }

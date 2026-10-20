@@ -93,12 +93,21 @@ impl TryFrom<pb::CertificationShare> for CertificationShare {
     }
 }
 
+/// Neither encodes nor decodes the certification's `height` and `height_witness`,
+/// which its signature does not cover.
+///
+/// TODO: Switch to a wire-compatible certification message without them.
 impl From<CertifiedStreamSlice> for pb::CertifiedStreamSlice {
     fn from(value: CertifiedStreamSlice) -> Self {
         Self {
             payload: value.payload,
             merkle_proof: value.merkle_proof,
-            certification: Some(value.certification.into()),
+            certification: Some(pb::Certification {
+                height: 0,
+                height_witness: None,
+                content: Some(value.certification.content.into()),
+                signature: Some(value.certification.signature.into()),
+            }),
         }
     }
 }
@@ -106,13 +115,19 @@ impl TryFrom<pb::CertifiedStreamSlice> for CertifiedStreamSlice {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb::CertifiedStreamSlice) -> Result<Self, Self::Error> {
+        let certification = value.certification.ok_or(ProxyDecodeError::MissingField(
+            "CertifiedStreamSlice::certification",
+        ))?;
         Ok(Self {
             payload: value.payload,
             merkle_proof: value.merkle_proof,
-            certification: try_from_option_field(
-                value.certification,
-                "CertifiedStreamSlice::certification",
-            )?,
+            certification: Signed {
+                content: try_from_option_field(certification.content, "Certification::content")?,
+                signature: try_from_option_field(
+                    certification.signature,
+                    "Certification::signature",
+                )?,
+            },
         })
     }
 }

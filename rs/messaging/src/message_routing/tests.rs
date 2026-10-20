@@ -27,7 +27,7 @@ use ic_replicated_state::Stream;
 use ic_replicated_state::testing::StreamTesting;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec};
+use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
 use ic_test_utilities_registry::{SubnetRecordBuilder, get_mainnet_delta_00_6d_c1};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::batch::BatchBuilder;
@@ -2554,16 +2554,10 @@ fn test_demux_delivers_certified_stream_slices() {
         };
 
         // Set up destination state manager.
-        let dst_metrics = MetricsRegistry::new();
         let dst_state_manager = Arc::new(FakeStateManager::new());
 
-        // Make up a second slice with a different height.
-        let other_height = Height::new(99);
-        let mut certified_stream_slice_other_height = certified_stream_slice.clone();
-        certified_stream_slice_other_height.certification.height = other_height;
-
         // Create messages to be provided as part of `BatchMessages`.
-        let certified_stream_slices = btreemap![src_subnet_id => certified_stream_slice, other_subnet_id => certified_stream_slice_other_height];
+        let certified_stream_slices = btreemap![src_subnet_id => certified_stream_slice.clone(), other_subnet_id => certified_stream_slice];
 
         let expected_slices = certified_stream_slices
             .clone()
@@ -2582,7 +2576,6 @@ fn test_demux_delivers_certified_stream_slices() {
             Box::new(FakeValidSetRule),
             Box::new(FakeStreamHandler::new(expected_slices)),
             dst_state_manager.clone(),
-            MessageRoutingMetrics::new(&dst_metrics),
             log,
         ));
 
@@ -2595,14 +2588,6 @@ fn test_demux_delivers_certified_stream_slices() {
                 certified_stream_slices,
                 ..Default::default()
             },
-        );
-
-        assert_eq!(
-            metric_vec(&[
-                (&[(LABEL_REMOTE, &src_subnet_id.to_string())], 1),
-                (&[(LABEL_REMOTE, &other_subnet_id.to_string())], 99)
-            ]),
-            fetch_int_gauge_vec(&dst_metrics, METRIC_REMOTE_CERTIFIED_HEIGHTS)
         );
     });
 }

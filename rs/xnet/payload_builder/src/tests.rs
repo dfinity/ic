@@ -7,7 +7,6 @@ use crate::certified_slice_pool::{
 use crate::testing::XNetPayloadBuilderTesting;
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-use ic_crypto_tree_hash::Witness;
 use ic_interfaces::messaging::{InvalidXNetPayload, XNetPayloadValidationFailure};
 use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
@@ -753,30 +752,6 @@ async fn validate_rejects_slice_from_unknown_subnet() {
 }
 
 #[tokio::test]
-async fn validate_rejects_slice_with_height_witness() {
-    with_test_replica_logger(|log| {
-        let fixture = PayloadBuilderTestFixture::with_xnet_state();
-        let xnet_payload_builder = fixture.new_xnet_payload_builder_impl(log);
-
-        // A payload that is valid against the state alone, plus a height witness.
-        let mut payload = fixture.oldest_payload().clone();
-        let slice = payload.stream_slices.values_mut().next().unwrap();
-        slice.certification.height_witness = Some(Witness::new_for_testing_with_height());
-
-        assert_matches!(
-            xnet_payload_builder.validate_xnet_payload(
-                &payload,
-                &fixture.validation_context,
-                &[],
-            ),
-            Err(ValidationError::InvalidArtifact(
-                InvalidXNetPayload::InvalidSlice(msg)
-            )) if msg.contains("certification has a height witness")
-        );
-    });
-}
-
-#[tokio::test]
 async fn validate_rejects_slice_without_high_threshold_signer() {
     with_test_replica_logger(|log| {
         let fixture = PayloadBuilderTestFixture::with_xnet_state();
@@ -787,7 +762,7 @@ async fn validate_rejects_slice_without_high_threshold_signer() {
             // A payload that is valid against the state alone, but for the signer.
             let mut payload = fixture.oldest_payload().clone();
             let slice = payload.stream_slices.values_mut().next().unwrap();
-            slice.certification.signed.signature.signer.dkg_tag = dkg_tag;
+            slice.certification.signature.signer.dkg_tag = dkg_tag;
 
             assert_matches!(
                 xnet_payload_builder.validate_xnet_payload(
@@ -803,10 +778,10 @@ async fn validate_rejects_slice_without_high_threshold_signer() {
     });
 }
 
-/// `validate_slice()` rejects a slice with a height witness or a signer that is
-/// not a high-threshold NI-DKG ID before decoding it.
+/// `validate_slice()` rejects a slice whose signer is not a high-threshold NI-DKG
+/// ID before decoding it.
 #[tokio::test]
-async fn pool_validate_slice_rejects_unnormalized_certification() {
+async fn pool_validate_slice_rejects_non_high_threshold_signer() {
     with_test_replica_logger(|log| {
         let config = StreamConfig {
             message_begin: 0,
@@ -816,7 +791,7 @@ async fn pool_validate_slice_rejects_unnormalized_certification() {
         let stream = generate_stream(&config);
         let slice = make_certified_stream_slice(REMOTE_SUBNET, config);
 
-        // With a normalized certification, the slice is decoded and accepted.
+        // With a high-threshold signer, the slice is decoded and accepted.
         assert_matches!(
             validate_pooled_slice(
                 &slice,
@@ -828,18 +803,11 @@ async fn pool_validate_slice_rejects_unnormalized_certification() {
             Ok(())
         );
 
-        // With a height witness or a low-threshold signer, it is rejected before being decoded.
-        let mut with_height_witness = slice.clone();
-        with_height_witness.certification.height_witness =
-            Some(Witness::new_for_testing_with_height());
-        let mut with_low_threshold_signer = slice;
-        with_low_threshold_signer
-            .certification
-            .signed
-            .signature
-            .signer
-            .dkg_tag = NiDkgTag::LowThreshold;
-        for slice in [with_height_witness, with_low_threshold_signer] {
+        // With any other signer, it is rejected before being decoded.
+        let master_public_key_tag = fake_dkg_id(fake_vetkd_key_id()).dkg_tag;
+        for dkg_tag in [NiDkgTag::LowThreshold, master_public_key_tag] {
+            let mut slice = slice.clone();
+            slice.certification.signature.signer.dkg_tag = dkg_tag;
             assert_matches!(
                 validate_pooled_slice(
                     &slice,
@@ -1299,10 +1267,9 @@ async fn handle_advert_invalid_signature() {
     });
 }
 
-/// An advert with a height witness and a low-threshold signer is normalized and
-/// handled like any other.
+/// An advert with a low-threshold signer is normalized and handled like any other.
 #[tokio::test]
-async fn handle_advert_normalizes_certification() {
+async fn handle_advert_normalizes_signer() {
     with_test_replica_logger(|log| {
         let advertised = peer_stream_for_advert_tests();
         let header = advertised.header();
@@ -1310,8 +1277,7 @@ async fn handle_advert_normalizes_certification() {
             advert_handler_and_pool(store_expecting_decodes(&advertised, 1), log);
 
         let mut advert = make_advert(&advertised);
-        advert.certification.height_witness = Some(Witness::new_for_testing_with_height());
-        advert.certification.signed.signature.signer.dkg_tag = NiDkgTag::LowThreshold;
+        advert.certification.signature.signer.dkg_tag = NiDkgTag::LowThreshold;
 
         assert_matches!(
             advert_handler.handle_advert(REMOTE_SUBNET, advert),

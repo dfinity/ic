@@ -1242,7 +1242,7 @@ fn pool_append_non_empty_to_non_empty(
 }
 
 #[test_strategy::proptest(ProptestConfig::with_cases(10))]
-fn pool_normalizes_certification(
+fn pool_normalizes_signer(
     #[strategy(arb_stream_slice(
         2, // min_size
         10, // max_size
@@ -1256,7 +1256,7 @@ fn pool_normalizes_certification(
 
     with_test_replica_logger(|log| {
         let fixture = StateManagerFixture::remote(log.clone()).with_stream(DST_SUBNET, stream);
-        // Has a normalized certification.
+        // Has a high-threshold signer.
         let slice = fixture.get_slice(DST_SUBNET, from, msg_count);
 
         let mut certified_stream_store = MockCertifiedStreamStore::new();
@@ -1267,11 +1267,11 @@ fn pool_normalizes_certification(
         let store: Arc<dyn CertifiedStreamStore> = Arc::new(certified_stream_store);
         let pool = Mutex::new(CertifiedSlicePool::new(&fixture.metrics, log.clone()));
 
-        // Put a slice with an unnormalized certification: it is pooled normalized.
+        // Put a slice with a low-threshold signer: it is pooled with a high-threshold one.
         put(
             &pool,
             SRC_SUBNET,
-            with_unnormalized_certification(slice.clone()),
+            with_low_threshold_signer(slice.clone()),
             &*store,
             &log,
         )
@@ -1281,8 +1281,8 @@ fn pool_normalizes_certification(
             take_slice(&pool, SRC_SUBNET, None, None, None),
         );
 
-        // Put the first half of the slice, then append the second half with an
-        // unnormalized certification: the merged slice is pooled normalized.
+        // Put the first half of the slice, then append the second half with a
+        // low-threshold signer: the merged slice is pooled with a high-threshold one.
         let prefix_len = msg_count / 2;
         let mid = from + (prefix_len as u64).into();
         let prefix_slice = fixture.get_slice(DST_SUBNET, from, prefix_len);
@@ -1291,7 +1291,7 @@ fn pool_normalizes_certification(
         append(
             &pool,
             SRC_SUBNET,
-            with_unnormalized_certification(suffix_slice),
+            with_low_threshold_signer(suffix_slice),
             &*store,
             &log,
         )

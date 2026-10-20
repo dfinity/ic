@@ -648,7 +648,6 @@ impl CertifiedStreamStore for FakeStateManager {
 
         Ok(encode_certified_stream_slice(
             stream.slice(begin_index, msg_limit),
-            state.height(),
         ))
     }
 
@@ -682,10 +681,7 @@ impl CertifiedStreamStore for FakeStateManager {
 ///
 /// This is useful for generating a `CertifiedStreamSlice` where
 /// `slice.header().begin() != `slice.messages().begin()` for use in tests.
-pub fn encode_certified_stream_slice(
-    slice: StreamSlice,
-    state_height: Height,
-) -> CertifiedStreamSlice {
+pub fn encode_certified_stream_slice(slice: StreamSlice) -> CertifiedStreamSlice {
     use ic_types::{
         consensus::certification::CertificationContent,
         crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signed},
@@ -697,23 +693,17 @@ pub fn encode_certified_stream_slice(
     CertifiedStreamSlice {
         payload: serde_cbor::to_vec(&slice).expect("failed to serialize stream slice"),
         merkle_proof: vec![],
-        certification: Certification {
-            height: state_height,
-            height_witness: None,
-            signed: Signed {
-                signature: ThresholdSignature {
-                    signer: NiDkgId {
-                        start_block_height: Height::from(0),
-                        dealer_subnet: subnet_test_id(0),
-                        dkg_tag: NiDkgTag::HighThreshold,
-                        target_subnet: NiDkgTargetSubnet::Local,
-                    },
-                    signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+        certification: Signed {
+            signature: ThresholdSignature {
+                signer: NiDkgId {
+                    start_block_height: Height::from(0),
+                    dealer_subnet: subnet_test_id(0),
+                    dkg_tag: NiDkgTag::HighThreshold,
+                    target_subnet: NiDkgTargetSubnet::Local,
                 },
-                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                    vec![],
-                ))),
+                signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
             },
+            content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
         },
     }
 }

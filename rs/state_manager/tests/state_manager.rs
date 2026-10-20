@@ -2526,20 +2526,12 @@ fn uses_latest_certified_state_to_decode_certified_streams() {
         );
 
         let certification = certify_height(&state_manager, Height(2));
-        assert!(certification.height_witness.is_some());
 
         let slice = state_manager
             .encode_certified_stream_slice(subnet, None, None, None, None)
             .expect("failed to encode certified stream");
 
-        // The certification, minus the height witness.
-        assert_eq!(
-            Certification {
-                height_witness: None,
-                ..certification
-            },
-            slice.certification
-        );
+        assert_eq!(certification.signed, slice.certification);
     });
 }
 
@@ -9047,9 +9039,9 @@ fn stream_store_decode_with_modified_hash_fails(
         true,
         /* modification between encoding and decoding  */
         |_state_manager, mut slice| {
-            let mut hash = slice.certification.signed.content.hash.get();
+            let mut hash = slice.certification.content.hash.get();
             *hash.0.first_mut().unwrap() = hash.0.first().unwrap().overflowing_add(1).0;
-            slice.certification.signed.content.hash = CryptoHashOfPartialState::from(hash);
+            slice.certification.content.hash = CryptoHashOfPartialState::from(hash);
 
             slice
         },

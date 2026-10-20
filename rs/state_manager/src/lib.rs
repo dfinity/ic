@@ -62,7 +62,7 @@ use ic_sys::fs::Clobber;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
     batch::BatchSummary,
-    consensus::certification::Certification,
+    consensus::certification::{Certification, SignedCertificationContent},
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
     state_manager::{StateManagerError, StateManagerResult},
@@ -4211,11 +4211,7 @@ impl CertifiedStreamStore for StateManagerImpl {
         Ok(CertifiedStreamSlice {
             payload: stream_encoding::encode_tree(slice_as_tree),
             merkle_proof: v1::Witness::proxy_encode(witness),
-            // The receiving subnet has no use for the height witness.
-            certification: Certification {
-                height_witness: None,
-                ..certification
-            },
+            certification: certification.signed,
         })
     }
 
@@ -4234,7 +4230,7 @@ impl CertifiedStreamStore for StateManagerImpl {
         fn verify_recomputed_digest(
             verifier: &Arc<dyn Verifier>,
             remote_subnet: SubnetId,
-            certification: &Certification,
+            certification: &SignedCertificationContent,
             registry_version: RegistryVersion,
             digest: Digest,
             metrics: &StateManagerMetrics,
@@ -4249,7 +4245,7 @@ impl CertifiedStreamStore for StateManagerImpl {
                 log,
             );
 
-            let hash_matches = digest.as_bytes() == certification.signed.content.hash.get_ref().0;
+            let hash_matches = digest.as_bytes() == certification.content.hash.get_ref().0;
             let verification_status =
                 verifier.validate(remote_subnet, certification, registry_version);
             let signature_verifies = verification_status.is_ok();
@@ -4314,19 +4310,18 @@ impl CertifiedStreamStore for StateManagerImpl {
 
 #[cfg(feature = "malicious_code")]
 fn maliciously_alter_certified_hash(
-    mut certification: Certification,
+    mut certification: SignedCertificationContent,
     malicious_flags: &MaliciousFlags,
     remote_subnet: &SubnetId,
     log: &ReplicaLogger,
-) -> Certification {
+) -> SignedCertificationContent {
     if malicious_flags.maliciously_alter_certified_hash {
         info!(
             log,
-            "[MALICIOUS] Corrupting root hash of certification at height {} in stream slice from {}",
-            certification.height,
+            "[MALICIOUS] Corrupting root hash of certification in stream slice from {}",
             remote_subnet
         );
-        certification.signed.content.hash = CryptoHashOfPartialState::from(CryptoHash(vec![0; 32]));
+        certification.content.hash = CryptoHashOfPartialState::from(CryptoHash(vec![0; 32]));
     }
     certification
 }

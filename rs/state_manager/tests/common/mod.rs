@@ -27,7 +27,7 @@ use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::{
     CanisterId, CryptoHashOfState, Height, RegistryVersion, SubnetId,
-    consensus::certification::{Certification, CertificationContent},
+    consensus::certification::{Certification, CertificationContent, SignedCertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
@@ -107,7 +107,7 @@ impl Verifier for RejectingVerifier {
     fn validate(
         &self,
         _subnet_id: SubnetId,
-        _certification: &Certification,
+        _certification: &SignedCertificationContent,
         _registry_version: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Err(InvalidCertificationReason::RejectedByRejectingVerifier.into())

@@ -73,6 +73,25 @@ fn certified_stream_slice_roundtrip() {
     );
 }
 
+/// Slices are encoded without the certification's height and height witness,
+/// which decoding ignores.
+#[test]
+fn certified_stream_slice_ignores_height_and_witness() {
+    let certified_stream_slice = certified_stream_slice_for_test();
+    let mut certified_stream_slice_proto: v1::CertifiedStreamSlice =
+        certified_stream_slice.clone().into();
+    let certification_proto = certified_stream_slice_proto.certification.as_mut().unwrap();
+    assert_eq!(0, certification_proto.height);
+    assert_eq!(None, certification_proto.height_witness);
+
+    // As encoded by older replica versions.
+    *certification_proto = certification_for_test().into();
+    assert_eq!(
+        certified_stream_slice,
+        CertifiedStreamSlice::try_from(certified_stream_slice_proto).unwrap()
+    );
+}
+
 #[test]
 fn error_decode_error() {
     match <pb_types::NiDkgId as ProtoProxy<NiDkgId>>::proxy_decode(&b"garbage"[..]) {
@@ -111,7 +130,7 @@ fn error_missing_field() {
 
 fn certified_stream_slice_for_test() -> CertifiedStreamSlice {
     CertifiedStreamSlice {
-        certification: certification_for_test(),
+        certification: certification_for_test().signed,
         merkle_proof: vec![7, 8, 9],
         payload: vec![4, 6, 8],
     }

@@ -199,11 +199,10 @@ fn certify_height(state_manager: &impl StateManager, h: Height) -> Certification
     certification
 }
 
-/// Returns `slice` with a (fake) height witness and a low-threshold signer, as
-/// subnets running older replica versions may serve it.
-pub fn with_unnormalized_certification(mut slice: CertifiedStreamSlice) -> CertifiedStreamSlice {
-    slice.certification.height_witness = Some(Witness::new_for_testing_with_height());
-    slice.certification.signed.signature.signer.dkg_tag = NiDkgTag::LowThreshold;
+/// Returns `slice` with a low-threshold signer, as subnets running older replica
+/// versions may serve it.
+pub fn with_low_threshold_signer(mut slice: CertifiedStreamSlice) -> CertifiedStreamSlice {
+    slice.certification.signature.signer.dkg_tag = NiDkgTag::LowThreshold;
     slice
 }
 

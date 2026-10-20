@@ -13,7 +13,7 @@ use ic_types::{
         FinalizationShare, NotarizationContent, NotarizationShare, Payload, RandomBeacon,
         RandomBeaconContent, RandomBeaconShare, RandomTapeContent, RandomTapeShare, Rank,
         SummaryPayload,
-        certification::{Certification, CertificationContent},
+        certification::{Certification, CertificationContent, SignedCertificationContent},
         dkg::{DkgDataPayload, DkgSummary, SubnetSplittingStatus},
         hashed,
     },
@@ -386,7 +386,7 @@ impl Verifier for FakeVerifier {
     fn validate(
         &self,
         _subnet_id: SubnetId,
-        _certification: &Certification,
+        _certification: &SignedCertificationContent,
         _registry_version: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Ok(())

@@ -978,7 +978,7 @@ fn validate_xnet_payload(
 }
 
 #[test]
-fn get_xnet_payload_normalizes_certification() {
+fn get_xnet_payload_normalizes_signer() {
     with_test_replica_logger(|log| {
         // Incoming stream from `SUBNET_1` with 10 messages, none of them inducted yet.
         let mut stream = out_stream(StreamIndex::new(0), StreamIndex::new(0));
@@ -991,12 +991,12 @@ fn get_xnet_payload_normalizes_certification() {
         );
         let fixture = XNetPayloadBuilderFixture::new(state_manager);
 
-        // Has a normalized certification.
+        // Has a high-threshold signer.
         let slice = in_slice(&stream, StreamIndex::new(0), StreamIndex::new(0), 10, &log);
         CertifiedSlicePool::put(
             &fixture.certified_slice_pool,
             SUBNET_1,
-            with_unnormalized_certification(slice.clone()),
+            with_low_threshold_signer(slice.clone()),
             fixture.state_manager.as_ref(),
             REGISTRY_VERSION,
             &log,

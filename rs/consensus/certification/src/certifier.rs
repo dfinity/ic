@@ -518,7 +518,7 @@ impl CertifierImpl {
         // Verify the certification signature.
         match verifier.validate(
             self.replica_config.subnet_id,
-            certification,
+            &certification.signed,
             registry_version,
         ) {
             Ok(()) => Some(ChangeAction::MoveToValidated(msg)),

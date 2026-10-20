@@ -177,11 +177,21 @@ impl CertificationContent {
     }
 }
 
+impl CountBytes for CertificationContent {
+    fn count_bytes(&self) -> usize {
+        self.hash.get_ref().0.len()
+    }
+}
+
 impl SignedBytesWithoutDomainSeparator for CertificationContent {
     fn write_signed_bytes_without_domain_separator(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&self.hash.get_ref().0);
     }
 }
+
+/// `CertificationContent` with the subnet's threshold signature on it.
+pub type SignedCertificationContent =
+    Signed<CertificationContent, ThresholdSignature<CertificationContent>>;
 
 // Returning a constant role is needed to work with the existing membership, to
 // select correct threshold value.
@@ -205,12 +215,12 @@ impl AsRef<CertificationContent> for CertificationMessage {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Certification {
-    /// The height that the CertificationContent belongs to
+    /// the height that the CertificationContent belongs to
     pub height: Height,
-    /// The witness for the height: always set by the certifier, dropped from XNet
-    /// stream slices.
+    /// the witness for the height
+    /// TODO: remove option after staged roll-out
     pub height_witness: Option<Witness>,
-    /// The signature on the CertificationContent
+    /// the signature on the CertificationContent
     pub signed: Signed<CertificationContent, ThresholdSignature<CertificationContent>>,
 }
 
