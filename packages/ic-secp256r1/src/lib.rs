@@ -5,6 +5,7 @@
 
 //! A crate with handling of ECDSA keys over the secp256r1 curve
 
+use hex_literal::hex;
 use p256::{
     AffinePoint, NistP256, Scalar,
     elliptic_curve::{
@@ -543,6 +544,26 @@ impl PrivateKey {
     }
 }
 
+/// An identifier for the mainnet production key
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum MasterPublicKeyId {
+    /// The production master key "key_1" for ECDSA
+    EcdsaKey1,
+    /// The test master key "test_key_1" for ECDSA
+    EcdsaTestKey1,
+}
+
+/// An identifier for the hardcoded keys used by PocketIC
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum PocketIcMasterPublicKeyId {
+    /// The PocketIC hardcoded key for ECDSA "key_1"
+    EcdsaKey1,
+    /// The PocketIC hardcoded key for ECDSA "test_key_1"
+    EcdsaTestKey1,
+    /// The PocketIC hardcoded key for ECDSA "dfx_test_key"
+    EcdsaDfxTestKey,
+}
+
 /// An ECDSA public key
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey {
@@ -550,6 +571,43 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
+    /// Return the public master keys used in the production mainnet
+    pub fn mainnet_key(key_id: MasterPublicKeyId) -> Self {
+        match key_id {
+            MasterPublicKeyId::EcdsaKey1 => Self::deserialize_sec1(&hex!(
+                "03225c6e2c86eeb576f99a456692e11dd41e37382d117d4dbdad6dcc29703a2fe6"
+            ))
+            .expect("Hardcoded master key was rejected"),
+            MasterPublicKeyId::EcdsaTestKey1 => Self::deserialize_sec1(&hex!(
+                "021a3eee9d02e8d9cc32f19ca572615a1fa4712742b3a623228db9289c87e859c5"
+            ))
+            .expect("Hardcoded master key was rejected"),
+        }
+    }
+
+    /// Return the public master keys used by PocketIC
+    ///
+    /// PocketIC derives each of these keys from
+    /// `PrivateKey::generate_insecure_key_for_testing(42)` and the key name, so
+    /// their secret keys are known, and they should only be used for offline
+    /// testing with PocketIC
+    pub fn pocketic_key(key_id: PocketIcMasterPublicKeyId) -> Self {
+        match key_id {
+            PocketIcMasterPublicKeyId::EcdsaKey1 => Self::deserialize_sec1(&hex!(
+                "0384e7ba2fc1e46ed22e8d7d2b885b16c36270b3403be76e877ae961aec99abc28"
+            ))
+            .expect("Hardcoded master key was rejected"),
+            PocketIcMasterPublicKeyId::EcdsaTestKey1 => Self::deserialize_sec1(&hex!(
+                "036c7bdaf10cc2bb6709ea76162db3e5f31f77014fc79741b044618f51ba61ee2b"
+            ))
+            .expect("Hardcoded master key was rejected"),
+            PocketIcMasterPublicKeyId::EcdsaDfxTestKey => Self::deserialize_sec1(&hex!(
+                "0287dd82d1da499aec7d1707e6e23a3522a5c2e544c64b573b1221545803ae1c39"
+            ))
+            .expect("Hardcoded master key was rejected"),
+        }
+    }
+
     /// Deserialize a public key stored in SEC1 format
     ///
     /// This is just the encoding of the point. Both compressed and uncompressed

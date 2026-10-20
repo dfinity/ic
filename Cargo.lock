@@ -13578,7 +13578,7 @@ dependencies = [
 
 [[package]]
 name = "ic-secp256r1"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "hex",
  "hex-literal 1.1.0",

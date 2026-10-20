@@ -535,3 +535,35 @@ fn non_canonical_encodings_are_rejected() {
         assert!(PublicKey::deserialize_canonical_der(&nce).is_err());
     }
 }
+
+#[test]
+fn mainnet_keys_are_the_ones_in_the_cups() {
+    // The master public keys of `ecdsa:Secp256r1:key_1` and `ecdsa:Secp256r1:test_key_1`
+    // in the CUPs of subnets uzr34 and fuqsr.
+    assert_eq!(
+        hex::encode(PublicKey::mainnet_key(MasterPublicKeyId::EcdsaKey1).serialize_sec1(true)),
+        "03225c6e2c86eeb576f99a456692e11dd41e37382d117d4dbdad6dcc29703a2fe6",
+    );
+    assert_eq!(
+        hex::encode(PublicKey::mainnet_key(MasterPublicKeyId::EcdsaTestKey1).serialize_sec1(true)),
+        "021a3eee9d02e8d9cc32f19ca572615a1fa4712742b3a623228db9289c87e859c5",
+    );
+}
+
+#[test]
+fn pocketic_keys_are_derived_like_in_pocketic() {
+    // PocketIC derives each key from this seed and the key name.
+    let seed_key = PrivateKey::generate_insecure_key_for_testing(42);
+    for (key_id, name) in [
+        (PocketIcMasterPublicKeyId::EcdsaKey1, "key_1"),
+        (PocketIcMasterPublicKeyId::EcdsaTestKey1, "test_key_1"),
+        (PocketIcMasterPublicKeyId::EcdsaDfxTestKey, "dfx_test_key"),
+    ] {
+        let path = DerivationPath::new(vec![DerivationIndex(name.as_bytes().to_vec())]);
+        assert_eq!(
+            PublicKey::pocketic_key(key_id),
+            seed_key.derive_subkey(&path).0.public_key(),
+            "{name}",
+        );
+    }
+}

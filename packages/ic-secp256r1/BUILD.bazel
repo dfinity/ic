@@ -6,9 +6,10 @@ rust_library(
     name = "ic-secp256r1",
     srcs = glob(["src/**"]),
     crate_name = "ic_secp256r1",
-    version = "0.2.0",
+    version = "0.3.0",
     deps = [
         # Keep sorted.
+        "@crate_index//:hex-literal",
         "@crate_index//:hmac",
         "@crate_index//:num-bigint",
         "@crate_index//:p256",
