@@ -406,6 +406,54 @@ fn should_match_slip10_derivation_test_data() {
 }
 
 #[test]
+fn should_match_slip10_derivation_retry_test_data() {
+    // Test data from https://github.com/satoshilabs/slips/blob/master/slip-0010.md#test-derivation-retry-for-nist256p1
+    // Deriving index 33941 from m/28578' gives iL >= n, which forces the retry.
+    let chain_code = hex!("e94c8ebe30c2250a14713212f6449b20f3329105ea15b652ca5bdfc68f6c65c2");
+
+    let private_key = PrivateKey::deserialize_sec1(&hex!(
+        "06f0db126f023755d0b8d86d4591718a5210dd8d024e3e14b6159d63f53aa669"
+    ))
+    .expect("Test has valid key");
+
+    let public_key = PublicKey::deserialize_sec1(&hex!(
+        "02519b5554a4872e8c9c1c847115363051ec43e93400e030ba3c36b52a3e70a5b7"
+    ))
+    .expect("Test has valid key");
+
+    assert_eq!(
+        hex::encode(public_key.serialize_sec1(true)),
+        hex::encode(private_key.public_key().serialize_sec1(true))
+    );
+
+    let path = DerivationPath::new_bip32(&[33941]);
+
+    let (derived_secret_key, sk_chain_code) =
+        private_key.derive_subkey_with_chain_code(&path, &chain_code);
+
+    let (derived_public_key, pk_chain_code) =
+        public_key.derive_subkey_with_chain_code(&path, &chain_code);
+    assert_eq!(
+        hex::encode(sk_chain_code),
+        "9e87fe95031f14736774cd82f25fd885065cb7c358c1edf813c72af535e83071",
+    );
+    assert_eq!(
+        hex::encode(pk_chain_code),
+        "9e87fe95031f14736774cd82f25fd885065cb7c358c1edf813c72af535e83071",
+    );
+
+    assert_eq!(
+        hex::encode(derived_public_key.serialize_sec1(true)),
+        "0235bfee614c0d5b2cae260000bb1d0d84b270099ad790022c1ae0b2e782efe120",
+    );
+
+    assert_eq!(
+        hex::encode(derived_secret_key.serialize_sec1()),
+        "092154eed4af83e078ff9b84322015aefe5769e31270f62c3f66c33888335f3a",
+    );
+}
+
+#[test]
 fn private_derivation_also_works_for_derived_keys() {
     let rng = &mut test_rng();
     use rand::Rng;
@@ -537,7 +585,7 @@ fn non_canonical_encodings_are_rejected() {
 }
 
 #[test]
-fn mainnet_keys_are_the_ones_in_the_cups() {
+fn mainnet_keys_round_trip() {
     // The master public keys of `ecdsa:Secp256r1:key_1` and `ecdsa:Secp256r1:test_key_1`
     // in the CUPs of subnets uzr34 and fuqsr.
     assert_eq!(
@@ -566,4 +614,137 @@ fn pocketic_keys_are_derived_like_in_pocketic() {
             "{name}",
         );
     }
+}
+
+fn derivation_path(parts: &[&str]) -> Vec<Vec<u8>> {
+    parts.iter().map(|part| part.as_bytes().to_vec()).collect()
+}
+
+// The expected keys in the following tests are what the replica's
+// `derive_threshold_public_key`, which answers `ecdsa_public_key`, returns for
+// the same master key, canister and derivation path.
+
+#[test]
+fn offline_key_derivation_matches_mainnet_for_key_1() {
+    use std::str::FromStr;
+
+    let canister_id = CanisterId::from_str("h5jwf-5iaaa-aaaan-qmvoa-cai").unwrap();
+    let dpk = PublicKey::derive_mainnet_key(
+        MasterPublicKeyId::EcdsaKey1,
+        &canister_id,
+        &derivation_path(&[
+            "Test",
+            "Derivation",
+            "For",
+            "Mainnet",
+            "ECDSA",
+            "secp256r1",
+            "key_1",
+        ]),
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_sec1(true)),
+        "02cda0a98456eaf736d750a6b3885433df81b9a5e76c2ee74e4552d9de1a3b38a5",
+    );
+}
+
+#[test]
+fn offline_key_derivation_matches_mainnet_for_test_key_1() {
+    use std::str::FromStr;
+
+    let canister_id = CanisterId::from_str("h5jwf-5iaaa-aaaan-qmvoa-cai").unwrap();
+    let dpk = PublicKey::derive_mainnet_key(
+        MasterPublicKeyId::EcdsaTestKey1,
+        &canister_id,
+        &derivation_path(&[
+            "Test",
+            "Derivation",
+            "For",
+            "Mainnet",
+            "ECDSA",
+            "secp256r1",
+            "test_key_1",
+        ]),
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_sec1(true)),
+        "038bee03c1155d5b11e08b90fbdebb584c84ba617b916498b9c3d7bdc7a3d32eb8",
+    );
+}
+
+#[test]
+fn offline_key_derivation_matches_pocketic_for_key_1() {
+    use std::str::FromStr;
+
+    let canister_id = CanisterId::from_str("uzt4z-lp777-77774-qaabq-cai").unwrap();
+    let dpk = PublicKey::derive_pocketic_key(
+        PocketIcMasterPublicKeyId::EcdsaKey1,
+        &canister_id,
+        &derivation_path(&[
+            "Test",
+            "Derivation",
+            "For",
+            "PocketIC",
+            "ECDSA",
+            "secp256r1",
+            "key_1",
+        ]),
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_sec1(true)),
+        "02d3536db48ecef1eb8249f04553046902fbe7d979140530e5294452b94f0e38ad",
+    );
+}
+
+#[test]
+fn offline_key_derivation_matches_pocketic_for_test_key_1() {
+    use std::str::FromStr;
+
+    let canister_id = CanisterId::from_str("uzt4z-lp777-77774-qaabq-cai").unwrap();
+    let dpk = PublicKey::derive_pocketic_key(
+        PocketIcMasterPublicKeyId::EcdsaTestKey1,
+        &canister_id,
+        &derivation_path(&[
+            "Test",
+            "Derivation",
+            "For",
+            "PocketIC",
+            "ECDSA",
+            "secp256r1",
+            "test_key_1",
+        ]),
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_sec1(true)),
+        "03080d5850ca18f277d7f39c3cfd37635b6527a73ba63b774d26d4cdf725e1ce39",
+    );
+}
+
+#[test]
+fn offline_key_derivation_matches_pocketic_for_dfx_test_key() {
+    use std::str::FromStr;
+
+    let canister_id = CanisterId::from_str("uzt4z-lp777-77774-qaabq-cai").unwrap();
+    let dpk = PublicKey::derive_pocketic_key(
+        PocketIcMasterPublicKeyId::EcdsaDfxTestKey,
+        &canister_id,
+        &derivation_path(&[
+            "Test",
+            "Derivation",
+            "For",
+            "PocketIC",
+            "ECDSA",
+            "secp256r1",
+            "dfx_test_key",
+        ]),
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_sec1(true)),
+        "036cd2e52401b60ec8b86041f9c624438eb69ab271def9c9a439bd9fb49fa88ac7",
+    );
 }
