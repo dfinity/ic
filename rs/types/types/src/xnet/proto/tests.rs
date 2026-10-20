@@ -14,6 +14,7 @@ use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::types::v1 as pb_types;
+use prost::Message;
 
 const SUBNET_1: SubnetId = SubnetId::new(PrincipalId::new(
     10,
@@ -74,22 +75,46 @@ fn certified_stream_slice_roundtrip() {
     );
 }
 
-/// Slices are encoded without the certification's height and height witness,
-/// which decoding ignores.
-#[test]
-fn certified_stream_slice_ignores_height_and_witness() {
-    let certified_stream_slice = certified_stream_slice_for_test();
-    let mut certified_stream_slice_proto: v1::CertifiedStreamSlice =
-        certified_stream_slice.clone().into();
-    let certification_proto = certified_stream_slice_proto.certification.as_mut().unwrap();
-    assert_eq!(0, certification_proto.height);
-    assert_eq!(None, certification_proto.height_witness);
+/// `v1::CertifiedStreamSlice` as of older replica versions, with a full
+/// `v1::Certification`.
+#[derive(Clone, PartialEq, Message)]
+struct CertifiedStreamSliceWithCertification {
+    #[prost(bytes = "vec", tag = "1")]
+    payload: Vec<u8>,
+    #[prost(bytes = "vec", tag = "2")]
+    merkle_proof: Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    certification: Option<v1::Certification>,
+}
 
-    // As encoded by older replica versions.
-    *certification_proto = certification_for_test().into();
+/// Slices are wire compatible with older replica versions, whose certifications
+/// also have a height and height witness.
+#[test]
+fn certified_stream_slice_wire_compatibility() {
+    let certified_stream_slice = certified_stream_slice_for_test();
+    let with_certification = CertifiedStreamSliceWithCertification {
+        payload: certified_stream_slice.payload.clone(),
+        merkle_proof: certified_stream_slice.merkle_proof.clone(),
+        certification: Some(certification_for_test().into()),
+    };
+
+    // Decoding ignores the height and height witness.
     assert_eq!(
         certified_stream_slice,
-        CertifiedStreamSlice::try_from(certified_stream_slice_proto).unwrap()
+        v1::CertifiedStreamSlice::proxy_decode(&with_certification.encode_to_vec()).unwrap()
+    );
+
+    // Older replica versions decode a certification without height and height witness.
+    let mut expected = with_certification;
+    let certification = expected.certification.as_mut().unwrap();
+    certification.height = 0;
+    certification.height_witness = None;
+    assert_eq!(
+        expected,
+        CertifiedStreamSliceWithCertification::decode(
+            v1::CertifiedStreamSlice::proxy_encode(certified_stream_slice).as_slice()
+        )
+        .unwrap()
     );
 }
 

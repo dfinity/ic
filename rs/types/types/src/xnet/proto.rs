@@ -4,7 +4,9 @@
 
 use crate::{
     CryptoHashOfPartialState, Height,
-    consensus::certification::{Certification, CertificationContent, CertificationShare},
+    consensus::certification::{
+        Certification, CertificationContent, CertificationShare, SignedCertificationContent,
+    },
     crypto::{CryptoHash, Signed, threshold_sig::ni_dkg::NiDkgTag},
     replica_version::ReplicaVersionParseError,
     signature::ThresholdSignature,
@@ -66,6 +68,33 @@ impl TryFrom<pb::Certification> for Certification {
     }
 }
 
+impl From<SignedCertificationContent> for pb::SignedCertificationContent {
+    fn from(value: SignedCertificationContent) -> Self {
+        Self {
+            content: Some(value.content.into()),
+            signature: Some(value.signature.into()),
+        }
+    }
+}
+/// Sets the signer's NI-DKG tag to `HighThreshold`, as the signature does not
+/// cover it.
+///
+/// TODO: Reject other NI-DKG tags instead, once all subnets validate the signer
+/// (see `CertifierImpl::validate_certification()`).
+impl TryFrom<pb::SignedCertificationContent> for SignedCertificationContent {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::SignedCertificationContent) -> Result<Self, Self::Error> {
+        let mut signature: ThresholdSignature<CertificationContent> =
+            try_from_option_field(value.signature, "SignedCertificationContent::signature")?;
+        signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+        Ok(Signed {
+            content: try_from_option_field(value.content, "SignedCertificationContent::content")?,
+            signature,
+        })
+    }
+}
+
 impl From<CertificationShare> for pb::CertificationShare {
     fn from(share: CertificationShare) -> Self {
         Self {
@@ -94,46 +123,26 @@ impl TryFrom<pb::CertificationShare> for CertificationShare {
     }
 }
 
-/// Leaves out the certification's `height` and `height_witness`, which its
-/// signature does not cover.
-///
-/// TODO: Switch to a wire-compatible certification message without them.
 impl From<CertifiedStreamSlice> for pb::CertifiedStreamSlice {
     fn from(value: CertifiedStreamSlice) -> Self {
         Self {
             payload: value.payload,
             merkle_proof: value.merkle_proof,
-            certification: Some(pb::Certification {
-                height: 0,
-                height_witness: None,
-                content: Some(value.certification.content.into()),
-                signature: Some(value.certification.signature.into()),
-            }),
+            certification: Some(value.certification.into()),
         }
     }
 }
-/// Ignores the certification's `height` and `height_witness` and sets its signer's
-/// NI-DKG tag to `HighThreshold`, as the signature covers none of them.
-///
-/// TODO: Reject other NI-DKG tags instead, once all subnets validate the signer
-/// (see `CertifierImpl::validate_certification()`).
 impl TryFrom<pb::CertifiedStreamSlice> for CertifiedStreamSlice {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb::CertifiedStreamSlice) -> Result<Self, Self::Error> {
-        let certification = value.certification.ok_or(ProxyDecodeError::MissingField(
-            "CertifiedStreamSlice::certification",
-        ))?;
-        let mut signature: ThresholdSignature<CertificationContent> =
-            try_from_option_field(certification.signature, "Certification::signature")?;
-        signature.signer.dkg_tag = NiDkgTag::HighThreshold;
         Ok(Self {
             payload: value.payload,
             merkle_proof: value.merkle_proof,
-            certification: Signed {
-                content: try_from_option_field(certification.content, "Certification::content")?,
-                signature,
-            },
+            certification: try_from_option_field(
+                value.certification,
+                "CertifiedStreamSlice::certification",
+            )?,
         })
     }
 }
