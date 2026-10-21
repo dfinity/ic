@@ -201,7 +201,7 @@ enum ConsumingCycles {
     Refund,
 }
 
-/// Maximum number of per-sender entries kept in a canister's `LRUConnectionMetrics`.
+/// Maximum number of per-sender entries kept in a canister's `LruConnectionMetrics`.
 pub(crate) const MAX_CONNECTION_METRICS_ENTRIES: usize = 100;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -213,11 +213,11 @@ pub struct ConnectionMetrics {
 /// Keeps track of the number of requests received from each canister, and the last time a request
 /// was received from that canister.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
-pub struct LRUConnectionMetrics {
+pub struct LruConnectionMetrics {
     metrics_per_sender: BTreeMap<CanisterId, ConnectionMetrics>,
 }
 
-impl LRUConnectionMetrics {
+impl LruConnectionMetrics {
     /// Creates the metrics from the given map, evicting entries if it holds more than
     /// `MAX_CONNECTION_METRICS_ENTRIES` of them.
     pub fn new(metrics_per_sender: BTreeMap<CanisterId, ConnectionMetrics>) -> Self {
@@ -341,7 +341,7 @@ pub struct CanisterMetrics {
     interrupted_during_execution: u64,
     instructions_executed: NumInstructions,
     load_metrics: LoadMetrics,
-    connection_metrics: LRUConnectionMetrics,
+    connection_metrics: LruConnectionMetrics,
     consumed_cycles: NominalCycles,
     consumed_cycles_monotonic: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
@@ -373,7 +373,7 @@ impl CanisterMetrics {
             consumed_cycles_by_use_cases_monotonic,
             instructions_executed,
             load_metrics,
-            connection_metrics: LRUConnectionMetrics::new(connection_metrics),
+            connection_metrics: LruConnectionMetrics::new(connection_metrics),
         }
     }
 
@@ -475,13 +475,13 @@ impl CanisterMetrics {
         &mut self.load_metrics
     }
 
-    pub fn connection_metrics(&self) -> &LRUConnectionMetrics {
+    pub fn connection_metrics(&self) -> &LruConnectionMetrics {
         &self.connection_metrics
     }
 
     pub fn load_and_connection_metrics_mut(
         &mut self,
-    ) -> (&mut LoadMetrics, &mut LRUConnectionMetrics) {
+    ) -> (&mut LoadMetrics, &mut LruConnectionMetrics) {
         (&mut self.load_metrics, &mut self.connection_metrics)
     }
 }

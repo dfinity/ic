@@ -8,7 +8,7 @@ use crate::canister_state::canister_snapshots::CanisterSnapshots;
 use crate::canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata};
 use crate::canister_state::system_state::testing::{OutputRequestBuilder, SystemStateTesting};
 use crate::canister_state::system_state::{
-    CallContextManager, CanisterHistory, CanisterStatus, ConnectionMetrics, LRUConnectionMetrics,
+    CallContextManager, CanisterHistory, CanisterStatus, ConnectionMetrics, LruConnectionMetrics,
     MAX_CANISTER_HISTORY_CHANGES, MAX_CONNECTION_METRICS_ENTRIES, OutstandingPrepayments,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
@@ -1893,7 +1893,7 @@ fn lru_connection_metrics_evicts_entries_in_correct_order() {
     assert_eq!(expected.len(), MAX_CONNECTION_METRICS_ENTRIES);
 
     // Recording the messages one by one: entries are evicted as soon as the map overflows.
-    let mut from_increments = LRUConnectionMetrics::default();
+    let mut from_increments = LruConnectionMetrics::default();
     for (sender, metrics) in &metrics_per_sender {
         for _ in 0..metrics.count {
             from_increments.increment(*sender, metrics.last_access_timestamp);
@@ -1902,7 +1902,7 @@ fn lru_connection_metrics_evicts_entries_in_correct_order() {
     assert_eq!(from_increments.get(), &expected);
 
     // Loading all the same entries at once, e.g. from a checkpoint.
-    let from_new = LRUConnectionMetrics::new(metrics_per_sender);
+    let from_new = LruConnectionMetrics::new(metrics_per_sender);
     assert_eq!(from_new.get(), &expected);
 
     assert_eq!(from_new, from_increments);
@@ -1912,7 +1912,7 @@ fn lru_connection_metrics_evicts_entries_in_correct_order() {
 fn lru_connection_metrics_increment_refreshes_eviction_order() {
     let t0 = Time::from_nanos_since_unix_epoch(0);
     let t1 = Time::from_nanos_since_unix_epoch(1);
-    let mut metrics = LRUConnectionMetrics::default();
+    let mut metrics = LruConnectionMetrics::default();
     for i in 0..MAX_CONNECTION_METRICS_ENTRIES as u64 {
         metrics.increment(canister_test_id(i), t0);
     }
