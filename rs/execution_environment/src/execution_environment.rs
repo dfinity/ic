@@ -2562,11 +2562,9 @@ impl ExecutionEnvironment {
         };
 
         // Fail early, without charging any execution cycles, if the call is
-        // invalid (e.g., the canister is not running or does not export the
-        // called method, or the called method is a composite query).
-        // Resumed aborted executions (`prepaid_execution_cycles` is `Some`)
-        // have already been prepaid and are handled by the regular execution
-        // path.
+        // invalid (canister not running, non-existent or composite query method).
+        // Invalid resumed aborted executions (`prepaid_execution_cycles` is
+        // `Some`) will be handled by the regular execution path.
         if prepaid_execution_cycles.is_none()
             && let Err(user_error) = validate_replicated_call(&canister, &method)
         {
