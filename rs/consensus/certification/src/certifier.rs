@@ -1939,10 +1939,9 @@ mod tests {
                 assert_for_all_subnet_splitting_statuses(
                     &mut pool,
                     |status, should_skip, test_height| {
-                        // Signed by the active high-threshold NI-DKG ID, if known (it is not for
-                        // heights without a finalized summary block, which are skipped anyway).
+                        // Signed by the active high-threshold NI-DKG ID.
                         let dkg_id = active_high_threshold_nidkg_id(cache.as_ref(), test_height)
-                            .unwrap_or_else(|| fake_dkg_id(0));
+                            .expect("no active high-threshold NI-DKG ID");
                         let CertificationMessage::Certification(cert) =
                             fake_cert(test_height, dkg_id).message
                         else {
