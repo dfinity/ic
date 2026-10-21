@@ -5086,12 +5086,14 @@ fn observe_input_metrics(
     network_topology: &NetworkTopology,
     time: Time,
 ) {
-    let canister_metrics = canister.system_state.canister_metrics_mut();
+    let (load_metrics, connection_metrics) = canister
+        .system_state
+        .canister_metrics_mut
+        .load_and_connection_metrics_mut();
+
     match next_input {
         NextInput::Task(ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer) => {
-            canister_metrics
-                .load_metrics_mut()
-                .observe_heartbeat_or_global_timer();
+            load_metrics.observe_heartbeat_or_global_timer();
         }
         // Not counted as load.
         NextInput::Task(ExecutionTask::OnLowWasmMemory) => {}
@@ -5105,26 +5107,18 @@ fn observe_input_metrics(
             ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode { .. },
         ) => {}
         NextInput::Message(CanisterMessage::Ingress(_)) => {
-            canister_metrics
-                .load_metrics_mut()
-                .observe_ingress_message();
+            load_metrics.observe_ingress_message();
         }
         NextInput::Message(CanisterMessage::Request(request)) => {
             if request.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES {
                 exec_env.metrics.oversize_intra_subnet_messages.inc();
             }
             if network_topology.route(request.sender.get()) == Some(exec_env.own_subnet_id) {
-                canister_metrics
-                    .load_metrics_mut()
-                    .observe_local_subnet_message();
+                load_metrics.observe_local_subnet_message();
 
-                canister_metrics
-                    .connection_metrics_mut()
-                    .increment(request.sender(), time);
+                connection_metrics.increment(request.sender(), time);
             } else {
-                canister_metrics
-                    .load_metrics_mut()
-                    .observe_remote_subnet_message();
+                load_metrics.observe_remote_subnet_message();
             }
         }
         NextInput::Message(CanisterMessage::Response {
@@ -5132,13 +5126,9 @@ fn observe_input_metrics(
             callback: _,
         }) => {
             if network_topology.route(response.respondent.get()) == Some(exec_env.own_subnet_id) {
-                canister_metrics
-                    .load_metrics_mut()
-                    .observe_local_subnet_message();
+                load_metrics.observe_local_subnet_message();
             } else {
-                canister_metrics
-                    .load_metrics_mut()
-                    .observe_remote_subnet_message();
+                load_metrics.observe_remote_subnet_message();
             }
         }
     }
