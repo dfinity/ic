@@ -5078,7 +5078,7 @@ enum NextInput {
     Message(CanisterMessage),
 }
 
-/// Observes all the metrics for the next input a canister is about to execute.
+/// Updates the replicated canister metrics with the next input it is about to execute.
 fn observe_input_metrics(
     canister: &mut CanisterState,
     next_input: &NextInput,
