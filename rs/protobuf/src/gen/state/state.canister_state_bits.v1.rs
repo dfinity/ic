@@ -700,6 +700,8 @@ pub struct CanisterStateBits {
     pub heartbeats_and_global_timers_executed: u64,
     #[prost(uint64, tag = "63")]
     pub instructions_executed: u64,
+    #[prost(message, repeated, tag = "72")]
+    pub connection_metrics: ::prost::alloc::vec::Vec<CanisterToCanisterMetrics>,
     #[prost(bytes = "vec", tag = "20")]
     pub certified_data: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "21")]
@@ -720,8 +722,6 @@ pub struct CanisterStateBits {
     pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
     #[prost(message, optional, tag = "26")]
     pub cycles_balance: ::core::option::Option<super::super::queues::v1::Cycles>,
-    #[prost(message, repeated, tag = "72")]
-    pub connection_metrics: ::prost::alloc::vec::Vec<CanisterToCanisterMetrics>,
     /// The size of the canister's stable memory in bytes.
     #[prost(uint64, tag = "27")]
     pub stable_memory_size64: u64,
