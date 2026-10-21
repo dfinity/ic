@@ -114,7 +114,7 @@ impl TryFrom<pb::CertificationShare> for CertificationShare {
             height: Height::new(value.height),
             height_witness: try_from_option_field(
                 value.height_witness,
-                "Certification::height_witness",
+                "CertificationShare::height_witness",
             )?,
             signed: Signed {
                 content: try_from_option_field(value.content, "CertificationShare::content")?,
