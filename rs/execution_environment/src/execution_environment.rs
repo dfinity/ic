@@ -7,7 +7,8 @@ use crate::canister_manager::types::{
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
 use crate::execution::common::{
-    CanisterAccess, canister_info, list_canisters, validate_sender_on_subnet,
+    CanisterAccess, canister_info, finish_call_with_error, list_canisters,
+    validate_replicated_call, validate_sender_on_subnet,
 };
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
@@ -2559,6 +2560,24 @@ impl ExecutionEnvironment {
                 }
             }
         };
+
+        // Fail early, without charging any execution cycles, if the call is
+        // invalid (canister not running, non-existent or composite query method).
+        // Invalid resumed aborted executions (`prepaid_execution_cycles` is
+        // `Some`) will be handled by the regular execution path.
+        if prepaid_execution_cycles.is_none()
+            && let Err(user_error) = validate_replicated_call(&canister, &method)
+        {
+            return finish_call_with_error(
+                user_error,
+                canister,
+                CanisterCallOrTask::Update(req),
+                NumInstructions::from(0),
+                time,
+                self.own_subnet_type,
+                &self.log,
+            );
+        }
 
         match &method {
             WasmMethod::Query(_) | WasmMethod::CompositeQuery(_) => {

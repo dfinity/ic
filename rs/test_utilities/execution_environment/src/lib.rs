@@ -1900,6 +1900,7 @@ impl ExecutionTest {
                     NextExecution::StartNew | NextExecution::ContinueLong => {}
                 }
                 let remaining_round_instructions_before = round_limits.instructions;
+                let instruction_cycles_before = consumed_instruction_cycles(&canister);
                 let result = execute_canister(
                     &self.exec_env,
                     canister,
@@ -1923,7 +1924,13 @@ impl ExecutionTest {
                     canister_id,
                     NumInstructions::from(slice_instructions_used.get() as u64),
                 );
-                if let Some(instructions_used) = result.instructions_used {
+                if let Some(instructions_used) = result.instructions_used
+                    && charged_execution_cycles(
+                        instructions_used,
+                        instruction_cycles_before,
+                        &result.canister,
+                    )
+                {
                     self.update_execution_cost(
                         canister_id,
                         instructions_used,
@@ -2066,6 +2073,7 @@ impl ExecutionTest {
                     subnet_memory_reservation: self.subnet_memory_reservation,
                 };
                 let remaining_round_instructions_before = round_limits.instructions;
+                let instruction_cycles_before = consumed_instruction_cycles(&canister);
                 let result = execute_canister(
                     &self.exec_env,
                     canister,
@@ -2090,7 +2098,13 @@ impl ExecutionTest {
                 );
                 self.subnet_available_memory = round_limits.subnet_available_memory;
                 self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
-                if let Some(instructions_used) = result.instructions_used {
+                if let Some(instructions_used) = result.instructions_used
+                    && charged_execution_cycles(
+                        instructions_used,
+                        instruction_cycles_before,
+                        &result.canister,
+                    )
+                {
                     self.update_execution_cost(
                         canister_id,
                         instructions_used,
@@ -3503,6 +3517,30 @@ macro_rules! assert_delta {
 
 fn mock_random_number_generator() -> Box<ReproducibleRng> {
     Box::new(ReproducibleRng::from_seed_for_debugging([0_u8; 32]))
+}
+
+/// Returns the cycles consumed by the canister for executing instructions.
+fn consumed_instruction_cycles(canister: &CanisterState) -> NominalCycles {
+    canister
+        .system_state
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
+        .get(&CyclesUseCase::Instructions)
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Returns whether execution cycles were charged for a finished execution.
+/// An execution that is rejected early (e.g., because the canister does not
+/// export the called method) uses no instructions and charges no cycles
+/// (not even the base fee).
+fn charged_execution_cycles(
+    instructions_used: NumInstructions,
+    instruction_cycles_before: NominalCycles,
+    canister: &CanisterState,
+) -> bool {
+    instructions_used.get() != 0
+        || consumed_instruction_cycles(canister) != instruction_cycles_before
 }
 
 #[cfg(test)]
