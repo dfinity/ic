@@ -357,13 +357,11 @@ impl CallOrTaskHelper {
         original: &OriginalContext,
         deallocation_sender: &DeallocationSender,
     ) -> Result<Self, UserError> {
-        let mut canister = clean_canister.clone();
-
-        validate_replicated_call(&canister, &original.method)?;
+        validate_replicated_call(clean_canister, &original.method)?;
 
         match original.call_or_task {
             CanisterCallOrTask::Update(_) => {
-                let wasm_memory_usage = canister
+                let wasm_memory_usage = clean_canister
                     .execution_state
                     .as_ref()
                     .map_or(NumBytes::new(0), |es| {
@@ -377,7 +375,7 @@ impl CallOrTaskHelper {
                             bytes: wasm_memory_usage,
                             limit: wasm_memory_limit,
                         };
-                        return Err(err.into_user_error(&canister.canister_id()));
+                        return Err(err.into_user_error(&clean_canister.canister_id()));
                     }
                 }
             }
@@ -386,6 +384,8 @@ impl CallOrTaskHelper {
             CanisterCallOrTask::Task(_) => (),
             CanisterCallOrTask::Query(_) => (),
         }
+
+        let mut canister = clean_canister.clone();
 
         let sender_info = match &original.call_or_task {
             CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => {
