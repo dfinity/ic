@@ -511,7 +511,10 @@ impl CertifierImpl {
         if certification.signed.signature.signer != dkg_id {
             return Some(ChangeAction::HandleInvalid(
                 msg,
-                format!("Unexpected signer (expected: {:?})", dkg_id),
+                format!(
+                    "Unexpected signer {:?} (expected: {:?})",
+                    certification.signed.signature.signer, dkg_id
+                ),
             ));
         }
 
@@ -1483,12 +1486,15 @@ mod tests {
                     ..expected_signer.clone()
                 },
             ] {
-                cert.signed.signature.signer = signer;
+                cert.signed.signature.signer = signer.clone();
                 assert_eq!(
                     certifier.validate_certification(cert),
                     Some(ChangeAction::HandleInvalid(
                         CertificationMessage::Certification(cert.clone()),
-                        format!("Unexpected signer (expected: {:?})", expected_signer)
+                        format!(
+                            "Unexpected signer {:?} (expected: {:?})",
+                            signer, expected_signer
+                        )
                     ))
                 );
             }
@@ -1933,7 +1939,8 @@ mod tests {
                 assert_for_all_subnet_splitting_statuses(
                     &mut pool,
                     |status, should_skip, test_height| {
-                        // Signed by the active high-threshold NI-DKG ID, if there is one.
+                        // Signed by the active high-threshold NI-DKG ID, if known (it is not for
+                        // heights without a finalized summary block, which are skipped anyway).
                         let dkg_id = active_high_threshold_nidkg_id(cache.as_ref(), test_height)
                             .unwrap_or_else(|| fake_dkg_id(0));
                         let CertificationMessage::Certification(cert) =

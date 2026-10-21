@@ -77,6 +77,8 @@ fn certified_stream_slice_roundtrip() {
 
 /// `v1::CertifiedStreamSlice` as of older replica versions, with a full
 /// `v1::Certification`.
+///
+/// TODO: Remove (along with the test below) once no subnet runs such a version.
 #[derive(Clone, PartialEq, Message)]
 struct CertifiedStreamSliceWithCertification {
     #[prost(bytes = "vec", tag = "1")]

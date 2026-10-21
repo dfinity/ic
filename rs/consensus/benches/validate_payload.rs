@@ -56,18 +56,13 @@ use ic_types::{
     Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,
     batch::{BatchPayload, IngressPayload, ValidationContext},
     consensus::{certification::*, dkg::DkgSummary, *},
-    crypto::Signed,
     ingress::{IngressState, IngressStatus},
-    signature::*,
     time::UNIX_EPOCH,
 };
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
-
-type SignedCertificationContent =
-    Signed<CertificationContent, ThresholdSignature<CertificationContent>>;
 
 /// Size of the signed ingress messages
 const INGRESS_MESSAGE_SIZE: usize = 1024;

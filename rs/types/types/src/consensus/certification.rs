@@ -221,7 +221,7 @@ pub struct Certification {
     /// TODO: remove option after staged roll-out
     pub height_witness: Option<Witness>,
     /// the signature on the CertificationContent
-    pub signed: Signed<CertificationContent, ThresholdSignature<CertificationContent>>,
+    pub signed: SignedCertificationContent,
 }
 
 impl HasHeight for Certification {
