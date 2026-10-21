@@ -4,9 +4,12 @@
 
 use crate::{
     CryptoHashOfPartialState, Height,
-    consensus::certification::{Certification, CertificationContent, CertificationShare},
-    crypto::{CryptoHash, Signed},
+    consensus::certification::{
+        Certification, CertificationContent, CertificationShare, SignedCertificationContent,
+    },
+    crypto::{CryptoHash, Signed, threshold_sig::ni_dkg::NiDkgTag},
     replica_version::ReplicaVersionParseError,
+    signature::ThresholdSignature,
     xnet::CertifiedStreamSlice,
 };
 use ic_crypto_tree_hash::Witness;
@@ -61,6 +64,33 @@ impl TryFrom<pb::Certification> for Certification {
                 content: try_from_option_field(value.content, "Certification::content")?,
                 signature: try_from_option_field(value.signature, "Certification::signature")?,
             },
+        })
+    }
+}
+
+impl From<SignedCertificationContent> for pb::SignedCertificationContent {
+    fn from(value: SignedCertificationContent) -> Self {
+        Self {
+            content: Some(value.content.into()),
+            signature: Some(value.signature.into()),
+        }
+    }
+}
+/// Sets the signer's NI-DKG tag to `HighThreshold`, as the signature does not
+/// cover it.
+///
+/// TODO: Reject other NI-DKG tags instead, once all subnets validate the signer
+/// (see `CertifierImpl::validate_certification()`).
+impl TryFrom<pb::SignedCertificationContent> for SignedCertificationContent {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::SignedCertificationContent) -> Result<Self, Self::Error> {
+        let mut signature: ThresholdSignature<CertificationContent> =
+            try_from_option_field(value.signature, "SignedCertificationContent::signature")?;
+        signature.signer.dkg_tag = NiDkgTag::HighThreshold;
+        Ok(Signed {
+            content: try_from_option_field(value.content, "SignedCertificationContent::content")?,
+            signature,
         })
     }
 }

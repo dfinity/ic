@@ -30,7 +30,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     CryptoHashOfPartialState, Height, NumBytes, RegistryVersion, SubnetId,
-    consensus::certification::{Certification, CertificationContent},
+    consensus::certification::CertificationContent,
     crypto::{CryptoHash, Signed},
     messages::CallbackId,
     signature::ThresholdSignature,
@@ -278,15 +278,9 @@ pub(crate) fn make_advert_for(
     CertifiedStreamSlice {
         payload: stream_encoding::encode_tree(tree),
         merkle_proof: vec![],
-        certification: Certification {
-            height: CERTIFIED_HEIGHT,
-            height_witness: None,
-            signed: Signed {
-                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                    vec![],
-                ))),
-                signature: ThresholdSignature::fake(),
-            },
+        certification: Signed {
+            content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
+            signature: ThresholdSignature::fake(),
         },
     }
 }

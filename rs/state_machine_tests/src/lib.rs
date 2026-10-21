@@ -156,7 +156,7 @@ use ic_types::{
     },
     consensus::{
         block_maker::SubnetRecords,
-        certification::{Certification, CertificationContent},
+        certification::{Certification, CertificationContent, SignedCertificationContent},
     },
     crypto::{
         AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
@@ -233,7 +233,7 @@ impl Verifier for FakeVerifier {
     fn validate(
         &self,
         _: SubnetId,
-        _: &Certification,
+        _: &SignedCertificationContent,
         _: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Ok(())
@@ -5552,7 +5552,7 @@ fn certify_hash(
                     dealer_subnet: subnet_id,
                     target_subnet: NiDkgTargetSubnet::Local,
                     start_block_height: *height,
-                    dkg_tag: NiDkgTag::LowThreshold,
+                    dkg_tag: NiDkgTag::HighThreshold,
                 },
             },
         },
