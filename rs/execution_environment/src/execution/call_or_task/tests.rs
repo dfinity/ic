@@ -950,7 +950,7 @@ fn dts_abort_of_replicated_execution_works() {
 }
 
 #[test]
-fn dts_abort_of_replicated_execution_records_load_connection_metrics_once() {
+fn dts_abort_of_replicated_execution_records_load_metrics_once() {
     // Test steps:
     // 1. Canister A runs an update method that calls canister B.
     // 2. The called update method of canister B runs with DTS.
@@ -996,14 +996,6 @@ fn dts_abort_of_replicated_execution_records_load_connection_metrics_once() {
         .canister_metrics()
         .load_metrics();
     assert_eq!(load_metrics.local_subnet_messages_executed(), 1);
-    let connection_metrics = test
-        .canister_state(b_id)
-        .system_state
-        .canister_metrics()
-        .connection_metrics()
-        .get();
-    assert_eq!(connection_metrics.len(), 1);
-    assert_eq!(connection_metrics[&a_id].count, 1);
 }
 
 #[test]

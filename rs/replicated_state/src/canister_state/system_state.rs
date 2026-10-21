@@ -479,10 +479,8 @@ impl CanisterMetrics {
         &self.connection_metrics
     }
 
-    pub fn load_and_connection_metrics_mut(
-        &mut self,
-    ) -> (&mut LoadMetrics, &mut LruConnectionMetrics) {
-        (&mut self.load_metrics, &mut self.connection_metrics)
+    pub fn connection_metrics_mut(&mut self) -> &mut LruConnectionMetrics {
+        &mut self.connection_metrics
     }
 }
 

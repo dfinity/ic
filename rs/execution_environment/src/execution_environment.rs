@@ -5084,12 +5084,11 @@ fn observe_input_metrics(
     next_input: &NextInput,
     exec_env: &ExecutionEnvironment,
     network_topology: &NetworkTopology,
-    time: Time,
 ) {
-    let (load_metrics, connection_metrics) = canister
+    let load_metrics = canister
         .system_state
         .canister_metrics_mut()
-        .load_and_connection_metrics_mut();
+        .load_metrics_mut();
 
     match next_input {
         NextInput::Task(ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer) => {
@@ -5115,8 +5114,6 @@ fn observe_input_metrics(
             }
             if network_topology.route(request.sender.get()) == Some(exec_env.own_subnet_id) {
                 load_metrics.observe_local_subnet_message();
-
-                connection_metrics.increment(request.sender(), time);
             } else {
                 load_metrics.observe_remote_subnet_message();
             }
@@ -5206,13 +5203,7 @@ pub fn execute_canister(
         // unwrap is safe.
         None => NextInput::Message(canister.pop_input().unwrap()),
     };
-    observe_input_metrics(
-        &mut canister,
-        &next_input,
-        exec_env,
-        &network_topology,
-        time,
-    );
+    observe_input_metrics(&mut canister, &next_input, exec_env, &network_topology);
 
     let (input, prepaid_execution_cycles) = match next_input {
         NextInput::Task(task) => match task {
