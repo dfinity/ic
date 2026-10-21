@@ -19,6 +19,7 @@ ic-base-types = { path = "../types/base_types" }
 ic-cdk = { workspace = true }
 ic-nns-constants = { path = "../nns/constants" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-resource-limits = { path = "../registry/resource_limits" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 registry-canister = { path = "../registry/canister" }
 serde = { workspace = true }

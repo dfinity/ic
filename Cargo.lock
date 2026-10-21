@@ -9364,6 +9364,7 @@ dependencies = [
  "ic-nns-test-utils",
  "ic-protobuf",
  "ic-registry-keys",
+ "ic-registry-resource-limits",
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-test-utilities-types",
