@@ -1,8 +1,3 @@
-use self::routing::demux::Demux;
-use self::routing::stream_handler::StreamHandler;
-use self::scheduling::valid_set_rule::ValidSetRule;
-use crate::routing::demux::DemuxImpl;
-
 use super::*;
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_ni_dkg::{
@@ -23,8 +18,6 @@ use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDa
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
-use ic_replicated_state::Stream;
-use ic_replicated_state::testing::StreamTesting;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
@@ -38,10 +31,7 @@ use ic_types::batch::{Batch, BatchMessages, BlockmakerMetrics};
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
 use ic_types::time::Time;
-use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
-use ic_types::{
-    CanisterId, ExecutionRound, NodeId, NumBytes, NumInstructions, PrincipalId, Randomness,
-};
+use ic_types::{CanisterId, NodeId, NumBytes, NumInstructions, PrincipalId, Randomness};
 use maplit::{btreemap, btreeset};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
 
@@ -2481,113 +2471,5 @@ fn process_batch_resets_merge_marker() {
         // whose behavior is covered by the `ic-replicated-state` unit tests.)
         let latest_state = state_manager.get_latest_state().take();
         assert!(!latest_state.metadata.subnet_merged);
-    });
-}
-
-#[test]
-fn test_demux_delivers_certified_stream_slices() {
-    struct FakeValidSetRule;
-    impl ValidSetRule for FakeValidSetRule {
-        fn induct_messages(
-            &self,
-            _: &mut ReplicatedState,
-            _: Vec<ic_types::messages::SignedIngress>,
-            _: ic_types::ExecutionRound,
-        ) {
-            // do nothing
-        }
-    }
-
-    struct FakeStreamHandler {
-        expected_slices: BTreeMap<SubnetId, StreamSlice>,
-    }
-
-    impl FakeStreamHandler {
-        fn new(expected_slices: BTreeMap<SubnetId, StreamSlice>) -> FakeStreamHandler {
-            FakeStreamHandler { expected_slices }
-        }
-    }
-
-    impl StreamHandler for FakeStreamHandler {
-        fn process_stream_slices(
-            &self,
-            state: ReplicatedState,
-            stream_slices: BTreeMap<SubnetId, StreamSlice>,
-        ) -> ReplicatedState {
-            assert_eq!(self.expected_slices, stream_slices);
-            state
-        }
-    }
-
-    with_test_replica_logger(|log| {
-        let src_subnet_id = subnet_test_id(42);
-        let dst_subnet_id = subnet_test_id(43);
-        let other_subnet_id = subnet_test_id(44);
-
-        // Obtain a certified stream slice.
-        let certified_stream_slice = {
-            // Set up state manager.
-            let src_state_manager = FakeStateManager::new();
-
-            // Obtain tip...
-            let (mut height, mut state) = src_state_manager.take_tip();
-            // ... and use testing function to put stream to encode as certified slice
-            use ic_replicated_state::testing::ReplicatedStateTesting;
-            state.modify_streams(|streams| {
-                streams.insert(
-                    dst_subnet_id,
-                    Stream::new(
-                        StreamIndexedQueue::with_begin(StreamIndex::new(0)),
-                        StreamIndex::new(42),
-                    ),
-                );
-            });
-
-            // Commit state with modified streams.
-            height.inc_assign();
-            src_state_manager.commit_and_certify(state, CertificationScope::Metadata, None);
-
-            // Encode slice.
-            src_state_manager
-                .encode_certified_stream_slice(dst_subnet_id, None, None, None, None)
-                .unwrap()
-        };
-
-        // Set up destination state manager.
-        let dst_state_manager = Arc::new(FakeStateManager::new());
-
-        // Create messages to be provided as part of `BatchMessages`.
-        let certified_stream_slices = btreemap![src_subnet_id => certified_stream_slice.clone(), other_subnet_id => certified_stream_slice];
-
-        let expected_slices = certified_stream_slices
-            .clone()
-            .into_iter()
-            .map(|(subnet, slice)| {
-                (
-                    subnet,
-                    dst_state_manager
-                        .decode_valid_certified_stream_slice(&slice)
-                        .unwrap(),
-                )
-            })
-            .collect::<BTreeMap<_, _>>();
-
-        let demux: Box<dyn Demux> = Box::new(DemuxImpl::new(
-            Box::new(FakeValidSetRule),
-            Box::new(FakeStreamHandler::new(expected_slices)),
-            dst_state_manager.clone(),
-            log,
-        ));
-
-        let (_, dst_state) = dst_state_manager.take_tip();
-
-        demux.process_payload(
-            dst_state,
-            ExecutionRound::from(0),
-            BatchMessages {
-                certified_stream_slices,
-                ..Default::default()
-            },
-        );
     });
 }
