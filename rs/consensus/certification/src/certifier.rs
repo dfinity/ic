@@ -556,11 +556,8 @@ impl CertifierImpl {
 
         // If the share has an invalid content or does not belong to the
         // committee
-        if let Err(e) = validate_height_witness(
-            share.height,
-            &Some(share.height_witness.clone()),
-            &content.hash,
-        ) {
+        if let Err(e) = validate_height_witness(share.height, &share.height_witness, &content.hash)
+        {
             return Some(ChangeAction::HandleInvalid(msg, e));
         }
 
