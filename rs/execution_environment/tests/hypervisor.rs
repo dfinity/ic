@@ -4667,12 +4667,16 @@ fn executing_non_existing_method_does_not_consume_cycles() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";
     let canister_id = test.canister_from_wat(wat).unwrap();
+    let balance_before = test.canister_state(canister_id).system_state.balance();
     let err = test.ingress(canister_id, "foo", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
     assert_eq!(
         DEFAULT_CREATE_EXECUTION_STATE_BASE_COST + wat_compilation_cost(wat),
         test.executed_instructions()
     );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
 }
 
 #[test]
