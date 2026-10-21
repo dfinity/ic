@@ -340,6 +340,25 @@ pub(crate) fn validate_message(
     Ok(())
 }
 
+/// Validates a call executed in replicated mode: the canister must be running
+/// and export the called method which must not be a composite query (composite
+/// queries cannot be called in replicated mode).
+pub(crate) fn validate_replicated_call(
+    canister: &CanisterState,
+    wasm_method: &WasmMethod,
+) -> Result<(), UserError> {
+    validate_message(canister, wasm_method)?;
+
+    if let WasmMethod::CompositeQuery(_) = wasm_method {
+        return Err(UserError::new(
+            ErrorCode::CompositeQueryCalledInReplicatedMode,
+            "Composite query cannot be called in replicated mode",
+        ));
+    }
+
+    Ok(())
+}
+
 pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserError> {
     if CanisterStatusType::Running != canister.status() {
         let canister_id = canister.canister_id();

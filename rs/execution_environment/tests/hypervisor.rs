@@ -4680,6 +4680,51 @@ fn executing_non_existing_method_does_not_consume_cycles() {
 }
 
 #[test]
+fn composite_query_called_in_replicated_mode_does_not_consume_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let err = test
+        .ingress(canister_id, "composite_query", wasm().reply().build())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CompositeQueryCalledInReplicatedMode, err.code());
+    assert_eq!(
+        "Composite query cannot be called in replicated mode",
+        err.description()
+    );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
+}
+
+#[test]
+fn inter_canister_call_to_composite_query_does_not_consume_cycles() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+    let b_balance_before = test.canister_state(b_id).system_state.balance();
+
+    // Canister A calls the composite query of canister B
+    // and forwards the reject code in the reject callback.
+    let a = wasm()
+        .call_simple(
+            b_id,
+            "composite_query",
+            CallArgs::default().other_side(wasm().reply().build()),
+        )
+        .build();
+    let res = test.ingress(a_id, "update", a);
+    assert_eq!(
+        get_reject(res).as_bytes(),
+        (RejectCode::CanisterError as u32).to_le_bytes()
+    );
+
+    // No execution cycles (not even the base fee) are charged to canister B.
+    let b_balance_after = test.canister_state(b_id).system_state.balance();
+    assert_eq!(b_balance_before, b_balance_after);
+}
+
+#[test]
 fn grow_memory() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
@@ -5159,12 +5204,16 @@ fn cannot_execute_update_on_stopping_canister() {
         test.canister_state(canister_id).system_state.status(),
         CanisterStatusType::Stopping
     );
+    let balance_before = test.canister_state(canister_id).system_state.balance();
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
     assert_eq!(
         format!("Canister {canister_id} is not running"),
         err.description()
     );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
 }
 
 #[test]
@@ -5177,12 +5226,16 @@ fn cannot_execute_update_on_stopped_canister() {
         CanisterStatusType::Stopped,
         test.canister_state(canister_id).system_state.status()
     );
+    let balance_before = test.canister_state(canister_id).system_state.balance();
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
     assert_eq!(
         format!("Canister {canister_id} is not running"),
         err.description()
     );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
 }
 
 #[test]
@@ -5239,12 +5292,16 @@ fn cannot_execute_query_on_stopping_canister() {
         test.canister_state(canister_id).system_state.status(),
         CanisterStatusType::Stopping
     );
+    let balance_before = test.canister_state(canister_id).system_state.balance();
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
     assert_eq!(
         format!("Canister {canister_id} is not running"),
         err.description()
     );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
 }
 
 #[test]
@@ -5257,12 +5314,16 @@ fn cannot_execute_query_on_stopped_canister() {
         CanisterStatusType::Stopped,
         test.canister_state(canister_id).system_state.status()
     );
+    let balance_before = test.canister_state(canister_id).system_state.balance();
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
     assert_eq!(
         format!("Canister {canister_id} is not running"),
         err.description()
     );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
 }
 
 #[test]

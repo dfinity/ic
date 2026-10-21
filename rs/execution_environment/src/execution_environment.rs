@@ -7,8 +7,8 @@ use crate::canister_manager::types::{
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
 use crate::execution::common::{
-    CanisterAccess, canister_info, finish_call_with_error, list_canisters, validate_canister,
-    validate_method, validate_sender_on_subnet,
+    CanisterAccess, canister_info, finish_call_with_error, list_canisters,
+    validate_replicated_call, validate_sender_on_subnet,
 };
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
@@ -2561,19 +2561,15 @@ impl ExecutionEnvironment {
             }
         };
 
-        // Fail early, without charging any execution cycles, if the canister
-        // does not export the called method. Resumed aborted executions
-        // (`prepaid_execution_cycles` is `Some`) have already been prepaid
-        // and are handled by the regular execution path.
+        // Fail early, without charging any execution cycles, if the call is
+        // invalid (e.g., the canister is not running or does not export the
+        // called method, or the called method is a composite query).
+        // Resumed aborted executions (`prepaid_execution_cycles` is `Some`)
+        // have already been prepaid and are handled by the regular execution
+        // path.
         if prepaid_execution_cycles.is_none()
-            && let Err(err) = validate_method(&method, &canister)
+            && let Err(user_error) = validate_replicated_call(&canister, &method)
         {
-            // Errors due to the canister status (stopping or stopped) take
-            // precedence over errors due to the called method (same as in
-            // `validate_message`).
-            let user_error = validate_canister(&canister)
-                .err()
-                .unwrap_or_else(|| err.into_user_error(&canister.canister_id()));
             return finish_call_with_error(
                 user_error,
                 canister,

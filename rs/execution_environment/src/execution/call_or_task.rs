@@ -3,8 +3,8 @@
 
 use crate::execution::common::{
     action_to_response, apply_canister_state_changes, finish_call_with_error,
-    ingress_status_with_processing_state, log_dirty_pages, update_round_limits, validate_message,
-    wasm_result_to_query_response,
+    ingress_status_with_processing_state, log_dirty_pages, update_round_limits,
+    validate_replicated_call, wasm_result_to_query_response,
 };
 use crate::execution_environment::{
     ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
@@ -359,7 +359,7 @@ impl CallOrTaskHelper {
     ) -> Result<Self, UserError> {
         let mut canister = clean_canister.clone();
 
-        validate_message(&canister, &original.method)?;
+        validate_replicated_call(&canister, &original.method)?;
 
         match original.call_or_task {
             CanisterCallOrTask::Update(_) => {
@@ -384,15 +384,7 @@ impl CallOrTaskHelper {
             // TODO(RUN-957): Enforce the `wasm_memory_limit` in heartbeat and timer after
             // canister logging ships.
             CanisterCallOrTask::Task(_) => (),
-            CanisterCallOrTask::Query(_) => {
-                if let WasmMethod::CompositeQuery(_) = &original.method {
-                    let user_error = UserError::new(
-                        ErrorCode::CompositeQueryCalledInReplicatedMode,
-                        "Composite query cannot be called in replicated mode",
-                    );
-                    return Err(user_error);
-                }
-            }
+            CanisterCallOrTask::Query(_) => (),
         }
 
         let sender_info = match &original.call_or_task {

@@ -797,8 +797,8 @@ fn composite_query_fails_in_replicated_mode() {
         err.description(),
         "Composite query cannot be called in replicated mode"
     );
-    // Verify that we consume some cycles.
-    assert_gt!(balance_before, balance_after);
+    // No execution cycles (not even the base fee) are charged.
+    assert_eq!(balance_before, balance_after);
 }
 
 #[test]
