@@ -3,11 +3,8 @@
 //!
 //! For the subnet `S` that is cooling down and a registry version `V` at which
 //! it is labeled as such, the condition holds iff all of the following
-//! terms hold. On every subnet, the same quorum of at least 2/3 of its
-//! replicas (see `quorum`) must be scraped and satisfy all applicable terms
-//! together, including `RegistryVersion`. The individual terms below report
-//! their own quorums for diagnostics; `CommonQuorum` enforces their conjunction
-//! on each replica. A replica that cannot be scraped satisfies no term.
+//! terms hold. A term holds on a subnet iff a quorum of its replicas (see
+//! `quorum`) satisfies it. A replica that cannot be scraped satisfies no term.
 //!
 //! 1. `RegistryVersion`: a replica of any subnet satisfies it iff it reports
 //!    `mr_registry_version >= V`.
@@ -26,18 +23,16 @@
 //!    `replicated_state_subnet_call_contexts > 0` for any type.
 //! 8. `RefundPool`: a replica of `S` satisfies it iff it reports no
 //!    `replicated_state_pending_refunds > 0`.
-//! 9. `CommonQuorum`: on each subnet, at least 2/3 of its replicas satisfy all
-//!    applicable conditions above together.
+//! 9. `CommonQuorum`: a replica of any subnet satisfies it iff it satisfies
+//!    all of the above terms that apply to its subnet.
 
-use crate::metrics_helper::{self, Labels, Metrics, ScrapeError};
+use crate::metrics_helper::{self, Labels, MetricsByReplica, ReplicaMetrics, ScrapeError};
 
 use ic_base_types::SubnetId;
+use ic_types::consensus::get_faults_tolerated;
+use strum_macros::EnumIter;
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt,
-    net::IpAddr,
-};
+use std::{collections::BTreeMap, fmt, net::IpAddr};
 
 /// The nodes of every subnet the conditions below range over.
 pub type SubnetNodeIps = BTreeMap<SubnetId, Vec<IpAddr>>;
@@ -61,7 +56,7 @@ pub const METRIC_SUBNET_CALL_CONTEXTS: &str = "replicated_state_subnet_call_cont
 pub const METRIC_PENDING_REFUNDS: &str = "replicated_state_pending_refunds";
 
 /// The individual conditions the "merge readiness" condition is made of.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, EnumIter, Eq, PartialEq)]
 pub enum Condition {
     RegistryVersion,
     IncomingStreams,
@@ -71,7 +66,6 @@ pub enum Condition {
     SubnetOutputQueues,
     SubnetCallContexts,
     RefundPool,
-    /// On each subnet, the same quorum satisfies all applicable conditions.
     CommonQuorum,
 }
 
@@ -84,13 +78,14 @@ pub struct Term {
 }
 
 /// The number of the `n` replicas of a subnet that have to satisfy a term for
-/// it to hold on that subnet: at least 2/3 of them.
+/// it to hold on that subnet: all but the faulty ones that a subnet of `n`
+/// replicas tolerates.
 pub fn quorum(n: usize) -> usize {
-    (2 * n).div_ceil(3)
+    n - get_faults_tolerated(n)
 }
 
 /// The evaluated terms of the readiness condition, along with the nodes that
-/// could not be scraped, by subnet. The latter satisfy no term.
+/// could not be scraped, by subnet.
 pub struct Readiness {
     pub terms: Vec<Term>,
     pub scrape_failures: Vec<(SubnetId, ScrapeError)>,
@@ -99,6 +94,8 @@ pub struct Readiness {
 /// Why the readiness condition could not be evaluated.
 #[derive(Debug)]
 pub enum ReadinessError {
+    /// `subnets` does not list the subnet that is cooling down.
+    UnknownSubnet(SubnetId),
     /// `subnets` lists no node for the subnet.
     NoNodes(SubnetId),
 }
@@ -106,6 +103,7 @@ pub enum ReadinessError {
 impl fmt::Display for ReadinessError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UnknownSubnet(subnet_id) => write!(f, "subnet {subnet_id} is not listed"),
             Self::NoNodes(subnet_id) => write!(f, "subnet {subnet_id} has no node to scrape"),
         }
     }
@@ -115,14 +113,9 @@ impl std::error::Error for ReadinessError {}
 
 /// Evaluates the terms of the "merge readiness" condition for the subnet that
 /// is cooling down and a registry version `V` at which it is labeled as such.
-/// Returns one term per condition.
-///
-/// On every subnet, the same quorum of at least 2/3 of the replicas must
-/// satisfy all applicable conditions, including the registry version. The
-/// `CommonQuorum` term checks this in addition to the individual terms, so
-/// readiness holds iff every returned term is satisfied.
-/// A node that cannot be scraped does not fail the evaluation, but satisfies
-/// no term: most terms compare against zero, which missing data would satisfy.
+/// Returns one term per condition: readiness holds iff every term is satisfied.
+/// Nodes that cannot be scraped do not fail the evaluation, but are returned
+/// along with the terms.
 pub async fn evaluate_merge_readiness(
     subnets: &SubnetNodeIps,
     source_subnet_id: SubnetId,
@@ -135,38 +128,30 @@ pub async fn evaluate_merge_readiness(
     })
 }
 
-/// The metrics of the replicas of a subnet that could be scraped, along with
-/// those replicas.
-///
-/// `metrics` alone does not tell a replica that could not be scraped from one
-/// that was scraped but does not report a series (e.g. a counter it never
-/// touched): neither has a value for the series. The latter reads as zero and
-/// may satisfy a term, the former must satisfy none, hence `scraped`.
-#[derive(Default)]
-struct SubnetMetrics {
-    metrics: Metrics,
-    /// The replicas of the subnet that could be scraped.
-    scraped: BTreeSet<IpAddr>,
-}
-
-/// The metrics of every subnet, by subnet.
-type AllSubnetMetrics = BTreeMap<SubnetId, SubnetMetrics>;
+/// The metrics of the replicas that could be scraped, by subnet, along with the
+/// nodes that could not be scraped, by subnet.
+type FetchedMetrics = (
+    BTreeMap<SubnetId, MetricsByReplica>,
+    Vec<(SubnetId, ScrapeError)>,
+);
 
 /// Fetches the metrics the terms are evaluated on: all of them from the subnet
 /// that is cooling down, and those of terms 1 and 2 from every other subnet.
-/// Returns them along with the nodes that could not be scraped, by subnet.
-/// Fails if `subnets` lists no node for a subnet, the cooling down one
-/// included.
+/// Fails if `subnets` does not list the cooling down subnet, or lists no node
+/// for a subnet.
 async fn fetch_readiness_metrics(
     subnets: &SubnetNodeIps,
     source_subnet_id: SubnetId,
-) -> Result<(AllSubnetMetrics, Vec<(SubnetId, ScrapeError)>), ReadinessError> {
+) -> Result<FetchedMetrics, ReadinessError> {
     if !subnets.contains_key(&source_subnet_id) {
-        return Err(ReadinessError::NoNodes(source_subnet_id));
+        return Err(ReadinessError::UnknownSubnet(source_subnet_id));
     }
-    let mut result = AllSubnetMetrics::new();
+    if let Some((&subnet_id, _)) = subnets.iter().find(|(_, node_ips)| node_ips.is_empty()) {
+        return Err(ReadinessError::NoNodes(subnet_id));
+    }
+    let mut result = BTreeMap::new();
     let mut scrape_failures = Vec::new();
-    for &subnet_id in subnets.keys() {
+    for (&subnet_id, node_ips) in subnets {
         let metrics: &[&str] = if subnet_id == source_subnet_id {
             &[
                 METRIC_REGISTRY_VERSION,
@@ -180,34 +165,38 @@ async fn fetch_readiness_metrics(
         } else {
             &[METRIC_REGISTRY_VERSION, METRIC_STREAM_MESSAGES]
         };
-        let (subnet_metrics, failures) = subnet_metrics(subnets, subnet_id, metrics).await?;
-        result.insert(subnet_id, subnet_metrics);
+        let (metrics, failures) = metrics_helper::fetch_available_metrics(node_ips, metrics).await;
+        result.insert(subnet_id, metrics);
         scrape_failures.extend(failures.map(|err| (subnet_id, err)));
     }
     Ok((result, scrape_failures))
 }
 
-/// Whether at least 2/3 of the replicas of a subnet, i.e. of `node_ips`, could
-/// be scraped and satisfy `satisfies`.
+/// Whether a quorum of the replicas of a subnet, i.e. of `node_ips`, could be
+/// scraped and satisfy `satisfies`.
 fn holds_on_quorum(
     node_ips: &[IpAddr],
-    metrics: &SubnetMetrics,
-    satisfies: impl Fn(&Metrics, &IpAddr) -> bool,
+    metrics: &MetricsByReplica,
+    satisfies: impl Fn(&ReplicaMetrics) -> bool,
 ) -> bool {
     let satisfied = node_ips
         .iter()
-        .filter(|ip| metrics.scraped.contains(ip) && satisfies(&metrics.metrics, ip))
+        .filter_map(|ip| metrics.get(ip))
+        .filter(|replica_metrics| satisfies(replica_metrics))
         .count();
     satisfied >= quorum(node_ips.len())
 }
 
 /// Whether a replica reports no value above zero for any series of `metric`
-/// whose labels match `labels_match`.
+/// whose labels match `labels_match`. A replica that does not export any such
+/// series, e.g. a counter it never touched, reports no such value.
 fn reports_nothing(
     metric: &'static str,
     labels_match: impl Fn(&Labels) -> bool,
-) -> impl Fn(&Metrics, &IpAddr) -> bool {
-    move |metrics, ip| metrics_helper::max_on_replica(metrics, metric, &labels_match, ip) == 0.0
+) -> impl Fn(&ReplicaMetrics) -> bool {
+    move |metrics| {
+        metrics_helper::replica_values(metrics, metric, &labels_match).all(|value| value <= 0.0)
+    }
 }
 
 /// Evaluates the terms on the metrics that `fetch_readiness_metrics` fetched,
@@ -215,20 +204,22 @@ fn reports_nothing(
 /// included.
 fn evaluate(
     subnets: &SubnetNodeIps,
-    metrics: &AllSubnetMetrics,
+    metrics: &BTreeMap<SubnetId, MetricsByReplica>,
     source_subnet_id: SubnetId,
     registry_version: u64,
 ) -> Vec<Term> {
-    let holds_on = |subnet_id: &SubnetId, satisfies: &dyn Fn(&Metrics, &IpAddr) -> bool| {
+    let holds_on = |subnet_id: &SubnetId, satisfies: &dyn Fn(&ReplicaMetrics) -> bool| {
         holds_on_quorum(&subnets[subnet_id], &metrics[subnet_id], satisfies)
     };
     let holds_on_source =
-        |satisfies: &dyn Fn(&Metrics, &IpAddr) -> bool| holds_on(&source_subnet_id, satisfies);
+        |satisfies: &dyn Fn(&ReplicaMetrics) -> bool| holds_on(&source_subnet_id, satisfies);
 
     let source_subnet = source_subnet_id.to_string();
-    let registry_version_reached_on = |metrics: &Metrics, ip: &IpAddr| {
-        metrics_helper::min_on_replica(metrics, METRIC_REGISTRY_VERSION, |_| true, ip)
-            >= registry_version as f64
+    // A replica that reports no registry version has not reached `V`.
+    let registry_version_reached_on = |metrics: &ReplicaMetrics| {
+        metrics_helper::replica_values(metrics, METRIC_REGISTRY_VERSION, |_| true)
+            .reduce(f64::min)
+            .is_some_and(|version| version >= registry_version as f64)
     };
     let incoming_streams_empty_on = reports_nothing(METRIC_STREAM_MESSAGES, |labels| {
         labels.get("remote") == Some(&source_subnet)
@@ -265,17 +256,17 @@ fn evaluate(
     let refund_pool_empty = holds_on_source(&refund_pool_empty_on);
 
     let common_quorum = subnets.keys().all(|subnet_id| {
-        holds_on(subnet_id, &|metrics, ip| {
-            registry_version_reached_on(metrics, ip)
+        holds_on(subnet_id, &|metrics| {
+            registry_version_reached_on(metrics)
                 && if *subnet_id == source_subnet_id {
-                    outgoing_streams_empty_on(metrics, ip)
-                        && ingress_history_processing_only_on(metrics, ip)
-                        && subnet_input_queues_empty_on(metrics, ip)
-                        && subnet_output_queues_empty_on(metrics, ip)
-                        && subnet_call_contexts_empty_on(metrics, ip)
-                        && refund_pool_empty_on(metrics, ip)
+                    outgoing_streams_empty_on(metrics)
+                        && ingress_history_processing_only_on(metrics)
+                        && subnet_input_queues_empty_on(metrics)
+                        && subnet_output_queues_empty_on(metrics)
+                        && subnet_call_contexts_empty_on(metrics)
+                        && refund_pool_empty_on(metrics)
                 } else {
-                    incoming_streams_empty_on(metrics, ip)
+                    incoming_streams_empty_on(metrics)
                 }
         })
     });
@@ -289,7 +280,7 @@ fn evaluate(
         term(
             Condition::RegistryVersion,
             format!(
-                "at least 2/3 of the replicas of every subnet have reached registry version \
+                "a quorum of the replicas of every subnet has reached registry version \
                  {registry_version}"
             ),
             registry_version_reached,
@@ -297,83 +288,56 @@ fn evaluate(
         term(
             Condition::IncomingStreams,
             format!(
-                "at least 2/3 of the replicas of every remote subnet hold no message in their \
-                 stream to subnet {source_subnet_id}"
+                "a quorum of the replicas of every remote subnet holds no message in its stream \
+                 to subnet {source_subnet_id}"
             ),
             incoming_streams_empty,
         ),
         term(
             Condition::OutgoingStreams,
             format!(
-                "at least 2/3 of the replicas of subnet {source_subnet_id} hold no message in \
-                 any of its streams, loopback included"
+                "a quorum of the replicas of subnet {source_subnet_id} holds no message in any \
+                 of its streams, loopback included"
             ),
             outgoing_streams_empty,
         ),
         term(
             Condition::IngressHistory,
-            "the ingress history holds nothing but `processing` entries on at least 2/3 of the \
+            "the ingress history holds nothing but `processing` entries on a quorum of the \
              replicas"
                 .to_string(),
             ingress_history_processing_only,
         ),
         term(
             Condition::SubnetInputQueues,
-            "the subnet input queues are empty on at least 2/3 of the replicas".to_string(),
+            "the subnet input queues are empty on a quorum of the replicas".to_string(),
             subnet_input_queues_empty,
         ),
         term(
             Condition::SubnetOutputQueues,
-            "the subnet output queues are empty on at least 2/3 of the replicas".to_string(),
+            "the subnet output queues are empty on a quorum of the replicas".to_string(),
             subnet_output_queues_empty,
         ),
         term(
             Condition::SubnetCallContexts,
-            "the subnet call context manager holds no call context on at least 2/3 of the \
-             replicas"
+            "the subnet call context manager holds no call context on a quorum of the replicas"
                 .to_string(),
             subnet_call_contexts_empty,
         ),
         term(
             Condition::RefundPool,
-            "the refund pool holds no pending anonymous refund on at least 2/3 of the replicas"
+            "the refund pool holds no pending anonymous refund on a quorum of the replicas"
                 .to_string(),
             refund_pool_empty,
         ),
         term(
             Condition::CommonQuorum,
-            "on every subnet, the same quorum of at least 2/3 of its replicas satisfies all \
-             applicable conditions together, including the registry version"
+            "on every subnet, the same quorum of the replicas satisfies all applicable \
+             conditions together"
                 .to_string(),
             common_quorum,
         ),
     ]
-}
-
-/// Fetches the given metrics from those nodes of `subnet_id` that can be
-/// scraped. Returns them along with the nodes that could not be scraped, if
-/// any.
-async fn subnet_metrics(
-    subnets: &SubnetNodeIps,
-    subnet_id: SubnetId,
-    metrics: &[&str],
-) -> Result<(SubnetMetrics, Option<ScrapeError>), ReadinessError> {
-    let node_ips = match subnets.get(&subnet_id) {
-        Some(node_ips) if !node_ips.is_empty() => node_ips.as_slice(),
-        _ => return Err(ReadinessError::NoNodes(subnet_id)),
-    };
-
-    let (metrics, failures) = metrics_helper::fetch_available_metrics(node_ips, metrics).await;
-    let scraped = node_ips
-        .iter()
-        .filter(|ip| {
-            failures
-                .as_ref()
-                .is_none_or(|err| err.failures.iter().all(|(failed, _)| failed != *ip))
-        })
-        .copied()
-        .collect();
-    Ok((SubnetMetrics { metrics, scraped }, failures))
 }
 
 #[cfg(test)]
@@ -381,6 +345,7 @@ mod tests {
     use super::*;
 
     use ic_base_types::PrincipalId;
+    use strum::IntoEnumIterator;
 
     const V: u64 = 10;
 
@@ -410,9 +375,9 @@ mod tests {
     }
 
     /// Sets the value that `node` of `subnet_id` reports for the series of
-    /// `metric` with the given labels, which makes `node` a scraped one.
+    /// `metric` with the given labels.
     fn set(
-        metrics: &mut AllSubnetMetrics,
+        metrics: &mut BTreeMap<SubnetId, MetricsByReplica>,
         subnet_id: SubnetId,
         node: u8,
         metric: &str,
@@ -423,28 +388,23 @@ mod tests {
             .iter()
             .map(|(name, value)| (name.to_string(), value.to_string()))
             .collect();
-        let subnet_metrics = metrics.entry(subnet_id).or_default();
-        subnet_metrics.scraped.insert(ip(node));
-        subnet_metrics
-            .metrics
-            .entry((metric.to_string(), labels))
+        metrics
+            .entry(subnet_id)
             .or_default()
-            .insert(ip(node), value);
+            .entry(ip(node))
+            .or_default()
+            .insert((metric.to_string(), labels), value);
     }
 
     /// Makes `node` of `subnet_id` one that could not be scraped.
-    fn unscrape(metrics: &mut AllSubnetMetrics, subnet_id: SubnetId, node: u8) {
-        let subnet_metrics = metrics.get_mut(&subnet_id).unwrap();
-        subnet_metrics.scraped.remove(&ip(node));
-        for values in subnet_metrics.metrics.values_mut() {
-            values.remove(&ip(node));
-        }
+    fn unscrape(metrics: &mut BTreeMap<SubnetId, MetricsByReplica>, subnet_id: SubnetId, node: u8) {
+        metrics.get_mut(&subnet_id).unwrap().remove(&ip(node));
     }
 
     /// Metrics on which the condition holds: every replica reports registry
     /// version `V`, and empty streams, queues etc.
-    fn ready_metrics() -> AllSubnetMetrics {
-        let mut metrics = AllSubnetMetrics::new();
+    fn ready_metrics() -> BTreeMap<SubnetId, MetricsByReplica> {
+        let mut metrics = BTreeMap::new();
         let (s_id, r_id) = (s().to_string(), r().to_string());
         for node in S_NODES {
             set(
@@ -531,7 +491,7 @@ mod tests {
     }
 
     /// The conditions that do not hold on `metrics`.
-    fn violated(metrics: &AllSubnetMetrics) -> Vec<Condition> {
+    fn violated(metrics: &BTreeMap<SubnetId, MetricsByReplica>) -> Vec<Condition> {
         evaluate(&subnets(), metrics, s(), V)
             .into_iter()
             .filter(|term| !term.satisfied)
@@ -540,12 +500,12 @@ mod tests {
     }
 
     #[test]
-    fn quorum_is_at_least_two_thirds() {
+    fn quorum_is_all_but_the_tolerated_faults() {
         assert_eq!(
             (1..=13).map(quorum).collect::<Vec<_>>(),
-            vec![1, 2, 2, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9]
+            vec![1, 2, 3, 3, 4, 5, 5, 6, 7, 7, 8, 9, 9]
         );
-        assert_eq!(quorum(34), 23);
+        assert_eq!(quorum(15), 11);
     }
 
     #[test]
@@ -553,17 +513,7 @@ mod tests {
         let terms = evaluate(&subnets(), &ready_metrics(), s(), V);
         assert_eq!(
             terms.iter().map(|term| term.condition).collect::<Vec<_>>(),
-            vec![
-                Condition::RegistryVersion,
-                Condition::IncomingStreams,
-                Condition::OutgoingStreams,
-                Condition::IngressHistory,
-                Condition::SubnetInputQueues,
-                Condition::SubnetOutputQueues,
-                Condition::SubnetCallContexts,
-                Condition::RefundPool,
-                Condition::CommonQuorum,
-            ]
+            Condition::iter().collect::<Vec<_>>()
         );
         assert!(terms.iter().all(|term| term.satisfied));
     }
@@ -579,7 +529,7 @@ mod tests {
     }
 
     impl Violation {
-        fn set_on(&self, metrics: &mut AllSubnetMetrics, node: u8) {
+        fn set_on(&self, metrics: &mut BTreeMap<SubnetId, MetricsByReplica>, node: u8) {
             let labels: Vec<(&str, &str)> = self
                 .labels
                 .iter()
@@ -675,7 +625,7 @@ mod tests {
     }
 
     #[test]
-    fn each_condition_is_violated_on_its_own_by_more_than_a_third() {
+    fn each_condition_is_violated_on_its_own_without_a_quorum() {
         for violation in violations() {
             let Violation {
                 condition,
@@ -684,7 +634,7 @@ mod tests {
                 labels,
                 value,
             } = &violation;
-            // Two of four replicas, i.e. more than a third of them.
+            // Two of four replicas, i.e. more than the one faulty replica tolerated.
             for violating in [[0, 1], [1, 3], [2, 3]] {
                 let mut metrics = ready_metrics();
                 for i in violating {
@@ -700,7 +650,7 @@ mod tests {
     }
 
     #[test]
-    fn a_third_of_the_replicas_does_not_violate_a_condition() {
+    fn a_faulty_replica_does_not_violate_a_condition() {
         for violation in violations() {
             let Violation {
                 subnet_id,
@@ -709,7 +659,7 @@ mod tests {
                 value,
                 ..
             } = &violation;
-            // One of four replicas, i.e. less than a third of them.
+            // One of four replicas, i.e. as many as the faulty replicas tolerated.
             for node in nodes(*subnet_id) {
                 let mut metrics = ready_metrics();
                 violation.set_on(&mut metrics, node);
@@ -912,12 +862,13 @@ mod tests {
             let mut metrics = ready_metrics();
             // Two of the replicas of the subnet report no registry version,
             // the other two still do.
-            for ((name, _), values) in &mut metrics.get_mut(&subnet_id).unwrap().metrics {
-                if name == METRIC_REGISTRY_VERSION {
-                    for node in &nodes(subnet_id)[..2] {
-                        values.remove(&ip(*node));
-                    }
-                }
+            for node in &nodes(subnet_id)[..2] {
+                metrics
+                    .get_mut(&subnet_id)
+                    .unwrap()
+                    .get_mut(&ip(*node))
+                    .unwrap()
+                    .retain(|(name, _), _| name != METRIC_REGISTRY_VERSION);
             }
             assert_eq!(
                 violated(&metrics),
@@ -928,17 +879,21 @@ mod tests {
     }
 
     #[test]
-    fn fails_if_a_subnet_has_no_nodes() {
+    fn fails_if_a_subnet_is_unknown_or_has_no_nodes() {
         let evaluate = |subnets: SubnetNodeIps| {
             futures::executor::block_on(evaluate_merge_readiness(&subnets, s(), V))
         };
 
         let mut without_s = subnets();
         without_s.remove(&s());
-        assert!(matches!(evaluate(without_s), Err(ReadinessError::NoNodes(id)) if id == s()));
+        assert!(matches!(evaluate(without_s), Err(ReadinessError::UnknownSubnet(id)) if id == s()));
 
         let mut s_without_nodes = subnets();
         s_without_nodes.insert(s(), vec![]);
         assert!(matches!(evaluate(s_without_nodes), Err(ReadinessError::NoNodes(id)) if id == s()));
+
+        let mut r_without_nodes = subnets();
+        r_without_nodes.insert(r(), vec![]);
+        assert!(matches!(evaluate(r_without_nodes), Err(ReadinessError::NoNodes(id)) if id == r()));
     }
 }

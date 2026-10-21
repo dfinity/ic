@@ -123,7 +123,7 @@ const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 
 /// The number of nodes of every subnet. More than one so that the terms of the
 /// merge readiness condition, which must hold together on the same quorum of
-/// at least 2/3 of the replicas of a subnet, range over more than one replica.
+/// the replicas of a subnet, range over more than one replica.
 const SUBNET_SIZE: usize = 4;
 
 /// The DKG interval length of the Application subnets, i.e. one less than the
