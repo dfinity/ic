@@ -4001,7 +4001,6 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "rustc-demangle",
- "rustc-hash 1.1.0",
  "rustix 1.1.4",
  "rustls",
  "rustls-pemfile",

@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "d7023d0da8ee7ee36803e8fac37765cd17385283ddf2d1e54b38f32854461158",
+  "checksum": "7681313e56e035da7bf36b975c0b9cb368fd82b31e71cf3df27e29723aa92b76",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -18025,10 +18025,6 @@
           {
             "id": "rustc-demangle 0.1.26",
             "target": "rustc_demangle"
-          },
-          {
-            "id": "rustc-hash 1.1.0",
-            "target": "rustc_hash"
           },
           {
             "id": "rustix 1.1.4",
@@ -67092,7 +67088,6 @@
     "rust_decimal 1.42.1",
     "rust_decimal_macros 1.40.0",
     "rustc-demangle 0.1.26",
-    "rustc-hash 1.1.0",
     "rustix 1.1.4",
     "rustls 0.23.46",
     "rustls-pemfile 2.2.0",

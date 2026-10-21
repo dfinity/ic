@@ -74,7 +74,6 @@ BASE_DEPENDENCIES = [
         "@crate_index//:maplit",
         "@crate_index//:rand",
         "@crate_index//:regex",
-        "@crate_index//:rustc-hash",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:tokio",

@@ -893,7 +893,6 @@ rust_decimal = { version = "^1.42", default-features = false, features = [
 ] }
 rust_decimal_macros = "^1.40"
 rustc-demangle = { version = "0.1.16" }
-rustc-hash = "^1.1.0"
 rustix = { version = "1.1.4", default-features = false, features = [
     "event",
     "fs",

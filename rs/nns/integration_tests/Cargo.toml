@@ -109,7 +109,6 @@ phantom_newtype = { path = "../../phantom_newtype" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
-rustc-hash = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
