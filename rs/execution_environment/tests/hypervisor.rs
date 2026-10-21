@@ -5186,6 +5186,51 @@ fn cannot_execute_update_on_stopped_canister() {
 }
 
 #[test]
+fn cannot_execute_non_existing_method_on_stopping_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    test.stop_canister(canister_id);
+    assert_matches!(
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopping
+    );
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let err = test.ingress(canister_id, "foo", vec![]).unwrap_err();
+    // The canister status error takes precedence over the missing method error.
+    assert_eq!(ErrorCode::CanisterStopping, err.code());
+    assert_eq!(
+        format!("Canister {canister_id} is not running"),
+        err.description()
+    );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
+}
+
+#[test]
+fn cannot_execute_non_existing_method_on_stopped_canister() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        CanisterStatusType::Stopped,
+        test.canister_state(canister_id).system_state.status()
+    );
+    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let err = test.ingress(canister_id, "foo", vec![]).unwrap_err();
+    // The canister status error takes precedence over the missing method error.
+    assert_eq!(ErrorCode::CanisterStopped, err.code());
+    assert_eq!(
+        format!("Canister {canister_id} is not running"),
+        err.description()
+    );
+    // No execution cycles (not even the base fee) are charged.
+    let balance_after = test.canister_state(canister_id).system_state.balance();
+    assert_eq!(balance_before, balance_after);
+}
+
+#[test]
 fn cannot_execute_query_on_stopping_canister() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();

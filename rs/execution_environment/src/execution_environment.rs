@@ -7,8 +7,8 @@ use crate::canister_manager::types::{
 use crate::canister_settings::CanisterSettings;
 use crate::execution::call_or_task::execute_call_or_task;
 use crate::execution::common::{
-    CanisterAccess, canister_info, finish_call_with_error, list_canisters, validate_method,
-    validate_sender_on_subnet,
+    CanisterAccess, canister_info, finish_call_with_error, list_canisters, validate_canister,
+    validate_method, validate_sender_on_subnet,
 };
 use crate::execution::inspect_message;
 use crate::execution::response::execute_response;
@@ -2568,7 +2568,12 @@ impl ExecutionEnvironment {
         if prepaid_execution_cycles.is_none()
             && let Err(err) = validate_method(&method, &canister)
         {
-            let user_error = err.into_user_error(&canister.canister_id());
+            // Errors due to the canister status (stopping or stopped) take
+            // precedence over errors due to the called method (same as in
+            // `validate_message`).
+            let user_error = validate_canister(&canister)
+                .err()
+                .unwrap_or_else(|| err.into_user_error(&canister.canister_id()));
             return finish_call_with_error(
                 user_error,
                 canister,
