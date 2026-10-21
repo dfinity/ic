@@ -5088,7 +5088,7 @@ fn observe_input_metrics(
 ) {
     let (load_metrics, connection_metrics) = canister
         .system_state
-        .canister_metrics_mut
+        .canister_metrics_mut()
         .load_and_connection_metrics_mut();
 
     match next_input {
