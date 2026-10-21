@@ -619,23 +619,27 @@ fn can_read_canister_metadata(
 
             // Controllers and subnet admins of the canister's cloud engine can
             // request private custom sections, matching `canister_metadata`.
-            let is_cloud_engine_admin = state
+            let cloud_engine = state
                 .metadata
                 .network_topology
                 .subnets()
                 .get(&state.metadata.own_subnet_id)
-                .is_some_and(|subnet| {
-                    subnet.subnet_type == SubnetType::CloudEngine
-                        && subnet.subnet_admins.contains(&user.get())
-                });
+                .filter(|subnet| subnet.subnet_type == SubnetType::CloudEngine);
+            let is_cloud_engine_admin =
+                cloud_engine.is_some_and(|subnet| subnet.subnet_admins.contains(&user.get()));
             if custom_section.visibility() == CustomSectionType::Private
                 && !canister.system_state.controllers.contains(&user.get())
                 && !is_cloud_engine_admin
             {
+                let subnet_admins = if cloud_engine.is_some() {
+                    " or subnet admins of its cloud engine"
+                } else {
+                    ""
+                };
                 return Err(HttpError {
                     status: StatusCode::FORBIDDEN,
                     message: format!(
-                        "Custom section {custom_section_name:.100} can only be requested by the controllers of the canister or subnet admins of its cloud engine."
+                        "Custom section {custom_section_name:.100} can only be requested by the controllers of the canister{subnet_admins}."
                     ),
                 });
             }
@@ -858,7 +862,7 @@ mod test {
             can_read_canister_metadata(&non_controller, &canister_id, "candid", &state),
             Err(HttpError {
                 status: StatusCode::FORBIDDEN,
-                message: "Custom section candid can only be requested by the controllers of the canister or subnet admins of its cloud engine."
+                message: "Custom section candid can only be requested by the controllers of the canister."
                     .to_string()
             })
         );
@@ -918,11 +922,19 @@ mod test {
             can_read_canister_metadata(&controller, &canister_id, "candid", &state),
             Ok(())
         );
+        let expected_message = if subnet_type == SubnetType::CloudEngine
+            && admin_subnet_id == APP_SUBNET_ID
+        {
+            "Custom section candid can only be requested by the controllers of the canister or subnet admins of its cloud engine."
+        } else {
+            "Custom section candid can only be requested by the controllers of the canister."
+        };
         assert_eq!(
-            can_read_canister_metadata(&stranger, &canister_id, "candid", &state)
-                .unwrap_err()
-                .status,
-            StatusCode::FORBIDDEN
+            can_read_canister_metadata(&stranger, &canister_id, "candid", &state),
+            Err(HttpError {
+                status: StatusCode::FORBIDDEN,
+                message: expected_message.to_string(),
+            })
         );
         for user in [admin, stranger] {
             for section in ["dummy", "unknown-name"] {
