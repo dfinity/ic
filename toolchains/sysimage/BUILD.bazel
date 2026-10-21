@@ -4,10 +4,17 @@ load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 package(default_visibility = ["//visibility:public"])
 
-# Process wrapper for commands that are run as part of the ic-os build.
+# Process wrapper for the ic-os build commands that run podman.
 sh_binary(
     name = "proc_wrapper",
     srcs = ["proc_wrapper.sh"],
+)
+
+# Process wrapper for all other ic-os build commands. They need no privileges,
+# so they can run sandboxed and remotely.
+sh_binary(
+    name = "tmpdir_wrapper",
+    srcs = ["tmpdir_wrapper.sh"],
 )
 
 # Common libs
@@ -48,6 +55,7 @@ py_binary(
 py_binary(
     name = "build_ext4_image",
     srcs = ["build_ext4_image.py"],
+    deps = [":utils"],
 )
 
 py_binary(

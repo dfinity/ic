@@ -47,8 +47,12 @@ build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
 build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
-# Build everything ic-os without sandbox
-build --strategy_regexp=ic-os[:/].*=local
+# The ic-os container builds run rootless podman, which needs user namespaces: run them locally.
+build --strategy=IcosContainerBaseImage=local
+build --strategy=IcosContainerBuild=local
+
+# Run all ic-os image actions on the host, unsandboxed, as before.
+build:icos_host --strategy_regexp=ic-os[:/].*=local
 
 build --workspace_status_command='$(pwd)/bazel/workspace_status.sh'
 
@@ -58,6 +62,9 @@ common --flag_alias=timeout_value=//bazel:timeout_value
 common --flag_alias=hermetic_cc=//bazel:hermetic_cc
 
 common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --stamp'
+# Release builds don't use the remote cache for the IC-OS partitions and images, as before (for
+# the verity signing, see ic-os/defs.bzl).
+build:stamped --modify_execution_info=^Icos(VfatImage|Fat32Image|Ext4Image|DiskImage|LvmImage|UpgradeImage)$=+no-remote-cache
 
 # Configure all tests to retry automatically on failure (up to 3 times)
 # such that we can detect flaky tests ASAP and fix them.

@@ -1,0 +1,61 @@
+= Building IC-OS images with Bazel caching and remote execution
+
+== Execution and caching
+
+* Only the actions that run rootless `podman build` need the host: the
+  container builds (`IcosContainerBuild`, `IcosContainerBaseImage`) and the
+  bootloader tree. They run `local`, as before. The `fuse2fs` boot partition
+  extraction also stays on the host.
+* All other image actions (ext4/vfat/fat32/disk/LVM/upgrade images, verity
+  signing, launch measurements) only read and write regular files. They run
+  sandboxed locally and remotely on RBE, through `tmpdir_wrapper.sh`.
+* Image outputs are cached (no more `no-cache`). Release builds
+  (`--config=stamped`) don't use the remote cache for the partitions and
+  images.
+* The image actions use tools of the dev container that Bazel can't see, so
+  `ci/container/TAG` is an input of each of them.
+* `--config=icos_host` runs all image actions on the host, unsandboxed, as
+  before.
+
+== Sandbox pitfalls
+
+* *fakeroot:* it tries the real `chown` first and only ignores `EPERM`. In the
+  user namespace of Bazel's `linux-sandbox`, a `chown` to an unmapped uid fails
+  with `EINVAL` instead. `tmpdir_wrapper.sh` sets `FAKEROOTDONTTRYCHOWN=1`.
+* *faketime:* the `faketime` wrapper and libfaketime create a semaphore and
+  shared memory in `/dev/shm` named after the PID. Sandboxed actions have
+  separate PID namespaces but share `/dev/shm`, so concurrent actions collided
+  (`File exists`). The image tools preload libfaketime directly with
+  `FAKETIME_DISABLE_SHM=1` (`faketime_env()` in `toolchains/sysimage/utils.py`,
+  `debugfs_with_frozen_clock()` in `partition_tools`).
+* *setgid:* the sandbox directories on the `dind-large` runners are setgid,
+  which the scratch directories inherited, so the CI-built root partitions'
+  root directory was 2755. The scratch directories drop the setgid bit, and
+  the image actions use `umask 022`.
+* *Input modes:* Bazel materializes inputs as 0555 locally but 0755/0644 from
+  a remote executor, and `COPY` keeps the build context's modes. The context
+  files get 0755 or 0644 by their executable bit.
+* *Scratch space:* the RBE workers only have a 1 GB `/tmp` (#10797), so scratch
+  goes in the action's working directory.
+
+== `build-ic` on PRs
+
+`build-ic` is the uncached side of the `build-determinism` comparison. On PRs
+it builds the IC-OS images only if the PR changes their inputs
+(`ci/scripts/targets.py build --include_manual`), changes `build-ic.sh` or
+`targets.py`, or deletes any file (the query can't see what depended on it).
+`master`, `rc--*`, scheduled and all-targets runs always build them.
+
+== Not decided here: the executor of the container step
+
+Rootless podman needs user namespaces and the setuid `newuidmap`/`newgidmap`,
+which neither the sandbox nor the RBE workers provide, so the container builds
+stay on the host and the CI containers that run them stay `--privileged`.
+Their outputs are cached, so this only costs anything when a container
+filesystem's inputs change. What, if anything, replaces podman (#11784
+prototyped a KVM microVM) is a separate decision.
+
+== Open question
+
+How much does caching the images grow the remote cache? To be measured on
+CI.

@@ -13,6 +13,7 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     ".git",
     "buf.yaml",
+    "ci/container/TAG",  # an input of the IC-OS image actions (see //toolchains/sysimage:toolchain.bzl)
     "clippy.toml",
     "rustfmt.toml",
     "mainnet-canister-revisions.json",

@@ -22,7 +22,6 @@ disk_image(
     ],
     tags = [
         "manual",
-        "no-cache",
     ],
     target_compatible_with = ["@platforms//os:linux"],
 )
@@ -32,7 +31,6 @@ zstd_compress(
     srcs = [":disk-img.tar"],
     tags = [
         "manual",
-        "no-cache",
     ],
 )
 
@@ -44,7 +42,6 @@ upgrade_image(
     root_partition = "//ic-os/guestos/envs/dev:partition-root-test.tzst",
     tags = [
         "manual",
-        "no-cache",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     version_file = "//ic-os/guestos/envs/dev:version.txt",
@@ -55,7 +52,6 @@ zstd_compress(
     srcs = ["update-img.tar"],
     tags = [
         "manual",
-        "no-cache",
     ],
 )
 

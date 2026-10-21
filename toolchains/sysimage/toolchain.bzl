@@ -2,34 +2,54 @@
 Tools for building IC OS image.
 """
 
-# Similar to ctx.actions.run but runs the command wrapped in the ic-os build process
-# wrapper that sets up the environment. Can only be used in rules defined by
-# _icos_build_rule.
-def _run_with_icos_wrapper(
-        ctx,
-        executable,
-        arguments = [],
-        tools = [],
-        execution_requirements = {},
-        **kwargs):
+# The actions that run podman, which bazel/conf/.bazelrc.build runs locally.
+ICOS_CONTAINER_MNEMONICS = ["IcosContainerBaseImage", "IcosContainerBuild"]
+
+def _run_with_wrapper(ctx, wrapper, executable, arguments, tools, execution_requirements, inputs, **kwargs):
     ctx.actions.run(
-        executable = ctx.executable._icos_build_proc_wrapper,
+        executable = wrapper.files_to_run.executable,
         arguments = [executable] + arguments,
-        tools = tools + [ctx.attr._icos_build_proc_wrapper.files_to_run],
+        # The actions also use tools of the dev container (podman, fakeroot, tar, ...), which Bazel
+        # can't see. Its tag stands in for them in the cache key.
+        inputs = inputs + [ctx.file._icos_host_tools],
+        tools = tools + [wrapper.files_to_run],
         execution_requirements = execution_requirements |
                                  {"supports-graceful-termination": "1"},
         **kwargs
     )
 
+# Similar to ctx.actions.run but runs the command wrapped in proc_wrapper.sh,
+# for podman. Can only be used in rules defined by _icos_build_rule.
+def _run_with_podman_wrapper(ctx, executable, arguments = [], tools = [], execution_requirements = {}, inputs = [], **kwargs):
+    if kwargs.get("mnemonic") not in ICOS_CONTAINER_MNEMONICS:
+        fail("podman actions must use a mnemonic of ICOS_CONTAINER_MNEMONICS")
+    _run_with_wrapper(ctx, ctx.attr._icos_build_proc_wrapper, executable, arguments, tools, execution_requirements, inputs, **kwargs)
+
+# Similar to ctx.actions.run but runs the command wrapped in tmpdir_wrapper.sh.
+# Can only be used in rules defined by _icos_build_rule.
+def _run_with_icos_wrapper(ctx, executable, arguments = [], tools = [], execution_requirements = {}, inputs = [], **kwargs):
+    _run_with_wrapper(ctx, ctx.attr._icos_tmpdir_wrapper, executable, arguments, tools, execution_requirements, inputs, **kwargs)
+
 def _icos_build_rule(attrs = {}, **kwargs):
     return rule(
-        attrs = attrs |
-                {"_icos_build_proc_wrapper": attr.label(
-                    default = ":proc_wrapper",
-                    executable = True,
-                    cfg = "exec",
-                    allow_files = True,
-                )},
+        attrs = attrs | {
+            "_icos_build_proc_wrapper": attr.label(
+                default = ":proc_wrapper",
+                executable = True,
+                cfg = "exec",
+                allow_files = True,
+            ),
+            "_icos_tmpdir_wrapper": attr.label(
+                default = ":tmpdir_wrapper",
+                executable = True,
+                cfg = "exec",
+                allow_files = True,
+            ),
+            "_icos_host_tools": attr.label(
+                default = "//:ci/container/TAG",
+                allow_single_file = True,
+            ),
+        },
         **kwargs
     )
 
@@ -57,13 +77,15 @@ def _build_container_base_image_impl(ctx):
         for build_arg in ctx.attr.build_args:
             args.extend([build_arg])
 
-    _run_with_icos_wrapper(
+    _run_with_podman_wrapper(
         ctx,
         executable = ctx.executable._tool.path,
         arguments = args,
         inputs = inputs,
         outputs = outputs,
         tools = [ctx.attr._tool.files_to_run],
+        mnemonic = "IcosContainerBaseImage",
+        progress_message = "Building container base image %{output}",
         # Base image is NOT reproducible (because `apt install`)
         execution_requirements = {"no-remote-cache": "1"},
     )
@@ -123,13 +145,15 @@ def _build_container_filesystem_impl(ctx):
         args.extend(["--base-image-tar-file-tag", ctx.attr.base_image_tar_file_tag])
         inputs.append(ctx.file.base_image_tar_file)
 
-    _run_with_icos_wrapper(
+    _run_with_podman_wrapper(
         ctx,
         executable = ctx.executable._tool.path,
         arguments = args,
         inputs = inputs,
         outputs = outputs,
         tools = [ctx.attr._tool.files_to_run],
+        mnemonic = "IcosContainerBuild",
+        progress_message = "Building container filesystem %{output}",
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -202,6 +226,8 @@ def _vfat_image_impl(ctx):
         inputs = inputs,
         outputs = outputs,
         tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run, ctx.attr._zstd.files_to_run],
+        mnemonic = "IcosVfatImage",
+        progress_message = "Building vfat image %{output}",
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -296,6 +322,8 @@ def _fat32_image_impl(ctx):
         inputs = inputs,
         outputs = outputs,
         tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run, ctx.attr._zstd.files_to_run],
+        mnemonic = "IcosFat32Image",
+        progress_message = "Building fat32 image %{output}",
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -403,6 +431,8 @@ def _ext4_image_impl(ctx):
         inputs = inputs,
         outputs = outputs,
         tools = [ctx.attr._tool.files_to_run, ctx.attr._diroid.files_to_run, ctx.attr._dflate.files_to_run, ctx.attr._zstd.files_to_run],
+        mnemonic = "IcosExt4Image",
+        progress_message = "Building ext4 image %{output}",
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -470,6 +500,7 @@ def _disk_image_impl(ctx):
     outputs.append(output_file)
 
     args.extend(["-p", ctx.files.layout[0].path, "--dflate", ctx.executable._dflate.path])
+    args.extend(["--zstd", ctx.executable._zstd.path])
     inputs.extend(ctx.files.layout)
 
     if ctx.attr.expanded_size:
@@ -488,7 +519,9 @@ def _disk_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = outputs,
-        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run],
+        tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run, ctx.attr._zstd.files_to_run],
+        mnemonic = "IcosDiskImage",
+        progress_message = "Building disk image %{output}",
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -512,6 +545,11 @@ disk_image = _icos_build_rule(
         ),
         "_dflate": attr.label(
             default = "//rs/ic_os/build_tools/dflate",
+            executable = True,
+            cfg = "exec",
+        ),
+        "_zstd": attr.label(
+            default = "@zstd//:zstd_cli",
             executable = True,
             cfg = "exec",
         ),
@@ -555,6 +593,8 @@ def _lvm_image_impl(ctx):
         inputs = inputs,
         outputs = outputs,
         tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run, ctx.attr._zstd.files_to_run],
+        mnemonic = "IcosLvmImage",
+        progress_message = "Building lvm image %{output}",
     )
 
     return [DefaultInfo(files = depset(outputs))]
@@ -624,6 +664,8 @@ def _upgrade_image_impl(ctx):
         inputs = inputs,
         outputs = outputs,
         tools = [ctx.attr._tool.files_to_run, ctx.attr._dflate.files_to_run],
+        mnemonic = "IcosUpgradeImage",
+        progress_message = "Building upgrade image %{output}",
     )
 
     return [DefaultInfo(files = depset(outputs))]
