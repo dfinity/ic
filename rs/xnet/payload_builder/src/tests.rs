@@ -4,7 +4,7 @@ use crate::certified_slice_pool::{CRITICAL_ERROR_INCOMPARABLE_PEER_HEADER, Certi
 use crate::testing::XNetPayloadBuilderTesting;
 use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-use ic_crypto_tree_hash::Witness;
+use ic_crypto_tree_hash::{Digest, Witness};
 use ic_interfaces::messaging::{InvalidXNetPayload, XNetPayloadValidationFailure};
 use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;

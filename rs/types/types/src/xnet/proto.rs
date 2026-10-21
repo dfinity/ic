@@ -12,7 +12,6 @@ use crate::{
     signature::ThresholdSignature,
     xnet::CertifiedStreamSlice,
 };
-use ic_crypto_tree_hash::Witness;
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use std::convert::TryFrom;
