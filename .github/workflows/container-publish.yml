@@ -95,6 +95,14 @@ jobs:
     environment: publish-container-images
     permissions:
       contents: read
+    # Serializes the lookup-through-push of one tag across branches: two runs
+    # with the same new recipe hash must not both find it missing and both
+    # push. A run that waits here finds the tag and reuses it. (GitHub keeps
+    # one pending job per group; a third run's job is cancelled and that branch
+    # gets its pins from its next container change.)
+    concurrency:
+      group: ${{ github.workflow }}-${{ matrix.image }}-${{ needs.prep.outputs.image_tag }}
+      cancel-in-progress: false
     strategy:
       matrix:
         include:
@@ -221,17 +229,27 @@ jobs:
           ref: ${{ github.event.workflow_run.head_branch }}
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Check that the branch is still at the triggering commit
+      - name: Check that the branch still has the recipe that was built
         id: guard
         env:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        # The pins describe the triggering commit's recipe; a branch that moved
-        # on gets them from the run for its new head. A push that races this
-        # check is rejected by the non-forced push below.
+          IMAGE_TAG: ${{ needs.prep.outputs.image_tag }}
+        # The pins describe a recipe. If the branch moved on with that recipe
+        # unchanged (an unrelated push, which on a dev-gh-* branch does not
+        # trigger another run) they are committed to its new head; if its
+        # recipe changed, the push that changed it triggered the run that
+        # publishes for the new head. A push that races this check is rejected
+        # by the non-forced push below.
         run: |
+          set -euo pipefail
           if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then
-            echo "::notice::the branch moved on from $HEAD_SHA; the run for its new head publishes instead"
-            echo "stale=true" >> "$GITHUB_OUTPUT"
+            tip_tag="$(sha256sum ci/container/Dockerfile ci/container/init.sh ci/container/files/* | sha256sum | cut -d' ' -f1)"
+            if [ "$tip_tag" = "$IMAGE_TAG" ]; then
+              echo "::notice::the branch moved on from $HEAD_SHA with its recipe unchanged; committing the pins to its new head"
+            else
+              echo "::notice::the branch moved on from $HEAD_SHA and its recipe changed; the run for its new head publishes instead (dispatch Container IC Build Image on it if none runs)"
+              echo "stale=true" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
       - name: Update Image References
