@@ -765,14 +765,6 @@ impl StreamHandlerImpl {
         // any such cycles are illegitimate: if such a message is dropped (or its cycles are
         // stripped), its cycles are not accounted for as lost.
         let is_at_engine_boundary = self.is_at_engine_boundary(remote_subnet_id, state);
-        let observe_lost_cycles = |state: &mut ReplicatedState, cycles: Cycles| {
-            if !is_at_engine_boundary {
-                state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                    cycles,
-                    own_cost_schedule,
-                ));
-            }
-        };
 
         let (mut msg, msg_type) = match msg {
             StreamMessage::Request(req) => {
@@ -796,7 +788,6 @@ impl StreamHandlerImpl {
                         LABEL_VALUE_TYPE_REFUND,
                         LABEL_VALUE_ENGINE_NOT_ALLOWED,
                     );
-                    observe_lost_cycles(state, refund.amount());
                     stream.push_accept_signal();
                     return;
                 }
@@ -855,9 +846,6 @@ impl StreamHandlerImpl {
                                 rep,
                             );
                             self.metrics.critical_error_engine_message.inc();
-                            if rep.refund > Cycles::zero() {
-                                observe_lost_cycles(state, rep.refund);
-                            }
                             if rep.deadline != NO_DEADLINE {
                                 // Best-effort illegal response: drop it. The caller will time
                                 // out on its own, so there is no need to deliver it.
@@ -952,7 +940,12 @@ impl StreamHandlerImpl {
                 stream.push_accept_signal();
                 // Cycles are lost (but only accounted for as such if not at an engine
                 // boundary).
-                observe_lost_cycles(state, rep.refund);
+                if !is_at_engine_boundary {
+                    state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                        rep.refund,
+                        own_cost_schedule,
+                    ));
+                }
             }
         }
     }
@@ -1173,8 +1166,7 @@ impl StreamHandlerImpl {
 
     /// Returns `true` iff messages from `remote_subnet_id` cross an engine boundary,
     /// i.e. iff `remote_subnet_id` is not this subnet and either this subnet or
-    /// `remote_subnet_id` is a CloudEngine subnet. Such messages are not allowed to be
-    /// guaranteed-response or to carry cycles.
+    /// `remote_subnet_id` is a CloudEngine subnet.
     fn is_at_engine_boundary(&self, remote_subnet_id: SubnetId, state: &ReplicatedState) -> bool {
         let remote_is_engine = state
             .metadata
