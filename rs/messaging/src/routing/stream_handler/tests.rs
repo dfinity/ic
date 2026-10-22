@@ -2764,62 +2764,70 @@ fn induct_stream_slices_with_refunds() {
     }
 }
 
-/// Tests that a refund arriving in a slice across an engine boundary is dropped,
-/// its cycles are not observed as lost (engines are not allowed to attach
-/// cycles to messages crossing the engine boundary), and a critical error is raised. With subnet
+/// Tests that a refund arriving in a slice across an engine boundary (from a remote
+/// CloudEngine subnet; or from a regular subnet onto a CloudEngine subnet) is dropped,
+/// its cycles are not observed as lost (no cycles are allowed to be attached to
+/// messages crossing an engine boundary), and a critical error is raised. With subnet
 /// types fixed at creation, an honest peer would never produce such a refund —
 /// arrival here implies a malicious or buggy sender.
 #[test]
 fn induct_stream_slices_drops_refund_at_engine_boundary() {
-    with_test_setup(
-        btreemap![],
-        btreemap![REMOTE_SUBNET => StreamSliceConfig {
-            messages: vec![Refund(*LOCAL_CANISTER)],
-            ..StreamSliceConfig::default()
-        }],
-        |stream_handler, mut state, slices, metrics| {
-            // Mark REMOTE_SUBNET as a CloudEngine.
-            state.metadata.modify_network_topology(|network_topology| {
-                network_topology.subnets_mut().insert(
-                    REMOTE_SUBNET,
-                    SubnetTopology {
-                        subnet_type: SubnetType::CloudEngine,
-                        ..Default::default()
-                    },
+    for remote_is_engine in [true, false] {
+        with_test_setup(
+            btreemap![],
+            btreemap![REMOTE_SUBNET => StreamSliceConfig {
+                messages: vec![Refund(*LOCAL_CANISTER)],
+                ..StreamSliceConfig::default()
+            }],
+            |stream_handler, mut state, slices, metrics| {
+                if remote_is_engine {
+                    // Mark REMOTE_SUBNET as a CloudEngine.
+                    state.metadata.modify_network_topology(|network_topology| {
+                        network_topology.subnets_mut().insert(
+                            REMOTE_SUBNET,
+                            SubnetTopology {
+                                subnet_type: SubnetType::CloudEngine,
+                                ..Default::default()
+                            },
+                        );
+                    });
+                } else {
+                    // Make this subnet a CloudEngine.
+                    state.metadata.own_subnet_type = SubnetType::CloudEngine;
+                }
+
+                // Expected state: a stream with one accept signal, no induction, no cycles
+                // observed as lost.
+                assert!(refund_in_slice(slices.get(&REMOTE_SUBNET), 0).amount() > Cycles::zero());
+                let mut expected_state = state.clone();
+                let expected_stream = stream_from_config(StreamConfig {
+                    signals_end: 1,
+                    ..StreamConfig::default()
+                });
+                expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+
+                let mut available_guaranteed_response_memory =
+                    stream_handler.available_guaranteed_response_memory(&state);
+                let inducted_state = stream_handler.induct_stream_slices(
+                    state,
+                    slices,
+                    &mut available_guaranteed_response_memory,
                 );
-            });
 
-            // Expected state: a stream with one accept signal, no induction, no cycles
-            // observed as lost.
-            assert!(refund_in_slice(slices.get(&REMOTE_SUBNET), 0).amount() > Cycles::zero());
-            let mut expected_state = state.clone();
-            let expected_stream = stream_from_config(StreamConfig {
-                signals_end: 1,
-                ..StreamConfig::default()
-            });
-            expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
+                assert_eq!(expected_state, inducted_state);
 
-            let mut available_guaranteed_response_memory =
-                stream_handler.available_guaranteed_response_memory(&state);
-            let inducted_state = stream_handler.induct_stream_slices(
-                state,
-                slices,
-                &mut available_guaranteed_response_memory,
-            );
-
-            assert_eq!(expected_state, inducted_state);
-
-            metrics.assert_inducted_xnet_messages_eq(&[(
-                LABEL_VALUE_TYPE_REFUND,
-                LABEL_VALUE_ENGINE_NOT_ALLOWED,
-                1,
-            )]);
-            metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                engine_message: 1,
-                ..CriticalErrorCounts::default()
-            });
-        },
-    );
+                metrics.assert_inducted_xnet_messages_eq(&[(
+                    LABEL_VALUE_TYPE_REFUND,
+                    LABEL_VALUE_ENGINE_NOT_ALLOWED,
+                    1,
+                )]);
+                metrics.assert_eq_critical_errors(CriticalErrorCounts {
+                    engine_message: 1,
+                    ..CriticalErrorCounts::default()
+                });
+            },
+        );
+    }
 }
 
 /// Tests that messages in the loopback stream and incoming slices are inducted
