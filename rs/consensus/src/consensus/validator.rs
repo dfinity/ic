@@ -3182,6 +3182,7 @@ pub mod test {
     /// later blocks rely on its start height to find their summary block.
     #[rstest]
     #[case::interval_start(Height::new(0), true)]
+    #[case::next_interval(Height::new(DKG_INTERVAL_LENGTH + 1), false)]
     #[case::earlier_data_block(Height::new(2), false)]
     #[case::own_height(Height::new(4), false)]
     fn test_dkg_start_height_is_validated_while_halted(
