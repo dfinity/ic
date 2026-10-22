@@ -27,8 +27,11 @@ on:
     types:
       - completed
 
+# Eligible runs for one branch replace each other. A run that prep skips (a
+# fork, or an unsuccessful upstream run) gets a group of its own, so that it
+# cannot cancel a run that publishes for the same branch name.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  group: ${{ github.workflow }}-${{ (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository) && format('{0}/{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) || github.run_id }}
   cancel-in-progress: true
 
 permissions: {}
