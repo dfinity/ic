@@ -90,7 +90,9 @@ use candid::Principal;
 use ic_agent::Agent;
 use ic_recovery::RecoveryArgs;
 use ic_registry_subnet_type::SubnetType;
-use ic_subnet_merging::metrics_helper::{fetch_metrics, min_across_replicas};
+use ic_subnet_merging::metrics_helper::{
+    Labels, MetricsByReplica, ScrapeError, fetch_available_metrics, replica_values,
+};
 use ic_subnet_merging::readiness::{
     Condition, METRIC_SUBNET_CALL_CONTEXTS, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, SubnetNodeIps,
     Term, evaluate_merge_readiness,
@@ -115,8 +117,7 @@ use ic_universal_canister::{
     CallInterface, call_args, get_universal_canister_wasm, management, wasm,
 };
 use slog::{Logger, info};
-use std::net::IpAddr;
-use std::time::Duration;
+use std::{net::IpAddr, time::Duration};
 use tokio::runtime::Runtime;
 
 /// The number of rounds a subnet executed no canister message in because it is
@@ -159,7 +160,7 @@ const LOOP_BREAK_TRIGGER: &[u8] = b"break";
 
 /// The number of nodes of every subnet. More than one so that the terms of the
 /// merge readiness condition, which must hold together on the same quorum of
-/// at least 2/3 of the replicas of a subnet, range over more than one replica.
+/// the replicas of a subnet, range over more than one replica.
 const SUBNET_SIZE: usize = 4;
 
 /// The DKG interval length of the Application subnets, i.e. one less than the
@@ -924,6 +925,43 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
     )
     .await
     .unwrap_or_else(|e| panic!("U1's `install_code` requests were not inducted: {e}"));
+}
+
+/// Fetches all series of the given metrics from the given nodes.
+///
+/// Fails if any node cannot be scraped: a condition evaluated across the nodes
+/// could otherwise hold on partial data. A series that no node reports is
+/// absent though, as a node that responds simply does not export that series.
+async fn fetch_metrics(
+    node_ips: &[IpAddr],
+    metrics: &[&str],
+) -> Result<MetricsByReplica, ScrapeError> {
+    match fetch_available_metrics(node_ips, metrics).await {
+        (metrics, None) => Ok(metrics),
+        (_, Some(err)) => Err(err),
+    }
+}
+
+/// The smallest value any of the given replicas reports for any series of
+/// `metric` whose labels match `labels_match`. A replica that reports no such
+/// series, or whose metrics are not in `metrics`, reads as zero, and so does
+/// an empty `replicas`.
+fn min_across_replicas(
+    metrics: &MetricsByReplica,
+    metric: &str,
+    labels_match: impl Fn(&Labels) -> bool,
+    replicas: &[IpAddr],
+) -> f64 {
+    replicas
+        .iter()
+        .map(|ip| {
+            metrics
+                .get(ip)
+                .and_then(|metrics| replica_values(metrics, metric, &labels_match).reduce(f64::min))
+                .unwrap_or(0.0)
+        })
+        .reduce(f64::min)
+        .unwrap_or(0.0)
 }
 
 /// Waits until `canister`'s global counter is non-zero, i.e. until the payload

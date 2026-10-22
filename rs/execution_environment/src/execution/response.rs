@@ -485,7 +485,7 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_response_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: CanisterStateChanges,
+        mut canister_state_changes: CanisterStateChanges,
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
@@ -493,6 +493,11 @@ impl ResponseHelper {
         reserved_cleanup_instructions: NumInstructions,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
+        // Canister logs are persisted even if the other changes are not.
+        canister_state_changes
+            .system_state_modifications
+            .apply_canister_log(&mut self.canister.system_state, round.hypervisor.metrics());
+
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -580,7 +585,7 @@ impl ResponseHelper {
     fn handle_wasm_execution_of_cleanup_callback(
         mut self,
         mut output: WasmExecutionOutput,
-        canister_state_changes: CanisterStateChanges,
+        mut canister_state_changes: CanisterStateChanges,
         callback_err: HypervisorError,
         original: &OriginalContext,
         round: &RoundContext,
@@ -588,6 +593,11 @@ impl ResponseHelper {
         subnet_memory_saturation: &ResourceSaturation,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
+        // Canister logs are persisted even if the other changes are not.
+        canister_state_changes
+            .system_state_modifications
+            .apply_canister_log(&mut self.canister.system_state, round.hypervisor.metrics());
+
         // Apply the state changes of the cleanup callback first, and only then
         // charge the ingress induction cycles debit.
         //

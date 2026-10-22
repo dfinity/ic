@@ -30,7 +30,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     Height, NodeId, PrincipalId, RegistryVersion, SubnetId,
-    consensus::certification::Certification, crypto::KeyPurpose,
+    consensus::certification::SignedCertificationContent, crypto::KeyPurpose,
 };
 use std::{net::SocketAddr, os::unix::fs::PermissionsExt};
 
@@ -209,7 +209,7 @@ impl InitializedNode {
             fn validate(
                 &self,
                 _: SubnetId,
-                _: &Certification,
+                _: &SignedCertificationContent,
                 _: RegistryVersion,
             ) -> ValidationResult<VerifierError> {
                 Ok(())

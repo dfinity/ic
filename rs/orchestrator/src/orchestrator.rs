@@ -9,8 +9,8 @@ use crate::{
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
     processes::{
-        IcBoundaryManager, IcBoundaryProcessConfig, IcGatewayProcessConfig,
-        MultipleProcessesManager, ReplicaProcessConfig,
+        IcBoundaryProcessConfig, IcGatewayProcessConfig, MultipleProcessesManager, ProcessManager,
+        ReplicaProcessConfig,
     },
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
@@ -282,18 +282,30 @@ impl Orchestrator {
             ic_gateway_env_file: args.ic_gateway_env_file.clone(),
             acme_cache_dir: args.acme_cache_dir(),
         };
+        let ic_boundary_process_config = IcBoundaryProcessConfig {
+            ic_binary_dir: args.ic_binary_directory.clone(),
+            ic_boundary_env_file: args.ic_boundary_env_file.clone(),
+            crypto_config: config.crypto.clone(),
+        };
 
         // Published by the cloud engine task, consumed by the process manager.
         let engine_config = Arc::new(RwLock::new(None));
 
-        let processes_manager = Arc::new(RwLock::new(MultipleProcessesManager::new(
+        let processes_manager = MultipleProcessesManager::new(
             replica_process_config,
             ic_gateway_process_config,
             Arc::clone(&engine_config),
             Arc::clone(&registry),
             Arc::clone(&metrics),
             logger.clone(),
-        )));
+        );
+        let ic_boundary_manager = ProcessManager::new(
+            ic_boundary_process_config,
+            Arc::clone(&metrics),
+            logger.clone(),
+        );
+        let mut process_observers = processes_manager.observers();
+        process_observers.push(ic_boundary_manager.observer());
 
         if args.enable_provisional_registration {
             // will not return until the node is registered
@@ -312,7 +324,7 @@ impl Orchestrator {
             Upgrade::new(
                 Arc::clone(&registry) as _,
                 Arc::clone(&metrics),
-                Arc::clone(&processes_manager),
+                processes_manager,
                 manageboot_runner,
                 cup_provider,
                 Arc::clone(&subnet_assignment),
@@ -354,17 +366,6 @@ impl Orchestrator {
             ),
         };
 
-        let ic_boundary_process_config = IcBoundaryProcessConfig {
-            ic_binary_dir: args.ic_binary_directory.clone(),
-            ic_boundary_env_file: args.ic_boundary_env_file.clone(),
-            crypto_config: config.crypto.clone(),
-        };
-        let ic_boundary_manager = IcBoundaryManager::new(
-            ic_boundary_process_config,
-            Arc::clone(&registry),
-            Arc::clone(&metrics),
-            logger.clone(),
-        );
         let boundary_node = BoundaryNodeManager::new(
             Arc::clone(&registry),
             ic_boundary_manager,
@@ -418,7 +419,7 @@ impl Orchestrator {
             firewall.get_last_applied_version(),
             ipv4_configurator.get_last_applied_version(),
             registry_replicator.get_latest_certified_time(),
-            processes_manager,
+            process_observers,
             Arc::clone(&subnet_assignment),
             platform_version,
             hostos_version.ok(),

@@ -14,11 +14,6 @@ on:
         description: The commit sha to run the CI on
         required: true
         type: string
-      release-build:
-        description: Whether this CI run is for a release build which means artifacts will be stamped.
-        required: false
-        default: ''
-        type: string
 
 permissions:
   contents: read
@@ -64,7 +59,8 @@ jobs:
               fi
           done
 
-          if [[ "${is_protected_branch:-}" == "true" ]]; then
+          # Only on push: a workflow_dispatch, for one, runs on whichever ref its dispatcher picks.
+          if [[ "${is_protected_branch:-}" == "true" && "$CI_EVENT_NAME" == "push" ]]; then
               # if we are on a "protected" branch, targeting an rc branch or master we
               # upload all artifacts and run a release build (with versioning)
               release_build="true"
@@ -97,11 +93,6 @@ jobs:
               release_build="false"
               diff_only="true"
               skip_long_tests="true"
-          fi
-
-          # if release build was set, override whatever was determined above
-          if [[ '${{ inputs.release-build }}' != '' ]]; then
-              release_build=${{ inputs.release-build }}
           fi
 
           if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
@@ -269,6 +260,8 @@ jobs:
       - name: Infer Bazel Args
         id: infer-bazel-args
         shell: bash
+        env:
+          RELEASE_BUILD: ${{ needs.config.outputs.release-build }}
         run: |
           # Determine bazel_args based on event type or branch name
           bazel_args=( --config=flaky_retry ) # auto retry eg systests
@@ -280,7 +273,7 @@ jobs:
               bazel_args+=( --keep_going )
           fi
 
-          if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
+          if [[ "$RELEASE_BUILD" == 'true' ]]; then
             # make sure the version is stamped in
             bazel_args+=( --config=stamped )
           fi
@@ -293,21 +286,26 @@ jobs:
         # the action's uploads (see .github/actions/bazel-namespace/action.yaml).
         timeout-minutes: 35
         uses: ./.github/actions/bazel-namespace
+        env:
+          SKIP_LONG_TESTS: ${{ needs.config.outputs.skip_long_tests }}
+          SKIP_BUF_CHECKS: ${{ needs.config.outputs.skip_buf_checks }}
+          SKIP_SYSTEM_TESTS: ${{ needs.config.outputs.skip_system_tests }}
+          DIFF_ONLY: ${{ needs.config.outputs.diff-only }}
         with:
           timeout-minutes: 30
           run: |
             # Farm-based system-tests run via .github/workflows/ci-main.yml so skip them here:
             targets_args=(--exclude_tags=farm_system_test)
-            if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
+            if [[ "$SKIP_LONG_TESTS" == 'true' ]]; then
               targets_args+=("--skip_long_tests")
             fi
-            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+            if [[ "$SKIP_BUF_CHECKS" == 'true' ]]; then
               targets_args+=("--exclude_tags=buf")
             fi
-            if [[ '${{ needs.config.outputs.skip_system_tests }}' == 'true' ]]; then
+            if [[ "$SKIP_SYSTEM_TESTS" == 'true' ]]; then
               targets_args+=("--exclude_tags=system_test")
             fi
-            if [[ '${{ needs.config.outputs.diff-only }}' == 'true' ]]; then
+            if [[ "$DIFF_ONLY" == 'true' ]]; then
               targets_args+=(
                 '--base=${{ github.event.pull_request.base.sha }}'
                 '--head=${{ github.event.pull_request.head.sha }}'

@@ -47,6 +47,7 @@ WHERE
    AND ({time_filter})
    AND (NOT {only_prs} OR wr.event_type = 'pull_request')
    AND ({branch} = '' OR bi.head_branch LIKE {branch})
+   AND (bi.head_branch NOT LIKE ALL({exclude_branches}))
    AND ({job} = '' OR bi.job_name LIKE {job})
    AND (bi.job_name IS NULL OR bi.job_name NOT LIKE ALL({exclude_jobs}))
    AND (wr.event_type IS DISTINCT FROM 'pull_request' OR wr.pull_request_number != ALL({exclude_prs}))

@@ -107,6 +107,12 @@ impl Records {
         }
     }
 
+    /// Removes all records, resetting the used bytes.
+    fn take(&mut self) -> VecDeque<CanisterLogRecord> {
+        self.bytes_used = 0;
+        std::mem::take(&mut self.records)
+    }
+
     /// Removes old records to make enough free space for new data within the limit.
     fn make_free_space_within_limit(&mut self, new_data_size: usize) {
         let mut total_size = new_data_size + self.bytes_used;
@@ -176,6 +182,12 @@ impl CanisterLog {
     /// Returns mutable reference to the canister log records.
     pub fn records_mut(&mut self) -> &mut VecDeque<CanisterLogRecord> {
         self.records.get_mut()
+    }
+
+    /// Removes and returns all canister log records, keeping the next record
+    /// index and byte capacity.
+    pub fn take_records(&mut self) -> VecDeque<CanisterLogRecord> {
+        self.records.take()
     }
 
     /// Returns true if the canister log is empty.

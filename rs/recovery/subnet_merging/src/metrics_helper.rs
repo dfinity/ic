@@ -20,9 +20,12 @@ const METRICS_PORT: u16 = 9090;
 /// The labels of a series, by label name.
 pub type Labels = BTreeMap<String, String>;
 
-/// The metrics of a set of nodes, keyed by series (i.e. metric name plus
-/// labels), with values keyed by the IP of each node reporting the series.
-pub type Metrics = BTreeMap<(String, Labels), BTreeMap<IpAddr, f64>>;
+/// The metrics of a single node, keyed by series (i.e. metric name plus
+/// labels).
+pub type ReplicaMetrics = BTreeMap<(String, Labels), f64>;
+
+/// The metrics of a set of nodes, keyed by the IP of each node.
+pub type MetricsByReplica = BTreeMap<IpAddr, ReplicaMetrics>;
 
 /// The nodes whose metrics could not be scraped, with the reason for each.
 #[derive(Debug)]
@@ -49,35 +52,21 @@ impl fmt::Display for ScrapeError {
 
 impl std::error::Error for ScrapeError {}
 
-/// Fetches all series of the given metrics from the given nodes.
-///
-/// Fails if any node cannot be scraped: a condition evaluated across the nodes
-/// could otherwise hold on partial data. A series that no node reports is
-/// absent though, as a node that responds simply does not export that series.
-pub async fn fetch_metrics(node_ips: &[IpAddr], metrics: &[&str]) -> Result<Metrics, ScrapeError> {
-    match fetch_available_metrics(node_ips, metrics).await {
-        (metrics, None) => Ok(metrics),
-        (_, Some(err)) => Err(err),
-    }
-}
-
 /// Fetches all series of the given metrics from those of the given nodes that
-/// can be scraped. Returns their metrics, along with the nodes that could not
-/// be scraped, if any.
+/// can be scraped. Returns the metrics of exactly those nodes, along with the
+/// nodes that could not be scraped, if any.
 pub async fn fetch_available_metrics(
     node_ips: &[IpAddr],
     metrics: &[&str],
-) -> (Metrics, Option<ScrapeError>) {
+) -> (MetricsByReplica, Option<ScrapeError>) {
     let responses = join_all(node_ips.iter().map(fetch_node_metrics)).await;
 
-    let mut result = Metrics::new();
+    let mut result = MetricsByReplica::new();
     let mut failures = Vec::new();
     for (ip, body) in node_ips.iter().zip(responses) {
         match body {
             Ok(body) => {
-                for (series, value) in parse_metrics(&body, metrics) {
-                    result.entry(series).or_default().insert(*ip, value);
-                }
+                result.insert(*ip, parse_metrics(&body, metrics).into_iter().collect());
             }
             Err(reason) => failures.push((*ip, reason)),
         }
@@ -127,104 +116,22 @@ fn parse_metrics(body: &str, metrics: &[&str]) -> Vec<((String, Labels), f64)> {
         .collect()
 }
 
-/// The per-node values of every series of `metric` whose labels match
-/// `labels_match`.
-pub fn matching_series<'a>(
-    metrics: &'a Metrics,
+/// The values a node reports for the series of `metric` whose labels match
+/// `labels_match`, given the metrics of that node.
+pub fn replica_values(
+    metrics: &ReplicaMetrics,
     metric: &str,
     labels_match: impl Fn(&Labels) -> bool,
-) -> Vec<&'a BTreeMap<IpAddr, f64>> {
+) -> impl Iterator<Item = f64> {
     metrics
         .iter()
-        .filter(|((name, labels), _)| name == metric && labels_match(labels))
-        .map(|(_, values)| values)
-        .collect()
-}
-
-/// The values `replica` reports for the series of `metric` whose labels match
-/// `labels_match`.
-fn replica_values<'a>(
-    metrics: &'a Metrics,
-    metric: &str,
-    labels_match: impl Fn(&Labels) -> bool,
-    replica: IpAddr,
-) -> impl Iterator<Item = f64> + 'a {
-    matching_series(metrics, metric, labels_match)
-        .into_iter()
-        .filter_map(move |values| values.get(&replica))
-        .copied()
-}
-
-/// The largest value `replica` reports for any series of `metric` whose labels
-/// match `labels_match`, or zero if it reports no such series.
-pub fn max_on_replica(
-    metrics: &Metrics,
-    metric: &str,
-    labels_match: impl Fn(&Labels) -> bool,
-    replica: &IpAddr,
-) -> f64 {
-    replica_values(metrics, metric, labels_match, *replica)
-        .reduce(f64::max)
-        .unwrap_or(0.0)
-}
-
-/// The smallest value `replica` reports for any series of `metric` whose labels
-/// match `labels_match`, or zero if it reports no such series.
-pub fn min_on_replica(
-    metrics: &Metrics,
-    metric: &str,
-    labels_match: impl Fn(&Labels) -> bool,
-    replica: &IpAddr,
-) -> f64 {
-    replica_values(metrics, metric, labels_match, *replica)
-        .reduce(f64::min)
-        .unwrap_or(0.0)
-}
-
-/// The smallest value any of the given replicas reports for any series of
-/// `metric` whose labels match `labels_match`. A replica that reports no such
-/// series reads as zero, and so does an empty `replicas`.
-pub fn min_across_replicas(
-    metrics: &Metrics,
-    metric: &str,
-    labels_match: impl Fn(&Labels) -> bool,
-    replicas: &[IpAddr],
-) -> f64 {
-    replicas
-        .iter()
-        .map(|ip| min_on_replica(metrics, metric, &labels_match, ip))
-        .reduce(f64::min)
-        .unwrap_or(0.0)
+        .filter(move |((name, labels), _)| name == metric && labels_match(labels))
+        .map(|(_, value)| *value)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn ip(node: u8) -> IpAddr {
-        IpAddr::from([127, 0, 0, node])
-    }
-
-    fn values(entries: &[(u8, f64)]) -> BTreeMap<IpAddr, f64> {
-        entries
-            .iter()
-            .map(|&(node, value)| (ip(node), value))
-            .collect()
-    }
-
-    #[test]
-    fn minimum_requires_each_replica_to_report() {
-        let metrics = Metrics::from([
-            (series("m", &[("kind", "a")]), values(&[(1, 5.0)])),
-            (series("m", &[("kind", "b")]), values(&[(1, 6.0)])),
-        ]);
-        assert_eq!(
-            min_across_replicas(&metrics, "m", |_| true, &[ip(1), ip(2)]),
-            0.0
-        );
-        assert_eq!(min_across_replicas(&metrics, "m", |_| true, &[ip(1)]), 5.0);
-        assert_eq!(min_across_replicas(&metrics, "m", |_| true, &[]), 0.0);
-    }
 
     fn series(metric: &str, labels: &[(&str, &str)]) -> (String, Labels) {
         let labels = labels
@@ -276,47 +183,24 @@ some_other_metric 12
     }
 
     #[test]
-    fn on_replica_test() {
-        let metrics = Metrics::from([
-            (
-                series("mr_stream_messages", &[("remote", "a")]),
-                values(&[(1, 1.0), (2, 3.0)]),
-            ),
-            (
-                series("mr_stream_messages", &[("remote", "b")]),
-                values(&[(1, 5.0)]),
-            ),
-            (
-                series("mr_stream_messages_total", &[]),
-                values(&[(1, 100.0)]),
-            ),
+    fn replica_values_test() {
+        let metrics = ReplicaMetrics::from([
+            (series("mr_stream_messages", &[("remote", "a")]), 1.0),
+            (series("mr_stream_messages", &[("remote", "b")]), 5.0),
+            (series("mr_stream_messages_total", &[]), 100.0),
         ]);
-        let remote_a = |labels: &Labels| labels.get("remote").is_some_and(|remote| remote == "a");
+        let values = |metric, labels_match: fn(&Labels) -> bool| {
+            replica_values(&metrics, metric, labels_match).collect::<Vec<_>>()
+        };
 
+        assert_eq!(values("mr_stream_messages", |_| true), vec![1.0, 5.0]);
         assert_eq!(
-            max_on_replica(&metrics, "mr_stream_messages", |_| true, &ip(1)),
-            5.0
+            values("mr_stream_messages", |labels| labels
+                .get("remote")
+                .is_some_and(|remote| remote == "b")),
+            vec![5.0]
         );
-        assert_eq!(
-            min_on_replica(&metrics, "mr_stream_messages", |_| true, &ip(1)),
-            1.0
-        );
-        assert_eq!(
-            max_on_replica(&metrics, "mr_stream_messages", remote_a, &ip(2)),
-            3.0
-        );
-        // A replica that reports no matching series reads as zero.
-        assert_eq!(
-            max_on_replica(&metrics, "mr_stream_messages", |_| true, &ip(3)),
-            0.0
-        );
-        assert_eq!(
-            min_on_replica(&metrics, "mr_registry_version", |_| true, &ip(1)),
-            0.0
-        );
-        assert_eq!(
-            min_across_replicas(&metrics, "mr_registry_version", |_| true, &[]),
-            0.0
-        );
+        // No matching series.
+        assert_eq!(values("mr_registry_version", |_| true), Vec::<f64>::new());
     }
 }
