@@ -3,7 +3,9 @@
 # `uses: dfinity/ic/.github/workflows/container-publish.yml@master`, so the
 # steps that hold the registry token always come from master, whatever the
 # calling pull request changes in its own copy of the workflows; the PR only
-# supplies the commit whose ci/container/ is built.
+# supplies the commit whose ci/container/ is built. Nothing from that checkout
+# is executed on the runner that holds the token: the recipe hash is computed
+# inline below and the Dockerfile's instructions run inside BuildKit.
 #
 # The push uses the GHCR_PUSH_TOKEN secret and GHCR_PUSH_USERNAME variable of
 # the publish-container-images environment, which must have required reviewers,
@@ -50,7 +52,12 @@ jobs:
 
       - name: Compute image tag
         id: tag
-        run: echo "image_tag=$(ci/container/get-image-tag.sh)" >> "$GITHUB_OUTPUT"
+        # The rule of ci/container/get-image-tag.sh, inline rather than by running
+        # the script from the pull request's checkout on this runner. The two must
+        # agree: change the rule here, on master, before changing the script.
+        run: |
+          image_tag="$(sha256sum ci/container/Dockerfile ci/container/init.sh ci/container/files/* | sha256sum | cut -d' ' -f1)"
+          echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3

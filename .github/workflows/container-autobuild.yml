@@ -97,7 +97,7 @@ jobs:
           ic_build_repo="ghcr.io/dfinity/ic-build"
           src="${ic_build_repo}@${{ needs.ic-build-image.outputs.ic-build-imagedigest }}"
           upload_log="$(mktemp)"
-          nsc base-image upload "$src" "ic-build:${{ needs.build-image-prep.outputs.image_tag }}" 2>&1 | tee "$upload_log"
+          nsc base-image upload "$src" "ic-build:${{ needs.ic-build-image.outputs.image_tag }}" 2>&1 | tee "$upload_log"
           worker_digest="$(grep -i 'Uploaded base image' "$upload_log" | grep -oE 'sha256:[0-9a-f]{64}' | tail -n1 || true)"
           : "${worker_digest:?could not parse pushed image digest from nsc base-image upload output}"
           worker_image="${NSC_CONTAINER_REGISTRY}/ic-build@${worker_digest}"
@@ -142,7 +142,7 @@ jobs:
           IMG_NAME_IC_BUILD="${IMAGE_PREFIX}ic-build@${IC_BUILD_DIGEST}"
           IMG_NAME_IC_DEV="${IMAGE_PREFIX}ic-dev@${IC_DEV_DIGEST}"
 
-          echo '${{ needs.build-image-prep.outputs.image_tag }}' > ci/container/TAG
+          echo '${{ needs.ic-build-image.outputs.image_tag }}' > ci/container/TAG
           echo "$IC_BUILD_DIGEST" > ci/container/ic-build.digest
           echo "$IC_DEV_DIGEST" > ci/container/ic-dev.digest
           # Re-point every reference to either image, by tag or by digest, under
@@ -173,7 +173,7 @@ jobs:
           git config --global user.email "<>"
           git add .
           git commit \
-            -m 'Updating container images to tag: ${{ needs.build-image-prep.outputs.image_tag }}' \
+            -m 'Updating container images to tag: ${{ needs.ic-build-image.outputs.image_tag }}' \
             -m 'ic-build: ${{ needs.ic-build-image.outputs.ic-build-imagedigest }}' \
             -m 'ic-dev:   ${{ needs.ic-build-image.outputs.ic-dev-imagedigest }}'
           git push
@@ -187,7 +187,7 @@ jobs:
             const marker = '<!-- container-autobuild-image-tag -->';
             let message = marker + '\n'
             message += 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
-            message += 'New container images with tag: `${{ needs.build-image-prep.outputs.image_tag }}`\n'
+            message += 'New container images with tag: `${{ needs.ic-build-image.outputs.image_tag }}`\n'
             message += 'ic-build: `${{ needs.ic-build-image.outputs.ic-build-imagedigest }}`\n'
             message += 'ic-dev: `${{ needs.ic-build-image.outputs.ic-dev-imagedigest }}`\n'
 
