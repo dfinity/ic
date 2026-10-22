@@ -12,7 +12,6 @@ use crate::{
     signature::ThresholdSignature,
     xnet::CertifiedStreamSlice,
 };
-use ic_crypto_tree_hash::Witness;
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use std::convert::TryFrom;
@@ -45,9 +44,7 @@ impl From<Certification> for pb::Certification {
     fn from(value: Certification) -> Self {
         Self {
             height: value.height.get(),
-            height_witness: value
-                .height_witness
-                .map(|height_witness| height_witness.into()),
+            height_witness: Some(value.height_witness.into()),
             content: Some(value.signed.content.into()),
             signature: Some(value.signed.signature.into()),
         }
@@ -59,7 +56,10 @@ impl TryFrom<pb::Certification> for Certification {
     fn try_from(value: pb::Certification) -> Result<Self, Self::Error> {
         Ok(Self {
             height: Height::new(value.height),
-            height_witness: value.height_witness.map(Witness::try_from).transpose()?,
+            height_witness: try_from_option_field(
+                value.height_witness,
+                "Certification::height_witness",
+            )?,
             signed: Signed {
                 content: try_from_option_field(value.content, "Certification::content")?,
                 signature: try_from_option_field(value.signature, "Certification::signature")?,
@@ -113,7 +113,7 @@ impl TryFrom<pb::CertificationShare> for CertificationShare {
             height: Height::new(value.height),
             height_witness: try_from_option_field(
                 value.height_witness,
-                "Certification::height_witness",
+                "CertificationShare::height_witness",
             )?,
             signed: Signed {
                 content: try_from_option_field(value.content, "CertificationShare::content")?,
