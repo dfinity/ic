@@ -676,11 +676,11 @@ impl StreamHandlerImpl {
                 #[cfg(debug_assertions)]
                 let (balance_before, msg_cycles, reject_signals_before) = (
                     state.balance_with_messages(),
-                    // An accepted message is expected to add its cycles to the balance
-                    // (credited or accounted for as lost). Cycles attached to messages
-                    // crossing an engine boundary are neither (see `induct_message`), so an
-                    // accepted message crossing an engine boundary leaves the balance
-                    // unchanged.
+                    // An accepted message is expected to add its cycles to the subnet
+                    // balance (to a canister's balance or tracked as consumed). Cycles
+                    // attached to messages crossing an engine boundary are neither (see
+                    // `induct_message`), so an accepted message crossing an engine boundary
+                    // leaves the subnet balance unchanged.
                     if self.is_at_engine_boundary(remote_subnet_id, &state) {
                         Cycles::zero()
                     } else {
