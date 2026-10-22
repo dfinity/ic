@@ -703,7 +703,7 @@ mod tests {
                 ic_types::crypto::crypto_hash,
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
-                    dkg: DkgDataPayload::new(Height::from(0), parent_dealings),
+                    dkg: DkgDataPayload::new(Height::from(0), parent_dealings, vec![]),
                     idkg: idkg::Payload::default(),
                 }),
             );
@@ -716,7 +716,7 @@ mod tests {
 
             let block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dkg: DkgDataPayload::new(Height::from(0), dealings_to_validate),
+                dkg: DkgDataPayload::new(Height::from(0), dealings_to_validate, vec![]),
                 idkg: idkg::Payload::default(),
             });
 
@@ -912,7 +912,7 @@ mod tests {
             };
             let block_payload = BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
-                dkg: DkgDataPayload::new(start_height, vec![dealing.clone()]),
+                dkg: DkgDataPayload::new(start_height, vec![dealing.clone()], vec![]),
                 idkg: idkg::Payload::default(),
             });
 
