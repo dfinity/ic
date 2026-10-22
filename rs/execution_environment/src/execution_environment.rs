@@ -4259,18 +4259,20 @@ impl ExecutionEnvironment {
                 Err(err) => {
                     // If we already have a call ID, then we are re-executing an aborted
                     // install that now failed: drop its call and refund its prepayment.
-                    if let Some(call_id) = call_id
-                        && let Some(call) = state
+                    if let Some(call_id) = call_id {
+                        let call = state
                             .metadata
                             .subnet_call_context_manager
-                            .remove_install_code_call(call_id)
-                        && let Some(prepaid_execution_cycles) = prepaid_execution_cycles
-                        && let Some(canister) =
-                            state.canister_state_make_mut(&call.effective_canister_id)
-                    {
-                        canister
-                            .system_state
-                            .refund_cycles(prepaid_execution_cycles, prepaid_execution_cycles);
+                            .remove_install_code_call(call_id);
+                        if let Some(call) = call
+                            && let Some(prepaid_execution_cycles) = prepaid_execution_cycles
+                            && let Some(canister) =
+                                state.canister_state_make_mut(&call.effective_canister_id)
+                        {
+                            canister
+                                .system_state
+                                .refund_cycles(prepaid_execution_cycles, prepaid_execution_cycles);
+                        }
                     }
                     let refund = msg.take_cycles();
                     return self.finish_subnet_message_execution(
