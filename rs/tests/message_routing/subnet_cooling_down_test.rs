@@ -64,7 +64,9 @@ end::catalog[] */
 use anyhow::{Result, anyhow, bail};
 use candid::Principal;
 use ic_registry_subnet_type::SubnetType;
-use ic_subnet_merging::metrics_helper::{Labels, MetricsByReplica, fetch_metrics, replica_values};
+use ic_subnet_merging::metrics_helper::{
+    Labels, MetricsByReplica, ScrapeError, fetch_available_metrics, replica_values,
+};
 use ic_subnet_merging::readiness::{
     Condition, METRIC_SUBNET_CALL_CONTEXTS, METRIC_SUBNET_INPUT_QUEUE_MESSAGES, SubnetNodeIps,
     Term, evaluate_merge_readiness,
@@ -650,6 +652,21 @@ async fn await_install_code_requests_inducted(subnet: &SubnetSnapshot, logger: &
     )
     .await
     .unwrap_or_else(|e| panic!("U1's `install_code` requests were not inducted: {e}"));
+}
+
+/// Fetches all series of the given metrics from the given nodes.
+///
+/// Fails if any node cannot be scraped: a condition evaluated across the nodes
+/// could otherwise hold on partial data. A series that no node reports is
+/// absent though, as a node that responds simply does not export that series.
+async fn fetch_metrics(
+    node_ips: &[IpAddr],
+    metrics: &[&str],
+) -> Result<MetricsByReplica, ScrapeError> {
+    match fetch_available_metrics(node_ips, metrics).await {
+        (metrics, None) => Ok(metrics),
+        (_, Some(err)) => Err(err),
+    }
 }
 
 /// The smallest value any of the given replicas reports for any series of

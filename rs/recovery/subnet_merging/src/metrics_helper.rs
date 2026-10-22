@@ -52,21 +52,6 @@ impl fmt::Display for ScrapeError {
 
 impl std::error::Error for ScrapeError {}
 
-/// Fetches all series of the given metrics from the given nodes.
-///
-/// Fails if any node cannot be scraped: a condition evaluated across the nodes
-/// could otherwise hold on partial data. A series that no node reports is
-/// absent though, as a node that responds simply does not export that series.
-pub async fn fetch_metrics(
-    node_ips: &[IpAddr],
-    metrics: &[&str],
-) -> Result<MetricsByReplica, ScrapeError> {
-    match fetch_available_metrics(node_ips, metrics).await {
-        (metrics, None) => Ok(metrics),
-        (_, Some(err)) => Err(err),
-    }
-}
-
 /// Fetches all series of the given metrics from those of the given nodes that
 /// can be scraped. Returns the metrics of exactly those nodes, along with the
 /// nodes that could not be scraped, if any.
