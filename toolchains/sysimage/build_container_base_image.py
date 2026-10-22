@@ -65,7 +65,8 @@ def build_image(image_tag: str, dockerfile: str, context_dir: str, build_args: L
 def save_image(image_tag: str, output_file: str):
     log.info("Saving image to tar file")
     storage_args = get_storage_dir_args()
-    cmd = f"podman {storage_args} image save --output {output_file} {image_tag}"
+    # As an OCI archive, which oci_rootfs.py flattens for the container filesystem builds.
+    cmd = f"podman {storage_args} image save --format oci-archive --output {output_file} {image_tag}"
     invoke.run(cmd)
 
     output_path = Path(output_file)

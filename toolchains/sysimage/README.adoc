@@ -11,7 +11,7 @@ as build rules.
 
 The following build tools are provided:
 
-* +build_container_filesystem_tar.py+: Build a container image and convert to tar file
+* +build_container_filesystem_vm.py+: Build a Dockerfile on a base image in a KVM microVM and export the filesystem as a tar file
 
 * +build_vfat_image.py+: Build vfat fs image from tar file
 
@@ -114,28 +114,31 @@ be larger than the target partition).
 The bazel rules can be imported using:
 
 ----
-load("//toolchains/sysimage:toolchain.bzl", "build_container_filesystem_tar", "vfat_image", "ext4_image", "disk_image", "tar_extract")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_filesystem", "vfat_image", "ext4_image", "disk_image", "tar_extract")
 ----
 
-=== Build container image as tar
+=== Build container filesystem as tar
 
 Synopsis:
 [subs="quotes"]
 ----
-build_container_filesystem_tar(
+build_container_filesystem(
   name="__out.tar__",
-  src=__dockerbuildir__,
-  dep=[__dependencies...__],
-  extra_args=[__args...__],
+  dockerfile="__Dockerfile__",
+  context_files=[__files...__],
+  base_rootfs="__flattened base image__",
+  base_image_ref="__docker-base file__",
+  build_args=["__NAME=value__"...],
 )
 ----
 
-Builds a container image using the given +__dockerbuilddir__+ as build context (this
-directory should contain a +Dockerfile+). The bazel build rule needs to be
-pointed at the directory itself. All contents of the container context directory should
-be given as additional +__dependencies__+ in order for bazel tracking to work
-correctly. All given +__args__+ are passed as extraneous arguments to the
-+podman build+ command.
+Builds the +__Dockerfile__+ on the base image in a KVM microVM
+(+build_container_filesystem_vm.py+) and exports the resulting filesystem as a
+tar. The +__files__+ make up the build context. +base_rootfs+ is the base image
+flattened by +oci_rootfs+, and +base_image_ref+ the +docker-base*+ file that
+the Dockerfile's +FROM+ names. The Dockerfile may only use the instructions that
++dockerfile.py+ supports (+FROM+, +ARG+, +USER root+, +COPY [--chmod]+ and
+shell-form +RUN+).
 
 === Extract file from tar archive
 
@@ -244,10 +247,12 @@ A complete example to build a disk image using a single partition populated
 from the contents of a container image:
 
 ----
-build_container_filesystem_tar(
+build_container_filesystem(
     name="tree.tar",
-    src=":tree",
-    dep=glob(["tree/**"]),
+    dockerfile="tree/Dockerfile",
+    context_files=glob(["tree/**"]),
+    base_rootfs="//toolchains/sysimage:icos_base_bootloader_rootfs",
+    base_image_ref="tree/docker-base",
 )
 
 ext4_image(

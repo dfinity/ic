@@ -47,8 +47,21 @@ build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
 build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
-# Build everything ic-os without sandbox
-build --strategy_regexp=ic-os[:/].*=local
+# The ic-os container filesystems are built in a KVM microVM (IcosContainerVmBuild), which needs
+# only /dev/kvm, so like all other ic-os image actions they run sandboxed or remotely. Only the
+# local-base-* images build their base image from scratch with rootless 'podman build', which
+# needs to create user namespaces and the network, so that action runs locally, outside the
+# sandbox (see ICOS_CONTAINER_MNEMONICS in toolchains/sysimage/toolchain.bzl). It is only cached
+# locally (no-remote-cache), as it's not reproducible.
+build --strategy=IcosContainerBaseImage=local
+
+# Escape hatch: run all ic-os image actions on the host, unsandboxed, as before. Use it with
+# `--config=icos_host` on a machine or executor where they fail sandboxed or remotely. The progress
+# messages of the image actions in the ic-os packages contain their output path, so this matches
+# them; not the base image flattening and the build VM kernel in //toolchains/sysimage, which need
+# nothing from the host. It never matches tests: Bazel doesn't apply --strategy_regexp to the
+# TestRunner mnemonic.
+build:icos_host --strategy_regexp=ic-os[:/].*=local
 
 build --workspace_status_command='$(pwd)/bazel/workspace_status.sh'
 
@@ -58,6 +71,12 @@ common --flag_alias=timeout_value=//bazel:timeout_value
 common --flag_alias=hermetic_cc=//bazel:hermetic_cc
 
 common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --stamp'
+# Release (stamped) builds build the IC-OS partitions and images from scratch rather than taking
+# them from the remote cache, which PR builds write to, as they did before they became cacheable.
+# They don't upload them either: their root and boot partitions embed the version, so nothing else
+# could use them. Like before, the container filesystems (which already were cacheable) and the
+# binaries in the images come from the cache like all other release artifacts.
+build:stamped --modify_execution_info=^Icos(VfatImage|Fat32Image|Ext4Image|DiskImage|LvmImage|UpgradeImage)$=+no-remote-cache
 
 # Configure all tests to retry automatically on failure (up to 3 times)
 # such that we can detect flaky tests ASAP and fix them.
