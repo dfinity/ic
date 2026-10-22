@@ -1189,10 +1189,6 @@ crate.spec(
     version = "^3.7.2",
 )
 crate.spec(
-    package = "publicsuffix",
-    version = "^2.2.3",
-)
-crate.spec(
     package = "quickcheck",
     version = "^1.0.3",
 )
@@ -1800,10 +1796,6 @@ crate.spec(
     ],
     package = "tracing-subscriber",
     version = "^0.3.20",
-)
-crate.spec(
-    package = "trust-dns-resolver",
-    version = "^0.22.0",
 )
 crate.spec(
     package = "turmoil",

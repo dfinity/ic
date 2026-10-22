@@ -3,7 +3,7 @@
     "ic-gateway 0.0.0-git",
     "ic-wasm 0.11.1"
   ],
-  "checksum": "374fde82fa49c6ea72b1ca50c11912ab15b775ccd21772b6954b221f06307f57",
+  "checksum": "db86a5fa341ff89b7338a734f1b1728dff70a183d832cdf8c7ef9c19754ad6a0",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -17737,10 +17737,6 @@
             "target": "protobuf"
           },
           {
-            "id": "publicsuffix 2.2.3",
-            "target": "publicsuffix"
-          },
-          {
             "id": "qrcode 0.14.1",
             "target": "qrcode"
           },
@@ -18191,10 +18187,6 @@
             "target": "tracing_subscriber"
           },
           {
-            "id": "trust-dns-resolver 0.22.0",
-            "target": "trust_dns_resolver"
-          },
-          {
             "id": "tui-textarea 0.7.0",
             "target": "tui_textarea"
           },
@@ -18481,7 +18473,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -19618,53 +19610,6 @@
         }
       ],
       "version": "0.8.32"
-    },
-    "enum-as-inner 0.5.1": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "heck 0.4.1",
-            "target": "heck"
-          },
-          {
-            "id": "proc-macro2 1.0.106",
-            "target": "proc_macro2"
-          },
-          {
-            "id": "quote 1.0.47",
-            "target": "quote"
-          },
-          {
-            "id": "syn 1.0.109",
-            "target": "syn"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "enum_as_inner",
-      "license": "MIT/Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "enum-as-inner",
-      "package_url": "https://github.com/bluejekyll/enum-as-inner",
-      "repository": {
-        "Http": {
-          "sha256": "c9720bba047d567ffc8a3cba48bf19126600e249ab7f128e9233e6376976a116",
-          "url": "https://static.crates.io/crates/enum-as-inner/0.5.1/download"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "enum_as_inner",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.5.1"
     },
     "enum-ordinalize 4.4.2": {
       "common_attrs": {
@@ -23805,38 +23750,6 @@
       ],
       "version": "0.3.0"
     },
-    "heck 0.4.1": {
-      "common_attrs": {
-        "crate_features": [
-          "default"
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "heck",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "heck",
-      "package_url": "https://github.com/withoutboats/heck",
-      "repository": {
-        "Http": {
-          "sha256": "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8",
-          "url": "https://static.crates.io/crates/heck/0.4.1/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "heck",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.4.1"
-    },
     "heck 0.5.0": {
       "common_attrs": {
         "edition": "2021"
@@ -25464,7 +25377,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "socket2 0.5.10",
+              "id": "socket2 0.6.5",
               "target": "socket2"
             },
             {
@@ -29411,88 +29324,6 @@
         }
       ],
       "version": "1.0.1"
-    },
-    "idna 0.2.3": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "matches 0.1.10",
-            "target": "matches"
-          },
-          {
-            "id": "unicode-bidi 0.3.13",
-            "target": "unicode_bidi"
-          },
-          {
-            "id": "unicode-normalization 0.1.22",
-            "target": "unicode_normalization"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "idna",
-      "license": "MIT/Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "idna",
-      "package_url": "https://github.com/servo/rust-url/",
-      "repository": {
-        "Http": {
-          "sha256": "418a0a6fab821475f634efe3ccc45c013f742efe03d853e8d3355d5cb850ecf8",
-          "url": "https://static.crates.io/crates/idna/0.2.3/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "idna",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.2.3"
-    },
-    "idna 0.3.0": {
-      "common_attrs": {
-        "deps": [
-          {
-            "id": "unicode-bidi 0.3.13",
-            "target": "unicode_bidi"
-          },
-          {
-            "id": "unicode-normalization 0.1.22",
-            "target": "unicode_normalization"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "idna",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "idna",
-      "package_url": "https://github.com/servo/rust-url/",
-      "repository": {
-        "Http": {
-          "sha256": "e14ddfc70884202db2244c223200c204c2bda1bc6e0998d11b5e024d657209e6",
-          "url": "https://static.crates.io/crates/idna/0.3.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "idna",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.3.0"
     },
     "idna 1.0.3": {
       "common_attrs": {
@@ -34695,34 +34526,6 @@
         }
       ],
       "version": "0.2.0"
-    },
-    "matches 0.1.10": {
-      "common_attrs": {
-        "edition": "2015"
-      },
-      "library_target_name": "matches",
-      "license": "MIT",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "MIT"
-      ],
-      "name": "matches",
-      "package_url": "https://github.com/SimonSapin/rust-std-candidates",
-      "repository": {
-        "Http": {
-          "sha256": "2532096657941c2fea9c289d370a250971c689d4f143798ff67113ec042024a5",
-          "url": "https://static.crates.io/crates/matches/0.1.10/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "matches",
-            "crate_root": "lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.10"
     },
     "matchit 0.8.4": {
       "common_attrs": {
@@ -42670,50 +42473,6 @@
       ],
       "version": "0.1.21"
     },
-    "publicsuffix 2.2.3": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "idna",
-          "punycode"
-        ],
-        "deps": [
-          {
-            "id": "idna 0.3.0",
-            "target": "idna"
-          },
-          {
-            "id": "psl-types 2.0.11",
-            "target": "psl_types"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "publicsuffix",
-      "license": "MIT/Apache-2.0",
-      "license_file": "LICENSE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "publicsuffix",
-      "package_url": "https://github.com/rushmorem/publicsuffix",
-      "repository": {
-        "Http": {
-          "sha256": "96a8c1bda5ae1af7f99a2962e49df150414a43d62404644d98dd5c3a93d07457",
-          "url": "https://static.crates.io/crates/publicsuffix/2.2.3/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "publicsuffix",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "2.2.3"
-    },
     "pulldown-cmark 0.13.4": {
       "build_script_attrs": {},
       "common_attrs": {
@@ -43217,7 +42976,7 @@
             ],
             "cfg(not(all(target_family = \"wasm\", target_os = \"unknown\")))": [
               {
-                "id": "socket2 0.5.10",
+                "id": "socket2 0.6.5",
                 "target": "socket2"
               }
             ]
@@ -43390,7 +43149,7 @@
           "selects": {
             "cfg(not(all(target_family = \"wasm\", target_os = \"unknown\")))": [
               {
-                "id": "socket2 0.5.10",
+                "id": "socket2 0.6.5",
                 "target": "socket2"
               }
             ],
@@ -43400,7 +43159,7 @@
                 "target": "once_cell"
               },
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -47094,7 +46853,7 @@
                 "target": "errno"
               },
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ],
@@ -47586,7 +47345,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -47691,7 +47450,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ]
@@ -54243,7 +54002,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.52.0",
+                "id": "windows-sys 0.61.2",
                 "target": "windows_sys"
               }
             ],
@@ -58240,194 +57999,6 @@
       ],
       "version": "0.3.23"
     },
-    "trust-dns-proto 0.22.0": {
-      "common_attrs": {
-        "crate_features": [
-          "tokio",
-          "tokio-runtime"
-        ],
-        "deps": [
-          {
-            "id": "cfg-if 1.0.0",
-            "target": "cfg_if"
-          },
-          {
-            "id": "data-encoding 2.11.0",
-            "target": "data_encoding"
-          },
-          {
-            "id": "futures-channel 0.3.33",
-            "target": "futures_channel"
-          },
-          {
-            "id": "futures-io 0.3.33",
-            "target": "futures_io"
-          },
-          {
-            "id": "futures-util 0.3.33",
-            "target": "futures_util"
-          },
-          {
-            "id": "idna 0.2.3",
-            "target": "idna"
-          },
-          {
-            "id": "ipnet 2.12.2",
-            "target": "ipnet"
-          },
-          {
-            "id": "lazy_static 1.5.0",
-            "target": "lazy_static"
-          },
-          {
-            "id": "rand 0.8.6",
-            "target": "rand"
-          },
-          {
-            "id": "smallvec 1.15.1",
-            "target": "smallvec"
-          },
-          {
-            "id": "thiserror 1.0.68",
-            "target": "thiserror"
-          },
-          {
-            "id": "tinyvec 1.6.0",
-            "target": "tinyvec"
-          },
-          {
-            "id": "tokio 1.54.0",
-            "target": "tokio"
-          },
-          {
-            "id": "tracing 0.1.44",
-            "target": "tracing"
-          },
-          {
-            "id": "url 2.5.4",
-            "target": "url"
-          }
-        ],
-        "edition": "2018",
-        "proc_macro_deps": [
-          {
-            "id": "async-trait 0.1.89",
-            "target": "async_trait"
-          },
-          {
-            "id": "enum-as-inner 0.5.1",
-            "target": "enum_as_inner"
-          }
-        ]
-      },
-      "library_target_name": "trust_dns_proto",
-      "license": "MIT/Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "trust-dns-proto",
-      "package_url": "https://github.com/bluejekyll/trust-dns",
-      "repository": {
-        "Http": {
-          "sha256": "4f7f83d1e4a0e4358ac54c5c3681e5d7da5efc5a7a632c90bb6d6669ddd9bc26",
-          "url": "https://static.crates.io/crates/trust-dns-proto/0.22.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "trust_dns_proto",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.22.0"
-    },
-    "trust-dns-resolver 0.22.0": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "ipconfig",
-          "resolv-conf",
-          "system-config",
-          "tokio",
-          "tokio-runtime"
-        ],
-        "deps": [
-          {
-            "id": "cfg-if 1.0.0",
-            "target": "cfg_if"
-          },
-          {
-            "id": "futures-util 0.3.33",
-            "target": "futures_util"
-          },
-          {
-            "id": "lazy_static 1.5.0",
-            "target": "lazy_static"
-          },
-          {
-            "id": "lru-cache 0.1.2",
-            "target": "lru_cache"
-          },
-          {
-            "id": "parking_lot 0.12.5",
-            "target": "parking_lot"
-          },
-          {
-            "id": "resolv-conf 0.7.6",
-            "target": "resolv_conf"
-          },
-          {
-            "id": "smallvec 1.15.1",
-            "target": "smallvec"
-          },
-          {
-            "id": "thiserror 1.0.68",
-            "target": "thiserror"
-          },
-          {
-            "id": "tokio 1.54.0",
-            "target": "tokio"
-          },
-          {
-            "id": "tracing 0.1.44",
-            "target": "tracing"
-          },
-          {
-            "id": "trust-dns-proto 0.22.0",
-            "target": "trust_dns_proto"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "trust_dns_resolver",
-      "license": "MIT/Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "trust-dns-resolver",
-      "package_url": "https://github.com/bluejekyll/trust-dns",
-      "repository": {
-        "Http": {
-          "sha256": "aff21aa4dcefb0a1afbfac26deb0adc93888c7d295fb63ab273ef276ba2b7cfe",
-          "url": "https://static.crates.io/crates/trust-dns-resolver/0.22.0/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "trust_dns_resolver",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.22.0"
-    },
     "try-lock 0.2.4": {
       "common_attrs": {
         "edition": "2015"
@@ -58935,40 +58506,6 @@
       ],
       "version": "2.6.0"
     },
-    "unicode-bidi 0.3.13": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "hardcoded-data",
-          "std"
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "unicode_bidi",
-      "license": "MIT OR Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "unicode-bidi",
-      "package_url": "https://github.com/servo/unicode-bidi",
-      "repository": {
-        "Http": {
-          "sha256": "92888ba5573ff080736b3648696b70cafad7d250551175acbaa4e0385b3e1460",
-          "url": "https://static.crates.io/crates/unicode-bidi/0.3.13/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "unicode_bidi",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.3.13"
-    },
     "unicode-general-category 1.1.0": {
       "build_script_attrs": {},
       "common_attrs": {
@@ -59036,45 +58573,6 @@
         }
       ],
       "version": "1.0.22"
-    },
-    "unicode-normalization 0.1.22": {
-      "common_attrs": {
-        "crate_features": [
-          "default",
-          "std"
-        ],
-        "deps": [
-          {
-            "id": "tinyvec 1.6.0",
-            "target": "tinyvec"
-          }
-        ],
-        "edition": "2018"
-      },
-      "library_target_name": "unicode_normalization",
-      "license": "MIT/Apache-2.0",
-      "license_file": "LICENSE-APACHE",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "name": "unicode-normalization",
-      "package_url": "https://github.com/unicode-rs/unicode-normalization",
-      "repository": {
-        "Http": {
-          "sha256": "5c5713f0fc4b5db668a2ac63cdb7bb4469d8c9fed047b1d0292cc7b0ce2ba921",
-          "url": "https://static.crates.io/crates/unicode-normalization/0.1.22/download"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "unicode_normalization",
-            "crate_root": "src/lib.rs"
-          }
-        }
-      ],
-      "version": "0.1.22"
     },
     "unicode-segmentation 1.12.0": {
       "common_attrs": {
@@ -66543,7 +66041,6 @@
     "prost 0.14.4",
     "prost-build 0.14.4",
     "protobuf 3.7.2",
-    "publicsuffix 2.2.3",
     "qrcode 0.14.1",
     "quickcheck 1.0.3",
     "quinn 0.11.12",
@@ -66660,7 +66157,6 @@
     "tracing-serde 0.2.0",
     "tracing-slog 0.2.0",
     "tracing-subscriber 0.3.23",
-    "trust-dns-resolver 0.22.0",
     "tui-textarea 0.7.0",
     "turmoil 0.6.6",
     "url 2.5.4",
