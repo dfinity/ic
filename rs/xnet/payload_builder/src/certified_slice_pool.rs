@@ -20,7 +20,7 @@ use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_replicated_state::{Stream, metadata_state::StreamMap};
 use ic_types::{
     CountBytes, RegistryVersion, SubnetId,
-    consensus::certification::Certification,
+    consensus::certification::SignedCertificationContent,
     xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex},
 };
 use messages::Messages;
@@ -810,7 +810,7 @@ pub struct UnpackedStreamSlice {
     merkle_proof: Witness,
 
     /// The certification of the root hash.
-    certification: Certification,
+    certification: SignedCertificationContent,
 }
 
 impl UnpackedStreamSlice {
@@ -952,7 +952,7 @@ impl UnpackedStreamSlice {
             .transpose()
     }
 
-    /// Packs a `Payload`, `Witness` and `Certification` into a
+    /// Packs a `Payload`, `Witness` and certification into a
     /// `CertifiedStreamSlice`.
     fn pack(self) -> CertifiedStreamSlice {
         CertifiedStreamSlice {
@@ -987,7 +987,7 @@ pub fn certified_slice_count_bytes(packed: &CertifiedStreamSlice) -> CertifiedSl
 /// `UnpackedStreamSlice`.
 ///
 /// Returns a deterministic byte size estimate of the provided certified slice.
-fn slice_count_bytes(payload: &Payload, certification: &Certification) -> usize {
+fn slice_count_bytes(payload: &Payload, certification: &SignedCertificationContent) -> usize {
     let stream_begin = payload.header.begin();
     let stream_end = payload.header.end();
     let slice_begin = payload.messages_begin();

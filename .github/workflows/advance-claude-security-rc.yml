@@ -1,0 +1,44 @@
+name: Advance Claude Security RC
+
+# Points the claude-security-rc branch, which the weekly Claude Security scheduled scan
+# (claude.ai/security) scans, at every scheduled RC once Release Testing has passed on it.
+
+on:
+  workflow_run:
+    types:
+      - completed
+    branches:
+      - rc--*
+    workflows:
+      - Release Testing
+
+permissions: {}
+
+jobs:
+  advance-claude-security-rc:
+    name: Advance claude-security-rc
+    if: github.repository == 'dfinity/ic' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Point claude-security-rc at the tested RC
+        shell: bash
+        env:
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$BRANCH" =~ ^rc--[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "$BRANCH is not a scheduled RC cut"
+            exit 0
+          fi
+
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/claude-security-rc" \
+            -f sha="$SHA" -F force=true --silent \
+            || gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref=refs/heads/claude-security-rc -f sha="$SHA" --silent
+          echo "claude-security-rc -> $BRANCH ($SHA)" | tee -a "$GITHUB_STEP_SUMMARY"

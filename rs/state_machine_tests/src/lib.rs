@@ -156,7 +156,7 @@ use ic_types::{
     },
     consensus::{
         block_maker::SubnetRecords,
-        certification::{Certification, CertificationContent},
+        certification::{Certification, CertificationContent, SignedCertificationContent},
     },
     crypto::{
         AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
@@ -233,7 +233,7 @@ impl Verifier for FakeVerifier {
     fn validate(
         &self,
         _: SubnetId,
-        _: &Certification,
+        _: &SignedCertificationContent,
         _: RegistryVersion,
     ) -> ValidationResult<VerifierError> {
         Ok(())
@@ -352,16 +352,15 @@ pub fn add_initial_registry_records(registry_data_provider: Arc<ProtoRegistryDat
         .unwrap();
 
     // replica version record
-    let replica_version = test_replica_version();
     let replica_version_record = ReplicaVersionRecord {
-        replica_version_id: Some(replica_version.to_string()),
+        replica_version_id: test_replica_version().to_string(),
         release_package_sha256_hex: "".to_string(),
         release_package_urls: vec![],
         guest_launch_measurements: None,
     };
     registry_data_provider
         .add(
-            &make_replica_version_key(replica_version),
+            &make_replica_version_key(&replica_version_record.replica_version_id),
             registry_version,
             Some(replica_version_record),
         )
@@ -5543,7 +5542,7 @@ fn certify_hash(
         CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
     Certification {
         height: *height,
-        height_witness: Some(Witness::new_for_testing(Digest([0; 32]))),
+        height_witness: Witness::new_for_testing(Digest([0; 32])),
         signed: Signed {
             content: CertificationContent { hash: hash.clone() },
             signature: ThresholdSignature {
@@ -5552,7 +5551,7 @@ fn certify_hash(
                     dealer_subnet: subnet_id,
                     target_subnet: NiDkgTargetSubnet::Local,
                     start_block_height: *height,
-                    dkg_tag: NiDkgTag::LowThreshold,
+                    dkg_tag: NiDkgTag::HighThreshold,
                 },
             },
         },

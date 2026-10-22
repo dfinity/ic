@@ -3,8 +3,8 @@
 
 use crate::execution::common::{
     action_to_response, apply_canister_state_changes, finish_call_with_error,
-    ingress_status_with_processing_state, log_dirty_pages, update_round_limits, validate_message,
-    wasm_result_to_query_response,
+    ingress_status_with_processing_state, log_dirty_pages, update_round_limits,
+    validate_replicated_call, wasm_result_to_query_response,
 };
 use crate::execution_environment::{
     ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
@@ -357,13 +357,11 @@ impl CallOrTaskHelper {
         original: &OriginalContext,
         deallocation_sender: &DeallocationSender,
     ) -> Result<Self, UserError> {
-        let mut canister = clean_canister.clone();
-
-        validate_message(&canister, &original.method)?;
+        validate_replicated_call(clean_canister, &original.method)?;
 
         match original.call_or_task {
             CanisterCallOrTask::Update(_) => {
-                let wasm_memory_usage = canister
+                let wasm_memory_usage = clean_canister
                     .execution_state
                     .as_ref()
                     .map_or(NumBytes::new(0), |es| {
@@ -377,23 +375,17 @@ impl CallOrTaskHelper {
                             bytes: wasm_memory_usage,
                             limit: wasm_memory_limit,
                         };
-                        return Err(err.into_user_error(&canister.canister_id()));
+                        return Err(err.into_user_error(&clean_canister.canister_id()));
                     }
                 }
             }
             // TODO(RUN-957): Enforce the `wasm_memory_limit` in heartbeat and timer after
             // canister logging ships.
             CanisterCallOrTask::Task(_) => (),
-            CanisterCallOrTask::Query(_) => {
-                if let WasmMethod::CompositeQuery(_) = &original.method {
-                    let user_error = UserError::new(
-                        ErrorCode::CompositeQueryCalledInReplicatedMode,
-                        "Composite query cannot be called in replicated mode",
-                    );
-                    return Err(user_error);
-                }
-            }
+            CanisterCallOrTask::Query(_) => (),
         }
+
+        let mut canister = clean_canister.clone();
 
         let sender_info = match &original.call_or_task {
             CanisterCallOrTask::Update(msg) | CanisterCallOrTask::Query(msg) => {
@@ -513,14 +505,24 @@ impl CallOrTaskHelper {
     fn finish(
         mut self,
         mut output: WasmExecutionOutput,
-        clean_canister: CanisterState,
-        canister_state_changes: CanisterStateChanges,
+        mut clean_canister: CanisterState,
+        mut canister_state_changes: CanisterStateChanges,
         original: OriginalContext,
         round: RoundContext,
         round_limits: &mut RoundLimits,
         subnet_memory_saturation: &ResourceSaturation,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
+        // Canister logs are persisted even if the other changes are not.
+        // Both states need the log because either may be returned below.
+        canister_state_changes
+            .system_state_modifications
+            .apply_canister_log_to_both(
+                &mut clean_canister.system_state,
+                &mut self.canister.system_state,
+                round.hypervisor.metrics(),
+            );
+
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -627,7 +629,6 @@ impl CallOrTaskHelper {
                         // non-replicated mode: a composite query called in the
                         // replicated mode is rejected before its execution.
                         false,
-                        round.hypervisor.metrics(),
                         round.log,
                     )
                 {

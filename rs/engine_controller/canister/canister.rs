@@ -11,7 +11,8 @@ use ic_engine_controller::{
     DeployGuestosToAllSubnetNodesPayload, EngineControllerInitArgs, NewSubnet, UpdateSubnetPayload,
 };
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::registry::subnet::v1::SubnetFeatures;
+use ic_protobuf::registry::subnet::v1::{ResourceLimits as ResourceLimitsPb, SubnetFeatures};
+use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use registry_canister::mutations::do_create_subnet::{
     CanisterCyclesCostSchedule, CreateSubnetPayload,
@@ -150,6 +151,14 @@ async fn create_engine(args: CreateEngineArgs) -> Result<NewSubnet, String> {
             http_requests: true,
             sev_enabled: Some(false),
         },
+        resource_limits: args.resource_limits.map(|limits| {
+            ResourceLimits::from(ResourceLimitsPb {
+                maximum_state_size: limits.maximum_state_size,
+                maximum_state_delta: limits.maximum_state_delta,
+                maximum_query_instructions: None,
+                maximum_query_walltime_seconds: None,
+            })
+        }),
         ..Default::default()
     };
 
@@ -189,6 +198,8 @@ async fn delete_engine(args: DeleteEngineArgs) -> Result<(), String> {
 /// - `subnet_admins`
 /// - `is_halted` (subnet halting / unhalting)
 /// - `cooling_down` (letting the subnet quiesce before it is halted)
+/// - `resource_limits`, but only its state limits (`maximum_state_size`,
+///   `maximum_state_delta`); the query limits stay with governance
 ///
 /// Every other `Option<_>` field must be `None`, and the single non-optional
 /// knob (`set_gossip_config_to_default`) must hold its default value
@@ -205,6 +216,7 @@ fn ensure_only_allowed_fields_set(payload: &UpdateSubnetPayload) -> Result<(), S
         subnet_admins: _,
         is_halted: _,
         cooling_down: _,
+        resource_limits,
 
         max_ingress_bytes_per_message,
         max_ingress_bytes_per_block,
@@ -218,7 +230,6 @@ fn ensure_only_allowed_fields_set(payload: &UpdateSubnetPayload) -> Result<(), S
         subnet_type,
         halt_at_cup_height,
         features,
-        resource_limits,
         chain_key_config,
         chain_key_signing_enable,
         chain_key_signing_disable,
@@ -265,7 +276,16 @@ fn ensure_only_allowed_fields_set(payload: &UpdateSubnetPayload) -> Result<(), S
     check_none!(subnet_type, "subnet_type");
     check_none!(halt_at_cup_height, "halt_at_cup_height");
     check_none!(features, "features");
-    check_none!(resource_limits, "resource_limits");
+    if let Some(resource_limits) = resource_limits {
+        check_none!(
+            resource_limits.maximum_query_instructions,
+            "resource_limits.maximum_query_instructions"
+        );
+        check_none!(
+            resource_limits.maximum_query_walltime_seconds,
+            "resource_limits.maximum_query_walltime_seconds"
+        );
+    }
     check_none!(chain_key_config, "chain_key_config");
     check_none!(chain_key_signing_enable, "chain_key_signing_enable");
     check_none!(chain_key_signing_disable, "chain_key_signing_disable");
@@ -292,7 +312,8 @@ fn ensure_only_allowed_fields_set(payload: &UpdateSubnetPayload) -> Result<(), S
     } else {
         Err(format!(
             "Updating these fields via the engine controller is not allowed: {}. \
-             Only `subnet_admins`, `is_halted` and `cooling_down` may be updated.",
+             Only `subnet_admins`, `is_halted`, `cooling_down` and the state limits in \
+             `resource_limits` may be updated.",
             disallowed.join(", ")
         ))
     }
@@ -304,6 +325,8 @@ fn ensure_only_allowed_fields_set(payload: &UpdateSubnetPayload) -> Result<(), S
 /// - `subnet_admins`
 /// - `is_halted`
 /// - `cooling_down`
+/// - `resource_limits.maximum_state_size` and `.maximum_state_delta`; the
+///   registry keeps the current value of any limit left unset
 ///
 /// Every other field must be left at its default value (`None` / `false`) or
 /// the call is rejected.
