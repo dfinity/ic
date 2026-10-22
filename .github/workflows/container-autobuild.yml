@@ -45,7 +45,7 @@ jobs:
           if grep $image_tag ci/container/TAG; then
             echo "build_image=false" >> "$GITHUB_OUTPUT"
             echo "Update with this image already in this PR!"
-            echo "Modify ci/container/TAG with a random string to trigger a new build."
+            echo "Recipe tags are written once: to rebuild the same recipe (e.g. for updated upstream packages) change the recipe, for instance a comment in the Dockerfile."
           else
             echo "build_image=true" >> "$GITHUB_OUTPUT"
             echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"

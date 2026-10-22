@@ -12,10 +12,12 @@
 # hash is computed inline, the Dockerfile's instructions run inside BuildKit,
 # and the commit step only edits files. The recipe tag is the hash of
 # Dockerfile, init.sh and files/*, which is everything the Dockerfile takes
-# from the checkout, so a tag only ever names an image built from a recipe that
-# hashes to it. The ghcr.io/dfinity/ic-build and ic-dev packages must grant
-# this repository's GITHUB_TOKEN read access only; ghcr-push-canary.yml checks
-# that daily.
+# from the checkout, and a recipe tag is written once: if it already exists,
+# the image it names is reused and nothing is pushed. A tag therefore only
+# ever names the image master's workflow first built from a recipe hashing to
+# it. The ghcr.io/dfinity/ic-build and ic-dev packages must grant this
+# repository's GITHUB_TOKEN read access only; ghcr-push-canary.yml checks that
+# daily.
 name: Container Publish
 
 on:
@@ -46,19 +48,35 @@ jobs:
     outputs:
       build_image: ${{ steps.decide.outputs.build_image }}
       image_tag: ${{ steps.decide.outputs.image_tag }}
+      source_sha: ${{ steps.decide.outputs.source_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          # The pull request's merge commit, which is what CI tests, for
+          # pull_request runs; the pushed commit otherwise. It is resolved to one
+          # SHA below so that every job builds the same recipe.
+          ref: ${{ github.event.workflow_run.event == 'pull_request' && format('refs/pull/{0}/merge', github.event.workflow_run.pull_requests[0].number) || github.event.workflow_run.head_sha }}
 
       - name: Compare the recipe hash with TAG
         id: decide
+        env:
+          EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         # The rule of ci/container/get-image-tag.sh, inline rather than by running
         # the script from the triggering commit. The two must agree: change the
         # rule here, on master, before changing the script.
         run: |
           set -euo pipefail
+          source_sha="$(git rev-parse HEAD)"
+          # The merge ref is rebuilt when the pull request moves on; then the run
+          # for its new head publishes, not this one.
+          if [ "$EVENT" = pull_request ] && ! git cat-file -p HEAD | grep -q "^parent $HEAD_SHA\$"; then
+            echo "::notice::the pull request moved on from $HEAD_SHA; the run for its new head publishes instead"
+            echo "build_image=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
           image_tag="$(sha256sum ci/container/Dockerfile ci/container/init.sh ci/container/files/* | sha256sum | cut -d' ' -f1)"
           if [ "$image_tag" = "$(<ci/container/TAG)" ]; then
             echo "ci/container/TAG already names the recipe hash $image_tag; nothing to build."
@@ -91,12 +109,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.prep.outputs.source_sha }}
+
+      - name: Reuse the image if the recipe tag already exists
+        id: existing
+        # A recipe tag is written once. The hash covers the recipe files' content,
+        # so a recipe with the same content but, say, other file modes must not
+        # replace what the tag names; and a partly failed run can be repeated.
+        # To rebuild a recipe, change it (a comment in the Dockerfile will do).
+        env:
+          IMAGE: ${{ matrix.image }}
+          TAG: ${{ needs.prep.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          token="$(curl -fsS "https://ghcr.io/token?service=ghcr.io&scope=repository:dfinity/$IMAGE:pull" | jq -r .token)"
+          accept='application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'
+          headers="$(mktemp)"
+          code="$(curl -sS -o /dev/null -D "$headers" -w '%{http_code}' -I -H "Authorization: Bearer $token" -H "Accept: $accept" "https://ghcr.io/v2/dfinity/$IMAGE/manifests/$TAG")"
+          case "$code" in
+            200)
+              digest="$(grep -i '^docker-content-digest:' "$headers" | tr -d '\r' | awk '{print $2}')"
+              [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]
+              echo "ghcr.io/dfinity/$IMAGE:$TAG already exists and names $digest; reusing it"
+              echo "digest=$digest" >> "$GITHUB_OUTPUT"
+              ;;
+            404) echo "ghcr.io/dfinity/$IMAGE:$TAG does not exist yet; building it" ;;
+            *)
+              echo "::error::ghcr.io answered HTTP $code for ghcr.io/dfinity/$IMAGE:$TAG"
+              exit 1
+              ;;
+          esac
 
       - name: Set up Docker Buildx
+        if: steps.existing.outputs.digest == ''
         uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
 
       - name: Login to GHCR
+        if: steps.existing.outputs.digest == ''
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         with:
           registry: ghcr.io
@@ -104,6 +153,7 @@ jobs:
           password: ${{ secrets.GHCR_PUSH_TOKEN }}
 
       - name: Build Container Image ${{ matrix.image }}
+        if: steps.existing.outputs.digest == ''
         # this sets the output 'digest' to the sha256 of the output image
         uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
         id: build
@@ -111,26 +161,17 @@ jobs:
           context: .
           file: ci/container/Dockerfile
           push: true
-          # <tag> is what container-run.sh of commits before digest pinning pulls.
-          # The second tag is never reused, so the digest a commit pins stays a
-          # tagged package version when <tag> is pushed again (a cleanup of
-          # untagged versions would otherwise remove it).
-          tags: |
-            ghcr.io/dfinity/${{ matrix.image }}:${{ needs.prep.outputs.image_tag }}
-            ghcr.io/dfinity/${{ matrix.image }}:${{ needs.prep.outputs.image_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          tags: ghcr.io/dfinity/${{ matrix.image }}:${{ needs.prep.outputs.image_tag }}
           target: ${{ matrix.target }}
 
       - name: Set output image digest
         id: set-output-imagedigest
+        env:
+          DIGEST: ${{ steps.existing.outputs.digest || steps.build.outputs.digest }}
         run: |
-          if [ "${{ matrix.image }}" == "ic-build" ]; then
-            echo "ic-build-imagedigest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ matrix.image }}" == "ic-dev" ]; then
-            echo "ic-dev-imagedigest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "Unknown image: ${{ matrix.image }}"
-            exit 1
-          fi
+          set -euo pipefail
+          [[ $DIGEST =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "${{ matrix.image }}-imagedigest=$DIGEST" >> "$GITHUB_OUTPUT"
 
   rbe-worker-image:
     name: Create Remote Build Execution Worker Image @ Namespace
@@ -180,7 +221,21 @@ jobs:
           ref: ${{ github.event.workflow_run.head_branch }}
           token: ${{ steps.app-token.outputs.token }}
 
+      - name: Check that the branch is still at the triggering commit
+        id: guard
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        # The pins describe the triggering commit's recipe; a branch that moved
+        # on gets them from the run for its new head. A push that races this
+        # check is rejected by the non-forced push below.
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$HEAD_SHA" ]; then
+            echo "::notice::the branch moved on from $HEAD_SHA; the run for its new head publishes instead"
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Update Image References
+        if: steps.guard.outputs.stale != 'true'
         shell: bash
         # Edits files only; nothing from the checkout is executed. ci-main's
         # test-container-run job runs ci/container/check-image-pins.sh on the
@@ -235,7 +290,7 @@ jobs:
 
       - name: Add PR Comment
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        if: github.event.workflow_run.pull_requests[0] != null
+        if: steps.guard.outputs.stale != 'true' && github.event.workflow_run.pull_requests[0] != null
         with:
           script: |
             const prNumber = ${{ github.event.workflow_run.pull_requests[0].number }};
