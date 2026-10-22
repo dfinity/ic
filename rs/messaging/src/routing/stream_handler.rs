@@ -676,7 +676,13 @@ impl StreamHandlerImpl {
                 #[cfg(debug_assertions)]
                 let (balance_before, msg_cycles, reject_signals_before) = (
                     state.balance_with_messages(),
-                    msg.cycles(),
+                    // Cycles attached to messages from a remote engine are never credited
+                    // nor accounted for as lost.
+                    if self.is_from_remote_engine(remote_subnet_id, &state) {
+                        Cycles::zero()
+                    } else {
+                        msg.cycles()
+                    },
                     stream.reject_signals().len(),
                 );
 
@@ -752,16 +758,23 @@ impl StreamHandlerImpl {
         //     are accounted as lost.
         // Loopback (own-subnet) messages are excluded: an engine's own messages are always
         // inducted normally.
-        let remote_is_engine = state
-            .metadata
-            .network_topology
-            .subnets()
-            .get(&remote_subnet_id)
-            .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine);
+        //
+        // Cycles attached to messages from a remote engine (which are not allowed to carry
+        // any) are not real cycles: if such a message is dropped, its cycles are not
+        // accounted for as lost.
+        let is_from_remote_engine = self.is_from_remote_engine(remote_subnet_id, state);
         let own_is_engine = state.metadata.own_subnet_type == SubnetType::CloudEngine;
         // At an engine boundary iff this is a cross-subnet message and either side is an engine.
         let is_at_engine_boundary =
-            remote_subnet_id != self.subnet_id && (own_is_engine || remote_is_engine);
+            is_from_remote_engine || (remote_subnet_id != self.subnet_id && own_is_engine);
+        let observe_lost_cycles = |state: &mut ReplicatedState, cycles: Cycles| {
+            if !is_from_remote_engine {
+                state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
+                    cycles,
+                    own_cost_schedule,
+                ));
+            }
+        };
 
         let (mut msg, msg_type) = match msg {
             StreamMessage::Request(req) => {
@@ -785,10 +798,7 @@ impl StreamHandlerImpl {
                         LABEL_VALUE_TYPE_REFUND,
                         LABEL_VALUE_ENGINE_NOT_ALLOWED,
                     );
-                    state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                        refund.amount(),
-                        own_cost_schedule,
-                    ));
+                    observe_lost_cycles(state, refund.amount());
                     stream.push_accept_signal();
                     return;
                 }
@@ -848,9 +858,7 @@ impl StreamHandlerImpl {
                             );
                             self.metrics.critical_error_engine_message.inc();
                             if rep.refund > Cycles::zero() {
-                                state.observe_lost_cycles_due_to_dropped_messages(
-                                    CompoundCycles::new(rep.refund, own_cost_schedule),
-                                );
+                                observe_lost_cycles(state, rep.refund);
                             }
                             if rep.deadline != NO_DEADLINE {
                                 // Best-effort illegal response: drop it. The caller will time
@@ -945,10 +953,7 @@ impl StreamHandlerImpl {
                 self.metrics.critical_error_sender_subnet_mismatch.inc();
                 stream.push_accept_signal();
                 // Cycles are lost.
-                state.observe_lost_cycles_due_to_dropped_messages(CompoundCycles::new(
-                    rep.refund,
-                    own_cost_schedule,
-                ));
+                observe_lost_cycles(state, rep.refund);
             }
         }
     }
@@ -1165,6 +1170,19 @@ impl StreamHandlerImpl {
                 stream.push_reject_signal(RejectReason::CanisterMigrating);
             }
         }
+    }
+
+    /// Returns `true` iff `remote_subnet_id` is a CloudEngine subnet other than this
+    /// subnet, i.e. iff messages from `remote_subnet_id` cross an engine boundary from
+    /// the engine side. Such messages are not allowed to carry cycles.
+    fn is_from_remote_engine(&self, remote_subnet_id: SubnetId, state: &ReplicatedState) -> bool {
+        remote_subnet_id != self.subnet_id
+            && state
+                .metadata
+                .network_topology
+                .subnets()
+                .get(&remote_subnet_id)
+                .is_some_and(|t| t.subnet_type == SubnetType::CloudEngine)
     }
 
     /// Checks whether `actual_subnet_id` is a valid host subnet for `msg.sender()`
