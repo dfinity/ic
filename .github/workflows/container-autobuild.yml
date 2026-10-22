@@ -17,9 +17,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+# The build-and-push job lives in container-publish.yml and pushes with the
+# machine-account token of the publish-container-images environment. The
+# ghcr.io/dfinity/ic-build and ic-dev packages must grant this repository's
+# GITHUB_TOKEN read access only, so that no pull_request run can push to them
+# whatever permissions its copy of a workflow asks for; ghcr-push-canary.yml
+# checks that daily.
 permissions:
-  contents: write
-  packages: write
+  contents: read
   pull-requests: write
 
 jobs:
@@ -50,56 +55,24 @@ jobs:
           fi
 
   ic-build-image:
-    name: Build Container Image ${{ matrix.image }}
-    runs-on: ubuntu-latest
+    name: Build Container Image
     needs: [build-image-prep]
-    if: ${{ needs.build-image-prep.outputs.build_image == 'true' }}
-    timeout-minutes: 60
-    strategy:
-      matrix:
-        include:
-          - image: ic-build
-            target: build
-          - image: ic-dev
-            target: dev
-    outputs:
-      ic-build-imagedigest: ${{ steps.set-output-imagedigest.outputs.ic-build-imagedigest }}
-      ic-dev-imagedigest: ${{ steps.set-output-imagedigest.outputs.ic-dev-imagedigest }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
-
-      - name: Login to GHCR
-        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Container Image ${{ matrix.image }}
-        # this sets the output 'digest' to the sha256 of the output image
-        uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
-        id: build
-        with:
-          context: .
-          file: ci/container/Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ needs.build-image-prep.outputs.image_tag }}
-          target: ${{ matrix.target }}
-      - name: Set output image digest
-        id: set-output-imagedigest
-        run: |
-          if [ "${{ matrix.image }}" == "ic-build" ]; then
-            echo "ic-build-imagedigest=${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
-          elif [ "${{ matrix.image }}" == "ic-dev" ]; then
-            echo "ic-dev-imagedigest=${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
-          else
-            echo "Unknown image: ${{ matrix.image }}"
-            exit 1
-          fi
+    # The build-and-push job comes from master's container-publish.yml, never
+    # from this run's own copy of the workflows, so a pull request cannot change
+    # the steps that hold the registry token; it only supplies the commit to
+    # build. That job runs in the publish-container-images environment: one of
+    # its required reviewers releases the token per run after reviewing the PR's
+    # ci/container/ changes and this `uses:` line.
+    #
+    # Fork PRs are skipped so that no approval can hand them the token, and so
+    # is the dfinity/ic-private mirror, where this workflow is active too.
+    if: |
+      needs.build-image-prep.outputs.build_image == 'true' &&
+      github.repository == 'dfinity/ic' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    uses: dfinity/ic/.github/workflows/container-publish.yml@master
+    secrets: inherit
 
   rbe-worker-image:
     name: Create Remote Build Execution Worker Image @ Namespace

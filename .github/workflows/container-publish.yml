@@ -1,0 +1,92 @@
+# Builds the ic-build and ic-dev images from the calling run's commit and pushes
+# them to ghcr.io/dfinity. container-autobuild.yml calls it as
+# `uses: dfinity/ic/.github/workflows/container-publish.yml@master`, so the
+# steps that hold the registry token always come from master, whatever the
+# calling pull request changes in its own copy of the workflows; the PR only
+# supplies the commit whose ci/container/ is built.
+#
+# The push uses the GHCR_PUSH_TOKEN secret and GHCR_PUSH_USERNAME variable of
+# the publish-container-images environment, which must have required reviewers,
+# "prevent self-review", administrators not allowed to bypass its rules, and no
+# deployment branch rule (see "Image publishing" in ci/container/README.md).
+# The ghcr.io/dfinity/ic-build and ic-dev packages must grant this repository's
+# GITHUB_TOKEN read access only; ghcr-push-canary.yml checks that daily.
+name: Container Publish
+
+on:
+  workflow_call:
+    outputs:
+      image_tag:
+        description: The tag the images were pushed under (ci/container/get-image-tag.sh)
+        value: ${{ jobs.build.outputs.image_tag }}
+      ic-build-imagedigest:
+        value: ${{ jobs.build.outputs.ic-build-imagedigest }}
+      ic-dev-imagedigest:
+        value: ${{ jobs.build.outputs.ic-dev-imagedigest }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Container Image ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: publish-container-images
+    strategy:
+      matrix:
+        include:
+          - image: ic-build
+            target: build
+          - image: ic-dev
+            target: dev
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+      ic-build-imagedigest: ${{ steps.set-output-imagedigest.outputs.ic-build-imagedigest }}
+      ic-dev-imagedigest: ${{ steps.set-output-imagedigest.outputs.ic-dev-imagedigest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Compute image tag
+        id: tag
+        run: echo "image_tag=$(ci/container/get-image-tag.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ vars.GHCR_PUSH_USERNAME }}
+          password: ${{ secrets.GHCR_PUSH_TOKEN }}
+
+      - name: Build Container Image ${{ matrix.image }}
+        # this sets the output 'digest' to the sha256 of the output image
+        uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
+        id: build
+        with:
+          context: .
+          file: ci/container/Dockerfile
+          push: true
+          # <tag> is what container-run.sh of commits before digest pinning pulls.
+          # The second tag is never reused, so the digest a commit pins stays a
+          # tagged package version when <tag> is pushed again (a cleanup of
+          # untagged versions would otherwise remove it).
+          tags: |
+            ghcr.io/dfinity/${{ matrix.image }}:${{ steps.tag.outputs.image_tag }}
+            ghcr.io/dfinity/${{ matrix.image }}:${{ steps.tag.outputs.image_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
+          target: ${{ matrix.target }}
+
+      - name: Set output image digest
+        id: set-output-imagedigest
+        run: |
+          if [ "${{ matrix.image }}" == "ic-build" ]; then
+            echo "ic-build-imagedigest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ matrix.image }}" == "ic-dev" ]; then
+            echo "ic-dev-imagedigest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Unknown image: ${{ matrix.image }}"
+            exit 1
+          fi
