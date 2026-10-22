@@ -697,16 +697,6 @@ impl DkgDataPayload {
             transcripts_for_remote_subnets: remote_dkg_transcripts,
         }
     }
-
-    /// Returns true if the payload is empty
-    pub fn is_empty(&self) -> bool {
-        let DkgDataPayload {
-            start_height: _,
-            messages,
-            transcripts_for_remote_subnets,
-        } = self;
-        messages.is_empty() && transcripts_for_remote_subnets.is_empty()
-    }
 }
 
 impl NiDkgTag {

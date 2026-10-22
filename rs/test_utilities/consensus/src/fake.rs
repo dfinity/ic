@@ -44,11 +44,7 @@ impl Fake for SummaryPayload {
 
 impl Fake for DataPayload {
     fn fake() -> Self {
-        Self {
-            batch: BatchPayload::default(),
-            dkg: DkgDataPayload::new_empty(Height::from(0)),
-            idkg: None,
-        }
+        Self::new_empty(Height::from(0))
     }
 }
 
@@ -406,11 +402,7 @@ mod tests {
             CryptoHashOf::from(CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                BlockPayload::Data(DataPayload {
-                    batch: BatchPayload::default(),
-                    dkg: DkgDataPayload::new_empty(Height::from(1)),
-                    idkg: None,
-                }),
+                BlockPayload::Data(DataPayload::new_empty(Height::from(1))),
             ),
             Height::from(123),
             Rank(456),
@@ -434,11 +426,7 @@ mod tests {
             CryptoHashOf::from(CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                BlockPayload::Data(DataPayload {
-                    batch: BatchPayload::default(),
-                    dkg: DkgDataPayload::new_empty(Height::from(1)),
-                    idkg: None,
-                }),
+                BlockPayload::Data(DataPayload::new_empty(Height::from(1))),
             ),
             Height::from(123),
             Rank(456),
