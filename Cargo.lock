@@ -9360,6 +9360,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk",
  "ic-management-canister-types 0.8.0",
+ "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-protobuf",

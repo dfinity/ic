@@ -9,6 +9,12 @@ on the process that this file is part of, see
 
 ## Added
 
+* New `create_canister` update method that creates an empty canister on a
+  cloud engine subnet, controlled by the given `controllers` only. Only a
+  canister on the NNS subnet may create canisters on another subnet, so this
+  lets the authorized caller put canisters on the engines it creates. The
+  target must be a `CloudEngine` subnet in the registry.
+
 * `create_engine` takes an optional `resource_limits` (`maximum_state_size`,
   `maximum_state_delta`), forwarded to the new subnet's `CreateSubnetPayload`.
   Omitted, the subnet keeps the protocol defaults as before.

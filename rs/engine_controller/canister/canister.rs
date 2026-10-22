@@ -1,17 +1,29 @@
 //! The engine controller canister.
 //!
 //! This canister provides a thin user-facing API on top of the registry
-//! canister's `create_subnet` / `delete_subnet` endpoints. Only a single,
+//! canister's `create_subnet` / `delete_subnet` endpoints, and creates
+//! canisters on the cloud engine subnets it manages. Only a single,
 //! hard-coded authorized principal may invoke its methods.
 use candid::Principal;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use ic_cdk::{api::msg_caller, call::Call, init, post_upgrade, println, update};
-use ic_engine_controller::{
-    ChangeSubnetMembershipPayload, CreateEngineArgs, DeleteEngineArgs,
-    DeployGuestosToAllSubnetNodesPayload, EngineControllerInitArgs, NewSubnet, UpdateSubnetPayload,
+use ic_cdk::{
+    api::{canister_version, msg_caller},
+    call::Call,
+    init, post_upgrade, println, update,
 };
+use ic_engine_controller::{
+    ChangeSubnetMembershipPayload, CreateCanisterArgs, CreateEngineArgs, DeleteEngineArgs,
+    DeployGuestosToAllSubnetNodesPayload, EngineControllerInitArgs, NewCanister, NewSubnet,
+    UpdateSubnetPayload,
+};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettings, CreateCanisterArgs as ManagementCreateCanisterArgs,
+};
+use ic_nns_common::registry::get_subnet_record;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::registry::subnet::v1::{ResourceLimits as ResourceLimitsPb, SubnetFeatures};
+use ic_protobuf::registry::subnet::v1::{
+    ResourceLimits as ResourceLimitsPb, SubnetFeatures, SubnetType as SubnetTypePb,
+};
 use ic_registry_resource_limits::ResourceLimits;
 use ic_registry_subnet_type::SubnetType;
 use registry_canister::mutations::do_create_subnet::{
@@ -41,6 +53,9 @@ const DEFAULT_INITIAL_DKG_SUBNET_ID: &str =
 
 /// This many nodes are expected when creating a new engine as a minimum.
 const REQUIRED_NODE_COUNT: usize = 4;
+
+/// A canister can have at most this many controllers.
+const MAX_CONTROLLERS: usize = 10;
 
 thread_local! {
     /// The principal currently allowed to call the canister's methods. Set on
@@ -381,6 +396,60 @@ async fn change_subnet_membership(payload: ChangeSubnetMembershipPayload) -> Res
         .map_err(|e| format!("Failed to decode registry response: {e}"))?;
 
     Ok(())
+}
+
+/// Creates an empty canister on a cloud engine subnet, controlled by
+/// `controllers` only.
+///
+/// Only a canister on the NNS subnet may create a canister on a subnet other
+/// than its own. The authorized caller is not on the NNS subnet, so without
+/// this method it could not put a canister on an engine it created. Once the
+/// canister exists, its controllers install and configure it with ordinary
+/// management canister calls.
+///
+/// The target must be a `CloudEngine` subnet in the registry. The call to it
+/// is bounded-wait and carries no cycles, as every call into a cloud engine
+/// must; engines are on the free cost schedule, so creating a canister there
+/// costs nothing. A bounded-wait call can time out (`SysUnknown`) after the
+/// canister was created, in which case `controllers` control a canister this
+/// method did not return.
+#[update]
+async fn create_canister(args: CreateCanisterArgs) -> Result<NewCanister, String> {
+    ensure_authorized()?;
+
+    if args.controllers.is_empty() || args.controllers.len() > MAX_CONTROLLERS {
+        return Err(format!(
+            "Expected between 1 and {MAX_CONTROLLERS} controllers, got {}",
+            args.controllers.len()
+        ));
+    }
+
+    let subnet_id = SubnetId::new(PrincipalId(args.subnet_id));
+    let (subnet_record, _) = get_subnet_record(subnet_id)
+        .await
+        .map_err(|e| format!("Failed to read the record of subnet {subnet_id}: {e}"))?;
+    if subnet_record.subnet_type != i32::from(SubnetTypePb::CloudEngine) {
+        return Err(format!("Subnet {subnet_id} is not a cloud engine"));
+    }
+
+    // Addressed to the subnet itself rather than to `aaaaa-aa`, which would
+    // create the canister on the NNS subnet.
+    let created: CanisterIdRecord = Call::bounded_wait(args.subnet_id, "create_canister")
+        .with_arg(ManagementCreateCanisterArgs {
+            settings: Some(CanisterSettings {
+                controllers: Some(args.controllers),
+                ..Default::default()
+            }),
+            sender_canister_version: Some(canister_version()),
+        })
+        .await
+        .map_err(|e| format!("create_canister on subnet {subnet_id} failed: {e:?}"))?
+        .candid()
+        .map_err(|e| format!("Failed to decode the create_canister response: {e}"))?;
+
+    Ok(NewCanister {
+        canister_id: created.canister_id,
+    })
 }
 
 fn main() {
